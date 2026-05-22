@@ -795,6 +795,20 @@ PY"
      :show ["--page"]}},
    :tags [:upsert :show],
    :extends :non-sync/graph-json-env}
+  {:id "block-upsert-blocks-inline-property-missing-does-not-create-target-page-json",
+   :cmds
+   ["set +e; out=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page NewPage --blocks '[{:block/title \"Q\" \"Missing Prop\" \"x\"}]' 2>&1)\"; code=$?; set -e; printf '%s\n' \"$out\"; test \"$code\" -ne 0; printf '%s' \"$out\" | python3 -c 'import sys,json; data=json.load(sys.stdin); assert data[\"status\"] == \"error\"; assert data[\"error\"][\"code\"] == \"property-not-found\"'; page=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"NewPage\"]]')\"; printf '%s\n' \"$page\"; printf '%s' \"$page\" | python3 -c 'import sys,json; data=json.load(sys.stdin); assert data[\"data\"][\"result\"] is None'"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["property-not-found"]},
+   :covers
+   {:commands ["upsert block" "query"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--blocks" "--target-page"],
+     :query ["--query"]}},
+   :tags [:upsert],
+   :extends :non-sync/graph-json-env}
   {:id "block-upsert-blocks-inline-properties-per-block-json",
    :setup
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
@@ -812,6 +826,25 @@ PY"
      :upsert ["--blocks" "--target-page" "--name" "--type" "--cardinality" "--public"],
      :query ["--query"],
      :show ["--id"]}},
+   :tags [:upsert :show],
+   :extends :non-sync/graph-json-env}
+  {:id "block-upsert-blocks-inline-property-numeric-id-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name 'Numeric Prop' --type default --cardinality one --public true >/dev/null"],
+   :cmds
+   ["prop_id=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Numeric Prop\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --blocks \"[{:block/title \\\"Inline numeric\\\" $prop_id \\\"inline\\\"}]\" >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --page Home"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["Inline numeric" "Numeric Prop: inline"]},
+   :covers
+   {:commands ["upsert block" "upsert property" "query" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--blocks" "--target-page" "--name" "--type" "--cardinality" "--public"],
+     :query ["--query"],
+     :show ["--page"]}},
    :tags [:upsert :show],
    :extends :non-sync/graph-json-env}
   {:id "block-upsert-target-uuid-json",
