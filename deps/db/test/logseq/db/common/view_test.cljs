@@ -80,6 +80,10 @@
                        [:db/add view-id :logseq.property.view/gallery-card-width 180]
                        [:db/add view-id :logseq.property.view/gallery-card-height 260]])
     (is (= {:width 180 :height 260}
+           (db-view/gallery-card-dimensions (d/entity @conn view-id))))
+    (d/transact! conn [[:db/add view-id :logseq.property.view/gallery-card-width 80]
+                       [:db/add view-id :logseq.property.view/gallery-card-height 1200]])
+    (is (= {:width 100 :height 1024}
            (db-view/gallery-card-dimensions (d/entity @conn view-id))))))
 
 (deftest get-view-data-all-pages-sorts-and-filters-hidden-test

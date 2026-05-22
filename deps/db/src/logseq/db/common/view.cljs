@@ -25,6 +25,16 @@
   {:width 160
    :height 232})
 
+(def gallery-min-card-dimension 100)
+
+(def gallery-max-card-dimension 1024)
+
+(defn- clamp-gallery-card-dimension
+  [value]
+  (-> value
+      (max gallery-min-card-dimension)
+      (min gallery-max-card-dimension)))
+
 (defn- column-ident
   [column]
   (or (:id column)
@@ -94,8 +104,8 @@
     (let [width (:logseq.property.view/gallery-card-width view)
           height (:logseq.property.view/gallery-card-height view)]
       (if (and (number? width) (number? height) (pos? width) (pos? height))
-        {:width width
-         :height height}
+        {:width (clamp-gallery-card-dimension width)
+         :height (clamp-gallery-card-dimension height)}
         gallery-default-card-dimensions))
 
     gallery-default-card-dimensions))

@@ -540,58 +540,63 @@
               :onSelect (fn [e] (.preventDefault e))}
              (:name column)))))))))
 
-(defn- positive-int
+(defn- gallery-slider-value
   [value]
-  (let [number-value (util/safe-parse-int value)]
-    (when (and number-value (pos? number-value))
-      number-value)))
+  (-> (js/Math.round value)
+      (max db-view/gallery-min-card-dimension)
+      (min db-view/gallery-max-card-dimension)))
+
+(rum/defc gallery-card-size-slider
+  [label value on-change on-commit]
+  [:div.flex.flex-col.gap-2
+   [:div.flex.flex-row.items-center.justify-between.gap-3.text-sm.leading-none
+    [:span label]
+    [:span.font-medium.tabular-nums (str value "px")]]
+   (shui/slider
+    {:class "relative flex w-full touch-none select-none items-center"
+     :value #js [value]
+     :min db-view/gallery-min-card-dimension
+     :max db-view/gallery-max-card-dimension
+     :step 1
+     :on-value-change (fn [result]
+                        (on-change (gallery-slider-value (first result))))
+     :on-value-commit (fn [result]
+                        (on-commit (gallery-slider-value (first result))))}
+    (shui/slider-track
+     {:class "relative h-2 w-full grow overflow-hidden rounded-full bg-secondary"}
+     (shui/slider-range
+      {:class "absolute h-full bg-primary"}))
+    (shui/slider-thumb
+     {:class "block h-4 w-4 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none"}))])
 
 (rum/defc gallery-custom-card-size-inputs
   [view-entity dimensions set-size!]
-  (let [[width set-width!] (hooks/use-state (str (:width dimensions)))
-        [height set-height!] (hooks/use-state (str (:height dimensions)))
-        apply! (fn []
-                 (when-let [width' (positive-int width)]
-                   (when-let [height' (positive-int height)]
-                     (p/do!
-                      (set-size! :custom)
-                      (set-view-property! view-entity :logseq.property.view/gallery-card-width width')
-                      (set-view-property! view-entity :logseq.property.view/gallery-card-height height')))))
+  (let [[width set-width!] (hooks/use-state (:width dimensions))
+        [height set-height!] (hooks/use-state (:height dimensions))
+        save-dimensions! (fn [width' height']
+                           (p/do!
+                            (set-size! :custom)
+                            (set-view-property! view-entity :logseq.property.view/gallery-card-width width')
+                            (set-view-property! view-entity :logseq.property.view/gallery-card-height height')))
         stop-menu-input! (fn [e]
                            (when-not (= "Escape" (util/ekey e))
-                             (util/stop-propagation e))
-                           (when (= "Enter" (util/ekey e))
-                             (util/stop e)
-                             (apply!)
-                             (some-> (.-target e) (.blur))))]
+                             (util/stop-propagation e)))]
     [:div
      {:class "flex flex-col items-stretch gap-2 w-[320px] max-w-[calc(100vw-32px)] px-4 py-2"
       :on-click util/stop-propagation
       :on-key-down stop-menu-input!}
      [:div.w-full.text-sm.leading-8 (t :view.gallery/custom-size)]
-     [:div.flex.flex-row.items-center.justify-between.gap-3.w-full
-      (shui/input
-       {:type "number"
-        :min 80
-        :class "w-[88px] h-8"
-        :placeholder (t :view.gallery/width)
-        :value width
-        :onChange #(set-width! (util/evalue %))})
-      (shui/input
-       {:type "number"
-        :min 80
-        :class "w-[88px] h-8"
-        :placeholder (t :view.gallery/height)
-        :value height
-        :onChange #(set-height! (util/evalue %))})
-      (shui/button
-       {:variant "secondary"
-        :size :sm
-        :class "h-8 px-3"
-        :on-click (fn [e]
-                    (util/stop e)
-                    (apply!))}
-       (t :ui/apply))]]))
+     [:div.flex.flex-col.gap-4.w-full
+      (gallery-card-size-slider
+       (t :view.gallery/width)
+       width
+       set-width!
+       #(save-dimensions! % height))
+      (gallery-card-size-slider
+       (t :view.gallery/height)
+       height
+       set-height!
+       #(save-dimensions! width %))]]))
 
 (defn- gallery-card-size-menu
   [view-entity]
