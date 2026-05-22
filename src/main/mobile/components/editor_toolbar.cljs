@@ -39,22 +39,21 @@
 
 (defn- insert-page-ref!
   []
-  (when (state/get-edit-input-id)
-    (let [input (state/get-input)]
-      (state/clear-editor-action!)
-      (let [selection (editor-handler/get-selection-and-format)
-            {:keys [selection-start selection-end selection]} selection]
-        (if (and input selection)
-          (do
-            (editor-handler/delete-and-update input selection-start selection-end)
-            (editor-handler/insert (page-ref/->page-ref selection)))
-          (insert-text page-ref/left-and-right-brackets
-                       {:backward-pos 2
-                        :check-fn (fn [_ _ _]
-                                    (let [input (state/get-input)
-                                          new-pos (cursor/get-caret-pos input)]
-                                      (state/set-editor-action-data! {:pos new-pos})
-                                      (commands/handle-step [:editor/search-page])))}))))))
+  (when-let [input (state/get-input)]
+    (state/clear-editor-action!)
+    (let [selection (editor-handler/get-selection-and-format)
+          {:keys [selection-start selection-end selection]} selection]
+      (if selection
+        (do
+          (editor-handler/delete-and-update input selection-start selection-end)
+          (editor-handler/insert (page-ref/->page-ref selection)))
+        (insert-text page-ref/left-and-right-brackets
+                     {:backward-pos 2
+                      :check-fn (fn [_ _ _]
+                                  (let [input (state/get-input)
+                                        new-pos (cursor/get-caret-pos input)]
+                                    (state/set-editor-action-data! {:pos new-pos})
+                                    (commands/handle-step [:editor/search-page])))})))))
 
 (defn- indent-outdent-action
   [indent?]
