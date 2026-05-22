@@ -609,17 +609,19 @@
      (restoring-worker-state
       (fn []
         (let [batch-sizes (atom [])
-              blocks [{:id "block-1" :page "page-1" :title "Block 1"}
-                      {:id "block-2" :page "page-1" :title "Block 2"}
-                      {:id "block-3" :page "page-1" :title "Block 3"}]
+              blocks (mapv (fn [n]
+                              {:id (str "block-" n)
+                               :page "page-1"
+                               :title (str "Block " n)})
+                            (range 8))
               embed-texts (fn [texts]
                             (swap! batch-sizes conj (count texts))
-                            (if (> (count texts) 1)
+                            (if (> (count texts) 2)
                               (p/rejected (js/Error. "batch too large"))
                               (p/resolved (mapv (fn [_] [0]) texts))))]
           (p/let [result (#'db-core/<embed-index-batch-with-fallback embed-texts blocks)]
             (is (= (count blocks) (count result)))
-            (is (= [3 1 1 1] @batch-sizes))))))
+            (is (= [8 4 2 2 4 2 2] @batch-sizes))))))
      (p/catch (fn [error]
                 (is false (str "unexpected error: " error))))
      (p/finally done))))

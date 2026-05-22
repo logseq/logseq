@@ -921,13 +921,12 @@
         (fn [error]
           (if (= 1 (count batch))
             (throw error)
-            (p/loop [remaining (seq batch)
-                     result []]
-              (if-let [block (first remaining)]
-                (p/let [embedded (<embed-index-batch embed-texts-fn [block])]
-                  (p/recur (next remaining)
-                           (into result embedded)))
-                result))))))))
+            (let [split-at (quot (count batch) 2)
+                  left (subvec (vec batch) 0 split-at)
+                  right (subvec (vec batch) split-at)]
+              (p/let [left-embedded (<embed-index-batch-with-fallback embed-texts-fn left)
+                      right-embedded (<embed-index-batch-with-fallback embed-texts-fn right)]
+                (into left-embedded right-embedded)))))))))
 
 (defn- <embed-index-blocks
   [repo blocks]
