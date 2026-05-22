@@ -80,6 +80,7 @@
       input-id
       (assoc config
              :comment-editor? true
+             :comment-asset-target-block asset-target-block
              :skip-focus? (not focus-editor?)
              :editor-opts
              {:default-value draft
