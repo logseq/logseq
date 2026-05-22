@@ -246,7 +246,7 @@
 
 (defn- selected-block-entities
   []
-  (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids)))
+  (vec (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids))))
 
 (defn- edit-block-entity
   []
@@ -255,8 +255,9 @@
 
 (defn- comment-shortcut-targets
   []
-  (or (seq (selected-block-entities))
-      (some-> (edit-block-entity) vector)))
+  (or (when (state/editing?)
+        (some-> (edit-block-entity) vector seq))
+      (seq (selected-block-entities))))
 
 (defn- current-edit-block-blank?
   []
@@ -269,12 +270,12 @@
   []
   (when-let [block (state/get-edit-block)]
     (editor-handler/save-current-block!)
-    (db-property-handler/set-block-property! (:db/id block)
-                                             :block/tags
-                                             comments-model/comments-tag-ident)
-    (state/clear-edit!)
-    (reveal-comments-area! block {:focus-editor? true})
-    block))
+    (p/let [_ (db-property-handler/set-block-property! (:db/id block)
+                                                       :block/tags
+                                                       comments-model/comments-tag-ident)]
+      (state/clear-edit!)
+      (reveal-comments-area! block {:focus-editor? true})
+      block)))
 
 (defn add-comment-to-blocks!
   [blocks]
@@ -290,10 +291,11 @@
   (if (and (state/editing?)
            (current-edit-block-blank?))
     (set-current-block-as-comments-area!)
-    (do
+    (let [comment-targets (comment-shortcut-targets)]
       (when (state/editing?)
-        (editor-handler/save-current-block!))
-      (add-comment-to-blocks! (comment-shortcut-targets)))))
+        (editor-handler/save-current-block!)
+        (state/clear-edit!))
+      (add-comment-to-blocks! comment-targets))))
 
 (defn insert-comment!
   [comments-block content]
