@@ -9,7 +9,6 @@
             [frontend.dicts :as dicts]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
