@@ -1107,7 +1107,6 @@
   @apply grid gap-2 px-3 pt-1 pb-3;
   @apply flex-1 overflow-y-auto;
   grid-template-columns: repeat(5, 1fr);
-  min-height: 120px;
   align-content: start;
 
   /* Recently used row - single row, no extra padding */
