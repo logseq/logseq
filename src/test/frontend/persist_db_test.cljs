@@ -1,6 +1,7 @@
 (ns frontend.persist-db-test
   (:require [cljs.test :refer [async deftest is use-fixtures]]
             [electron.ipc :as ipc]
+            [frontend.common.thread-api :as thread-api]
             [frontend.config :as config]
             [frontend.handler.notification :as notification]
             [frontend.persist-db.browser :as browser]
@@ -187,6 +188,27 @@
 (defn- graph-repos
   [& graphs]
   (mapv (fn [graph] {:url graph}) graphs))
+
+(deftest search-index-build-progress-keeps-vector-stage-in-ui-state
+  (let [repo "logseq_db_graph_a"
+        progress! (get @thread-api/*thread-apis :thread-api/search-index-build-progress)
+        original-state @state/state]
+    (try
+      (reset! state/state (assoc original-state :git/current-repo repo))
+      (progress! repo {:status :running
+                       :stage :vector-index
+                       :progress 42
+                       :processed 420
+                       :total 1000})
+      (is (= {:running? true
+              :repo repo
+              :stage :vector-index
+              :progress 42
+              :processed 420
+              :total 1000}
+             (:search/index-build @state/state)))
+      (finally
+        (reset! state/state original-state)))))
 
 (deftest electron-fetch-init-data-starts-remote-runtime
   (async done

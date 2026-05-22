@@ -74,7 +74,9 @@
   ([{:keys [post-message! remove-vfs! runtime import-db embed-texts]
      :or {post-message! (fn [& _] nil)
           remove-vfs! (fn [_] nil)
-          runtime :browser}}]
+          runtime :browser
+          embed-texts (fn [texts]
+                        (p/resolved (mapv (fn [_] [0.0]) texts)))}}]
    {:env {:publishing? false
           :runtime runtime}
     :storage {:install-opfs-pool (fn [_sqlite _pool-name]
@@ -99,9 +101,8 @@
              :exec (fn [db sql-or-opts] (.exec db sql-or-opts))
              :transaction (fn [db f] (.transaction db f))}
     :crypto {}
-    :embedding (cond-> {:model-id "test-model"}
-                 embed-texts
-                 (assoc :embed-texts embed-texts))
+    :embedding {:model-id "test-model"
+                :embed-texts embed-texts}
     :timers {:set-interval! (fn [_ _] nil)}}))
 
 (defn- restoring-worker-state
@@ -451,28 +452,71 @@
                            (is false (str error)))))))))
      (p/finally done))))
 
+(deftest search-build-blocks-indice-in-worker-reports-vector-progress-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
+              conn (d/create-conn db-schema/schema)
+              search-db (fake-db)
+              progress-calls (atom [])
+              idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
+          (d/transact! conn [{:block/uuid (random-uuid)}])
+          (platform/set-platform! (build-test-platform
+                                   {:runtime :node
+                                    :embed-texts (fn [_texts]
+                                                   (p/resolved [[0.1 0.2 0.3]]))}))
+          (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
+          (reset! worker-state/*datascript-conns {test-repo conn})
+          (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [_docs] nil)
+                                                           :truncate! (fn [] nil)}})
+          (reset! idle-status-atom {test-repo {:idle? true
+                                               :ts (.now js/Date)}})
+          (reset! worker-state/*main-thread
+                  (fn [qkw & args]
+                    (when (= qkw :thread-api/search-index-build-progress)
+                      (let [[repo payload] args]
+                        (swap! progress-calls conj {:repo repo
+                                                    :payload payload})))
+                    (p/resolved nil)))
+          (with-redefs [search/truncate-table! (fn [_db] nil)
+                        search/upsert-blocks! (fn [_db _blocks] nil)
+                        search/hidden-entity? (constantly false)
+                        search/block->index (fn [_entity]
+                                              {:id "block-1"
+                                               :page "page-1"
+                                               :title "Hello"})]
+            (p/let [_ (build-index! test-repo true)]
+              (let [vector-progress (some #(when (= :vector-index (get-in % [:payload :stage]))
+                                             %)
+                                          @progress-calls)]
+                (is (= test-repo (:repo vector-progress)))
+                (is (= :running (get-in vector-progress [:payload :status])))
+                (is (= 1 (get-in vector-progress [:payload :processed])))
+                (is (= 1 (get-in vector-progress [:payload :total])))
+                (is (= 100 (get-in vector-progress [:payload :progress])))))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
 (deftest search-index-blocks-use-platform-embeddings-for-vector-index-test
   (async done
     (->
      (restoring-worker-state
       (fn []
-        (let [embed-calls (atom [])]
-          (platform/set-platform! (build-test-platform
-                                   {:runtime :node
-                                    :embed-texts (fn [texts]
-                                                   (swap! embed-calls conj (vec texts))
-                                                   (p/resolved [[0.1 0.2 0.3]]))}))
+        (do
+          (platform/set-platform! (build-test-platform {:runtime :node}))
           (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [_] nil)}})
           (p/let [result (#'db-core/<embed-index-blocks
                           test-repo
                           [{:id "block-1"
                             :page "page-1"
                             :title "Hello"}])]
-            (is (= [["Hello"]] @embed-calls))
             (is (= [{:id "block-1"
                      :page "page-1"
                      :title "Hello"
-                     :embedding [0.1 0.2 0.3]}]
+                     :embedding [0]}]
                    result))))))
      (p/catch (fn [error]
                 (is false (str "unexpected error: " error))))
