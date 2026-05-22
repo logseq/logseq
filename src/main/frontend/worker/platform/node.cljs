@@ -265,6 +265,7 @@
 
 (def ^:private zvec-vector-field "embedding")
 (def ^:private zvec-page-field "page")
+(def ^:private zvec-title-field "title")
 
 (defn- zvec-enum-value
   [enum-name value-name]
@@ -287,7 +288,9 @@
                                                     :metricType (zvec-enum-value "ZVecMetricType" "COSINE")}}]
               :fields #js [#js {:name zvec-page-field
                                  :dataType (zvec-enum-value "ZVecDataType" "STRING")
-                                 :indexParams #js {:indexType (zvec-enum-value "ZVecIndexType" "INVERT")}}]})))
+                                 :indexParams #js {:indexType (zvec-enum-value "ZVecIndexType" "INVERT")}}
+                            #js {:name zvec-title-field
+                                 :dataType (zvec-enum-value "ZVecDataType" "STRING")}]})))
 
 (defn- create-zvec-collection!
   [path dimension]
@@ -313,11 +316,13 @@
         (throw error)))))
 
 (defn- zvec-doc
-  [{:keys [id page embedding]}]
+  [{:keys [id page embedding vector-title]}]
   (let [vectors (js-obj)
         fields (js-obj)]
     (gobj/set vectors zvec-vector-field (clj->js embedding))
     (gobj/set fields zvec-page-field page)
+    (when vector-title
+      (gobj/set fields zvec-title-field vector-title))
     #js {:id id
          :vectors vectors
          :fields fields}))
@@ -328,6 +333,7 @@
         distance (gobj/get doc "score")]
     {:id (gobj/get doc "id")
      :page (gobj/get fields zvec-page-field)
+     :vector-title (gobj/get fields zvec-title-field)
      :vector-score (if (number? distance)
                      (/ 1 (+ 1 distance))
                      0.0)}))
@@ -365,9 +371,9 @@
   [collection embedding topk]
   (.querySync ^js collection
               #js {:fieldName zvec-vector-field
-                   :topk topk
-                   :vector (clj->js embedding)
-                   :outputFields #js [zvec-page-field]
+	                   :topk topk
+	                   :vector (clj->js embedding)
+	                   :outputFields #js [zvec-page-field zvec-title-field]
                    :params #js {:indexType (zvec-enum-value "ZVecIndexType" "HNSW")
                                 :ef 300}}))
 

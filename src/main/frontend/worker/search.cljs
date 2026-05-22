@@ -146,11 +146,15 @@ DROP TRIGGER IF EXISTS blocks_au;
 (def ^:private query-boolean-operators #{"and" "or" "not" "|" "&"})
 (def ^:private query-break-chars #{\, \. \; \! \? \uFF0C \u3002 \uFF1B \uFF01 \uFF1F \u3001}) ;; , . ; ! ? ， 。 ； ！ ？ 、
 (def vector-embedding-dimension 384)
-(def vector-context-version 1)
+(def vector-context-version 2)
 (def ^:private rrf-k 60)
 (def ^:private keyword-rrf-weight 1.25)
 (def ^:private vector-rrf-weight 1.0)
 (def ^:private source-score-tie-break-weight 0.000001)
+(def ^:private primary-title-term-match-boost 0.004)
+(def ^:private title-term-match-boost 0.002)
+(def ^:private context-term-match-boost 0.0005)
+(def ^:private max-vector-term-match-boost 0.005)
 
 (defn- query->terms
   [q]
@@ -851,11 +855,47 @@ DROP TRIGGER IF EXISTS blocks_au;
    {}
    (vec result-lists)))
 
+(defn- matched-term-set
+  [text terms]
+  (if (string/blank? text)
+    #{}
+    (->> (find-matches text terms)
+         (map (comp string/lower-case :term))
+         set)))
+
+(defn- vector-term-match-score
+  [q result block]
+  (if (and (not (string/blank? q))
+           (:vector-score result))
+    (let [terms (vec (query->terms q))
+          title-matches (matched-term-set (or (:title result) (:block/title block)) terms)
+          context-matches (matched-term-set (:vector-title result) terms)
+          score (->> terms
+                     (map-indexed
+                      (fn [idx term]
+                        (let [term (string/lower-case term)]
+                          (cond
+                            (contains? title-matches term)
+                            (if (zero? idx)
+                              primary-title-term-match-boost
+                              title-term-match-boost)
+
+                            (contains? context-matches term)
+                            context-term-match-boost
+
+                            :else
+                            0))))
+                     (reduce + 0))]
+      (min max-vector-term-match-boost score))
+    0))
+
 ;; Combine and re-rank keyword and vector results
 (defn combine-results
   ([db keyword-results]
    (combine-results db keyword-results nil))
   ([db keyword-results vector-results]
+   (combine-results db keyword-results vector-results nil))
+  ([db keyword-results vector-results q]
    (let [keyword-results (vec (or keyword-results []))
          vector-results (vec (or vector-results []))
          use-rrf? (seq vector-results)
@@ -874,15 +914,21 @@ DROP TRIGGER IF EXISTS blocks_au;
                                   base-score (if use-rrf?
                                                (or (get fused-score-by-id id) 0.0)
                                                keyword-score)
+                                  vector-match-score (if use-rrf?
+                                                       (vector-term-match-score q result block)
+                                                       0)
                                   combined-score (+ base-score
+                                                    vector-match-score
                                                     (* source-score-tie-break-weight
                                                        (+ keyword-score vector-score))
-                                                    (cond
-                                                      (ldb/page? block)
-                                                      0.02
-                                                      (:block/tags block)
-                                                      0.01
-                                                      :else
+                                                    (if-not use-rrf?
+                                                      (cond
+                                                        (ldb/page? block)
+                                                        0.02
+                                                        (:block/tags block)
+                                                        0.01
+                                                        :else
+                                                        0)
                                                       0))]
                               (assoc result
                                      search-result-block-key block
@@ -918,8 +964,7 @@ DROP TRIGGER IF EXISTS blocks_au;
        (or (not (ldb/built-in? block))
            (not (ldb/private-built-in-page? block))
            (ldb/class? block))
-       (or (not (ldb/built-in? block))
-           (ldb/class? block))))
+       (not (ldb/built-in? block))))
    (or (not code-only?)
        (code-block? code-class block))))
 
@@ -931,11 +976,11 @@ DROP TRIGGER IF EXISTS blocks_au;
       (when (include-search-block? conn block code-class option)
         (let [alias-source (some-> (first (:block/_alias block))
                                    (select-keys [:block/uuid :block/title]))
-	              alias-match (matched-alias q block)
-	              display-title (if (:enable-snippet? option)
-	                              (if (page-or-object? block)
-	                                (ensure-highlighted-snippet snippet (:block/title block) q)
-	                                (ensure-highlighted-snippet snippet (or title (:block/title block)) q))
+              alias-match (matched-alias q block)
+              display-title (if (:enable-snippet? option)
+                              (if (page-or-object? block)
+                                (ensure-highlighted-snippet snippet (:block/title block) q)
+                                (ensure-highlighted-snippet snippet (or title (:block/title block)) q))
                               (if (page-or-object? block)
                                 (:block/title block)
                                 (or snippet title (:block/title block))))
@@ -992,7 +1037,8 @@ DROP TRIGGER IF EXISTS blocks_au;
                      (cond-> {:id id
                               :vector-score (or vector-score score 0.0)}
                        page (assoc :page page)
-                       (:title result) (assoc :title (:title result))))))))))
+                       (:title result) (assoc :title (:title result))
+                       (:vector-title result) (assoc :vector-title (:vector-title result))))))))))
 
 (defn search-blocks
   "Options:
@@ -1047,7 +1093,8 @@ DROP TRIGGER IF EXISTS blocks_au;
            ;;      (prn :debug :keyword-search-result item))
            combined-result (combine-results @conn
                                             (concat exact-title-result fuzzy-result matched-result non-match-result)
-                                            vector-result)
+                                            vector-result
+                                            q)
            code-class (when code-only?
                         (d/entity @conn :logseq.class/Code-block))
            matched-count (when include-matched-count?
@@ -1064,11 +1111,13 @@ DROP TRIGGER IF EXISTS blocks_au;
   [vector-index blocks]
   (when-let [upsert-fn (:upsert! vector-index)]
     (let [docs (->> blocks
-                    (keep (fn [{:keys [id page embedding]}]
+                    (keep (fn [{:keys [id page embedding vector-title]}]
                             (when (and id page (seq embedding))
-                              {:id id
-                               :page page
-                               :embedding embedding})))
+                              (cond-> {:id id
+                                       :page page
+                                       :embedding embedding}
+                                vector-title
+                                (assoc :vector-title vector-title)))))
                     vec)]
       (when (seq docs)
         (upsert-fn docs)))))
@@ -1170,7 +1219,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                    (remove nil?))))]
     (when (seq datoms)
       (let [ref-affecting-attrs #{:block/uuid :block/name :block/title :block/properties :block/alias}
-            visibility-affecting-attrs #{:logseq.property/deleted-at :block/parent :block/page}
+            visibility-affecting-attrs #{:logseq.property/deleted-at :block/parent :block/page :block/order}
             ref-eids (->> datoms
                           (filter #(contains? ref-affecting-attrs (:a %)))
                           (mapcat (fn [{:keys [a e v]}]
@@ -1193,8 +1242,11 @@ DROP TRIGGER IF EXISTS blocks_au;
   (let [data (:tx-data tx-report)
         datoms (filter
                 (fn [datom]
-                  ;; Capture direct changes on searchable block content, refs, and aliases.
-                  (contains? #{:block/uuid :block/name :block/title :block/properties :block/alias} (:a datom)))
+                  ;; Capture direct changes on searchable content and outline structure
+                  ;; because vector embeddings include parent, child, and sibling context.
+                  (contains? #{:block/uuid :block/name :block/title :block/properties :block/alias
+                               :block/parent :block/page :block/order}
+                             (:a datom)))
                 data)]
     (when (seq datoms)
       (get-blocks-from-datoms-impl tx-report datoms))))
