@@ -534,6 +534,106 @@
           (is (= (str page-id) (:id indexed)))
           (is (= "Artificial Intelligence ai" (:title indexed))))))))
 
+(deftest block-index-includes-vector-embedding
+  (testing "desktop vector search can index the same block text as SQLite keyword search"
+    (let [block-id #uuid "00000000-0000-0000-0000-000000000238"
+          page-id #uuid "00000000-0000-0000-0000-000000000239"
+          block {:db/id 1
+                 :block/uuid block-id
+                 :block/title "Local-first semantic search"
+                 :block/page {:block/uuid page-id}}]
+      (with-redefs [ldb/page? (constantly false)
+                    ldb/object? (constantly false)
+                    ldb/journal? (constantly false)
+                    ldb/closed-value? (constantly false)
+                    ldb/get-title-with-parents (fn [entity] (:block/title entity))]
+        (let [indexed (search/block->index block)]
+          (is (= "Local-first semantic search" (:title indexed)))
+          (is (vector? (:embedding indexed)))
+          (is (= search/vector-embedding-dimension (count (:embedding indexed))))
+          (is (every? number? (:embedding indexed))))))))
+
+(deftest search-blocks-includes-vector-only-results
+  (testing "zvec vector hits are merged into desktop search even when SQLite has no keyword hit"
+    (let [page-id (test-uuid-string 900)
+          vector-id (test-uuid-string 901)
+          blocks {vector-id {:db/id 901
+                             :block/uuid (uuid vector-id)
+                             :block/title "Semantic only result"
+                             :block/page {:block/uuid (uuid page-id)}}}
+          vector-queries (atom [])
+          vector-index {:query (fn [embedding limit page]
+                                 (swap! vector-queries conj {:embedding embedding
+                                                             :limit limit
+                                                             :page page})
+                                 [{:id vector-id
+                                   :page page-id
+                                   :vector-score 0.91}])}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (get blocks (str id)))
+                    d/pull-many (fn [_db _selector lookup-refs]
+                                  (mapv (fn [[_attr id]]
+                                          (get blocks (str id)))
+                                        lookup-refs))
+                    ldb/hidden? (constantly false)
+                    ldb/page? (constantly false)
+                    ldb/built-in? (constantly false)]
+        (let [result (vec (search/search-blocks (atom :db)
+                                                (checking-db)
+                                                vector-index
+                                                "meaning based query"
+                                                {:limit 10
+                                                 :enable-snippet? false}))]
+          (is (= [{:db/id 901
+                   :block/title "Semantic only result"}]
+                 (mapv #(select-keys % [:db/id :block/title]) result)))
+          (is (= 1 (count @vector-queries)))
+          (is (= search/vector-embedding-dimension
+                 (count (:embedding (first @vector-queries))))))))))
+
+(deftest search-blocks-hybrid-ranks-keyword-and-vector-results
+  (testing "SQLite keyword hits and zvec vector hits share the final ranking"
+    (let [keyword-id (test-uuid-string 910)
+          vector-id (test-uuid-string 911)
+          page-id (test-uuid-string 912)
+          blocks {keyword-id {:db/id 910
+                              :block/uuid (uuid keyword-id)
+                              :block/title "alpha keyword"
+                              :block/page {:block/uuid (uuid page-id)}}
+                  vector-id {:db/id 911
+                             :block/uuid (uuid vector-id)
+                             :block/title "related semantic result"
+                             :block/page {:block/uuid (uuid page-id)}}}
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")]
+                            (cond
+                              (string/includes? sql "title match ?")
+                              (clj->js [[keyword-id page-id "alpha keyword" -16 nil]])
+
+                              :else
+                              #js [])))}
+          vector-index {:query (fn [_embedding _limit _page]
+                                 [{:id vector-id
+                                   :page page-id
+                                   :vector-score 4.0}])}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (get blocks (str id)))
+                    d/pull-many (fn [_db _selector lookup-refs]
+                                  (mapv (fn [[_attr id]]
+                                          (get blocks (str id)))
+                                        lookup-refs))
+                    ldb/hidden? (constantly false)
+                    ldb/page? (constantly false)
+                    ldb/built-in? (constantly false)]
+        (let [result (vec (search/search-blocks (atom :db)
+                                                db
+                                                vector-index
+                                                "alpha"
+                                                {:limit 10
+                                                 :enable-snippet? false}))]
+          (is (= ["related semantic result" "alpha keyword"]
+                 (mapv :block/title result))))))))
+
 (deftest search-result-keeps-page-title-when-alias-matches
   (testing "alias matches annotate the page result without replacing its title"
     (let [page-id #uuid "00000000-0000-0000-0000-000000000236"

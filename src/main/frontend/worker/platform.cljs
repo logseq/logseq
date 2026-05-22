@@ -142,6 +142,11 @@
     (f opts)
     (throw (ex-info "platform sqlite/open-db missing" {:opts opts}))))
 
+(defn vector-open
+  [platform opts]
+  (when-let [f (get-in platform [:vector :open-index])]
+    (f opts)))
+
 (defn post-message!
   [platform type payload]
   (when-let [f (get-in platform [:broadcast :post-message!])]
