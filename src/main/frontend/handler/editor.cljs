@@ -748,6 +748,11 @@
    (or (ldb/page? block1)
        (ldb/page? block2))))
 
+(defn- editor-block-preserved-on-empty-title-merge?
+  [block]
+  (or (ldb/asset? block)
+      (comments-model/comments-area? block)))
+
 (defn delete-block-inner!
   [repo {:keys [block-id value config block-container current-block next-block delete-concat?]}]
   (when (and block-id (not (one-page-another-block current-block next-block)))
@@ -785,7 +790,10 @@
                        (db-model/hidden-page? (:block/page block))) ; embed page
                   nil
 
-                  (and concat-prev-block? input-empty? delete-concat?)
+                  (and concat-prev-block?
+                       input-empty?
+                       (not (editor-block-preserved-on-empty-title-merge? prev-block))
+                       delete-concat?)
                   (let [children (:block/_parent (db/entity (:db/id current-block)))] ; del
                     (p/do!
                      (ui-outliner-tx/transact!
@@ -806,7 +814,10 @@
                       (delete-block-aux! current-block))
                      (edit-block! (db/entity (:db/id next-block)) 0)))
 
-                  (and concat-prev-block? (string/blank? (:block/title prev-block)) (not delete-concat?)) ; backspace
+                  (and concat-prev-block?
+                       (string/blank? (:block/title prev-block))
+                       (not (editor-block-preserved-on-empty-title-merge? prev-block))
+                       (not delete-concat?)) ; backspace
                   (p/do!
                    (ui-outliner-tx/transact!
                     transact-opts
@@ -2677,6 +2688,7 @@
             single-block? (if e (inside-of-single-block (.-target e)) false)
             root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
         (when (and (not (and top-block? (not (string/blank? value))))
+                   (not (editor-block-preserved-on-empty-title-merge? block))
                    (not root-block?)
                    (not single-block?)
                    (not custom-query?))

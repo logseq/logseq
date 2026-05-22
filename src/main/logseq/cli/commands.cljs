@@ -2,6 +2,7 @@
   "Command parsing and action building for the Logseq CLI."
   (:require [babashka.cli :as cli]
             [clojure.string :as string]
+            [logseq.cli.command.agent :as agent-command]
             [logseq.cli.command.auth :as auth-command]
             [logseq.cli.command.completion :as completion-command]
             [logseq.cli.command.core :as command-core]
@@ -92,6 +93,7 @@
 
 (def ^:private base-table
   (vec (concat graph-command/entries
+               agent-command/entries
                server-command/entries
                list-command/entries
                upsert-command/entries
@@ -587,6 +589,9 @@
         (:graph-list :graph-create :graph-switch :graph-remove :graph-validate :graph-info)
         (graph-command/build-graph-action command graph repo options)
 
+        (:agent-bridge :agent-bridge-list)
+        (agent-command/build-action command options repo graph)
+
         :graph-backup-list
         (graph-command/build-backup-list-action repo)
 
@@ -695,6 +700,8 @@
                        :else
                        (case (:type action)
                          :graph-list (graph-command/execute-graph-list action config)
+                         :agent-bridge (agent-command/execute-bridge action config)
+                         :agent-bridge-list (agent-command/execute-list action config)
                          :graph-backup-list (graph-command/execute-graph-backup-list action config)
                          :graph-backup-create (graph-command/execute-graph-backup-create action config)
                          :graph-backup-restore (graph-command/execute-graph-backup-restore action config)

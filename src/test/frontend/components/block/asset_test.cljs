@@ -16,3 +16,9 @@
            (block-asset/link-file-name
             {:block/title "test"}
             :pdf)))))
+
+(deftest read-mode-title-attrs-test
+  (testing "reserves the asset title row at the same height as a one-line editor"
+    (let [attrs block-asset/read-mode-title-attrs]
+      (is (= {:min-height 24} (:style attrs)))
+      (is (= "asset-title-slot text-xs opacity-60 mt-1 cursor-text" (:class attrs))))))
