@@ -128,8 +128,9 @@
              (:property-assignments result))))))
 
 (deftest test-extract-inline-properties-keeps-non-property-attrs
-  (testing "only property namespace keywords and string property names are extracted"
+  (testing "property selectors are extracted without treating normal block attrs as properties"
     (let [block-uuid (uuid "00000000-0000-0000-0000-000000000103")
+          property-uuid (uuid "00000000-0000-0000-0000-000000000104")
           result (#'add-command/extract-inline-properties
                   [{:block/title "Block"
                     :block/uuid block-uuid
@@ -137,7 +138,10 @@
                     :build/keep-uuid? true
                     :plugin/option "kept"
                     :logseq.property.asset/type "png"
-                    :plugin.property._test_plugin/rating "5"}])]
+                    :plugin.property._test_plugin/rating "5"
+                    801 "by id"
+                    property-uuid "by uuid"
+                    :plain-title "by keyword"}])]
       (is (= [{:block/title "Block"
                :block/uuid block-uuid
                :db/id 101
@@ -146,7 +150,10 @@
                :logseq.property.asset/type "png"}]
              (:blocks result)))
       (is (= [{:block-uuid block-uuid
-               :properties {:plugin.property._test_plugin/rating "5"}}]
+               :properties {:plugin.property._test_plugin/rating "5"
+                            801 "by id"
+                            property-uuid "by uuid"
+                            :plain-title "by keyword"}}]
              (:property-assignments result))))))
 
 (def ^:private mock-transport-invoke
@@ -439,6 +446,59 @@
                                     :opts {:allow-non-built-in? true}}
                                   %)
                                @resolve-properties-calls*)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-add-block-does-not-create-target-page-when-inline-property-resolution-fails
+  (async done
+         (let [created-page-uuid (uuid "00000000-0000-0000-0000-000000000203")
+               ops* (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               add-command/resolve-properties
+                               (fn [_ _ properties & _]
+                                 (if (= {"Missing Prop" "x"} properties)
+                                   (p/rejected (ex-info "property not found: \"Missing Prop\""
+                                                        {:code :property-not-found
+                                                         :property "Missing Prop"}))
+                                   (p/resolved properties)))
+                               transport/invoke
+                               (fn [_ method args]
+                                 (case method
+                                   :thread-api/q
+                                   (p/resolved [])
+
+                                   :thread-api/pull
+                                   (let [[_ _ lookup] args]
+                                     (p/resolved
+                                      (if (= lookup [:block/name "newpage"])
+                                        {:db/id 900
+                                         :block/uuid created-page-uuid
+                                         :block/name "newpage"
+                                         :block/title "NewPage"}
+                                        {})))
+
+                                   :thread-api/apply-outliner-ops
+                                   (let [[_ ops _] args]
+                                     (swap! ops* conj ops)
+                                     (p/resolved {:result :ok}))
+
+                                   (p/rejected (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (-> (add-command/execute-add-block
+                      {:type :add-block
+                       :repo "demo"
+                       :target-page-name "NewPage"
+                       :pos "last-child"
+                       :blocks [{:block/title "Q"
+                                 :block/uuid (uuid "00000000-0000-0000-0000-000000000204")
+                                 "Missing Prop" "x"}]}
+                      {})
+                     (p/then (fn [_]
+                               (is false "expected inline property resolution error")))
+                     (p/catch (fn [e]
+                                (is (= :property-not-found (-> e ex-data :code)))
+                                (is (empty? @ops*)
+                                    "target page creation must not run before inline properties validate")))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))

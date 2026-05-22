@@ -192,9 +192,15 @@
     (string? k)
     (seq (string/trim k))
 
+    (or (number? k) (uuid? k))
+    true
+
     (qualified-keyword? k)
     (and (inline-property-key-namespace? (namespace k))
          (public-built-in-property-key? k))
+
+    (keyword? k)
+    true
 
     :else
     false))
@@ -1252,22 +1258,22 @@
 (defn execute-add-block
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              target-block-uuid (resolve-add-target cfg action)
               action-blocks (normalize-block-content-keys (:blocks action))
-              ref-values (collect-page-refs action-blocks)
+              {blocks-without-inline-properties :blocks
+               inline-property-assignments :property-assignments} (extract-inline-properties action-blocks)
+              inline-property-assignments (resolve-inline-property-assignments cfg (:repo action)
+                                                                               inline-property-assignments)
+              target-block-uuid (resolve-add-target cfg action)
+              ref-values (collect-page-refs blocks-without-inline-properties)
               {:keys [uuid-refs page-refs id-refs]} (partition-ref-values ref-values)
               _ (ensure-block-refs-exist! cfg (:repo action) uuid-refs)
               page-refs' (or (resolve-page-ref-entities cfg (:repo action) page-refs) [])
               id-refs' (or (resolve-id-ref-entities cfg (:repo action) id-refs) [])
               refs (into page-refs' id-refs')
               blocks (if (seq refs)
-                       (normalize-block-title-refs action-blocks refs)
-                       action-blocks)
-              {blocks-without-inline-properties :blocks
-               inline-property-assignments :property-assignments} (extract-inline-properties blocks)
-              inline-property-assignments (resolve-inline-property-assignments cfg (:repo action)
-                                                                               inline-property-assignments)
-              blocks-for-insert (flatten-block-tree blocks-without-inline-properties)
+                       (normalize-block-title-refs blocks-without-inline-properties refs)
+                       blocks-without-inline-properties)
+              blocks-for-insert (flatten-block-tree blocks)
               status (:status action)
               tags (if (contains? action :resolved-tags)
                      (:resolved-tags action)
