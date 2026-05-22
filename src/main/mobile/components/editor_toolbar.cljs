@@ -39,23 +39,22 @@
 
 (defn- insert-page-ref!
   []
-  (let [{:keys [block]} (editor-handler/get-state)]
-    (when block
-      (let [input (state/get-input)]
-        (state/clear-editor-action!)
-        (let [selection (editor-handler/get-selection-and-format)
-              {:keys [selection-start selection-end selection]} selection]
-          (if selection
-            (do
-              (editor-handler/delete-and-update input selection-start selection-end)
-              (editor-handler/insert (page-ref/->page-ref selection)))
-            (insert-text page-ref/left-and-right-brackets
-                         {:backward-pos 2
-                          :check-fn (fn [_ _ _]
-                                      (let [input (state/get-input)
-                                            new-pos (cursor/get-caret-pos input)]
-                                        (state/set-editor-action-data! {:pos new-pos})
-                                        (commands/handle-step [:editor/search-page])))})))))))
+  (when (state/get-edit-input-id)
+    (let [input (state/get-input)]
+      (state/clear-editor-action!)
+      (let [selection (editor-handler/get-selection-and-format)
+            {:keys [selection-start selection-end selection]} selection]
+        (if (and input selection)
+          (do
+            (editor-handler/delete-and-update input selection-start selection-end)
+            (editor-handler/insert (page-ref/->page-ref selection)))
+          (insert-text page-ref/left-and-right-brackets
+                       {:backward-pos 2
+                        :check-fn (fn [_ _ _]
+                                    (let [input (state/get-input)
+                                          new-pos (cursor/get-caret-pos input)]
+                                      (state/set-editor-action-data! {:pos new-pos})
+                                      (commands/handle-step [:editor/search-page])))}))))))
 
 (defn- indent-outdent-action
   [indent?]
@@ -151,19 +150,24 @@
 
 (defn- toolbar-actions
   []
-  (let [keyboard (keyboard-action)
-        main-actions [(undo-action)
-                      (todo-action)
-                      (indent-outdent-action false)
-                      (indent-outdent-action true)
-                      (tag-action)
-                      (camera-action)
-                      (page-ref-action)
-                      (audio-action)
-                      (slash-action)
-                      (redo-action)]]
-    {:main main-actions
-     :trailing keyboard}))
+  (if (:comment-editor? (last (state/get-editor-args)))
+    {:main [(page-ref-action)
+            (camera-action)
+            (audio-action)]
+     :trailing nil}
+    (let [keyboard (keyboard-action)
+          main-actions [(undo-action)
+                        (todo-action)
+                        (indent-outdent-action false)
+                        (indent-outdent-action true)
+                        (tag-action)
+                        (camera-action)
+                        (page-ref-action)
+                        (audio-action)
+                        (slash-action)
+                        (redo-action)]]
+      {:main main-actions
+       :trailing keyboard})))
 
 (defn- action->native
   [{:keys [id title system-icon]}]
