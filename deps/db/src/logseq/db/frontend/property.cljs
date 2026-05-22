@@ -232,11 +232,6 @@
      :logseq.property/asset   {:title "Asset"
                                :schema {:type :entity
                                         :hide? true}}
-     ;; Wikidata entity ID for pages created from Wikidata
-     :logseq.property/wikidata-id {:title "Wikidata ID"
-                                   :schema {:type :default
-                                            :public? false
-                                            :hide? true}}
      ;; used by pdf
      ;; TODO: remove ls-type
      :logseq.property/ls-type {:schema {:type :keyword
@@ -276,10 +271,10 @@
                                                            :cardinality :many
                                                            :hide? true}}
      :logseq.property.comments/blocks {:title "Commented blocks"
-                                        :schema {:type :node
-                                                 :cardinality :many
-                                                 :public? false
-                                                 :hide? true}}
+                                       :schema {:type :node
+                                                :cardinality :many
+                                                :public? false
+                                                :hide? true}}
 
      ;; Journal props
      :logseq.property.journal/title-format {:title "Title Format"
@@ -518,10 +513,6 @@
                                              :cardinality :many
                                              :hide? true
                                              :public? false}}
-     :logseq.property/property-key-width {:title "Property key column width"
-                                          :schema {:type :raw-number
-                                                   :hide? true
-                                                   :public? false}}
      :logseq.property/view-for {:title "This view belongs to"
                                 :schema
                                 {:type :node
