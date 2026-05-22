@@ -6383,15 +6383,30 @@
   {:will-mount (fn [s]
                  (let [opts (first (:rum/args s))
                        current-icon (:current-icon opts)
+                       ;; Only carry over prior icon data when it's a
+                       ;; text icon. For emoji/tabler, `normalize-icon`
+                       ;; stamps the shortcode (e.g. "smiley") into
+                       ;; `[:data :value]`; for avatars, the initials
+                       ;; ("BA") land there and the foreground color
+                       ;; lands in `[:data :color]`. Without this guard
+                       ;; both leak into the text-picker's atoms and
+                       ;; surface in the text input + Custom tile
+                       ;; preview when the user switches modes from a
+                       ;; non-text icon. `*mode = nil` is then masked
+                       ;; by the `valid-modes` fallback at render time,
+                       ;; so the Initials tile *looks* selected while
+                       ;; the input shows the leaked string — the
+                       ;; bug's signature.
+                       text-icon? (= :text (:type current-icon))
                        title (or (:page-title opts)
                                  (some-> (state/get-current-page)
                                          (db/get-page)
                                          (:block/title)))
-                       existing-value (get-in current-icon [:data :value])
-                       existing-alignment (get-in current-icon [:data :alignment])
-                       existing-color (get-in current-icon [:data :color])
+                       existing-value (when text-icon? (get-in current-icon [:data :value]))
+                       existing-alignment (when text-icon? (get-in current-icon [:data :alignment]))
+                       existing-color (when text-icon? (get-in current-icon [:data :color]))
                        selected-color (:selected-color opts)
-                       existing-mode (get-in current-icon [:data :mode])]
+                       existing-mode (when text-icon? (get-in current-icon [:data :mode]))]
                    (reset! (::text-value s) (or existing-value (derive-initials title)))
                    (reset! (::alignment s) (or existing-alignment "center"))
                    (reset! (::color s) (or existing-color selected-color))
