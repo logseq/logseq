@@ -311,6 +311,27 @@
                               (-> (stop!) (p/finally (fn [] (done))))
                               (done))))))))
 
+(deftest db-worker-node-logs-console-number-output
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-log-console-number")
+               repo (str "logseq_db_log_console_number_" (subs (str (random-uuid)) 0 8))
+               log-file (log-path data-dir repo)]
+           (-> (p/let [{:keys [stop!]}
+                       (start-daemon! {:root-dir data-dir
+                                       :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (.error js/console 123)
+                       _ (p/delay 50)
+                       contents (.toString (fs/readFileSync log-file) "utf8")]
+                 (is (string/includes? contents "123")))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
 (deftest db-worker-node-logs-process-stdout-output
   (async done
          (let [daemon (atom nil)

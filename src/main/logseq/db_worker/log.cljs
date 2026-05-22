@@ -110,8 +110,13 @@
      (instance? js/Error value)
      (or (.-stack value) (.-message value) (str value))
 
+     (and encoding
+          (exists? js/Buffer)
+          (.isBuffer js/Buffer value))
+     (.toString value encoding)
+
      (and value (fn? (.-toString value)))
-     (.toString value (or encoding "utf8"))
+     (.toString value)
 
      :else
      (str value))))

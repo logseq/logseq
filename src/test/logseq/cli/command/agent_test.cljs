@@ -21,6 +21,14 @@
   []
   (.mkdtempSync fs (node-path/join (.tmpdir os) "logseq-agent-bridge-test-")))
 
+(defn- read-dict
+  [filename]
+  (reader/read-string
+   (.toString
+    (fs/readFileSync
+     (node-path/join (.cwd js/process) "src" "resources" "dicts" filename))
+    "utf8")))
+
 (defn- task-block
   [overrides]
   (merge {:db/id 42
@@ -108,7 +116,11 @@
              (get-in property [:properties :logseq.property/description])))
       (is (contains? db-property/public-built-in-properties :logseq.property.agent/session-id))
       (is (db-property/logseq-property? :logseq.property.agent/session-id))
-      (is (db-property/internal-property? :logseq.property.agent/session-id)))))
+      (is (db-property/internal-property? :logseq.property.agent/session-id))
+      (let [i18n-key (db-property/built-in-ident->i18n-key :logseq.property.agent/session-id)]
+        (is (= :property.built-in/agent-session-id i18n-key))
+        (is (contains? (read-dict "en.edn") i18n-key))
+        (is (contains? (read-dict "zh-cn.edn") i18n-key))))))
 
 (deftest test-agent-command-entries
   (testing "parse agent bridge command surface"
@@ -1308,6 +1320,110 @@
                (is false (str "unexpected setup error: " e))
                (done))))))
 
+(deftest test-execute-agent-bridge-connects-listener-before-ready-log-and-initial-scan
+  (async done
+         (let [calls (atom [])
+               call-index (fn [pred]
+                            (first (keep-indexed (fn [idx call]
+                                                   (when (pred call) idx))
+                                                 @calls)))]
+           (-> (p/with-redefs [agent-command/codex-available? (fn [_] true)
+                               cli-server/ensure-server! (fn [cfg repo]
+                                                           (swap! calls conj [:ensure-server repo])
+                                                           (assoc cfg :base-url "http://127.0.0.1:1234"))
+                               agent-command/register-agent-bridge! (fn [_cfg repo agent-name]
+                                                                      (swap! calls conj [:register repo agent-name])
+                                                                      (p/resolved true))
+                               agent-command/ensure-agent-bridge-prompt-templates!
+                               (fn [_cfg repo]
+                                 (swap! calls conj [:prompt-templates repo])
+                                 (p/resolved {:task "Task {{graph}} {{block-uuid}} {{agent-name}}\n{{task-block-tree}}"
+                                              :comment "Comment {{graph}} {{comment-uuid}} {{agent-name}}\n{{comment-target-context}}\n{{comment-thread-context}}\n{{requesting-comment}}"}))
+                               transport/connect-events! (fn [_cfg _handler]
+                                                           (swap! calls conj [:connect])
+                                                           {:close! (fn [] nil)})
+                               agent-command/list-routable-tasks (fn [_cfg repo agent-name]
+                                                                   (swap! calls conj [:list repo agent-name])
+                                                                   (p/resolved []))]
+                 (do
+                   (agent-command/execute-bridge {:type :agent-bridge
+                                                  :repo "logseq_db_demo"
+                                                  :graph "demo"
+                                                  :dry-run? false}
+                                                 {:root-dir "/tmp/logseq"
+                                                  :agent-name "build-host"
+                                                  :log-fn (fn [line]
+                                                            (swap! calls conj [:log line]))})
+                   (p/let [_ (p/delay 10)]
+                     (let [connect-index (call-index #(= [:connect] %))
+                           listening-index (call-index #(and (= :log (first %))
+                                                             (string/includes? (second %) "listening graph changes")))
+                           list-index (call-index #(= :list (first %)))]
+                       (is (some? connect-index))
+                       (is (some? listening-index))
+                       (is (some? list-index))
+                       (is (< connect-index listening-index))
+                       (is (< connect-index list-index))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-agent-bridge-bounds-initial-task-routing-concurrency
+  (async done
+         (let [root (temp-root)
+               active* (atom 0)
+               max-active* (atom 0)
+               routed* (atom [])
+               blocks (mapv (fn [idx]
+                               (task-block {:db/id (+ 42 idx)
+                                            :block/uuid (uuid (str "11111111-1111-1111-1111-11111111111" idx))}))
+                             (range 5))]
+           (try
+             (-> (p/with-redefs [agent-command/codex-available? (fn [_] true)
+                                 cli-server/ensure-server! (fn [cfg _repo]
+                                                             (assoc cfg :base-url "http://127.0.0.1:1234"))
+                                 agent-command/register-agent-bridge! (fn [_cfg _repo _agent-name]
+                                                                        (p/resolved true))
+                                 agent-command/ensure-agent-bridge-prompt-templates!
+                                 (fn [_cfg _repo]
+                                   (p/resolved {:task "Task {{graph}} {{block-uuid}} {{agent-name}}\n{{task-block-tree}}"
+                                                :comment "Comment {{graph}} {{comment-uuid}} {{agent-name}}\n{{comment-target-context}}\n{{comment-thread-context}}\n{{requesting-comment}}"}))
+                                 agent-command/list-routable-tasks (fn [_cfg _repo _agent-name]
+                                                                     (p/resolved (mapv (fn [block]
+                                                                                         {:block block
+                                                                                          :tree-text (:block/title block)})
+                                                                                       blocks)))
+                                 agent-command/start-codex! (fn [_command _opts]
+                                                              (let [active (swap! active* inc)]
+                                                                (swap! max-active* max active)
+                                                                (p/let [_ (p/delay 20)]
+                                                                  (swap! active* dec)
+                                                                  {:session (str "session-" (random-uuid))
+                                                                   :status :running})))
+                                 agent-command/write-agent-session-id! (fn [_cfg _repo block-uuid session-id]
+                                                                         (swap! routed* conj [block-uuid session-id])
+                                                                         (p/resolved true))]
+                   (p/let [result (agent-command/execute-bridge {:type :agent-bridge
+                                                                 :repo "logseq_db_demo"
+                                                                 :graph "demo"
+                                                                 :dry-run? false
+                                                                 :process-once? true}
+                                                                {:root-dir root
+                                                                 :agent-name "build-host"
+                                                                 :log-fn (fn [_] nil)})]
+                     (is (= :ok (:status result)))
+                     (is (= 5 (count @routed*)))
+                     (is (<= @max-active* 4))))
+                 (p/catch (fn [e]
+                            (is false (str "unexpected error: " e))))
+                 (p/finally (fn []
+                              (fs/rmSync root #js {:recursive true :force true})
+                              (done))))
+             (catch :default e
+               (fs/rmSync root #js {:recursive true :force true})
+               (is false (str "unexpected setup error: " e))
+               (done))))))
+
 (deftest test-agent-bridge-listener-ignores-unrelated-events
   (async done
          (let [handler* (atom nil)
@@ -1478,6 +1594,78 @@
                                  @calls))
                        (is (some #(= [:write-session "logseq_db_demo" (:block/uuid block) "session-123"] %)
                                  @calls)))))
+                 (p/catch (fn [e]
+                            (is false (str "unexpected error: " e))))
+                 (p/finally (fn []
+                              (fs/rmSync root #js {:recursive true :force true})
+                              (done))))
+             (catch :default e
+               (fs/rmSync root #js {:recursive true :force true})
+               (is false (str "unexpected setup error: " e))
+               (done))))))
+
+(deftest test-agent-bridge-listener-routes-task-tag-and-status-datoms
+  (async done
+         (let [root (temp-root)
+               handler* (atom nil)
+               calls (atom [])
+               status-block (task-block {:db/id 42})
+               tag-block (task-block {:db/id 43
+                                      :block/uuid #uuid "22222222-2222-2222-2222-222222222222"})]
+           (try
+             (-> (p/with-redefs [transport/connect-events! (fn [_cfg handler]
+                                                             (reset! handler* handler)
+                                                             {:close! (fn [] nil)})
+                                 agent-command/list-routable-tasks (fn [_cfg repo agent-name]
+                                                                     (swap! calls conj [:broad-scan repo agent-name])
+                                                                     (p/resolved []))
+                                 transport/invoke (fn [_cfg method args]
+                                                    (swap! calls conj [method args])
+                                                    (case method
+                                                      :thread-api/pull
+                                                      (let [[_repo _selector lookup] args]
+                                                        (cond
+                                                          (= lookup 42) (p/resolved status-block)
+                                                          (= lookup 43) (p/resolved tag-block)
+                                                          :else (p/rejected (ex-info "unexpected pull"
+                                                                                     {:lookup lookup}))))
+                                                      (p/rejected (ex-info "unexpected invoke"
+                                                                           {:method method
+                                                                            :args args}))))
+                                 show-command/execute-show (fn [action _cfg]
+                                                             (swap! calls conj [:show action])
+                                                             (p/resolved {:status :ok
+                                                                          :data {:message "- Routed task"}}))
+                                 cli-server/ensure-server! (fn [cfg repo]
+                                                             (swap! calls conj [:ensure-server (:root-dir cfg) repo])
+                                                             (assoc cfg :base-url "http://127.0.0.1:1234"))
+                                 agent-command/start-codex! (fn [_command _opts]
+                                                              (p/resolved {:session (str "session-" (random-uuid))
+                                                                           :status :running}))
+                                 agent-command/write-agent-session-id! (fn [_cfg repo block-uuid session-id]
+                                                                         (swap! calls conj [:write-session repo block-uuid session-id])
+                                                                         (p/resolved true))]
+                   (do
+                     (#'agent-command/listen-forever! {:root-dir root
+                                                       :base-url "http://127.0.0.1:1234"
+                                                       :log-fn (fn [_] nil)}
+                                                      {:repo "logseq_db_demo"
+                                                       :graph "demo"
+                                                       :agent-name "build-host"})
+                     (@handler* :sync-db-changes {:tx-data [{:e 42
+                                                             :a :logseq.property/status
+                                                             :v :logseq.property/status.todo
+                                                             :added true}
+                                                            {:e 43
+                                                             :a :block/tags
+                                                             :v :logseq.class/Task
+                                                             :added true}]})
+                     (p/let [_ (p/delay 10)]
+                       (is (not-any? #(= :broad-scan (first %)) @calls))
+                       (is (= #{(:block/uuid status-block)
+                                (:block/uuid tag-block)}
+                              (set (map #(nth % 2)
+                                        (filter #(= :write-session (first %)) @calls))))))))
                  (p/catch (fn [e]
                             (is false (str "unexpected error: " e))))
                  (p/finally (fn []
