@@ -555,6 +555,12 @@
                 (is false (str "unexpected error: " error))))
      (p/finally done))))
 
+(deftest vector-embedding-title-truncates-long-text-test
+  (let [vector-embedding-title #'db-core/vector-embedding-title
+        long-title (apply str (repeat 6000 "x"))]
+    (is (= 2048 (count (vector-embedding-title long-title))))
+    (is (= "short title" (vector-embedding-title "short title")))))
+
 (deftest release-access-handles-clears-active-import-state-test
   (restoring-worker-state
    (fn []

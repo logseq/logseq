@@ -74,6 +74,7 @@
 
 (def ^:private search-index-build-batch-size 200)
 (def ^:private vector-embedding-batch-size 32)
+(def ^:private vector-embedding-max-title-length 2048)
 (def ^:private search-index-build-time-budget-ms 8)
 (def ^:private search-index-build-idle-status-ttl-ms 2000)
 (def ^:private search-index-build-pause-ms 300)
@@ -847,6 +848,13 @@
   [{:keys [id page title]}]
   (and id page (not (string/blank? (str title)))))
 
+(defn- vector-embedding-title
+  [title]
+  (let [title (str title)]
+    (if (> (count title) vector-embedding-max-title-length)
+      (subs title 0 vector-embedding-max-title-length)
+      title)))
+
 (defn- <embed-index-blocks
   [repo blocks]
   (let [blocks (vec (filter embeddable-index-block? blocks))]
@@ -856,7 +864,8 @@
         (if (empty? remaining)
           result
           (let [batch (vec (first remaining))]
-            (p/let [embeddings (platform/embed-texts (platform/current) (mapv :title batch))
+            (p/let [embeddings (platform/embed-texts (platform/current)
+                                                     (mapv (comp vector-embedding-title :title) batch))
                     _ (validate-embedding-count! batch embeddings)]
               (p/recur (rest remaining)
                        (into result
