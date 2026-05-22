@@ -17,6 +17,11 @@
 
 (def valid-type-for-sort? (some-fn number? string? boolean?))
 
+(defn- normalize-value-for-sort
+  [v]
+  (cond-> v
+    (string? v) string/lower-case))
+
 (defn get-property-value-for-search
   [block property]
   (let [v (get block (:db/ident property))]
@@ -60,7 +65,7 @@
         :else
         (let [v (get-property-value-fn entity)]
           (when (valid-type-for-sort? v)
-            v))))))
+            (normalize-value-for-sort v)))))))
 
 (defn- by-one-sorting
   [{:keys [asc? get-value]}]
@@ -81,7 +86,7 @@
   (let [property (or (d/entity db id) {:db/ident id})
         get-value-fn (memoize (get-value-for-sort property))
         entities' (if (vector? entities) entities (vec entities))
-        datom-sort-supported? (contains? #{:block/updated-at :block/created-at :block/title}
+        datom-sort-supported? (contains? #{:block/updated-at :block/created-at}
                                          (:db/ident property))
         use-datom-sort? (and datom-sort-supported?
                              (not= :db.type/ref (:db/valueType property))
@@ -379,7 +384,7 @@
             asc? (:asc? major-sorting)
             get-sort-value (memoize
                             (fn [eid]
-                              (get (entity-plus/unsafe->Entity db eid) sort-id)))
+                              (normalize-value-for-sort (get (entity-plus/unsafe->Entity db eid) sort-id))))
             cmp (fn [eid-a eid-b]
                   (let [va (get-sort-value eid-a)
                         vb (get-sort-value eid-b)
