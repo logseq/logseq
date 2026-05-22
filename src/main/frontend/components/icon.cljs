@@ -6603,6 +6603,32 @@
                               ;; preventDefault on mousedown, the focus
                               ;; stays where it was.
                               (.preventDefault e))
+             ;; Live preview the mode change on the actual page icon —
+             ;; mirrors the asset-picker shape/fallback hover pattern
+             ;; (icon.cljs:4367-4396). Writes a full `:icon` override
+             ;; into `:ui/icon-hover-preview`; the consumer at
+             ;; `get-node-icon-cp` swaps it in for the committed icon
+             ;; without touching the DB. Mouse-leave clears the field
+             ;; only — sibling `:color` (from concurrent swatch hover)
+             ;; is preserved by `dissoc-icon-preview-field!`.
+             :on-mouse-enter (when (or preview-target-db-id (seq preview-target-db-ids))
+                               (fn []
+                                 (let [preview-text (case mode
+                                                      "initials" derived-initials
+                                                      "abbreviated" derived-abbreviated
+                                                      "custom" (if (string/blank? @*text-value)
+                                                                 derived-initials
+                                                                 @*text-value))
+                                       ;; `build-icon` bakes the *current* `@*mode` into
+                                       ;; `[:data :mode]`. Override to the hovered mode so
+                                       ;; the preview reflects the would-be commit.
+                                       preview-icon (-> (build-icon preview-text)
+                                                        (assoc-in [:data :mode] mode))]
+                                   (merge-into-icon-preview!
+                                    (assoc preview-base-target :icon preview-icon)))))
+             :on-mouse-leave (when (or preview-target-db-id (seq preview-target-db-ids))
+                               (fn []
+                                 (dissoc-icon-preview-field! preview-base-target :icon)))
              :on-click (fn []
                          ;; Radio semantic: clicking the already-selected
                          ;; tile is a no-op — skip the same-value
