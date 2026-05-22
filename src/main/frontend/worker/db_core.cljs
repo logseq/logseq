@@ -844,8 +844,12 @@
   (and id page (not (string/blank? (str title)))))
 
 (defn- vector-embedding-title
-  [title]
-  (let [title (str title)]
+  [block-or-title]
+  (let [title (if (map? block-or-title)
+                (or (:vector-title block-or-title)
+                    (:title block-or-title))
+                block-or-title)
+        title (str title)]
     (if (> (count title) vector-embedding-max-title-length)
       (subs title 0 vector-embedding-max-title-length)
       title)))
@@ -860,7 +864,7 @@
           result
           (let [batch (vec (first remaining))]
             (p/let [embeddings (platform/embed-texts (platform/current)
-                                                     (mapv (comp vector-embedding-title :title) batch))
+                                                     (mapv vector-embedding-title batch))
                     _ (validate-embedding-count! batch embeddings)]
               (p/recur (rest remaining)
                        (into result

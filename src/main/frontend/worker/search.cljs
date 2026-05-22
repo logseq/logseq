@@ -539,6 +539,107 @@ DROP TRIGGER IF EXISTS blocks_au;
            (string/join " "))
       title)))
 
+(def ^:private vector-context-parent-depth 3)
+(def ^:private vector-context-child-limit 2)
+(def ^:private vector-context-segment-max-length 320)
+
+(defn- truncate-vector-context-segment
+  [text]
+  (let [text (str text)]
+    (if (> (count text) vector-context-segment-max-length)
+      (subs text 0 vector-context-segment-max-length)
+      text)))
+
+(defn- vector-context-title
+  [block]
+  (let [title (some-> (:block/title block)
+                      str
+                      string/trim)]
+    (when-not (string/blank? title)
+      (truncate-vector-context-segment title))))
+
+(defn- vector-context-segment
+  [label text]
+  (when-not (string/blank? text)
+    (str label ": " text)))
+
+(defn- vector-context-page-title
+  [block]
+  (vector-context-title (:block/page block)))
+
+(defn- vector-context-parent-path
+  [block]
+  (->> (loop [parent (:block/parent block)
+              result []]
+         (cond
+           (nil? parent)
+           result
+
+           (ldb/page? parent)
+           result
+
+           (>= (count result) vector-context-parent-depth)
+           result
+
+           :else
+           (recur (:block/parent parent) (conj result parent))))
+       reverse
+       (keep vector-context-title)
+       (string/join " > ")))
+
+(defn- vector-context-block-id
+  [block]
+  (or (:db/id block) (:block/uuid block)))
+
+(defn- same-vector-context-block?
+  [a b]
+  (let [a-id (vector-context-block-id a)]
+    (and a-id
+         (= a-id (vector-context-block-id b)))))
+
+(defn- vector-context-siblings
+  [block]
+  (some->> (:block/_parent (:block/parent block))
+           seq
+           ldb/sort-by-order
+           vec))
+
+(defn- vector-context-sibling
+  [block offset]
+  (let [siblings (vector-context-siblings block)
+        idx (some->> siblings
+                     (keep-indexed (fn [i sibling]
+                                     (when (same-vector-context-block? sibling block)
+                                       i)))
+                     first)
+        sibling-idx (when idx (+ idx offset))]
+    (when (and sibling-idx
+               (<= 0 sibling-idx)
+               (< sibling-idx (count siblings)))
+      (nth siblings sibling-idx))))
+
+(defn- vector-context-child-titles
+  [block]
+  (some->> (:block/_parent block)
+           seq
+           ldb/sort-by-order
+           (take vector-context-child-limit)
+           (keep vector-context-title)
+           (string/join " | ")))
+
+(defn- block->vector-title
+  [block title]
+  (let [previous-sibling (vector-context-sibling block -1)
+        next-sibling (vector-context-sibling block 1)]
+    (->> [(vector-context-segment "Page" (vector-context-page-title block))
+          (vector-context-segment "Path" (vector-context-parent-path block))
+          (vector-context-segment "Previous" (vector-context-title previous-sibling))
+          (vector-context-segment "Block" (truncate-vector-context-segment title))
+          (vector-context-segment "Children" (vector-context-child-titles block))
+          (vector-context-segment "Next" (vector-context-title next-sibling))]
+         (keep identity)
+         (string/join "\n"))))
+
 (defn- matched-alias
   [q block]
   (when-not (string/blank? q)
@@ -563,7 +664,8 @@ DROP TRIGGER IF EXISTS blocks_au;
         (when uuid
           {:id (str uuid)
            :page (str (or (:block/uuid page) uuid))
-           :title (if (page-or-object? block) title (sanitize title))}))
+           :title (if (page-or-object? block) title (sanitize title))
+           :vector-title (block->vector-title block title)}))
       (catch :default e
         (prn "Error: failed to run block->index on block " (:db/id block))
         (js/console.error e)))))

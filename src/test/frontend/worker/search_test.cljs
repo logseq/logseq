@@ -551,6 +551,58 @@
           (is (= "Local-first semantic search" (:title indexed)))
           (is (not (contains? indexed :embedding))))))))
 
+(deftest block-index-includes-bounded-vector-context
+  (testing "vector-only text includes local block context without changing the keyword title"
+    (let [page-id #uuid "00000000-0000-0000-0000-000000000240"
+          block-id #uuid "00000000-0000-0000-0000-000000000241"
+          page {:db/id 1
+                :page? true
+                :block/uuid page-id
+                :block/title "Search Design"}
+          grandparent {:db/id 2
+                       :block/uuid #uuid "00000000-0000-0000-0000-000000000242"
+                       :block/title "Architecture"
+                       :block/parent page}
+          parent {:db/id 3
+                  :block/uuid #uuid "00000000-0000-0000-0000-000000000243"
+                  :block/title "Vector index"
+                  :block/parent grandparent}
+          prev-sibling {:db/id 4
+                        :block/uuid #uuid "00000000-0000-0000-0000-000000000244"
+                        :block/title "Keyword search"
+                        :block/order "a"}
+          sibling-anchor {:db/id 5
+                          :block/uuid block-id
+                          :block/title "Hybrid retrieval"
+                          :block/order "b"}
+          next-sibling {:db/id 6
+                        :block/uuid #uuid "00000000-0000-0000-0000-000000000245"
+                        :block/title "Ranking policy"
+                        :block/order "c"}
+          child {:db/id 7
+                 :block/uuid #uuid "00000000-0000-0000-0000-000000000246"
+                 :block/title "Cross block context"
+                 :block/order "a"}
+          block (assoc sibling-anchor
+                       :block/page page
+                       :block/parent (assoc parent :block/_parent [prev-sibling sibling-anchor next-sibling])
+                       :block/_parent [child])]
+      (with-redefs [ldb/page? (fn [entity] (true? (:page? entity)))
+                    ldb/object? (constantly false)
+                    ldb/journal? (constantly false)
+                    ldb/closed-value? (constantly false)
+                    ldb/hidden? (constantly false)
+                    ldb/get-title-with-parents (fn [entity] (:block/title entity))]
+        (let [indexed (search/block->index block)
+              vector-title (:vector-title indexed)]
+          (is (= "Hybrid retrieval" (:title indexed)))
+          (is (string/includes? vector-title "Page: Search Design"))
+          (is (string/includes? vector-title "Path: Architecture > Vector index"))
+          (is (string/includes? vector-title "Previous: Keyword search"))
+          (is (string/includes? vector-title "Block: Hybrid retrieval"))
+          (is (string/includes? vector-title "Children: Cross block context"))
+          (is (string/includes? vector-title "Next: Ranking policy")))))))
+
 (deftest search-blocks-includes-vector-only-results
   (testing "zvec vector hits are merged into desktop search even when SQLite has no keyword hit"
     (let [page-id (test-uuid-string 900)

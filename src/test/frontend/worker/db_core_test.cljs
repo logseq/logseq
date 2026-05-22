@@ -553,6 +553,14 @@
     (is (= 2048 (count (vector-embedding-title long-title))))
     (is (= "short title" (vector-embedding-title "short title")))))
 
+(deftest vector-embedding-title-prefers-vector-title-test
+  (let [vector-embedding-title #'db-core/vector-embedding-title]
+    (is (= "Page context\nBlock: Alpha"
+           (vector-embedding-title {:title "Alpha"
+                                    :vector-title "Page context\nBlock: Alpha"})))
+    (is (= "Alpha"
+           (vector-embedding-title {:title "Alpha"})))))
+
 (deftest release-access-handles-clears-active-import-state-test
   (restoring-worker-state
    (fn []
