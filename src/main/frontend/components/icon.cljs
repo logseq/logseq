@@ -1002,9 +1002,19 @@
         ;; fallback-only hover (which omits `:color`) would clobber the
         ;; avatar's `:backgroundColor` to "inherit" and kill the chip.
         preview-color (when preview-active? (:color preview))
+        ;; Committed text/avatar icons store color at [:data :color]
+        ;; (see icon-data-for-storage). Inherited icons from class
+        ;; default-icon stamp color at both top-level and [:data :color]
+        ;; (see get-node-icon). Read nested first so instance colors
+        ;; picked via the text-picker actually reach this wrapper —
+        ;; otherwise the outer .icon-cp-container falls back to
+        ;; "inherit" and the inner SVG (fill: currentColor) picks up
+        ;; the sidebar's muted text color instead of the user's hex.
         effective-color (cond
                           preview-color preview-color
-                          :else (or (:color node-icon) "inherit"))
+                          :else (or (get-in node-icon [:data :color])
+                                    (:color node-icon)
+                                    "inherit"))
         ;; Source icon for the preview overlay: either the previewed icon
         ;; (cross-type swap) or the committed node-icon. Then layer the
         ;; preview color into [:data :color] so the inner `icon` fn renders
