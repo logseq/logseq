@@ -78,6 +78,16 @@
  :asset/transfer-placeholder "{1} asset..."
  :asset/uploading "Uploading"
 
+ :asset.delete/confirm-message "Selected asset files will be deleted from the assets directory and can't be restored. Continue?"
+ :asset.delete/confirm-title "Delete assets?"
+
+ :asset.orphan/confirm-message "These files are not linked to any asset block. Deleting them removes the physical files from the assets directory and can't be restored."
+ :asset.orphan/delete "Delete orphaned assets"
+ :asset.orphan/invert-selection "Invert selection"
+ :asset.orphan/no-assets "No orphaned assets found."
+ :asset.orphan/time "Time"
+ :asset.orphan/type "Type"
+
  :block/click-to-fix-query "Click to fix query: {1}"
  :block/copy-ref "Copy block ref"
  :block/copy-url "Copy block URL"

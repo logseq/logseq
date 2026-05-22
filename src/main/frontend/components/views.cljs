@@ -730,59 +730,61 @@
                          (set-sized-columns! (assoc sized-columns (:id column) size)))))]))
 
 (defn- on-delete-rows
-  [view-parent view-feature-type table selected-ids]
-  (let [selected-rows (->> (map db/entity selected-ids)
+  [view-parent view-feature-type table selected-ids delete-rows-fn]
+  (if delete-rows-fn
+    (delete-rows-fn table selected-ids)
+    (let [selected-rows (->> (map db/entity selected-ids)
                            (remove :logseq.property/built-in?))
-        pages (filter ldb/page? selected-rows)
-        blocks (remove ldb/page? selected-rows)
-        page-ids (map :db/id pages)
-        {:keys [set-data! set-row-selection!]} (:data-fns table)
-        update-table-state! (fn []
-                              (let [data (:full-data table)
-                                    selected-ids (set (map :db/id selected-rows))
-                                    new-data (if (every? number? data)
-                                               (remove selected-ids data)
-                                               ;; group
-                                               (map (fn [[by-value col]]
-                                                      [by-value (remove selected-ids col)]) data))]
-                                (set-data! new-data)
-                                (set-row-selection! {})))]
-    (p/do!
-     (ui-outliner-tx/transact!
-      {:outliner-op :delete-blocks}
-      (when (seq blocks)
-        (outliner-op/delete-blocks! blocks nil))
-      (case view-feature-type
-        :class-objects
-        (when (seq page-ids)
-          (when-not (= :logseq.class/Page (:db/ident view-parent))
-            (doseq [page pages]
-              (when-let [id (:block/uuid page)]
-                (outliner-op/delete-page! id)))))
+          pages (filter ldb/page? selected-rows)
+          blocks (remove ldb/page? selected-rows)
+          page-ids (map :db/id pages)
+          {:keys [set-data! set-row-selection!]} (:data-fns table)
+          update-table-state! (fn []
+                                (let [data (:full-data table)
+                                      selected-ids (set (map :db/id selected-rows))
+                                      new-data (if (every? number? data)
+                                                 (remove selected-ids data)
+                                                 ;; group
+                                                 (map (fn [[by-value col]]
+                                                        [by-value (remove selected-ids col)]) data))]
+                                  (set-data! new-data)
+                                  (set-row-selection! {})))]
+      (p/do!
+       (ui-outliner-tx/transact!
+        {:outliner-op :delete-blocks}
+        (when (seq blocks)
+          (outliner-op/delete-blocks! blocks nil))
+        (case view-feature-type
+          :class-objects
+          (when (seq page-ids)
+            (when-not (= :logseq.class/Page (:db/ident view-parent))
+              (doseq [page pages]
+                (when-let [id (:block/uuid page)]
+                  (outliner-op/delete-page! id)))))
 
-        :property-objects
-        ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
-        (when-not (:logseq.property/built-in? view-parent)
-          (let [tx-data (map (fn [pid] [:db/retract pid (:db/ident view-parent)]) page-ids)]
-            (when (seq tx-data)
-              (outliner-op/transact! tx-data {:outliner-op :save-block}))))
+          :property-objects
+          ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
+          (when-not (:logseq.property/built-in? view-parent)
+            (let [tx-data (map (fn [pid] [:db/retract pid (:db/ident view-parent)]) page-ids)]
+              (when (seq tx-data)
+                (outliner-op/transact! tx-data {:outliner-op :save-block}))))
 
-        :query-result
-        (doseq [page pages]
-          (when-let [id (:block/uuid page)]
-            (outliner-op/delete-page! id)))
+          :query-result
+          (doseq [page pages]
+            (when-let [id (:block/uuid page)]
+              (outliner-op/delete-page! id)))
 
-        :all-pages
-        (state/pub-event! [:page/show-delete-dialog selected-rows update-table-state!])
+          :all-pages
+          (state/pub-event! [:page/show-delete-dialog selected-rows update-table-state!])
 
-        nil))
+          nil))
 
-     (when-not (or (= view-feature-type :all-pages)
-                   (and (= view-feature-type :property-objects) (:logseq.property/built-in? view-parent)))
-       (update-table-state!)))))
+       (when-not (or (= view-feature-type :all-pages)
+                     (and (= view-feature-type :property-objects) (:logseq.property/built-in? view-parent)))
+         (update-table-state!))))))
 
 (defn- table-header
-  [table {:keys [show-add-property? add-property! view-parent view-feature-type] :as option} selected-rows]
+  [table {:keys [show-add-property? add-property! view-parent view-feature-type delete-rows-fn] :as option} selected-rows]
   (let [set-ordered-columns! (get-in table [:data-fns :set-ordered-columns!])
         pinned (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
@@ -821,7 +823,7 @@
         (action-bar table selected-rows
                     (assoc option
                            :on-delete-rows (fn [table selected-ids]
-                                             (on-delete-rows view-parent view-feature-type table selected-ids))))]))))
+                                             (on-delete-rows view-parent view-feature-type table selected-ids delete-rows-fn))))]))))
 
 (rum/defc lazy-table-cell
   [cell-render-f cell-placeholder]

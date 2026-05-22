@@ -78,6 +78,16 @@
  :asset/transfer-placeholder "{1}资源..."
  :asset/uploading "上传中"
 
+ :asset.delete/confirm-message "选中的附件文件将从 assets 目录中删除，且无法恢复。是否继续？"
+ :asset.delete/confirm-title "删除附件？"
+
+ :asset.orphan/confirm-message "这些文件没有关联任何附件块。删除后会从 assets 目录中移除物理文件，且无法恢复。"
+ :asset.orphan/delete "删除孤儿附件"
+ :asset.orphan/invert-selection "反选"
+ :asset.orphan/no-assets "未找到孤儿附件。"
+ :asset.orphan/time "时间"
+ :asset.orphan/type "类型"
+
  :block/click-to-fix-query "点击修复查询：{1}"
  :block/copy-ref "复制块引用"
  :block/copy-url "复制块 URL"
