@@ -1072,6 +1072,18 @@
     > .x:hover {
       background-color: var(--lx-gray-08, var(--ls-border-color, var(--rx-gray-08)));
     }
+
+    /* Focus-lift on the search-glyph mirrors the icon-picker's
+       `.search-input:focus-within .ls-icon-search` rule. Without it,
+       the asset-picker's search input gives no visual feedback when
+       focused — the comment at .asset-picker-search above documents
+       this lift as the active-state signal. opacity-50 → opacity-100
+       reads as "field is active" without needing a focus ring. */
+    &:focus-within {
+      .ls-icon-search {
+        @apply opacity-75;
+      }
+    }
   }
 }
 
