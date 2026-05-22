@@ -634,6 +634,52 @@
         (is (= 40 (count (search/build-blocks-indice :db))))
         (is (<= @sort-calls 2))))))
 
+(deftest expand-vector-context-blocks-includes-neighbor-anchors
+  (testing "incremental vector updates refresh anchors whose context includes the changed block"
+    (let [page {:db/id 1
+                :page? true
+                :block/uuid #uuid "00000000-0000-0000-0000-000000000290"
+                :block/title "Search"}
+          parent {:db/id 2
+                  :block/uuid #uuid "00000000-0000-0000-0000-000000000291"
+                  :block/title "Parent"
+                  :block/page page}
+          prev {:db/id 3
+                :block/uuid #uuid "00000000-0000-0000-0000-000000000292"
+                :block/title "Previous"
+                :block/order 1
+                :block/page page}
+          current {:db/id 4
+                   :block/uuid #uuid "00000000-0000-0000-0000-000000000293"
+                   :block/title "Current"
+                   :block/order 2
+                   :block/page page}
+          next {:db/id 5
+                :block/uuid #uuid "00000000-0000-0000-0000-000000000294"
+                :block/title "Next"
+                :block/order 3
+                :block/page page}
+          child {:db/id 6
+                 :block/uuid #uuid "00000000-0000-0000-0000-000000000295"
+                 :block/title "Child"
+                 :block/order 1
+                 :block/page page}
+          parent (assoc parent :block/_parent [prev current next])
+          current (assoc current
+                         :block/parent parent
+                         :block/_parent [child])
+          prev (assoc prev :block/parent parent)
+          next (assoc next :block/parent parent)
+          child (assoc child :block/parent current)]
+      (with-redefs [ldb/sort-by-order (fn [children] (sort-by :block/order children))
+                    ldb/hidden? (constantly false)]
+        (is (= [(uuid "00000000-0000-0000-0000-000000000293")
+                (uuid "00000000-0000-0000-0000-000000000291")
+                (uuid "00000000-0000-0000-0000-000000000292")
+                (uuid "00000000-0000-0000-0000-000000000294")
+                (uuid "00000000-0000-0000-0000-000000000295")]
+               (mapv :block/uuid (search/expand-vector-context-blocks [current]))))))))
+
 (deftest search-blocks-includes-vector-only-results
   (testing "zvec vector hits are merged into desktop search even when SQLite has no keyword hit"
     (let [page-id (test-uuid-string 900)

@@ -1103,6 +1103,22 @@ DROP TRIGGER IF EXISTS blocks_au;
     (->> blocks
          (keep #(block->index* context %)))))
 
+(defn expand-vector-context-blocks
+  [blocks]
+  (->> blocks
+       (mapcat (fn [block]
+                 (let [parent (:block/parent block)]
+                   (concat [block
+                            parent
+                            (vector-context-sibling block -1)
+                            (vector-context-sibling block 1)]
+                           (some->> (:block/_parent block)
+                                    seq
+                                    ldb/sort-by-order)))))
+       (remove nil?)
+       (remove hidden-entity?)
+       (common-util/distinct-by vector-context-block-id)))
+
 (defn- get-blocks-from-datoms-impl
   [{:keys [db-after db-before]} datoms]
   (letfn [(page-descendants [page]
@@ -1186,7 +1202,8 @@ DROP TRIGGER IF EXISTS blocks_au;
   (let [{:keys [blocks-to-add blocks-to-remove]} (get-affected-blocks tx-report)]
     ;; update block indice
     (when (or (seq blocks-to-add) (seq blocks-to-remove))
-      (let [blocks-to-add' (keep block->index blocks-to-add)
+      (let [blocks-to-add (expand-vector-context-blocks blocks-to-add)
+            blocks-to-add' (keep block->index blocks-to-add)
             blocks-to-remove (set (concat (map (comp str :block/uuid) blocks-to-remove)
                                           (->>
                                            (set/difference
