@@ -2188,10 +2188,12 @@
 
    [:div.flex-1] ; Spacer
 
-   ;; Right: Hide/Show with keyboard shortcut (visible when navigating grid or tabs, hidden when typing in search)
+   ;; Right: Hide/Show with keyboard shortcut. Visible when navigating grid/tabs;
+   ;; also revealed on cursor hover via `.section-header:hover .section-header-hint`
+   ;; (see icon.css) so mouse users discover the shortcut as they reach for the chevron.
    (when keyboard-hint
      (let [show-hint? (contains? #{:grid :tabs} focus-region)]
-       [:div.flex.gap-1.items-center.text-xs.opacity-50.transition-all.duration-200
+       [:div.section-header-hint.flex.gap-1.items-center.text-xs.opacity-50.transition-all.duration-200
         {:class (when-not show-hint? "!opacity-0")
          :style {:pointer-events (if show-hint? "auto" "none")}}
         (if expanded? (t :icon.section-header/hide) (t :icon.section-header/show))

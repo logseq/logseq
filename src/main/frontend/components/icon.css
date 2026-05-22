@@ -1550,6 +1550,19 @@
   }
 }
 
+/* Reveal the keyboard-shortcut hint when the cursor hovers over a section
+   header. Mirrors `.keyboard-shortcut` reveal in container.css for sidebar nav.
+   `!important` is required to override the `!opacity-0` Tailwind utility set
+   when focus is in the search input. The 250ms delay is hover-intent: a
+   user clicking straight through the chevron won't see the hint flash. */
+@media (hover: hover) and (pointer: fine) {
+  .section-header:hover .section-header-hint {
+    opacity: 0.5 !important;
+    pointer-events: auto !important;
+    transition-delay: 250ms;
+  }
+}
+
 /* ============================================================================
    Web Image Search Section
    ============================================================================ */
