@@ -117,6 +117,27 @@
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest node-platform-vector-index-persists-metadata
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-vector-metadata")
+          vector-path (node-path/join root-dir "graphs" "graph-a" "search" "vector")
+          metadata {:embedding-model-id "test-model"
+                    :embedding-dimension 3
+                    :context-version 1}]
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
+                  open-index (get-in platform [:vector :open-index])
+                  vector-index (open-index {:path vector-path
+                                            :dimension 3})
+                  _ ((:set-metadata! vector-index) metadata)
+                  _ ((:close! vector-index))
+                  reopened (open-index {:path vector-path
+                                        :dimension 3})]
+            (is (= metadata ((:metadata reopened))))
+            ((:close! reopened)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest node-platform-backup-uses-shared-sqlite-backup-implementation
   (let [source (node-platform-source)]
     (is (string/includes? source "logseq.db.sqlite.backup"))

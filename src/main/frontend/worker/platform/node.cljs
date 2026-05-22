@@ -2,6 +2,7 @@
   "Node.js platform adapter for db-worker."
   (:require ["@huggingface/transformers" :as transformers]
             ["@zvec/zvec" :as zvec]
+            ["fs" :as node-fs]
             ["fs/promises" :as fs]
             ["node:sqlite" :as node-sqlite]
             ["os" :as os]
@@ -331,6 +332,26 @@
                      (/ 1 (+ 1 distance))
                      0.0)}))
 
+(defn- vector-metadata-path
+  [path]
+  (node-path/join path "metadata.json"))
+
+(defn- read-vector-metadata
+  [path]
+  (let [metadata-path (vector-metadata-path path)]
+    (when (.existsSync node-fs metadata-path)
+      (-> (.readFileSync node-fs metadata-path "utf8")
+          js/JSON.parse
+          (js->clj :keywordize-keys true)))))
+
+(defn- write-vector-metadata!
+  [path metadata]
+  (.mkdirSync node-fs path #js {:recursive true})
+  (.writeFileSync node-fs
+                  (vector-metadata-path path)
+                  (js/JSON.stringify (clj->js metadata))
+                  "utf8"))
+
 (defn- open-vector-index
   [{:keys [path dimension]}]
   (p/let [_ (ensure-dir! (node-path/dirname path))]
@@ -364,6 +385,11 @@
                     (.destroySync ^js @collection*)
                     (reopen!)
                     nil)
+       :metadata (fn []
+                   (read-vector-metadata path))
+       :set-metadata! (fn [metadata]
+                        (write-vector-metadata! path metadata)
+                        nil)
        :close! (fn []
                  (.closeSync ^js @collection*)
                  nil)})))
