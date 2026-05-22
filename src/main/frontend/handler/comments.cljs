@@ -270,12 +270,12 @@
   []
   (when-let [block (state/get-edit-block)]
     (editor-handler/save-current-block!)
-    (db-property-handler/set-block-property! (:db/id block)
-                                             :block/tags
-                                             comments-model/comments-tag-ident)
-    (state/clear-edit!)
-    (reveal-comments-area! block {:focus-editor? true})
-    block))
+    (p/let [_ (db-property-handler/set-block-property! (:db/id block)
+                                                       :block/tags
+                                                       comments-model/comments-tag-ident)]
+      (state/clear-edit!)
+      (reveal-comments-area! block {:focus-editor? true})
+      block)))
 
 (defn add-comment-to-blocks!
   [blocks]

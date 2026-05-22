@@ -533,6 +533,31 @@
                          @revealed)
                       "Empty /Add comment should open the reply editor"))))))
 
+(deftest-async add-comment-to-empty-edit-block-reveals-after-comments-tag-is-saved
+  (let [block {:block/uuid (random-uuid)
+               :db/id 1
+               :block/title ""}
+        property-save (p/deferred)
+        revealed (atom nil)]
+    (-> (p/with-redefs [state/editing? (constantly true)
+                        state/get-edit-block (constantly block)
+                        state/get-edit-content (constantly "")
+                        editor/save-current-block! (fn [])
+                        db-property-handler/set-block-property! (fn [_db-id _property _value]
+                                                                  property-save)
+                        state/clear-edit! (fn [])
+                        comments-handler/reveal-comments-area! (fn [area opts]
+                                                                 (reset! revealed [area opts]))]
+          (let [result (comments-handler/add-comment-to-current-context!)]
+            (is (nil? @revealed)
+                "The reply editor cannot be focused until the blank block is saved as a comments area")
+            (p/resolve! property-save :saved)
+            result))
+        (p/then (fn [_]
+                  (is (= [block {:focus-editor? true}]
+                         @revealed)
+                      "The converted comments area should be revealed after the property transaction finishes"))))))
+
 (deftest-async empty-comment-submit-creates-sibling-block-after-comments
   (let [comments-area {:block/uuid (random-uuid)
                        :block/title "Comments"
