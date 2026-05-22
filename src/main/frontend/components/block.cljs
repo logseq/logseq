@@ -4054,36 +4054,20 @@
         protected-comment-block? (comments-model/protected-comment-block? block)
         page-icon (when (:page-title? config)
                     (let [icon' (get block :logseq.property/icon)
-                          ;; Class-default-icon inheritance. The previous
-                          ;; fallback used `:logseq.property/icon` on the
-                          ;; tag, which returns the tag's *own* page-header
-                          ;; icon (a bare tabler-icon), not the inheritance
-                          ;; default the user configured for instances of
-                          ;; the class. For an avatar default-icon, build
-                          ;; a per-instance avatar by merging the class's
-                          ;; shape/fallback/color with the page's own
-                          ;; initials — same shape `get-node-icon` does
-                          ;; for the sidebar.
+                          ;; Class-default-icon inheritance. Delegate to
+                          ;; `get-node-icon` so the page-title heading
+                          ;; resolves inherited icons the same way every
+                          ;; other surface does (sidebar, list/table
+                          ;; view) — including mode-aware text derivation
+                          ;; (initials / abbreviated / custom). Strings
+                          ;; are type-based defaults ("file", "hash",
+                          ;; etc.); skip them here so the page-title's
+                          ;; own `:tabler-icon` fallbacks below stay in
+                          ;; charge of those.
                           inherited-default-icon
                           (when-not icon'
-                            (let [d (some :logseq.property.class/default-icon
-                                          (sort-by :db/id (:block/tags block)))]
-                              (cond
-                                (= :avatar (:type d))
-                                {:type :avatar
-                                 :data (merge (select-keys (:data d)
-                                                           [:backgroundColor :color
-                                                            :shape :fallback-type :fallback-icon])
-                                              {:value (icon-component/derive-avatar-initials
-                                                       (:block/title block))})}
-
-                                (= :text (:type d))
-                                {:type :text
-                                 :data (merge (select-keys (:data d) [:color])
-                                              {:value (icon-component/derive-avatar-initials
-                                                       (:block/title block))})}
-
-                                :else d)))]
+                            (let [resolved (icon-component/get-node-icon block)]
+                              (when (map? resolved) resolved)))]
                       (when-let [icon (and (ldb/page? block)
                                            ;; Guard the user-data branches with `renderable-icon?` so
                                            ;; `{:type :none}` (and any other unrenderable value) does
