@@ -1140,11 +1140,11 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (search/build-blocks-indice @conn)))
 
-(defn- take-block-datoms-batch
-  [datoms batch-size time-budget-ms]
+(defn- take-search-index-batch
+  [items batch-size time-budget-ms]
   (let [deadline (+ (common-util/time-ms) time-budget-ms)]
     (loop [batch (transient [])
-           remaining (seq datoms)
+           remaining (seq items)
            n 0]
       (if (or (nil? remaining)
               (>= n batch-size)
@@ -1183,8 +1183,12 @@
   (search/truncate-table! search-db)
   (search/truncate-vector-index! (worker-state/get-vector-index repo))
   (let [db @conn
-        datoms (d/datoms db :avet :block/uuid)
-        total (count datoms)]
+        blocks (->> (d/datoms db :avet :block/uuid)
+                    (keep #(d/entity db (:e %)))
+                    (remove search/hidden-entity?)
+                    vec)
+        vector-context (search/build-vector-context-cache blocks)
+        total (count blocks)]
     (p/do!
      (report-search-index-progress! repo {:build-id build-id
                                           :status :running
@@ -1193,19 +1197,16 @@
                                           :processed 0
                                           :total total})
      (<wait-for-search-index-idle! repo build-id)
-     (p/loop [remaining (seq datoms)
+     (p/loop [remaining (seq blocks)
               processed 0
               last-progress 0]
        (ensure-active-search-index-build! repo build-id)
        (if (seq remaining)
-         (let [[batch remaining'] (take-block-datoms-batch remaining
+         (let [[batch remaining'] (take-search-index-batch remaining
                                                            search-index-build-batch-size
                                                            search-index-build-time-budget-ms)
                processed' (+ processed (count batch))
-               indexed (->> batch
-                            (keep #(d/entity db (:e %)))
-                            (remove search/hidden-entity?)
-                            (keep search/block->index))
+               indexed (keep #(search/block->index-with-context vector-context %) batch)
                progress (if (zero? total)
                           100
                           (min 100 (int (* 100 (/ processed' total)))))

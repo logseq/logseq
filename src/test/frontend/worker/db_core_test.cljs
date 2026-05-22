@@ -427,10 +427,10 @@
           (with-redefs [search/truncate-table! (fn [_db] nil)
                         search/upsert-blocks! (fn [_db _blocks] nil)
                         search/hidden-entity? (constantly false)
-                        search/block->index (fn [_entity]
-                                              {:id "block-1"
-                                               :page "page-1"
-                                               :title "Hello"})]
+                        search/block->index-with-context (fn [_context _entity]
+                                                           {:id "block-1"
+                                                            :page "page-1"
+                                                            :title "Hello"})]
             (-> (p/let [_ (build-index! test-repo true)
                         _ (p/loop [remaining 20]
                             (if (or (seq @progress-calls)
@@ -483,10 +483,10 @@
           (with-redefs [search/truncate-table! (fn [_db] nil)
                         search/upsert-blocks! (fn [_db _blocks] nil)
                         search/hidden-entity? (constantly false)
-                        search/block->index (fn [_entity]
-                                              {:id "block-1"
-                                               :page "page-1"
-                                               :title "Hello"})]
+                        search/block->index-with-context (fn [_context _entity]
+                                                           {:id "block-1"
+                                                            :page "page-1"
+                                                            :title "Hello"})]
             (p/let [_ (build-index! test-repo true)]
               (let [vector-progress (some #(when (= :vector-index (get-in % [:payload :stage]))
                                              %)
@@ -496,6 +496,54 @@
                 (is (= 1 (get-in vector-progress [:payload :processed])))
                 (is (= 1 (get-in vector-progress [:payload :total])))
                 (is (= 100 (get-in vector-progress [:payload :progress])))))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest search-build-blocks-indice-in-worker-reuses-vector-context-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
+              conn (d/create-conn db-schema/schema)
+              search-db (fake-db)
+              page-id (random-uuid)
+              sort-calls (atom 0)
+              idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)
+              block-count 40]
+          (set! (.-transaction search-db) (fn [f] (f search-db)))
+          (d/transact! conn
+                       (into [{:block/uuid page-id
+                               :block/name "search perf"
+                               :block/title "Search Perf"}]
+                             (map (fn [idx]
+                                    {:block/uuid (random-uuid)
+                                     :block/title (str "Sibling " idx)
+                                     :block/order idx
+                                     :block/parent [:block/uuid page-id]
+                                     :block/page [:block/uuid page-id]}))
+                             (range block-count)))
+          (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
+          (reset! worker-state/*datascript-conns {test-repo conn})
+          (reset! idle-status-atom {test-repo {:idle? true
+                                               :ts (.now js/Date)}})
+          (reset! worker-state/*main-thread (fn [& _args] (p/resolved nil)))
+          (with-redefs [search/truncate-table! (fn [_db] nil)
+                        search/upsert-blocks! (fn [_db _blocks] nil)
+                        search/hidden-entity? (constantly false)
+                        ldb/sort-by-order (fn [children]
+                                            (swap! sort-calls inc)
+                                            (sort-by :block/order children))
+                        ldb/page? (fn [entity]
+                                    (= page-id (:block/uuid entity)))
+                        ldb/object? (constantly false)
+                        ldb/journal? (constantly false)
+                        ldb/closed-value? (constantly false)
+                        ldb/hidden? (constantly false)
+                        ldb/get-title-with-parents (fn [entity] (:block/title entity))]
+            (p/let [_ (build-index! test-repo true)]
+              (is (<= @sort-calls 2)))))))
      (p/catch (fn [error]
                 (is false (str "unexpected error: " error))))
      (p/finally done))))
@@ -847,25 +895,25 @@
        ;; Stale build-id should throw
        (is (thrown? js/Error (ensure-active-search-index-build! test-repo "stale-id")))))))
 
-;; ---- take-block-datoms-batch tests ----
+;; ---- take-search-index-batch tests ----
 
-(deftest take-block-datoms-batch-returns-all-for-small-input
-  (let [take-block-datoms-batch #'db-core/take-block-datoms-batch
-        datoms [{:e 1} {:e 2} {:e 3}]
-        [batch remaining] (take-block-datoms-batch datoms 10 1000)]
+(deftest take-search-index-batch-returns-all-for-small-input
+  (let [take-search-index-batch #'db-core/take-search-index-batch
+        blocks [{:e 1} {:e 2} {:e 3}]
+        [batch remaining] (take-search-index-batch blocks 10 1000)]
     (is (= 3 (count batch)))
     (is (nil? remaining))))
 
-(deftest take-block-datoms-batch-respects-batch-size
-  (let [take-block-datoms-batch #'db-core/take-block-datoms-batch
-        datoms (vec (for [i (range 100)] {:e i}))
-        [batch remaining] (take-block-datoms-batch datoms 10 1000)]
+(deftest take-search-index-batch-respects-batch-size
+  (let [take-search-index-batch #'db-core/take-search-index-batch
+        blocks (vec (for [i (range 100)] {:e i}))
+        [batch remaining] (take-search-index-batch blocks 10 1000)]
     (is (= 10 (count batch)))
     (is (= 90 (count remaining)))))
 
-(deftest take-block-datoms-batch-returns-empty-for-empty-input
-  (let [take-block-datoms-batch #'db-core/take-block-datoms-batch
-        [batch remaining] (take-block-datoms-batch [] 10 1000)]
+(deftest take-search-index-batch-returns-empty-for-empty-input
+  (let [take-search-index-batch #'db-core/take-search-index-batch
+        [batch remaining] (take-search-index-batch [] 10 1000)]
     (is (empty? batch))
     (is (nil? remaining))))
 

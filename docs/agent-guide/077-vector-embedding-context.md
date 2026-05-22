@@ -34,6 +34,10 @@ Each searchable block keeps one vector document whose id is the anchor block UUI
 
 SQLite keyword search continues to index only the existing per-block `:title`. The richer context is vector-only.
 
+Full index rebuilds must build the local-context cache once and reuse it across index batches. Do not compute sibling or child context by sorting the same parent children for every block.
+
+Hybrid ranking should keep vector similarity as an auxiliary signal. Exact or strong keyword matches must not be displaced by weak vector hits.
+
 ## Constraints
 
 - Do not increase vector document count.
@@ -41,6 +45,7 @@ SQLite keyword search continues to index only the existing per-block `:title`. T
 - Do not put unbounded subtree text into an embedding input.
 - Keep the final embedding input capped by `db_core` before it reaches Transformers.
 - Preserve existing keyword index behavior and exact-match precision.
+- Keep full-rebuild context preparation close to linear in block count.
 
 ## Rationale
 
