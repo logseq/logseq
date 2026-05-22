@@ -173,7 +173,7 @@
   (let [[custom-tab-ids set-custom-tab-ids!] (hooks/use-state
                                               (storage/get :ls-mobile-tabs))
         features {:flashcards? (state/enable-flashcards?)}
-        max-tabs (mobile-tabs/max-main-tabs (mobile-util/native-iphone?))
+        max-tabs (mobile-tabs/max-main-tabs)
         selected-tab-ids (mobile-tabs/selected-tab-ids custom-tab-ids features max-tabs)
         selected-tab-id-set (set selected-tab-ids)
         available-tabs (mobile-tabs/available-tabs features)
