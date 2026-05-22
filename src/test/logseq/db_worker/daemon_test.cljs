@@ -36,6 +36,12 @@
       (is (not-any? #{"/tmp/server-list"} (:args @captured)))
       (is (not-any? #{"--host" "--port"} (:args @captured)))
       (is (= true (get-in @captured [:opts :detached])))
+      (let [stdio (get-in @captured [:opts :stdio])]
+        (is (vector? stdio))
+        (is (= "ignore" (first stdio)))
+        (is (number? (second stdio)))
+        (is (number? (nth stdio 2))))
+      (is (= "1" (get-in @captured [:opts :env :LOGSEQ_DB_WORKER_NODE_STDIO_REDIRECTED_TO_LOG])))
       (is (= "1" (get-in @captured [:opts :env :ELECTRON_RUN_AS_NODE])))
       (is (= true @unref-called?))
       (finally
