@@ -1567,19 +1567,18 @@
    Web Image Search Section
    ============================================================================ */
 
-/* Section header row with info icon */
-.section-header-row {
-  @apply flex items-center gap-1;
+/* Info icon used as a section-header `:title-extra` (e.g. Web images). Sits
+   next to the title inside the section-header's left cluster. The 2px
+   translateY corrects the optical center against the bolded title baseline
+   — flex `items-center` aligns geometric centers but the (i) glyph reads
+   as top-heavy. */
+.info-icon {
+  @apply p-0.5 rounded border-none bg-transparent cursor-help transition-colors;
+  color: var(--lx-gray-10, var(--ls-primary-text-color, var(--rx-gray-10)));
+  transform: translateY(2px);
 
-  .info-icon {
-    @apply p-0.5 rounded border-none bg-transparent cursor-help transition-colors;
-    color: var(--lx-gray-10, var(--ls-primary-text-color, var(--rx-gray-10)));
-    margin-left: auto;
-    margin-right: 12px;
-
-    &:hover {
-      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
-    }
+  &:hover {
+    color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
   }
 }
 

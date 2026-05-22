@@ -2170,21 +2170,32 @@
 (defonce *section-states (atom {}))
 
 (rum/defc section-header
-  [{:keys [title count total-count expanded? keyboard-hint on-toggle focus-region simple?]}]
+  [{:keys [title count total-count expanded? keyboard-hint on-toggle focus-region simple? title-extra]}]
   [:div.section-header.text-xs.py-1.5.px-3.flex.justify-between.items-center.gap-2.bg-gray-02.h-8
    {:style {:color "var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)))"}}
-   ;; Left: Title · total-count · Chevron (chevron and count hidden in simple mode)
+   ;; Left: Title · (title-extra) · total-count · Chevron
+   ;; The toggle handler is wired to the title span and the count/chevron span
+   ;; separately — title-extra (e.g. an info-icon tooltip) sits between them
+   ;; without a click handler, so clicking it opens its own UI without firing
+   ;; `on-toggle`. (Using one cluster-wide handler + stopPropagation on
+   ;; title-extra was attempted but didn't reliably stop the bubble through
+   ;; Radix-wrapped triggers.)
    [:div.flex.items-center.gap-1.select-none
-    (when-not simple? {:class "cursor-pointer"
-                       :on-click on-toggle})
-    [:span.font-bold title]
-    (when (or total-count count)
-      [:<>
-       [:span "·"]
-       [:span {:style {:font-size "0.7rem"}}
-        (or total-count count)]])
-    (when-not simple?
-      (ui/icon (if expanded? "chevron-down" "chevron-right") {:size 14}))]
+    [:span.font-bold
+     (when-not simple? {:class "cursor-pointer"
+                        :on-click on-toggle})
+     title]
+    (when title-extra title-extra)
+    [:span.flex.items-center.gap-1
+     (when-not simple? {:class "cursor-pointer"
+                        :on-click on-toggle})
+     (when (or total-count count)
+       [:<>
+        [:span "·"]
+        [:span {:style {:font-size "0.7rem"}}
+         (or total-count count)]])
+     (when-not simple?
+       (ui/icon (if expanded? "chevron-down" "chevron-right") {:size 14}))]]
 
    [:div.flex-1] ; Spacer
 
@@ -3085,7 +3096,7 @@
    ghost-highlighted-id: stable id of the ghost-highlighted tile (hint that
      Enter-from-search will pick this one), or nil"
   [state {:keys [query on-select avatar-context user-typing?
-                 highlighted-id ghost-highlighted-id saved-source-urls]}]
+                 highlighted-id ghost-highlighted-id focus-region saved-source-urls]}]
   (let [*images (::images state)
         *loading? (::loading? state)
         *current-query (::current-query state)
@@ -3118,24 +3129,25 @@
     ;; failed and we have nothing to show, we surface an inline error.
     (when-not (and (not show-loading?) (not search-error?) (empty? images))
       [:div.pane-section.web-images-section
-       ;; Section header with info icon
-       [:div.section-header-row
-        (section-header {:title "Web images"
-                         :count (when-not show-loading? (count images))
-                         :expanded? web-expanded?
-                         :on-toggle #(swap! *section-states update "Web images" (fn [v] (if (nil? v) false (not v))))})
-        (shui/tooltip-provider
-         {:delay-duration 200}
-         (shui/tooltip
-          (shui/tooltip-trigger
-           {:as-child true}
-           [:button.info-icon
-            (shui/tabler-icon "info-circle" {:size 14})])
-          (shui/tooltip-content
-           {:side "top" :show-arrow true}
-           [:div
-            [:div.text-sm.font-medium (t :icon.web-images/info-title)]
-            [:div.text-xs.opacity-70.mt-1 (t :icon.web-images/info-desc)]])))]
+       (section-header {:title "Web images"
+                        :count (when-not show-loading? (count images))
+                        :expanded? web-expanded?
+                        :keyboard-hint "alt mod 2"
+                        :focus-region focus-region
+                        :on-toggle #(swap! *section-states update "Web images" (fn [v] (if (nil? v) false (not v))))
+                        :title-extra
+                        (shui/tooltip-provider
+                         {:delay-duration 200}
+                         (shui/tooltip
+                          (shui/tooltip-trigger
+                           {:as-child true}
+                           [:button.info-icon
+                            (shui/tabler-icon "info-circle" {:size 14})])
+                          (shui/tooltip-content
+                           {:side "top" :show-arrow true}
+                           [:div
+                            [:div.text-sm.font-medium (t :icon.web-images/info-title)]
+                            [:div.text-xs.opacity-70.mt-1 (t :icon.web-images/info-desc)]])))})
 
        ;; Image grid (or inline network-error message)
        (when web-expanded?
@@ -4260,6 +4272,7 @@
           :sections           sections
           :container-selector ".asset-picker"
           :topbar-selector    ".asset-picker-topbar [data-topbar-stop]"
+          :section-shortcuts  {49 "Recently used" 50 "Web images" 51 "Available assets"}
           :on-escape          (fn []
                                 (if (string/blank? @*search-q)
                                   (shui/popup-hide!)
@@ -4777,6 +4790,8 @@
            (section-header {:title "Recently used"
                             :count recently-used-count
                             :expanded? recently-used-expanded?
+                            :keyboard-hint "alt mod 1"
+                            :focus-region @*focus-region
                             :on-toggle #(swap! *section-states update "Recently used" (fn [v] (if (nil? v) false (not v))))})
            (when recently-used-expanded?
              [:div.asset-picker-grid.recently-used-row
@@ -4806,6 +4821,7 @@
             :*result-sink *web-images-result
             :highlighted-id highlighted-id
             :ghost-highlighted-id ghost-highlighted-id
+            :focus-region @*focus-region
             :saved-source-urls saved-source-urls}))
 
         ;; "Available assets" section — header is hidden when there are no
@@ -4817,6 +4833,8 @@
            (section-header {:title "Available assets"
                             :count asset-count
                             :expanded? available-expanded?
+                            :keyboard-hint "alt mod 3"
+                            :focus-region @*focus-region
                             :on-toggle #(swap! *section-states update "Available assets" (fn [v] (if (nil? v) false (not v))))}))
 
          ;; Asset grid. While loading we render an empty grid; the web-image
@@ -5232,8 +5250,14 @@
      :flat-items         — flat seq of items with stable :id each
      :sections           — seq of {:start :count :cols :label} maps
      :*virtuoso-ref      — optional virtuoso scroll-container ref
-     :*tab               — optional tab atom (icon-picker only; enables ⌥⌘1/2/3
-                           section-collapse and the :tabs-region rove)
+     :*tab               — optional tab atom (icon-picker only; enables the
+                           :tabs-region rove and, when set, gates section
+                           shortcuts to fire only on the `:all` tab)
+     :section-shortcuts  — optional `{keycode label}` map. When set, meta+alt+N
+                           toggles the named section in `*section-states`.
+                           Icon-search uses {49 \"Recently used\" 50 \"Emojis\" …}
+                           and gates on `*tab = :all`; asset-picker uses its
+                           own labels and fires unconditionally.
      :container-selector — CSS selector of the scoping root (default
                            `.cp__emoji-icon-picker`). Tile lookups and the
                            keydown listener are scoped to this ancestor.
@@ -5247,7 +5271,8 @@
                            ArrowDown/Tab/Escape return to search, Shift+Tab
                            jumps to the grid (if any)."
   [{:keys [*focus-region *highlighted-index *tab *input-ref flat-items sections
-           *virtuoso-ref container-selector on-escape topbar-selector]
+           *virtuoso-ref container-selector on-escape topbar-selector
+           section-shortcuts]
     :or {container-selector ".cp__emoji-icon-picker"
          on-escape          shui/popup-hide!}}]
   (let [*el-ref (rum/use-ref nil)
@@ -5448,21 +5473,19 @@
          (fn [^js e]
            (let [region @*focus-region
                  _code (.-keyCode e)]
-             (if (and *tab (util/meta-key? e) (.-altKey e))
-               ;; Alt+meta + 1/2/3/4 toggles section collapse on the All tab
-               ;; (icon-picker only). Mac: ⌥⌘1-4 — Win/Linux: Ctrl+Alt+1-4.
-               ;; 4 toggles the Assets section (only visible in search results).
-               (when (= @*tab :all)
-                 (let [section-name (case (.-keyCode e)
-                                      49 "Recently used"
-                                      50 "Emojis"
-                                      51 "Icons"
-                                      52 "Assets"
-                                      nil)]
-                   (when section-name
-                     (swap! *section-states update section-name (fn [v] (if (nil? v) false (not v))))
-                     (reset! *highlighted-index nil)
-                     (util/stop e))))
+             (if (and section-shortcuts (util/meta-key? e) (.-altKey e)
+                      ;; When *tab is wired (icon-picker), restrict to the
+                      ;; :all tab — other tabs render only one section. The
+                      ;; asset-picker doesn't pass *tab, so the gate becomes
+                      ;; a no-op and shortcuts fire whenever the picker has focus.
+                      (or (nil? *tab) (= @*tab :all)))
+               ;; Alt+meta + 1/2/3(/4) toggles section collapse. Mac: ⌥⌘N —
+               ;; Win/Linux: Ctrl+Alt+N. Labels live in `*section-states` and
+               ;; are mapped per-picker via `:section-shortcuts`.
+               (when-let [section-name (get section-shortcuts (.-keyCode e))]
+                 (swap! *section-states update section-name (fn [v] (if (nil? v) false (not v))))
+                 (reset! *highlighted-index nil)
+                 (util/stop e))
                (case region
                  :grid   ((.-current *grid-handler-ref) e)
                  :tabs   ((.-current *tabs-handler-ref) e)
@@ -7407,6 +7430,7 @@
          :flat-items         flat-items
          :sections           sections
          :*virtuoso-ref      *virtuoso-ref
+         :section-shortcuts  {49 "Recently used" 50 "Emojis" 51 "Icons" 52 "Assets"}
          :topbar-selector    ".cp__emoji-icon-picker .tabs-section [data-topbar-stop]"})
 
        ;; Topbar: tabs + separator + search. Whole topbar collapses to
