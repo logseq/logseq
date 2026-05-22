@@ -179,8 +179,8 @@ if [[ "$#" -eq 1 && "$1" == "--version" ]]; then
   exit 0
 fi
 
-if [[ "$#" -ge 3 && "$1" == "exec" && "$2" == "--json" ]]; then
-  prompt="$3"
+if [[ "$#" -ge 6 && "$1" == "--sandbox" && "$2" == "danger-full-access" && "$3" == "exec" && "$4" == "--json" && "$5" == "--skip-git-repo-check" ]]; then
+  prompt="$6"
   python3 - "$CODEX_FAKE_LOG" "$prompt" "$@" <<'PY'
 import json
 import pathlib
