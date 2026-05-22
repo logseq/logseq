@@ -200,7 +200,9 @@
                        :progress 42
                        :processed 420
                        :total 1000})
-      (is (= {:running? true
+      (is (= {:visible? true
+              :running? true
+              :status :running
               :repo repo
               :stage :search-index
               :progress 42
@@ -208,6 +210,35 @@
               :total 1000}
              (:search/index-build @state/state)))
       (finally
+        (reset! state/state original-state)))))
+
+(deftest search-index-build-progress-keeps-completed-build-visible-through-idle
+  (let [repo "logseq_db_graph_a"
+        build-id "build-1"
+        progress! (get @thread-api/*thread-apis :thread-api/search-index-build-progress)
+        original-state @state/state]
+    (try
+      (reset! state/state (assoc original-state :git/current-repo repo))
+      (progress! repo {:build-id build-id
+                       :status :completed
+                       :progress 100
+                       :processed 1
+                       :total 1})
+      (progress! repo {:build-id build-id
+                       :status :idle})
+      (is (= {:visible? true
+              :running? false
+              :status :completed
+              :repo repo
+              :build-id build-id
+              :stage :search-index
+              :progress 100
+              :processed 1
+              :total 1}
+             (:search/index-build @state/state)))
+      (finally
+        (progress! repo {:build-id build-id
+                         :status :running})
         (reset! state/state original-state)))))
 
 (deftest electron-fetch-init-data-starts-remote-runtime
