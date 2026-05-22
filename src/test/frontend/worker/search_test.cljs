@@ -591,6 +591,49 @@
           (is (= query-embedding
                  (:embedding (first @vector-queries)))))))))
 
+(deftest search-blocks-bounds-vector-results-before-combining
+  (testing "large graph vector search cannot force the search core to materialize more than the requested limit"
+    (let [page-id (test-uuid-string 930)
+          vector-ids (mapv test-uuid-string (range 931 1931))
+          blocks (into {}
+                       (map-indexed (fn [idx id]
+                                      [id {:db/id (+ 931 idx)
+                                           :block/uuid (uuid id)
+                                           :block/title (str "Vector result " idx)
+                                           :block/page {:block/uuid (uuid page-id)}}])
+                                    vector-ids))
+          consumed (atom 0)
+          vector-results (fn vector-results [ids]
+                           (lazy-seq
+                            (when-let [ids (seq ids)]
+                              (let [id (first ids)]
+                                (cons (do
+                                        (swap! consumed inc)
+                                        {:id id
+                                         :page page-id
+                                         :vector-score 1.0})
+                                      (vector-results (rest ids)))))))
+          vector-index {:query (fn [_embedding _limit _page]
+                                 (vector-results vector-ids))}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (get blocks (str id)))
+                    d/pull-many (fn [_db _selector lookup-refs]
+                                  (mapv (fn [[_attr id]]
+                                          (get blocks (str id)))
+                                        lookup-refs))
+                    ldb/hidden? (constantly false)
+                    ldb/page? (constantly false)
+                    ldb/built-in? (constantly false)]
+        (let [result (doall (search/search-blocks (atom :db)
+                                                  (checking-db)
+                                                  vector-index
+                                                  "semantic large graph"
+                                                  {:limit 10
+                                                   :enable-snippet? false
+                                                   :query-embedding [0.1 0.2 0.3]}))]
+          (is (= 10 (count result)))
+          (is (= 10 @consumed)))))))
+
 (deftest search-blocks-hybrid-ranks-keyword-and-vector-results
   (testing "SQLite keyword hits and zvec vector hits share the final ranking"
     (let [keyword-id (test-uuid-string 910)

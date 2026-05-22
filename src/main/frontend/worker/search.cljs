@@ -761,6 +761,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   (when-let [query-fn (:query vector-index)]
     (when (seq query-embedding)
       (->> (query-fn query-embedding limit page)
+           (take (or limit 100))
            (keep (fn [{:keys [id page vector-score score] :as result}]
                    (when id
                      (cond-> {:id id
