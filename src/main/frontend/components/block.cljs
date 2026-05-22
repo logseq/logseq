@@ -3255,8 +3255,9 @@
                                (asset-cp config block)]})
             (if show-editor?
               [:div.mt-1 editor-cp]
-              [:div.text-xs.opacity-60.mt-1.cursor-text
-               {:on-click #(edit-block-content config block edit-input-id)}
+              [:div
+               (assoc block-asset/read-mode-title-attrs
+                      :on-click #(edit-block-content config block edit-input-id))
                (text-block-title (dissoc config :raw-title?) block)])]
 
            show-editor?

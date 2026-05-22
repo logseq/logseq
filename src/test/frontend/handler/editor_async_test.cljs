@@ -41,21 +41,31 @@
      :stopped? stopped?}))
 
 (defn- delete-block
-  [db block {:keys [embed? on-delete]}]
+  [db block {:keys [embed? on-delete edit-content on-edit schedule-immediately?]}]
   (let [sibling-block (ldb/get-left-sibling (d/entity db (:db/id block)))
         first-block (ldb/get-left-sibling sibling-block)
         block-dom-id "ls-block-block-to-delete"
+        sibling-dom-id "ls-block-sibling-block"
+        sibling-dom #js {:id sibling-dom-id
+                         :getAttribute #({"blockid" (str (:block/uuid sibling-block))
+                                          "data-embed" (if embed? "true" "false")} %)}
+        edit-content (or edit-content (:block/title block))
         previous-repo (:git/current-repo @state/state)]
     (swap! state/state assoc :git/current-repo test-helper/test-db)
     (-> (p/with-redefs
          [editor/get-state (constantly {:block-id (:block/uuid block)
                                         :block-parent-id block-dom-id
-                                        :config {:embed? embed?}})
+                                        :config {:embed? embed?}
+                                        :value edit-content})
                   ;; stub for delete-block
           gdom/getElement (constantly #js {:id block-dom-id})
                   ;; stub since not testing moving
-          editor/edit-block! (constantly nil)
-          state/get-edit-content (constantly "")
+          editor/edit-block! (fn [block pos opts]
+                               (when (fn? on-edit)
+                                 (on-edit block pos opts))
+                               nil)
+          state/get-edit-content (constantly edit-content)
+          util/get-prev-block-non-collapsed-non-embed (constantly sibling-dom)
                   ;; stub b/c of js/document
           state/get-selection-blocks (constantly [])
           util/get-blocks-noncollapse (constantly (mapv
@@ -66,10 +76,14 @@
                                                                            "data-embed" (if embed? "true" "false")} %)})
                                                    [{:id "ls-block-first-block"
                                                      :block-uuid (:block/uuid first-block)}
-                                                    {:id "ls-block-sibling-block"
+                                                    {:id sibling-dom-id
                                                      :block-uuid (:block/uuid sibling-block)}
                                                     {:id block-dom-id
-                                                     :block-uuid (:block/uuid block)}]))]
+                                                     :block-uuid (:block/uuid block)}]))
+          util/schedule (fn [f]
+                          (if schedule-immediately?
+                            (f)
+                            (js/setTimeout f 0)))]
           (p/do!
            (editor/delete-block! test-helper/test-db)
            (when (fn? on-delete)
@@ -137,8 +151,189 @@
                                                                    [?b :block/title ""]]
                                                                  @conn)
                                                             (map first))]
-                                    (is (= ["b1" "b2"] updated-blocks) "Visible page blocks stay on the page")
-                                    (is (empty? deleted-blocks) "Deleted block is removed from page db")))}))))
+                                     (is (= ["b1" "b2"] updated-blocks) "Visible page blocks stay on the page")
+                                     (is (empty? deleted-blocks) "Deleted block is removed from page db")))}))))
+
+(deftest-async backspace-before-block-merges-into-previous-blank-asset-block
+  (load-test-files
+   [{:page {:block/title "page1"}
+     :blocks
+     [{:block/title "b1"}
+      {:block/title ""
+       :logseq.property.asset/type "png"
+       :logseq.property.asset/checksum "blank-asset-checksum"
+       :logseq.property.asset/size 1}
+      {:block/title "after"}]}])
+  (p/let [conn (db/get-db test-helper/test-db false)
+          block (->> (d/q '[:find (pull ?b [*])
+                            :where [?b :block/title "after"]
+                            [?p :block/name "page1"]
+                            [?b :block/page ?p]]
+                          @conn)
+                     ffirst)]
+    (delete-block @conn block
+                  {:on-delete (fn []
+                                (let [visible-blocks (->> (d/q '[:find (pull ?b [*])
+                                                                 :where
+                                                                 [?p :block/name "page1"]
+                                                                 [?b :block/page ?p]
+                                                                 [?b :block/title]
+                                                                 [(missing? $ ?b :logseq.property/deleted-at)]]
+                                                               @conn)
+                                                          (map first))
+                                      visible-titles (map :block/title visible-blocks)
+                                      asset-blocks (filter :logseq.property.asset/type visible-blocks)]
+                                  (is (= ["b1" "after"] visible-titles))
+                                  (is (= "after" (:block/title (first asset-blocks)))
+                                      "Backspace before the following block should merge its title into the asset block")
+                                  (is (= "png" (:logseq.property.asset/type (first asset-blocks)))
+                                      "Merging must keep the previous block renderable as an asset")))})))
+
+(deftest-async backspace-before-block-merges-into-previous-blank-comments-block
+  (load-test-files
+   [{:page {:block/title "page1"}
+     :blocks
+     [{:block/title "b1"}
+      {:block/title ""
+       :build/tags [:logseq.class/Comments]}
+      {:block/title "after"}]}])
+  (p/let [conn (db/get-db test-helper/test-db false)
+          block (->> (d/q '[:find (pull ?b [*])
+                            :where [?b :block/title "after"]
+                            [?p :block/name "page1"]
+                            [?b :block/page ?p]]
+                          @conn)
+                     ffirst)]
+    (delete-block @conn block
+                  {:on-delete (fn []
+                                (let [visible-blocks (->> (d/q '[:find (pull ?b [* {:block/tags [:db/ident]}])
+                                                                 :where
+                                                                 [?p :block/name "page1"]
+                                                                 [?b :block/page ?p]
+                                                                 [?b :block/title]
+                                                                 [(missing? $ ?b :logseq.property/deleted-at)]]
+                                                               @conn)
+                                                          (map first))
+                                      visible-titles (map :block/title visible-blocks)
+                                      comments-blocks (filter comments-model/comments-area? visible-blocks)]
+                                  (is (= ["b1" "after"] visible-titles))
+                                  (is (= "after" (:block/title (first comments-blocks)))
+                                      "Backspace before the following block should merge its title into the Comments block")
+                                  (is (= #{:logseq.class/Comments}
+                                         (set (map :db/ident (:block/tags (first comments-blocks)))))
+                                      "Merging must keep the previous block tagged as a Comments block")))})))
+
+(deftest-async delete-at-empty-asset-end-merges-next-block-into-asset-block
+  (load-test-files
+   [{:page {:block/title "page1"}
+     :blocks
+     [{:block/title "b1"}
+      {:block/title ""
+       :logseq.property.asset/type "png"
+       :logseq.property.asset/checksum "blank-asset-checksum"
+       :logseq.property.asset/size 1}
+      {:block/title "after"}]}])
+  (p/let [conn (db/get-db test-helper/test-db false)
+          asset-block (->> (d/q '[:find (pull ?b [*])
+                                  :where [?b :logseq.property.asset/type "png"]
+                                  [?p :block/name "page1"]
+                                  [?b :block/page ?p]]
+                                @conn)
+                           ffirst)
+          next-block (->> (d/q '[:find (pull ?b [*])
+                                 :where [?b :block/title "after"]
+                                 [?p :block/name "page1"]
+                                 [?b :block/page ?p]]
+                               @conn)
+                          ffirst)
+          asset-dom #js {:getAttribute #({"blockid" (str (:block/uuid asset-block))
+                                          "containerid" nil} %)}]
+    (-> (p/with-redefs [state/get-edit-content (constantly "")
+                        util/get-prev-block-non-collapsed-non-embed (constantly asset-dom)
+                        editor/edit-block! (constantly nil)]
+          (p/do!
+           (editor/delete-block-inner!
+            test-helper/test-db
+            {:block-id (:block/uuid next-block)
+             :value (:block/title next-block)
+             :config {}
+             :block-container #js {}
+             :current-block asset-block
+             :next-block next-block
+             :delete-concat? true})
+           (let [visible-blocks (->> (d/q '[:find (pull ?b [*])
+                                            :where
+                                            [?p :block/name "page1"]
+                                            [?b :block/page ?p]
+                                            [?b :block/title]
+                                            [(missing? $ ?b :logseq.property/deleted-at)]]
+                                          @conn)
+                                     (map first))
+                 visible-titles (map :block/title visible-blocks)
+                 asset-blocks (filter :logseq.property.asset/type visible-blocks)]
+             (is (= ["b1" "after"] visible-titles))
+             (is (= "after" (:block/title (first asset-blocks)))
+                 "Delete at the end of an empty asset title should merge the next title into the asset block")
+             (is (= "png" (:logseq.property.asset/type (first asset-blocks)))
+                 "Delete merge must keep the current block renderable as an asset"))))
+        (p/finally (fn []
+                     (state/set-state! :editor/edit-block-fn nil))))))
+
+(deftest-async delete-at-empty-comments-end-merges-next-block-into-comments-block
+  (load-test-files
+   [{:page {:block/title "page1"}
+     :blocks
+     [{:block/title "b1"}
+      {:block/title ""
+       :build/tags [:logseq.class/Comments]}
+      {:block/title "after"}]}])
+  (p/let [conn (db/get-db test-helper/test-db false)
+          comments-block (->> (d/q '[:find (pull ?b [* {:block/tags [:db/ident]}])
+                                      :where
+                                      [?p :block/name "page1"]
+                                      [?b :block/page ?p]
+                                      [?b :block/tags :logseq.class/Comments]]
+                                    @conn)
+                               ffirst)
+          next-block (->> (d/q '[:find (pull ?b [*])
+                                 :where [?b :block/title "after"]
+                                 [?p :block/name "page1"]
+                                 [?b :block/page ?p]]
+                               @conn)
+                          ffirst)
+          comments-dom #js {:getAttribute #({"blockid" (str (:block/uuid comments-block))
+                                             "containerid" nil} %)}]
+    (-> (p/with-redefs [state/get-edit-content (constantly "")
+                        util/get-prev-block-non-collapsed-non-embed (constantly comments-dom)
+                        editor/edit-block! (constantly nil)]
+          (p/do!
+           (editor/delete-block-inner!
+            test-helper/test-db
+            {:block-id (:block/uuid next-block)
+             :value (:block/title next-block)
+             :config {}
+             :block-container #js {}
+             :current-block comments-block
+             :next-block next-block
+             :delete-concat? true})
+           (let [visible-blocks (->> (d/q '[:find (pull ?b [* {:block/tags [:db/ident]}])
+                                            :where
+                                            [?p :block/name "page1"]
+                                            [?b :block/page ?p]
+                                            [?b :block/title]
+                                            [(missing? $ ?b :logseq.property/deleted-at)]]
+                                          @conn)
+                                     (map first))
+                 visible-titles (map :block/title visible-blocks)
+                 comments-blocks (filter comments-model/comments-area? visible-blocks)]
+             (is (= ["b1" "after"] visible-titles))
+             (is (= "after" (:block/title (first comments-blocks)))
+                 "Delete at the end of an empty Comments title should merge the next title into the Comments block")
+             (is (= #{:logseq.class/Comments}
+                    (set (map :db/ident (:block/tags (first comments-blocks)))))
+                 "Delete merge must keep the current block tagged as a Comments block"))))
+        (p/finally (fn []
+                     (state/set-state! :editor/edit-block-fn nil))))))
 
 (deftest-async rapid-tab-after-new-block-indents-pending-block
   (let [current-block {:db/id 1
