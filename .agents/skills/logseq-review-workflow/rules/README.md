@@ -3,6 +3,7 @@
 The rule files are intentionally modular:
 
 - `common.md` is always applied.
+- `passes/` files define independent read-only subagent review passes and their output contract.
 - `libraries/` files apply based on imported libraries, data structures, or runtime tooling.
 - `modules/` files apply based on Logseq product/runtime area.
 
