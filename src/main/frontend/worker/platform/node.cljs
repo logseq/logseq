@@ -281,13 +281,19 @@
    (zvec-schema dimension)
    #js {:enableMMAP true}))
 
+(defn- zvec-collection-missing-error?
+  [error]
+  (or (= "ZVEC_NOT_FOUND" (gobj/get error "code"))
+      (and (= "ZVEC_INVALID_ARGUMENT" (gobj/get error "code"))
+           (string/includes? (str error) " not exist"))))
+
 (defn- open-zvec-collection!
   [path dimension]
   (initialize-zvec!)
   (try
     ((gobj/get zvec "ZVecOpen") path #js {:enableMMAP true})
     (catch :default error
-      (if (= "ZVEC_NOT_FOUND" (gobj/get error "code"))
+      (if (zvec-collection-missing-error? error)
         (create-zvec-collection! path dimension)
         (throw error)))))
 

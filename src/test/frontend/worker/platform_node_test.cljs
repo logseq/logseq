@@ -80,6 +80,27 @@
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest node-platform-vector-index-creates-missing-collection-path
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-vector")
+          vector-path (node-path/join root-dir "graphs" "graph-a" "search-vector" "db.sqlite")]
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
+                  vector-index ((get-in platform [:vector :open-index])
+                                {:path vector-path
+                                 :dimension 3})
+                  _ ((:upsert! vector-index) [{:id "block-1"
+                                               :page "page-1"
+                                               :embedding [1 0 0]}])
+                  result ((:query vector-index) [1 0 0] 10 nil)]
+            (is (.existsSync fs vector-path))
+            (is (= [{:id "block-1"
+                     :page "page-1"}]
+                   (mapv #(select-keys % [:id :page]) result)))
+            ((:close! vector-index)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest node-platform-backup-uses-shared-sqlite-backup-implementation
   (let [source (node-platform-source)]
     (is (string/includes? source "logseq.db.sqlite.backup"))
