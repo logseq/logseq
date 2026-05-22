@@ -465,6 +465,15 @@
         columns)))
     columns))
 
+(defn view-row-key
+  [prefix rows idx]
+  (let [row (util/nth-safe rows idx)
+        row-id (cond
+                 (map? row) (:db/id row)
+                 (number? row) row
+                 :else nil)]
+    (str prefix (or row-id idx))))
+
 (defonce groups-sort-by-options
   [[:view.table/group-journal-date :block/journal-day]
    [:view.table/group-page-name :block/title]
@@ -1641,8 +1650,7 @@
                                (-> (:config option)
                                    (assoc :viewel (js/document.getElementById (:viewid option)))))
         :compute-item-key (fn [idx]
-                            (let [block-id (util/nth-safe rows idx)]
-                              (str "table-row-" block-id)))
+                            (view-row-key "table-row-" rows idx))
         :skipAnimationFrameInResizeObserver true
         :total-count (count rows)
         :context {:scrolling scrolling?}
@@ -1695,8 +1703,7 @@
                       :custom-scroll-parent (get-scroll-parent config)
                       :increase-viewport-by {:top 64 :bottom 64}
                       :compute-item-key (fn [idx]
-                                          (let [block-id (util/nth-safe rows idx)]
-                                            (str "list-row-" block-id)))
+                                          (view-row-key "list-row-" rows idx))
                       :total-count (count rows)
                       :skipAnimationFrameInResizeObserver true
                       :item-content (fn [idx] (lazy-item-render rows idx))}
@@ -1731,7 +1738,7 @@
                      block)]])
 
 (rum/defcs gallery-view < rum/static mixins/container-id
-  [state {:keys [config]} table view-entity blocks *scroller-ref]
+  [state {:keys [config]} view-entity blocks *scroller-ref]
   (let [config' (assoc config :container-id (:container-id state))]
     [:div.ls-cards
      (when (seq blocks)
@@ -1741,9 +1748,9 @@
          :custom-scroll-parent (get-scroll-parent config)
          :skipAnimationFrameInResizeObserver true
          :compute-item-key (fn [idx]
-                             (str (:db/id view-entity) "-card-" idx))
+                             (view-row-key (str (:db/id view-entity) "-card-") blocks idx))
          :item-content (fn [idx]
-                         (lazy-item (:data table) idx {}
+                         (lazy-item blocks idx {}
                                     (fn [block]
                                       (gallery-card-item view-entity block config'))))}))]))
 
@@ -1850,7 +1857,7 @@
        (list-view option view-entity table *scroller-ref)
 
        :logseq.property.view/type.gallery
-       (gallery-view option table view-entity (:rows table) *scroller-ref)
+       (gallery-view option view-entity (:rows table) *scroller-ref)
 
        (table-view table option row-selection *scroller-ref))]))
 

@@ -38,3 +38,8 @@
         ordered-ids [:c :b :a :c :b]
         sorted (views/sort-columns columns ordered-ids)]
     (is (= [:c :b :a] (map :id sorted)))))
+
+(deftest view-row-key-should-follow-current-row-id
+  (is (= "card-42" (views/view-row-key "card-" [42] 0)))
+  (is (= "card-99" (views/view-row-key "card-" [{:db/id 99}] 0)))
+  (is (= "card-0" (views/view-row-key "card-" [nil] 0))))
