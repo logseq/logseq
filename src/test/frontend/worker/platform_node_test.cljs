@@ -66,9 +66,11 @@
     (is (string/includes? source "all-MiniLM-L6-v2"))
     (is (string/includes? source "feature-extraction"))
     (is (string/includes? source "q8"))
-    (is (string/includes? source "executionProviders"))
+    (is (string/includes? source "embedding-pipeline-devices [\"gpu\" \"cpu\"]"))
+    (is (not (string/includes? source ":device \"auto\"")))
     (is (string/includes? source "intraOpNumThreads"))
-    (is (string/includes? source "enableCpuMemArena"))
+    (is (string/includes? source "executionMode \"parallel\""))
+    (is (not (string/includes? source ":executionProviders #js [\"cpu\"]")))
     (is (string/includes? source "pooling"))
     (is (string/includes? source "mean"))
     (is (string/includes? source "normalize"))))
@@ -87,7 +89,8 @@
 (deftest node-platform-embedding-backend-embeds-text
   (async done
     (let [root-dir (node-helper/create-tmp-dir "platform-node-embedding-text")]
-      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir
+                                                         :embedding-devices ["cpu"]})
                   embeddings ((get-in platform [:embedding :embed-texts]) ["hello"])]
             (is (= 1 (count embeddings)))
             (is (= 384 (count (first embeddings))))

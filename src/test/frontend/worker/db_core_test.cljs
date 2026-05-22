@@ -638,6 +638,38 @@
                 (is false (str "unexpected error: " error))))
      (p/finally done))))
 
+(deftest search-index-blocks-embeds-batches-in-parallel-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [active-batches (atom 0)
+              max-active-batches (atom 0)
+              batch-sizes (atom [])
+              blocks (mapv (fn [n]
+                              {:id (str "block-" n)
+                               :page "page-1"
+                               :title (str "Block " n)})
+                            (range 96))]
+          (platform/set-platform!
+           (build-test-platform
+            {:runtime :node
+             :embed-texts (fn [texts]
+                            (let [active (swap! active-batches inc)]
+                              (swap! max-active-batches max active)
+                              (swap! batch-sizes conj (count texts))
+                              (p/let [_ (p/delay 10)]
+                                (swap! active-batches dec)
+                                (mapv (fn [_] [0]) texts))))}))
+          (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [_] nil)}})
+          (p/let [result (#'db-core/<embed-index-blocks test-repo blocks)]
+            (is (= (count blocks) (count result)))
+            (is (= [32 32 32] (sort @batch-sizes)))
+            (is (= 2 @max-active-batches))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
 (deftest search-index-blocks-falls-back-to-single-embeddings-when-batch-fails-test
   (async done
     (->

@@ -74,6 +74,7 @@
 
 (def ^:private search-index-build-batch-size 200)
 (def ^:private vector-embedding-batch-size 32)
+(def ^:private vector-embedding-parallelism 2)
 (def ^:private vector-embedding-max-batch-chars (* vector-embedding-batch-size 2048))
 (def ^:private vector-embedding-max-title-length 2048)
 (def ^:private search-index-build-time-budget-ms 8)
@@ -928,18 +929,43 @@
                       right-embedded (<embed-index-batch-with-fallback embed-texts-fn right)]
                 (into left-embedded right-embedded)))))))))
 
+(defn- pop-embedding-batch!
+  [queue]
+  (let [selected (atom nil)]
+    (swap! queue
+           (fn [items]
+             (if (seq items)
+               (do
+                 (reset! selected (first items))
+                 (subvec items 1))
+               items)))
+    @selected))
+
+(defn- <embed-index-batches
+  [batches]
+  (let [batches (vec batches)]
+    (if (empty? batches)
+      (p/resolved [])
+      (let [queue (atom (mapv vector (range (count batches)) batches))
+            results (atom {})
+            worker-count (min vector-embedding-parallelism (count batches))]
+        (letfn [(worker []
+                  (if-let [[idx batch] (pop-embedding-batch! queue)]
+                    (-> (<embed-index-batch-with-fallback batch)
+                        (p/then (fn [embedded]
+                                  (swap! results assoc idx embedded)
+                                  (worker))))
+                    (p/resolved nil)))]
+          (p/let [_ (p/all (mapv (fn [_] (worker)) (range worker-count)))]
+            (into [] (mapcat (fn [idx]
+                               (get @results idx))
+                             (range (count batches))))))))))
+
 (defn- <embed-index-blocks
   [repo blocks]
   (let [blocks (vec (filter embeddable-index-block? blocks))]
     (if (and (seq blocks) (worker-state/get-vector-index repo))
-      (p/loop [remaining (seq (vector-embedding-batches blocks))
-               result []]
-        (if (empty? remaining)
-          result
-          (let [batch (vec (first remaining))]
-            (p/let [embedded (<embed-index-batch-with-fallback batch)]
-              (p/recur (rest remaining)
-                       (into result embedded))))))
+      (<embed-index-batches (vector-embedding-batches blocks))
       (p/resolved []))))
 
 (defn- schedule-vector-index-upsert!

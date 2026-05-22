@@ -214,28 +214,51 @@
     (wrap-node-sqlite-db (new DatabaseSync path) write-guard-fn)))
 
 (def ^:private default-embedding-model "Xenova/all-MiniLM-L6-v2")
+(def ^:private embedding-pipeline-devices ["gpu" "cpu"])
 (defonce ^:private *embedding-pipelines (atom {}))
 
-(defn- embedding-pipeline-options
+(defn- embedding-cpu-thread-count
   []
-  #js {:device "cpu"
+  (-> (count (.cpus os))
+      (max 1)
+      (min 4)))
+
+(defn- embedding-pipeline-options
+  [device]
+  #js {:device device
        :dtype "q8"
-       :session_options #js {:executionProviders #js ["cpu"]
-                             :intraOpNumThreads 1
-                             :interOpNumThreads 1
-                             :executionMode "sequential"
-                             :enableCpuMemArena false
-                             :enableMemPattern false}})
+       :session_options #js {:intraOpNumThreads (embedding-cpu-thread-count)
+                             :interOpNumThreads (embedding-cpu-thread-count)
+                             :executionMode "parallel"
+                             :enableCpuMemArena true
+                             :enableMemPattern true}})
+
+(defn- <embedding-pipeline-for-device
+  [model-id device]
+  ((gobj/get transformers "pipeline")
+   "feature-extraction"
+   model-id
+   (embedding-pipeline-options device)))
+
+(defn- <embedding-pipeline-with-fallback
+  [model-id devices]
+  (let [device (first devices)]
+    (-> (<embedding-pipeline-for-device model-id device)
+        (p/catch (fn [error]
+                   (if-let [remaining (seq (rest devices))]
+                     (do
+                       (log/warn :embedding/gpu-pipeline-failed {:model-id model-id
+                                                                 :device device
+                                                                 :error error})
+                       (<embedding-pipeline-with-fallback model-id remaining))
+                     (throw error)))))))
 
 (defn- <embedding-pipeline
-  [model-id]
-  (if-let [pipeline-promise (get @*embedding-pipelines model-id)]
+  [model-id devices]
+  (if-let [pipeline-promise (get @*embedding-pipelines [model-id devices])]
     pipeline-promise
-    (let [pipeline-promise ((gobj/get transformers "pipeline")
-                            "feature-extraction"
-                            model-id
-                            (embedding-pipeline-options))]
-      (swap! *embedding-pipelines assoc model-id pipeline-promise)
+    (let [pipeline-promise (<embedding-pipeline-with-fallback model-id devices)]
+      (swap! *embedding-pipelines assoc [model-id devices] pipeline-promise)
       pipeline-promise)))
 
 (defn- tensor->vectors
@@ -246,11 +269,11 @@
       (mapv vec values))))
 
 (defn- <embed-texts
-  [model-id texts]
+  [model-id devices texts]
   (let [texts (vec texts)]
     (if (empty? texts)
       (p/resolved [])
-      (p/let [extractor (<embedding-pipeline model-id)
+      (p/let [extractor (<embedding-pipeline model-id devices)
               tensor (.call (gobj/get extractor "_call")
                             extractor
                             (clj->js texts)
@@ -644,10 +667,11 @@
                (fs/writeFile kv-path payload "utf8")))}))
 
 (defn node-platform
-  [{:keys [root-dir event-fn write-guard-fn owner-source recreate-lock-fn]}]
+  [{:keys [root-dir event-fn write-guard-fn owner-source recreate-lock-fn embedding-devices]}]
   (let [root-dir (db-lock/resolve-root-dir root-dir)
         data-dir (db-lock/graphs-dir root-dir)
         owner-source (db-lock/normalize-owner-source owner-source)
+        embedding-devices (vec (or embedding-devices embedding-pipeline-devices))
         kv (kv-store root-dir)]
     (p/do!
      (ensure-dir! root-dir)
@@ -694,7 +718,7 @@
                             (.backup db path))}
       :embedding {:model-id default-embedding-model
                   :embed-texts (fn [texts]
-                                 (<embed-texts default-embedding-model texts))}
+                                 (<embed-texts default-embedding-model embedding-devices texts))}
       :vector {:open-index open-vector-index}
       :crypto {:save-secret-text! (fn [key text]
                                     (<save-secret-text-by-owner! kv owner-source key text))
