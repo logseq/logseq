@@ -25,4 +25,8 @@ extend-exclude = ["resources/*",
                   "deps/db-sync/test/logseq/db_sync/fixtures/*.edn",
                   "clj-e2e/resources/*",
                   "deps/common/src/logseq/common/plural.cljs",
-                  "packages/ui/src/amplify/lang.ts"]
+                  "packages/ui/src/amplify/lang.ts",
+                  # Pure W3C named-color → hex tables; hex digits trip the typos
+                  # tokenizer ("daa" inside "e6daa6"/"daa520" etc.). No prose.
+                  "src/main/frontend/colors/named.cljs",
+                  "src/main/frontend/colors/css.cljs"]

@@ -16,7 +16,7 @@
 
 (defn parse-css-color->hex
   "Parse a computed CSS color value (hex / hsl(...) / rgb(...)) into a hex
-   string. Returns nil for blank or unparseable input."
+   string. Returns nil for blank or unparsable input."
   [s]
   (when-let [v (some-> s string/trim not-empty)]
     (cond
@@ -60,7 +60,7 @@
 ;; callbacks fire at the microtask boundary, before React commits the
 ;; render scheduled by the same set-state! that triggered the flip, so
 ;; subscribers always see fresh values on the next paint. `contains?`
-;; check lets us cache nil too (var unset / unparseable).
+;; check lets us cache nil too (var unset / unparsable).
 (defonce ^:private *bg-var-cache (atom {}))
 
 (defn- invalidate-bg-var-cache! []
@@ -77,7 +77,7 @@
 (defn read-bg-var
   "Read a CSS background variable (e.g. \"--ls-primary-background-color\") and
    return its hex value. Tries body first (where Logseq sets theme vars), falls
-   back to documentElement. Returns nil if unset/unparseable.
+   back to documentElement. Returns nil if unset/unparsable.
 
    Cached per theme; cache invalidates on `documentElement` attribute changes
    (data-theme / class), so theme flips are observed without an explicit
@@ -582,7 +582,7 @@
       :match :hex | :css | :exact | :prefix
       :name optional-string  (omitted for :hex)
       :tentative? bool       (only true for :prefix)}
-   or nil. Whitespace-only / blacklisted / unparseable -> nil.
+   or nil. Whitespace-only / blacklisted / unparsable -> nil.
    Public boundary."
   [s]
   (when (and (string? s) (<= (count s) 64))
