@@ -1390,6 +1390,7 @@
  :property/update-success "Property updated!"
  :property/use-choice-in-tag "Use in #{1}"
 
+ :property.built-in/agent-session-id "Agent Session ID"
  :property.built-in/alias "Alias"
  :property.built-in/asset "Asset"
  :property.built-in/asset-align "Asset alignment"

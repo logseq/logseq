@@ -187,6 +187,24 @@
                       (d/entity @conn [:block/uuid range-comments-uuid])))))
         "Existing range comment targets should be preserved")))
 
+(deftest migrate-65-30-adds-assignee-property
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 29}}])
+
+    (let [result (db-migrate/migrate conn :target-version {:major 65 :minor 30})]
+      (is (= {:major 65 :minor 30}
+             (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+      (let [property (d/entity @conn :logseq.property/assignee)]
+        (is (some? property))
+        (is (= "Assignee" (:block/title property)))
+        (is (= :node (:logseq.property/type property)))
+        (is (= :db.cardinality/many (:db/cardinality property)))
+        (is (true? (:logseq.property/public? property))))
+      (is (some #(= {:properties [:logseq.property/assignee]}
+                    (:migrate-updates %))
+                (:upgrade-result-coll result))))))
+
 (deftest migrate-65-31-adds-agent-session-id-property
   (let [conn (d/create-conn db-schema/schema)]
     (d/transact! conn [{:db/ident :logseq.kv/schema-version

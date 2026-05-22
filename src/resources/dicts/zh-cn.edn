@@ -1379,6 +1379,7 @@
  :property/update-success "属性已更新！"
  :property/use-choice-in-tag "用于 #{1}"
 
+ :property.built-in/agent-session-id "Agent 会话 ID"
  :property.built-in/alias "别名"
  :property.built-in/asset "附件"
  :property.built-in/asset-align "附件对齐"

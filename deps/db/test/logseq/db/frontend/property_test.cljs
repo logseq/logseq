@@ -1,6 +1,17 @@
 (ns logseq.db.frontend.property-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
+            [cljs.reader :as reader]
+            [cljs.test :refer [deftest is testing]]
             [logseq.db.frontend.property :as db-property]))
+
+(defn- read-dict
+  [filename]
+  (reader/read-string
+   (.toString
+    (fs/readFileSync
+     (node-path/join (.cwd js/process) "src" "resources" "dicts" filename))
+    "utf8")))
 
 (deftest sort-properties
   (let [p1 {:db/id 1, :block/order "a", :block/uuid "uuid-a"}
@@ -102,4 +113,10 @@
              (get-in property [:properties :logseq.property/description])))
       (is (contains? db-property/public-built-in-properties :logseq.property.agent/session-id))
       (is (db-property/logseq-property? :logseq.property.agent/session-id))
-      (is (db-property/internal-property? :logseq.property.agent/session-id)))))
+      (is (db-property/internal-property? :logseq.property.agent/session-id)))
+
+    (testing "localized display title"
+      (let [i18n-key (db-property/built-in-ident->i18n-key :logseq.property.agent/session-id)]
+        (is (= :property.built-in/agent-session-id i18n-key))
+        (is (contains? (read-dict "en.edn") i18n-key))
+        (is (contains? (read-dict "zh-cn.edn") i18n-key))))))
