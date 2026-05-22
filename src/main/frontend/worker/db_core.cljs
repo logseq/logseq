@@ -73,7 +73,7 @@
 (def ^:private recycle-gc-kv :logseq.kv/recycle-last-gc-at)
 
 (def ^:private search-index-build-batch-size 200)
-(def ^:private vector-embedding-batch-size 32)
+(def ^:private vector-embedding-batch-size 1)
 (def ^:private vector-embedding-max-title-length 2048)
 (def ^:private search-index-build-time-budget-ms 8)
 (def ^:private search-index-build-idle-status-ttl-ms 2000)
