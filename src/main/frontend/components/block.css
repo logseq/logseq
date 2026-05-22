@@ -1735,6 +1735,15 @@ html.is-mac {
   font-size: 16px;
 }
 
+/* Avatar's inner fallback glyph is a nested SVG, which the broad
+   `.ls-page-icon svg { 38px }` rule above would otherwise force to fill
+   the whole 38×38 box. Reset to intrinsic so `shui/tabler-icon`'s
+   computed `:size` (~0.55× the avatar) governs again. */
+.ls-page-title .ls-page-icon .ui__avatar svg {
+  width: auto;
+  height: auto;
+}
+
 .ls-page-title .ls-page-icon .image-icon img {
   width: 100%;
   height: 100%;
