@@ -5116,21 +5116,21 @@
 
       ;; Emojis tab: full emoji list, optionally preceded by recently-used
       ;; emojis when :show-used? is true (reaction-picker context).
+      ;; Section headers are not user-collapsible on this tab, so don't gate
+      ;; on `section-states` — that key is owned by the All tab.
       (= tab :emoji)
       (build-sections
        (when show-used?
          {:label "Recently used"
-          :items (when (get section-states "Recently used" true)
-                   (->> (get-used-items)
-                        (filterv #(= :emoji (:type %)))))
+          :items (->> (get-used-items)
+                      (filterv #(= :emoji (:type %))))
           :cols icon-grid-cols})
        {:label "Emojis"
-        :items (when (get section-states "Emojis" true)
-                 (mapv (fn [emoji]
-                         {:type :emoji :id (:id emoji)
-                          :label (or (:name emoji) (:id emoji))
-                          :data {:value (:id emoji)}})
-                       emojis))
+        :items (mapv (fn [emoji]
+                       {:type :emoji :id (:id emoji)
+                        :label (or (:name emoji) (:id emoji))
+                        :data {:value (:id emoji)}})
+                     emojis)
         :cols icon-grid-cols})
 
       ;; Icons tab: full icon list
