@@ -1,4 +1,7 @@
 .ls-table {
+  --ls-table-row-divider-color: hsl(var(--border));
+  --ls-table-edge-divider-color: var(--ls-border-color, hsl(var(--border)));
+
   .asset-container {
     @apply my-1;
   }
@@ -35,6 +38,23 @@
 
   .ls-table-row {
     @apply h-[33px] min-h-[33px] max-h-[33px];
+    position: relative;
+    border-bottom-color: transparent;
+
+    &::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 1px;
+      pointer-events: none;
+      background-color: var(--ls-table-row-divider-color);
+      transform: scaleY(0.5);
+      transform-origin: bottom;
+      z-index: 8;
+    }
+
     div, span, a {
       @apply whitespace-nowrap;
     }
@@ -48,10 +68,15 @@
     }
   }
 
+  div[data-testid='virtuoso-item-list'] > div:last-child .ls-table-row::after {
+    background-color: transparent;
+  }
+
   .ls-table-header {
     @apply flex flex-row items-center w-fit absolute left-0 top-0;
 
     min-width: 100%;
+    border-color: var(--ls-table-edge-divider-color);
 
     will-change: transform;
     transform: translate3d(0, 0, 0);
@@ -86,6 +111,11 @@
   }
   .ls-table-footer {
     @apply absolute left-0 bottom-[8px] w-full;
+
+    > div {
+      border-top: 1px solid var(--ls-table-edge-divider-color);
+      border-bottom-color: var(--ls-table-edge-divider-color);
+    }
   }
 
   .ls-table-resize-handle {
