@@ -9,7 +9,6 @@
             [frontend.dicts :as dicts]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
@@ -173,7 +172,7 @@
   (let [[custom-tab-ids set-custom-tab-ids!] (hooks/use-state
                                               (storage/get :ls-mobile-tabs))
         features {:flashcards? (state/enable-flashcards?)}
-        max-tabs (mobile-tabs/max-main-tabs (mobile-util/native-iphone?))
+        max-tabs (mobile-tabs/max-main-tabs)
         selected-tab-ids (mobile-tabs/selected-tab-ids custom-tab-ids features max-tabs)
         selected-tab-id-set (set selected-tab-ids)
         available-tabs (mobile-tabs/available-tabs features)
