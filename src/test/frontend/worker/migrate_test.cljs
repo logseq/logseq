@@ -186,3 +186,41 @@
                      (:logseq.property.comments/blocks
                       (d/entity @conn [:block/uuid range-comments-uuid])))))
         "Existing range comment targets should be preserved")))
+
+(deftest migrate-65-30-adds-assignee-property
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 29}}])
+
+    (let [result (db-migrate/migrate conn :target-version {:major 65 :minor 30})]
+      (is (= {:major 65 :minor 30}
+             (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+      (let [property (d/entity @conn :logseq.property/assignee)]
+        (is (some? property))
+        (is (= "Assignee" (:block/title property)))
+        (is (= :node (:logseq.property/type property)))
+        (is (= :db.cardinality/many (:db/cardinality property)))
+        (is (true? (:logseq.property/public? property))))
+      (is (some #(= {:properties [:logseq.property/assignee]}
+                    (:migrate-updates %))
+                (:upgrade-result-coll result))))))
+
+(deftest migrate-65-31-adds-agent-session-id-property
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 30}}])
+
+    (let [result (db-migrate/migrate conn)]
+      (is (= {:major 65 :minor 31}
+             (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+      (let [property (d/entity @conn :logseq.property.agent/session-id)]
+        (is (some? property))
+        (is (= "Agent Session ID" (:block/title property)))
+        (is (= :string (:logseq.property/type property)))
+        (is (true? (:logseq.property/public? property)))
+        (is (true? (:logseq.property/hide? property)))
+        (is (= "Stores the AgentBridge session ID for a routed task."
+               (:block/title (:logseq.property/description property)))))
+      (is (some #(= {:properties [:logseq.property.agent/session-id]}
+                    (:migrate-updates %))
+                (:upgrade-result-coll result))))))
