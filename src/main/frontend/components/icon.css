@@ -336,7 +336,7 @@
   border-radius: 0;
 
   .tab-actions {
-    @apply flex items-center gap-1 ml-auto;
+    @apply flex items-center gap-1.5 ml-auto;
   }
 
   .tab-item {
@@ -881,13 +881,11 @@
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  /* Left 12px matches the icon-picker tabs (`.tabs-section` uses
-     `px-3`), so the back-chevron lines up with the "All / Emojis /
-     Icons / Custom" tab strip when switching between picker modes
-     via `< Back`. Right stays at 14px — that's the trash/del button
-     side and its baseline padding is fine. Mirrored in
-     `.text-picker-back` below. */
-  padding: 0 14px 0 12px;
+  /* Symmetric 12px matches the icon-picker tabs (`.tabs-section`
+     uses `px-3`), so the back-chevron and trash button line up with
+     the "All / Emojis / Icons / Custom" tab strip and its right-side
+     trigger when switching between picker modes via `< Back`. */
+  padding: 0 12px;
   height: 40px;
   /* Tailwind utility for the full themed chain (matches the icon
      picker's tabs-section so both topbars read as the same chrome).
@@ -973,9 +971,9 @@
   justify-self: end;
   /* Right-side group: holds the (avatar-mode-only) color trigger and the
      trash button. Flex-row aligns them on a single baseline; the gap
-     mirrors the icon-picker's `.tab-actions gap-1` so the two topbars
+     mirrors the icon-picker's `.tab-actions gap-1.5` so the two topbars
      read as the same chrome at different drill levels. */
-  @apply flex items-center gap-1;
+  @apply flex items-center gap-1.5;
 
   /* Delete button - matching icon picker styling */
   .ui__button[data-action=del] {
@@ -1375,11 +1373,11 @@
 
 .text-picker-back {
   @apply flex-shrink-0 flex items-center justify-between;
-  /* Left 12px matches the icon-picker tabs (`.tabs-section` uses
-     `px-3`) and `.asset-picker-tabrow` above, so the back-chevron
-     lines up with the tab strip when switching picker modes via
-     `< Back`. Right stays at 14px — trash button side. */
-  padding: 8px 14px 7px 12px;
+  /* Symmetric 12px matches the icon-picker tabs (`.tabs-section`
+     uses `px-3`) and `.asset-picker-tabrow` above, so the
+     back-chevron and trash button line up with the tab strip and
+     its right-side trigger when switching picker modes via `< Back`. */
+  padding: 8px 12px 7px;
   /* Themed via Tailwind chain (matches the asset-picker and icon-picker topbars). */
   @apply bg-gray-03;
   border-bottom: 1px solid var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
@@ -1403,7 +1401,7 @@
 }
 
 .text-picker-actions {
-  @apply flex items-center gap-1;
+  @apply flex items-center gap-1.5;
 }
 
 .text-picker-body {
@@ -2237,14 +2235,14 @@
      body color shows above the gradient, breaking the visual continuity
      between the elevated topbar and the customize panel. */
   margin-top: -4px;
-  /* 14px horizontal padding on the wrapper — both the content row and
+  /* 12px horizontal padding on the wrapper — both the content row and
      the rail are siblings of this padding, so the rail's border-top
-     is inset accordingly. Symmetric 14px on both sides matches the
-     topbar's `.asset-picker-tabrow` / `.text-picker-back` right
-     padding, pulling the banner row inward by 4px vs the original
-     18px Paper inset so the avatar preview and the Edit affordance
-     sit closer to the popup edges. */
-  padding: 0 14px;
+     is inset accordingly. Symmetric 12px on both sides matches the
+     topbar's `.asset-picker-tabrow` / `.text-picker-back` inset
+     (and the icon-picker tabs' `px-3`), so the avatar preview, the
+     banner text, and the Edit affordance share a single vertical
+     with the topbar chevron/trash above. */
+  padding: 0 12px;
   /* Two-layer base background — visible in both compact and expanded
      states so the customize zone reads as a quietly-recessed banner
      distinct from the image grid below:
@@ -2899,8 +2897,8 @@ html.dark .avatar-customize-zone .cb-rail {
   align-items: center;
   justify-content: space-between;
   /* Horizontal padding lives on the wrapper now; only vertical padding
-     here. The border-top therefore spans the inner 352px (band's 380px
-     minus 2 × 14px wrapper padding) instead of bleeding to the band
+     here. The border-top therefore spans the inner 356px (band's 380px
+     minus 2 × 12px wrapper padding) instead of bleeding to the band
      edges. */
   padding: 10px 0 12px;
   /* Themed via --ls-border-color middle step (matches the topbar
