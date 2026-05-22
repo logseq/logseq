@@ -590,7 +590,7 @@
           (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [_] nil)}})
           (p/let [result (#'db-core/<embed-index-blocks test-repo blocks)]
             (is (= (count blocks) (count result)))
-            (is (= [16 16 16 16 1] @batch-sizes))))))
+            (is (= [32 32 1] @batch-sizes))))))
      (p/catch (fn [error]
                 (is false (str "unexpected error: " error))))
      (p/finally done))))
