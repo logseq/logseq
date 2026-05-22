@@ -2,10 +2,9 @@ package com.logseq.app
 
 import android.app.DatePickerDialog
 import android.content.Intent
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
-import android.widget.DatePicker
-import android.widget.FrameLayout
 import android.widget.Toast
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -21,6 +20,7 @@ class UILocal : Plugin() {
   private var toast: Toast? = null
   companion object {
     const val ACTION_ROUTE_CHANGED = "com.logseq.app.ROUTE_DID_CHANGE"
+    private const val DEBUG_PREFIX = "[DEBUG-navstack]"
   }
 
   @PluginMethod
@@ -31,7 +31,7 @@ class UILocal : Plugin() {
     if (!defaultDate.isNullOrEmpty()) {
       try {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val date = defaultDate?.let { sdf.parse(it) }
+        val date = sdf.parse(defaultDate)
         if (date != null) {
           calendar.time = date
         }
@@ -52,7 +52,7 @@ class UILocal : Plugin() {
       year, month, day
     )
 
-    datePickerDialog.datePicker.setOnDateChangedListener { _, selectedYear: Int, selectedMonth: Int, selectedDay: Int ->
+    datePickerDialog.datePicker.init(year, month, day) { _, selectedYear: Int, selectedMonth: Int, selectedDay: Int ->
       // format selected date
       val selectedDate = Calendar.getInstance().apply {
         set(selectedYear, selectedMonth, selectedDay)
@@ -119,8 +119,11 @@ class UILocal : Plugin() {
     val path = call.getString("path") ?: "/"
     val stack = call.getString("stack") ?: "home"
 
-    // Drive Compose Nav for native animations/back handling.
-    ComposeHost.applyNavigation(navigationType, path)
+    Log.d(
+      "NavStack",
+      "$DEBUG_PREFIX uiLocal.routeDidChange stack=$stack type=$navigationType push=$push path=$path"
+    )
+
 
     val ctx = context
     if (ctx != null) {
