@@ -827,7 +827,6 @@
   /* Match icon-picker width for visual continuity */
   width: 380px;
   min-width: 380px;
-  min-height: 320px;
   max-height: 440px;
   background-color: var(--lx-gray-02);
   transition: background-color 200ms;
