@@ -825,6 +825,42 @@
         vector-index (worker-state/get-vector-index repo)]
     (search/search-blocks conn search-db vector-index q option)))
 
+(defn- validate-embedding-count!
+  [blocks embeddings]
+  (when-not (= (count blocks) (count embeddings))
+    (throw (ex-info "embedding result count mismatch"
+                    {:block-count (count blocks)
+                     :embedding-count (count embeddings)
+                     :model-id (platform/embedding-model-id (platform/current))}))))
+
+(defn- embeddable-index-block?
+  [{:keys [id page title]}]
+  (and id page (not (string/blank? (str title)))))
+
+(defn- <embed-index-blocks
+  [repo blocks]
+  (let [blocks (vec (filter embeddable-index-block? blocks))]
+    (if (and (seq blocks) (worker-state/get-vector-index repo))
+      (p/let [embeddings (platform/embed-texts (platform/current) (mapv :title blocks))
+              _ (validate-embedding-count! blocks embeddings)]
+        (mapv (fn [block embedding]
+                (assoc block :embedding embedding))
+              blocks
+              embeddings))
+      (p/resolved []))))
+
+(defn- <search-blocks
+  [repo q option]
+  (let [vector-index (worker-state/get-vector-index repo)]
+    (if (and vector-index
+             (not (:page-only? option))
+             (not (:query-embedding option))
+             (not (string/blank? q)))
+      (p/let [embeddings (platform/embed-texts (platform/current) [q])
+              _ (validate-embedding-count! [{:title q}] embeddings)]
+        (search-blocks repo q (assoc option :query-embedding (first embeddings))))
+      (p/resolved (search-blocks repo q option)))))
+
 (def-thread-api :thread-api/block-refs-check
   [repo id {:keys [unlinked?]}]
   (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -1050,14 +1086,15 @@
 
 (def-thread-api :thread-api/search-blocks
   [repo q option]
-  (search-blocks repo q option))
+  (<search-blocks repo q option))
 
 (def-thread-api :thread-api/search-upsert-blocks
   [repo blocks]
   (when-let [db (get-search-db repo)]
-    (search/upsert-vector-blocks! (worker-state/get-vector-index repo) blocks)
-    (search/upsert-blocks! db (bean/->js blocks))
-    nil))
+    (p/let [vector-blocks (<embed-index-blocks repo blocks)]
+      (search/upsert-vector-blocks! (worker-state/get-vector-index repo) vector-blocks)
+      (search/upsert-blocks! db (bean/->js blocks))
+      nil)))
 
 (def-thread-api :thread-api/search-delete-blocks
   [repo ids]
@@ -1147,16 +1184,17 @@
                           100
                           (min 100 (int (* 100 (/ processed' total)))))
                should-report? (> progress last-progress)]
-           (when (seq indexed)
-             (search/upsert-vector-blocks! (worker-state/get-vector-index repo) indexed)
-             (search/upsert-blocks! search-db (bean/->js indexed)))
-           (when should-report?
-             (report-search-index-progress! repo {:build-id build-id
-                                                  :status :running
-                                                  :progress progress
-                                                  :processed processed'
-                                                  :total total}))
-           (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))]
+           (p/let [_ (when (seq indexed)
+                       (p/let [vector-blocks (<embed-index-blocks repo indexed)]
+                         (search/upsert-vector-blocks! (worker-state/get-vector-index repo) vector-blocks)
+                         (search/upsert-blocks! search-db (bean/->js indexed))))
+                   _ (when should-report?
+                       (report-search-index-progress! repo {:build-id build-id
+                                                            :status :running
+                                                            :progress progress
+                                                            :processed processed'
+                                                            :total total}))
+                   _ (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))]
              (p/recur remaining' processed' (if should-report? progress last-progress))))
          (do
            (ensure-active-search-index-build! repo build-id)

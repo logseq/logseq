@@ -1,6 +1,7 @@
 (ns frontend.worker.platform.node
   "Node.js platform adapter for db-worker."
-  (:require ["@zvec/zvec" :as zvec]
+  (:require ["@huggingface/transformers" :as transformers]
+            ["@zvec/zvec" :as zvec]
             ["fs/promises" :as fs]
             ["node:sqlite" :as node-sqlite]
             ["os" :as os]
@@ -210,6 +211,40 @@
   [write-guard-fn {:keys [path]}]
   (p/let [_ (ensure-dir! (node-path/dirname path))]
     (wrap-node-sqlite-db (new DatabaseSync path) write-guard-fn)))
+
+(def ^:private default-embedding-model "Xenova/all-MiniLM-L6-v2")
+(defonce ^:private *embedding-pipelines (atom {}))
+
+(defn- <embedding-pipeline
+  [model-id]
+  (if-let [pipeline-promise (get @*embedding-pipelines model-id)]
+    pipeline-promise
+    (let [pipeline-promise ((gobj/get transformers "pipeline")
+                            "feature-extraction"
+                            model-id)]
+      (swap! *embedding-pipelines assoc model-id pipeline-promise)
+      pipeline-promise)))
+
+(defn- tensor->vectors
+  [^js tensor]
+  (let [values (js->clj (.tolist tensor))]
+    (if (every? number? values)
+      [(vec values)]
+      (mapv vec values))))
+
+(defn- <embed-texts
+  [model-id texts]
+  (let [texts (vec texts)]
+    (if (empty? texts)
+      (p/resolved [])
+      (p/let [extractor (<embedding-pipeline model-id)
+              tensor (extractor (clj->js texts)
+                                #js {:pooling "mean"
+                                     :normalize true})]
+        (let [vectors (tensor->vectors tensor)]
+          (when-let [dispose (gobj/get tensor "dispose")]
+            (.call dispose tensor))
+          vectors)))))
 
 (defonce ^:private *zvec-initialized? (atom false))
 
@@ -579,6 +614,9 @@
                :transaction (fn [db f] (.transaction db f))
                :backup-db (fn [^js db path]
                             (.backup db path))}
+      :embedding {:model-id default-embedding-model
+                  :embed-texts (fn [texts]
+                                 (<embed-texts default-embedding-model texts))}
       :vector {:open-index open-vector-index}
       :crypto {:save-secret-text! (fn [key text]
                                     (<save-secret-text-by-owner! kv owner-source key text))

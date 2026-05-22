@@ -71,7 +71,7 @@
 (defn- build-test-platform
   ([]
    (build-test-platform {}))
-  ([{:keys [post-message! remove-vfs! runtime import-db]
+  ([{:keys [post-message! remove-vfs! runtime import-db embed-texts]
      :or {post-message! (fn [& _] nil)
           remove-vfs! (fn [_] nil)
           runtime :browser}}]
@@ -99,6 +99,9 @@
              :exec (fn [db sql-or-opts] (.exec db sql-or-opts))
              :transaction (fn [db f] (.transaction db f))}
     :crypto {}
+    :embedding (cond-> {:model-id "test-model"}
+                 embed-texts
+                 (assoc :embed-texts embed-texts))
     :timers {:set-interval! (fn [_ _] nil)}}))
 
 (defn- restoring-worker-state
@@ -107,6 +110,7 @@
         config-prev @worker-state/*db-sync-config
         sqlite-prev @worker-state/*sqlite
         sqlite-conns-prev @worker-state/*sqlite-conns
+        vector-indexes-prev @worker-state/*vector-indexes
         datascript-prev @worker-state/*datascript-conns
         client-ops-prev @worker-state/*client-ops-conns
         opfs-prev @worker-state/*opfs-pools
@@ -118,6 +122,7 @@
                   (reset! worker-state/*db-sync-config config-prev)
                   (reset! worker-state/*sqlite sqlite-prev)
                   (reset! worker-state/*sqlite-conns sqlite-conns-prev)
+                  (reset! worker-state/*vector-indexes vector-indexes-prev)
                   (reset! worker-state/*datascript-conns datascript-prev)
                   (reset! worker-state/*client-ops-conns client-ops-prev)
                   (reset! worker-state/*opfs-pools opfs-prev)
@@ -127,6 +132,7 @@
     (platform/set-platform! (build-test-platform))
     (reset! worker-state/*sqlite #js {})
     (reset! worker-state/*sqlite-conns {})
+    (reset! worker-state/*vector-indexes {})
     (reset! worker-state/*datascript-conns {})
     (reset! worker-state/*client-ops-conns {})
     (reset! worker-state/*opfs-pools {})
@@ -443,6 +449,33 @@
                     (is (= 1 (get-in completed [:payload :total])))))
                 (p/catch (fn [error]
                            (is false (str error)))))))))
+     (p/finally done))))
+
+(deftest search-index-blocks-use-platform-embeddings-for-vector-index-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [embed-calls (atom [])]
+          (platform/set-platform! (build-test-platform
+                                   {:runtime :node
+                                    :embed-texts (fn [texts]
+                                                   (swap! embed-calls conj (vec texts))
+                                                   (p/resolved [[0.1 0.2 0.3]]))}))
+          (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [_] nil)}})
+          (p/let [result (#'db-core/<embed-index-blocks
+                          test-repo
+                          [{:id "block-1"
+                            :page "page-1"
+                            :title "Hello"}])]
+            (is (= [["Hello"]] @embed-calls))
+            (is (= [{:id "block-1"
+                     :page "page-1"
+                     :title "Hello"
+                     :embedding [0.1 0.2 0.3]}]
+                   result))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
      (p/finally done))))
 
 (deftest release-access-handles-clears-active-import-state-test

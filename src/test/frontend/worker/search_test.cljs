@@ -534,8 +534,8 @@
           (is (= (str page-id) (:id indexed)))
           (is (= "Artificial Intelligence ai" (:title indexed))))))))
 
-(deftest block-index-includes-vector-embedding
-  (testing "desktop vector search can index the same block text as SQLite keyword search"
+(deftest block-index-does-not-generate-vector-embedding
+  (testing "desktop vector embeddings are supplied by the platform embedding backend"
     (let [block-id #uuid "00000000-0000-0000-0000-000000000238"
           page-id #uuid "00000000-0000-0000-0000-000000000239"
           block {:db/id 1
@@ -549,9 +549,7 @@
                     ldb/get-title-with-parents (fn [entity] (:block/title entity))]
         (let [indexed (search/block->index block)]
           (is (= "Local-first semantic search" (:title indexed)))
-          (is (vector? (:embedding indexed)))
-          (is (= search/vector-embedding-dimension (count (:embedding indexed))))
-          (is (every? number? (:embedding indexed))))))))
+          (is (not (contains? indexed :embedding))))))))
 
 (deftest search-blocks-includes-vector-only-results
   (testing "zvec vector hits are merged into desktop search even when SQLite has no keyword hit"
@@ -561,6 +559,7 @@
                              :block/uuid (uuid vector-id)
                              :block/title "Semantic only result"
                              :block/page {:block/uuid (uuid page-id)}}}
+          query-embedding [0.1 0.2 0.3]
           vector-queries (atom [])
           vector-index {:query (fn [embedding limit page]
                                  (swap! vector-queries conj {:embedding embedding
@@ -583,13 +582,14 @@
                                                 vector-index
                                                 "meaning based query"
                                                 {:limit 10
-                                                 :enable-snippet? false}))]
+                                                 :enable-snippet? false
+                                                 :query-embedding query-embedding}))]
           (is (= [{:db/id 901
                    :block/title "Semantic only result"}]
                  (mapv #(select-keys % [:db/id :block/title]) result)))
           (is (= 1 (count @vector-queries)))
-          (is (= search/vector-embedding-dimension
-                 (count (:embedding (first @vector-queries))))))))))
+          (is (= query-embedding
+                 (:embedding (first @vector-queries)))))))))
 
 (deftest search-blocks-hybrid-ranks-keyword-and-vector-results
   (testing "SQLite keyword hits and zvec vector hits share the final ranking"
@@ -626,11 +626,12 @@
                     ldb/page? (constantly false)
                     ldb/built-in? (constantly false)]
         (let [result (vec (search/search-blocks (atom :db)
-                                                db
-                                                vector-index
-                                                "alpha"
-                                                {:limit 10
-                                                 :enable-snippet? false}))]
+                                               db
+                                               vector-index
+                                               "alpha"
+                                               {:limit 10
+                                                :enable-snippet? false
+                                                :query-embedding [0.4 0.5 0.6]}))]
           (is (= ["related semantic result" "alpha keyword"]
                  (mapv :block/title result))))))))
 

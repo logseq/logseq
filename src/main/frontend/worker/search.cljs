@@ -145,54 +145,8 @@ DROP TRIGGER IF EXISTS blocks_au;
 (def ^:private snippet-ellipsis "\u00A0\u00A0\u00A0...\u00A0\u00A0\u00A0") ;; \u00A0 is No-Break Space (NBSP)
 (def ^:private query-boolean-operators #{"and" "or" "not" "|" "&"})
 (def ^:private query-break-chars #{\, \. \; \! \? \uFF0C \u3002 \uFF1B \uFF01 \uFF1F \u3001}) ;; , . ; ! ? ， 。 ； ！ ？ 、
-(def vector-embedding-dimension 64)
+(def vector-embedding-dimension 384)
 (def ^:private vector-score-weight 100000)
-
-(defn- stable-hash-string
-  [s]
-  (loop [idx 0
-         h 0]
-    (if (< idx (count s))
-      (recur (inc idx)
-             (bit-and 0x7fffffff
-                      (+ (* 31 h) (.charCodeAt s idx))))
-      h)))
-
-(defn- embedding-tokens
-  [text]
-  (let [normalized (-> (str text)
-                       string/lower-case
-                       (string/replace #"\s+" " ")
-                       string/trim)]
-    (cond
-      (string/blank? normalized)
-      []
-
-      (< (count normalized) 3)
-      [normalized]
-
-      :else
-      (map #(subs normalized % (+ % 3))
-           (range 0 (- (count normalized) 2))))))
-
-(defn text->embedding
-  [text]
-  (let [values (double-array vector-embedding-dimension)]
-    (doseq [token (embedding-tokens text)]
-      (let [h (stable-hash-string token)
-            idx (mod h vector-embedding-dimension)
-            sign (if (zero? (bit-and h 1)) 1.0 -1.0)]
-        (aset values idx (+ (aget values idx) sign))))
-    (let [norm (js/Math.sqrt
-                (reduce (fn [acc idx]
-                          (+ acc (* (aget values idx) (aget values idx))))
-                        0
-                        (range vector-embedding-dimension)))]
-      (mapv (fn [idx]
-              (if (pos? norm)
-                (/ (aget values idx) norm)
-                0.0))
-            (range vector-embedding-dimension)))))
 
 (defn- query->terms
   [q]
@@ -609,8 +563,7 @@ DROP TRIGGER IF EXISTS blocks_au;
         (when uuid
           {:id (str uuid)
            :page (str (or (:block/uuid page) uuid))
-           :title (if (page-or-object? block) title (sanitize title))
-           :embedding (text->embedding title)}))
+           :title (if (page-or-object? block) title (sanitize title))}))
       (catch :default e
         (prn "Error: failed to run block->index on block " (:db/id block))
         (js/console.error e)))))
@@ -804,10 +757,10 @@ DROP TRIGGER IF EXISTS blocks_au;
       (include-search-block? conn block code-class option))))
 
 (defn- vector-search-blocks
-  [vector-index q {:keys [limit page]}]
+  [vector-index {:keys [limit page query-embedding]}]
   (when-let [query-fn (:query vector-index)]
-    (let [embedding (text->embedding q)]
-      (->> (query-fn embedding limit page)
+    (when (seq query-embedding)
+      (->> (query-fn query-embedding limit page)
            (keep (fn [{:keys [id page vector-score score] :as result}]
                    (when id
                      (cond-> {:id id
@@ -860,8 +813,9 @@ DROP TRIGGER IF EXISTS blocks_au;
            fuzzy-result (when-not skip-fuzzy?
                           (search-blocks-fuzzy-aux search-db q page limit))
            vector-result (when-not page-only?
-                           (vector-search-blocks vector-index q {:limit limit-p
-                                                                 :page page}))
+                           (vector-search-blocks vector-index {:limit limit-p
+                                                               :page page
+                                                               :query-embedding (:query-embedding option)}))
            ;;  _ (prn :debug "Search results before combine:" enable-snippet? (map :snippet matched-result))
            ;;  _ (doseq [item (concat fuzzy-result matched-result)]
            ;;      (prn :debug :keyword-search-result item))

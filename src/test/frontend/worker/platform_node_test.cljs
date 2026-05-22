@@ -60,6 +60,26 @@
     (is (string/includes? source "\"node:sqlite\""))
     (is (not (string/includes? source "\"better-sqlite3\"")))))
 
+(deftest node-platform-uses-transformers-default-embedding-model
+  (let [source (node-platform-source)]
+    (is (string/includes? source "\"@huggingface/transformers\""))
+    (is (string/includes? source "all-MiniLM-L6-v2"))
+    (is (string/includes? source "feature-extraction"))
+    (is (string/includes? source "pooling"))
+    (is (string/includes? source "mean"))
+    (is (string/includes? source "normalize"))))
+
+(deftest node-platform-provides-default-embedding-backend
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-embedding")]
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
+                  embedding (:embedding platform)]
+            (is (= "Xenova/all-MiniLM-L6-v2" (:model-id embedding)))
+            (is (fn? (:embed-texts embedding))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest node-platform-backup-uses-shared-sqlite-backup-implementation
   (let [source (node-platform-source)]
     (is (string/includes? source "logseq.db.sqlite.backup"))
