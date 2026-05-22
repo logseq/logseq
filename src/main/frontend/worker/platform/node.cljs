@@ -214,8 +214,17 @@
     (wrap-node-sqlite-db (new DatabaseSync path) write-guard-fn)))
 
 (def ^:private default-embedding-model "Xenova/all-MiniLM-L6-v2")
-(def ^:private embedding-pipeline-devices ["gpu" "cpu"])
 (defonce ^:private *embedding-pipelines (atom {}))
+
+(defn- default-embedding-pipeline-devices
+  []
+  (case (.-platform js/process)
+    "darwin" ["coreml" "cpu"]
+    "win32" ["dml" "cpu"]
+    "linux" (if (= "x64" (.-arch js/process))
+              ["cuda" "cpu"]
+              ["cpu"])
+    ["cpu"]))
 
 (defn- embedding-cpu-thread-count
   []
@@ -671,7 +680,7 @@
   (let [root-dir (db-lock/resolve-root-dir root-dir)
         data-dir (db-lock/graphs-dir root-dir)
         owner-source (db-lock/normalize-owner-source owner-source)
-        embedding-devices (vec (or embedding-devices embedding-pipeline-devices))
+        embedding-devices (vec (or embedding-devices (default-embedding-pipeline-devices)))
         kv (kv-store root-dir)]
     (p/do!
      (ensure-dir! root-dir)
