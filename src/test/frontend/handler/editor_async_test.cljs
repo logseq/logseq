@@ -455,6 +455,52 @@
                   (is @cleared-selection?)
                   (is (= [[:editor/hide-action-bar]] @events)))))))
 
+(deftest-async add-comment-to-non-empty-edit-block-focuses-comment-box
+  (let [block-uuid (random-uuid)
+        selected-uuid (random-uuid)
+        block {:block/uuid block-uuid
+               :db/id 1
+               :block/title "typing"
+               :block/page {:db/id 10}}
+        selected-block {:block/uuid selected-uuid
+                        :db/id 2
+                        :block/title "stale selection"
+                        :block/page {:db/id 10}}
+        comments-area {:block/uuid (random-uuid)
+                       :block/title "Comments"
+                       :block/tags #{comments-model/comments-tag-ident}}
+        saved? (atom false)
+        cleared? (atom false)
+        revealed (atom nil)]
+    (-> (p/with-redefs [state/editing? (constantly true)
+                        state/get-edit-block (constantly block)
+                        state/get-edit-content (constantly "typing")
+                        state/get-selection-block-ids (constantly [selected-uuid])
+                        db/entity (fn [lookup-ref]
+                                    (case lookup-ref
+                                      [:block/uuid block-uuid] block
+                                      [:block/uuid selected-uuid] selected-block
+                                      nil))
+                        block-handler/get-top-level-blocks identity
+                        editor/save-current-block! #(reset! saved? true)
+                        state/clear-edit! #(reset! cleared? true)
+                        comments-handler/ensure-comments-area-for-selected-blocks! (fn [blocks]
+                                                                                     (is (= [block] blocks)
+                                                                                         "The editing block should take precedence over stale selection state")
+                                                                                     (p/resolved comments-area))
+                        comments-handler/reveal-comments-area! (fn [area opts]
+                                                                 (reset! revealed [area opts]))
+                        state/clear-selection! (fn [])
+                        state/pub-event! (fn [_])]
+          (comments-handler/add-comment-to-current-context!))
+        (p/then (fn [_]
+                  (is @saved?)
+                  (is @cleared?
+                      "Moving focus to the comment box should leave the original block editor")
+                  (is (= [comments-area {:focus-editor? true}]
+                         @revealed)
+                      "Adding a comment while typing should open and focus the reply editor"))))))
+
 (deftest-async add-comment-to-empty-edit-block
   (let [block {:block/uuid (random-uuid)
                :db/id 1
@@ -485,6 +531,31 @@
                   (is (= [block {:focus-editor? true}]
                          @revealed)
                       "Empty /Add comment should open the reply editor"))))))
+
+(deftest-async add-comment-to-empty-edit-block-reveals-after-comments-tag-is-saved
+  (let [block {:block/uuid (random-uuid)
+               :db/id 1
+               :block/title ""}
+        property-save (p/deferred)
+        revealed (atom nil)]
+    (-> (p/with-redefs [state/editing? (constantly true)
+                        state/get-edit-block (constantly block)
+                        state/get-edit-content (constantly "")
+                        editor/save-current-block! (fn [])
+                        db-property-handler/set-block-property! (fn [_db-id _property _value]
+                                                                  property-save)
+                        state/clear-edit! (fn [])
+                        comments-handler/reveal-comments-area! (fn [area opts]
+                                                                 (reset! revealed [area opts]))]
+          (let [result (comments-handler/add-comment-to-current-context!)]
+            (is (nil? @revealed)
+                "The reply editor cannot be focused until the blank block is saved as a comments area")
+            (p/resolve! property-save :saved)
+            result))
+        (p/then (fn [_]
+                  (is (= [block {:focus-editor? true}]
+                         @revealed)
+                      "The converted comments area should be revealed after the property transaction finishes"))))))
 
 (deftest-async empty-comment-submit-creates-sibling-block-after-comments
   (let [comments-area {:block/uuid (random-uuid)

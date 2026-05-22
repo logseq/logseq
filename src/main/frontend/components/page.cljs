@@ -111,7 +111,8 @@
         config (dissoc config* :page)]
     (when (or page? block? (util/mobile?))
       [:div.ls-block.block-add-button.flex-1.flex-col.rounded-sm.cursor-text.transition-opacity.ease-in.duration-100.!py-0
-       {:class opacity-class
+       {:class (util/classnames [opacity-class
+                                  {"ls-block-content-indent" block?}])
         :parentblockid (:db/id block)
         :ref *ref
         :on-click (fn [e]
@@ -141,9 +142,10 @@
         :tab-index 0}
        [:div.flex.flex-row
         [:div.flex.items-center {:style {:height 28
-                                         :margin-left (if (util/mobile?)
-                                                        (if page? 0 18)
-                                                        22)}}
+                                         :margin-left (cond
+                                                        (and block? (not (util/mobile?))) 6
+                                                        (util/mobile?) (if page? 0 18)
+                                                        :else 22)}}
          [:span.bullet-container
           [:span.bullet]]]]])))
 
