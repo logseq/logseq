@@ -5034,11 +5034,13 @@
    Returns {:items [icon-item ...] :sections [{:start N :count N :cols N} ...]}."
   [tab result section-states & [{:keys [show-used?]}]]
   (let [build-sections (fn [& groups]
+                         ;; Skip nil entries (callers may pass `(when cond {...})` as a group).
                          (loop [gs groups offset 0 items [] sections []]
-                           (if-let [g (first gs)]
-                             (let [its (vec (or (:items g) []))
+                           (if (seq gs)
+                             (let [g (first gs)
+                                   its (vec (or (:items g) []))
                                    c (count its)]
-                               (if (pos? c)
+                               (if (and g (pos? c))
                                  (recur (rest gs) (+ offset c)
                                         (into items its)
                                         (conj sections {:start offset :count c :cols (:cols g) :label (:label g)}))
