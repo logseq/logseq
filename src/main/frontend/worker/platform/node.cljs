@@ -215,13 +215,25 @@
 (def ^:private default-embedding-model "Xenova/all-MiniLM-L6-v2")
 (defonce ^:private *embedding-pipelines (atom {}))
 
+(defn- embedding-pipeline-options
+  []
+  #js {:device "cpu"
+       :dtype "q8"
+       :session_options #js {:executionProviders #js ["cpu"]
+                             :intraOpNumThreads 1
+                             :interOpNumThreads 1
+                             :executionMode "sequential"
+                             :enableCpuMemArena false
+                             :enableMemPattern false}})
+
 (defn- <embedding-pipeline
   [model-id]
   (if-let [pipeline-promise (get @*embedding-pipelines model-id)]
     pipeline-promise
     (let [pipeline-promise ((gobj/get transformers "pipeline")
                             "feature-extraction"
-                            model-id)]
+                            model-id
+                            (embedding-pipeline-options))]
       (swap! *embedding-pipelines assoc model-id pipeline-promise)
       pipeline-promise)))
 
