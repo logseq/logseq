@@ -348,23 +348,35 @@
     (d/transact! (db/get-db test-db false)
                  [{:db/ident :logseq.class/Comments}
                   [:db/add (:db/id (get-block 4)) :block/tags :logseq.class/Comments]])
-    (testing "comments area cannot be moved"
+    (testing "comments area cannot be moved as a child"
       (outliner-tx/transact!
        (transact-opts)
        (outliner-core/move-blocks! (db/get-db test-db false) [(get-block 4)] (get-block 3) {:sibling? false}))
       (is (= [3 4 5] (get-children 2)))
       (is (empty? (get-children 3))))
+    (testing "comments area can be moved as a sibling"
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/move-blocks! (db/get-db test-db false) [(get-block 4)] (get-block 5) {:sibling? true}))
+      (is (= [3 5 4] (get-children 2)))
+      (is (= [6] (get-children 4))))
     (testing "comment item cannot be moved"
       (outliner-tx/transact!
        (transact-opts)
        (outliner-core/move-blocks! (db/get-db test-db false) [(get-block 6)] (get-block 5) {:sibling? false}))
       (is (= [6] (get-children 4)))
       (is (empty? (get-children 5))))
-    (testing "ordinary blocks cannot be moved into comments"
+    (testing "ordinary blocks can be moved as siblings of comments"
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/move-blocks! (db/get-db test-db false) [(get-block 3)] (get-block 4) {:sibling? true}))
+      (is (= [5 4 3] (get-children 2)))
+      (is (= [6] (get-children 4))))
+    (testing "ordinary blocks cannot be moved into comments as children"
       (outliner-tx/transact!
        (transact-opts)
        (outliner-core/move-blocks! (db/get-db test-db false) [(get-block 5)] (get-block 4) {:sibling? false}))
-      (is (= [3 4 5] (get-children 2)))
+      (is (= [5 4 3] (get-children 2)))
       (is (= [6] (get-children 4))))))
 
 (deftest test-delete-blocks
