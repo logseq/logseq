@@ -23,9 +23,10 @@
   (state/input-idle? repo :diff diff))
 
 (def-thread-api :thread-api/search-index-build-progress
-  [repo {:keys [status stage progress processed total]}]
+  [repo {:keys [status progress processed total]}]
   (let [prev-state (get @state/state :search/index-build)
         current-repo (state/get-current-repo)
+        stage :search-index
         visible-repo? (or (= repo current-repo)
                           (= repo (:repo prev-state)))]
     (when visible-repo?

@@ -460,7 +460,39 @@
                            (is false (str error)))))))))
      (p/finally done))))
 
-(deftest search-build-blocks-indice-in-worker-reports-vector-progress-test
+(deftest search-upsert-blocks-does-not-wait-for-vector-embedding-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [upsert-blocks! (get @thread-api/*thread-apis :thread-api/search-upsert-blocks)
+              sqlite-upserts (atom 0)
+              vector-upserts (atom [])
+              block-id (str (random-uuid))
+              page-id (str (random-uuid))
+              search-db #js {:transaction (fn [f]
+                                            (swap! sqlite-upserts inc)
+                                            (f #js {:exec (fn [_opts] nil)}))}]
+          (platform/set-platform! (build-test-platform
+                                   {:runtime :node
+                                    :embed-texts (fn [_texts]
+                                                   (js/Promise. (fn [_resolve _reject])))}))
+          (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
+          (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [docs]
+                                                                       (swap! vector-upserts conj docs))}})
+          (p/let [result (js/Promise.race
+                          #js [(upsert-blocks! test-repo [{:id block-id
+                                                           :page page-id
+                                                           :title "which team is Manu in?"}])
+                               (p/delay 20 ::timeout)])]
+            (is (nil? result))
+            (is (= 1 @sqlite-upserts))
+            (is (empty? @vector-upserts))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest search-build-blocks-indice-in-worker-reports-unified-progress-test
   (async done
     (->
      (restoring-worker-state
@@ -496,14 +528,17 @@
                                                             :page "page-1"
                                                             :title "Hello"})]
             (p/let [_ (build-index! test-repo true)]
-              (let [vector-progress (some #(when (= :vector-index (get-in % [:payload :stage]))
-                                             %)
-                                          @progress-calls)]
-                (is (= test-repo (:repo vector-progress)))
-                (is (= :running (get-in vector-progress [:payload :status])))
-                (is (= 1 (get-in vector-progress [:payload :processed])))
-                (is (= 1 (get-in vector-progress [:payload :total])))
-                (is (= 100 (get-in vector-progress [:payload :progress])))))))))
+              (let [stages (keep #(get-in % [:payload :stage]) @progress-calls)
+                    running-progress (some #(when (and (= :running (get-in % [:payload :status]))
+                                                       (= 100 (get-in % [:payload :progress])))
+                                              %)
+                                           @progress-calls)]
+                (is (not-any? #{:vector-index :keyword-index} stages))
+                (is (some #{:search-index} stages))
+                (is (= test-repo (:repo running-progress)))
+                (is (= :search-index (get-in running-progress [:payload :stage])))
+                (is (= 1 (get-in running-progress [:payload :processed])))
+                (is (= 1 (get-in running-progress [:payload :total])))))))))
      (p/catch (fn [error]
                 (is false (str "unexpected error: " error))))
      (p/finally done))))

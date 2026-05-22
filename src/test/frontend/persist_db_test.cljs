@@ -189,7 +189,7 @@
   [& graphs]
   (mapv (fn [graph] {:url graph}) graphs))
 
-(deftest search-index-build-progress-keeps-vector-stage-in-ui-state
+(deftest search-index-build-progress-normalizes-index-stages-in-ui-state
   (let [repo "logseq_db_graph_a"
         progress! (get @thread-api/*thread-apis :thread-api/search-index-build-progress)
         original-state @state/state]
@@ -202,7 +202,7 @@
                        :total 1000})
       (is (= {:running? true
               :repo repo
-              :stage :vector-index
+              :stage :search-index
               :progress 42
               :processed 420
               :total 1000}

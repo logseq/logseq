@@ -942,6 +942,18 @@
                        (into result embedded))))))
       (p/resolved []))))
 
+(defn- schedule-vector-index-upsert!
+  [repo blocks]
+  (when (and (seq blocks) (worker-state/get-vector-index repo))
+    (-> (<embed-index-blocks repo blocks)
+        (p/then (fn [vector-blocks]
+                  (when (seq vector-blocks)
+                    (search/upsert-vector-blocks! (worker-state/get-vector-index repo) vector-blocks))))
+        (p/catch (fn [error]
+                   (log/error :search/vector-index-upsert-failed {:repo repo
+                                                                  :error error})))))
+  nil)
+
 (defn- <search-blocks
   [repo q option]
   (let [vector-index (worker-state/get-vector-index repo)]
@@ -1184,10 +1196,9 @@
 (def-thread-api :thread-api/search-upsert-blocks
   [repo blocks]
   (when-let [db (get-search-db repo)]
-    (p/let [vector-blocks (<embed-index-blocks repo blocks)]
-      (search/upsert-vector-blocks! (worker-state/get-vector-index repo) vector-blocks)
-      (search/upsert-blocks! db (bean/->js blocks))
-      nil)))
+    (search/upsert-blocks! db (bean/->js blocks))
+    (schedule-vector-index-upsert! repo blocks)
+    nil))
 
 (def-thread-api :thread-api/search-delete-blocks
   [repo ids]
@@ -1260,7 +1271,7 @@
     (p/do!
      (report-search-index-progress! repo {:build-id build-id
                                           :status :running
-                                          :stage :keyword-index
+                                          :stage :search-index
                                           :progress 0
                                           :processed 0
                                           :total total})
@@ -1282,7 +1293,7 @@
            (p/let [_ (when (worker-state/get-vector-index repo)
                        (report-search-index-progress! repo {:build-id build-id
                                                             :status :running
-                                                            :stage :vector-index
+                                                            :stage :search-index
                                                             :progress progress
                                                             :processed processed'
                                                             :total total}))
@@ -1293,7 +1304,7 @@
                    _ (when should-report?
                        (report-search-index-progress! repo {:build-id build-id
                                                             :status :running
-                                                            :stage :keyword-index
+                                                            :stage :search-index
                                                             :progress progress
                                                             :processed processed'
                                                             :total total}))
@@ -1305,7 +1316,7 @@
            (.exec search-db (str "PRAGMA user_version = " search-db-version))
            (report-search-index-progress! repo {:build-id build-id
                                                 :status :completed
-                                                :stage :keyword-index
+                                                :stage :search-index
                                                 :progress 100
                                                 :processed total
                                                 :total total})))))))

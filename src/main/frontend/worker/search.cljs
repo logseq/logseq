@@ -13,6 +13,9 @@
             [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.text :as text]))
 
+(def ^:private max-vector-search-results 10)
+(def ^:private min-vector-search-score 0.5)
+
 (defn- add-blocks-fts-triggers!
   "Table bindings of blocks tables and the blocks FTS virtual tables"
   [db]
@@ -1030,15 +1033,18 @@ DROP TRIGGER IF EXISTS blocks_au;
   [vector-index {:keys [limit page query-embedding]}]
   (when-let [query-fn (:query vector-index)]
     (when (seq query-embedding)
-      (->> (query-fn query-embedding limit page)
-           (take (or limit 100))
-           (keep (fn [{:keys [id page vector-score score] :as result}]
-                   (when id
-                     (cond-> {:id id
-                              :vector-score (or vector-score score 0.0)}
-                       page (assoc :page page)
-                       (:title result) (assoc :title (:title result))
-                       (:vector-title result) (assoc :vector-title (:vector-title result))))))))))
+      (let [limit' (min max-vector-search-results
+                        (or limit max-vector-search-results))]
+        (->> (query-fn query-embedding limit' page)
+             (take limit')
+             (keep (fn [{:keys [id page vector-score score] :as result}]
+                     (let [vector-score' (or vector-score score 0.0)]
+                       (when (and id (> vector-score' min-vector-search-score))
+                         (cond-> {:id id
+                                  :vector-score vector-score'}
+                           page (assoc :page page)
+                           (:title result) (assoc :title (:title result))
+                           (:vector-title result) (assoc :vector-title (:vector-title result))))))))))))
 
 (defn search-blocks
   "Options:

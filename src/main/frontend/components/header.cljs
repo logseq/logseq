@@ -390,17 +390,14 @@
 (rum/defc search-index-progress < rum/reactive
   []
   (let [current-repo (state/get-current-repo)
-        {:keys [running? repo stage progress]} (or (state/sub :search/index-build) {})
+        {:keys [running? repo progress]} (or (state/sub :search/index-build) {})
         progress' (-> (or progress 0)
                       (max 0)
-                      (min 100))
-        progress-label-key (case stage
-                             :vector-index :search/vector-index-progress
-                             :search/index-progress)]
+                      (min 100))]
     (when (and running? (= repo current-repo))
       [:div.search-index-progress
        [ui/loading ""]
-       [:span.search-index-progress__text (t progress-label-key progress')]
+       [:span.search-index-progress__text (t :search/index-progress progress')]
        [:div.search-index-progress__bar
         [:div.search-index-progress__bar-fill {:style {:width (str progress' "%")}}]]])))
 

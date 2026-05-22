@@ -796,30 +796,35 @@
           (is (= ["which team is Manu in?"]
                  (mapv :block/title result))))))))
 
-(deftest search-blocks-bounds-vector-results-before-combining
-  (testing "large graph vector search cannot force the search core to materialize more than the requested limit"
+(deftest search-blocks-limits-vector-results-before-combining
+  (testing "large graph vector search caps semantic hits and drops low scores before merging"
     (let [page-id (test-uuid-string 930)
           vector-ids (mapv test-uuid-string (range 931 1931))
           blocks (into {}
                        (map-indexed (fn [idx id]
                                       [id {:db/id (+ 931 idx)
                                            :block/uuid (uuid id)
-                                           :block/title (str "Vector result " idx)
+                                           :block/title (if (even? idx)
+                                                          (str "Strong vector result " idx)
+                                                          (str "Weak vector result " idx))
                                            :block/page {:block/uuid (uuid page-id)}}])
                                     vector-ids))
           consumed (atom 0)
+          query-limits (atom [])
           vector-results (fn vector-results [ids]
                            (lazy-seq
                             (when-let [ids (seq ids)]
-                              (let [id (first ids)]
+                              (let [id (first ids)
+                                    idx @consumed]
                                 (cons (do
                                         (swap! consumed inc)
                                         {:id id
                                          :page page-id
-                                         :vector-score 1.0})
+                                         :vector-score (if (even? idx) 0.51 0.5)})
                                       (vector-results (rest ids)))))))
-          vector-index {:query (fn [_embedding _limit _page]
-                                 (vector-results vector-ids))}]
+          vector-index {:query (fn [_embedding limit _page]
+                                 (swap! query-limits conj limit)
+                                 (take limit (vector-results vector-ids)))}]
       (with-redefs [d/entity (fn [_db [_attr id]]
                                (get blocks (str id)))
                     d/pull-many (fn [_db _selector lookup-refs]
@@ -833,10 +838,13 @@
                                                   (checking-db)
                                                   vector-index
                                                   "semantic large graph"
-                                                  {:limit 10
+                                                  {:limit 50
                                                    :enable-snippet? false
                                                    :query-embedding [0.1 0.2 0.3]}))]
-          (is (= 10 (count result)))
+          (is (= [10] @query-limits))
+          (is (= 5 (count result)))
+          (is (every? #(string/starts-with? % "Strong")
+                      (map :block/title result)))
           (is (= 10 @consumed)))))))
 
 (deftest reciprocal-rank-fusion-promotes-cross-source-agreement
@@ -893,8 +901,8 @@
           (is (= ["alpha keyword" "related semantic result"]
                  (mapv :block/title result))))))))
 
-(deftest search-blocks-ranks-exact-keyword-before-weak-vector-result
-  (testing "weak semantic hits do not outrank exact keyword hits"
+(deftest search-blocks-filters-weak-vector-result
+  (testing "weak semantic hits are dropped even when exact keyword hits exist"
     (let [keyword-id (test-uuid-string 920)
           vector-id (test-uuid-string 921)
           page-id (test-uuid-string 922)
@@ -934,7 +942,7 @@
                                                 {:limit 10
                                                  :enable-snippet? false
                                                  :query-embedding [0.4 0.5 0.6]}))]
-          (is (= ["alpha" "contextually adjacent but weak"]
+          (is (= ["alpha"]
                  (mapv :block/title result))))))))
 
 (deftest combine-results-uses-vector-context-terms-as-semantic-tie-breaker
