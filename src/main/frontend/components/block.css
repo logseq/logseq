@@ -1347,6 +1347,15 @@ html.is-mobile .ls-block-content-indent {
   line-height: 1;
   vertical-align: middle;
 
+  /* List/Gallery views adopt the 20-slot scale used by inline [[page-refs]],
+     sidebars, and table-cells: room for 2-letter monograms and a roomier
+     avatar without crowding body text. */
+  .is-list-view-row & {
+    width: 1.25em;
+    min-width: 1.25em;
+    height: 1.25em;
+  }
+
   .bullet-heading {
     background-color: var(--ls-block-bullet-color, #8fbc8f);
   }

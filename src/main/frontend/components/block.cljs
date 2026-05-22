@@ -2244,8 +2244,18 @@
                                                         :ignore-children? page-title?
                                                         :page-title? page-title?})
         link? (boolean (:original-block config))
-        icon-size (if collapsed? 12 14)
-        icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
+        ;; List/Gallery views render the bullet at the 20-slot scale that
+        ;; inline `[[page-refs]]`, sidebars, and table-cells already use:
+        ;; 16px non-photo glyph, 20px avatar. Outliner blocks keep their
+        ;; tighter 14/16 scale.
+        list-or-gallery? (or (:list-view? config) (:gallery-view? config))
+        icon-size (cond
+                    collapsed?       12
+                    list-or-gallery? 16
+                    :else            14)
+        icon (icon-component/get-node-icon-cp block
+                                              (cond-> {:size icon-size :color? true :link? link?}
+                                                list-or-gallery? (assoc :avatar-size 20)))
         with-icon? (and (some? icon)
                         (or (and (db/page? block)
                                  (not (:library? config)))
@@ -4303,8 +4313,11 @@
        (dnd-separator-wrapper block block-id true))
 
      (when-not (:hide-title? config)
-       [:div.block-main-container.flex.flex-row.gap-1
-        {:class (when (:page-title? config) "is-page-title-row")
+       [:div.block-main-container.flex.flex-row
+        {:class (util/classnames [{"is-page-title-row" (:page-title? config)
+                                   "is-list-view-row" (or (:list-view? config) (:gallery-view? config))
+                                   "gap-2" (or (:list-view? config) (:gallery-view? config))
+                                   "gap-1" (not (or (:list-view? config) (:gallery-view? config)))}])
          :style (when (:page-title? config)
                   {:margin-left (cond
                                   (util/mobile?) 0
