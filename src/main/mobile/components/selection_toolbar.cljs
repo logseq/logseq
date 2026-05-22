@@ -33,6 +33,7 @@
   (let [close! close-selection-bar!
         blocks (selected-blocks)
         first-block-id (:block/uuid (first blocks))
+        reaction-blocks (mapv #(select-keys % [:block/uuid]) blocks)
         selection-target (first (state/get-selection-blocks))
         comment-targets (comments-model/comment-target-blocks blocks)]
     (vec
@@ -60,14 +61,17 @@
           :handler (fn []
                      (comments-handler/add-comment-to-blocks! comment-targets)
                      (close!))}])
-      (when (and first-block-id selection-target)
+      (when (and (seq reaction-blocks) selection-target)
         [{:id "reaction"
           :label (t :command.editor/add-reaction)
           :system-icon "face.smiling"
           :handler (fn []
-                     (state/pub-event! [:editor/new-reaction
-                                        {:block {:block/uuid first-block-id}
-                                         :target selection-target}])
+                     (let [opts (if (= 1 (count reaction-blocks))
+                                  {:block (first reaction-blocks)
+                                   :target selection-target}
+                                  {:blocks reaction-blocks
+                                   :target selection-target})]
+                       (state/pub-event! [:editor/new-reaction opts]))
                      (close!))}])
       [{:id "delete"
         :label (t :ui/delete)
