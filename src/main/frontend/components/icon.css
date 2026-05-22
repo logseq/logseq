@@ -2286,6 +2286,20 @@
      places). Expanded = 56px tile. Animated by transitions on the
      consuming elements. */
   --avatar-size: 20px;
+  /* Font-size for letter fallbacks ("DD" initials) and tabler-icon /
+     emoji glyph size — driven by CSS so the text shrinks in lockstep
+     with the avatar container. Without this the JS renderer bakes the
+     expanded font-size (22px / 30px) inline at render time, and the
+     `:not([data-expanded])` overrides below used to snap to the
+     compact values via `!important`. That snap meant the font jumped
+     from compact → expanded at t=0 of the expand animation while the
+     container took 200ms to follow — "DD" rendered at 22px inside a
+     ~25px circle for ~80ms, clipping and wrapping to two lines.
+     Driving them through vars lets `transition: font-size` interpolate
+     in parallel with `--avatar-size`. */
+  --avatar-font-size: 10px;
+  --avatar-icon-size: 11px;
+  --avatar-emoji-size: 11px;
 }
 
 /* Dark-mode override: same color-mix recipe but with much more black
@@ -2333,6 +2347,14 @@ html.dark .avatar-customize-zone .cb-rail {
 
 .avatar-customize-zone[data-expanded="true"] {
   --avatar-size: 56px;
+  /* Expanded glyph sizes — match the JS-baked values for `:size 56`
+     so the steady-state expanded view is pixel-identical to before.
+     Letter font: 22px (icon.cljs:801, `(<= size 56) "22px"`).
+     Icon SVG: 30px (icon.cljs:804, `(int (* 56 0.55))`).
+     Emoji: 30px (icon.cljs:782 derives the same way). */
+  --avatar-font-size: 22px;
+  --avatar-icon-size: 30px;
+  --avatar-emoji-size: 30px;
 }
 
 /* Customize banner sits flush against the search topbar by design (see
@@ -2512,33 +2534,38 @@ html.dark .avatar-customize-zone .cb-rail {
    doesn't yet emit the `avatar-fallback` class in the built bundle.
    `> span` is unambiguous — AvatarImage renders an <img>, so the only
    span child is the fallback. */
-.avatar-customize-zone:not([data-expanded="true"]) .cb-avatar-trigger
+.avatar-customize-zone .cb-avatar-trigger
 .preview-avatar .ui__avatar > span {
-  font-size: 10px !important;
+  font-size: var(--avatar-font-size) !important;
   font-weight: 500 !important;
+  /* Interpolate in lockstep with `--avatar-size`'s width/height
+     transition on `.cb-avatar-trigger` (200ms / same easing). */
+  transition: font-size 200ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-.avatar-customize-zone:not([data-expanded="true"]) .cb-avatar-trigger
+.avatar-customize-zone .cb-avatar-trigger
 .preview-avatar .ui__avatar > span svg {
-  width: 11px !important;
-  height: 11px !important;
+  width: var(--avatar-icon-size) !important;
+  height: var(--avatar-icon-size) !important;
+  transition: width 200ms cubic-bezier(0.32, 0.72, 0, 1),
+              height 200ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* Same compact-state size clamp for emoji fallbacks. The icon function
-   renders `<em-emoji size="30">` for the customize-band's underlying
-   :size 56 React tree, but the visible box is only 20px in compact —
-   so the 30px emoji glyph overflows the avatar tile and gets clipped.
-   emoji-mart's `<em-emoji>` wraps the native glyph in nested spans
-   with their own *inline* `font-size: 30px`. An `!important` rule on
-   the em-emoji ancestor doesn't reach those inner spans (inline
-   styles on a child win over the parent's external !important). So
-   target the descendant spans directly to clamp the glyph itself. */
-.avatar-customize-zone:not([data-expanded="true"]) .cb-avatar-trigger
+/* Same var-driven size for emoji fallbacks. The icon function renders
+   `<em-emoji size="30">` for the customize-band's underlying :size 56
+   React tree, so emoji-mart's nested spans carry their own *inline*
+   `font-size: 30px`. An `!important` rule on the em-emoji ancestor
+   doesn't reach those inner spans (inline styles on a child win over
+   the parent's external !important). So target the descendant spans
+   directly to clamp the glyph itself; the var interpolates between
+   11px (compact) and 30px (expanded) in parallel with the container. */
+.avatar-customize-zone .cb-avatar-trigger
 .preview-avatar .ui__avatar > span em-emoji,
-.avatar-customize-zone:not([data-expanded="true"]) .cb-avatar-trigger
+.avatar-customize-zone .cb-avatar-trigger
 .preview-avatar .ui__avatar > span em-emoji span {
-  font-size: 11px !important;
+  font-size: var(--avatar-emoji-size) !important;
   line-height: 1 !important;
+  transition: font-size 200ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 /* The right column hosts both .cb-banner (resting) and .cb-rows (expanded)
@@ -2661,18 +2688,29 @@ html.dark .avatar-customize-zone .cb-rail {
      56px avatar tile to its left, no overflow tail under the avatar. */
   gap: 4px;
   min-width: 0;
-  /* Resting default: out of flow, invisible, late-fade-in stagger */
+  /* Resting default: out of flow, invisible. Collapse-direction
+     transition: 120ms fade-out, NO delay so the rows start clearing
+     immediately while the banner fades in. */
   position: absolute;
   inset: 0;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 120ms cubic-bezier(0.32, 0.72, 0, 1) 80ms;
+  transition: opacity 120ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .avatar-customize-zone[data-expanded="true"] .cb-rows {
   position: relative;
   opacity: 1;
   pointer-events: auto;
+  /* Expand-direction transition: 80ms delay so the rows wait for the
+     banner to fade out before fading in. CSS transitions apply the
+     timing of the *target* state, so this delay only fires on expand;
+     the base rule above governs collapse. Without this split the same
+     80ms wait kicked in during collapse too, leaving the expanded rows
+     held at opacity 1 for 80ms while `.cb-banner` faded back in — the
+     resting and expanded layers ghosted on top of each other for a
+     ~120ms window. */
+  transition: opacity 120ms cubic-bezier(0.32, 0.72, 0, 1) 80ms;
 }
 
 .avatar-customize-zone .cb-row {
