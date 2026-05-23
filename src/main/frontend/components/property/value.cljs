@@ -227,11 +227,17 @@
                              (for [inst preview-rows]
                                [:li.flex.items-center.gap-2
                                 {:key (str (:db/id inst))}
+                                ;; Match the 20-slot scale used by inline page-refs,
+                                ;; table-row icons, list/gallery rows, and sidebars:
+                                ;; 20x20 wrapper, 16px non-photo glyph, 20px avatar.
+                                ;; `:own-icon?` reads the instance's own
+                                ;; :logseq.property/icon (the customization that's
+                                ;; about to be cleared), not the inherited default.
                                 [:span.flex-shrink-0.inline-flex.items-center.justify-center
-                                 {:style {:width 18 :height 18}}
-                                 (icon-component/icon
-                                  (:logseq.property/icon inst)
-                                  {:size 16 :color? true})]
+                                 {:style {:width 20 :height 20}}
+                                 (icon-component/get-node-icon-cp
+                                  inst
+                                  {:size 16 :avatar-size 20 :color? true :own-icon? true})]
                                 [:span.truncate (or (:block/title inst) (t :class.default-icon/untitled))]])
                              (when (pos? remaining)
                                [:li.opacity-60.text-xs.pl-7
