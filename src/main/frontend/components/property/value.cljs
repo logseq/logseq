@@ -313,18 +313,20 @@
                                   ;; previews on the same class entity).
                                   :property :logseq.property.class/default-icon
                                   :icon-props {:size 20}})
-     ;; Inline "reset instances" affordance — visible only when at
-     ;; least one instance has its own `:logseq.property/icon` set
-     ;; (i.e., diverges from this default). Sits next to the icon
+     ;; Inline "reset instances" affordance — visible only when (a)
+     ;; this class actually has a default icon to fall back to, and
+     ;; (b) at least one instance has its own `:logseq.property/icon`
+     ;; set (i.e., diverges from this default). Without (a) the word
+     ;; "customized" is misleading: an instance with an icon and no
+     ;; default isn't overriding anything. Sits next to the icon
      ;; preview (no `ml-auto`) so it reads as a sibling-action on the
      ;; default the user is editing, not a far-edge utility. Clicking
      ;; opens a confirm dialog; on confirm, the per-instance
      ;; overrides are batch-removed so the rows fall back to
-     ;; inheritance. Hidden when nothing is diverged so the row stays
-     ;; quiet in the common case. Icon + short copy mirrors Logseq's
+     ;; inheritance. Icon + short copy mirrors Logseq's
      ;; section-header `· N` count convention; tooltip carries the
      ;; full long-form description.
-     (when (pos? diverged-count)
+     (when (and current-value (pos? diverged-count))
        (shui/tooltip-provider
         (shui/tooltip
          {:delayDuration 400}
