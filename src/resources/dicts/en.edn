@@ -177,7 +177,7 @@
  :class.built-in/whiteboard "Whiteboard"
 
  :class.default-icon/clear-button-label (fn [n] (str "Clear " n " customized icon" (when (not= 1 n) "s")))
- :class.default-icon/clear-confirm-desc (fn [n trailing] (str "These " (if (= 1 n) "row" "rows") " will use the default icon instead of " (if (= 1 n) "its" "their") " custom one" (when (not= 1 n) "s") trailing))
+ :class.default-icon/clear-confirm-desc (fn [n trailing] (str (if (= 1 n) "This " "These ") (if (= 1 n) "row" "rows") " will use the default icon instead of " (if (= 1 n) "its" "their") " custom one" (when (not= 1 n) "s") trailing))
  :class.default-icon/clear-confirm-title (fn [n] (str "Clear " n " customized icon" (when (not= 1 n) "s") "?"))
  :class.default-icon/more-count "and {1} more"
  :class.default-icon/reset-tooltip-desc (fn [n] (str "Replaces " n " custom icon" (when (not= 1 n) "s")))

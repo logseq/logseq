@@ -182,7 +182,14 @@
                 (p/then (fn [result]
                           (reset! *all-instances (vec (or result [])))))
                 (p/catch (fn [_] (reset! *all-instances [])))))
-        all-instances (rum/react *all-instances)
+        ;; Re-hydrate the cached snapshots (from `<get-tag-objects`) to
+        ;; live entities via `model/sub-block` — this both subscribes for
+        ;; reactivity AND returns up-to-date :logseq.property/icon values,
+        ;; so the diverged-count below refreshes after batch retracts.
+        ;; The async fetch only contributes the db-ids; the per-render
+        ;; entity lookup gives current property state.
+        all-instances (->> (rum/react *all-instances)
+                           (keep #(model/sub-block (:db/id %))))
         block (or (model/sub-block block-id) block)
         own-value (:logseq.property.class/default-icon block)
         inherited-value (when-not own-value
@@ -194,17 +201,12 @@
               (model/sub-block (:db/id parent))))
         current-value (or own-value inherited-value)
         page-title (:block/title block)
-        ;; Subscribe to each loaded instance so the row's reset
-        ;; affordance count updates live when instances diverge or
-        ;; re-align (e.g., via the table batch-toolbar).
-        _ (doseq [inst all-instances]
-            (model/sub-block (:db/id inst)))
         diverged-instances (vec (filter :logseq.property/icon all-instances))
         diverged-count (count diverged-instances)
         ;; Bounded preview: show up to 5 affected rows with their
         ;; current (custom) icon + title, then "and N more" if there
-        ;; are extras. For a single divergence we skip the list — the
-        ;; title's count is enough information on its own.
+        ;; are extras. Shown for every N≥1 — the single-row case is
+        ;; where the preview is most useful (one row to confirm).
         preview-cap 5
         preview-rows (take preview-cap diverged-instances)
         remaining (max 0 (- diverged-count preview-cap))
@@ -219,8 +221,8 @@
                           [:p.opacity-70.text-sm.leading-relaxed
                            (t :class.default-icon/clear-confirm-desc
                               diverged-count
-                              (if (> diverged-count 1) ":" "."))]
-                          (when (> diverged-count 1)
+                              ":")]
+                          (when (seq preview-rows)
                             [:ul.flex.flex-col.gap-2.text-sm.m-0.p-0.list-none
                              (for [inst preview-rows]
                                [:li.flex.items-center.gap-2
