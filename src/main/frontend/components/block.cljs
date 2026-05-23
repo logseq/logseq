@@ -2374,54 +2374,58 @@
         block-ref? (:block-ref? config)
         block-type (or (keyword (pu/lookup block :logseq.property/ls-type)) :default)
         heading (block-heading-level block level)
+        annotation? (= block-type :annotation)
         elem (if heading
                (keyword (str "h" heading ".block-title-wrap.as-heading"
                              (when block-ref? ".as-inline")))
-               :span.block-title-wrap)]
+               :span.block-title-wrap)
+        [hl-type hl-color hl-page]
+        (when annotation?
+          (map #(pu/lookup block (keyword "logseq.property.pdf" %))
+            ["hl-type" "hl-color" "hl-page"]))]
     (->elem
-     elem
-     (merge
-      {:data-hl-type (pu/lookup block :logseq.property.pdf/hl-type)})
+      elem
+      {:data-type block-type}
 
-     ;; children
-     (let [area? (= :area (keyword (pu/lookup block :logseq.property.pdf/hl-type)))
-           hl-ref #(when (not (#{:default} block-type))
-                     [:div.prefix-link
-                      {:on-pointer-down
-                       (fn [^js e]
-                         (let [^js target (.-target e)]
-                           (case block-type
-                             ;; pdf annotation
-                             :annotation
-                             (if (and area? (.contains (.-classList target) "blank"))
-                               :actions
-                               (do
-                                 (pdf-assets/open-block-ref! block)
-                                 (util/stop e)))
+      ;; children
+      (let [area? (= :area hl-type)
+            hl-ref #(when (not (#{:default} block-type))
+                      [:div.prefix-link
+                       {:data-hl-type hl-type
+                        :data-hl-color hl-color
+                        :on-pointer-down
+                        (fn [^js e]
+                          (let [^js target (.-target e)]
+                            (case block-type
+                              ;; pdf annotation
+                              :annotation
+                              (if (and area? (.contains (.-classList target) "blank"))
+                                :actions
+                                (do
+                                  (pdf-assets/open-block-ref! block)
+                                  (util/stop e)))
 
-                             :dune)))}
+                              :dune)))}
 
-                      [:span.hl-page
-                       [:strong.forbid-edit
-                        (str "P"
-                             (or (pu/lookup block :logseq.property.pdf/hl-page)
-                                 "?"))]]
+                       [:span.hl-page
+                        [:strong.forbid-edit
+                         (str "P" (or hl-page "?"))]]
 
-                      (when (and area? (:logseq.property.pdf/hl-image block))
-                        (pdf-assets/area-display block))])]
-       (remove-nils
-        (concat
-         ;; highlight ref block (inline)
-         [(hl-ref)]
+                       (when (and area? (:logseq.property.pdf/hl-image block))
+                         (pdf-assets/area-display block))])]
+        (remove-nils
+          (concat
+            ;; highlight ref block (inline)
+            [(hl-ref)]
 
-         (let [config' (cond-> config
-                         (and (:page-ref? config)
+            (let [config' (cond-> config
+                            (and (:page-ref? config)
                               (= 1 (count block-ast-title))
                               (= "Link" (ffirst block-ast-title)))
-                         (assoc :node-ref-link-only? true)
-                         (integer? heading)
-                         (assoc :parent-heading heading))]
-           (map-inline config' block-ast-title))))))))
+                            (assoc :node-ref-link-only? true)
+                            (integer? heading)
+                            (assoc :parent-heading heading))]
+              (map-inline config' block-ast-title))))))))
 
 (rum/defc block-title-aux
   [config block {:keys [query? *show-query?]}]
@@ -3039,7 +3043,7 @@
        [:div (t :sync/show-conflicts)]))))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
-  [config {:block/keys [uuid] :as block} edit-input-id block-id *show-query?]
+  [config {:block/keys [uuid] :as block} edit-input-id block-id *show-query? custom-inner]
   (let [repo (state/get-current-repo)
         format :markdown
         collapsed? (:collapsed? config)
@@ -3059,6 +3063,7 @@
         mouse-down-key (if (util/mobile?)
                          :on-click
                          :on-pointer-down)                  ; TODO: it seems that Safari doesn't work well with on-pointer-down
+        annotation? (= block-type :annotation)
         attrs (cond->
                {:blockid (str uuid)
                 :class (util/classnames [{:jtrigger (:property-block? config)
@@ -3068,10 +3073,9 @@
                 :style {:width "100%"
                         :pointer-events (when stop-events? "none")}}
 
-                (not (string/blank?
-                      (pu/lookup block :logseq.property.pdf/hl-color)))
-                (assoc :data-hl-color
-                       (pu/lookup block :logseq.property.pdf/hl-color))
+                annotation?
+                (assoc :data-hl-color (pu/lookup block :logseq.property.pdf/hl-color)
+                  :data-hl-type (pu/lookup block :logseq.property.pdf/hl-type))
 
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
@@ -3105,19 +3109,20 @@
        true
        (merge attrs))
 
-     [:<>
-      (when (and (> (count content) (state/block-content-max-length (state/get-current-repo)))
-                 (not (contains? #{:code} (:logseq.property.node/display-type block))))
-        [:div.warning.text-sm
-         (t :block/large-block-warning)])
-      [:div.flex.flex-row.justify-between.block-content-inner
-       (when-not plugin-slotted?
-         [:div.block-head-wrap
-          (block-title config block {:*show-query? *show-query?})])
+     (or custom-inner
+       [:<>
+        (when (and (> (count content) (state/block-content-max-length (state/get-current-repo)))
+                (not (contains? #{:code} (:logseq.property.node/display-type block))))
+          [:div.warning.text-sm
+           (t :block/large-block-warning)])
+        [:div.flex.flex-row.justify-between.block-content-inner
+         (when-not plugin-slotted?
+           [:div.block-head-wrap
+            (block-title config block {:*show-query? *show-query?})])
 
-       (task-spent-time-cp block)]
+         (task-spent-time-cp block)]
 
-      (block-content-inner config block ast-body plugin-slotted? collapsed? block-ref-with-title?)]]))
+        (block-content-inner config block ast-body plugin-slotted? collapsed? block-ref-with-title?)])]))
 
 (rum/defc block-refs-count < rum/static
   [block block-refs-count' *hide-block-refs?]
@@ -3170,7 +3175,10 @@
                                       (:block/title block))
                          :section-attrs
                          {:on-click #(edit-block-content config block edit-input-id)}})])
-     (or custom-block-content (block-content config block edit-input-id block-id *show-query?)))))
+      (let [content #(block-content config block edit-input-id block-id *show-query? %)]
+        (if (fn? custom-block-content)
+          (custom-block-content content)
+          (or custom-block-content (content nil)))))))
 
 (rum/defcs ^:large-vars/cleanup-todo block-content-or-editor < rum/reactive
   [state config {:block/keys [uuid] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? refs-count *hide-block-refs? *show-query?]}]
@@ -3250,14 +3258,18 @@
          (cond
            (and (ldb/asset? block) (img-audio-video? block))
            [:div.flex.flex-col.asset-block-wrap.w-full
-            (block-content-f {:custom-block-content
-                              [:div.flex.flex-1
-                               (asset-cp config block)]})
             (if show-editor?
               [:div.mt-1 editor-cp]
-              [:div.text-xs.opacity-60.mt-1.cursor-text
+              [:div.mt-1.cursor-text
                {:on-click #(edit-block-content config block edit-input-id)}
-               (text-block-title (dissoc config :raw-title?) block)])]
+               (text-block-title (dissoc config :raw-title?) block)])
+
+            (block-content-f {:custom-block-content
+                              (fn [content]
+                                (content
+                                  [:div.flex.flex-1
+                                   (asset-cp config block)]))
+                              })]
 
            show-editor?
            editor-cp

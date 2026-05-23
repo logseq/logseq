@@ -793,10 +793,10 @@ html[data-theme=dark] {
   }
 }
 
-.block-content {
+.block-title-wrap, .block-content {
   &[data-type=annotation] {
     .prefix-link {
-      @apply inline-flex items-center pr-1 cursor-alias;
+      @apply inline-flex items-center pr-1 cursor-alias whitespace-pre-wrap;
 
       color: var(--ls-link-ref-text-color);
 
@@ -807,15 +807,41 @@ html[data-theme=dark] {
       &.as-block {
         @apply inline-block;
       }
-    }
 
-    [data-hl-type=area] {
-
-      .hl-page {
-        > label {
-          @apply flex-1 cursor-text;
+      &[data-hl-color=green] {
+        &:before {
+          content: "🟢 ";
         }
       }
+
+      &[data-hl-color=purple] {
+        &:before {
+          content: "🟣 ";
+        }
+      }
+
+      &[data-hl-color=blue] {
+        &:before {
+          content: "🔵 ";
+        }
+      }
+
+      &[data-hl-color=yellow] {
+        &:before {
+          content: "🟡 ";
+        }
+
+      }
+
+      &[data-hl-color=red] {
+        &:before {
+          content: "🔴 ";
+        }
+      }
+    }
+
+    &[data-hl-type=area] {
+      @apply pb-1 -mt-1;
     }
 
     .hl-area {
@@ -831,48 +857,6 @@ html[data-theme=dark] {
 
       img {
         @apply cursor-alias;
-      }
-    }
-  }
-}
-
-.ls-hl-colored .block-content {
-  &[data-hl-color=green] {
-    .prefix-link {
-      &:before {
-        content: "🟢 ";
-      }
-    }
-  }
-
-  &[data-hl-color=purple] {
-    .prefix-link {
-      &:before {
-        content: "🟣 ";
-      }
-    }
-  }
-
-  &[data-hl-color=blue] {
-    .prefix-link {
-      &:before {
-        content: "🔵 ";
-      }
-    }
-  }
-
-  &[data-hl-color=yellow] {
-    .prefix-link {
-      &:before {
-        content: "🟡 ";
-      }
-    }
-  }
-
-  &[data-hl-color=red] {
-    .prefix-link {
-      &:before {
-        content: "🔴 ";
       }
     }
   }
