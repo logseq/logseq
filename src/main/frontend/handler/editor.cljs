@@ -1409,7 +1409,7 @@
     (fs/write-asset-file! repo file-path buffer)))
 
 (defn- new-asset-block
-  [repo ^js file {:keys [external-url] :as opts}]
+  [repo ^js file {:keys [external-url pdf-highlight] :as opts}]
   ;; WARN file name maybe fully qualified path when paste file
   (p/let [[file title] (if (map? file) [(:src file) (:title file)] [file nil])
           [file external-url] (if (string? file) [nil file] [file external-url])
@@ -1428,7 +1428,9 @@
                             false)
         nil)
       ;; new asset block
-      (let [block-id (or (:block/uuid opts) (ldb/new-block-id))
+      (let [block-id (or (:block/uuid opts)
+                       (some-> pdf-highlight :id)
+                       (ldb/new-block-id))
             ext (when file-name (db-asset/asset-path->type file-name))
             _ (when (string/blank? ext)
                 (throw (ex-info "File doesn't have a valid ext."
@@ -1450,13 +1452,15 @@
           :logseq.property.asset/checksum checksum
           ;; Use stable class ident in tx payload to avoid leaking numeric eids
           ;; into outliner history ops shared with the worker sync pipeline.
-          :block/tags #{:logseq.class/Asset}})))))
+          :block/tags (cond-> #{:logseq.class/Asset}
+                        (not (nil? pdf-highlight))
+                        (conj :logseq.class/Pdf-annotation))})))))
 
 (defn db-based-save-assets!
   "Save incoming(pasted) assets to assets directory.
 
    Returns: asset entities"
-  [repo files & {:keys [pdf-area? last-edit-block save-to-page target-block]}]
+  [repo files & {:keys [pdf-highlight last-edit-block save-to-page target-block]}]
   (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
           today-page-name (db-model/get-today-journal-title)
           today-page-e (db-model/get-journal-page today-page-name)
@@ -1476,11 +1480,12 @@
                    (for [^js [idx file] (medley/indexed files)]
                      (new-asset-block repo file
                                       {:repo-dir repo-dir
+                                       :pdf-highlight pdf-highlight
                                        :asset-dir-rpath asset-dir-rpath
                                        :block/uuid (when (and (zero? idx) empty-target?)
                                                      (:block/uuid edit-block))})))
           blocks (remove nil? blocks*)
-          insert-to-current-block-page? (boolean (and (not target-block) (:block/uuid edit-block) (not pdf-area?)))
+          insert-to-current-block-page? (boolean (and (not target-block) (:block/uuid edit-block) (nil? pdf-highlight)))
           target (cond
                    target-block
                    target-block

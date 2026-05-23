@@ -42,6 +42,12 @@
   ([date-time]
    (tf/unparse custom-formatter-2 date-time)))
 
+(defn get-date-time-string-3
+  ([]
+   (get-date-time-string-3 (tl/local-now)))
+  ([date-time]
+   (tf/unparse yyyy-MM-dd-HH-mm-formatter date-time)))
+
 (defn journal-name
   ([]
    (journal-name (tl/local-now)))

@@ -14,6 +14,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]
+            [frontend.date :as date]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.ref :as ref]
@@ -63,48 +64,57 @@
 (defn db-based-ensure-ref-block!
   [pdf-current {:keys [id content page properties] :as hl} insert-opts]
   (when-let [pdf-block (:block pdf-current)]
-    (let [ref-block (db-model/query-block-by-uuid id)]
+    (let [ref-block (db-model/query-block-by-uuid id)
+          build-props (fn []
+                        (let [ref-asset-id (:image content)
+                              asset? (not (nil? ref-asset-id))
+                              colors (:property/closed-values (db/entity :logseq.property.pdf/hl-color))
+                              color-id (some (fn [color] (when (= (:block/title color) (:color properties))
+                                                           (:db/id color))) colors)]
+                          (when color-id
+                            (cond->
+                              {:block/collapsed? false
+                               :logseq.property/ls-type :annotation
+                               :logseq.property.pdf/hl-color color-id
+                               :logseq.property/asset (:db/id pdf-block)
+                               :logseq.property.pdf/hl-page page
+                               :logseq.property.pdf/hl-value hl}
+
+                              asset?
+                              (assoc :logseq.property.pdf/hl-type :area
+                                ;; Can't set this block itself as own property value.
+                                :logseq.property.pdf/hl-image nil)))))]
+
       (if (:block/title ref-block)
-        (do
+        (if-not (nil? (:logseq.property/ls-type ref-block))
           (println "[existed ref block]" ref-block)
-          ref-block)
+          ;; update ref block properties
+          (let [properties (build-props)]
+            (when (seq properties)
+              (property-handler/set-block-properties! id properties))
+            ;; move asset block to owner block
+            (editor-handler/move-blocks! [ref-block] pdf-block {:sibling? false})
+            ref-block))
+
         (let [ref-asset-id (:image content)
               image? (not (nil? ref-asset-id))
               text (if image? (i18n/locale-format-date (js/Date.))
-                       (:text content))
-              colors (:property/closed-values (db/entity :logseq.property.pdf/hl-color))
-              color-id (some (fn [color] (when (= (:block/title color) (:color properties))
-                                           (:db/id color))) colors)]
-          (when color-id
-            (let [properties (cond->
-                              {:block/tags #{:logseq.class/Pdf-annotation}
-                               :block/collapsed? image?
-                               :logseq.property/ls-type  :annotation
-                               :logseq.property.pdf/hl-color color-id
-                               :logseq.property/asset (:db/id pdf-block)
-                               :logseq.property.pdf/hl-page  page
-                               :logseq.property.pdf/hl-value hl}
-
-                               image?
-                               (assoc :logseq.property.pdf/hl-type :area
-                                      :logseq.property.pdf/hl-image ref-asset-id))]
+                     (:text content))
+              base-props (build-props)]
+          (when (seq base-props)
+            (let [properties (assoc base-props :block/tags #{:logseq.class/Pdf-annotation})]
               (when (string? text)
                 (editor-handler/api-insert-new-block!
-                 text (merge {:block-uuid (:block/uuid pdf-block)
-                              :sibling? false
-                              :custom-uuid id
-                              :properties properties}
-                             (assoc insert-opts :edit-block? false)))))))))))
+                  text (merge {:block-uuid (:block/uuid pdf-block)
+                               :sibling? false
+                               :custom-uuid id
+                               :properties properties}
+                         (assoc insert-opts :edit-block? false)))))))))))
 
 (defn ensure-ref-block!
   [pdf-current hl insert-opts]
   (p/let [ref-block (db-based-ensure-ref-block! pdf-current hl insert-opts)
-          asset-block (:logseq.property.pdf/hl-image ref-block)]
-      ;; try to move the asset block to the ref block
-    (p/do!
-     (when asset-block
-       (editor-handler/move-blocks! [asset-block] ref-block {:sibling? false}))
-     ref-block)))
+          _ (:logseq.property.pdf/hl-image ref-block)]))
 
 (defn db-based-load-hls-data$
   [{:keys [block]}]
@@ -125,13 +135,13 @@
   (and hl (not (nil? (get-in hl [:content :image])))))
 
 (defn- db-based-persist-hl-area-image
-  [repo png]
-  (let [file (js/File. #js [png] "pdf area highlight.png")]
-    (editor-handler/db-based-save-assets! repo [file] {:pdf-area? true})))
+  [repo png hl]
+  (let [file (js/File. #js [png] (str (date/get-date-time-string-3) ".png"))]
+    (editor-handler/db-based-save-assets! repo [file] {:pdf-highlight hl})))
 
 (defn- persist-hl-area-image
-  [repo-url _repo-dir _current _new-hl _old-hl png]
-  (p/let [result (db-based-persist-hl-area-image repo-url png)]
+  [repo-url _repo-dir _current new-hl _old-hl png]
+  (p/let [result (db-based-persist-hl-area-image repo-url png new-hl)]
     (first result)))
 
 (defn persist-hl-area-image$
