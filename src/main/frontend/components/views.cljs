@@ -42,6 +42,7 @@
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.property :as db-property]
             [logseq.shui.hooks :as hooks]
+            [logseq.shui.table.core :as shui-table]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [missionary.core :as m]
@@ -79,10 +80,11 @@
       {:id "header-checkbox"
        :checked (or selected-all? (and selected-some? "indeterminate"))
        :on-checked-change (fn [value]
-                            (p/do
-                              (when value
-                                (db-async/<get-blocks (state/get-current-repo) (:rows table) {}))
-                              (toggle-selected-all! table value)))
+                            (let [row-ids (keep shui-table/table-row-id (:rows table))]
+                              (p/do
+                                (when (and value (seq row-ids))
+                                  (db-async/<get-blocks (state/get-current-repo) row-ids {}))
+                                (toggle-selected-all! table value))))
        :aria-label (t :view.table/select-all)
        :class (str "flex transition-opacity "
                    (if (or show? selected-all? selected-some?) "opacity-100" "opacity-0"))})]))
@@ -94,8 +96,27 @@
     :title (t :view.table/row-number)}
    "#"])
 
+(defn- toggle-row-selection-with-related!
+  [table row value]
+  (let [row-id (:db/id row)
+        related-ids (when-let [f (:row-selection-related-ids-fn table)]
+                      (f row))
+        row-ids (set (remove nil? (cons row-id related-ids)))
+        row-selection (get-in table [:state :row-selection])
+        set-row-selection! (get-in table [:data-fns :set-row-selection!])]
+    (if (seq (disj row-ids row-id))
+      (set-row-selection!
+       (if (:selected-all? row-selection)
+         (update row-selection :excluded-ids
+                 (fn [ids]
+                   ((if value set/difference set/union) (set ids) row-ids)))
+         (update row-selection :selected-ids
+                 (fn [ids]
+                   ((if value set/union set/difference) (set ids) row-ids)))))
+      ((:row-toggle-selected! table) row-selection row value))))
+
 (rum/defc row-checkbox < rum/static
-  [{:keys [row-selected? row-toggle-selected! data state data-fns]} row _column]
+  [{:keys [row-selected? data state data-fns] :as table} row _column]
   (let [id (str (:db/id row) "-" "checkbox")
         [show? set-show!] (rum/use-state false)
         checked? (row-selected? row)
@@ -112,9 +133,14 @@
                    (when (and (.-shiftKey e) last-selected-idx)
                      ;; add selection
                      (util/stop e)
-                     (let [idx (.indexOf data (:db/id row))]
+                     (let [idx (first (keep-indexed
+                                       (fn [idx item]
+                                         (when (= (:db/id row) (shui-table/table-row-id item))
+                                           idx))
+                                       data))]
                        (when (not= last-selected-idx idx)
-                         (let [new-ids (keep (fn [idx] (util/nth-safe data idx)) (range (min last-selected-idx idx) (inc (max last-selected-idx idx))))]
+                         (let [new-ids (keep (fn [idx] (some-> (util/nth-safe data idx) shui-table/table-row-id))
+                                             (range (min last-selected-idx idx) (inc (max last-selected-idx idx))))]
                            (when (seq new-ids)
                              (let [row-selection' (update row-selection :selected-ids set/union (set new-ids))]
                                (set-row-selection! row-selection'))))))))
@@ -123,11 +149,15 @@
                              (when v (db-async/<get-block (state/get-current-repo) (:db/id row) {:skip-refresh? true
                                                                                                  :children? false}))
                              (if v
-                               (let [idx (.indexOf data (:db/id row))]
+                               (let [idx (first (keep-indexed
+                                                 (fn [idx item]
+                                                   (when (= (:db/id row) (shui-table/table-row-id item))
+                                                     idx))
+                                                 data))]
                                  (set-last-selected-idx! idx))
                                (when (= (:db/id row) last-selected-idx)
                                  (set-last-selected-idx! nil)))
-                             (row-toggle-selected! row-selection row v)))
+                             (toggle-row-selection-with-related! table row v)))
        :aria-label (t :view.table/select-row)
        :class (str "flex transition-opacity "
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
@@ -386,7 +416,14 @@
               :name "#"
               :header (fn [_table _column] (header-index))
               :cell (fn [table row _column]
-                      (inc (.indexOf (:rows table) (:db/id row))))
+                      (let [row-id (:db/id row)
+                            row-idx (first
+                                     (keep-indexed
+                                      (fn [idx item]
+                                        (when (= row-id (shui-table/table-row-id item))
+                                          idx))
+                                      (:rows table)))]
+                        (some-> row-idx inc)))
               :resizable? false})
            (when with-object-name?
              {:id :block/title
@@ -971,48 +1008,50 @@
     (shui/table-row
      (merge
       props
-      {:key (str (:db/id row))
-       :tabIndex 0
-       :ref *ref
-       :data-state (when (row-selected? row) "selected")
-       :data-id (:db/id row)
-       :blockid (str (:block/uuid row))
-       :on-pointer-down (fn [_e] (db-async/<get-block (state/get-current-repo) (:db/id row) {:children? false}))
-       :on-key-down (fn [e]
-                      (let [container (rum/deref *ref)]
-                        (when (dom/has-class? container "selected")
-                          (case (util/ekey e)
-                            "Enter"
-                            (do
-                              (state/sidebar-add-block! (state/get-current-repo) (:db/id row) :block)
-                              (state/clear-selection!)
-                              (util/stop e))
-                            "ArrowLeft"
-                            (do
-                              (when-let [cell (->> (dom/sel container ".ls-table-cell")
-                                                   (remove (fn [node]
-                                                             (some? (dom/sel1 node ".ui__checkbox"))))
-                                                   first)]
-                                (state/clear-selection!)
-                                (dom/add-class! cell "selected")
-                                (.focus cell))
-                              (util/stop e))
-                            "ArrowRight"
-                            (do
-                              (when-let [cell (->> (dom/sel container ".ls-table-cell")
-                                                   (remove (fn [node]
-                                                             (some? (dom/sel1 node ".ui__checkbox"))))
-                                                   last)]
-                                (state/clear-selection!)
-                                (dom/remove-class! container "selected")
-                                (dom/add-class! cell "selected")
-                                (.focus cell))
-                              (util/stop e))
-                            "Escape"
-                            (do
-                              (state/clear-selection!)
-                              (util/stop e))
-                            nil))))})
+      (cond-> {:key (str (:db/id row))
+               :tabIndex 0
+               :ref *ref
+               :data-state (when (row-selected? row) "selected")
+               :data-id (:db/id row)
+               :blockid (str (:block/uuid row))
+               :on-pointer-down (fn [_e] (db-async/<get-block (state/get-current-repo) (:db/id row) {:children? false}))
+               :on-key-down (fn [e]
+                              (let [container (rum/deref *ref)]
+                                (when (dom/has-class? container "selected")
+                                  (case (util/ekey e)
+                                    "Enter"
+                                    (do
+                                      (state/sidebar-add-block! (state/get-current-repo) (:db/id row) :block)
+                                      (state/clear-selection!)
+                                      (util/stop e))
+                                    "ArrowLeft"
+                                    (do
+                                      (when-let [cell (->> (dom/sel container ".ls-table-cell")
+                                                           (remove (fn [node]
+                                                                     (some? (dom/sel1 node ".ui__checkbox"))))
+                                                           first)]
+                                        (state/clear-selection!)
+                                        (dom/add-class! cell "selected")
+                                        (.focus cell))
+                                      (util/stop e))
+                                    "ArrowRight"
+                                    (do
+                                      (when-let [cell (->> (dom/sel container ".ls-table-cell")
+                                                           (remove (fn [node]
+                                                                     (some? (dom/sel1 node ".ui__checkbox"))))
+                                                           last)]
+                                        (state/clear-selection!)
+                                        (dom/remove-class! container "selected")
+                                        (dom/add-class! cell "selected")
+                                        (.focus cell))
+                                      (util/stop e))
+                                    "Escape"
+                                    (do
+                                      (state/clear-selection!)
+                                      (util/stop e))
+                                    nil))))}
+        (:asset-table/nested? row)
+        (assoc :data-asset-table-nested true)))
      (when (seq pinned-columns)
        [:div.sticky-columns.flex.flex-row
         (map #(row-cell-f % {}) pinned-columns)])
@@ -1024,8 +1063,9 @@
   [table row props option]
   (let [block (db/sub-block (:db/id row))
         block' (if (contains? #{:self :full} (:block.temp/load-status block)) block row)
+        row-meta (select-keys row [:asset-table/nested? :asset-table/annotation-id])
         row' (when block'
-               (-> block'
+               (-> (merge block' row-meta)
                    (update :block/tags (fn [tags]
                                          (keep (fn [tag]
                                                  (when-let [id (:db/id tag)]
@@ -1612,14 +1652,19 @@
 
 (rum/defc lazy-item
   [data idx {:keys [properties list-view? scrolling?]} item-render]
-  (let [item (util/nth-safe data idx)
-        db-id (cond (map? item) (:db/id item)
-                    (number? item) item
+  (let [source-item (util/nth-safe data idx)
+        source-item-meta (when (map? source-item)
+                           (select-keys source-item [:asset-table/nested?
+                                                     :asset-table/annotation-id]))
+        db-id (cond (map? source-item) (:db/id source-item)
+                    (number? source-item) source-item
                     :else nil)
         entity (when db-id
                  (let [e (db/entity db-id)]
                    (when (= :full (:block.temp/load-status e))
-                     e)))
+                     (if (map? source-item)
+                       (merge e source-item-meta)
+                       e))))
         [item set-item!] (hooks/use-state entity)
         opts (if list-view?
                {:skip-refresh? true
@@ -1632,11 +1677,17 @@
      #(c.m/run-task*
        (m/sp
          (when (and db-id (not item) (not scrolling?))
-           (let [block (c.m/<? (db-async/<get-block (state/get-current-repo) db-id opts))
-                 block' (if list-view? (db/entity db-id) block)]
-             (set-item! block')))))
+                 (let [block (c.m/<? (db-async/<get-block (state/get-current-repo) db-id opts))
+                       block' (if list-view? (db/entity db-id) block)
+                       block' (if (map? source-item)
+                                (merge block' source-item-meta)
+                                block')]
+                   (set-item! block')))))
      [db-id scrolling?])
-    (let [item' (cond (map? item) item (number? item) {:db/id item})]
+    (let [item' (cond
+                  (map? item) (merge item source-item-meta)
+                  (number? item) (merge {:db/id item} source-item-meta)
+                  (map? source-item) source-item)]
       (item-render item'))))
 
 (rum/defc table-body < rum/static
@@ -1670,6 +1721,9 @@
 (rum/defc table-view < rum/static
   [table option row-selection *scroller-ref]
   (let [selected-rows (shui/table-get-selection-rows row-selection (:rows table))
+        selected-rows (if-let [f (:expand-selected-rows-fn option)]
+                        (f selected-rows row-selection (:rows table))
+                        selected-rows)
         [items-rendered? set-items-rendered!] (hooks/use-state false)]
     (shui/table
      (let [rows (:rows table)]
@@ -2135,6 +2189,7 @@
                    :data data
                    :full-data full-data
                    :columns columns
+                   :row-selection-related-ids-fn (:row-selection-related-ids-fn option)
                    :state {:sorting sorting
                            :filters filters
                            :row-selection row-selection
@@ -2340,12 +2395,20 @@
         (:filters view-parent)
         query-entity-ids
         (:data-changes-version option)]))
-    (if loading?
-      [:div.flex.flex-col.space-2.gap-2.my-2
-       (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
-      [:div.flex.flex-col.gap-2
-       (view-container view-entity (assoc option
-                                          :data data
+    (let [table-data-transform (:table-data-transform option)
+          table-display? (= display-type :logseq.property.view/type.table)
+          data' (hooks/use-memo
+                 #(if (and table-display? table-data-transform)
+                    (table-data-transform data)
+                    data)
+                 [table-display? table-data-transform data])]
+      (if loading?
+        [:div.flex.flex-col.space-2.gap-2.my-2
+         (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
+        (let [flat-rows? (every? #(or (number? %) (map? %)) data')]
+          [:div.flex.flex-col.gap-2
+           (view-container view-entity (assoc option
+                                          :data data'
                                           :full-data data
                                           :filters filters
                                           :sorting sorting
@@ -2354,8 +2417,8 @@
                                           :set-data! set-data!
                                           :set-input! set-input!
                                           :input input
-                                          :items-count (if (every? number? data)
-                                                         (count data)
+                                          :items-count (if flat-rows?
+                                                         (count data')
                                                          ;; grouped
                                                          (let [f (fn count-col
                                                                    [data]
@@ -2368,13 +2431,13 @@
                                                                                           (uuid? (ffirst col)))
                                                                                    (+ total (count-col col))
                                                                                    (+ total (count col)))))) 0 data))]
-                                                           (f data)))
+                                                           (f data')))
                                           :group-by-property-ident group-by-property-ident
                                           :ref-pages-count ref-pages-count
                                           :ref-matched-children-ids ref-matched-children-ids
                                           :display-type display-type
                                           :load-view-data load-view-data
-                                          :set-view-entity! set-view-entity!))])))
+                                          :set-view-entity! set-view-entity!))])))))
 
 (defn sub-view-data-changes
   [view-parent view-feature-type]

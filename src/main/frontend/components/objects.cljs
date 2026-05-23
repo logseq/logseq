@@ -4,18 +4,22 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.components.filepicker :as filepicker]
+            [frontend.components.property.value :as pv]
             [frontend.components.views :as views]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.react :as react]
+            [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.fs :as fs]
             [frontend.handler.editor :as editor-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.common.path :as path]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
@@ -23,6 +27,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.hooks :as hooks]
+            [logseq.shui.table.core :as shui-table]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -36,6 +41,193 @@
     (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 {:container-id :unknown-container})
     block))
 
+(defn- annotation-position-value
+  [annotation k]
+  (or (get-in annotation [:logseq.property.pdf/hl-value :position :bounding k])
+      js/Number.MAX_SAFE_INTEGER))
+
+(defn- annotation-sort-key
+  [annotation]
+  [(or (:logseq.property.pdf/hl-page annotation) js/Number.MAX_SAFE_INTEGER)
+   (annotation-position-value annotation :y1)
+   (annotation-position-value annotation :x1)
+   (or (:block/order annotation) js/Number.MAX_SAFE_INTEGER)
+   (:db/id annotation)])
+
+(defn- entity-id
+  [x]
+  (or (:db/id x)
+      (when (number? x) x)))
+
+(def ^:private empty-pdf-annotation-asset-index
+  {:image-id->annotation {}
+   :pdf-id->annotations {}})
+
+(defn- build-pdf-annotation-asset-index
+  [annotations]
+  (let [index (reduce
+               (fn [index annotation]
+                 (let [pdf-asset (:logseq.property/asset annotation)
+                       image-asset (:logseq.property.pdf/hl-image annotation)
+                       pdf-id (:db/id pdf-asset)
+                       image-id (:db/id image-asset)]
+                   (if (and pdf-id image-id)
+                     (-> index
+                         (assoc-in [:image-id->annotation image-id] annotation)
+                         (update-in [:pdf-id->annotations pdf-id] (fnil conj []) annotation))
+                     index)))
+               empty-pdf-annotation-asset-index
+               annotations)]
+    (update index :pdf-id->annotations
+            (fn [pdf-id->annotations]
+              (reduce-kv
+               (fn [m pdf-id annotations]
+                 (assoc m pdf-id (sort-by annotation-sort-key annotations)))
+               {}
+               pdf-id->annotations)))))
+
+(defn- <pdf-annotation-asset-index
+  [repo]
+  (p/let [result (db-async/<q
+                  repo
+                  {:transact-db? false}
+                  '[:find (pull ?annotation
+                                [:db/id
+                                 :block/order
+                                 {:logseq.property/asset
+                                  [:db/id
+                                   :block/uuid
+                                   :logseq.property.asset/external-url
+                                   :logseq.property.asset/external-file-name]}
+                                 {:logseq.property.pdf/hl-image
+                                  [:db/id]}
+                                 :logseq.property.pdf/hl-page
+                                 :logseq.property.pdf/hl-value])
+                    :where
+                    [?annotation :block/tags :logseq.class/Pdf-annotation]])]
+    (build-pdf-annotation-asset-index (map first result))))
+
+(defn- pdf-asset?
+  [row]
+  (= "pdf" (some-> (:logseq.property.asset/type row) name)))
+
+(defn- pending-pdf-area-image-asset?
+  [row]
+  (when-let [id (shui-table/table-row-id row)]
+    (pdf-assets/pending-area-image-asset? (state/get-current-repo) id)))
+
+(defn- annotation-image-id
+  [annotation]
+  (entity-id (:logseq.property.pdf/hl-image annotation)))
+
+(defn- normalize-pdf-annotation
+  [annotation image-id]
+  (cond-> annotation
+    (number? (:logseq.property/asset annotation))
+    (update :logseq.property/asset #(hash-map :db/id %))
+
+    (number? (:logseq.property.pdf/hl-image annotation))
+    (update :logseq.property.pdf/hl-image #(hash-map :db/id %))
+
+    (nil? (:logseq.property.pdf/hl-image annotation))
+    (assoc :logseq.property.pdf/hl-image {:db/id image-id})))
+
+(defn- pdf-annotation-block?
+  [annotation image-id]
+  (and annotation
+       (= image-id (annotation-image-id annotation))
+       (entity-id (:logseq.property/asset annotation))
+       (or (= :annotation (:logseq.property/ls-type annotation))
+           (:logseq.property.pdf/hl-page annotation)
+           (:logseq.property.pdf/hl-value annotation)
+           (some #(= :logseq.class/Pdf-annotation (:db/ident %))
+                 (:block/tags annotation)))))
+
+(defn- row-pdf-annotation
+  [row]
+  (when-let [id (shui-table/table-row-id row)]
+    (let [asset (or (db/entity id)
+                    (when (map? row) row))
+          annotation (:block/parent asset)]
+      (when (pdf-annotation-block? annotation id)
+        (normalize-pdf-annotation annotation id)))))
+
+(defn- augment-pdf-annotation-asset-index
+  [annotation-index rows]
+  (let [row-annotations (keep row-pdf-annotation rows)]
+    (if (seq row-annotations)
+      (->> (concat (mapcat identity (vals (:pdf-id->annotations annotation-index)))
+                   row-annotations)
+           (reduce (fn [m annotation]
+                     (assoc m (or (:db/id annotation)
+                                  (annotation-image-id annotation))
+                            annotation))
+                   {})
+           vals
+           build-pdf-annotation-asset-index)
+      annotation-index)))
+
+(defn- pdf-annotation-image-ids
+  [annotation-index pdf-id]
+  (keep annotation-image-id (get-in annotation-index [:pdf-id->annotations pdf-id])))
+
+(defn- asset-row-selection-related-ids
+  [row annotation-index]
+  (when (pdf-asset? row)
+    (pdf-annotation-image-ids annotation-index (:db/id row))))
+
+(defn- expand-selected-asset-row-ids
+  [selected-ids row-selection _rows annotation-index]
+  (let [excluded-ids (set (:excluded-ids row-selection))
+        annotation-image-id? (set (keys (:image-id->annotation annotation-index)))]
+    (->> (if (:selected-all? row-selection)
+           (mapcat (fn [id]
+                     (cons id (pdf-annotation-image-ids annotation-index id)))
+                   selected-ids)
+           (concat selected-ids
+                   (filter annotation-image-id? (:selected-ids row-selection))))
+         (remove #(contains? excluded-ids %))
+         (remove nil?)
+         distinct
+         vec)))
+
+(defn- build-pdf-annotation-table-data
+  [rows annotation-index expanded-pdf-ids]
+  (if (every? #(or (number? %) (map? %)) rows)
+    (let [row-ids (set (keep shui-table/table-row-id rows))
+          image-id->annotation (:image-id->annotation annotation-index)
+          pdf-id->annotations (:pdf-id->annotations annotation-index)
+          nested-image-id? (fn [id]
+                             (contains? image-id->annotation id))
+          child-rows (fn [annotations]
+                       (keep (fn [annotation]
+                               (when-let [image-id (annotation-image-id annotation)]
+                                 (when (contains? row-ids image-id)
+                                   {:db/id image-id
+                                    :asset-table/nested? true
+                                    :asset-table/annotation-id (:db/id annotation)})))
+                             annotations))]
+      (vec
+       (reduce
+        (fn [result row]
+          (let [id (shui-table/table-row-id row)]
+            (cond
+              (nested-image-id? id)
+              result
+
+              (pending-pdf-area-image-asset? row)
+              result
+
+              (contains? expanded-pdf-ids id)
+              (into (conj result row)
+                    (child-rows (get pdf-id->annotations id)))
+
+              :else
+              (conj result row))))
+        []
+        rows)))
+    rows))
+
 (defn- build-asset-file-column
   [config]
   {:id :file
@@ -44,10 +236,87 @@
    :header views/header-cp
    :cell (fn [_table row _column]
            (when-let [asset-cp (state/get-component :block/asset-cp)]
-             [:div.block-content.overflow-hidden
-              {:style {:max-height 30}}
+             [:div.block-content.overflow-hidden.flex.items-center
+              {:class pv/asset-thumb-fit-class
+               :style {:width "100%"
+                       :height 30
+                       :max-height 30}}
               (asset-cp (assoc config :disable-resize? true) row)]))
    :disable-hide? true})
+
+(defn- pdf-annotation-title
+  [annotation]
+  (let [title (:block/title annotation)
+        title (if (and (not (string/blank? title))
+                       (not= "pdf area highlight" title))
+                title
+                (t :asset/pdf-area-highlight-title))]
+    (str "P" (or (:logseq.property.pdf/hl-page annotation) "?")
+         " · "
+         title)))
+
+(rum/defc asset-pdf-title-cell
+  [original-cell table row column style annotation-index expanded-pdf-ids set-expanded-pdf-ids!]
+  (let [pdf-id (:db/id row)
+        annotations (get-in annotation-index [:pdf-id->annotations pdf-id])
+        expanded? (contains? expanded-pdf-ids pdf-id)]
+    (if (seq annotations)
+      [:div.flex.w-full.min-w-0.items-center.gap-1
+       (shui/button
+        {:variant "ghost"
+         :size :sm
+         :class "!h-6 !w-5 shrink-0 !px-0 text-muted-foreground"
+         :title (t (if expanded?
+                     :asset/collapse-pdf-annotations
+                     :asset/expand-pdf-annotations))
+         :aria-label (t (if expanded?
+                          :asset/collapse-pdf-annotations
+                          :asset/expand-pdf-annotations))
+         :on-click (fn [e]
+                     (util/stop e)
+                     (set-expanded-pdf-ids!
+                      (if expanded?
+                        (disj expanded-pdf-ids pdf-id)
+                        (conj expanded-pdf-ids pdf-id))))}
+        (ui/icon (if expanded? "chevron-down" "chevron-right") {:size 14}))
+       [:div.min-w-0.flex-1
+        (original-cell table row column style)]]
+      (original-cell table row column style))))
+
+(rum/defc asset-annotation-title-cell
+  [row annotation-index]
+  (let [annotation (or (some-> row :asset-table/annotation-id db/entity)
+                       (get-in annotation-index [:image-id->annotation (:db/id row)]))]
+    [:div.flex.h-full.w-full.min-w-0.items-center.gap-1.pl-8
+     (if annotation
+       (shui/button
+        {:variant "ghost"
+         :size :sm
+         :class "min-w-0 justify-start !px-1 text-left font-normal"
+         :title (t :asset/open-pdf-annotation)
+         :aria-label (t :asset/open-pdf-annotation)
+         :on-click (fn [e]
+                     (util/stop e)
+                     (pdf-assets/open-block-ref! annotation))}
+        [:span.truncate (pdf-annotation-title annotation)])
+       [:span.truncate.text-muted-foreground (:block/title row)])]))
+
+(defn- wrap-asset-title-column
+  [column annotation-index expanded-pdf-ids set-expanded-pdf-ids!]
+  (let [original-cell (:cell column)]
+    (assoc column
+           :cell (fn [table row column style]
+                   (cond
+                     (:asset-table/nested? row)
+                     (asset-annotation-title-cell row annotation-index)
+
+                     (and (pdf-asset? row)
+                          (seq (get-in annotation-index [:pdf-id->annotations (:db/id row)])))
+                     (asset-pdf-title-cell original-cell table row column style annotation-index
+                                           expanded-pdf-ids set-expanded-pdf-ids!)
+
+                     :else
+                     (original-cell table row column style))))))
 
 (defn- local-asset-file-name
   [asset]
@@ -144,6 +413,15 @@
                    _ (p/all (map editor-handler/delete-block-aux! assets))]
              (set-data! (remove-asset-ids-from-data (:full-data table) deleted-ids))
              (set-row-selection! {})))))))
+
+(defn- sub-class-objects-data-changes
+  [class-ident]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [class-id (:db/id (db/entity class-ident))]
+      (let [*version (atom 0)]
+        (react/q repo [:frontend.worker.react/objects class-id]
+                 {:query-fn (fn [_] (swap! *version inc))}
+                 nil)))))
 
 (defn- format-asset-time
   [timestamp]
@@ -353,26 +631,48 @@
 (rum/defc class-objects-inner < rum/static
   [config class properties]
   (let [*ref (hooks/use-ref nil)
+        [expanded-pdf-ids set-expanded-pdf-ids!] (hooks/use-state #{})
+        db-ident (:db/ident class)
+        asset? (= db-ident :logseq.class/Asset)
+        [annotation-index set-annotation-index!] (hooks/use-state nil)
+        pdf-annotation-changes-version (:pdf-annotation-changes-version config)
+        pdf-annotation-changes-version (hooks/use-debounced-value pdf-annotation-changes-version 100)
+        table-data-transform (hooks/use-callback
+                              (fn [rows]
+                                (build-pdf-annotation-table-data
+                                 rows
+                                 (augment-pdf-annotation-asset-index annotation-index rows)
+                                 expanded-pdf-ids))
+                              [annotation-index expanded-pdf-ids])
+        row-selection-related-ids-fn (hooks/use-callback
+                                      #(asset-row-selection-related-ids % annotation-index)
+                                      [annotation-index])
+        expand-selected-rows-fn (hooks/use-callback
+                                 #(expand-selected-asset-row-ids %1 %2 %3 annotation-index)
+                                 [annotation-index])
         ;; Properties can be nil for published private graphs
         properties' (remove nil? properties)
         columns* (views/build-columns config properties' {:add-tags-column? true})
         columns (cond
-                  (= (:db/ident class) :logseq.class/Pdf-annotation)
+                  (= db-ident :logseq.class/Pdf-annotation)
                   (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)
-                  (= (:db/ident class) :logseq.class/Asset)
+                  (= db-ident :logseq.class/Asset)
                   (remove #(contains? #{:logseq.property.asset/checksum} (:id %)) columns*)
                   :else
                   columns*)
-        db-ident (:db/ident class)
-        asset? (= db-ident :logseq.class/Asset)
         columns (if asset?
-                  ;; Insert in front of tag's properties
-                  (let [[before-cols after-cols] (split-with #(not (db-property/logseq-property? (:id %))) columns)]
-                    (concat before-cols [(build-asset-file-column config)] after-cols))
+                  (let [[before-cols after-cols] (split-with #(not (db-property/logseq-property? (:id %))) columns)
+                        columns' (concat before-cols [(build-asset-file-column config)] after-cols)]
+                    (map (fn [column]
+                           (if (= :block/title (:id column))
+                             (wrap-asset-title-column column annotation-index
+                                                      expanded-pdf-ids set-expanded-pdf-ids!)
+                             column))
+                         columns'))
                   columns)
-        add-new-object! (when (or asset? (not (ldb/private-tags (:db/ident class))))
+        add-new-object! (when (or asset? (not (ldb/private-tags db-ident)))
                           (fn [view table {:keys [properties]}]
-                            (if (= :logseq.class/Asset (:db/ident class))
+                            (if asset?
                               (shui/dialog-open!
                                (fn []
                                  [:div.flex.flex-col.gap-2
@@ -388,26 +688,57 @@
                                   (refresh-view-data! class view table [(:db/id block)])
                                   (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block))))))]
 
-    [:div {:ref *ref}
-     (views/view {:config config
-                  :view-parent class
-                  :view-feature-type :class-objects
-                  :columns columns
-                  :delete-rows-fn (when asset? delete-asset-rows!)
-                  :additional-actions (when asset? [orphan-assets-action])
-                  :add-new-object! add-new-object!
-                  :show-add-property? true
-                  :show-items-count? true
-                  :add-property! (fn [e]
-                                   (state/pub-event! [:editor/new-property {:block class
-                                                                            :class-schema? true
-                                                                            :target (.-target e)}]))})]))
+    (hooks/use-effect!
+     (fn []
+       (if asset?
+         (if-let [repo (state/get-current-repo)]
+           (let [cancelled? (atom false)]
+             (-> (<pdf-annotation-asset-index repo)
+                 (p/then (fn [index]
+                           (when-not @cancelled?
+                             (set-annotation-index! index))))
+                 (p/catch (fn [error]
+                            (log/error :msg "Failed to load PDF annotation asset index"
+                                       :error error)
+                            (when-not @cancelled?
+                              (set-annotation-index! empty-pdf-annotation-asset-index)))))
+             (fn [] (reset! cancelled? true)))
+           (set-annotation-index! empty-pdf-annotation-asset-index))
+         (set-annotation-index! empty-pdf-annotation-asset-index)))
+     [asset? (state/get-current-repo) pdf-annotation-changes-version])
+
+    (if (and asset? (nil? annotation-index))
+      [:div.flex.flex-col.space-2.gap-2.my-2
+       (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
+      [:div {:ref *ref}
+       (views/view {:config config
+                    :view-parent class
+                    :view-feature-type :class-objects
+                    :columns columns
+                    :table-data-transform (when asset? table-data-transform)
+                    :row-selection-related-ids-fn (when asset? row-selection-related-ids-fn)
+                    :expand-selected-rows-fn (when asset? expand-selected-rows-fn)
+                    :delete-rows-fn (when asset? delete-asset-rows!)
+                    :additional-actions (when asset? [orphan-assets-action])
+                    :add-new-object! add-new-object!
+                    :show-add-property? true
+                    :show-items-count? true
+                    :add-property! (fn [e]
+                                     (state/pub-event! [:editor/new-property {:block class
+                                                                              :class-schema? true
+                                                                              :target (.-target e)}]))})])))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
   [state class config]
   (when class
     (let [class (db/sub-block (:db/id class))
-          config (assoc config :container-id (:container-id state))
+          asset? (= (:db/ident class) :logseq.class/Asset)
+          pdf-annotation-changes-version (when asset?
+                                           (some-> (sub-class-objects-data-changes :logseq.class/Pdf-annotation)
+                                                   rum/react))
+          config (cond-> (assoc config :container-id (:container-id state))
+                   asset?
+                   (assoc :pdf-annotation-changes-version pdf-annotation-changes-version))
           properties (outliner-property/get-class-properties class)]
       [:div.ml-1
        (class-objects-inner config class properties)])))

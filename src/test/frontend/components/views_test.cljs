@@ -1,6 +1,7 @@
 (ns frontend.components.views-test
   (:require [cljs.test :refer [deftest is]]
-            [frontend.components.views :as views]))
+            [frontend.components.views :as views]
+            [logseq.shui.table.core :as shui-table]))
 
 (deftest build-columns-should-allow-name-property-when-no-object-name
   "When with-object-name? is false, the user property 'Name' should be kept"
@@ -43,3 +44,17 @@
   (is (= "card-42" (views/view-row-key "card-" [42] 0)))
   (is (= "card-99" (views/view-row-key "card-" [{:db/id 99}] 0)))
   (is (= "card-0" (views/view-row-key "card-" [nil] 0))))
+
+(deftest table-row-id-should-support-map-rows
+  (is (= [1 2 3]
+         (keep shui-table/table-row-id [1 {:db/id 2} {:foo "ignored"} 3]))))
+
+(deftest id-column-should-count-map-rows
+  (let [columns (views/build-columns {} [] {:with-id? true
+                                            :with-object-name? false
+                                            :add-tags-column? false})
+        id-column (some #(when (= :id (:id %)) %) columns)
+        render-id (:cell id-column)]
+    (is (= 1 (render-id {:rows [1 {:db/id 2} 3]} {:db/id 1} nil)))
+    (is (= 2 (render-id {:rows [1 {:db/id 2} 3]} {:db/id 2} nil)))
+    (is (= 3 (render-id {:rows [1 {:db/id 2} 3]} {:db/id 3} nil)))))

@@ -1372,6 +1372,7 @@
                          :as opts}]
   (let [multiple-values? (db-property/many? property)
         class (str (when-not row? "flex flex-1 ")
+                   (when (:table-view? opts) "items-center ")
                    (when multiple-values? "property-value-content"))
         type (:logseq.property/type property)
         text-ref-type? (db-property-type/text-ref-property-types type)]
@@ -1530,7 +1531,7 @@
   [^js target]
   (some? (some-> target (.closest asset-embedded-control-selector))))
 
-(def ^:private asset-thumb-fit-class
+(def asset-thumb-fit-class
   "CSS escape hatch that makes asset-cp's output fit the wrapper's bounding box.
   asset-cp wraps the <img> in a div.asset-container with no size constraint of
   its own, so max-h-full on the img resolves against an auto-sized parent and

@@ -25,18 +25,23 @@
           ;; included ids
           (contains? (:selected-ids row-selection) id)))))
 
+(defn table-row-id
+  [row]
+  (if (map? row) (:db/id row) row))
+
 (defn- select-some?
   [row-selection rows]
-  (or
-   (and (seq (:selected-ids row-selection))
-        (some (:selected-ids row-selection) rows))
-   (and (seq (:excluded-ids row-selection))
-        (not= (count rows) (count (:excluded-ids row-selection))))))
+  (let [row-ids (keep table-row-id rows)]
+    (or
+     (and (seq (:selected-ids row-selection))
+          (some (:selected-ids row-selection) row-ids))
+     (and (seq (:excluded-ids row-selection))
+          (not= (count row-ids) (count (:excluded-ids row-selection)))))))
 
 (defn- select-all?
   [row-selection rows]
   (and (seq (:selected-ids row-selection))
-       (set/subset? (set rows)
+       (set/subset? (set (keep table-row-id rows))
                     (:selected-ids row-selection))))
 
 (defn- toggle-selected-all!
@@ -47,7 +52,7 @@
       (and group-by-property value)
       (let [new-selection (update row-selection :selected-ids
                                   (fn [ids]
-                                    (set/union (set ids) (set (:rows table)))))]
+                                    (set/union (set ids) (set (keep table-row-id (:rows table))))))]
         (set-row-selection! new-selection))
 
       value
@@ -56,7 +61,7 @@
       group-by-property
       (let [new-selection (update row-selection :selected-ids
                                   (fn [ids]
-                                    (set/difference (set ids) (set (:rows table)))))]
+                                    (set/difference (set ids) (set (keep table-row-id (:rows table))))))]
         (set-row-selection! new-selection))
 
       :else
@@ -94,13 +99,14 @@
 (defn get-selection-rows
   [row-selection rows]
   (if (:selected-all? row-selection)
-    (let [excluded-ids (:excluded-ids row-selection)]
+    (let [excluded-ids (:excluded-ids row-selection)
+          row-ids (keep table-row-id rows)]
       (if (seq excluded-ids)
-        (remove #(excluded-ids %) rows)
-        rows))
+        (remove #(excluded-ids %) row-ids)
+        row-ids))
     (let [selected-ids (:selected-ids row-selection)]
       (when (seq selected-ids)
-        (filter #(selected-ids %) rows)))))
+        (filter #(selected-ids %) (keep table-row-id rows))))))
 
 (defn table-option
   [{:keys [data columns state data-fns]
@@ -249,7 +255,7 @@
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
     [:div.ls-table-cell.flex.relative.h-full (dissoc prop :select? :add-property?)
-     [:div {:class (str "flex align-middle w-full overflow-x-clip items-center"
+     [:div {:class (str "flex align-middle h-full w-full overflow-x-clip items-center"
                         (cond
                           (:select? prop)
                           " px-0"
