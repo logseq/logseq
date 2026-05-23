@@ -177,6 +177,7 @@
     "Reply instructions:"
     "For a short reply, append a comment after the requesting comment."
     "For a long reply, write a normal block tree after the comments area and append a comment that references that tree."
+    "When referencing result blocks in DB graphs, reference result blocks with [[block-uuid]], not ((block-uuid))."
     "If the request is blocked or fails, make that clear in the reply."]))
 
 (def ^:private prompt-template-vars
