@@ -245,6 +245,17 @@
       (is (string/starts-with? preview "codex --sandbox danger-full-access exec --json --skip-git-repo-check '"))
       (is (string/includes? preview "Ship the CLI bridge")))))
 
+(deftest test-default-comment-prompt-documents-db-graph-block-ref-syntax
+  (let [prompt (#'agent-command/build-comment-codex-prompt
+                {:graph "demo"
+                 :agent-name "build-host"
+                 :comment (comment-block {})
+                 :target-tree-texts ["- Target block"]
+                 :comments-area-tree-text "- Comments"
+                 :comment-tree-text "- [[build-host]] summarize"})]
+    (is (string/includes? prompt "reference result blocks with [[block-uuid]], not ((block-uuid))"))
+    (is (not (string/includes? prompt "reference result blocks with ((block-uuid))")))))
+
 (deftest test-prompt-templates
   (testing "prompt builders render supplied graph templates"
     (let [prompt (agent-command/build-codex-prompt
