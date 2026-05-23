@@ -5526,13 +5526,28 @@
 
     [:span.absolute.hidden {:ref *el-ref}]))
 
+(defn- same-color?
+  "Semantic equality for two color values that may be hex strings, CSS
+   variable expressions (`var(--rx-…)`), or nil. Both sides are
+   normalized via `colors/->hex` before comparison so that e.g. a stored
+   hex matches the same color expressed as a palette CSS-var.
+   - (same-color? nil nil)               => true   (Default tile)
+   - (same-color? \"#ec5e41\" \"var(--rx-tomato-10)\") => true
+   - (same-color? \"#ff0000\" nil)             => false"
+  [a b]
+  (cond
+    (and (nil? a) (nil? b)) true
+    (or  (nil? a) (nil? b)) false
+    :else (let [ha (colors/->hex a)
+                hb (colors/->hex b)]
+            (boolean (and ha hb (= ha hb))))))
+
 (defn- preset-hex?
-  "True when `hex` (any color-picker stored value) matches one of the
-   preset values. Preset values are themselves CSS-var strings (e.g.
-   `var(--rx-indigo-10)`) when sourced from `colors/variable`, so a
-   plain `=` is sufficient."
-  [hex preset-values]
-  (boolean (and hex (some #(= hex %) preset-values))))
+  "True when `color` matches any of the preset palette values, comparing
+   in normalized-hex space so CSS-var swatch values and hex stored
+   colors interoperate."
+  [color preset-values]
+  (boolean (and color (some #(same-color? color %) preset-values))))
 
 (defn- custom-active?
   "True when the current color is set, non-default, and doesn't match
@@ -5563,7 +5578,7 @@
         rows (partition-all cols preset-entries)
         render-preset
         (fn [{value :value label :label hint :hint :as _entry}]
-          (let [active? (= value color)
+          (let [active? (same-color? value color)
                 swatch-key (or value "none")]
             (shui/tooltip-provider
              {:key swatch-key :delay-duration 300}
@@ -5738,7 +5753,7 @@
      [:div.control-col
       ;; Default — corresponds to the original first entry (`:value nil`)
       (let [{value :value label :label hint :hint} default-entry
-            active? (and (= value color) (not custom?))]
+            active? (and (same-color? value color) (not custom?))]
         (shui/tooltip-provider
          {:delay-duration 300}
          (shui/tooltip
@@ -6077,6 +6092,7 @@
         (recents-lane
          {:recents recents
           :hex-input hex-input
+          :color color
           :set-hover! set-hover!
           :on-hover! on-hover!
           :on-select! on-commit!
@@ -6101,7 +6117,7 @@
    rove within). ArrowUp leaves to the hex input; ArrowDown wraps to
    the swatches grid (closing the vertical loop). Escape collapses the
    pane back to the swatches grid."
-  [{:keys [recents hex-input on-select! set-hover! on-hover!
+  [{:keys [recents hex-input color on-select! set-hover! on-hover!
            on-escape! on-up! on-down!]}]
   (when (seq recents)
     (let [*parent (rum/use-ref nil)
@@ -6181,7 +6197,7 @@
           (let [{:keys [light dark differs?]} (or (colors/adjust-for-both-themes hex)
                                                   {:light hex :dark hex :differs? false})
                 picked-name (some-> hex colors/hex->name colors/humanize-name)
-                checked? (and hex-input (= hex hex-input))]
+                checked? (same-color? hex color)]
             (shui/tooltip-provider
              {:key hex :delay-duration 300}
              (shui/tooltip
@@ -6329,7 +6345,7 @@
         *el (rum/use-ref nil)
         palette [{:value nil :label "Default"
                   :hint "Inherits the surrounding text color"}
-                 {:value (colors/variable :gray :10)   :label "Gray"}
+                 {:value (colors/variable :gray :09)   :label "Gray"}
                  {:value (colors/variable :indigo :10) :label "Indigo"}
                  {:value (colors/variable :cyan :10)   :label "Cyan"}
                  {:value (colors/variable :green :10)  :label "Green"}
@@ -6368,13 +6384,17 @@
              (.add (.-classList picker) "icon-colored")))))
      [effective-color])
     ;; Commit effect — only fires on actual selection. Persists + propagates to *color.
-    ;; Only persist real hex strings (or the "inherit" sentinel). CSS-variable
-    ;; strings and other non-hex values would poison later picker opens.
+    ;; Accept hex strings, `var(--rx-…)` palette expressions (so preset swatch
+    ;; picks persist with theme-responsive colors), and the "inherit" sentinel.
+    ;; Other shapes (free-form CSS vars, arbitrary strings) are rejected so they
+    ;; can't poison later picker opens.
     (hooks/use-effect!
      (fn []
        (let [c (if (string/blank? color) "inherit" color)]
          (when (or (= c "inherit")
-                   (and (string? c) (re-matches #"#[0-9a-fA-F]{6}" c)))
+                   (and (string? c)
+                        (or (re-matches #"#[0-9a-fA-F]{6}" c)
+                            (re-matches #"var\(--rx-[A-Za-z0-9_-]+\)" c))))
            (storage/set :ls-icon-color-preset c)))
        (reset! *color color))
      [color])
@@ -6907,7 +6927,8 @@
                        initial-color (denull (:initial-color opts))
                        stored (let [raw (denull (storage/get :ls-icon-color-preset))]
                                 (when (and (string? raw)
-                                           (re-matches #"#[0-9a-fA-F]{6}" raw))
+                                           (or (re-matches #"#[0-9a-fA-F]{6}" raw)
+                                               (re-matches #"var\(--rx-[A-Za-z0-9_-]+\)" raw)))
                                   raw))
                        ;; If the caller restricts the available tabs (e.g.
                        ;; the avatar customize band's icon-fallback sub-picker
