@@ -3553,12 +3553,14 @@
         ;; an :image icon and when the caller didn't supply an avatar-context.
         synthesized-avatar-context
         (or avatar-context
-            {:type :avatar
-             :id (str "avatar-" (or page-title "page"))
-             :label (or page-title "")
-             :data {:value (derive-avatar-initials (or page-title ""))
-                    :backgroundColor (colors/variable :gray :09)
-                    :color (colors/variable :gray :09)}})
+            (let [gray-var (colors/variable :gray :09)
+                  gray-hex (or (colors/->hex gray-var) gray-var)]
+              {:type :avatar
+               :id (str "avatar-" (or page-title "page"))
+               :label (or page-title "")
+               :data {:value (derive-avatar-initials (or page-title ""))
+                      :backgroundColor gray-hex
+                      :color gray-hex}}))
         ;; Child components read `(some? avatar-context)` to decide circle vs
         ;; square; flip that live from the active tab.
         effective-avatar-context (when avatar-mode? synthesized-avatar-context)
@@ -6230,6 +6232,14 @@
   [{:keys [colors color set-color! set-hover!
            on-select! on-hover! on-hover-end!]}]
   (let [preset-values (->> colors (map :value) (filter some?) vec)
+        ;; Normalize incoming `color` to hex when it arrives as a CSS-variable
+        ;; expression (e.g. "var(--rx-gray-09)"). Without this, the swatch
+        ;; comparison treats the literal string as a "custom" color and opens
+        ;; the SV pad expanded with an unparseable hex-input value.
+        color (if (and (string? color)
+                       (string/starts-with? color "var("))
+                (or (frontend.colors/->hex color) color)
+                color)
         custom? (custom-active? color preset-values)
         [picker-mode set-picker-mode!] (rum/use-state (if custom? :custom :presets))
         [hex-input set-hex-input!]     (rum/use-state (when custom? color))
@@ -6358,10 +6368,14 @@
              (.add (.-classList picker) "icon-colored")))))
      [effective-color])
     ;; Commit effect — only fires on actual selection. Persists + propagates to *color.
+    ;; Only persist real hex strings (or the "inherit" sentinel). CSS-variable
+    ;; strings and other non-hex values would poison later picker opens.
     (hooks/use-effect!
      (fn []
        (let [c (if (string/blank? color) "inherit" color)]
-         (storage/set :ls-icon-color-preset c))
+         (when (or (= c "inherit")
+                   (and (string? c) (re-matches #"#[0-9a-fA-F]{6}" c)))
+           (storage/set :ls-icon-color-preset c)))
        (reset! *color color))
      [color])
     ;; Cleanup — clear external preview when picker unmounts.
@@ -6891,7 +6905,10 @@
                        ;; color so a sub-picker for an icon-less avatar
                        ;; still inherits the avatar's color.
                        initial-color (denull (:initial-color opts))
-                       stored (denull (storage/get :ls-icon-color-preset))
+                       stored (let [raw (denull (storage/get :ls-icon-color-preset))]
+                                (when (and (string? raw)
+                                           (re-matches #"#[0-9a-fA-F]{6}" raw))
+                                  raw))
                        ;; If the caller restricts the available tabs (e.g.
                        ;; the avatar customize band's icon-fallback sub-picker
                        ;; passes `:allowed-tabs [:all :emoji :icon]` to drop

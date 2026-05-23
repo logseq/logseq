@@ -579,8 +579,8 @@
   "Resolve free-text input to a color descriptor.
    Returns:
      {:hex '#rrggbb'
-      :match :hex | :css | :exact | :prefix
-      :name optional-string  (omitted for :hex)
+      :match :hex | :var | :css | :exact | :prefix
+      :name optional-string  (omitted for :hex and :var)
       :tentative? bool       (only true for :prefix)}
    or nil. Whitespace-only / blacklisted / unparsable -> nil.
    Public boundary."
@@ -593,13 +593,17 @@
          ;; 1. Hex pattern wins
          (when-let [hex (parse-hex trimmed)]
            {:hex hex :match :hex})
-         ;; 2. CSS named
+         ;; 2. CSS variable expression (e.g. "var(--rx-gray-09)")
+         (when (string/starts-with? trimmed "var(")
+           (when-let [hex (->hex trimmed)]
+             {:hex hex :match :var}))
+         ;; 3. CSS named
          (when-let [hex (css-named->hex trimmed)]
            {:hex hex :match :css :name (despace (normalize-name trimmed))})
-         ;; 3. Dictionary exact
+         ;; 4. Dictionary exact
          (when-let [hex (dict-exact->hex trimmed)]
            {:hex hex :match :exact :name (normalize-name trimmed)})
-         ;; 4. Dictionary prefix (tentative)
+         ;; 5. Dictionary prefix (tentative)
          (when-let [{:keys [hex name]} (dict-prefix->hex trimmed)]
            {:hex hex :match :prefix :name name :tentative? true}))))))
 
