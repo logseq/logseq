@@ -494,9 +494,7 @@
        (when window-controls?
          (window-controls/container))
 
-       (right-sidebar/sidebar)
-
-       [:div#app-single-container]]
+       (right-sidebar/sidebar)]
 
       (ui/notification)
 

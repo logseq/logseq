@@ -4,6 +4,7 @@
             [frontend.components.plugins :as plugin]
             [frontend.config :as config]
             [frontend.context.i18n :refer [interpolate-sentence t]]
+            [frontend.extensions.pdf.core :as pdf]
             [frontend.handler.export :as export]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
@@ -137,16 +138,20 @@
                    (when-let [teardown (::teardown state)]
                      (teardown)))}
   []
-  (if-let [route-match (state/sub :route-match)]
-    (when-let [view (:view (:data route-match))]
-      (rum/with-key
-        (ui/catch-error-and-notify
-         (helpful-default-error-screen)
-         [:<>
-          (container/root-container
-           route-match
-           (view route-match))
-          (when config/lsp-enabled?
-            (plugin/hook-daemon-renderers))])
-        (:path route-match)))
-    (not-found)))
+  (let [route-match (state/sub :route-match)]
+    [:<>
+     (if-let [route-match route-match]
+       (when-let [view (:view (:data route-match))]
+         (rum/with-key
+           (ui/catch-error-and-notify
+            (helpful-default-error-screen)
+            [:<>
+             (container/root-container
+              route-match
+              (view route-match))
+             (when config/lsp-enabled?
+               (plugin/hook-daemon-renderers))])
+           (:path route-match)))
+       (not-found))
+     [:div#app-single-container]
+     (pdf/default-embed-playground)]))

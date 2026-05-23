@@ -16,6 +16,8 @@
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
+(defonce *pdf-reset-repo (atom ::initial))
+
 (rum/defc scrollbar-measure
   []
   (let [*el (rum/use-ref nil)]
@@ -95,7 +97,9 @@
     (hooks/use-effect!
      (fn []
        (ui-handler/reset-custom-css!)
-       (pdf/reset-current-pdf!)
+       (when-not (= @*pdf-reset-repo current-repo)
+         (reset! *pdf-reset-repo current-repo)
+         (pdf/reset-current-pdf!))
        (plugin-handler/hook-plugin-app :current-graph-changed {}))
      [current-repo])
 
@@ -143,6 +147,4 @@
      {:on-click on-click
       :tab-index -1}
      child
-
-     (pdf/default-embed-playground)
      (scrollbar-measure)]))
