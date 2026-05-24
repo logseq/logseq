@@ -863,6 +863,33 @@
            (sqlite-export/diff-exports export-map export-map2))
         "No diff between original export and export after importing into a new graph")))
 
+(deftest graph-with-property-alias-is-idempotent
+  (let [property-alias-uuid (random-uuid)
+        original-data
+        {:properties
+         {:user.property/referrerURL
+          {:logseq.property/type :default
+           :block/alias #{[:block/uuid property-alias-uuid]}}}
+         :pages-and-blocks
+         [{:page {:block/title "Referrer"
+                  :block/uuid property-alias-uuid
+                  :build/keep-uuid? true}
+           :blocks []}]}
+        conn (db-test/create-conn-with-import-map original-data)
+        export-map (sqlite-export/build-export @conn {:export-type :graph})
+        valid-result (sqlite-export/validate-export export-map)
+        _ (assert (not (:error valid-result)) "No error when importing export-map into new graph")
+        _ (validate-db (:db valid-result))
+        export-map2 (sqlite-export/build-export (:db valid-result) {:export-type :graph})]
+    (is (some? (:block/alias (d/entity @conn :user.property/referrerURL)))
+        "Property's :block/alias is preserved after import")
+    (is (= #{[:block/uuid property-alias-uuid]}
+           (get-in export-map [:properties :user.property/referrerURL :block/alias]))
+        "Property's :block/alias is present in the first export")
+    (is (= nil
+           (sqlite-export/diff-exports export-map export-map2))
+        "No diff between original export and export after importing into a new graph")))
+
 (deftest ^:long import-graph-preserves-property-history
   (let [now (common-util/time-ms)
         original-data
