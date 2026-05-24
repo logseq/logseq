@@ -1402,8 +1402,10 @@
 (rum/defc add-new-row < rum/static
   [view-entity table {:keys [show-add-property?]}]
   [:div.py-1.px-2.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm.border-b
-   {:style {:width (table-content-width table show-add-property?)
-            :min-width "100%"}
+   {:style (cond-> {:width (table-content-width table show-add-property?)
+                    :min-width "100%"}
+             (empty? (:rows table))
+             (assoc :border-top 0))
     :on-click (fn [_]
                 (let [f (get-in table [:data-fns :add-new-object!])]
                   (f view-entity table)))}
