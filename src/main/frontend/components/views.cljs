@@ -1826,7 +1826,7 @@
 (rum/defc view-sorting-item
   [table sorting id name asc? set-sorting!]
   [:div.flex.flex-row.gap-2.items-center.justify-between.px-2
-   [:div:div.flex.flex-row.gap-1.items-center
+   [:div.flex.flex-row.gap-1.items-center
     (shui/button
      {:size :sm
       :class "!px-1"
