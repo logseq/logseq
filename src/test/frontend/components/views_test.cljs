@@ -9,7 +9,7 @@
                           :block/title "Name"
                           :logseq.property/type :default}]
         columns (views/build-columns {} mock-properties {:with-object-name? false
-                                                          :add-tags-column? false})]
+                                                         :add-tags-column? false})]
     ;; Without built-in title column, user 'Name' property should exist
     (is (some #(= :user.property/name-abc (:id %)) columns))))
 
@@ -49,6 +49,15 @@
   (is (= [1 2 3]
          (keep shui-table/table-row-id [1 {:db/id 2} {:foo "ignored"} 3]))))
 
+(deftest table-row-id-with-related-should-include-related-row-ids
+  (let [table {:row-selection-related-ids-fn (fn [row]
+                                              (when (= (:db/id row) 10)
+                                                [20 30]))}]
+    (is (= [10 20 30]
+           (#'views/table-row-id-with-related table {:db/id 10})))
+    (is (= [40]
+           (#'views/table-row-id-with-related table {:db/id 40})))))
+
 (deftest id-column-should-count-map-rows
   (let [columns (views/build-columns {} [] {:with-id? true
                                             :with-object-name? false
@@ -58,3 +67,12 @@
     (is (= 1 (render-id {:rows [1 {:db/id 2} 3]} {:db/id 1} nil)))
     (is (= 2 (render-id {:rows [1 {:db/id 2} 3]} {:db/id 2} nil)))
     (is (= 3 (render-id {:rows [1 {:db/id 2} 3]} {:db/id 3} nil)))))
+
+(deftest build-columns-should-mark-system-columns-readonly
+  (let [columns (views/build-columns {} [] {:with-id? true
+                                            :with-object-name? false
+                                            :add-tags-column? false})
+        created-at-column (some #(when (= :block/created-at (:id %)) %) columns)
+        updated-at-column (some #(when (= :block/updated-at (:id %)) %) columns)]
+    (is (false? (:editable? created-at-column)))
+    (is (false? (:editable? updated-at-column)))))

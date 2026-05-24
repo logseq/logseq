@@ -15,6 +15,8 @@
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
             [frontend.components.selection :as selection]
+            [frontend.components.table.columns :as table-columns]
+            [frontend.components.table.core :as table-core]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.dicts :as dicts]
@@ -115,6 +117,13 @@
                    ((if value set/union set/difference) (set ids) row-ids)))))
       ((:row-toggle-selected! table) row-selection row value))))
 
+(defn- table-row-id-with-related
+  [table row]
+  (let [row-id (shui-table/table-row-id row)
+        related-ids (when-let [f (:row-selection-related-ids-fn table)]
+                      (f row))]
+    (remove nil? (cons row-id related-ids))))
+
 (rum/defc row-checkbox < rum/static
   [{:keys [row-selected? data state data-fns] :as table} row _column]
   (let [id (str (:db/id row) "-" "checkbox")
@@ -139,8 +148,10 @@
                                            idx))
                                        data))]
                        (when (not= last-selected-idx idx)
-                         (let [new-ids (keep (fn [idx] (some-> (util/nth-safe data idx) shui-table/table-row-id))
-                                             (range (min last-selected-idx idx) (inc (max last-selected-idx idx))))]
+                         (let [new-ids (mapcat (fn [idx]
+                                                 (some->> (util/nth-safe data idx)
+                                                          (table-row-id-with-related table)))
+                                               (range (min last-selected-idx idx) (inc (max last-selected-idx idx))))]
                            (when (seq new-ids)
                              (let [row-selection' (update row-selection :selected-ids set/union (set new-ids))]
                                (set-row-selection! row-selection'))))))))
@@ -453,107 +464,39 @@
             (ui/icon "layout-sidebar-right"))]]))]))
 
 (defn build-columns
-  [config properties & {:keys [with-object-name? with-id? add-tags-column? advanced-query? readonly-property-idents]
+  "Builds table columns with view-owned renderers.
+
+  Options:
+
+  | key                         | description
+  |-----------------------------|-------------
+  | `:with-object-name?`        | Include the object title column.
+  | `:with-id?`                 | Include the `#` index column.
+  | `:add-tags-column?`         | Add `:block/tags` when it is not already present.
+  | `:advanced-query?`          | Only include requested timestamp columns for advanced query tables.
+  | `:readonly-property-idents` | Property idents that should render as readonly columns.
+  | `:class-ident`              | Class ident used by column editability policy."
+  [config properties & {:keys [with-object-name? with-id? add-tags-column? advanced-query?
+                               readonly-property-idents class-ident]
                         :or {with-object-name? true
                              with-id? true
                              add-tags-column? true
                              readonly-property-idents #{}}}]
-  (let [properties' (->>
-                     (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?))
-                       properties
-                       (conj properties (db/entity :block/tags)))
-                     (remove (fn [property]
-                               (or (nil? property)
-                                   (contains? #{:logseq.property/hide?} (:db/ident property))))))
-        property-keys (set (map :db/ident properties'))]
-    (->> (concat
-          [{:id :select
-            :name (t :view.table/select-column)
-            :header (fn [table _column] (header-checkbox table))
-            :cell (fn [table row column]
-                    (row-checkbox table row column))
-            :column-list? false
-            :resizable? false}
-           (when with-id?
-             {:id :id
-              :name "#"
-              :header (fn [_table _column] (header-index))
-              :cell (fn [table row _column]
-                      (let [row-id (:db/id row)
-                            row-idx (first
-                                     (keep-indexed
-                                      (fn [idx item]
-                                        (when (= row-id (shui-table/table-row-id item))
-                                          idx))
-                                      (:rows table)))]
-                        (some-> row-idx inc)))
-              :resizable? false})
-           (when with-object-name?
-             {:id :block/title
-              :name (t :view.table/name-column)
-              :type :string
-              :header header-cp
-              :cell (fn [_table row _column style]
-                      (block-title row {:property-ident :block/title
-                                        :sidebar? (:sidebar? config)
-                                        :width (:width style)}))
-              :disable-hide? true})]
-          (keep
-           (fn [property]
-             (when-let [ident (or (:db/ident property) (:id property))]
-               ;; Hide properties that shouldn't ever be editable or that do not display well in a table
-               (when-not (or (contains? #{:logseq.property/built-in? :logseq.property.asset/checksum :logseq.property.class/properties
-                                          :block/created-at :block/updated-at :block/order :block/collapsed?
-                                          :logseq.property/created-from-property}
-                                        ident)
-                             (and with-object-name? (= :block/title ident))
-                             (contains? #{:map :entity} (:logseq.property/type property)))
-                 (let [property (if (de/entity? property)
-                                  property
-                                  (or (merge (db/entity ident) property) property)) ; otherwise, :cell/:header/etc. will be removed
-                       get-value (when (de/entity? property)
-                                   (fn [row] (db-view/get-property-value-for-search row property)))]
-                   {:id ident
-                    :name (or (:name property)
-                              (db-property/built-in-display-title property t))
-                    :header (or (:header property)
-                                header-cp)
-                    :cell (or (:cell property)
-                              (when (de/entity? property)
-                                (fn [_table row _column style]
-                                  (let [readonly? (contains? readonly-property-idents ident)
-                                        opts (cond->
-                                             {:view? true
-                                              :table-view? true
-                                              :table-text-property-render
-                                              (fn [block opts]
-                                                (block-title block (assoc opts
-                                                                          :row row
-                                                                          :property property
-                                                                          :width (:width style)
-                                                                          :sidebar? (:sidebar? config))))}
-                                               readonly?
-                                               (assoc :readonly? true))]
-                                    (pv/property-value row property opts)))))
-                    :get-value get-value
-                    :type (:type property)}))))
-           properties')
-
-          [(when (or (not advanced-query?)
-                     (and advanced-query? (property-keys :block/created-at)))
-             {:id :block/created-at
-              :name (t :page/created-at)
-              :type :datetime
-              :header header-cp
-              :cell timestamp-cell-cp})
-           (when (or (not advanced-query?)
-                     (and advanced-query? (property-keys :block/updated-at)))
-             {:id :block/updated-at
-              :name (t :page/updated-at)
-              :type :datetime
-              :header header-cp
-              :cell timestamp-cell-cp})])
-         (remove nil?))))
+  (table-columns/build-columns
+   config
+   properties
+   {:header-checkbox (fn [table _column] (header-checkbox table))
+    :row-checkbox row-checkbox
+    :header-index header-index
+    :header-cp header-cp
+    :block-title block-title
+    :timestamp-cell timestamp-cell-cp}
+   :with-object-name? with-object-name?
+   :with-id? with-id?
+   :add-tags-column? add-tags-column?
+   :advanced-query? advanced-query?
+   :readonly-property-idents readonly-property-idents
+   :class-ident class-ident))
 
 (defn sort-columns
   [columns ordered-column-ids]
@@ -697,28 +640,6 @@
          :on-click #(db-export-handler/export-view-nodes-data rows {:group-by? (some? group-by-property-ident)})}
         (t :view/export-edn)))))))
 
-(defn- get-column-size
-  [column sized-columns]
-  (let [id (:id column)
-        size (get sized-columns id)]
-    (cond
-      (= id :id)
-      48
-
-      (number? size)
-      size
-
-      (= id :logseq.property/query)
-      400
-
-      :else
-      (case id
-        :select 32
-        :add-property 160
-        (:block/title :block/name) 360
-        (:block/created-at :block/updated-at) 160
-        180))))
-
 (rum/defc add-property-button < rum/static
   []
   [:div.ls-table-header-cell.!border-0
@@ -828,7 +749,7 @@
   (let [header-fn (:header column)
         sized-columns (get-in table [:state :sized-columns])
         set-sized-columns! (get-in table [:data-fns :set-sized-columns!])
-        width (get-column-size column sized-columns)
+        width (table-core/get-column-size column sized-columns)
         select? (= :select (:id column))]
     [:div.ls-table-header-cell
      {:style {:width width
@@ -939,200 +860,12 @@
                            :on-delete-rows (fn [table selected-ids]
                                              (on-delete-rows view-parent view-feature-type table selected-ids delete-rows-fn))))]))))
 
-(rum/defc lazy-table-cell
-  [cell-render-f cell-placeholder]
-  (let [^js state (ui/useInView #js {:rootMargin "0px"})
-        in-view? (.-inView state)]
-    [:div.h-full
-     {:ref (.-ref state)}
-     (if in-view?
-       (cell-render-f)
-       cell-placeholder)]))
-
-(defn- click-cell
-  [node]
-  (when-let [trigger (dom/sel1 node ".jtrigger")]
-    (state/clear-selection!)
-    (.click trigger)))
-
-(defn navigate-to-cell
-  [e cell direction]
-  (util/stop e)
-  (let [row (util/rec-get-node cell "ls-table-row")
-        cells (dom/sel row ".ls-table-cell")
-        idx (.indexOf cells cell)
-        rows-container (util/rec-get-node row "ls-table-rows")
-        rows (dom/sel rows-container ".ls-table-row")
-        row-idx (.indexOf rows row)
-        container-left (.-left (.getBoundingClientRect rows-container))
-        next-cell (case direction
-                    :left (if (> idx 1)               ; don't focus on checkbox
-                            (nth cells (dec idx))
-                            ;; last cell in the prev row
-                            (let [prev-row (when (> row-idx 0)
-                                             (nth rows (dec row-idx)))]
-                              (when prev-row
-                                (let [cells (dom/sel prev-row ".ls-table-cell")]
-                                  (last cells)))))
-                    :right (if (< idx (dec (count cells)))
-                             (nth cells (inc idx))
-                             ;; first cell in the next row
-                             (let [next-row (when (< row-idx (dec (count rows)))
-                                              (nth rows (inc row-idx)))]
-                               (when next-row
-                                 (let [cells (dom/sel next-row ".ls-table-cell")]
-                                   (second cells)))))
-                    :up (let [prev-row (when (> row-idx 0)
-                                         (nth rows (dec row-idx)))]
-                          (when prev-row
-                            (let [cells (dom/sel prev-row ".ls-table-cell")]
-                              (nth cells idx))))
-                    :down (let [next-row (when (< row-idx (dec (count rows)))
-                                           (nth rows (inc row-idx)))]
-                            (when next-row
-                              (let [cells (dom/sel next-row ".ls-table-cell")]
-                                (nth cells idx)))))]
-    (when next-cell
-      (let [next-cell-left (.-left (.getBoundingClientRect next-cell))]
-        (state/clear-selection!)
-        (dom/add-class! next-cell "selected")
-        (.focus next-cell)
-        (when (< next-cell-left container-left)
-          (.scrollIntoView next-cell #js {:inline "center"
-                                          :block "nearest"}))))))
-
-(rum/defc table-cell-container
-  [cell-opts body]
-  (let [*ref (hooks/use-ref nil)]
-    (shui/table-cell
-     (assoc cell-opts
-            :tabIndex 0
-            :ref *ref
-            :on-click (fn [e]
-                        (when-not (dom/has-class? (.-target e) "jtrigger")
-                          (click-cell (rum/deref *ref))))
-            :on-key-down (fn [e]
-                           (let [container (rum/deref *ref)]
-                             (case (util/ekey e)
-                               "Escape"
-                               (do
-                                 (if (util/input? (.-target e))
-                                   (do
-                                     (state/exit-editing-and-set-selected-blocks! [container])
-                                     (.focus container))
-                                   (do
-                                     (dom/remove-class! container "selected")
-                                     (let [row (util/rec-get-node container "ls-table-row")]
-                                       (state/exit-editing-and-set-selected-blocks! [row]))))
-                                 (util/stop e))
-                               "Enter"
-                               (do
-                                 (if (util/input? (.-target e)) ; number
-                                   (do
-                                     (state/exit-editing-and-set-selected-blocks! [container])
-                                     (.focus container))
-                                   (click-cell container))
-                                 (util/stop e))
-                               "ArrowUp"
-                               (navigate-to-cell e container :up)
-                               "ArrowDown"
-                               (navigate-to-cell e container :down)
-                               "ArrowLeft"
-                               (navigate-to-cell e container :left)
-                               "ArrowRight"
-                               (navigate-to-cell e container :right)
-                               nil))))
-     body)))
-
-(rum/defc table-row-inner < rum/static
-  [{:keys [row-selected?] :as table} row props {:keys [show-add-property? scrolling?]}]
-  (let [*ref (hooks/use-ref nil)
-        pinned-columns (get-in table [:state :pinned-columns])
-        unpinned (get-in table [:state :unpinned-columns])
-        unpinned-columns (if show-add-property?
-                           (conj (vec unpinned)
-                                 {:id :add-property
-                                  :cell (fn [_table _row _column])})
-                           unpinned)
-        sized-columns (get-in table [:state :sized-columns])
-        row-cell-f (fn [column {:keys [_lazy?]}]
-                     (let [id (str (:id row) "-" (:id column))
-                           width (get-column-size column sized-columns)
-                           select? (= (:id column) :select)
-                           add-property? (= (:id column) :add-property)
-                           style {:width width :min-width width}
-                           cell-opts {:key id
-                                      :select? select?
-                                      :add-property? add-property?
-                                      :style style}
-                           cell-placeholder (table-cell-container cell-opts nil)]
-                       (if (and scrolling? (not (:block/title row)))
-                         cell-placeholder
-                         (when-let [render (get column :cell)]
-                           (lazy-table-cell
-                            (fn []
-                              (table-cell-container
-                               cell-opts (render table row column style)))
-                            cell-placeholder)))))]
-    (shui/table-row
-     (merge
-      props
-      (cond-> {:key (str (:db/id row))
-               :tabIndex 0
-               :ref *ref
-               :data-state (when (row-selected? row) "selected")
-               :data-id (:db/id row)
-               :blockid (str (:block/uuid row))
-               :on-pointer-down (fn [_e] (db-async/<get-block (state/get-current-repo) (:db/id row) {:children? false}))
-               :on-key-down (fn [e]
-                              (let [container (rum/deref *ref)]
-                                (when (dom/has-class? container "selected")
-                                  (case (util/ekey e)
-                                    "Enter"
-                                    (do
-                                      (state/sidebar-add-block! (state/get-current-repo) (:db/id row) :block)
-                                      (state/clear-selection!)
-                                      (util/stop e))
-                                    "ArrowLeft"
-                                    (do
-                                      (when-let [cell (->> (dom/sel container ".ls-table-cell")
-                                                           (remove (fn [node]
-                                                                     (some? (dom/sel1 node ".ui__checkbox"))))
-                                                           first)]
-                                        (state/clear-selection!)
-                                        (dom/add-class! cell "selected")
-                                        (.focus cell))
-                                      (util/stop e))
-                                    "ArrowRight"
-                                    (do
-                                      (when-let [cell (->> (dom/sel container ".ls-table-cell")
-                                                           (remove (fn [node]
-                                                                     (some? (dom/sel1 node ".ui__checkbox"))))
-                                                           last)]
-                                        (state/clear-selection!)
-                                        (dom/remove-class! container "selected")
-                                        (dom/add-class! cell "selected")
-                                        (.focus cell))
-                                      (util/stop e))
-                                    "Escape"
-                                    (do
-                                      (state/clear-selection!)
-                                      (util/stop e))
-                                    nil))))}
-        (:asset-table/nested? row)
-        (assoc :data-asset-table-nested true)))
-     (when (seq pinned-columns)
-       [:div.sticky-columns.flex.flex-row
-        (map #(row-cell-f % {}) pinned-columns)])
-     (when (seq unpinned-columns)
-       [:div.flex.flex-row
-        (map #(row-cell-f % {:lazy? true}) unpinned-columns)]))))
-
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
   (let [block (db/sub-block (:db/id row))
         block' (if (contains? #{:self :full} (:block.temp/load-status block)) block row)
-        row-meta (select-keys row [:asset-table/nested? :asset-table/annotation-id])
+        row-meta (select-keys row [:asset-table/nested?
+                                   :asset-table/annotation-id])
         row' (when block'
                (-> (merge block' row-meta)
                    (update :block/tags (fn [tags]
@@ -1141,7 +874,7 @@
                                                    (db/entity id)))
                                                tags)))
                    (assoc :block.temp/refs-count (:block.temp/refs-count row))))]
-    (table-row-inner table row' props option)))
+    (table-core/table-row-inner table row' props option)))
 
 (rum/defc search
   [input {:keys [on-change set-input!]}]

@@ -1,7 +1,9 @@
-(ns frontend.components.objects-test
+(ns frontend.components.assets.table-test
   (:require [cljs.test :refer [deftest is testing]]
-            [frontend.components.objects :as objects]
-            [frontend.extensions.pdf.assets :as pdf-assets]))
+            [frontend.components.assets.pdf-annotations :as pdf-annotations]
+            [frontend.components.assets.table :as asset-table]
+            [frontend.extensions.pdf.assets :as pdf-assets]
+            [logseq.shui.table.core :as shui-table]))
 
 (def annotation-index
   {:image-id->annotation
@@ -26,8 +28,9 @@
 (deftest build-pdf-annotation-table-data-groups-images-under-expanded-pdf
   (testing "collapsed PDFs hide their area highlight image assets from the top level"
     (is (= [10 40]
-           (#'objects/build-pdf-annotation-table-data
-            [10 20 30 40] annotation-index #{}))))
+           (mapv shui-table/table-row-id
+                 (pdf-annotations/build-pdf-annotation-table-data
+                  [10 20 30 40] annotation-index #{})))))
 
   (testing "expanded PDFs insert area highlight image rows directly under the PDF"
     (is (= [10
@@ -38,12 +41,12 @@
              :asset-table/nested? true
              :asset-table/annotation-id 300}
             40]
-           (#'objects/build-pdf-annotation-table-data
+           (pdf-annotations/build-pdf-annotation-table-data
             [10 20 30 40] annotation-index #{10}))))
 
   (testing "annotation images are hidden from the top level even when their source PDF is not in the result set"
     (is (= [40]
-           (#'objects/build-pdf-annotation-table-data
+           (pdf-annotations/build-pdf-annotation-table-data
             [20 40] annotation-index #{}))))
 
   (testing "newly indexed annotation images move from top-level rows to the expanded PDF"
@@ -68,8 +71,8 @@
               {:db/id 50
                :asset-table/nested? true
                :asset-table/annotation-id 500}
-             40]
-             (#'objects/build-pdf-annotation-table-data
+              40]
+             (pdf-annotations/build-pdf-annotation-table-data
               [10 20 30 40 50] index #{10})))))
 
   (testing "fresh row parent annotation augments stale index before rendering"
@@ -79,7 +82,7 @@
                               :logseq.property/asset {:db/id 10}
                               :logseq.property.pdf/hl-image {:db/id 50}
                               :logseq.property.pdf/hl-page 10}}
-          effective-index (#'objects/augment-pdf-annotation-asset-index
+          effective-index (pdf-annotations/augment-pdf-annotation-asset-index
                            annotation-index
                            [10 20 30 40 row])]
       (is (= [10
@@ -93,7 +96,7 @@
                :asset-table/nested? true
                :asset-table/annotation-id 500}
               40]
-             (#'objects/build-pdf-annotation-table-data
+             (pdf-annotations/build-pdf-annotation-table-data
               [10 20 30 40 row] effective-index #{10})))))
 
   (testing "only explicitly pending area image assets are hidden until their annotation exists"
@@ -108,17 +111,23 @@
                  :asset-table/nested? true
                  :asset-table/annotation-id 300}
                 40]
-	               (#'objects/build-pdf-annotation-table-data
+	               (pdf-annotations/build-pdf-annotation-table-data
 	                [10 20 30 row 40] annotation-index #{10})))))))
 
 (deftest build-pdf-annotation-table-data-skips-non-flat-table-data
   (let [grouped-data [["png" [20 30]]
                       ["pdf" [10]]]]
     (is (= grouped-data
-           (#'objects/build-pdf-annotation-table-data grouped-data annotation-index #{10})))))
+           (pdf-annotations/build-pdf-annotation-table-data grouped-data annotation-index #{10})))))
+
+(deftest augment-pdf-annotation-asset-index-skips-non-flat-table-data
+  (let [grouped-data [["png" [20 30]]
+                      ["pdf" [10]]]]
+    (is (= annotation-index
+           (pdf-annotations/augment-pdf-annotation-asset-index annotation-index grouped-data)))))
 
 (deftest build-pdf-annotation-asset-index-keeps-image-annotations
-  (let [index (#'objects/build-pdf-annotation-asset-index
+  (let [index (#'pdf-annotations/build-pdf-annotation-asset-index
                [{:db/id 300
                  :logseq.property/asset {:db/id 10}
                  :logseq.property.pdf/hl-image {:db/id 30}
@@ -136,7 +145,7 @@
            (mapv :db/id (get-in index [:pdf-id->annotations 10]))))))
 
 (deftest build-pdf-annotation-asset-index-sorts-annotations-by-pdf-position
-  (let [index (#'objects/build-pdf-annotation-asset-index
+  (let [index (#'pdf-annotations/build-pdf-annotation-asset-index
                [{:db/id 300
                  :block/order "a0"
                  :logseq.property/asset {:db/id 10}
@@ -160,36 +169,42 @@
 
 (deftest pdf-annotation-title-prefers-custom-title
   (is (= "P3 · Custom highlight title"
-         (#'objects/pdf-annotation-title
+         (#'asset-table/pdf-annotation-title
           {:block/title "Custom highlight title"
            :logseq.property.pdf/hl-page 3})))
   (is (= "P3 · Area highlight"
-         (#'objects/pdf-annotation-title
+         (#'asset-table/pdf-annotation-title
           {:block/title "pdf area highlight"
            :logseq.property.pdf/hl-page 3})))
   (is (= "P3 · Area highlight"
-         (#'objects/pdf-annotation-title
-          {:block/title ""
-           :logseq.property.pdf/hl-page 3}))))
+           (#'asset-table/pdf-annotation-title
+            {:block/title ""
+             :logseq.property.pdf/hl-page 3}))))
+
+(deftest toggle-expanded-pdf-id-keeps-other-expanded-pdfs
+  (is (= #{10 40}
+         (#'asset-table/toggle-expanded-pdf-id #{10} 40)))
+  (is (= #{40}
+         (#'asset-table/toggle-expanded-pdf-id #{10 40} 10))))
 
 (deftest asset-row-selection-includes-pdf-annotation-images
   (testing "selecting a PDF row includes all associated annotation image asset ids"
     (is (= [20 30]
-           (vec (#'objects/asset-row-selection-related-ids
+           (vec (pdf-annotations/asset-row-selection-related-ids
                  {:db/id 10 :logseq.property.asset/type "pdf"}
                  annotation-index)))))
 
   (testing "selecting an annotation image row stays independent"
-    (is (nil? (#'objects/asset-row-selection-related-ids
+    (is (nil? (pdf-annotations/asset-row-selection-related-ids
                {:db/id 20 :logseq.property.asset/type "png"}
                annotation-index))))
 
   (testing "selected row ids expand PDF parents to annotation image ids"
     (is (= [10 20 30 40]
-           (#'objects/expand-selected-asset-row-ids
+           (pdf-annotations/expand-selected-asset-row-ids
             [10 40] {:selected-all? true} [10 40] annotation-index))))
 
   (testing "explicit selection keeps individually unchecked annotations unchecked"
     (is (= #{10 20 40}
-           (set (#'objects/expand-selected-asset-row-ids
+           (set (pdf-annotations/expand-selected-asset-row-ids
                  [10 40] {:selected-ids #{10 20 40}} [10 40] annotation-index))))))
