@@ -1869,12 +1869,13 @@
   [table sorting columns]
   (let [[sorting set-sorting!] (rum/use-state sorting)]
     [:div.ls-view-order-setting.flex.flex-col.gap-2.py-2.text-sm
-     (let [items (for [{:keys [id asc?]} sorting]
-                   (when-let [name (some (fn [column] (when (= id (:id column))
-                                                        (:name column))) columns)]
-                     {:id (str id)
-                      :value id
-                      :content (view-sorting-item table sorting id name asc? set-sorting!)}))]
+     (let [items (keep (fn [{:keys [id asc?]}]
+                         (when-let [name (some (fn [column] (when (= id (:id column))
+                                                              (:name column))) columns)]
+                           {:id (str id)
+                            :value id
+                            :content (view-sorting-item table sorting id name asc? set-sorting!)}))
+                       sorting)]
        (dnd/items items
                   {:on-drag-end (fn [ordered-columns]
                                   (let [f (get-in table [:data-fns :set-sorting!])
