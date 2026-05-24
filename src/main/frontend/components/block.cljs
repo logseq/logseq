@@ -2240,7 +2240,7 @@
                             link?
                             (some :logseq.property/icon (:block/tags block))
                             (contains? #{"pdf"} (:logseq.property.asset/type block))))
-        movable? (not (comments-model/protected-comment-block? block))]
+        movable? (not (comments-model/comment-block? block))]
     [:div.block-control-wrap.flex.flex-row.items-center.h-6
      {:class (util/classnames [{:is-order-list order-list?
                                 :is-with-icon with-icon?
@@ -3261,7 +3261,8 @@
             (if show-editor?
               [:div.mt-1 editor-cp]
               [:div.mt-1.cursor-text
-               {:on-click #(edit-block-content config block edit-input-id)}
+               (assoc block-asset/read-mode-title-attrs
+                 :on-click #(edit-block-content config block edit-input-id))
                (text-block-title (dissoc config :raw-title?) block)])
 
             (block-content-f {:custom-block-content
@@ -4070,7 +4071,6 @@
                                 (true? comment-thread-present?))
         inline-thread (state/sub :comments/inline-thread)
         show-inline-comments? (inline-comment-thread? inline-thread uuid comment-thread)
-        protected-comment-block? (comments-model/protected-comment-block? block)
         page-icon (when (:page-title? config)
                     (let [icon' (get block :logseq.property/icon)]
                       (when-let [icon (and (ldb/page? block)
@@ -4173,7 +4173,9 @@
         :on-touch-cancel (fn [e]
                            (block-handler/on-touch-cancel e))}
 
-       (and (util/capacitor?) (not (ldb/page? block)) (not protected-comment-block?))
+       (and (util/capacitor?)
+            (not (ldb/page? block))
+            (not (comments-model/comment-block? block)))
        (assoc
          :draggable true
          :on-drag-start

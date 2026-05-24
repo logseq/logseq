@@ -184,8 +184,7 @@
         tagged-comment (db-test/find-block-by-content @conn "tagged comment")
         ordinary (db-test/find-block-by-content @conn "ordinary")
         comments-area (db-test/find-block-by-content @conn "Comments")
-        original-comment-parent-id (:db/id (:block/parent tagged-comment))
-        original-ordinary-parent-id (:db/id (:block/parent ordinary))]
+        original-comment-parent-id (:db/id (:block/parent tagged-comment))]
     (d/transact! conn [{:db/id -1
                         :db/ident :logseq.class/Tag
                         :block/uuid (random-uuid)
@@ -207,15 +206,32 @@
       (is (= original-comment-parent-id
              (:db/id (:block/parent (d/entity @conn (:db/id tagged-comment)))))))
 
-    (testing "ordinary blocks cannot be moved to #Comments blocks"
+    (testing "#Comments blocks cannot be moved as children"
+      (outliner-core/move-blocks! conn [comments-area] target {:sibling? false})
+      (let [comments-area' (d/entity @conn (:db/id comments-area))]
+        (is (= (:db/id page)
+               (:db/id (:block/parent comments-area'))))))
+
+    (testing "#Comments blocks can be moved as siblings"
+      (outliner-core/move-blocks! conn [comments-area] target {:sibling? true})
+      (let [page' (d/entity @conn (:db/id page))
+            children (->> (:block/_parent page')
+                          ldb/sort-by-order
+                          (mapv :block/title))]
+        (is (= ["target" "Comments" "tagged comment" "normal parent"] children))))
+
+    (testing "ordinary blocks can be moved as siblings of #Comments blocks"
       (outliner-core/move-blocks! conn [ordinary] comments-area {:sibling? true})
       (let [ordinary' (d/entity @conn (:db/id ordinary))]
-        (is (= original-ordinary-parent-id
-               (:db/id (:block/parent ordinary'))))
-        (is (not= (:db/id page)
-                  (:db/id (:block/parent ordinary'))))))
+        (is (= (:db/id page)
+               (:db/id (:block/parent ordinary'))))))
+
+    (testing "ordinary blocks cannot be moved as children of #Comments blocks"
+      (outliner-core/move-blocks! conn [ordinary] comments-area {:sibling? false})
+      (is (= (:db/id page)
+             (:db/id (:block/parent (d/entity @conn (:db/id ordinary)))))))
 
     (testing "ordinary blocks cannot be moved to #Comment blocks"
       (outliner-core/move-blocks! conn [ordinary] tagged-comment {:sibling? false})
-      (is (= original-ordinary-parent-id
+      (is (= (:db/id page)
              (:db/id (:block/parent (d/entity @conn (:db/id ordinary)))))))))
