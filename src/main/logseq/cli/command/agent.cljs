@@ -829,6 +829,40 @@
                                {}])]
     true))
 
+(def ^:private task-start-reaction "eyes")
+(def ^:private comment-start-reaction "eyes")
+(def ^:private comment-complete-reaction "white_check_mark")
+(def ^:private comment-failed-reaction "x")
+
+(def ^:private reaction-query
+  '[:find ?r .
+    :in $ ?target-uuid ?emoji-id
+    :where
+    [?target :block/uuid ?target-uuid]
+    [?r :logseq.property.reaction/target ?target]
+    [?r :logseq.property.reaction/emoji-id ?emoji-id]
+    [(missing? $ ?r :logseq.property/created-by-ref)]])
+
+(defn- ensure-reaction!
+  [cfg repo target-uuid emoji-id]
+  (p/let [existing (transport/invoke cfg :thread-api/q [repo [reaction-query target-uuid emoji-id]])]
+    (when-not (some? existing)
+      (transport/invoke cfg :thread-api/apply-outliner-ops
+                        [repo [[:toggle-reaction [target-uuid emoji-id nil]]] {}]))))
+
+(defn- mark-agent-bridge-task-started!
+  [cfg repo block]
+  (let [block-uuid (:block/uuid block)]
+    (p/let [_ (ensure-reaction! cfg repo block-uuid task-start-reaction)
+            _ (when (contains? block :logseq.property/status)
+                (transport/invoke cfg :thread-api/apply-outliner-ops
+                                  [repo [[:batch-set-property [[block-uuid]
+                                                                :logseq.property/status
+                                                                :logseq.property/status.doing
+                                                                {}]]]
+                                   {}]))]
+      true)))
+
 (def ^:private routable-task-query
   '[:find [(pull ?e [:db/id
                      :block/uuid
@@ -907,7 +941,8 @@
         command (build-codex-command prompt {})
         preview (command-preview command)]
     (emit-log! cfg (log-line (str "Codex command prepared for " (block-uuid-str block) ": " preview)))
-    (p/let [{:keys [session]} (start-codex! command
+    (p/let [_ (mark-agent-bridge-task-started! cfg repo block)
+            {:keys [session]} (start-codex! command
                                             {:on-exit (fn [code session-id]
                                                         (when session-id
                                                           (update-session-status! cfg session-id
@@ -1016,19 +1051,6 @@
    :block/title
    {:block/tags [:db/ident :block/title]}
    {:logseq.property.comments/blocks (comment-target-block-selector session-property-ident)}])
-
-(def ^:private comment-start-reaction "eyes")
-(def ^:private comment-complete-reaction "white_check_mark")
-(def ^:private comment-failed-reaction "x")
-
-(def ^:private comment-reaction-query
-  '[:find ?r .
-    :in $ ?target-uuid ?emoji-id
-    :where
-    [?target :block/uuid ?target-uuid]
-    [?r :logseq.property.reaction/target ?target]
-    [?r :logseq.property.reaction/emoji-id ?emoji-id]
-    [(missing? $ ?r :logseq.property/created-by-ref)]])
 
 (defn- unknown-attr-datom?
   [datom]
@@ -1145,10 +1167,7 @@
 
 (defn- ensure-comment-reaction!
   [cfg repo target-uuid emoji-id]
-  (p/let [existing (transport/invoke cfg :thread-api/q [repo [comment-reaction-query target-uuid emoji-id]])]
-    (when-not (some? existing)
-      (transport/invoke cfg :thread-api/apply-outliner-ops
-                        [repo [[:toggle-reaction [target-uuid emoji-id nil]]] {}]))))
+  (ensure-reaction! cfg repo target-uuid emoji-id))
 
 (defn- comment-session-record
   [graph agent-name comment-block session-id status]
