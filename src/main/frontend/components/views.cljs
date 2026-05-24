@@ -287,7 +287,7 @@
 (defn- mobile-btn-class
   "The sole purpose of this function is to avoid false positives in hardcoded UI detection."
   [opacity]
-  (str "h-6 w-6 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 opacity-" opacity))
+  (str "h-6 w-6 !p-0 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 opacity-" opacity))
 
 (rum/defc ^:large-vars/cleanup-todo block-title < rum/static
   "Used on table view"
@@ -298,6 +298,7 @@
         inline-title (state/get-component :block/inline-title)
         many? (db-property/many? property)
         block (if many? (first block*) block*)
+        leading-action (:table/title-leading-action block)
         add-to-sidebar! #(state/sidebar-add-block! (state/get-current-repo)
                                                    (or (and many? (:db/id row)) (:db/id block))
                                                    :block)
@@ -352,8 +353,12 @@
                              :on-after-hide (fn []
                                               (save-block-and-focus *ref set-focus-timeout! false))})
                            (editor-handler/edit-block! block :max {:container-id :unknown-container})))))))}
+     (when leading-action
+       [:div.mr-1.flex.shrink-0.items-center.justify-center
+        leading-action])
+
      (if block
-       [:div.flex.flex-row
+       [:div.flex.min-w-0.flex-row
         (let [render (fn [block]
                        [:div
                         (inline-title
@@ -371,7 +376,7 @@
 
      (when-not (util/mobile?)
        (let [class (mobile-btn-class opacity)]
-         [:div.absolute.-right-1
+         [:div.absolute.right-0
           [:div.flex.flex-row.items-center
            (shui/button
             {:variant :ghost

@@ -261,26 +261,24 @@
         annotations (get-in annotation-index [:pdf-id->annotations pdf-id])
         expanded? (contains? expanded-pdf-ids pdf-id)]
     (if (seq annotations)
-      [:div.flex.w-full.min-w-0.items-center.gap-1
-       (shui/button
-        {:variant "ghost"
-         :size :sm
-         :class "!h-6 !w-5 shrink-0 !px-0 text-muted-foreground"
-         :title (t (if expanded?
-                     :asset/collapse-pdf-annotations
-                     :asset/expand-pdf-annotations))
-         :aria-label (t (if expanded?
-                          :asset/collapse-pdf-annotations
-                          :asset/expand-pdf-annotations))
-         :on-click (fn [e]
-                     (util/stop e)
-                     (set-expanded-pdf-ids!
-                      (if expanded?
-                        (disj expanded-pdf-ids pdf-id)
-                        (conj expanded-pdf-ids pdf-id))))}
-        (ui/icon (if expanded? "chevron-down" "chevron-right") {:size 14}))
-       [:div.min-w-0.flex-1
-        (original-cell table row column style)]]
+      (let [toggle (shui/button
+                    {:variant "ghost"
+                     :size :sm
+                     :class "!h-6 !w-6 shrink-0 !p-0 text-muted-foreground"
+                     :title (t (if expanded?
+                                 :asset/collapse-pdf-annotations
+                                 :asset/expand-pdf-annotations))
+                     :aria-label (t (if expanded?
+                                      :asset/collapse-pdf-annotations
+                                      :asset/expand-pdf-annotations))
+                     :on-click (fn [e]
+                                 (util/stop e)
+                                 (set-expanded-pdf-ids!
+                                  (if expanded?
+                                    (disj expanded-pdf-ids pdf-id)
+                                    (conj expanded-pdf-ids pdf-id))))}
+                    (ui/icon (if expanded? "chevron-down" "chevron-right")))]
+        (original-cell table (assoc row :table/title-leading-action toggle) column style))
       (original-cell table row column style))))
 
 (rum/defc asset-annotation-title-cell
