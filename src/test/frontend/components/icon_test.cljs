@@ -1,6 +1,16 @@
 (ns frontend.components.icon-test
-  (:require [cljs.test :refer [deftest is testing]]
-            [frontend.components.icon :as icon]))
+  (:require [cljs.test :refer [deftest is testing use-fixtures]]
+            [frontend.components.icon :as icon]
+            [frontend.context.i18n :as i18n]
+            [frontend.state :as state]))
+
+;; Reset preferred-language between tests so a previous test's locale
+;; setting can't leak into the next test's initials derivation.
+(use-fixtures :each
+  (fn [f]
+    (state/set-state! :preferred-language nil)
+    (f)
+    (state/set-state! :preferred-language nil)))
 
 ;; Pre-existing tests for `normalize-tabs` and `emoji-sections` were removed
 ;; in this commit because those private helpers no longer exist in
@@ -139,3 +149,91 @@
   (testing "blank input returns empty string (caller-friendly)"
     (is (= "" (icon/humanize-icon-name nil)))
     (is (= "" (icon/humanize-icon-name "")))))
+
+(deftest strip-leading-honorific-test
+  (testing "English: common prefixes are stripped"
+    (is (= "David Kowalski"   (i18n/strip-leading-honorific "Dr. David Kowalski" :en)))
+    (is (= "Smith"            (i18n/strip-leading-honorific "Mrs. Smith" :en)))
+    (is (= "Patrick Stewart"  (i18n/strip-leading-honorific "Sir Patrick Stewart" :en))))
+
+  (testing "no-period variant of a typically-periodized prefix"
+    (is (= "David Kowalski" (i18n/strip-leading-honorific "Dr David Kowalski" :en)))
+    (is (= "Smith"          (i18n/strip-leading-honorific "Mrs Smith" :en))))
+
+  (testing "case-insensitive matching"
+    (is (= "DAVID KOWALSKI"  (i18n/strip-leading-honorific "DR. DAVID KOWALSKI" :en)))
+    (is (= "david kowalski"  (i18n/strip-leading-honorific "dr. david kowalski" :en))))
+
+  (testing "longest-first: 'Mrs.' wins over 'Mr.'"
+    (is (= "Robinson" (i18n/strip-leading-honorific "Mrs. Robinson" :en))))
+
+  (testing "whitespace requirement: 'Drew' is NOT a 'Dr', no-space yields no strip"
+    (is (= "Drew Barrymore"     (i18n/strip-leading-honorific "Drew Barrymore" :en)))
+    (is (= "Dr.David Kowalski"  (i18n/strip-leading-honorific "Dr.David Kowalski" :en))))
+
+  (testing "blank-result safety: bare prefix is preserved"
+    (is (= "Dr." (i18n/strip-leading-honorific "Dr." :en)))
+    (is (= "Dr"  (i18n/strip-leading-honorific "Dr"  :en))))
+
+  (testing "single-pass: doesn't strip nested honorifics"
+    (is (= "Dr. Müller" (i18n/strip-leading-honorific "Prof. Dr. Müller" :de))))
+
+  (testing "German"
+    (is (= "Schneider" (i18n/strip-leading-honorific "Dr. Schneider" :de))))
+
+  (testing "French"
+    (is (= "Macron" (i18n/strip-leading-honorific "M. Macron" :fr)))
+    (is (= "Curie"  (i18n/strip-leading-honorific "Mme. Curie" :fr))))
+
+  (testing "Spanish"
+    (is (= "García" (i18n/strip-leading-honorific "Dr. García" :es))))
+
+  (testing "unknown locale falls back to English"
+    (is (= "David Kowalski" (i18n/strip-leading-honorific "Dr. David Kowalski" :xx))))
+
+  (testing "nil / blank / non-string input is returned as-is"
+    (is (nil? (i18n/strip-leading-honorific nil :en)))
+    (is (= "" (i18n/strip-leading-honorific "" :en)))
+    (is (= "   " (i18n/strip-leading-honorific "   " :en))))
+
+  (testing "no match: title is returned unchanged"
+    (is (= "Acme Inc."   (i18n/strip-leading-honorific "Acme Inc." :en)))
+    (is (= "The Beatles" (i18n/strip-leading-honorific "The Beatles" :en)))))
+
+(deftest derive-avatar-initials-honorific-test
+  (testing "English honorifics with default locale — two-word names"
+    (is (= "DK" (icon/derive-avatar-initials "Dr. David Kowalski")))
+    (is (= "PS" (icon/derive-avatar-initials "Sir Patrick Stewart")))
+    (is (= "DB" (icon/derive-avatar-initials "Drew Barrymore"))))
+
+  (testing "honorific + single name reduces to single-word path (first 2 chars)"
+    ;; "Mrs. Smith" → strip "Mrs." → "Smith" → single-word path → "SM".
+    ;; Consistent with how mononyms ("Madonna" → "MA") are handled.
+    (is (= "SM" (icon/derive-avatar-initials "Mrs. Smith")))
+    (is (= "SC" (icon/derive-avatar-initials "Dr. Schneider"))))
+
+  (testing "no-period variant"
+    (is (= "DK" (icon/derive-avatar-initials "Dr David Kowalski"))))
+
+  (testing "non-English with locale switch"
+    (state/set-state! :preferred-language "fr")
+    (is (= "MA" (icon/derive-avatar-initials "M. Macron"))))
+
+  (testing "unchanged behavior for non-honorific titles"
+    (is (= "DK" (icon/derive-avatar-initials "David Kowalski")))
+    (is (= "TB" (icon/derive-avatar-initials "The Beatles")))
+    (is (= "AC" (icon/derive-avatar-initials "Acme Corp")))))
+
+(deftest derive-initials-honorific-test
+  (testing "case-preserving + honorific stripping"
+    (is (= "DK" (icon/derive-initials "Dr. David Kowalski")))
+    (is (= "Sm" (icon/derive-initials "Mrs. Smith"))))  ; single word post-strip
+
+  (testing "non-honorific titles unchanged (case preserved from source)"
+    (is (= "DK" (icon/derive-initials "David Kowalski")))
+    (is (= "TB" (icon/derive-initials "The Beatles")))))
+
+(deftest derive-abbreviated-honorific-test
+  (testing "honorific stripping flows through to abbreviated derivation"
+    ;; "Dr. Math 203" → strip → "Math 203" → keeps as-is (< 8 chars)
+    (is (= "Math 203" (icon/derive-abbreviated "Dr. Math 203")))))

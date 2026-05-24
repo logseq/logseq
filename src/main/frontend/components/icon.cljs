@@ -2392,10 +2392,14 @@
     (storage/set :ui/ls-icons-used-v2 s)))
 
 (defn derive-initials
-  "Derive initials from a page title (max 8 chars)"
+  "Derive initials from a page title (max 8 chars). Case is preserved
+   from the source. Strips locale-aware honorific prefixes (e.g. 'Dr.',
+   'Prof.') before tokenizing, so 'Dr. David Kowalski' yields 'DK'
+   instead of 'DD'."
   [title]
   (when title
-    (let [words (string/split (string/trim title) #"\s+")
+    (let [title (i18n/strip-leading-honorific title (i18n/preferred-locale))
+          words (string/split (string/trim title) #"\s+")
           initials (if (> (count words) 1)
                      ;; Take first letter of first two words
                      (str (subs (first words) 0 1)
@@ -2405,10 +2409,13 @@
       (subs initials 0 (min 8 (count initials))))))
 
 (defn derive-avatar-initials
-  "Derive initials from a page title (max 2-3 chars for avatars, always uppercase)"
+  "Derive initials from a page title (max 2-3 chars for avatars, always
+   uppercase). Strips locale-aware honorific prefixes before tokenizing
+   so 'Dr. David Kowalski' yields 'DK' instead of 'DD'."
   [title]
   (when title
-    (let [words (string/split (string/trim title) #"\s+")
+    (let [title (i18n/strip-leading-honorific title (i18n/preferred-locale))
+          words (string/split (string/trim title) #"\s+")
           initials (if (> (count words) 1)
                      ;; Take first letter of first two words
                      (str (string/upper-case (subs (first words) 0 1))
@@ -2437,10 +2444,12 @@
 (defn derive-abbreviated
   "Derive abbreviated form from page title (max 8 chars).
    Returns nil if result equals derive-initials output (to avoid duplicates).
+   Strips locale-aware honorific prefixes for consistency with derive-initials.
    Examples: 'Software Engineer' -> 'Soft Eng', 'Math 203' -> 'Math 203'"
   [title]
   (when title
-    (let [normalized (normalize-word-boundaries (string/trim title))
+    (let [title (i18n/strip-leading-honorific title (i18n/preferred-locale))
+          normalized (normalize-word-boundaries (string/trim title))
           max-len 8]
       (when-not (string/blank? normalized)
         (if (<= (count normalized) max-len)

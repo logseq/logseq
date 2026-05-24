@@ -41,6 +41,52 @@
    :zh-CN "，"
    :zh-Hant "，"})
 
+(def ^:private honorific-prefixes-by-locale
+  "Honorific titles to strip from a page title before computing initials.
+   Each entry is matched case-insensitively at the start of the title,
+   with an optional trailing period and required trailing whitespace
+   (so 'Drew' doesn't match 'Dr'). Lists are intentionally short and
+   curated; expand only when users report a concrete miss. Omits forms
+   of address that aren't name-prefix conventions (Herr, Frau, Señor —
+   used as standalone vocatives, not attached to a name)."
+  {:en ["Dr" "Mr" "Mrs" "Ms" "Miss" "Prof" "Rev" "Sir" "Hon"]
+   :de ["Dr" "Prof" "Dipl"]
+   :fr ["M" "Mme" "Mlle" "Dr" "Pr"]
+   :es ["Sr" "Sra" "Srta" "Dr" "Dra"]
+   :it ["Dr" "Prof" "Sig"]})
+
+(defn strip-leading-honorific
+  "Strip a leading honorific (e.g. 'Dr.', 'Prof.') from `title` per
+   `locale`'s prefix list. Matches case-insensitively; the prefix must
+   be followed by an optional period and required whitespace — so 'Drew'
+   doesn't match 'Dr', and 'Mr.' alone (no name) is preserved.
+
+   Single-pass: 'Prof. Dr. Müller' yields 'Dr. Müller', not 'Müller'.
+   Returns the original title unchanged when no prefix matches, when
+   stripping would leave a blank string, or when locale isn't in the
+   table (falls back to :en)."
+  [title locale]
+  (if (or (not (string? title)) (string/blank? title))
+    title
+    (let [lc (string/lower-case title)
+          prefixes (->> (or (get honorific-prefixes-by-locale locale)
+                            (:en honorific-prefixes-by-locale))
+                        ;; longest first so 'Mrs.' wins over 'Mr.'
+                        (sort-by count >))
+          match-len (some (fn [p]
+                            (let [lp (string/lower-case p)
+                                  with-dot (str lp ". ")
+                                  no-dot   (str lp " ")]
+                              (cond
+                                (string/starts-with? lc with-dot) (count with-dot)
+                                (string/starts-with? lc no-dot)   (count no-dot)
+                                :else nil)))
+                          prefixes)]
+      (if match-len
+        (let [stripped (string/trim (subs title match-len))]
+          (if (string/blank? stripped) title stripped))
+        title))))
+
 (def ^:private translate-strict
   "tongue translator built against the raw locale dicts without any fallback.
   Returns a '{Missing key ...}' string for keys absent in the requested locale."
