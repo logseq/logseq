@@ -6993,21 +6993,44 @@
                           ::input-ref (rum/create-ref)
                           ::result-ref (rum/create-ref))))
    :did-mount (fn [s]
-                ;; Belt-and-braces for non-Radix call sites where the
-                ;; picker is opened as a free-floating popup (`shui/popup-show!`
-                ;; rather than `dropdown-menu-sub-content`). The Radix
-                ;; sub-menu path now focuses synchronously via
-                ;; `onOpenAutoFocus` (see avatar fallback wiring at
-                ;; icon.cljs:~3850), which is more reliable than racing
-                ;; FocusScope on a `setTimeout 0`. This `:did-mount` is a
-                ;; safety net so existing call sites that don't pass
-                ;; their own focus handoff still get the input focused.
-                (js/setTimeout
-                 (fn []
-                   (when-let [^js input (rum/deref (::input-ref s))]
-                     (when (not= js/document.activeElement input)
-                       (.focus input))))
-                 0)
+                (let [*input-ref (::input-ref s)
+                      focus-input! (fn []
+                                     (when-let [^js input (rum/deref *input-ref)]
+                                       (when (not= js/document.activeElement input)
+                                         (.focus input))))]
+                  (js/setTimeout focus-input! 0)
+                  ;; Persistent focus-grab window. When the picker mounts
+                  ;; inside a Radix `dropdown-menu-sub-content`, the parent
+                  ;; `MenuContent` actively refocuses itself as the user's
+                  ;; cursor moves from the sub-trigger into the sub-content
+                  ;; area (see `onItemLeave` → `A.current?.focus()` in
+                  ;; @radix-ui/react-menu). That fires ~60–100ms after our
+                  ;; React `autoFocus` lands, stealing focus from the
+                  ;; search input. `onOpenAutoFocus` on the sub-content
+                  ;; can't intercept this: Radix's `MenuSubContent` hard-
+                  ;; codes its own handler (index.js:~807) that overrides
+                  ;; any prop we pass. The reliable counter is to listen
+                  ;; for focusin events at the document level for a short
+                  ;; post-mount window and bounce focus back whenever it
+                  ;; lands outside the picker. We do nothing if the new
+                  ;; focus target is inside the picker (tabs, color
+                  ;; swatch, emoji grid clicks), so legitimate user
+                  ;; interaction is respected.
+                  (let [done? (atom false)
+                        handler (fn [^js e]
+                                  (when-not @done?
+                                    (when-let [^js input (rum/deref *input-ref)]
+                                      (when-let [^js picker (.closest input ".cp__emoji-icon-picker")]
+                                        (let [^js tgt (.-target e)]
+                                          (when (and (not= tgt input)
+                                                     (not (.contains picker tgt)))
+                                            (.focus input)))))))]
+                    (.addEventListener js/document "focusin" handler true)
+                    (js/setTimeout
+                     (fn []
+                       (reset! done? true)
+                       (.removeEventListener js/document "focusin" handler true))
+                     300)))
                 ;; Apply the initial color tint to the picker root so the
                 ;; icon grid renders in the parent's color even when the
                 ;; color-picker swatch is suppressed (e.g. the avatar

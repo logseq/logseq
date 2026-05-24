@@ -32,14 +32,46 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
 
 (rum/defc ^:large-vars/cleanup-todo custom-context-menu-content
   []
-  (let [[set-icon-sub-menu-open? set-icon-sub-menu-open] (rum/use-state false)
+  (let [;; Single source of truth for which sub-menu is open in this
+        ;; parent menu. Radix doesn't enforce sibling exclusivity, so we
+        ;; do it ourselves: opening any sub-menu sets `open-sub` to its
+        ;; id, which flips every other sub-menu's `:open` to false in
+        ;; the same render.
+        [open-sub set-open-sub!] (rum/use-state nil)
+        sub-menu-props (fn [id]
+                         {:open (= open-sub id)
+                          :onOpenChange (fn [v] (set-open-sub! (if v id nil)))})
+        ;; Keep the Set icon sub-menu open through two transient "outside"
+        ;; events that would otherwise close it:
+        ;;
+        ;; 1. The topbar color picker popover portals to body, so Radix
+        ;;    sees its pointer/focus events as outside the sub-content.
+        ;;    Detect via its stable `.color-picker-popover` class.
+        ;;
+        ;; 2. Before the popover even mounts, clicking the color dot moves
+        ;;    the pointer off the Set-icon sub-trigger, which fires Radix
+        ;;    MenuContent's internal `onItemLeave` → `A.current?.focus()`
+        ;;    that re-focuses the parent menu's container DIV. That focus
+        ;;    shift fires `onFocusOutside` on us with target = the parent
+        ;;    container itself. Match `.ui__dropdown-menu-content` via
+        ;;    `.matches` (not `.closest`) so genuine clicks on sibling
+        ;;    menu items (`.ui__dropdown-menu-item`) still close us.
+        ;;
+        ;; The real focus/click target lives at `event.detail.originalEvent
+        ;; .target` — the CustomEvent's own `.target` is the SubContent
+        ;; root, useless for routing.
+        keep-open-for-color-popover (fn [^js e]
+                                      (let [^js t (some-> e .-detail .-originalEvent .-target)]
+                                        (when (and t
+                                                   (or (.closest t ".color-picker-popover")
+                                                       (.matches t ".ui__dropdown-menu-content")))
+                                          (.preventDefault e))))
         comment-targets (comments-model/comment-target-blocks
                          (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids)))]
     [:<>
@@ -52,33 +84,30 @@
                       #(editor-handler/batch-set-heading! (state/get-selection-block-ids) true)
                       #(editor-handler/batch-remove-heading! (state/get-selection-block-ids)))
 
-     (shui/dropdown-menu-sub
-      {:open set-icon-sub-menu-open?
-       :onOpenChange (fn [v]
-                       (when (not= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
-                         (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
-                         (set-icon-sub-menu-open v)))}
-      (shui/dropdown-menu-sub-trigger
-       (t :context-menu/set-icon))
-      (shui/dropdown-menu-sub-content
-       {:class "!p-0"}
-       [:div.p-1
-        (icon-component/icon-search
-         {:on-chosen (fn [_e icon]
-                       (let [block-ids (state/get-selection-block-ids)]
-                         (if icon
-                           (property-handler/batch-set-block-property!
-                            block-ids
-                            :logseq.property/icon
-                            (select-keys icon [:type :id :color]))
-                           (property-handler/batch-remove-block-property!
-                            block-ids
-                            :logseq.property/icon)))
-                       (state/hide-custom-context-menu!)
-                       (shui/popup-hide!))
-          :color-auto-chosen? false
-          :del-btn? true
-          :icon-value nil})]))
+     (shui/dropdown-menu-sub (sub-menu-props :set-icon)
+                             (shui/dropdown-menu-sub-trigger
+                              (t :context-menu/set-icon))
+                             (shui/dropdown-menu-sub-content
+                              {:class "!p-0"
+                               :onPointerDownOutside keep-open-for-color-popover
+                               :onFocusOutside keep-open-for-color-popover}
+                              [:div.p-1
+                               (icon-component/icon-search
+                                {:on-chosen (fn [_e icon]
+                                              (let [block-ids (state/get-selection-block-ids)]
+                                                (if icon
+                                                  (property-handler/batch-set-block-property!
+                                                   block-ids
+                                                   :logseq.property/icon
+                                                   (select-keys icon [:type :id :color]))
+                                                  (property-handler/batch-remove-block-property!
+                                                   block-ids
+                                                   :logseq.property/icon)))
+                                              (state/hide-custom-context-menu!)
+                                              (shui/popup-hide!))
+                                 :color-auto-chosen? false
+                                 :del-btn? true
+                                 :icon-value nil})]))
 
      (shui/dropdown-menu-separator)
 
@@ -170,7 +199,40 @@
 (rum/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id property-default-value?]
   (let [block (db/entity [:block/uuid block-id])
-        [set-icon-sub-menu-open? set-icon-sub-menu-open] (rum/use-state false)
+        ;; Single source of truth for which sub-menu is open in this
+        ;; parent menu. Radix doesn't enforce sibling exclusivity, so we
+        ;; do it ourselves: opening any sub-menu sets `open-sub` to its
+        ;; id, which flips every other sub-menu's `:open` to false in
+        ;; the same render.
+        [open-sub set-open-sub!] (rum/use-state nil)
+        sub-menu-props (fn [id]
+                         {:open (= open-sub id)
+                          :onOpenChange (fn [v] (set-open-sub! (if v id nil)))})
+        ;; Keep the Set icon sub-menu open through two transient "outside"
+        ;; events that would otherwise close it:
+        ;;
+        ;; 1. The topbar color picker popover portals to body, so Radix
+        ;;    sees its pointer/focus events as outside the sub-content.
+        ;;    Detect via its stable `.color-picker-popover` class.
+        ;;
+        ;; 2. Before the popover even mounts, clicking the color dot moves
+        ;;    the pointer off the Set-icon sub-trigger, which fires Radix
+        ;;    MenuContent's internal `onItemLeave` → `A.current?.focus()`
+        ;;    that re-focuses the parent menu's container DIV. That focus
+        ;;    shift fires `onFocusOutside` on us with target = the parent
+        ;;    container itself. Match `.ui__dropdown-menu-content` via
+        ;;    `.matches` (not `.closest`) so genuine clicks on sibling
+        ;;    menu items (`.ui__dropdown-menu-item`) still close us.
+        ;;
+        ;; The real focus/click target lives at `event.detail.originalEvent
+        ;; .target` — the CustomEvent's own `.target` is the SubContent
+        ;; root, useless for routing.
+        keep-open-for-color-popover (fn [^js e]
+                                      (let [^js t (some-> e .-detail .-originalEvent .-target)]
+                                        (when (and t
+                                                   (or (.closest t ".color-picker-popover")
+                                                       (.matches t ".ui__dropdown-menu-content")))
+                                          (.preventDefault e))))
         [heading set-heading!] (rum/use-state (or (pu/lookup block :logseq.property/heading) false))
         [current-color set-current-color!] (rum/use-state (pu/lookup block :logseq.property/background-color))]
     (when block
@@ -213,51 +275,48 @@
                        (comments-handler/reveal-comments-area! comments-area {:focus-editor? true})))}
         (t :block.comments/add-comment))
 
-       (shui/dropdown-menu-sub
-        (shui/dropdown-menu-sub-trigger
-         (t :command.editor/add-reaction))
-        (shui/dropdown-menu-sub-content
-         {:class "!p-0"}
-         [:div.p-1
-          (icon-component/icon-search
-           (merge icon-component/reaction-picker-opts
-                  {:on-chosen (fn [_e icon _keep-popup?]
-                                (let [emoji-id (:id icon)
-                                      emoji? (= :emoji (:type icon))]
-                                  (if emoji?
-                                    (do
-                                      (reaction-handler/toggle-reaction! block-id emoji-id)
-                                      (state/hide-custom-context-menu!)
-                                      (shui/popup-hide!))
-                                    (notification/show! (t :block.reaction/emoji-required-warning) :warning))))}))]))
+       (shui/dropdown-menu-sub (sub-menu-props :add-reaction)
+                               (shui/dropdown-menu-sub-trigger
+                                (t :command.editor/add-reaction))
+                               (shui/dropdown-menu-sub-content
+                                {:class "!p-0"}
+                                [:div.p-1
+                                 (icon-component/icon-search
+                                  (merge icon-component/reaction-picker-opts
+                                         {:on-chosen (fn [_e icon _keep-popup?]
+                                                       (let [emoji-id (:id icon)
+                                                             emoji? (= :emoji (:type icon))]
+                                                         (if emoji?
+                                                           (do
+                                                             (reaction-handler/toggle-reaction! block-id emoji-id)
+                                                             (state/hide-custom-context-menu!)
+                                                             (shui/popup-hide!))
+                                                           (notification/show! (t :block.reaction/emoji-required-warning) :warning))))}))]))
 
-       (shui/dropdown-menu-sub
-        {:open set-icon-sub-menu-open?
-         :onOpenChange (fn [v]
-                         (when (not= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
-                           (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
-                           (set-icon-sub-menu-open v)))}
-        (shui/dropdown-menu-sub-trigger
-         (t :context-menu/set-icon))
-        (shui/dropdown-menu-sub-content
-         {:class "!p-0"}
-         [:div.p-1
-          (let [icon-value (:logseq.property/icon block)]
-            (icon-component/icon-search
-             {:on-chosen (fn [_e icon]
-                           (if icon
-                             (property-handler/set-block-property!
-                              block-id
-                              :logseq.property/icon
-                              (select-keys icon [:type :id :color]))
-                             (property-handler/remove-block-property!
-                              block-id
-                              :logseq.property/icon))
-                           (state/hide-custom-context-menu!)
-                           (shui/popup-hide!))
-              :color-auto-chosen? false
-              :del-btn? (boolean icon-value)
-              :icon-value icon-value}))]))
+       (shui/dropdown-menu-sub (sub-menu-props :set-icon)
+                               (shui/dropdown-menu-sub-trigger
+                                (t :context-menu/set-icon))
+                               (shui/dropdown-menu-sub-content
+                                {:class "!p-0"
+                                 :onPointerDownOutside keep-open-for-color-popover
+                                 :onFocusOutside keep-open-for-color-popover}
+                                [:div.p-1
+                                 (let [icon-value (:logseq.property/icon block)]
+                                   (icon-component/icon-search
+                                    {:on-chosen (fn [_e icon]
+                                                  (if icon
+                                                    (property-handler/set-block-property!
+                                                     block-id
+                                                     :logseq.property/icon
+                                                     (select-keys icon [:type :id :color]))
+                                                    (property-handler/remove-block-property!
+                                                     block-id
+                                                     :logseq.property/icon))
+                                                  (state/hide-custom-context-menu!)
+                                                  (shui/popup-hide!))
+                                     :color-auto-chosen? false
+                                     :del-btn? (boolean icon-value)
+                                     :icon-value icon-value}))]))
 
        (shui/dropdown-menu-separator)
 
