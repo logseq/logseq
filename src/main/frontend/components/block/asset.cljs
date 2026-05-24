@@ -34,5 +34,5 @@
     ext (str "." (name ext))))
 
 (def read-mode-title-attrs
-  {:class "asset-title-slot text-xs opacity-60 mt-1 cursor-text"
+  {:class "asset-title-slot mt-1 cursor-text"
    :style {:min-height 24}})
