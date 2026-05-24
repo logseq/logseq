@@ -92,8 +92,8 @@
           (let [properties (build-props)]
             (when (seq properties)
               (property-handler/set-block-properties! id properties))
-            ;; move asset block to owner block
-            (editor-handler/move-blocks! [ref-block] pdf-block {:sibling? false})
+            ;; should move asset block to owner block?
+            ;;(editor-handler/move-blocks! [ref-block] pdf-block {:sibling? false})
             ref-block))
 
         (let [ref-asset-id (:image content)
@@ -136,8 +136,11 @@
 
 (defn- db-based-persist-hl-area-image
   [repo png hl]
-  (let [file (js/File. #js [png] (str (date/get-date-time-string-3) ".png"))]
-    (editor-handler/db-based-save-assets! repo [file] {:pdf-highlight hl})))
+  (let [file (js/File. #js [png] (str (date/get-date-time-string-3) ".png"))
+        current-pdf (state/get-current-pdf)
+        opts {:pdf-highlight hl
+              :target-block (:block current-pdf)}]
+    (editor-handler/db-based-save-assets! repo [file] opts)))
 
 (defn- persist-hl-area-image
   [repo-url _repo-dir _current new-hl _old-hl png]
