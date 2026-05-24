@@ -273,16 +273,47 @@
        (container config' row)
        [:div])]))
 
-(defn- save-block-and-focus
-  [*ref set-focus-timeout! hide-popup?]
+(defn- focus-table-title-cell
+  [*ref set-focus-timeout!]
   (let [node (rum/deref *ref)
         cell (util/rec-get-node node "ls-table-cell")]
-    (p/do!
-     (editor-handler/save-current-block!)
-     (when hide-popup?
-       (shui/popup-hide!))
-     (state/exit-editing-and-set-selected-blocks! [cell])
-     (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))
+    (when cell
+      (state/exit-editing-and-set-selected-blocks! [cell])
+      (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))
+
+(defn- save-block-and-focus
+  [*ref set-focus-timeout! hide-popup?]
+  (p/do!
+   (editor-handler/save-current-block!)
+   (when hide-popup?
+     (shui/popup-hide!))
+   (focus-table-title-cell *ref set-focus-timeout!)))
+
+(defn- save-asset-title-if-changed!
+  [block title]
+  (let [value (or title "")
+        current (or (:block/title (db/entity (:db/id block))) "")]
+    (when-not (= current value)
+      (editor-handler/save-block-if-changed! block value {:force? true}))))
+
+(defn- asset-title-editor-popup
+  [width *title]
+  [:div.ls-table-block
+   {:style {:width width :max-width width}
+    :on-click util/stop-propagation}
+   (ui/ls-textarea
+    {:auto-focus true
+     :class "block-editor w-full resize-none border-none bg-transparent px-0 pt-2 pb-1 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+     :default-value @*title
+     :on-change #(reset! *title (util/evalue %))
+     :on-key-down (fn [e]
+                    (util/stop-propagation e)
+                    (case (util/ekey e)
+                      ("Enter" "Escape")
+                      (do
+                        (util/stop e)
+                        (shui/popup-hide! :ls-table-block-editor))
+                      nil))})])
 
 (defn- mobile-btn-class
   "The sole purpose of this function is to avoid false positives in hardcoded UI detection."
@@ -322,13 +353,21 @@
                         (add-to-sidebar!)
 
                         :else
-                        (let [popup (fn []
+                        (let [asset? (and (not many?) (ldb/asset? block))
+                              *asset-title (when asset? (atom (or (:block/title block) "")))
+                              popup (fn []
                                       (let [width (-> (max 160 width) (- 18))]
-                                        (if many?
+                                        (cond
+                                          many?
                                           [:div.ls-table-block
                                            {:style {:width width :max-width width}
                                             :on-click util/stop-propagation}
                                            (pv/property-value row property {})]
+
+                                          asset?
+                                          (asset-title-editor-popup width *asset-title)
+
+                                          :else
                                           [:div.ls-table-block
                                            {:style {:width width :max-width width}
                                             :on-click util/stop-propagation}
@@ -344,15 +383,19 @@
                                                  (util/stop e)
                                                  (save-block-and-focus *ref set-focus-timeout! true)))}
                                             block)])))]
-                          (p/do!
-                           (shui/popup-show!
-                            (.closest (.-target e) ".ls-table-cell")
-                            popup
-                            {:id :ls-table-block-editor
-                             :as-mask? true
-                             :on-after-hide (fn []
-                                              (save-block-and-focus *ref set-focus-timeout! false))})
-                           (editor-handler/edit-block! block :max {:container-id :unknown-container})))))))}
+                          (shui/popup-show!
+                           (.closest (.-target e) ".ls-table-cell")
+                           popup
+                           {:id :ls-table-block-editor
+                            :as-mask? true
+                            :on-after-hide (fn []
+                                             (if asset?
+                                               (p/do!
+                                                (save-asset-title-if-changed! block @*asset-title)
+                                                (focus-table-title-cell *ref set-focus-timeout!))
+                                               (save-block-and-focus *ref set-focus-timeout! false)))})
+                          (when-not asset?
+                            (editor-handler/edit-block! block :max {:container-id :unknown-container})))))))}
      (when leading-action
        [:div.mr-1.flex.shrink-0.items-center.justify-center
         leading-action])
