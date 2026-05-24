@@ -1842,7 +1842,7 @@
           (property-empty-text-value property opts)])))))
 
 (rum/defcs property-scalar-value-aux < rum/static rum/reactive
-  [state block property value* {:keys [editing? on-chosen]
+  [state block property value* {:keys [editing? on-chosen readonly?]
                                 :as opts}]
   (let [property (model/sub-block (:db/id property))
         type (:logseq.property/type property)
@@ -1857,6 +1857,9 @@
     (cond
       (= :logseq.property/icon (:db/ident property))
       (icon-row block editing?)
+
+      readonly?
+      (property-value-inner block property value opts)
 
       (and (= type :number) (not editing?) (not closed-values?))
       (single-number-input block property value (:table-view? opts))

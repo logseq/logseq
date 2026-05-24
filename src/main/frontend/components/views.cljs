@@ -453,10 +453,11 @@
             (ui/icon "layout-sidebar-right"))]]))]))
 
 (defn build-columns
-  [config properties & {:keys [with-object-name? with-id? add-tags-column? advanced-query?]
+  [config properties & {:keys [with-object-name? with-id? add-tags-column? advanced-query? readonly-property-idents]
                         :or {with-object-name? true
                              with-id? true
-                             add-tags-column? true}}]
+                             add-tags-column? true
+                             readonly-property-idents #{}}}]
   (let [properties' (->>
                      (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?))
                        properties
@@ -520,15 +521,20 @@
                     :cell (or (:cell property)
                               (when (de/entity? property)
                                 (fn [_table row _column style]
-                                  (pv/property-value row property {:view? true
-                                                                   :table-view? true
-                                                                   :table-text-property-render
-                                                                   (fn [block opts]
-                                                                     (block-title block (assoc opts
-                                                                                               :row row
-                                                                                               :property property
-                                                                                               :width (:width style)
-                                                                                               :sidebar? (:sidebar? config))))}))))
+                                  (let [readonly? (contains? readonly-property-idents ident)
+                                        opts (cond->
+                                             {:view? true
+                                              :table-view? true
+                                              :table-text-property-render
+                                              (fn [block opts]
+                                                (block-title block (assoc opts
+                                                                          :row row
+                                                                          :property property
+                                                                          :width (:width style)
+                                                                          :sidebar? (:sidebar? config))))}
+                                               readonly?
+                                               (assoc :readonly? true))]
+                                    (pv/property-value row property opts)))))
                     :get-value get-value
                     :type (:type property)}))))
            properties')

@@ -660,7 +660,10 @@
                                  [annotation-index])
         ;; Properties can be nil for published private graphs
         properties' (remove nil? properties)
-        columns* (views/build-columns config properties' {:add-tags-column? true})
+        columns* (views/build-columns config properties' (cond->
+                                                          {:add-tags-column? true}
+                                                          (= db-ident :logseq.class/Asset)
+                                                          (assoc :readonly-property-idents #{:logseq.property.asset/type})))
         columns (cond
                   (= db-ident :logseq.class/Pdf-annotation)
                   (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)
