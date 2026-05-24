@@ -1390,10 +1390,21 @@
       (ui/icon (if asset? "upload" "plus")))
      [:div (t :node/new)])))
 
+(defn- table-content-width
+  [table show-add-property?]
+  (let [sized-columns (get-in table [:state :sized-columns])
+        columns (concat (get-in table [:state :pinned-columns])
+                        (get-in table [:state :unpinned-columns])
+                        (when show-add-property?
+                          [{:id :add-property}]))]
+    (reduce + (map #(table-core/get-column-size % sized-columns) columns))))
+
 (rum/defc add-new-row < rum/static
-  [view-entity table]
+  [view-entity table {:keys [show-add-property?]}]
   [:div.py-1.px-2.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm.border-b
-   {:on-click (fn [_]
+   {:style {:width (table-content-width table show-add-property?)
+            :min-width "100%"}
+    :on-click (fn [_]
                 (let [f (get-in table [:data-fns :add-new-object!])]
                   (f view-entity table)))}
    (ui/icon "plus" {:size 14})
@@ -1536,7 +1547,7 @@
          (table-body table option rows *scroller-ref set-items-rendered!)
 
          (when (and (get-in table [:data-fns :add-new-object!]) (or (empty? rows) items-rendered?))
-           (shui/table-footer (add-new-row (:view-entity option) table)))]]))))
+           (shui/table-footer (add-new-row (:view-entity option) table option)))]]))))
 
 (rum/defcs list-view < rum/static mixins/container-id
   [state {:keys [config ref-matched-children-ids disable-virtualized?] :as option} view-entity {:keys [rows]} *scroller-ref]
