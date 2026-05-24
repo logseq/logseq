@@ -392,6 +392,7 @@
                                                  (util/stop e)
                                                  (save-block-and-focus *ref set-focus-timeout! true)))}
                                             block)])))]
+                          (state/clear-selection!)
                           (shui/popup-show!
                            (.closest (.-target e) ".ls-table-cell")
                            popup
@@ -945,6 +946,7 @@
 (defn- click-cell
   [node]
   (when-let [trigger (dom/sel1 node ".jtrigger")]
+    (state/clear-selection!)
     (.click trigger)))
 
 (defn navigate-to-cell
