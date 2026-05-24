@@ -306,6 +306,11 @@
      :class "block-editor w-full resize-none border-none bg-transparent px-0 pt-2 pb-1 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
      :default-value @*title
      :on-change #(reset! *title (util/evalue %))
+     :on-focus (fn [e]
+                 (let [target (.-target e)
+                       value (or (.-value target) "")
+                       length (.-length value)]
+                   (.setSelectionRange target length length)))
      :on-key-down (fn [e]
                     (util/stop-propagation e)
                     (case (util/ekey e)
