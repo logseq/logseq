@@ -289,14 +289,14 @@
      (shui/popup-hide!))
    (focus-table-title-cell *ref set-focus-timeout!)))
 
-(defn- save-asset-title-if-changed!
+(defn- save-table-title-if-changed!
   [block title]
   (let [value (or title "")
         current (or (:block/title (db/entity (:db/id block))) "")]
     (when-not (= current value)
       (editor-handler/save-block-if-changed! block value {:force? true}))))
 
-(defn- asset-title-editor-popup
+(defn- table-title-editor-popup
   [width *title]
   [:div.ls-table-block
    {:style {:width width :max-width width}
@@ -353,8 +353,12 @@
                         (add-to-sidebar!)
 
                         :else
-                        (let [asset? (and (not many?) (ldb/asset? block))
-                              *asset-title (when asset? (atom (or (:block/title block) "")))
+                        (let [edit-block (or (:table/title-edit-block block) block)
+                              title-only-editor? (and (not many?)
+                                                      (or (:table/title-only-editor? block)
+                                                          (and (ldb/asset? block)
+                                                               (not (:asset-table/nested? block)))))
+                              *title (when title-only-editor? (atom (or (:block/title edit-block) "")))
                               popup (fn []
                                       (let [width (-> (max 160 width) (- 18))]
                                         (cond
@@ -364,8 +368,8 @@
                                             :on-click util/stop-propagation}
                                            (pv/property-value row property {})]
 
-                                          asset?
-                                          (asset-title-editor-popup width *asset-title)
+                                          title-only-editor?
+                                          (table-title-editor-popup width *title)
 
                                           :else
                                           [:div.ls-table-block
@@ -389,12 +393,12 @@
                            {:id :ls-table-block-editor
                             :as-mask? true
                             :on-after-hide (fn []
-                                             (if asset?
+                                             (if title-only-editor?
                                                (p/do!
-                                                (save-asset-title-if-changed! block @*asset-title)
+                                                (save-table-title-if-changed! edit-block @*title)
                                                 (focus-table-title-cell *ref set-focus-timeout!))
                                                (save-block-and-focus *ref set-focus-timeout! false)))})
-                          (when-not asset?
+                          (when-not title-only-editor?
                             (editor-handler/edit-block! block :max {:container-id :unknown-container})))))))}
      (when leading-action
        [:div.mr-1.flex.shrink-0.items-center.justify-center
@@ -402,22 +406,26 @@
 
      (if block
        [:div.flex.min-w-0.flex-row
-        (let [render (fn [block]
+        (let [title-renderer (:table/title-renderer block)
+              render (fn [block]
                        [:div
-                        (inline-title
-                         {:table? true
-                          :block/uuid (:block/uuid block)}
-                         (some->> (:block/title block)
-                                  string/trim
-                                  string/split-lines
-                                  first))])]
+                        (if title-renderer
+                          (title-renderer block)
+                          (inline-title
+                           {:table? true
+                            :block/uuid (:block/uuid block)}
+                           (some->> (:block/title block)
+                                    string/trim
+                                    string/split-lines
+                                    first)))])]
           (if many?
             (->> (map render block*)
                  (interpose [:div.mr-1 ","]))
             (render block*)))]
        [:div])
 
-     (when-not (util/mobile?)
+     (when-not (or (util/mobile?)
+                   (:table/hide-title-actions? block))
        (let [class (mobile-btn-class opacity)]
          [:div.absolute.right-0
           [:div.flex.flex-row.items-center

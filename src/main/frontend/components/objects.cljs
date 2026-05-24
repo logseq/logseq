@@ -281,23 +281,33 @@
         (original-cell table (assoc row :table/title-leading-action toggle) column style))
       (original-cell table row column style))))
 
-(rum/defc asset-annotation-title-cell
+(rum/defc asset-annotation-title
+  [annotation]
+  (shui/button
+   {:variant "ghost"
+    :size :sm
+    :class "min-w-0 justify-start !px-1 text-left font-normal"
+    :title (t :asset/open-pdf-annotation)
+    :aria-label (t :asset/open-pdf-annotation)
+    :on-click (fn [e]
+                (util/stop e)
+                (pdf-assets/open-block-ref! annotation))}
+   [:span.truncate (pdf-annotation-title annotation)]))
+
+(defn- annotation-title-row
   [row annotation-index]
   (let [annotation (or (some-> row :asset-table/annotation-id db/entity)
                        (get-in annotation-index [:image-id->annotation (:db/id row)]))]
-    [:div.flex.h-full.w-full.min-w-0.items-center.gap-1.pl-8
-     (if annotation
-       (shui/button
-        {:variant "ghost"
-         :size :sm
-         :class "min-w-0 justify-start !px-1 text-left font-normal"
-         :title (t :asset/open-pdf-annotation)
-         :aria-label (t :asset/open-pdf-annotation)
-         :on-click (fn [e]
-                     (util/stop e)
-                     (pdf-assets/open-block-ref! annotation))}
-        [:span.truncate (pdf-annotation-title annotation)])
-       [:span.truncate.text-muted-foreground (:block/title row)])]))
+    (assoc row
+           :table/hide-title-actions? true
+           :table/title-only-editor? (some? annotation)
+           :table/title-edit-block annotation
+           :table/title-renderer
+           (fn [_row]
+             [:div.flex.h-full.w-full.min-w-0.items-center.gap-1.pl-8
+              (if annotation
+                (asset-annotation-title annotation)
+                [:span.truncate.text-muted-foreground (:block/title row)])]))))
 
 (defn- wrap-asset-title-column
   [column annotation-index expanded-pdf-ids set-expanded-pdf-ids!]
@@ -306,7 +316,7 @@
            :cell (fn [table row column style]
                    (cond
                      (:asset-table/nested? row)
-                     (asset-annotation-title-cell row annotation-index)
+                     (original-cell table (annotation-title-row row annotation-index) column style)
 
                      (and (pdf-asset? row)
                           (seq (get-in annotation-index [:pdf-id->annotations (:db/id row)])))
