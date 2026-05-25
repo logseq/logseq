@@ -93,7 +93,7 @@
 
 (rum/defc header-index < rum/static
   []
-  [:label.h-8.w-6.flex.items-center.justify-center
+  [:label.h-8.w-full.flex.items-center.justify-end.pr-2
    {:html-for "header-index"
     :title (t :view.table/row-number)}
    "#"])

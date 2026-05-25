@@ -169,13 +169,16 @@
                      (let [id (str (:id row) "-" (:id column))
                            width (get-column-size column sized-columns)
                            select? (= (:id column) :select)
+                           index? (= (:id column) :id)
                            add-property? (= (:id column) :add-property)
                            style {:width width :min-width width}
-                           cell-opts {:key id
-                                      :select? select?
-                                      :add-property? add-property?
-                                      :editable? (column-cell-editable? column row)
-                                      :style style}
+                           cell-opts (cond-> {:key id
+                                              :select? select?
+                                              :add-property? add-property?
+                                              :editable? (column-cell-editable? column row)
+                                              :style style}
+                                       index?
+                                       (assoc :class "ls-table-index-cell"))
                            cell-placeholder (table-cell-container cell-opts nil)]
                        (if (and scrolling? (not (:block/title row)))
                          cell-placeholder

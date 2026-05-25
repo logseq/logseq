@@ -109,6 +109,11 @@
   .ls-table-cell {
     @apply overflow-hidden;
   }
+
+  .ls-table-index-cell > div {
+    @apply justify-end;
+  }
+
   .ls-table-footer {
     @apply absolute left-0 bottom-[8px] w-full;
 
