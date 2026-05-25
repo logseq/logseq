@@ -1,5 +1,5 @@
 (ns electron.git
-  (:require ["dugite" :refer [GitProcess]]
+  (:require ["dugite" :refer [exec]]
             [goog.object :as gobj]
             [electron.configs :as cfgs]
             [electron.state :as state]
@@ -24,7 +24,7 @@
 (defn run-git!
   [graph-path commands]
   (when (and graph-path (fs/existsSync graph-path))
-    (p/let [result (.exec GitProcess commands graph-path)]
+    (p/let [result (exec commands graph-path)]
       (if (zero? (gobj/get result "exitCode"))
         (let [result (gobj/get result "stdout")]
           (p/resolved result))
@@ -36,7 +36,7 @@
 (defn run-git2!
   [graph-path commands]
   (when (and graph-path (fs/existsSync graph-path))
-    (p/let [^js result (.exec GitProcess commands graph-path)]
+    (p/let [^js result (exec commands graph-path)]
       result)))
 
 (defn git-dir-exists?
