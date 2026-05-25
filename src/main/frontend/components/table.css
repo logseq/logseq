@@ -70,6 +70,10 @@
     .multi-values {
       @apply !flex-nowrap;
     }
+
+    > .ls-table-row-cells {
+      height: calc(100% + 1px);
+    }
   }
 
   div[data-testid='virtuoso-item-list'] > div:last-child .ls-table-row::after {

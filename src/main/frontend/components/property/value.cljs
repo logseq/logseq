@@ -1233,7 +1233,7 @@
          string-value))]))
 
 (rum/defc closed-value-item < rum/reactive db-mixins/query
-  [value {:keys [inline-text icon?]}]
+  [value {:keys [inline-text icon? chip?]}]
   (when value
     (let [eid (if (entity-map? value) (:db/id value) [:block/uuid value])
           block (or (db/sub-block (:db/id (db/entity eid))) value)
@@ -1244,9 +1244,12 @@
       (cond
         icon
         (if icon?
-          (icon-component/icon icon {:color? true})
-          [:div.flex.flex-row.items-center.gap-1.h-6
-           (icon-component/icon icon {:color? true})
+          (icon-component/icon icon (cond-> {:color? true}
+                                      chip? (assoc :size 13)))
+          [:div.flex.flex-row.items-center.justify-center.gap-1
+           {:class (if chip? "h-4" "h-6")}
+           (icon-component/icon icon (cond-> {:color? true}
+                                       chip? (assoc :size 13)))
            (when value'
              [:span value'])])
 
@@ -1257,15 +1260,25 @@
         [:span.number (str value')]
 
         :else
-        [:span.inline-flex.w-full
+        [:span {:class (if chip?
+                         "inline-flex items-center justify-center min-w-0 max-w-full"
+                         "inline-flex w-full")}
          (let [value' (str value')
                value' (if (string/blank? value')
                         (t :ui/empty)
                         value')]
-           (inline-text {} :markdown value'))]))))
+           (inline-text (cond-> {}
+                          chip? (assoc :add-margin? false))
+                        :markdown value'))]))))
+
+(rum/defc closed-value-chip < rum/static
+  [value opts]
+  [:span.ls-property-choice-chip
+   [:span.ls-property-choice-chip-content
+    (closed-value-item value (assoc opts :chip? true))]])
 
 (rum/defc select-item
-  [property type value {:keys [page-cp inline-text other-position? property-position table-view? _icon?] :as opts}]
+  [property type value {:keys [page-cp inline-text other-position? property-position table-view? closed-value-display _icon?] :as opts}]
   (let [closed-values? (seq (:property/closed-values property))
         tag? (or (:tag? opts) (= (:db/ident property) :block/tags))
         inline-text-cp (fn [content]
@@ -1277,7 +1290,9 @@
        (property-empty-btn-value property)
 
        closed-values?
-       (closed-value-item value opts)
+       (if (= closed-value-display :chip)
+         (closed-value-chip value opts)
+         (closed-value-item value opts))
 
        (or (entity-util/page? value)
            (seq (:block/tags value)))
@@ -1996,6 +2011,8 @@
   [block property v {:keys [on-chosen editing?] :as opts}]
   (let [type (:logseq.property/type property)
         date? (= type :date)
+        closed-values? (seq (:property/closed-values property))
+        closed-value-chip? (= (:closed-value-display opts) :chip)
         *el (hooks/use-ref nil)
         items (cond->> (if (entity-map? v) #{v} v)
                 (= (:db/ident property) :block/tags)
@@ -2059,14 +2076,19 @@
                  (rum/with-key
                    (asset-value-content item)
                    (or (:block/uuid item) (str item))))
-               (concat
-                (->> (for [item items]
-                       (rum/with-key
-                         (select-item property type item (assoc opts :show-popup! show-popup!))
-                         (or (:block/uuid item) (str item))))
-                     (interpose [:span.opacity-50.-ml-1 ","]))
-                (when date?
-                  [(property-value-date-picker block property nil {:toggle-fn toggle-fn})])))
+               (if (and closed-value-chip? closed-values?)
+                 (for [item items]
+                   (rum/with-key
+                     (closed-value-chip item opts)
+                     (or (:block/uuid item) (str item))))
+                 (concat
+                  (->> (for [item items]
+                         (rum/with-key
+                           (select-item property type item (assoc opts :show-popup! show-popup!))
+                           (or (:block/uuid item) (str item))))
+                       (interpose [:span.opacity-50.-ml-1 ","]))
+                  (when date?
+                    [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))))
              (if date?
                (property-value-date-picker block property nil {:toggle-fn toggle-fn})
                (if (= type :asset)

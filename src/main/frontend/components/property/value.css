@@ -46,6 +46,14 @@
   min-height: 20px;
 }
 
+.ls-property-choice-chip {
+  @apply inline-flex items-center justify-center min-w-0 max-w-full h-6 px-1 rounded-sm border border-border bg-secondary text-sm leading-5;
+}
+
+.ls-property-choice-chip-content {
+  @apply inline-flex items-center justify-center min-w-0 max-w-full truncate;
+}
+
 .ls-repeat-task-frequency .property-value-inner {
   @apply border rounded pl-2;
   min-width: 3em;
