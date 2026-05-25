@@ -518,6 +518,76 @@
                                  (:template (ex-data e))))))
                (p/finally done)))))
 
+(deftest test-agent-bridge-listener-routes-id-valued-task-routability-datoms
+  (async done
+         (let [calls* (atom [])
+               task (task-block {})
+               route-opts {:repo "logseq_db_demo"
+                           :graph "demo"
+                           :agent-name "build-host"
+                           :prompt-templates {:task "Task {{graph}} {{block-uuid}} {{agent-name}}\n{{task-block-tree}}"}
+                           :routing-blocks* (atom #{})}]
+           (-> (p/with-redefs [transport/invoke
+                                (fn [_cfg method args]
+                                  (swap! calls* conj [method args])
+                                  (case method
+                                    :thread-api/pull
+                                    (let [[_repo _selector lookup] args]
+                                      (case lookup
+                                        42 (p/resolved task)
+                                        900 (p/resolved {:db/id 900
+                                                         :db/ident :logseq.class/Task})
+                                        901 (p/resolved {:db/id 901
+                                                         :db/ident :logseq.property/status.todo})
+                                        (p/rejected (ex-info "unexpected pull"
+                                                             {:lookup lookup}))))
+
+                                    :thread-api/q
+                                    (p/resolved :logseq.property/status.todo)
+
+                                    :thread-api/apply-outliner-ops
+                                    (p/resolved {:ok true})
+
+                                    (p/rejected (ex-info "unexpected invoke"
+                                                         {:method method
+                                                          :args args}))))
+                                show-command/execute-show
+                                (fn [_action _cfg]
+                                  (p/resolved {:status :ok
+                                               :data {:message "- Ship the CLI bridge"}}))
+                                cli-server/ensure-server!
+                                (fn [cfg _repo]
+                                  (assoc cfg :base-url "http://127.0.0.1:1234"))
+                                agent-command/start-codex!
+                                (fn [_command _opts]
+                                  (swap! calls* conj [:codex])
+                                  (p/resolved {:session "session-123"
+                                               :status :running}))
+                                agent-command/record-session!
+                                (fn [_cfg _session-record]
+                                  true)
+                                agent-command/write-agent-session-id!
+                                (fn [_cfg _repo _block-uuid _session-id]
+                                  (p/resolved true))]
+                 (#'agent-command/process-sync-db-changes-event!
+                  {:root-dir "/tmp/logseq"
+                   :base-url "http://127.0.0.1:1234"
+                   :log-fn (fn [_] nil)}
+                  route-opts
+                  {:tx-data [{:e 42
+                              :a :block/tags
+                              :v 900
+                              :added true}
+                             {:e 42
+                              :a :logseq.property/status
+                              :v 901
+                              :added true}]}))
+               (p/then (fn [_]
+                         (is (= 1 (count (filter #(= [:codex] %) @calls*))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest test-agent-bridge-listener-routes-comment-mention-with-context-and-reactions
   (async done
          (let [root (temp-root)
