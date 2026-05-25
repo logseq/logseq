@@ -220,7 +220,7 @@ private fun SelectionActionBar(
                         .weight(1f)
                         .horizontalScroll(scrollState),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     mainActions.forEach { action ->
                         SelectionActionButton(action, tint, onAction)
@@ -230,14 +230,14 @@ private fun SelectionActionBar(
 
             trailingAction?.let { action ->
                 if (mainActions.isNotEmpty()) {
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Divider(
                         modifier = Modifier
                             .height(28.dp)
                             .width(1.dp),
                         color = tint.copy(alpha = 0.15f)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                 }
                 SelectionActionButton(action, tint, onAction)
             }
@@ -257,9 +257,9 @@ private fun SelectionActionButton(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier
-            .defaultMinSize(minWidth = 56.dp)
+            .defaultMinSize(minWidth = 48.dp)
             .clickable { onAction(action.id) }
-            .padding(horizontal = 6.dp, vertical = 8.dp)
+            .padding(horizontal = 4.dp, vertical = 8.dp)
     ) {
         if (icon != null) {
             Icon(

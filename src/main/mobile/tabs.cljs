@@ -15,8 +15,8 @@
     :systemImage "tray"
     :role "normal"}
    {:id "flashcards"
-    :title-key :nav/flashcards
-    :systemImage "infinity"
+    :title-key :mobile.tab/flashcards
+    :systemImage "rectangle.stack"
     :role "normal"}
    {:id "go to"
     :title-key :mobile.tab/go-to
@@ -29,8 +29,9 @@
 (def required-tab-id "home")
 
 (defn max-main-tabs
-  [native-iphone?]
-  (if native-iphone? 4 5))
+  "Maximum number of configurable main tabs shown across mobile platforms."
+  []
+  4)
 
 (defn available-tabs
   [{:keys [flashcards?]}]

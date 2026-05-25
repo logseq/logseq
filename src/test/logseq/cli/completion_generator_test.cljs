@@ -632,6 +632,23 @@
             (is (contains? sub-subcmds "restore"))
             (is (contains? sub-subcmds "remove"))))))))
 
+;; Regression: `logseq list page -g woot -<TAB>` must offer leaf (command-specific) options
+;; e.g. --journal-only, not just globals. _arguments at the dispatcher
+;; level must stop consuming options once the subcommand is identified.
+;; The `(-)` exclusion list on the positional and rest specs delegates
+;; option parsing/completion entirely to the leaf function.
+(deftest test-zsh-dispatchers-disable-option-parsing-after-subcommand
+  (let [output (gen/generate-completions "zsh" full-table)]
+    (testing "top-level dispatcher uses (-) on positional and rest"
+      (is (re-find #"(?s)_logseq\(\) \{.*?'\(-\)1:command:->cmds'.*?'\(-\)\*::args:->args'"
+                   output)))
+    (testing "group dispatcher (e.g. _logseq_list) uses (-) on positional and rest"
+      (is (re-find #"(?s)_logseq_list\(\) \{.*?'\(-\)1:subcommand:->subcmd'.*?'\(-\)\*::args:->args'"
+                   output)))
+    (testing "subgroup dispatcher (e.g. _logseq_graph_backup) uses (-) on positional and rest"
+      (is (re-find #"(?s)_logseq_graph_backup\(\) \{.*?'\(-\)1:subcommand:->subcmd'.*?'\(-\)\*::args:->args'"
+                   output)))))
+
 (deftest test-e2e-generated-header
   (testing "zsh output includes do-not-edit header"
     (let [output (gen/generate-completions "zsh" full-table)]

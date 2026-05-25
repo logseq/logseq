@@ -177,7 +177,8 @@
                                        :page-names (sort (keys @page-names-to-uuids))})))))
 
 (defn- replace-namespace-with-parent [block page-names-to-uuids parent-k]
-  (if (:block/namespace block)
+  (if (and (:block/namespace block)
+           (not (:block/journal-day block)))
     (-> (dissoc block :block/namespace)
         (assoc parent-k
                {:block/uuid (get-page-uuid page-names-to-uuids
@@ -1571,14 +1572,15 @@
              (not (get @assets asset-link-or-name))
              (string/ends-with? path ".pdf")
              (fn? <get-file-stat))
-    (-> (p/let [^js stat (<get-file-stat path)]
+    (-> (p/let [stat (<get-file-stat path)]
           (swap! assets assoc asset-link-or-name
                  {:asset-id (d/squuid)
                   :type "pdf"
                   ;; avoid using the real checksum since it could be the same with in-graph asset
                   :checksum "0000000000000000000000000000000000000000000000000000000000000000"
                   ;; gracefully create stat-less assets so that references to them are still valid
-                  :size (if stat (.-size stat) 0)
+                  ;; Electron IPC returns a CLJS map, while Node import scripts return fs.Stats.
+                  :size (or (:size stat) (some-> stat .-size) 0)
                   :external-url (or asset-link-or-name path)
                   :external-file-name asset-path}))
         (p/catch (fn [error]
@@ -2017,12 +2019,87 @@
     (cond-> page'
       true
       (dissoc :block/format)
-      (:block/namespace page)
+      (and (:block/namespace page) (not (:block/journal-day page)))
       ((fn [block']
          (merge (build-new-namespace-page block')
                 {;; save original name b/c it's still used for a few name lookups
                  ::original-name (:block/name block')
                  ::original-title (:block/title block')}))))))
+
+(defn sanitize-page-aliases-for-import!
+  "Removes alias declarations that violate ownership invariants across imported files.
+  Mutates alias-owners-atom (alias-name -> canonical-name map) and ignored-properties-atom.
+  Violations detected: duplicate owner (two pages claiming same alias),
+  alias-of-alias (a page used as alias that itself owns aliases),
+  cross-file source-is-alias (a page that is already an alias across files trying to own aliases), and
+  cross-file alias-owns-aliases (an alias target that already owns aliases in a previous file).
+  Returns a vec of pages with conflicting aliases stripped."
+  [pages alias-owners-atom ignored-properties-atom]
+  (let [;; Within this batch: first-declared owner wins for duplicate detection
+        batch-alias->owner
+        (reduce (fn [acc page]
+                  (reduce (fn [acc2 alias-m]
+                            (let [n (:block/name alias-m)]
+                              (if (contains? acc2 n) acc2 (assoc acc2 n (:block/name page)))))
+                          acc (:block/alias page)))
+                {} pages)
+        ;; Names of pages in this batch that themselves declare aliases
+        batch-pages-with-aliases
+        (->> pages (filter #(seq (:block/alias %))) (map :block/name) set)
+        ;; Pages that already own aliases across previously imported files (values of alias-owners-atom)
+        ;; Computed once per call for O(1) per-alias lookup
+        cross-file-alias-owners
+        (set (vals @alias-owners-atom))]
+    (mapv
+     (fn [page]
+       (if-let [aliases (seq (:block/alias page))]
+         (let [canonical (:block/name page)]
+           ;; Cross-file source-is-alias: this canonical page is already registered as someone else's alias
+           (if (contains? @alias-owners-atom canonical)
+             (do (doseq [alias-m aliases]
+                   (swap! ignored-properties-atom conj
+                          {:property :block/alias :value (:block/name alias-m)
+                           :location canonical :reason :alias/source-is-alias}))
+                 (dissoc page :block/alias))
+             (let [valid (filterv
+                          (fn [alias-m]
+                            (let [aname (:block/name alias-m)
+                                  cross-owner (get @alias-owners-atom aname)
+                                  batch-owner (get batch-alias->owner aname)]
+                              (cond
+                                (= aname canonical)
+                                (do (swap! ignored-properties-atom conj
+                                           {:property :block/alias :value aname
+                                            :location canonical :reason :alias/self})
+                                    false)
+                                (and cross-owner (not= cross-owner canonical))
+                                (do (swap! ignored-properties-atom conj
+                                           {:property :block/alias :value aname
+                                            :location canonical :reason :alias/duplicate-owner})
+                                    false)
+                                (and batch-owner (not= batch-owner canonical))
+                                (do (swap! ignored-properties-atom conj
+                                           {:property :block/alias :value aname
+                                            :location canonical :reason :alias/duplicate-owner})
+                                    false)
+                                ;; Cross-file alias-owns-aliases: aname already owns aliases from a previous file
+                                (contains? cross-file-alias-owners aname)
+                                (do (swap! ignored-properties-atom conj
+                                           {:property :block/alias :value aname
+                                            :location canonical :reason :alias/alias-owns-aliases})
+                                    false)
+                                (contains? batch-pages-with-aliases aname)
+                                (do (swap! ignored-properties-atom conj
+                                           {:property :block/alias :value aname
+                                            :location canonical :reason :alias/alias-owns-aliases})
+                                    false)
+                                :else true)))
+                          aliases)]
+               (doseq [alias-m valid]
+                 (swap! alias-owners-atom assoc (:block/name alias-m) canonical))
+               (if (seq valid) (assoc page :block/alias valid) (dissoc page :block/alias)))))
+         page))
+     pages)))
 
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
@@ -2030,13 +2107,16 @@
   data for subsequent steps"
   [conn pages blocks {:keys [import-state user-options]
                       :as options}]
-  (let [all-pages* (->> (extract/with-ref-pages pages blocks)
-                        ;; remove unused property pages unless the page has content
-                        (remove #(and (contains? (into (:property-classes user-options) (:property-parent-classes user-options))
-                                                 (keyword (:block/name %)))
-                                      (not (:block/file %))))
-                        ;; remove file path relative
-                        (map #(dissoc % :block/file)))
+  (let [all-pages* (-> (->> (extract/with-ref-pages pages blocks)
+                            ;; remove unused property pages unless the page has content
+                            (remove #(and (contains? (into (:property-classes user-options) (:property-parent-classes user-options))
+                                                     (keyword (:block/name %)))
+                                          (not (:block/file %))))
+                            ;; remove file path relative
+                            (map #(dissoc % :block/file)))
+                       ;; sanitize alias declarations before transacting
+                       (sanitize-page-aliases-for-import! (:alias-owners import-state)
+                                                          (:ignored-properties import-state)))
         ;; Build all named ents once per import file to speed up named lookups
         all-existing-page-uuids (get-all-existing-page-uuids @(:classes-from-property-parents import-state)
                                                              @(:all-existing-page-uuids import-state))
@@ -2165,7 +2245,10 @@
    ;; Used if a property value changes to :default
    :block-properties-text-values (atom {})
    ;; Track asset data for use across asset and doc import steps
-   :assets (atom {})})
+   :assets (atom {})
+   ;; Map from alias-page-name (string) to canonical-page-name (string) for duplicate-owner detection.
+   ;; Populated as files are imported and used to drop conflicting alias declarations.
+   :alias-owners (atom {})})
 
 (defn- build-tx-options [{:keys [user-options] :as options}]
   (merge
@@ -2523,6 +2606,68 @@
     (when (seq tx)
       (d/transact! conn tx))))
 
+(defn- journal-uuid-normalizations
+  [db]
+  (keep (fn [datom]
+          (let [entity (d/entity db (:e datom))
+                old-uuid (:block/uuid entity)
+                journal-day (:block/journal-day entity)
+                standard-uuid (common-uuid/gen-uuid :journal-page-uuid journal-day)]
+            (when (and old-uuid (not= old-uuid standard-uuid))
+              (when-let [target (d/entity db [:block/uuid standard-uuid])]
+                (when (not= (:db/id target) (:db/id entity))
+                  (throw (ex-info "Cannot normalize journal uuid because the standard uuid is already used"
+                                  {:journal-day journal-day
+                                   :old-uuid old-uuid
+                                   :standard-uuid standard-uuid
+                                   :target-id (:db/id target)}))))
+              {:eid (:db/id entity)
+               :old-uuid old-uuid
+               :standard-uuid standard-uuid})))
+        (d/datoms db :avet :block/journal-day)))
+
+(defn- replace-journal-uuid-refs
+  [value uuid-replacements]
+  (if (seq uuid-replacements)
+    (walk/postwalk
+     (fn [x]
+       (if (string? x)
+         (reduce (fn [s [old-uuid standard-uuid]]
+                   (-> s
+                       (string/replace (page-ref/->page-ref old-uuid)
+                                       (page-ref/->page-ref standard-uuid))
+                       (string/replace (block-ref/->block-ref old-uuid)
+                                       (block-ref/->block-ref standard-uuid))))
+                 x
+                 uuid-replacements)
+         x))
+     value)
+    value))
+
+(defn- normalize-journal-uuids-tx
+  [db]
+  (let [normalizations (vec (journal-uuid-normalizations db))
+        uuid-replacements (map (juxt :old-uuid :standard-uuid) normalizations)
+        uuid-tx (mapcat (fn [{:keys [eid old-uuid standard-uuid]}]
+                          [[:db/retract eid :block/uuid old-uuid]
+                           [:db/add eid :block/uuid standard-uuid]])
+                        normalizations)
+        text-tx (when (seq uuid-replacements)
+                  (keep (fn [datom]
+                          (let [value (:v datom)
+                                value' (when (or (string? value) (coll? value))
+                                         (replace-journal-uuid-refs value uuid-replacements))]
+                            (when (and (some? value') (not= value value'))
+                              [:db/add (:e datom) (:a datom) value'])))
+                        (d/datoms db :eavt)))]
+    (vec (concat uuid-tx text-tx))))
+
+(defn- normalize-journal-uuids!
+  [conn]
+  (let [tx (normalize-journal-uuids-tx @conn)]
+    (when (seq tx)
+      (d/transact! conn tx))))
+
 (defn export-doc-files
   "Exports all user created files i.e. under journals/ and pages/.
    Recommended to use build-doc-options and pass that as options"
@@ -2544,9 +2689,11 @@
             (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
                      (inc i))))
         (p/then (fn [_]
-                  (p/let [tx-report (cleanup-missing-block-refs! conn)
-                          _ (when tx-report (on-tx-report tx-report))]
-                    tx-report)))
+                  (p/let [normalize-tx-report (normalize-journal-uuids! conn)
+                          _ (when normalize-tx-report (on-tx-report normalize-tx-report))
+                          cleanup-tx-report (cleanup-missing-block-refs! conn)
+                          _ (when cleanup-tx-report (on-tx-report cleanup-tx-report))]
+                    cleanup-tx-report)))
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
                                  :level :error

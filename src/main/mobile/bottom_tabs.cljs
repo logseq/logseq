@@ -110,7 +110,8 @@
 (defn- delete-local-graph!
   [url]
   (when-let [repo (repo-by-url url)]
-    (repo-handler/remove-repo! repo)))
+    (when (repo-handler/removable-repo? repo (state/get-repos))
+      (repo-handler/remove-repo! repo))))
 
 (defn- refresh-remote-graphs!
   []
@@ -273,14 +274,14 @@
   (mobile-tabs/selected-tab-ids
    (storage/get :ls-mobile-tabs)
    {:flashcards? (state/enable-flashcards?)}
-   (mobile-tabs/max-main-tabs (mobile-util/native-iphone?))))
+   (mobile-tabs/max-main-tabs)))
 
 (defn configure
   []
   (let [tabs (->> (mobile-tabs/tab-configs
                    (storage/get :ls-mobile-tabs)
                    {:flashcards? (state/enable-flashcards?)}
-                   (mobile-tabs/max-main-tabs (mobile-util/native-iphone?)))
+                   (mobile-tabs/max-main-tabs))
                   (mapv translated-tab))]
     (configure-tabs
      (cond-> tabs
