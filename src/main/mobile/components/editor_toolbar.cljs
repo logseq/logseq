@@ -12,9 +12,6 @@
             [goog.dom :as gdom]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.shui.hooks :as hooks]
-            [mobile.components.recorder :as recorder]
-            [mobile.init :as mobile-init]
-            [promesa.core :as p]
             [rum.core :as rum]))
 
 (defn- blur-if-compositing
@@ -39,21 +36,32 @@
 
 (defn- insert-page-ref!
   []
-  (when-let [input (state/get-input)]
-    (state/clear-editor-action!)
-    (let [selection (editor-handler/get-selection-and-format)
-          {:keys [selection-start selection-end selection]} selection]
-      (if selection
-        (do
-          (editor-handler/delete-and-update input selection-start selection-end)
-          (editor-handler/insert (page-ref/->page-ref selection)))
-        (insert-text page-ref/left-and-right-brackets
-                     {:backward-pos 2
-                      :check-fn (fn [_ _ _]
-                                  (let [input (state/get-input)
-                                        new-pos (cursor/get-caret-pos input)]
-                                    (state/set-editor-action-data! {:pos new-pos})
-                                    (commands/handle-step [:editor/search-page])))})))))
+  (when (state/get-edit-input-id)
+    (let [input (state/get-input)]
+      (state/clear-editor-action!)
+      (let [selection (editor-handler/get-selection-and-format)
+            {:keys [selection-start selection-end selection]} selection]
+        (if (and input selection)
+          (do
+            (editor-handler/delete-and-update input selection-start selection-end)
+            (editor-handler/insert (page-ref/->page-ref selection)))
+          (insert-text page-ref/left-and-right-brackets
+                       {:backward-pos 2
+                        :check-fn (fn [_ _ _]
+                                    (let [input (state/get-input)
+                                          new-pos (cursor/get-caret-pos input)]
+                                      (state/set-editor-action-data! {:pos new-pos})
+                                      (commands/handle-step [:editor/search-page])))}))))))
+
+(defn- comment-editor-config
+  []
+  (let [config (last (state/get-editor-args))]
+    (when (:comment-editor? config)
+      config)))
+
+(defn- comment-asset-target-block
+  []
+  (:comment-asset-target-block (comment-editor-config)))
 
 (defn- indent-outdent-action
   [indent?]
@@ -136,28 +144,32 @@
    :system-icon "camera"
    :event? true
    :handler #(when-let [parent-id (state/get-edit-input-id)]
-               (mobile-camera/embed-photo parent-id))})
+               (mobile-camera/embed-photo parent-id
+                                          {:target-block (comment-asset-target-block)}))})
 
 (defn- audio-action
   []
   {:id "audio"
   :title (t :mobile.toolbar/audio)
    :system-icon "waveform"
-   :handler #(recorder/record!)})
+   :handler #(let [target-block (comment-asset-target-block)]
+               (state/pub-event! [:mobile/start-audio-record
+                                  (cond-> {:save-to-today? false}
+                                    target-block
+                                    (assoc :target-block target-block))]))})
 
 (defn- keyboard-action
   []
-  {:id "keyboard"
-  :title (t :mobile.toolbar/hide)
+   {:id "keyboard"
+   :title (t :mobile.toolbar/hide)
    :system-icon "keyboard.chevron.compact.down"
-   :handler #(p/do!
-              (editor-handler/save-current-block!)
-              (state/clear-edit!)
-              (mobile-init/keyboard-hide))})
+   :handler #(do
+               (editor-handler/save-current-block!)
+               (state/pub-event! [:mobile/clear-edit]))})
 
 (defn- toolbar-actions
   []
-  (if (:comment-editor? (last (state/get-editor-args)))
+  (if (comment-editor-config)
     {:main [(page-ref-action)
             (camera-action)
             (upload-asset-action)
