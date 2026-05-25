@@ -1,5 +1,6 @@
 (ns mobile.selection-toolbar-test
   (:require [cljs.test :refer [deftest is testing]]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [mobile.components.selection-toolbar :as selection-toolbar]))
@@ -21,7 +22,7 @@
         (let [actions (#'selection-toolbar/selection-actions)
               action (some #(when (= "reaction" (:id %)) %) actions)]
           (is (some? action))
-          (is (= "Add reaction" (:label action)))
+          (is (= (t :mobile.toolbar/reaction) (:label action)))
           (when action
             ((:handler action))
             (is (= [[:editor/new-reaction {:block {:block/uuid block-uuid}
