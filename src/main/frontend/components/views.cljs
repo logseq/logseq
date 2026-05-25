@@ -1748,7 +1748,7 @@
       (set-sized-columns! sized-columns)))})
 
 (rum/defc lazy-item
-  [data idx {:keys [properties list-view? scrolling?]} item-render]
+  [data idx {:keys [properties list-view? gallery-view? scrolling?]} item-render]
   (let [item (util/nth-safe data idx)
         db-id (cond (map? item) (:db/id item)
                     (number? item) item
@@ -1758,7 +1758,8 @@
                    (when (= :full (:block.temp/load-status e))
                      e)))
         [item set-item!] (hooks/use-state entity)
-        opts (if list-view?
+        list-or-gallery? (or list-view? gallery-view?)
+        opts (if list-or-gallery?
                {:skip-refresh? true
                 :children? false}
                {:children? false
@@ -1770,7 +1771,7 @@
        (m/sp
          (when (and db-id (not item) (not scrolling?))
            (let [block (c.m/<? (db-async/<get-block (state/get-current-repo) db-id opts))
-                 block' (if list-view? (db/entity db-id) block)]
+                 block' (if list-or-gallery? (db/entity db-id) block)]
              (set-item! block')))))
      [db-id scrolling?])
     (let [item' (cond (map? item) item (number? item) {:db/id item})]
@@ -1923,7 +1924,9 @@
          :compute-item-key (fn [idx]
                              (str (:db/id view-entity) "-card-" idx))
          :item-content (fn [idx]
-                         (lazy-item (:data table) idx (gallery-lazy-item-opts option)
+                         (lazy-item (:data table) idx
+                                    (assoc (gallery-lazy-item-opts option)
+                                           :gallery-view? true)
                                     (fn [block]
                                       (gallery-card-item view-entity block config'
                                                          {:asset-property-ident asset-property-ident

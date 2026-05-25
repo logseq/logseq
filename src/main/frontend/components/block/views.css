@@ -49,7 +49,7 @@
   }
 
   .ls-gallery-card-title {
-    @apply min-w-0 truncate text-sm font-normal leading-snug text-foreground opacity-100;
+    @apply min-w-0 truncate text-sm font-medium leading-snug text-foreground opacity-100;
   }
 
   .ls-gallery-card-property {
