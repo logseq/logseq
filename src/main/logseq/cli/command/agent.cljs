@@ -1008,13 +1008,14 @@
           (partition-all limit coll)))
 
 (defn- process-tasks!
-  [cfg {:keys [repo graph agent-name prompt-templates]}]
+  [cfg {:keys [repo graph agent-name prompt-templates routing-blocks*]}]
   (p/let [tasks (list-routable-tasks cfg repo agent-name)]
     (p-map-batched max-concurrent-routes
                    #(route-task-once! cfg {:repo repo
                                            :graph graph
                                            :agent-name agent-name
-                                           :prompt-templates prompt-templates}
+                                           :prompt-templates prompt-templates
+                                           :routing-blocks* routing-blocks*}
                                       %)
                    tasks)))
 
@@ -1332,8 +1333,8 @@
         (p/all routing)))))
 
 (defn- listen-forever!
-  [cfg {:keys [repo graph agent-name prompt-templates]}]
-  (let [routing-blocks* (atom #{})
+  [cfg {:keys [repo graph agent-name prompt-templates routing-blocks*]}]
+  (let [routing-blocks* (or routing-blocks* (atom #{}))
         handle-error! (fn [e]
                         (emit-log! cfg (log-line (str "Codex invocation failed: "
                                                       (or (ex-message e) (str e)))))
@@ -1402,24 +1403,29 @@
                   (do
                     (doseq [line (conj logs (log-line "listening graph changes ..."))]
                       (emit-log! cfg line))
-                    (p/let [routed (process-tasks! cfg {:repo repo
-                                                        :graph graph
-                                                        :agent-name agent-name
-                                                        :prompt-templates prompt-templates})]
-                      {:status :ok
-                       :command :agent-bridge
-                       :data {:mode :processed-once
-                              :graph graph
-                              :agent-name agent-name
-                              :routed routed}}))
-                  (let [listen-promise (listen-forever! cfg {:repo repo
+                    (let [routing-blocks* (atom #{})]
+                      (p/let [routed (process-tasks! cfg {:repo repo
+                                                          :graph graph
+                                                          :agent-name agent-name
+                                                          :prompt-templates prompt-templates
+                                                          :routing-blocks* routing-blocks*})]
+                        {:status :ok
+                         :command :agent-bridge
+                         :data {:mode :processed-once
+                                :graph graph
+                                :agent-name agent-name
+                                :routed routed}})))
+                  (let [routing-blocks* (atom #{})
+                        listen-promise (listen-forever! cfg {:repo repo
                                                              :graph graph
                                                              :agent-name agent-name
-                                                             :prompt-templates prompt-templates})]
+                                                             :prompt-templates prompt-templates
+                                                             :routing-blocks* routing-blocks*})]
                     (doseq [line (conj logs (log-line "listening graph changes ..."))]
                       (emit-log! cfg line))
                     (p/let [_ (process-tasks! cfg {:repo repo
                                                    :graph graph
                                                    :agent-name agent-name
-                                                   :prompt-templates prompt-templates})]
+                                                   :prompt-templates prompt-templates
+                                                   :routing-blocks* routing-blocks*})]
                       listen-promise)))))))))))
