@@ -1,6 +1,63 @@
+.ls-gallery-action-bar-slot {
+  @apply fixed inset-x-0 bottom-0 z-[100] flex justify-center px-4;
+  background: linear-gradient(to top, var(--ls-primary-background-color) 0%, var(--ls-primary-background-color) 42%, transparent 100%);
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.ls-gallery-action-bar {
+  @apply flex h-8 max-w-[calc(100vw-2rem)] flex-row items-center overflow-x-auto rounded-md border border-border bg-background;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18), 0 2px 6px rgb(0 0 0 / 0.12);
+  pointer-events: auto;
+}
+
+.ls-gallery-action-select-all {
+  @apply flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center border-r border-border;
+}
+
+.ls-gallery-action-bar .ls-table-actions > div:first-child {
+  @apply px-2;
+}
+
 .ls-cards {
+  --ls-gallery-card-width: 220px;
+  --ls-gallery-card-height: 320px;
+  position: relative;
+
   .ls-card-item {
-    @apply dark:shadow-gray-700 shadow-md rounded-md p-4 h-[15rem] w-full overflow-auto;
+    @apply w-full overflow-hidden rounded-md border border-transparent bg-transparent shadow-none transition-all;
+    @apply hover:border-border hover:shadow-sm active:border-primary active:shadow-md dark:hover:border-gray-700 dark:hover:shadow-gray-800;
+    height: var(--ls-gallery-card-height);
+    cursor: pointer;
+    display: flex;
+    align-items: stretch;
+  }
+
+  .ls-card-item.has-gallery-asset {
+    align-items: flex-start;
+    justify-content: center;
+  }
+
+  .ls-gallery-card-content {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+  }
+
+  .ls-card-item.has-gallery-asset .ls-gallery-card-content {
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .ls-card-item.has-gallery-asset .ls-gallery-card-title {
+    text-align: left;
+  }
+
+  .ls-card-item.has-gallery-asset .ls-gallery-card-meta,
+  .ls-card-item.has-gallery-asset .ls-gallery-card-property {
+    text-align: left;
   }
 
   > div[data-virtuoso-scroller] {
@@ -8,10 +65,183 @@
   }
 
   .virtuoso-grid-list {
-    @apply flex flex-wrap gap-3;
+    @apply flex w-full flex-wrap justify-between gap-y-8;
+    column-gap: 1rem;
   }
 
   .virtuoso-grid-item {
-    @apply flex w-[290px];
+    @apply flex;
+    width: min(var(--ls-gallery-card-width), 100%);
+    flex: 0 1 min(var(--ls-gallery-card-width), 100%);
+  }
+
+  .ls-gallery-card-media {
+    @apply relative flex items-start justify-start overflow-hidden text-muted-foreground;
+    min-height: 0;
+  }
+
+  .ls-gallery-card-media .asset-action-bar {
+    display: none;
+  }
+
+  .ls-gallery-card-select {
+    @apply absolute right-2 top-2 z-10 h-7 w-7 opacity-0 transition-opacity;
+  }
+
+  .ls-gallery-card-select button[role="checkbox"] {
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px;
+    min-height: 18px;
+    padding: 0 !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgb(255 255 255 / 0.7);
+    border-radius: 5px;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+    backdrop-filter: blur(2px);
+  }
+
+  .ls-gallery-card-select button[role="checkbox"] svg {
+    width: 13px;
+    height: 13px;
+    display: block;
+  }
+
+  .ls-gallery-card-select button[role="checkbox"][data-state="checked"] {
+    color: white;
+    background-color: rgb(2 132 199 / 0.9);
+  }
+
+  .ls-gallery-card-select button[role="checkbox"]:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgb(255 255 255 / 0.8), 0 1px 3px rgb(0 0 0 / 0.25);
+  }
+
+  .dark-theme .ls-gallery-card-select button[role="checkbox"] {
+    background-color: rgb(15 23 42 / 0.65);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
+  }
+
+  .dark-theme .ls-gallery-card-select button[role="checkbox"][data-state="checked"] {
+    background-color: rgb(14 165 233 / 0.78);
+  }
+
+  .dark-theme .ls-gallery-card-select button[role="checkbox"]:focus-visible {
+    box-shadow: 0 0 0 2px rgb(15 23 42 / 0.85), 0 0 0 3px rgb(125 211 252 / 0.75);
+  }
+
+  .ls-card-item:hover .ls-gallery-card-select,
+  .ls-card-item.is-selected .ls-gallery-card-select {
+    @apply opacity-100;
+  }
+
+  .ls-card-item.is-selected {
+    @apply shadow-md;
+  }
+
+  .ls-card-item.has-gallery-asset .ls-gallery-card-media {
+    @apply items-end justify-center;
+  }
+
+  .ls-gallery-card-media .asset-container {
+    @apply flex h-full items-start justify-center;
+    margin-top: 0;
+  }
+
+  .ls-card-item.has-gallery-asset .ls-gallery-card-media .asset-container {
+    @apply items-end;
+    width: auto;
+    max-width: 100%;
+  }
+
+  .ls-gallery-card-media img {
+    @apply block max-h-full max-w-full object-contain;
+    width: auto !important;
+    height: auto !important;
+    object-position: center top;
+    transform: scale(1);
+    transform-origin: center center;
+    transition: transform 160ms ease;
+    will-change: transform;
+  }
+
+  .ls-gallery-card-media:hover img {
+    transform: scale(1.04);
+  }
+
+  .ls-gallery-card-media video,
+  .ls-gallery-card-media audio {
+    @apply max-h-full max-w-full;
+  }
+
+  .ls-gallery-card-meta {
+    @apply flex flex-col gap-1 px-1 py-1.5;
+    box-sizing: border-box;
+    width: 0;
+    min-width: 100%;
+    max-width: 100%;
+  }
+
+  .ls-card-item:not(.has-gallery-asset) .ls-gallery-card-meta {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .ls-gallery-card-title {
+    @apply min-w-0 truncate text-sm font-medium leading-snug text-foreground opacity-100;
+  }
+
+  .ls-gallery-card-property {
+    @apply min-w-0 truncate text-sm font-normal leading-snug text-foreground opacity-90;
+  }
+
+  .ls-gallery-card-title * {
+    @apply text-sm font-normal leading-snug text-foreground opacity-100;
+  }
+
+  .ls-gallery-card-property * {
+    @apply text-sm font-normal leading-snug text-foreground opacity-100;
+  }
+
+  .ls-gallery-card-property .multi-values {
+    @apply block min-w-0;
+    white-space: normal;
+  }
+
+  .ls-gallery-card-property .multi-values > * {
+    display: inline;
+  }
+
+  .ls-gallery-card-property .multi-values > .opacity-50 {
+    @apply ml-0 opacity-100;
+  }
+
+  @media (max-width: 640px) {
+    .virtuoso-grid-list {
+      @apply gap-3;
+    }
+
+    .virtuoso-grid-item {
+      width: calc((100% - 0.75rem) / 2);
+      flex-basis: calc((100% - 0.75rem) / 2);
+    }
+
+    .ls-card-item {
+      height: auto;
+      min-height: 220px;
+    }
+
+    .ls-gallery-card-media {
+      height: clamp(140px, 48vw, 220px);
+    }
+  }
+
+  @media (max-width: 360px) {
+    .virtuoso-grid-item {
+      width: 100%;
+      flex-basis: 100%;
+    }
   }
 }

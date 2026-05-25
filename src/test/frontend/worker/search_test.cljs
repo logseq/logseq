@@ -3,7 +3,8 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.search :as search]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.test.helper :as db-test]))
 
 (defn- sql-placeholder-count
   [sql]
@@ -513,6 +514,185 @@
           (is (not (contains? result :block/tags)))
           (is (not (contains? result :logseq.property/icon)))
           (is (not (contains? result :alias))))))))
+
+(deftest block-index-includes-page-alias-titles
+  (testing "page aliases can be matched by page-ref autocomplete search"
+    (let [page-id #uuid "00000000-0000-0000-0000-000000000234"
+          page {:db/id 1
+                :block/uuid page-id
+                :block/title "Artificial Intelligence"
+                :block/alias [{:db/id 2
+                               :block/uuid #uuid "00000000-0000-0000-0000-000000000235"
+                               :block/title "ai"}]}]
+      (with-redefs [ldb/page? (fn [entity] (= (:db/id entity) (:db/id page)))
+                    ldb/object? (constantly false)
+                    ldb/journal? (constantly false)
+                    ldb/closed-value? (constantly false)
+                    ldb/hidden? (constantly false)
+                    ldb/get-title-with-parents (fn [entity] (:block/title entity))]
+        (let [indexed (search/block->index page)]
+          (is (= (str page-id) (:id indexed)))
+          (is (= "Artificial Intelligence ai" (:title indexed))))))))
+
+(deftest search-result-keeps-page-title-when-alias-matches
+  (testing "alias matches annotate the page result without replacing its title"
+    (let [page-id #uuid "00000000-0000-0000-0000-000000000236"
+          alias-id #uuid "00000000-0000-0000-0000-000000000237"
+          page {:db/id 1
+                :block/uuid page-id
+                :block/title "Artificial Intelligence"
+                :block/alias [{:db/id 2
+                               :block/uuid alias-id
+                               :block/title "ai"}]}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (when (= id page-id)
+                                 page))
+                    ldb/page? (fn [entity] (= (:db/id entity) (:db/id page)))
+                    ldb/built-in? (constantly false)
+                    ldb/hidden? (constantly false)]
+        (let [result (#'search/search-result->block-result
+                      (atom :db)
+                      "ai"
+                      nil
+                      {:enable-snippet? false}
+                      {:id (str page-id)
+                       :page (str page-id)
+                       :title "Artificial Intelligence ai"})]
+          (is (= "Artificial Intelligence" (:block/title result)))
+          (is (= {:block/uuid alias-id
+                  :block/title "ai"}
+                 (:alias result))))))))
+
+(deftest search-result-detects-alias-match-from-pulled-result-map
+  (testing "pulled search result maps include aliases for alias-match detection"
+    (let [page-id #uuid "00000000-0000-0000-0000-000000000238"
+          alias-id #uuid "00000000-0000-0000-0000-000000000239"
+          block-key :frontend.worker.search/block
+          page {:db/id 1
+                :block/uuid page-id
+                :block/title "Artificial Intelligence"
+                :block/alias [{:block/uuid alias-id
+                               :block/title "ai"}]}]
+      (with-redefs [d/entity (fn [& _]
+                               (throw (js/Error. "search result block should come from pull map")))
+                    ldb/page? (fn [entity] (= (:db/id entity) (:db/id page)))
+                    ldb/built-in? (constantly false)
+                    ldb/hidden? (constantly false)]
+        (let [result (#'search/search-result->block-result
+                      (atom :db)
+                      "ai"
+                      nil
+                      {:enable-snippet? false}
+                      {:id (str page-id)
+                       :page (str page-id)
+                       :title "Artificial Intelligence ai"
+                       block-key page})]
+          (is (= "Artificial Intelligence" (:block/title result)))
+          (is (= {:block/uuid alias-id
+                  :block/title "ai"}
+                 (:alias result))))))))
+
+(deftest search-result-keeps-page-title-when-canonical-title-matches
+  (testing "page results display the canonical title when the indexed title also contains aliases"
+    (let [page-id #uuid "00000000-0000-0000-0000-000000000240"
+          page {:db/id 1
+                :block/uuid page-id
+                :block/title "Artificial Intelligence"
+                :block/alias [{:db/id 2
+                               :block/uuid #uuid "00000000-0000-0000-0000-000000000241"
+                               :block/title "ai"}]}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (when (= id page-id)
+                                 page))
+                    ldb/page? (fn [entity] (= (:db/id entity) (:db/id page)))
+                    ldb/built-in? (constantly false)
+                    ldb/hidden? (constantly false)]
+        (let [result (#'search/search-result->block-result
+                      (atom :db)
+                      "Artificial"
+                      nil
+                      {:enable-snippet? false}
+                      {:id (str page-id)
+                       :page (str page-id)
+                       :title "Artificial Intelligence ai"})]
+          (is (= "Artificial Intelligence" (:block/title result)))
+          (is (not (contains? result :alias))))))))
+
+(deftest search-result-snippet-uses-canonical-page-title
+  (testing "page snippets do not display alias titles from the search index"
+    (let [page-id #uuid "00000000-0000-0000-0000-000000000242"
+          page {:db/id 1
+                :block/uuid page-id
+                :block/title "Artificial Intelligence"
+                :block/alias [{:db/id 2
+                               :block/uuid #uuid "00000000-0000-0000-0000-000000000243"
+                               :block/title "ai"}]}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (when (= id page-id)
+                                 page))
+                    ldb/page? (fn [entity] (= (:db/id entity) (:db/id page)))
+                    ldb/built-in? (constantly false)
+                    ldb/hidden? (constantly false)]
+        (let [result (#'search/search-result->block-result
+                      (atom :db)
+                      "Artificial"
+                      nil
+                      {:enable-snippet? true}
+                      {:id (str page-id)
+                       :page (str page-id)
+                       :title "Artificial Intelligence ai"
+                       :snippet "$pfts_2lqh>$Artificial$<pfts_2lqh$ Intelligence ai"})]
+          (is (= "$pfts_2lqh>$Artificial$<pfts_2lqh$ Intelligence" (:block/title result)))
+          (is (not (contains? result :alias))))))))
+
+(deftest search-result-keeps-valid-page-snippet
+  (testing "page snippets are preserved when they only contain canonical title text"
+    (let [page-id #uuid "00000000-0000-0000-0000-000000000244"
+          page {:db/id 1
+                :block/uuid page-id
+                :block/title "Artificial Intelligence"
+                :block/alias [{:db/id 2
+                               :block/uuid #uuid "00000000-0000-0000-0000-000000000245"
+                               :block/title "ai"}]}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (when (= id page-id)
+                                 page))
+                    ldb/page? (fn [entity] (= (:db/id entity) (:db/id page)))
+                    ldb/built-in? (constantly false)
+                    ldb/hidden? (constantly false)]
+        (let [result (#'search/search-result->block-result
+                      (atom :db)
+                      "Artificial"
+                      nil
+                      {:enable-snippet? true}
+                      {:id (str page-id)
+                       :page (str page-id)
+                       :title "Artificial Intelligence ai"
+                       :snippet "$pfts_2lqh>$Artificial$<pfts_2lqh$ Intelligence"})]
+          (is (= "$pfts_2lqh>$Artificial$<pfts_2lqh$ Intelligence" (:block/title result)))
+          (is (not (contains? result :alias))))))))
+(deftest search-result-includes-block-unique-title
+  (testing "search responses include the title cmdk should render"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:Project {:block/title "Project"}
+                           :Area {:block/title "Area"}
+                           :user.class/Milestone {:block/title "Milestone"
+                                                  :build/class-extends [:Project]}
+                           :other.class/Milestone {:block/title "Milestone"
+                                                   :build/class-extends [:Area]}}})
+          milestone (d/entity @conn :user.class/Milestone)
+          result (#'search/search-result->block-result
+                  conn
+                  "stone"
+                  nil
+                  {:enable-snippet? true}
+                  {:id (str (:block/uuid milestone))
+                   :page (str (:block/uuid milestone))
+                   :title "Milestone"})]
+      (is (= "Project/Mile$pfts_2lqh>$stone$<pfts_2lqh$"
+             (:block.temp/unique-title result)))
+      (is (= "Mile$pfts_2lqh>$stone$<pfts_2lqh$"
+             (:block/title result))))))
 
 (deftest upsert-blocks-batches-rows-into-single-sql-statement
   (let [calls (atom [])

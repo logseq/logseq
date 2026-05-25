@@ -126,20 +126,18 @@
            acc []]
     (if (empty? remaining)
       acc
-      (let [item (first remaining)
-            op (nth item 0 nil)
-            attr (nth item 2 nil)
-            value (nth item 3 nil)]
+      (let [item (first remaining)]
         (if (and (vector? item)
-                 (= :db/add op)
-                 (= :block/title attr)
-                 (string? value)
-                 (large-title? value))
-          (p/let [obj (upload-fn repo graph-id value aes-key)
-                  placeholder (assoc-datom-value item "")]
-            (p/recur (rest remaining)
-                     (conj acc placeholder
-                           [:db/add (nth item 1) large-title-object-attr obj])))
+                 (= :db/add (nth item 0 nil))
+                 (= :block/title (nth item 2 nil))
+                 (string? (nth item 3 nil))
+                 (large-title? (nth item 3 nil)))
+          (let [title (nth item 3)]
+            (p/let [obj (upload-fn repo graph-id title aes-key)
+                    placeholder (assoc-datom-value item "")]
+              (p/recur (rest remaining)
+                       (conj acc placeholder
+                             [:db/add (nth item 1) large-title-object-attr obj]))))
           (p/recur (rest remaining) (conj acc item)))))))
 
 (defn rehydrate-large-titles!

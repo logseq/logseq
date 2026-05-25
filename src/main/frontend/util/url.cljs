@@ -1,6 +1,7 @@
 (ns frontend.util.url
   "Util fns related to protocol url"
-  (:require [frontend.db.conn :as db-conn]))
+  (:require [clojure.string :as string]
+            [frontend.db.conn :as db-conn]))
 
 ;; Keep same as electron/electron.core
 (def LSP_SCHEME "logseq")
@@ -52,14 +53,70 @@
    (str (get-logseq-graph-url host repo protocol?)
         "?block-id=" uuid)))
 
-(defn get-logseq-graph-page-url
-  "The URL represents an page in graph with pagename, for example:
-   logseq://graph/abc?page=<page-name>
-   Ensure repo and page-name are valid before hand.
-   host: set to `nil` for local graph
-   protocol?: if true, returns URL with protocol prefix"
-  ([host repo page-name]
-   (get-logseq-graph-page-url host repo page-name true))
-  ([host repo page-name protocol?]
-   (str (get-logseq-graph-url host repo protocol?)
-        "?page=" (encode-param page-name))))
+(defn- strip-trailing-slash
+  [s]
+  (string/replace s #"/+$" ""))
+
+(defn- required-url-part!
+  [k v]
+  (when-not (and (string? v) (not (string/blank? v)))
+    (throw (js/Error. (str "Missing " (name k)))))
+  v)
+
+(defn get-logseq-web-page-url
+  "Canonical web URL for a page. Page routes must always carry `graph-id`."
+  [app-base-url graph-id page-id]
+  (str (strip-trailing-slash (required-url-part! :app-base-url app-base-url))
+       "/page/" (encode-param (required-url-part! :page-id page-id))
+       "?graph-id=" (encode-param (required-url-part! :graph-id graph-id))))
+
+(defn get-logseq-web-block-url
+  "Canonical web URL for a block. Block routes must always carry `graph-id`."
+  [app-base-url graph-id block-id]
+  (str (strip-trailing-slash (required-url-part! :app-base-url app-base-url))
+       "/block/" (encode-param (required-url-part! :block-id block-id))
+       "?graph-id=" (encode-param (required-url-part! :graph-id graph-id))))
+
+(defn- route-from-path-parts
+  [path-parts]
+  (case (first path-parts)
+    "page" (when-let [page-id (second path-parts)]
+             {:to :page
+              :page-id (js/decodeURIComponent page-id)})
+    "block" (when-let [block-id (second path-parts)]
+              {:to :block
+               :block-id (js/decodeURIComponent block-id)})
+    nil))
+
+(defn- path-parts
+  [path]
+  (->> (string/split path #"/")
+       (remove string/blank?)
+       vec))
+
+(defn- hash-route-url
+  [parsed-url]
+  (let [hash (.-hash parsed-url)]
+    (when (string/starts-with? hash "#/")
+      (js/URL. (subs hash 1) "https://logseq.com"))))
+
+(defn parse-web-url-target
+  [url]
+  (let [parsed-url (js/URL. url "https://logseq.com")
+        hash-url (hash-route-url parsed-url)
+        graph-id (or (some-> hash-url .-searchParams (.get "graph-id"))
+                     (.get (.-searchParams parsed-url) "graph-id"))
+        graph-identifier (when (string/blank? graph-id)
+                           (or (some-> hash-url .-searchParams (.get "graph"))
+                               (.get (.-searchParams parsed-url) "graph")))
+        route (or (some-> hash-url .-pathname path-parts route-from-path-parts)
+                  (route-from-path-parts (path-parts (.-pathname parsed-url))))]
+    (cond-> {}
+      (not (string/blank? graph-id))
+      (assoc :graph-id graph-id)
+
+      (not (string/blank? graph-identifier))
+      (assoc :graph-identifier graph-identifier)
+
+      route
+      (assoc :route route))))

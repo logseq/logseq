@@ -610,108 +610,6 @@
      :search ["--content"]}},
    :tags [:upsert :search],
    :extends :non-sync/graph-json-env}
-  {:id "qmd-and-qsearch-json",
-   :setup
-   ["python3 - <<'PY'\nimport base64, pathlib\np = pathlib.Path('{{tmp-dir}}/fake-bin/qmd')\np.parent.mkdir(parents=True, exist_ok=True)\np.write_bytes(base64.b64decode('IyEvdXNyL2Jpbi9lbnYgcHl0aG9uMwppbXBvcnQganNvbgppbXBvcnQgb3MKaW1wb3J0IHBhdGhsaWIKaW1wb3J0IHJlCmltcG9ydCBzeXMKCmFyZ3MgPSBzeXMuYXJndlsxOl0Kc3RhdGUgPSBwYXRobGliLlBhdGgob3MuZW52aXJvblsnUU1EX0ZBS0VfU1RBVEUnXSkKCmlmIGFyZ3MgPT0gWyctLWhlbHAnXToKICAgIHByaW50KCdxbWQgaGVscCcpCiAgICBzeXMuZXhpdCgwKQoKaWYgYXJnc1s6Ml0gPT0gWydjb2xsZWN0aW9uJywgJ3Nob3cnXToKICAgIGlmIG5vdCBzdGF0ZS5leGlzdHMoKToKICAgICAgICBwcmludCgnQ29sbGVjdGlvbiBub3QgZm91bmQnLCBmaWxlPXN5cy5zdGRlcnIpCiAgICAgICAgc3lzLmV4aXQoMSkKICAgIHByaW50KCdDb2xsZWN0aW9uOiAnICsgYXJnc1syXSkKICAgIHByaW50KCcgIFBhdGg6ICAgICAnICsgc3RhdGUucmVhZF90ZXh0KCkuc3RyaXAoKSkKICAgIHByaW50KCcgIFBhdHRlcm46ICAqKi8qLm1kJykKICAgIHN5cy5leGl0KDApCgppZiBhcmdzWzoyXSA9PSBbJ2NvbGxlY3Rpb24nLCAnYWRkJ106CiAgICBzdGF0ZS53cml0ZV90ZXh0KGFyZ3NbMl0pCiAgICBwcmludCgnY3JlYXRlZCcpCiAgICBzeXMuZXhpdCgwKQoKaWYgYXJnc1s6MV0gPT0gWydlbWJlZCddOgogICAgcHJpbnQoJ2VtYmVkZGVkJykKICAgIHN5cy5leGl0KDApCgppZiBhcmdzWzoxXSA9PSBbJ3VwZGF0ZSddOgogICAgcHJpbnQoJ3VwZGF0ZWQnKQogICAgc3lzLmV4aXQoMCkKCmlmIGFyZ3NbOjFdID09IFsncXVlcnknXToKICAgIHJvb3QgPSBwYXRobGliLlBhdGgoc3RhdGUucmVhZF90ZXh0KCkuc3RyaXAoKSkKICAgIHJvd3MgPSBbXQogICAgZm9yIHBhdGggaW4gcm9vdC5yZ2xvYignKi5tZCcpOgogICAgICAgIHRleHQgPSBwYXRoLnJlYWRfdGV4dChlbmNvZGluZz0ndXRmOCcpCiAgICAgICAgbWF0Y2ggPSByZS5zZWFyY2gocic8IS0tIGlkOiAoXGQrKSAtLT4nLCB0ZXh0KQogICAgICAgIGlmIG1hdGNoOgogICAgICAgICAgICByb3dzLmFwcGVuZCh7CiAgICAgICAgICAgICAgICAnc2NvcmUnOiAxLAogICAgICAgICAgICAgICAgJ2ZpbGUnOiAncW1kOi8vY3VzdG9tLycgKyBwYXRoLm5hbWUsCiAgICAgICAgICAgICAgICAnc25pcHBldCc6ICctIHFtZCB0YXJnZXQgPCEtLSBpZDogJyArIG1hdGNoLmdyb3VwKDEpICsgJyAtLT4nLAogICAgICAgICAgICB9KQogICAgICAgICAgICBicmVhawogICAgcHJpbnQoanNvbi5kdW1wcyhyb3dzKSkKICAgIHN5cy5leGl0KDApCgpwcmludCgndW5leHBlY3RlZCBhcmdzOiAnICsgcmVwcihhcmdzKSwgZmlsZT1zeXMuc3RkZXJyKQpzeXMuZXhpdCgyKQo='))\np.chmod(0o755)\nPY"
-    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page QmdSearchPage --content \"qmd target\" >/dev/null"],
-   :cmds
-   ["QMD_FAKE_STATE={{tmp-dir-arg}}/qmd-state PATH={{tmp-dir-arg}}/fake-bin:$PATH {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json qmd --graph {{graph-arg}}"
-    "QMD_FAKE_STATE={{tmp-dir-arg}}/qmd-state PATH={{tmp-dir-arg}}/fake-bin:$PATH {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json qsearch qmd target --graph {{graph-arg}} --no-rerank"],
-   :expect
-   {:exit 0,
-    :stdout-json-paths {[:status] "ok"},
-    :stdout-contains ["qmd target"]},
-   :covers
-   {:commands ["qmd" "qsearch"],
-    :options
-    {:global ["--config" "--graph" "--root-dir" "--output"],
-     :qmd []
-     :qsearch ["--no-rerank"]}},
-   :tags [:qmd :search],
-   :extends :non-sync/graph-json-env}
-  {:id "qmd-and-qsearch-human-page-groups",
-   :setup
-   ["python3 - <<'PY'
-import pathlib
-p = pathlib.Path('{{tmp-dir}}/fake-bin/qmd')
-p.parent.mkdir(parents=True, exist_ok=True)
-p.write_text(r'''#!/usr/bin/env python3
-import json
-import os
-import pathlib
-import re
-import sys
-
-args = sys.argv[1:]
-state = pathlib.Path(os.environ['QMD_FAKE_STATE'])
-
-if args == ['--help']:
-    print('qmd help')
-    sys.exit(0)
-
-if args[:2] == ['collection', 'show']:
-    if not state.exists():
-        print('Collection not found', file=sys.stderr)
-        sys.exit(1)
-    print('Collection: ' + args[2])
-    print('  Path:     ' + state.read_text().strip())
-    print('  Pattern:  **/*.md')
-    sys.exit(0)
-
-if args[:2] == ['collection', 'add']:
-    state.write_text(args[2])
-    print('created')
-    sys.exit(0)
-
-if args[:1] == ['embed']:
-    print('embedded')
-    sys.exit(0)
-
-if args[:1] == ['update']:
-    print('updated')
-    sys.exit(0)
-
-if args[:1] == ['query']:
-    root = pathlib.Path(state.read_text().strip())
-    rows = []
-    for path in sorted(root.rglob('*.md')):
-        text = path.read_text(encoding='utf8')
-        match = re.search(r'<!-- id: (\\d+) -->', text)
-        if match:
-            rows.append({
-                'score': 1,
-                'file': 'qmd://custom/' + path.name,
-                'snippet': '- qmd target <!-- id: ' + match.group(1) + ' -->',
-            })
-            break
-    print(json.dumps(rows))
-    sys.exit(0)
-
-print('unexpected args: ' + repr(args), file=sys.stderr)
-sys.exit(2)
-''')
-p.chmod(0o755)
-PY"
-    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name QmdHumanTag >/dev/null"
-    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name qmd-human-prop --public true >/dev/null"
-    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page QmdHumanPage --content \"qmd target\" --update-tags '[\"QmdHumanTag\"]' --update-properties '{:qmd-human-prop \"rich value\"}' >/dev/null"],
-   :cmds
-   ["QMD_FAKE_STATE={{tmp-dir-arg}}/qmd-human-state PATH={{tmp-dir-arg}}/fake-bin:$PATH {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json qmd --graph {{graph-arg}} >/dev/null"
-    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph switch --graph {{graph-arg}} >/dev/null"
-    "QMD_FAKE_STATE={{tmp-dir-arg}}/qmd-human-state PATH={{tmp-dir-arg}}/fake-bin:$PATH {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human qsearch qmd target --no-rerank"],
-   :expect
-   {:exit 0,
-    :stdout-contains ["QmdHumanPage" "qmd target #QmdHumanTag" "qmd-human-prop: rich value" "└──"],
-    :stdout-not-contains ["QmdHumanPage (1 match)" "PAGE-TITLE" "Count:"]},
-   :covers
-   {:commands ["upsert tag" "upsert property" "qmd" "graph switch" "qsearch"],
-    :options
-    {:global ["--config" "--graph" "--root-dir" "--output"],
-     :upsert ["--name" "--target-page" "--content" "--update-tags" "--update-properties"],
-     :qmd []
-     :qsearch ["--no-rerank"]}},
-   :tags [:qmd :search],
-   :extends :non-sync/graph-json-env}
   {:id "search-page-json",
    :setup
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page SearchPageTarget >/dev/null"],
@@ -775,6 +673,77 @@ PY"
     {:global ["--config" "--graph" "--root-dir" "--output"],
      :upsert ["--blocks-file" "--target-id" "--pos"]}},
    :tags [:upsert],
+   :extends :non-sync/graph-json-env}
+  {:id "block-upsert-blocks-file-inline-property-name-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name 'Correct Answer' --type default --cardinality one --public true >/dev/null"
+    "printf '%s' '[{:block/title \"Question block\" \"Correct Answer\" \"answer\"}]' > {{export-path-arg}}"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --blocks-file {{export-path-arg}} >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --page Home"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["Question block" "Correct Answer:" "answer"]},
+   :covers
+   {:commands ["upsert block" "upsert property" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--blocks-file" "--target-page" "--name" "--type" "--cardinality" "--public"],
+     :show ["--page"]}},
+   :tags [:upsert :show],
+   :extends :non-sync/graph-json-env}
+  {:id "block-upsert-blocks-inline-property-missing-does-not-create-target-page-json",
+   :cmds
+   ["set +e; out=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page NewPage --blocks '[{:block/title \"Q\" \"Missing Prop\" \"x\"}]' 2>&1)\"; code=$?; set -e; printf '%s\n' \"$out\"; test \"$code\" -ne 0; printf '%s' \"$out\" | python3 -c 'import sys,json; data=json.load(sys.stdin); assert data[\"status\"] == \"error\"; assert data[\"error\"][\"code\"] == \"property-not-found\"'; page=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"NewPage\"]]')\"; printf '%s\n' \"$page\"; printf '%s' \"$page\" | python3 -c 'import sys,json; data=json.load(sys.stdin); assert data[\"data\"][\"result\"] is None'"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["property-not-found"]},
+   :covers
+   {:commands ["upsert block" "query"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--blocks" "--target-page"],
+     :query ["--query"]}},
+   :tags [:upsert],
+   :extends :non-sync/graph-json-env}
+  {:id "block-upsert-blocks-inline-properties-per-block-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name 'Inline Note' --type default --cardinality one --public true >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --blocks '[{:block/title \"First inline\" \"Inline Note\" \"First note\"} {:block/title \"Second inline\" \"Inline Note\" \"Second note\"}]' >/dev/null"
+    "first_id=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"First inline\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; second_id=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Second inline\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; first_show=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --id \"$first_id\")\"; second_show=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --id \"$second_id\")\"; printf '%s\n---\n%s\n' \"$first_show\" \"$second_show\"; printf '%s' \"$first_show\" | grep 'Inline Note: First note' >/dev/null; ! printf '%s' \"$first_show\" | grep 'Second note' >/dev/null; printf '%s' \"$second_show\" | grep 'Inline Note: Second note' >/dev/null; ! printf '%s' \"$second_show\" | grep 'First note' >/dev/null"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["First inline" "Inline Note: First note" "Second inline" "Inline Note: Second note"]},
+   :covers
+   {:commands ["upsert block" "upsert property" "query" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--blocks" "--target-page" "--name" "--type" "--cardinality" "--public"],
+     :query ["--query"],
+     :show ["--id"]}},
+   :tags [:upsert :show],
+   :extends :non-sync/graph-json-env}
+  {:id "block-upsert-blocks-inline-property-numeric-id-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name 'Numeric Prop' --type default --cardinality one --public true >/dev/null"],
+   :cmds
+   ["prop_id=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Numeric Prop\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --blocks \"[{:block/title \\\"Inline numeric\\\" $prop_id \\\"inline\\\"}]\" >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --page Home"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["Inline numeric" "Numeric Prop: inline"]},
+   :covers
+   {:commands ["upsert block" "upsert property" "query" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--blocks" "--target-page" "--name" "--type" "--cardinality" "--public"],
+     :query ["--query"],
+     :show ["--page"]}},
+   :tags [:upsert :show],
    :extends :non-sync/graph-json-env}
   {:id "block-upsert-target-uuid-json",
    :setup
@@ -1307,6 +1276,48 @@ PY"
      :server ["--graph"]}},
    :tags [:server],
    :extends :non-sync/graph-json-env}
+  {:id "agent-bridge-workflows",
+   :setup
+   ["mkdir -p '{{tmp-dir}}/assigned-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/assigned-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-assigned >/dev/null && {{cli}} --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --output json upsert task --graph cli-e2e-agent-bridge-assigned --target-page AgentBridgeE2E --content '测试 agent bridge 功能，把当前task status设置为done' --status todo >/dev/null"
+    "mkdir -p '{{tmp-dir}}/parallel-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/parallel-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/parallel-root' --config '{{tmp-dir}}/parallel-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-parallel >/dev/null"
+    "mkdir -p '{{tmp-dir}}/comment-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/comment-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/comment-root' --config '{{tmp-dir}}/comment-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-comment >/dev/null"],
+   :cmds
+   ["python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --graph cli-e2e-agent-bridge-assigned --tmp-dir '{{tmp-dir}}/assigned-work' --repo-root '{{repo-root}}' --assign-after-start"
+    "python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/parallel-root' --config '{{tmp-dir}}/parallel-root/cli.edn' --graph cli-e2e-agent-bridge-parallel --tmp-dir '{{tmp-dir}}/parallel-work' --repo-root '{{repo-root}}' --parallel-assignment-check"
+    "python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/comment-root' --config '{{tmp-dir}}/comment-root/cli.edn' --graph cli-e2e-agent-bridge-comment --tmp-dir '{{tmp-dir}}/comment-work' --repo-root '{{repo-root}}' --comment-mention-check"
+    "bash '{{repo-root}}/cli-e2e/scripts/agent_bridge_demo.sh' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/demo-root' --graph cli-e2e-agent-bridge-demo --repo-root '{{repo-root}}'"
+    "mkdir -p '{{tmp-dir}}/list-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/list-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/list-root' --config '{{tmp-dir}}/list-root/cli.edn' --output json agent bridge list --all"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths {[:status] "ok", [:data :sessions] []}},
+   :covers
+   {:commands ["agent bridge" "agent bridge list"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :agent ["--all"]}},
+   :cleanup
+   ["{{cli}} --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-assigned"
+    "{{cli}} --root-dir '{{tmp-dir}}/parallel-root' --config '{{tmp-dir}}/parallel-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-parallel"
+    "{{cli}} --root-dir '{{tmp-dir}}/comment-root' --config '{{tmp-dir}}/comment-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-comment"],
+   :tags [:agent]}
+  {:id "agent-bridge-prompt-template-graphs",
+   :setup
+   ["mkdir -p '{{tmp-dir}}/prompt-template-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/prompt-template-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/prompt-template-root' --config '{{tmp-dir}}/prompt-template-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-template-a >/dev/null"],
+   :cmds
+   ["python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/prompt-template-root' --config '{{tmp-dir}}/prompt-template-root/cli.edn' --graph cli-e2e-agent-bridge-template-a --tmp-dir '{{tmp-dir}}/prompt-template-work' --repo-root '{{repo-root}}' --prompt-template-graph-check"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["agent bridge graph prompt templates are isolated and linted"]},
+   :covers
+   {:commands ["agent bridge"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :agent ["--dry-run"]}},
+   :cleanup
+   ["{{cli}} --root-dir '{{tmp-dir}}/prompt-template-root' --config '{{tmp-dir}}/prompt-template-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-template-a"
+    "{{cli}} --root-dir '{{tmp-dir}}/prompt-template-root' --config '{{tmp-dir}}/prompt-template-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-template-a-other"
+    "{{cli}} --root-dir '{{tmp-dir}}/prompt-template-root' --config '{{tmp-dir}}/prompt-template-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-template-a-invalid"],
+   :tags [:agent]}
   {:id "skill-show-human",
    :cmds ["{{cli}} skill show"],
    :expect
