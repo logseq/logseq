@@ -1083,13 +1083,41 @@
        (or (string/includes? (:v datom) (str "[[" agent-name "]]"))
            (string/includes? (:v datom) "[["))))
 
-(defn- task-routability-datom?
-  [datom]
-  (and (true? (:added datom))
-       (or (and (= :block/tags (:a datom))
-                (= :logseq.class/Task (:v datom)))
-           (and (= :logseq.property/status (:a datom))
-                (= :logseq.property/status.todo (:v datom))))))
+(def ^:private routability-entity-selector
+  [:db/id :db/ident])
+
+(defn- task-routability-attr?
+  [attr]
+  (or (= :block/tags attr)
+      (= :logseq.property/status attr)))
+
+(defn- task-routability-ident?
+  [attr ident]
+  (case attr
+    :block/tags (= :logseq.class/Task ident)
+    :logseq.property/status (= :logseq.property/status.todo ident)
+    false))
+
+(defn- resolve-routability-datom-ident
+  [cfg repo datom]
+  (let [value (:v datom)]
+    (if (keyword? value)
+      (p/resolved value)
+      (p/let [entity (transport/invoke cfg :thread-api/pull [repo routability-entity-selector value])]
+        (:db/ident entity)))))
+
+(defn- resolve-routability-datoms
+  [cfg repo tx-data]
+  (let [candidates (filter #(and (true? (:added %))
+                                  (task-routability-attr? (:a %)))
+                           tx-data)]
+    (p/let [resolved (p/all
+                      (mapv (fn [datom]
+                              (p/let [ident (resolve-routability-datom-ident cfg repo datom)]
+                                (when (task-routability-ident? (:a datom) ident)
+                                  datom)))
+                            candidates))]
+      (keep identity resolved))))
 
 (defn- pull-assignee-property
   [cfg repo]
@@ -1294,9 +1322,9 @@
 
 (defn- process-sync-db-changes-event!
   [cfg {:keys [repo] :as opts} {:keys [tx-data]}]
-  (p/let [assignee-datoms (resolve-assignee-datoms cfg repo tx-data)]
-    (let [routability-datoms (filter task-routability-datom? tx-data)
-          comment-datoms (filter #(comment-title-datom? % (:agent-name opts)) tx-data)
+  (p/let [assignee-datoms (resolve-assignee-datoms cfg repo tx-data)
+          routability-datoms (resolve-routability-datoms cfg repo tx-data)]
+    (let [comment-datoms (filter #(comment-title-datom? % (:agent-name opts)) tx-data)
           routing (vec (concat (map #(route-assignee-datom! cfg opts %) assignee-datoms)
                                (map #(route-routability-datom! cfg opts %) routability-datoms)
                                (map #(route-comment-datom! cfg opts %) comment-datoms)))]
