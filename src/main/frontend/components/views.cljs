@@ -1916,12 +1916,16 @@
       (for [property-ident display-property-idents
             :let [property-value (gallery-property-value block property-ident)]
             :when property-value]
-        (rum/with-key
-          property-value
-          (str "gallery-property-" (:db/id block) "-" property-ident)))]]))
+          (rum/with-key
+            property-value
+            (str "gallery-property-" (:db/id block) "-" property-ident)))]]))
+
+(defn gallery-lazy-item-opts
+  [option]
+  (select-keys option [:properties]))
 
 (rum/defcs gallery-view < rum/static mixins/container-id
-  [state {:keys [config]} table view-entity blocks *scroller-ref]
+  [state {:keys [config] :as option} table view-entity blocks *scroller-ref]
   (let [config' (assoc config :container-id (:container-id state))
         columns (:columns table)
         dimensions (db-view/gallery-card-dimensions view-entity)
@@ -1939,7 +1943,7 @@
          :compute-item-key (fn [idx]
                              (str (:db/id view-entity) "-card-" idx))
          :item-content (fn [idx]
-                         (lazy-item (:data table) idx {}
+                         (lazy-item (:data table) idx (gallery-lazy-item-opts option)
                                     (fn [block]
                                       (gallery-card-item view-entity block config'
                                                          {:asset-property-ident asset-property-ident

@@ -38,3 +38,8 @@
         ordered-ids [:c :b :a :c :b]
         sorted (views/sort-columns columns ordered-ids)]
     (is (= [:c :b :a] (map :id sorted)))))
+
+(deftest gallery-lazy-item-opts-should-request-view-properties
+  (let [properties [:block/title :user.property/cover :block/uuid]]
+    (is (= {:properties properties}
+           (views/gallery-lazy-item-opts {:properties properties})))))
