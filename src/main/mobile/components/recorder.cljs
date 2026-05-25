@@ -31,6 +31,8 @@
 (def *last-edit-block (atom nil))
 (defn set-last-edit-block! [block] (reset! *last-edit-block block))
 
+(defonce *target-block (atom nil))
+
 (defn ms-to-time-format [ms]
   (let [total-seconds (quot ms 1000)
         minutes (quot total-seconds 60)
@@ -63,31 +65,34 @@
     (when-let [filename (some->> ext (str "Audio-"
                                           (date/get-date-time-string
                                            (tl/local-now)
-                                           {:formatter-str audio-file-format})
+                                          {:formatter-str audio-file-format})
                                           "."))]
-      (p/let [file (js/File. [blob] filename #js {:type (.-type blob)})
-              capture? (= "capture" @mobile-state/*tab)
-              insert-opts (cond->
-                           {:last-edit-block @*last-edit-block}
-                            capture?
-                            (assoc :save-to-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)))
-              result (editor-handler/db-based-save-assets! (state/get-current-repo) [file] insert-opts)
-              asset-entity (first result)]
-        (when (nil? asset-entity)
-          (log/error ::empty-asset-entity {}))
-        (when (and asset-entity transcribe?)
-          (p/let [buffer-data (.arrayBuffer blob)
-                  unit8-data (js/Uint8Array. buffer-data)]
-            (-> (.transcribeAudio2Text mobile-util/ui-local #js {:audioData (js/Array.from unit8-data)})
-                (p/then (fn [^js r]
-                          (let [content (.-transcription r)]
-                            (when-not (string/blank? content)
-                              (editor-handler/api-insert-new-block! content
-                                                                    {:block-uuid (:block/uuid asset-entity)
-                                                                     :sibling? false
-                                                                     :replace-empty-target? true
-                                                                     :edit-block? false})))))
-                (p/catch #(log/error :transcribe-audio-error %)))))))))
+      (-> (p/let [file (js/File. [blob] filename #js {:type (.-type blob)})
+                  capture? (= "capture" @mobile-state/*tab)
+                  insert-opts (cond->
+                               {:last-edit-block @*last-edit-block}
+                                @*target-block
+                                (assoc :target-block @*target-block)
+                                capture?
+                                (assoc :save-to-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)))
+                  result (editor-handler/db-based-save-assets! (state/get-current-repo) [file] insert-opts)
+                  asset-entity (first result)]
+            (when (nil? asset-entity)
+              (log/error ::empty-asset-entity {}))
+            (when (and asset-entity transcribe?)
+              (p/let [buffer-data (.arrayBuffer blob)
+                      unit8-data (js/Uint8Array. buffer-data)]
+                (-> (.transcribeAudio2Text mobile-util/ui-local #js {:audioData (js/Array.from unit8-data)})
+                    (p/then (fn [^js r]
+                              (let [content (.-transcription r)]
+                                (when-not (string/blank? content)
+                                  (editor-handler/api-insert-new-block! content
+                                                                        {:block-uuid (:block/uuid asset-entity)
+                                                                         :sibling? false
+                                                                         :replace-empty-target? true
+                                                                         :edit-block? false})))))
+                    (p/catch #(log/error :transcribe-audio-error %))))))
+          (p/finally #(reset! *target-block nil))))))
 
 (rum/defc record-button
   []
@@ -185,19 +190,22 @@
                      :default-height 300}))
 
 (defn record!
-  [& {:keys [save-to-today?]}]
+  [& {:keys [save-to-today? target-block]}]
   (let [editing-id (state/get-edit-input-id)
         quick-add? (= "capture" @mobile-state/*tab)]
     (set-last-edit-block! nil)
-    (if-not (string/blank? editing-id)
-      (p/do!
-       (editor-handler/save-current-block!)
-       (let [block (db-model/query-block-by-uuid (:block/uuid (state/get-edit-block)))]
-         (if (or quick-add? save-to-today?)
-           (p/do!
-            (state/clear-edit!)
-            (init/keyboard-hide)
-            (show-recorder))
-           (do (set-last-edit-block! block)
-               (show-recorder)))))
-      (show-recorder))))
+    (reset! *target-block target-block)
+    (if target-block
+      (show-recorder)
+      (if-not (string/blank? editing-id)
+        (p/do!
+         (editor-handler/save-current-block!)
+         (let [block (db-model/query-block-by-uuid (:block/uuid (state/get-edit-block)))]
+           (if (or quick-add? save-to-today?)
+             (p/do!
+              (state/clear-edit!)
+              (init/keyboard-hide)
+              (show-recorder))
+             (do (set-last-edit-block! block)
+                 (show-recorder)))))
+        (show-recorder)))))

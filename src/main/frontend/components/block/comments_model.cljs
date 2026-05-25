@@ -1,41 +1,62 @@
 (ns frontend.components.block.comments-model
   (:require [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
+            [frontend.util :as util]
             [goog.object :as gobj]))
 
 (def comments-tag-ident :logseq.class/Comments)
+(def comment-tag-ident :logseq.class/Comment)
 (def comments-blocks-property :logseq.property.comments/blocks)
 
-(defn comments-area?
-  [block]
+(defn- tagged-with?
+  [block tag-ident]
   (boolean
    (some (fn [tag]
-           (= comments-tag-ident
+           (= tag-ident
               (if (keyword? tag)
                 tag
                 (:db/ident tag))))
          (:block/tags block))))
 
+(defn comments-area?
+  [block]
+  (tagged-with? block comments-tag-ident))
+
+(defn tagged-comment-block?
+  [block]
+  (tagged-with? block comment-tag-ident))
+
 (defn comment-block?
   [block]
-  (comments-area? (:block/parent block)))
+  (or (tagged-comment-block? block)
+      (comments-area? (:block/parent block))))
 
 (defn protected-comment-block?
   [block]
   (or (comments-area? block)
       (comment-block? block)))
 
+(defn- move-source-allowed?
+  [block sibling?]
+  (and (not (comment-block? block))
+       (or sibling?
+           (not (comments-area? block)))))
+
+(defn- move-target-allowed?
+  [target-block sibling?]
+  (and (not (comment-block? target-block))
+       (or sibling?
+           (not (comments-area? target-block)))))
+
 (defn move-allowed?
   ([blocks target-block]
    (move-allowed? blocks target-block {}))
-  ([blocks target-block opts]
+  ([blocks target-block {:keys [sibling?]}]
    (boolean
     (and (seq blocks)
          target-block
-         (not-any? protected-comment-block? blocks)
-         (not (comment-block? target-block))
-         (or (:sibling? opts)
-             (not (comments-area? target-block)))))))
+         (every? #(move-source-allowed? % sibling?) blocks)
+         (move-target-allowed? target-block sibling?)))))
 
 (defn comment-target-blocks
   [blocks]
@@ -56,12 +77,58 @@
        (remove :logseq.property/deleted-at)
        vec))
 
+(defn comment-thread-targets-toggle-visible?
+  [comments-area]
+  (> (count (comment-thread-target-blocks comments-area)) 1))
+
+(defn show-comment-thread-targets?
+  [comments-area targets-open?]
+  (boolean
+   (and targets-open?
+        (comment-thread-targets-toggle-visible? comments-area))))
+
+(defn comment-thread-click-action
+  [comments-area-visible?]
+  (if comments-area-visible?
+    :focus-comments-area
+    :show-inline-comments))
+
+(defn next-inline-comment-thread
+  [current-inline-thread target-block-uuid comments-area-uuid]
+  (let [next-thread {:target-block-uuid (str target-block-uuid)
+                     :comments-area-uuid (str comments-area-uuid)}]
+    (when-not (= current-inline-thread next-thread)
+      next-thread)))
+
+(defn inline-comment-container-id
+  [container-id]
+  (if (int? container-id)
+    container-id
+    :unknown-container))
+
+(defn- child-comments-area?
+  [block comments-area]
+  (let [block-id (:db/id block)
+        parent-id (some-> comments-area :block/parent :db/id)]
+    (boolean
+     (and block-id
+          parent-id
+          (= block-id parent-id)))))
+
 (defn comment-threads-for-block
   [block]
   (->> (get block :logseq.property.comments/_blocks)
        (filter comments-area?)
+       (remove #(child-comments-area? block %))
        (remove :logseq.property/deleted-at)
        vec))
+
+(defn comment-thread-for-block
+  ([block]
+   (first (comment-threads-for-block block)))
+  ([rendered-block fresh-block]
+   (or (some-> fresh-block comment-thread-for-block)
+       (comment-thread-for-block rendered-block))))
 
 (defn- author-initials
   [author]
@@ -81,6 +148,13 @@
           string/trim
           not-empty))
 
+(defn- created-by-avatar-src
+  [block]
+  (some-> (:logseq.property/created-by-ref block)
+          :logseq.property.user/avatar
+          string/trim
+          not-empty))
+
 (defn- uuid-string
   [value]
   (cond
@@ -97,10 +171,14 @@
 (defn comment-row
   [block]
   (let [author (created-by-title block)
+        avatar-src (created-by-avatar-src block)
+        author-uuid (created-by-uuid block)
         created-at (:block/created-at block)
         updated-at (:block/updated-at block)]
     {:author author
      :avatar (author-initials author)
+     :avatar-src avatar-src
+     :author-uuid author-uuid
      :body (string/trim (or (:block/title block) ""))
      :created-at created-at
      :updated-at updated-at
@@ -125,6 +203,21 @@
         {:count (count rows)
          :latest-author (:author latest)
          :latest-created-at (:created-at latest)}))))
+
+(defn collapsed-comments-label
+  [summary]
+  (if summary
+    (t :block.comments/collapsed-summary
+       (:count summary)
+       (:latest-author summary))
+    (t :block.comments/label)))
+
+(defn comments-area-title
+  [comments-area]
+  (or (some-> (:block/title comments-area)
+              string/trim
+              not-empty)
+      (t :block.comments/label)))
 
 (defn- same-local-day?
   [^js a ^js b]
@@ -252,4 +345,5 @@
    (boolean
     (and (nil? editor-action)
          (= "Enter" (gobj/get event "key"))
+         (not (util/native-event-is-composing? event))
          (not (true? (gobj/get event "shiftKey")))))))

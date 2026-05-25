@@ -117,6 +117,24 @@
     true
     (true? graph-e2ee?)))
 
+(defn- active-graph-operation []
+  (let [{:rtc/keys [downloading-graph-uuid uploading?]} @state/state]
+    (cond
+      downloading-graph-uuid
+      {:active-operation :download
+       :active-graph-uuid downloading-graph-uuid}
+
+      (true? uploading?)
+      {:active-operation :upload})))
+
+(defn- reject-graph-operation-in-progress
+  [requested-operation active-operation]
+  (p/rejected
+   (ex-info "graph operation already in progress"
+            (assoc active-operation
+                   :type :db-sync/graph-operation-in-progress
+                   :requested-operation requested-operation))))
+
 (defn- <ensure-download-runtime-bound!
   [repo]
   (if (util/electron?)
@@ -257,30 +275,33 @@
   ([graph-name graph-uuid]
    (<rtc-download-graph! graph-name graph-uuid true))
   ([graph-name graph-uuid graph-e2ee?]
-   (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
-   (state/pub-event!
-    [:rtc/log {:type :rtc.log/download
-               :sub-type :download-progress
-               :graph-uuid graph-uuid
-               :message "Preparing graph snapshot download"}])
-   (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
-         base (http-base)]
-     (-> (if (and graph-uuid base)
-           (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-                   graph (str config/db-version-prefix graph-name)
-                   _ (<ensure-download-runtime-bound! graph)
-                   _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
-                                              graph graph-uuid graph-e2ee?)]
-             true)
-           (p/rejected (ex-info "db-sync missing graph info"
-                                {:type :db-sync/invalid-graph
-                                 :graph-uuid graph-uuid
-                                 :base base})))
-         (p/catch (fn [error]
-                    (throw error)))
-         (p/finally
-           (fn []
-             (state/set-state! :rtc/downloading-graph-uuid nil)))))))
+   (if-let [operation (active-graph-operation)]
+     (reject-graph-operation-in-progress :download operation)
+     (do
+       (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
+       (state/pub-event!
+        [:rtc/log {:type :rtc.log/download
+                   :sub-type :download-progress
+                   :graph-uuid graph-uuid
+                   :message "Preparing graph snapshot download"}])
+       (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
+             base (http-base)]
+         (-> (if (and graph-uuid base)
+               (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+                       graph (str config/db-version-prefix graph-name)
+                       _ (<ensure-download-runtime-bound! graph)
+                       _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
+                                                  graph graph-uuid graph-e2ee?)]
+                 true)
+               (p/rejected (ex-info "db-sync missing graph info"
+                                    {:type :db-sync/invalid-graph
+                                     :graph-uuid graph-uuid
+                                     :base base})))
+             (p/catch (fn [error]
+                        (throw error)))
+             (p/finally
+               (fn []
+                 (state/set-state! :rtc/downloading-graph-uuid nil)))))))))
 
 (defn <get-remote-graphs
   []
@@ -385,10 +406,18 @@
 
 (defn <rtc-upload-graph!
   [repo _graph-e2ee?]
-  (p/do!
-   (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
-   (<get-remote-graphs)
-   (<rtc-start! repo)))
+  (if-let [operation (active-graph-operation)]
+    (reject-graph-operation-in-progress :upload operation)
+    (do
+      (state/set-state! :rtc/uploading? true)
+      (-> (p/let [_ (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
+                  _ (<get-remote-graphs)
+                  _ (state/set-state! :rtc/uploading? false)
+                  _ (<rtc-start! repo)]
+            true)
+          (p/finally
+            (fn []
+              (state/set-state! :rtc/uploading? false)))))))
 
 (defn <rtc-create-graph-and-start-sync!
   [repo graph-e2ee?]

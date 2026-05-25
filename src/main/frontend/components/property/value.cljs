@@ -770,6 +770,9 @@
         alias? (= :block/alias (:db/ident property))
         tags-or-alias? (or tags? alias?)
         block (or (db/entity (:db/id block)) block)
+        alias-source-page (when alias? (or (:block/page block) block))
+        alias-source-page-id (:db/id alias-source-page)
+        alias-source-page-owned? (and alias? (seq (:block/_alias alias-source-page)))
         selected-choices (when block
                            (when-let [v (get block (:db/ident property))]
                              (if (every? entity-map? v)
@@ -822,9 +825,15 @@
                                   node (or (some-> (:db/id node') db/entity) node)]
                               (or (= (:db/id block) (:db/id node))
                                   ;; A page's alias can't be itself
-                                  (and alias? (= (or (:db/id (:block/page block))
-                                                     (:db/id block))
-                                                 (:db/id node)))
+                                  (and alias? (= alias-source-page-id (:db/id node)))
+                                  ;; Candidate is already owned by a different page as an alias
+                                  (and alias?
+                                       (when-let [owner (first (:block/_alias node))]
+                                         (not= (:db/id owner) alias-source-page-id)))
+                                  ;; Candidate already owns aliases (alias pages must be leaf nodes)
+                                  (and alias? (seq (:block/alias node)))
+                                  ;; Source page is already an alias of another page
+                                  alias-source-page-owned?
                                   (= :logseq.property/empty-placeholder (:db/ident node))
                                   (cond
                                     (= property-type :class)
@@ -1321,7 +1330,7 @@
        (inline-text-cp (str value)))]))
 
 (rum/defc single-value-select
-  [block property value select-opts {:keys [value-render] :as opts}]
+  [block property value select-opts {:keys [value-render popup-focus-trigger? popup-auto-focus-trigger?] :as opts}]
   (let [*el (hooks/use-ref nil)
         editing? (:editing? opts)
         type (:logseq.property/type property)
@@ -1337,10 +1346,13 @@
         trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
         show-popup! (fn [target]
                       (shui/popup-show! target (fn [] (popup-content target))
-                                        {:align "start"
-                                         :as-dropdown? true
-                                         :auto-focus? true
-                                         :trigger-id trigger-id}))]
+                                        (cond->
+                                         {:align "start"
+                                          :as-dropdown? true
+                                          :auto-focus? (not (false? popup-auto-focus-trigger?))
+                                          :trigger-id trigger-id}
+                                          (some? popup-focus-trigger?)
+                                          (assoc :focus-trigger? popup-focus-trigger?))))]
     (if editing?
       (popup-content nil)
       (let [show! (fn [e]

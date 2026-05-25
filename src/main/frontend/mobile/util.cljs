@@ -97,7 +97,11 @@
     (let [width (.-width js/screen)
           height (.-height js/screen)
           landscape? (> width height)
-          [width height] (if landscape? [height width] [width height])]
+          [width height] (if landscape? [height width] [width height])
+          fallback-model (if (and (<= 320 width 600)
+                                  (<= 568 height 1000))
+                           "iPhone"
+                           "Not a known Apple device!")]
       [(case [width height]
          ;; The following list is from:
          ;; - https://useyourloaf.com/blog/ipad-2024-screen-sizes/
@@ -121,7 +125,7 @@
          [1024 1366] "iPadPro12.9"
          [1032 1376] "iPadPro13(M4)"
          [834 1210]  "iPadPro11(M4)"
-         "Not a known Apple device!")
+         fallback-model)
        landscape?])))
 
 (defn native-iphone-without-notch?

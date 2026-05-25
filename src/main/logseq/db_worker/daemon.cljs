@@ -5,6 +5,7 @@
             ["http" :as http]
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
+            [logseq.db-worker.log :as db-worker-log]
             [promesa.core :as p]))
 
 (def ^:private valid-owner-sources
@@ -231,11 +232,20 @@
       (do
         (log/warn :db-worker-daemon/missing-script {:repo repo :root-dir root-dir})
         nil)
-      (let [child (.spawn child-process (.-execPath js/process) args #js {:detached detached?
-                                                                          :stdio (if detached?
-                                                                                   "ignore"
-                                                                                   "inherit")
-                                                                          :env env})]
+      (let [stdio-config (when detached?
+                           (db-worker-log/child-stdio! {:root-dir root-dir
+                                                        :repo repo}))
+            _ (when detached?
+                (aset env db-worker-log/stdio-redirected-env "1"))
+            child (try
+                    (.spawn child-process (.-execPath js/process) args #js {:detached detached?
+                                                                            :stdio (if detached?
+                                                                                     (:stdio stdio-config)
+                                                                                     "inherit")
+                                                                            :env env})
+                    (finally
+                      (when-let [close! (:close! stdio-config)]
+                        (close!))))]
         (when detached?
           (.unref child))
         child))))

@@ -14,7 +14,7 @@
     ;; Native search UI owns query/result clearing on each platform; doing it here
     ;; makes the Search UI redraw during the Home tab transition on iOS.
     (when (and (= prev "search")
-               (not= tab "search"))
+            (not= tab "search"))
       (mobile-nav/reset-stack-history! "search"))
     (reset! *tab tab)
     (mobile-nav/switch-stack! tab)))

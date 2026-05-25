@@ -714,11 +714,9 @@
   (common-uuid/gen-uuid))
 
 (defn get-alias-source-page
-  "return the source page (page-name) of an alias"
+  "return the source page of an alias"
   [db alias-id]
   (when alias-id
-      ;; may be a case that a user added same alias into multiple pages.
-      ;; only return the first result for idiot-proof
     (first (:block/_alias (d/entity db alias-id)))))
 
 (def get-block-alias common-initial-data/get-block-alias)

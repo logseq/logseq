@@ -1,6 +1,7 @@
 (ns frontend.components.block.comments
   (:require [clojure.string :as string]
             [dommy.core :as dom]
+            [frontend.components.avatar :as avatar]
             [frontend.components.block.comments-model :as comments-model]
             [frontend.components.icon :as icon-component]
             [frontend.config :as config]
@@ -8,6 +9,7 @@
             [frontend.date :as date]
             [frontend.format.block :as block]
             [frontend.handler.comments :as comments-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.reaction :as reaction-handler]
             [frontend.handler.user :as user-handler]
@@ -42,9 +44,18 @@
   (when-let [closest-fn (and target (gobj/get target "closest"))]
     (.call closest-fn target ".ls-comments-area")))
 
+(defn- closest-editor-autocomplete
+  [target]
+  (when-let [closest-fn (and target (gobj/get target "closest"))]
+    (.call closest-fn target "#ui__ac")))
+
 (defn- inside-comments-area?
   [target]
   (boolean (closest-comments-area target)))
+
+(defn- inside-editor-autocomplete?
+  [target]
+  (boolean (closest-editor-autocomplete target)))
 
 (defn- activate-comment-editor!
   ([input-id block content container-id]
@@ -79,6 +90,7 @@
       input-id
       (assoc config
              :comment-editor? true
+             :comment-asset-target-block asset-target-block
              :skip-focus? (not focus-editor?)
              :editor-opts
              {:default-value draft
@@ -158,7 +170,8 @@
    (fn []
      (when active?
        (let [on-pointer-down (fn [e]
-                               (when-not (inside-comments-area? (.-target e))
+                               (when-not (or (inside-comments-area? (.-target e))
+                                             (inside-editor-autocomplete? (.-target e)))
                                  (exit-comment-editor!)))]
          (.addEventListener js/document "pointerdown" on-pointer-down true)
          #(.removeEventListener js/document "pointerdown" on-pointer-down true))))
@@ -291,7 +304,7 @@
 (rum/defc comment-row-view
   [config comment-block *hide-block-refs? *show-query? {:keys [block-content-or-editor block-reactions]}]
   (let [[editing? set-editing!] (hooks/use-state false)
-        {:keys [author avatar body created-at]} (comments-model/comment-row comment-block)
+        {:keys [author avatar-src author-uuid body created-at]} (comments-model/comment-row comment-block)
         current-user-uuid (user-handler/user-uuid)
         show-author? (comments-model/comment-author-visible? current-user-uuid)
         comment-uuid (:block/uuid comment-block)
@@ -303,7 +316,12 @@
         placeholder (t :block.comments/placeholder)]
     [:div.ls-comment-row
      (when show-author?
-       [:div.ls-comment-avatar avatar])
+       (avatar/user-avatar
+        {:class "ls-comment-avatar"
+         :title author
+         :name author
+         :uuid author-uuid
+         :avatar-src avatar-src}))
      [:div.ls-comment-main
       [:div.ls-comment-meta
        (when show-author?
@@ -320,8 +338,11 @@
           :refocus-after-submit? false
           :on-cancel #(set-editing! false)
           :on-submit (fn [content]
-                       (comments-handler/save-comment! comment-block content)
-                       (set-editing! false))})
+                       (-> (comments-handler/save-comment! comment-block content)
+                           (p/then (fn [_]
+                                     (set-editing! false)))
+                           (p/catch (fn [_error]
+                                      (notification/show! (t :block.comments/save-error) :error)))))})
         [:div.ls-comment-body
          (block-content-or-editor
           config
@@ -371,13 +392,14 @@
            (shui/tabler-icon "trash" {:size 14})))])]))
 
 (rum/defc add-comment-button
-  [config comments-block]
+  [config comments-block {:keys [focus-on-mount?]}]
   (let [placeholder (t :block.comments/placeholder)]
     [:div.ls-comment-add
      (comment-box
       {:config config
        :comments-block comments-block
        :placeholder placeholder
+       :focus-on-mount? focus-on-mount?
        :on-submit (fn [content]
                     (comments-handler/insert-comment! comments-block content))})]))
 
@@ -395,9 +417,65 @@
         (dom/add-class! el "is-comment-thread-hovered")
         (dom/remove-class! el "is-comment-thread-hovered")))))
 
+(rum/defc comment-thread-targets-view
+  [comments-area]
+  (let [targets (comments-model/comment-thread-target-blocks comments-area)]
+    (when (> (count targets) 1)
+      [:div.ls-comments-targets
+       (for [target targets]
+         (let [uuid (:block/uuid target)
+               reference (state/get-component :block/reference)]
+           [:div.ls-comments-target
+            {:key (str uuid)
+             :data-block-id (str uuid)}
+            (if reference
+              (reference {} uuid)
+              (string/trim (or (:block/title target) "")))]))])))
+
+(defn- comments-area-title-editing?
+  [config block]
+  (let [block-uuid (:block/uuid block)
+        container-id (:container-id config)
+        editing-in-container? (state/sub-editing? [container-id block-uuid])
+        editing-in-unknown-container? (state/sub-editing? [:unknown-container block-uuid])]
+    (boolean
+     (and block-uuid
+          (or editing-in-container?
+              editing-in-unknown-container?)))))
+
+(defn- comments-area-title-view
+  [config block editing? *hide-block-refs? *show-query? {:keys [block-content-or-editor]}]
+  (let [block-uuid (:block/uuid block)
+        edit-input-id (str "edit-block-" block-uuid)]
+    (if (and editing? block-content-or-editor)
+      [:div.ls-comments-title-editor
+       (block-content-or-editor
+        (assoc config :table-block-title? true)
+        (merge block (block/parse-title-and-body block-uuid
+                                                 (get block :block/format :markdown)
+                                                 (:block/title block)))
+        {:edit-input-id edit-input-id
+         :block-id block-uuid
+         :edit? true
+         :refs-count nil
+         :*hide-block-refs? *hide-block-refs?
+         :hide-block-refs-count? true
+         :*show-query? *show-query?})]
+      [:button.ls-comments-label
+       {:type "button"
+        :title (t :editor/click-to-edit)
+        :aria-label (t :editor/click-to-edit)
+        :on-pointer-down util/stop
+        :on-click (fn [e]
+                    (util/stop e)
+                    (comments-handler/edit-comments-area-title! block (:container-id config)))}
+       (comments-model/comments-area-title block)])))
+
 (rum/defc comments-area-view
-  [config block children collapsed? *hide-block-refs? *show-query? renderers]
+  [config block children collapsed? *hide-block-refs? *show-query? renderers {:keys [focus-editor? inline?]}]
   (let [*comments-list-ref (hooks/use-ref nil)
+        [targets-open? set-targets-open!] (hooks/use-state false)
+        title-editing? (comments-area-title-editing? config block)
         render-token (comments-model/comments-render-token children)
         summary (comments-model/comments-summary children)
         count (count children)]
@@ -411,11 +489,13 @@
        nil)
      [collapsed? render-token])
     [:div.ls-comments-area
-     (when (comments-model/range-comments-area? block)
-       {:on-mouse-enter #(set-comment-thread-targets-hover! block true)
-        :on-mouse-leave #(set-comment-thread-targets-hover! block false)
-        :on-focus #(set-comment-thread-targets-hover! block true)
-        :on-blur #(set-comment-thread-targets-hover! block false)})
+     (cond-> {}
+       inline? (assoc :class "ls-comments-area-inline")
+       (comments-model/range-comments-area? block)
+       (assoc :on-mouse-enter #(set-comment-thread-targets-hover! block true)
+              :on-mouse-leave #(set-comment-thread-targets-hover! block false)
+              :on-focus #(set-comment-thread-targets-hover! block true)
+              :on-blur #(set-comment-thread-targets-hover! block false)))
      (if collapsed?
        [:button.ls-comments-summary
         {:type "button"
@@ -423,15 +503,21 @@
          :on-click (fn [e]
                      (util/stop e)
                      (comments-handler/expand-comments-area! block))}
-        (if summary
-          (t :block.comments/collapsed-summary
-             (:count summary)
-             (:latest-author summary))
-          (t :block.comments/count 0))]
+        (comments-model/collapsed-comments-label summary)]
        [:<>
         [:div.ls-comments-header
-         [:span.ls-comments-label (t :block.comments/label)]
-         [:span.ls-comments-count count]]
+         (comments-area-title-view config block title-editing? *hide-block-refs? *show-query? renderers)
+         [:span.ls-comments-count count]
+         (when (comments-model/comment-thread-targets-toggle-visible? block)
+           [:button.ls-comments-targets-toggle
+            {:type "button"
+             :on-pointer-down util/stop
+             :on-click (fn [e]
+                         (util/stop e)
+                         (set-targets-open! (not targets-open?)))}
+            (t :block.comments/on-those-blocks)])]
+        (when (comments-model/show-comment-thread-targets? block targets-open?)
+          (comment-thread-targets-view block))
         (when (seq children)
           [:div.ls-comments-list
            {:ref *comments-list-ref}
@@ -439,4 +525,4 @@
              (rum/with-key
                (comment-row-view config comment-block *hide-block-refs? *show-query? renderers)
                (str (:block/uuid comment-block))))])
-        (add-comment-button config block)])]))
+        (add-comment-button config block {:focus-on-mount? focus-editor?})])]))

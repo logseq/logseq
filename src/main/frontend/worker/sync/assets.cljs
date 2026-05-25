@@ -154,6 +154,18 @@
                             :base base
                             :graph-id graph-id})))))
 
+(defn- drop-asset-op!
+  [repo asset-uuid reason data current-client-f broadcast-rtc-state!-f]
+  (log/warn :db-sync/drop-asset-op
+            (merge data
+                   {:repo repo
+                    :asset-uuid asset-uuid
+                    :reason reason}))
+  (client-op/remove-asset-op repo asset-uuid)
+  (when-let [client (current-client-f repo)]
+    (broadcast-rtc-state!-f client))
+  (p/resolved nil))
+
 (defn process-asset-op!
   [repo graph-id asset-op {:keys [current-client-f broadcast-rtc-state!-f fail-fast-f]}]
   (let [asset-uuid (:block/uuid asset-op)
@@ -170,18 +182,21 @@
               asset-type (:logseq.property.asset/type ent)
               checksum (:logseq.property.asset/checksum ent)
               size (:logseq.property.asset/size ent 0)]
-          (when-not asset-type
-            (fail-fast-f :db-sync/missing-field {:repo repo
-                                                 :field :asset-type
-                                                 :op :update-asset
-                                                 :asset-uuid asset-uuid}))
-          (when-not checksum
-            (fail-fast-f :db-sync/missing-field {:repo repo
-                                                 :field :checksum
-                                                 :op :update-asset
-                                                 :asset-uuid asset-uuid
-                                                 :asset-type asset-type}))
           (cond
+            (nil? ent)
+            (drop-asset-op! repo asset-uuid :missing-asset-entity {:op :update-asset}
+                            current-client-f broadcast-rtc-state!-f)
+
+            (not (seq asset-type))
+            (drop-asset-op! repo asset-uuid :missing-asset-type {:op :update-asset}
+                            current-client-f broadcast-rtc-state!-f)
+
+            (not (seq checksum))
+            (drop-asset-op! repo asset-uuid :missing-checksum
+                            {:op :update-asset
+                             :asset-type asset-type}
+                            current-client-f broadcast-rtc-state!-f)
+
             (> size max-asset-size)
             (do
               (log/info :db-sync/asset-too-large {:repo repo
