@@ -1026,6 +1026,7 @@
  :mobile.toolbar/indent "Indent"
  :mobile.toolbar/outdent "Outdent"
  :mobile.toolbar/photo "Photo"
+ :mobile.toolbar/reaction "Reaction"
  :mobile.toolbar/redo "Redo"
  :mobile.toolbar/reference "Reference"
  :mobile.toolbar/slash "Slash"

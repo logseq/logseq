@@ -43,9 +43,18 @@
   (when-let [closest-fn (and target (gobj/get target "closest"))]
     (.call closest-fn target ".ls-comments-area")))
 
+(defn- closest-editor-autocomplete
+  [target]
+  (when-let [closest-fn (and target (gobj/get target "closest"))]
+    (.call closest-fn target "#ui__ac")))
+
 (defn- inside-comments-area?
   [target]
   (boolean (closest-comments-area target)))
+
+(defn- inside-editor-autocomplete?
+  [target]
+  (boolean (closest-editor-autocomplete target)))
 
 (defn- activate-comment-editor!
   ([input-id block content container-id]
@@ -160,7 +169,8 @@
    (fn []
      (when active?
        (let [on-pointer-down (fn [e]
-                               (when-not (inside-comments-area? (.-target e))
+                               (when-not (or (inside-comments-area? (.-target e))
+                                             (inside-editor-autocomplete? (.-target e)))
                                  (exit-comment-editor!)))]
          (.addEventListener js/document "pointerdown" on-pointer-down true)
          #(.removeEventListener js/document "pointerdown" on-pointer-down true))))

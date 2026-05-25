@@ -63,7 +63,7 @@
                      (close!))}])
       (when (and (seq reaction-blocks) selection-target)
         [{:id "reaction"
-          :label (t :command.editor/add-reaction)
+          :label (t :mobile.toolbar/reaction)
           :system-icon "face.smiling"
           :handler (fn []
                      (let [opts (if (= 1 (count reaction-blocks))
