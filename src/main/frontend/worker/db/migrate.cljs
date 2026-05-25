@@ -93,7 +93,7 @@
                    [:db/add comments-area-id :logseq.property.comments/blocks parent-id]))))))
 
 (defn- fix-asset-source-url-property-type
-  "65.33 mistakenly registered :logseq.property.asset/source-url with type :url
+  "65.34 mistakenly registered :logseq.property.asset/source-url with type :url
    (a ref-typed schema), which made datascript treat string URLs as tempid
    lookups during transact and block all asset saves. Coerce the existing
    property's type to :string in any DB that ran the bad migration."
@@ -103,7 +103,7 @@
       [[:db/add (:db/id e) :logseq.property/type :string]])))
 
 (defn- fix-asset-source-url-schema-lock
-  "65.34 changed :logseq.property/type to :string but left :db/valueType
+  "65.35 changed :logseq.property/type to :string but left :db/valueType
    :db.type/ref on the entity. In Logseq's datascript fork, :db/valueType
    on a :db/ident-keyed entity IS the live schema entry — so the attribute
    stayed ref-typed and string URLs continued to fail with 'Tempids used
@@ -114,6 +114,27 @@
     (when (and (:db/valueType e)
                (not= :url (:logseq.property/type e)))
       [[:db/retract (:db/id e) :db/valueType]])))
+
+(defn- missing-class-extends?
+  [class]
+  (let [extends (:logseq.property.class/extends class)]
+    (or (nil? extends)
+        (and (coll? extends) (empty? extends)))))
+
+(defn- repair-comment-classes-and-targets
+  [db]
+  (let [root-id (:db/id (d/entity db :logseq.class/Root))]
+    (concat
+     (add-single-block-comment-targets db)
+     (mapcat
+      (fn [class-ident]
+        (when-let [class (d/entity db class-ident)]
+          (concat
+           (when (and root-id (missing-class-extends? class))
+             [[:db/add (:db/id class) :logseq.property.class/extends root-id]])
+           (when (:block/order class)
+             [[:db/retract (:db/id class) :block/order (:block/order class)]]))))
+      [:logseq.class/Comments :logseq.class/Comment]))))
 
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
@@ -152,24 +173,32 @@
    ["65.29" {:fix add-single-block-comment-targets}]
    ["65.30" {:properties [:logseq.property/assignee]}]
    ["65.31" {:properties [:logseq.property.agent/session-id]}]
-   ["65.32" {:properties [:logseq.property.class/default-icon]}]
-   ["65.33" {:properties [:logseq.property.asset/source-url
+   ["65.32" {:fix repair-comment-classes-and-targets}]
+   ["65.33" {:properties [:logseq.property.class/default-icon]}]
+   ["65.34" {:properties [:logseq.property.asset/source-url
                           :logseq.property.asset/source-name
                           :logseq.property.asset/license
                           :logseq.property.asset/attribution]}]
-   ["65.34" {:fix fix-asset-source-url-property-type}]
-   ["65.35" {:fix fix-asset-source-url-schema-lock}]
-   ;; 65.36 — orphan cleanup + catch-up for dev DBs whose kv was stuck at our
-   ;; pre-merge 65.30/65.31/65.32 (now renumbered to 65.32/65.33/65.34) and
+   ["65.35" {:fix fix-asset-source-url-property-type}]
+   ["65.36" {:fix fix-asset-source-url-schema-lock}]
+   ;; 65.37 — orphan cleanup + catch-up for dev DBs whose kv was stuck at our
+   ;; pre-merge 65.30/65.31/65.32 (now renumbered to 65.33/65.34/65.35) and
    ;; therefore skipped master's 65.30 (:assignee) and 65.31 (:agent/session-id),
    ;; or stopped after the buggy property-type fix. `:properties` re-registration
    ;; is idempotent (skipped if the ident already resolves); `:fix` re-runs the
    ;; property-type coercion which is itself guarded by `(= :url ...)`.
-   ["65.36" {:properties [:logseq.property/assignee
+   ["65.37" {:properties [:logseq.property/assignee
                           :logseq.property.agent/session-id]
              :fix fix-asset-source-url-property-type
              :delete-properties [:logseq.property/wikidata-id
-                                 :logseq.property/property-key-width]}]])
+                                 :logseq.property/property-key-width]}]
+   ;; 65.38 — re-run master's repair for dev DBs that crossed past 65.32 on
+   ;; this branch before the merge (e.g. ours was 65.36 before renumber, so
+   ;; the runner would consider 65.32 already done and skip master's repair).
+   ;; `repair-comment-classes-and-targets` is idempotent: each datom it emits
+   ;; is guarded by a presence check, so re-running on an already-clean DB is
+   ;; a no-op.
+   ["65.38" {:fix repair-comment-classes-and-targets}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
