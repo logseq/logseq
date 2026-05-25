@@ -71,6 +71,27 @@
                              (set-input! v)))}
              input-opts)]]))
 
+(defn- next-local-selected-choices
+  [old-args new-args current-choices]
+  (let [old-choices (set (:selected-choices old-args))
+        new-choices (set (:selected-choices new-args))]
+    (when (and (nil? (:selected-choices-atom new-args))
+               (not= old-choices new-choices)
+               (not= new-choices current-choices))
+      new-choices)))
+
+(defn- toggle-selected-choice!
+  [*selected-choices chosen]
+  (let [selected-choices @*selected-choices
+        selected? (contains? selected-choices chosen)]
+    (if selected?
+      (do
+        (swap! *selected-choices disj chosen)
+        false)
+      (do
+        (swap! *selected-choices conj chosen)
+        true))))
+
 ;; TODO: rewrite using hooks
 (rum/defcs ^:large-vars/cleanup-todo select
   "Provides a select dropdown powered by a fuzzy search. Takes the following options:
@@ -92,11 +113,12 @@
   {:init (fn [state]
            (let [choices (:selected-choices (first (:rum/args state)))]
              (assoc state ::selected-choices (atom (set choices)))))
-   :will-remount (fn [_old-state new-state]
-                   (let [choices (set (:selected-choices (first (:rum/args new-state))))]
-                     (when (not= choices @(::selected-choices new-state))
-                       (reset! (::selected-choices new-state) choices))
-                     new-state))
+   :will-remount (fn [old-state new-state]
+                   (when-let [choices (next-local-selected-choices (first (:rum/args old-state))
+                                                                    (first (:rum/args new-state))
+                                                                    @(::selected-choices new-state))]
+                     (reset! (::selected-choices new-state) choices))
+                   new-state)
    :will-unmount (fn [state]
                    (shui/dialog-close! :ls-select-modal)
                    state)}
@@ -106,7 +128,7 @@
                  item-cp transform-fn tap-*input-val
                  multiple-choices? on-apply new-case-sensitive?
                  dropdown? show-new-when-not-exact-match? exact-match-exclude-items
-                 input-container initial-open? loading?
+                 input-container initial-open? loading? selected-choices-atom
                  clear-input-on-chosen?]
           :or {limit 100
                prompt-key :select/default-prompt
@@ -119,7 +141,7 @@
                clear-input-on-chosen? true}}]
   (let [*input (::input state)
         *toggle (::toggle state)
-        *selected-choices (::selected-choices state)
+        *selected-choices (or selected-choices-atom (::selected-choices state))
         selected-choices (rum/react *selected-choices)
         full-choices (cond->>
                       (remove nil? items)
@@ -187,15 +209,12 @@
                                                          (util/stop-propagation e)
                                                          (when clear-input-on-chosen?
                                                            (reset! *input ""))
-                                                         (let [chosen (extract-chosen-fn raw-chosen)]
+                                                         (let [chosen (extract-chosen-fn raw-chosen)
+                                                               selected? (when multiple-choices?
+                                                                           (toggle-selected-choice! *selected-choices chosen))]
                                                            (if multiple-choices?
-                                                             (if (selected-choices chosen)
-                                                               (do
-                                                                 (swap! *selected-choices disj chosen)
-                                                                 (when on-chosen (on-chosen chosen false @*selected-choices e)))
-                                                               (do
-                                                                 (swap! *selected-choices conj chosen)
-                                                                 (when on-chosen (on-chosen chosen true @*selected-choices e))))
+                                                             (when on-chosen
+                                                               (on-chosen chosen selected? @*selected-choices e))
                                                              (do
                                                                (when (and close-modal? (not multiple-choices?))
                                                                  (state/close-modal!))

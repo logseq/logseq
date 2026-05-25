@@ -91,6 +91,17 @@
     (is (= #{}
            (#'property-value/asset-selected-ids {} property)))))
 
+(deftest selected-choice-values-test
+  (is (= [1]
+         (vec (#'property-value/selected-choice-values {:db/id 1}))))
+  (is (= [1]
+         (vec (#'property-value/selected-choice-values 1))))
+  (is (= [1 2]
+         (vec (#'property-value/selected-choice-values [{:db/id 1} {:db/id 2}]))))
+  (is (= #{1 2}
+         (set (#'property-value/selected-choice-values #{1 2}))))
+  (is (empty? (#'property-value/selected-choice-values nil))))
+
 (deftest assets-selected-first-test
   (let [assets [{:db/id 1 :block/title "one"}
                 {:db/id 2 :block/title "two"}

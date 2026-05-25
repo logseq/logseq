@@ -54,6 +54,19 @@
   [m]
   (and (map? m) (:db/id m)))
 
+(defn- selected-choice-values
+  [value]
+  (let [values (if (and (coll? value)
+                        (not (map? value)))
+                 value
+                 [value])]
+    (keep (fn [v]
+            (cond
+              (nil? v) nil
+              (entity-map? v) (:db/id v)
+              :else v))
+          values)))
+
 (rum/defc property-empty-btn-value
   [property & opts]
   (let [text (if (= (:db/ident property) :logseq.property/description)
@@ -240,9 +253,7 @@
         (ui-outliner-tx/transact!
          {:outliner-op :save-block}
          (db-property-handler/batch-delete-property-value! (map :db/id blocks) (:db/ident property) value))
-        (when (or (not many?)
-                  ;; values will be cleared
-                  (and many? (<= (count (get block (:db/ident property))) 1)))
+        (when-not many?
           (shui/popup-hide!))))
      (when (fn? refresh-result-f) (refresh-result-f)))))
 
@@ -759,9 +770,7 @@
         alias-source-page-owned? (and alias? (seq (:block/_alias alias-source-page)))
         selected-choices (when block
                            (when-let [v (get block (:db/ident property))]
-                             (if (every? entity-map? v)
-                               (map :db/id v)
-                               [(:db/id v)])))
+                             (selected-choice-values v)))
         extends-property? (= (:db/ident property) :logseq.property.class/extends)
         children-pages (when extends-property? (model/get-structured-children repo (:db/id block)))
         property-type (:logseq.property/type property)
@@ -1063,9 +1072,7 @@
                                                          :refresh-result-f refresh-result-f})))
             selected-choices' (get block (:db/ident property))
             selected-choices (when-not (= type :checkbox)
-                               (if (every? #(and (map? %) (:db/id %)) selected-choices')
-                                 (map :db/id selected-choices')
-                                 [selected-choices']))]
+                               (selected-choice-values selected-choices'))]
         (select-aux block property
                     {:multiple-choices? multiple-choices?
                      :items items
@@ -1993,8 +2000,9 @@
         items (cond->> (if (entity-map? v) #{v} v)
                 (= (:db/ident property) :block/tags)
                 (remove (fn [v] (contains? ldb/hidden-tags (:db/ident v)))))
-        select-cp (fn [select-opts target]
+        select-cp (fn [select-opts target *selected-choices]
                     (let [select-opts (merge {:multiple-choices? true
+                                              :selected-choices-atom *selected-choices
                                               :on-chosen (fn []
                                                            (when on-chosen (on-chosen)))}
                                              select-opts
@@ -2012,18 +2020,25 @@
 
                          (select block property select-opts opts))]))]
     (if editing?
-      (select-cp {} nil)
+      (select-cp {} nil nil)
       (let [toggle-fn shui/popup-hide!
-            content-fn (fn [{:keys [_id content-props]} target]
-                         (select-cp {:content-props content-props} target))
+            content-fn (fn [{:keys [_id content-props]} target *selected-choices]
+                         (select-cp {:content-props content-props} target *selected-choices))
             show-popup! (fn [^js e]
                           (let [target (.-target e)]
                             (when-not (or (util/link? target) (.closest target "a") config/publishing?)
-                              (shui/popup-show! (rum/deref *el)
-                                                (fn [opts]
-                                                  (content-fn opts target))
-                                                {:as-dropdown? true :as-content? false
-                                                 :align "start" :auto-focus? true}))))]
+                              (let [trigger (rum/deref *el)
+                                    popup-target (or (some-> trigger (.closest ".ls-table-cell")) trigger target)
+                                    *selected-choices (atom (set (selected-choice-values v)))]
+                                (shui/popup-show! popup-target
+                                                  (fn [opts]
+                                                    (content-fn opts target *selected-choices))
+                                                  {:as-dropdown? true
+                                                   :as-content? false
+                                                   :align "start"
+                                                   :auto-focus? true
+                                                   :content-props
+                                                   {:side-offset 0}})))))]
         [:div.multi-values.jtrigger
          {:tab-index "0"
           :ref *el
