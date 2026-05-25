@@ -114,6 +114,19 @@
     @apply justify-end;
   }
 
+  .property-value-inner[data-type="number"] > div,
+  .property-value-inner[data-type="raw-number"] > div,
+  .property-value-inner[data-type="row-number"] > div,
+  .property-value-inner[data-type="number"] .ls-number,
+  .property-value-inner[data-type="row-number"] .ls-number {
+    @apply w-full justify-end text-right;
+  }
+
+  .property-value-inner[data-type="number"] input,
+  .property-value-inner[data-type="row-number"] input {
+    @apply text-right;
+  }
+
   .ls-table-footer {
     @apply absolute left-0 bottom-[8px] w-full;
 
