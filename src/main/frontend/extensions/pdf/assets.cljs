@@ -114,7 +114,8 @@
 (defn ensure-ref-block!
   [pdf-current hl insert-opts]
   (p/let [ref-block (db-based-ensure-ref-block! pdf-current hl insert-opts)
-          _ (:logseq.property.pdf/hl-image ref-block)]))
+          _ (:logseq.property.pdf/hl-image ref-block)]
+    ref-block))
 
 (defn db-based-load-hls-data$
   [{:keys [block]}]
