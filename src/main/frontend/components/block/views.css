@@ -32,10 +32,12 @@
 
   .ls-gallery-card-media .asset-container {
     @apply flex h-full w-full items-center justify-start;
+    margin-top: 0;
   }
 
   .ls-gallery-card-media img {
-    @apply h-auto max-h-full w-auto max-w-full object-contain;
+    @apply h-full max-h-full w-full max-w-full object-contain;
+    object-position: left top;
   }
 
   .ls-gallery-card-media video,
