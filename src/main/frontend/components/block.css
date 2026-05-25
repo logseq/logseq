@@ -1582,9 +1582,26 @@ html.is-mac {
   text-overflow: ellipsis;
 }
 
-.block-content-wrapper svg, .view-actions svg {
+.block-content-wrapper svg,
+.view-actions svg {
   width: 18px;
   height: 18px;
+  display: block;
+  flex-shrink: 0;
+}
+
+.view-actions,
+.view-actions > *,
+.view-actions button,
+.view-action-type .property-value-inner {
+  display: inline-flex;
+  align-items: center;
+}
+
+.view-actions button,
+.view-action-type .property-value-inner {
+  justify-content: center;
+  min-height: 28px;
 }
 
 .katex svg {

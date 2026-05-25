@@ -132,7 +132,49 @@
        :class (str "flex transition-opacity "
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
 
+(rum/defc gallery-card-checkbox < rum/static
+  [{:keys [row-selected? row-toggle-selected! data state data-fns]} row]
+  (let [id (str (:db/id row) "-gallery-checkbox")
+        checked? (row-selected? row)
+        {:keys [last-selected-idx row-selection]} state
+        {:keys [set-last-selected-idx! set-row-selection!]} data-fns]
+    [:label.ls-gallery-card-select.flex.items-center.justify-center.cursor-pointer
+     {:html-for id
+      :on-click util/stop-propagation}
+     (shui/checkbox
+      {:id id
+       :checked checked?
+       :on-click (fn [e]
+                   (when (and (.-shiftKey e) last-selected-idx)
+                     (util/stop e)
+                     (let [idx (.indexOf data (:db/id row))]
+                       (when (not= last-selected-idx idx)
+                         (let [new-ids (keep (fn [idx] (util/nth-safe data idx))
+                                             (range (min last-selected-idx idx)
+                                                    (inc (max last-selected-idx idx))))]
+                           (when (seq new-ids)
+                             (set-row-selection! (update row-selection :selected-ids set/union (set new-ids)))))))))
+       :on-checked-change (fn [v]
+                            (p/do!
+                             (when v
+                               (db-async/<get-block (state/get-current-repo) (:db/id row) {:skip-refresh? true
+                                                                                           :children? false}))
+                             (if v
+                               (set-last-selected-idx! (.indexOf data (:db/id row)))
+                               (when (= (:db/id row) last-selected-idx)
+                                 (set-last-selected-idx! nil)))
+                             (row-toggle-selected! row-selection row v)))
+       :aria-label (t :view.table/select-row)
+       :class "flex"})]))
+
 (defonce *last-header-action-target (atom nil))
+
+(defn- prevent-view-action-button-focus
+  [^js e]
+  (let [target (.-target e)]
+    (when (and (some-> target (.closest "button, [tabindex]"))
+               (not (some-> target (.closest "input, textarea, select, [contenteditable='true']"))))
+      (.preventDefault e))))
 
 (defn- header-dropdown-click-should-hide?
   [target]
@@ -683,7 +725,8 @@
         :size :sm}
        (ui/icon "dots" {:size 15})))
      (shui/dropdown-menu-content
-      {:align "end"}
+      {:align "end"
+       :onCloseAutoFocus #(.preventDefault %)}
       (shui/dropdown-menu-group
        (when table?
          (shui/dropdown-menu-sub
@@ -1353,7 +1396,8 @@
                                   (fn []
                                     (filter-property view-entity columns table opts))
                                   {:align :end
-                                   :auto-focus? true}))}
+                                   :focus-trigger? false
+                                   :content-props {:onCloseAutoFocus #(.preventDefault %)}}))}
    (ui/icon "filter")))
 
 (defn operator->text
@@ -1903,41 +1947,55 @@
       (->entity asset-value))))
 
 (rum/defc gallery-card-item
-  [view-entity block config {:keys [asset-property-ident display-property-idents]}]
-  (let [asset-block (gallery-card-asset-block block asset-property-ident)]
+  [table view-entity block config {:keys [asset-property-ident display-property-idents]}]
+  (let [asset-block (gallery-card-asset-block block asset-property-ident)
+        asset-cp (state/get-component :block/asset-cp)
+        render-asset? (and asset-block asset-cp)
+        selected? ((:row-selected? table) block)]
     [:div.ls-card-item.content
      {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))
+      :data-state (when selected? "selected")
+      :class (str (when render-asset? "has-gallery-asset")
+                  (when selected? " is-selected"))
       :on-click (fn [e]
                   (when-not (some-> (.-target e) (.closest (str "button, a, input, textarea, select, [role='menuitem'], "
                                                                  ".ls-gallery-card-media, .ls-gallery-card-property")))
                     (route-handler/redirect-to-page! (:block/uuid block))))}
-     [:div.ls-gallery-card-media
-      (if (and asset-block (state/get-component :block/asset-cp))
-        (let [asset-cp (state/get-component :block/asset-cp)]
-          (asset-cp (assoc config :disable-resize? true :gallery-view? true) asset-block))
-        (ui/icon "photo" {:size 36}))]
-     [:div.ls-gallery-card-meta
-      (for [property-ident display-property-idents
-            :let [property-value (gallery-property-value block property-ident)]
-            :when property-value]
+     [:div.ls-gallery-card-content
+      [:div.ls-gallery-card-media
+       (gallery-card-checkbox table block)
+       (if render-asset?
+         (asset-cp (assoc config :disable-resize? true :gallery-view? true) asset-block)
+         (ui/icon "photo" {:size 36}))]
+      [:div.ls-gallery-card-meta
+       (for [property-ident display-property-idents
+             :let [property-value (gallery-property-value block property-ident)]
+             :when property-value]
           (rum/with-key
             property-value
-            (str "gallery-property-" (:db/id block) "-" property-ident)))]]))
+            (str "gallery-property-" (:db/id block) "-" property-ident)))]]]))
 
 (defn gallery-lazy-item-opts
   [option]
   (select-keys option [:properties]))
 
 (rum/defcs gallery-view < rum/static mixins/container-id
-  [state {:keys [config] :as option} table view-entity blocks *scroller-ref]
+  [state {:keys [config view-parent view-feature-type] :as option} table view-entity blocks row-selection *scroller-ref]
   (let [config' (assoc config :container-id (:container-id state))
         columns (:columns table)
         dimensions (db-view/gallery-card-dimensions view-entity)
         asset-property-ident (db-view/gallery-asset-property-ident (db/get-db) view-entity columns)
-        display-property-idents (db-view/gallery-display-property-idents view-entity columns asset-property-ident)]
+        display-property-idents (db-view/gallery-display-property-idents view-entity columns asset-property-ident)
+        selected-rows (shui/table-get-selection-rows row-selection (:rows table))]
     [:div.ls-cards
      {:style {"--ls-gallery-card-width" (str (:width dimensions) "px")
               "--ls-gallery-card-height" (str (:height dimensions) "px")}}
+     (when (seq selected-rows)
+       [:div.ls-gallery-action-bar
+        (action-bar table selected-rows
+                    (assoc option
+                           :on-delete-rows (fn [table selected-ids]
+                                             (on-delete-rows view-parent view-feature-type table selected-ids))))])
      (when (seq blocks)
        (ui/virtualized-grid
         {:ref #(reset! *scroller-ref %)
@@ -1951,7 +2009,7 @@
                                     (assoc (gallery-lazy-item-opts option)
                                            :gallery-view? true)
                                     (fn [block]
-                                      (gallery-card-item view-entity block config'
+                                      (gallery-card-item table view-entity block config'
                                                          {:asset-property-ident asset-property-ident
                                                           :display-property-idents display-property-idents}))))}))]))
 
@@ -2043,7 +2101,9 @@
                 (shui/popup-show! (.-target e)
                                   (fn [] (view-sorting-config table sorting columns))
                                   {:align :end
-                                   :dropdown-menu? true}))}
+                                   :dropdown-menu? true
+                                   :focus-trigger? false
+                                   :content-props {:onCloseAutoFocus #(.preventDefault %)}}))}
    (ui/icon "arrows-up-down")))
 
 (rum/defc view-cp
@@ -2058,7 +2118,7 @@
        (list-view option view-entity table *scroller-ref)
 
        :logseq.property.view/type.gallery
-       (gallery-view option table view-entity (:rows table) *scroller-ref)
+       (gallery-view option table view-entity (:rows table) row-selection *scroller-ref)
 
        (table-view table option row-selection *scroller-ref))]))
 
@@ -2228,7 +2288,8 @@
                                                   :opacity opacity
                                                   :references? references?)))]
      [:div.view-actions.flex.items-center.gap-1.transition-opacity.ease-in.duration-300
-      {:class opacity}
+      {:class opacity
+       :on-mouse-down prevent-view-action-button-focus}
 
       (when (seq additional-actions)
         [:<> (for [action additional-actions]
@@ -2246,7 +2307,9 @@
                       :set-input! set-input!})]
 
       [:div.view-action-type.text-muted-foreground.text-sm
-       (pv/property-value view-entity (db/entity :logseq.property.view/type) {:icon? true})]
+       (pv/property-value view-entity (db/entity :logseq.property.view/type) {:icon? true
+                                                                              :popup-focus-trigger? false
+                                                                              :popup-auto-focus-trigger? false})]
 
       (more-actions view-entity columns table option)
 
