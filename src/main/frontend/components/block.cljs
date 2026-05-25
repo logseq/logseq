@@ -226,7 +226,7 @@
 (defonce *resizing-image? (atom false))
 
 (rum/defc ^:large-vars/cleanup-todo asset-container
-  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}]
+  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text gallery-view?]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)
         asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))]
@@ -260,10 +260,11 @@
         :ref *el-ref}
        [:img.rounded-sm.relative.fade-in.fade-in-faster
         (merge
-         {:loading "lazy"
-          :referrerPolicy "no-referrer"
-          :src src'
-          :title title}
+         (cond-> {:loading "lazy"
+                  :referrerPolicy "no-referrer"
+                  :src src'}
+           (not gallery-view?)
+           (assoc :title title))
          metadata)]
        (when (and (not breadcrumb?)
                   (not positioned?))
@@ -412,7 +413,8 @@
                                             {:breadcrumb? breadcrumb?
                                              :positioned? positioned?
                                              :local? local?
-                                             :full-text full-text})]
+                                             :full-text full-text
+                                             :gallery-view? (:gallery-view? config)})]
     (if (or (:disable-resize? config)
             (:table-view? config)
             (not resizable?))
@@ -1120,6 +1122,7 @@
                          [:div.asset-transfer-progress-bar
                           [:span {:style {:width (str percent "%")}}]]])
         image? (contains? (common-config/img-formats) (keyword asset-type))
+        gallery-image? (and (:gallery-view? config) image?)
         width (get-in block [:logseq.property.asset/resize-metadata :width])
         asset-width (:logseq.property.asset/width block)
         asset-height (:logseq.property.asset/height block)
@@ -1142,15 +1145,15 @@
         href (or (:logseq.property.asset/external-url block)
                  (path/path-join (str "../" common-config/local-assets-dir) file))
         content (cond
-                  file-ready?
-                  (asset-link (assoc config
-                                     :asset-block block
-                                     :image-placeholder img-placeholder)
+                  (or file-ready? gallery-image?)
+                  (asset-link (cond-> (assoc config :asset-block block)
+                                (not gallery-image?)
+                                (assoc :image-placeholder img-placeholder))
                               (:block/title block)
                               href
                               img-metadata
                               nil)
-                  image?
+                  (and image? (not gallery-image?))
                   img-placeholder)]
     (if progress-view
       [:div.asset-transfer-shell
@@ -2267,7 +2270,7 @@
                      (when (and (state/developer-mode?) (.-metaKey event))
                        (js/console.debug "[block config]==" config)))}
         [:span {:class (if (or (and control-show? (or collapsed? collapsable?))
-                               (and collapsed? (or page-title? order-list? config/publishing? (util/mobile?))))
+                               (and collapsed? (or order-list? config/publishing? (util/mobile?))))
                          "control-show cursor-pointer"
                          "control-hide")}
          (ui/rotating-arrow collapsed?)]])

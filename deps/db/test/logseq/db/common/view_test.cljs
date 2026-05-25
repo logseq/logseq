@@ -8,7 +8,7 @@
   [conn feature-type & {:keys [view-for-id]}]
   (let [tx (d/transact! conn [(cond-> {:db/id -100
                                        :block/title "Test view"
-                                       :block/uuid #uuid "00000000-0000-0000-0000-000000000100"
+                                       :block/uuid (random-uuid)
                                        :logseq.property.view/feature-type feature-type
                                        :logseq.property.view/type :logseq.property.view/type.table}
                                 view-for-id
@@ -30,23 +30,27 @@
         book-view-id (create-view-id conn :class-objects :view-for-id book-class-id)
         album-view-id (create-view-id conn :class-objects :view-for-id album-class-id)
         query-view-id (create-view-id conn :query-result)
-        columns (mapv #(d/entity @conn %) [:user.property/cover :user.property/back-cover :user.property/author])]
+        book-columns (mapv #(d/entity @conn %) [:user.property/cover :user.property/author])
+        album-columns (mapv #(d/entity @conn %) [:user.property/cover :user.property/back-cover :user.property/author])
+        query-columns (mapv #(d/entity @conn %) [:user.property/cover :user.property/author])]
     (is (= :block/uuid
-           (db-view/gallery-asset-property-ident @conn (d/entity @conn asset-view-id) columns)))
+           (db-view/gallery-asset-property-ident @conn (d/entity @conn asset-view-id) album-columns)))
     (is (= :user.property/cover
-           (db-view/gallery-asset-property-ident @conn (d/entity @conn book-view-id) columns)))
+           (db-view/gallery-asset-property-ident @conn (d/entity @conn book-view-id) book-columns)))
     (is (nil?
-         (db-view/gallery-asset-property-ident @conn (d/entity @conn album-view-id) columns)))
+         (db-view/gallery-asset-property-ident @conn (d/entity @conn album-view-id) album-columns)))
+    (is (= :user.property/cover
+           (db-view/gallery-asset-property-ident @conn (d/entity @conn query-view-id) query-columns)))
     (is (nil?
-         (db-view/gallery-asset-property-ident @conn (d/entity @conn query-view-id) columns)))
+         (db-view/gallery-asset-property-ident @conn (d/entity @conn query-view-id) album-columns)))
     (d/transact! conn [[:db/add album-view-id :logseq.property.view/gallery-asset-property
                         (:db/id (d/entity @conn :user.property/back-cover))]
                        [:db/add query-view-id :logseq.property.view/gallery-asset-property
                         (:db/id (d/entity @conn :user.property/cover))]])
     (is (= :user.property/back-cover
-           (db-view/gallery-asset-property-ident @conn (d/entity @conn album-view-id) columns)))
+           (db-view/gallery-asset-property-ident @conn (d/entity @conn album-view-id) album-columns)))
     (is (= :user.property/cover
-           (db-view/gallery-asset-property-ident @conn (d/entity @conn query-view-id) columns)))))
+           (db-view/gallery-asset-property-ident @conn (d/entity @conn query-view-id) album-columns)))))
 
 (deftest gallery-display-property-idents-test
   (let [conn (db-test/create-conn-with-blocks

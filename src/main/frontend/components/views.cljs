@@ -1534,7 +1534,7 @@
                   false
                   true)]
       (shui/button
-       {:class "!px-2 rounded-none border-r"
+       {:class "!px-2 rounded-none border-r min-w-0 max-w-full overflow-hidden"
         :variant "ghost"
         :size :sm
         :on-click (fn [e]
@@ -1615,25 +1615,26 @@
                      (keep #(db/entity [:block/uuid %]) value)
                      :else
                      value)]
-         [:div.flex.flex-row.items-center.gap-1.text-xs
-          (cond
-            (de/entity? value)
-            [:div (get-property-value-content value)]
+        [:div.ls-view-filter-value.flex.flex-row.items-center.gap-1.text-xs.min-w-0.max-w-full.overflow-hidden
+         (cond
+           (de/entity? value)
+           [:div.ls-view-filter-value-item (get-property-value-content value)]
 
-            (string? value)
-            [:div value]
+           (string? value)
+           [:div.ls-view-filter-value-item value]
 
-            (boolean? value)
-            [:div (str value)]
+           (boolean? value)
+           [:div.ls-view-filter-value-item (str value)]
 
-            (= value :empty)
-            [:div (t :view.filter/empty)]
+           (= value :empty)
+           [:div.ls-view-filter-value-item (t :view.filter/empty)]
 
-            (seq value)
-            (->> (map (fn [v] [:div (get-property-value-content v)]) value)
-                 (interpose [:div (t :view.filter/or)]))
-            :else
-            (t :view/all))])))))
+           (seq value)
+           (->> (map (fn [v] [:span (get-property-value-content v)]) value)
+                (interpose [:span.flex-none ", "])
+                (into [:div.ls-view-filter-value-item]))
+           :else
+           (t :view/all))])))))
 
 (rum/defc filter-value < rum/static
   [view-entity table property operator value filters set-filters! idx opts]
@@ -1669,8 +1670,8 @@
   (let [filters (get-in table [:state :filters])
         {:keys [set-filters!]} data-fns]
     (when (seq (:filters filters))
-      [:div.filters-row.flex.flex-row.items-center.gap-4.justify-between.flex-wrap.py-2
-       [:div.flex.flex-row.items-center.gap-2
+      [:div.filters-row.flex.flex-row.items-center.gap-4.justify-between.flex-wrap.py-2.min-w-0.max-w-full
+       [:div.flex.flex-row.items-center.gap-2.flex-wrap.min-w-0.max-w-full
         (map-indexed
          (fn [idx filter']
            (let [[property-ident operator value] filter'
@@ -1681,7 +1682,7 @@
                                 (some (fn [column] (when (= (:id column) property-ident)
                                                      {:db/ident (:id column)
                                                       :block/title (:name column)})) columns)))]
-             [:div.flex.flex-row.items-center.border.rounded
+             [:div.flex.flex-row.items-center.border.rounded.min-w-0.max-w-full
               (shui/button
                {:class "!px-2 rounded-none border-r"
                 :variant "ghost"
@@ -2003,9 +2004,9 @@
          :custom-scroll-parent (get-scroll-parent config)
          :skipAnimationFrameInResizeObserver true
          :compute-item-key (fn [idx]
-                             (str (:db/id view-entity) "-card-" idx))
+                             (str (:db/id view-entity) "-card-" (util/nth-safe blocks idx)))
          :item-content (fn [idx]
-                         (lazy-item (:data table) idx
+                         (lazy-item blocks idx
                                     (assoc (gallery-lazy-item-opts option)
                                            :gallery-view? true)
                                     (fn [block]
@@ -2232,7 +2233,9 @@
                           {:as-dropdown? true
                            :dropdown-menu? true
                            :align "start"
-                           :content-props {:onClick shui/popup-hide!}})
+                           :focus-trigger? false
+                           :content-props {:onClick shui/popup-hide!
+                                           :onCloseAutoFocus #(.preventDefault %)}})
                          (do
                            (set-view-entity! view)
                            (set-data! nil))))}

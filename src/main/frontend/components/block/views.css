@@ -43,7 +43,8 @@
   }
 
   .ls-gallery-action-bar {
-    @apply sticky top-0 z-10 mb-2;
+    @apply sticky top-0 z-[100] mb-2 flex w-full items-center py-1;
+    background: var(--ls-primary-background-color);
   }
 
   .virtuoso-grid-list {

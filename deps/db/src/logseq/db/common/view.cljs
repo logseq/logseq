@@ -66,9 +66,11 @@
   [db view columns]
   (let [configured-ident (:db/ident (:logseq.property.view/gallery-asset-property view))
         view-for (:logseq.property/view-for view)
+        feature-type (:logseq.property.view/feature-type view)
         asset-tag? (= :logseq.class/Asset (:db/ident view-for))
-        tag-view? (and (= :class-objects (:logseq.property.view/feature-type view))
-                       (ldb/class? view-for))]
+        tag-view? (and (= :class-objects feature-type)
+                       (ldb/class? view-for))
+        query-view? (= :query-result feature-type)]
     (cond
       asset-tag?
       :block/uuid
@@ -76,7 +78,7 @@
       configured-ident
       configured-ident
 
-      tag-view?
+      (or tag-view? query-view?)
       (let [asset-idents (asset-property-idents db columns)]
         (when (= 1 (count asset-idents))
           (first asset-idents))))))
