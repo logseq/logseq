@@ -193,6 +193,13 @@ html.is-resizing-buf {
     @apply sticky left-0 z-[8] bg-gray-01;
 }
 
+.ls-table-new-row-content {
+    @apply sticky z-[8] bg-gray-01;
+    left: 0.5rem;
+}
+
 .table-action-bar {
+    width: max-content;
+    white-space: nowrap;
     z-index: 100;
 }

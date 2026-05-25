@@ -839,26 +839,28 @@
                                 :content (add-property-button)
                                 :disabled? true})
                          (mapv build-item unpinned))
-        selection-rows-count (count selected-rows)]
+        selection-rows-count (count selected-rows)
+        action-bar-el (when (pos? selection-rows-count)
+                        [:div.table-action-bar.absolute.top-0.left-8
+                         (action-bar table selected-rows
+                                     (assoc option
+                                            :on-delete-rows (fn [table selected-ids]
+                                                              (on-delete-rows view-parent view-feature-type table selected-ids delete-rows-fn))))])]
     (shui/table-header
      {:main-container (util/app-scroll-container-node)}
-     (when (seq pinned-items)
+     (when (or (seq pinned-items) action-bar-el)
        [:div.sticky-columns.flex.flex-row
-        (dnd/items pinned-items {:vertical? false
-                                 :on-drag-end (fn [ordered-columns _m]
-                                                (set-ordered-columns! ordered-columns))})])
+        (when (seq pinned-items)
+          (dnd/items pinned-items {:vertical? false
+                                   :on-drag-end (fn [ordered-columns _m]
+                                                  (set-ordered-columns! ordered-columns))}))
+        action-bar-el])
      (when (seq unpinned-items)
        [:div.flex.flex-row
         (dnd/items unpinned-items
                    {:vertical? false
                     :on-drag-end (fn [ordered-columns _m]
-                                   (set-ordered-columns! ordered-columns))})])
-     (when (pos? selection-rows-count)
-       [:div.table-action-bar.absolute.top-0.left-8
-        (action-bar table selected-rows
-                    (assoc option
-                           :on-delete-rows (fn [table selected-ids]
-                                             (on-delete-rows view-parent view-feature-type table selected-ids delete-rows-fn))))]))))
+                                   (set-ordered-columns! ordered-columns))})]))))
 
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
@@ -1409,8 +1411,9 @@
     :on-click (fn [_]
                 (let [f (get-in table [:data-fns :add-new-object!])]
                   (f view-entity table)))}
-   (ui/icon "plus" {:size 14})
-   [:div (t :view/new)]])
+   [:div.ls-table-new-row-content.flex.flex-row.items-center.gap-1
+    (ui/icon "plus" {:size 14})
+    [:div (t :view/new)]]])
 
 (defn- table-filters->persist-state
   [filters]
