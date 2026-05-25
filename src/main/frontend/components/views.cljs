@@ -124,13 +124,23 @@
                       (f row))]
     (remove nil? (cons row-id related-ids))))
 
+(defn- table-row-index
+  [rows row-id]
+  (first
+   (keep-indexed
+    (fn [idx item]
+      (when (= row-id (shui-table/table-row-id item))
+        idx))
+    rows)))
+
 (rum/defc row-checkbox < rum/static
-  [{:keys [row-selected? data state data-fns] :as table} row _column]
-  (let [id (str (:db/id row) "-" "checkbox")
+  [{:keys [row-selected? state data-fns] :as table} row _column]
+  (let [row-id (shui-table/table-row-id row)
+        id (str (:db/id row) "-" "checkbox")
         [show? set-show!] (rum/use-state false)
         checked? (row-selected? row)
-        {:keys [last-selected-idx row-selection]} state
-        {:keys [set-last-selected-idx! set-row-selection!]} data-fns]
+        {:keys [last-selected-row-id row-selection]} state
+        {:keys [set-last-selected-row-id! set-row-selection!]} data-fns]
     [:label.h-8.w-8.flex.items-center.justify-center.cursor-pointer
      {:html-for (str (:db/id row) "-" "checkbox")
       :on-mouse-over #(set-show! true)
@@ -139,19 +149,17 @@
       {:id id
        :checked checked?
        :on-click (fn [e]
-                   (when (and (.-shiftKey e) last-selected-idx)
-                     ;; add selection
-                     (util/stop e)
-                     (let [idx (first (keep-indexed
-                                       (fn [idx item]
-                                         (when (= (:db/id row) (shui-table/table-row-id item))
-                                           idx))
-                                       data))]
-                       (when (not= last-selected-idx idx)
+                   (when (and (.-shiftKey e) last-selected-row-id)
+                     (let [rows (:rows table)
+                           last-idx (table-row-index rows last-selected-row-id)
+                           idx (table-row-index rows row-id)]
+                       (when (and last-idx idx (not= last-idx idx))
+                         ;; add selection
+                         (util/stop e)
                          (let [new-ids (mapcat (fn [idx]
-                                                 (some->> (util/nth-safe data idx)
+                                                 (some->> (util/nth-safe rows idx)
                                                           (table-row-id-with-related table)))
-                                               (range (min last-selected-idx idx) (inc (max last-selected-idx idx))))]
+                                               (range (min last-idx idx) (inc (max last-idx idx))))]
                            (when (seq new-ids)
                              (let [row-selection' (update row-selection :selected-ids set/union (set new-ids))]
                                (set-row-selection! row-selection'))))))))
@@ -160,14 +168,9 @@
                              (when v (db-async/<get-block (state/get-current-repo) (:db/id row) {:skip-refresh? true
                                                                                                  :children? false}))
                              (if v
-                               (let [idx (first (keep-indexed
-                                                 (fn [idx item]
-                                                   (when (= (:db/id row) (shui-table/table-row-id item))
-                                                     idx))
-                                                 data))]
-                                 (set-last-selected-idx! idx))
-                               (when (= (:db/id row) last-selected-idx)
-                                 (set-last-selected-idx! nil)))
+                               (set-last-selected-row-id! row-id)
+                               (when (= row-id last-selected-row-id)
+                                 (set-last-selected-row-id! nil)))
                              (toggle-row-selection-with-related! table row v)))
        :aria-label (t :view.table/select-row)
        :class (str "flex transition-opacity "
@@ -2023,7 +2026,7 @@
                                           :set-ordered-columns! set-ordered-columns!
                                           :columns columns})
         [row-selection set-row-selection!] (rum/use-state {})
-        [last-selected-idx set-last-selected-idx!] (rum/use-state nil)
+        [last-selected-row-id set-last-selected-row-id!] (rum/use-state nil)
         select? (first (filter (fn [item] (= (:id item) :select)) columns))
         id? (first (filter (fn [item] (= (:id item) :id)) columns))
         pinned-properties (set (cond->> (map :db/ident (:logseq.property.table/pinned-columns view-entity))
@@ -2053,7 +2056,7 @@
                            :pinned-columns pinned
                            :unpinned-columns unpinned
                            :group-by-property group-by-property
-                           :last-selected-idx last-selected-idx}
+                           :last-selected-row-id last-selected-row-id}
                    :data-fns {:set-data! set-data!
                               :set-filters! set-filters!
                               :set-sorting! set-sorting!
@@ -2062,7 +2065,7 @@
                               :set-sized-columns! set-sized-columns!
                               :set-row-selection! set-row-selection!
                               :add-new-object! add-new-object!
-                              :set-last-selected-idx! set-last-selected-idx!}}
+                              :set-last-selected-row-id! set-last-selected-row-id!}}
         table (shui/table-option table-map)
         *view-ref (rum/use-ref nil)
         gallery? (= display-type :logseq.property.view/type.gallery)
