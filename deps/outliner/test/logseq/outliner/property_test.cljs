@@ -267,14 +267,16 @@
 
 (deftest status-property-setting-classes
   (let [conn (db-test/create-conn-with-blocks
-              {:classes {:Project {:build/class-properties [:logseq.property/status]}}
+              {:classes {:Cat {}
+                         :Project {:build/class-properties [:logseq.property/status]}}
                :pages-and-blocks
                [{:page {:block/title "page1"}
                  :blocks [{:block/title ""}
+                          {:block/title "cat task" :build/tags [:Cat]}
                           {:block/title "project task" :build/tags [:Project]}]}]})
         page1 (:block/uuid (db-test/find-page-by-title @conn "page1"))
-        [empty-task project]
-        (map #(:block/uuid (db-test/find-block-by-content @conn %)) ["" "project task"])]
+        [empty-task cat project]
+        (map #(:block/uuid (db-test/find-block-by-content @conn %)) ["" "cat task" "project task"])]
 
     (outliner-property/batch-set-property! conn [empty-task] :logseq.property/status :logseq.property/status.doing)
     (is (= [:logseq.class/Task]
@@ -286,10 +288,15 @@
            (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid page1])))))
         "Adds Task to page without tag")
 
+    (outliner-property/batch-set-property! conn [cat] :logseq.property/status :logseq.property/status.doing)
+    (is (= #{:logseq.class/Task :user.class/Cat}
+           (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid cat])))))
+        "Adds Task to tagged block when its classes do not provide status")
+
     (outliner-property/batch-set-property! conn [project] :logseq.property/status :logseq.property/status.doing)
     (is (= [:user.class/Project]
            (mapv :db/ident (:block/tags (d/entity @conn [:block/uuid project]))))
-        "Doesn't add Task to block when it is already tagged")))
+        "Doesn't add Task to block when its class provides status")))
 
 (deftest batch-set-property-rejects-private-built-in-entity
   (let [conn (db-test/create-conn)
