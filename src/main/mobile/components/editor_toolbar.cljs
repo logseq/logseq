@@ -121,10 +121,18 @@
    :event? true
    :handler #(insert-text "/" {})})
 
+(defn- upload-asset-action
+  []
+  {:id "upload-asset"
+   :title (t :editor.slash/upload-asset)
+   :system-icon "paperclip"
+   :event? true
+   :handler #(commands/handle-step [:editor/click-hidden-file-input :id] nil)})
+
 (defn- camera-action
   []
   {:id "camera"
-  :title (t :mobile.toolbar/photo)
+   :title (t :mobile.toolbar/photo)
    :system-icon "camera"
    :event? true
    :handler #(when-let [parent-id (state/get-edit-input-id)]
@@ -152,6 +160,7 @@
   (if (:comment-editor? (last (state/get-editor-args)))
     {:main [(page-ref-action)
             (camera-action)
+            (upload-asset-action)
             (audio-action)]
      :trailing nil}
     (let [keyboard (keyboard-action)
@@ -161,6 +170,7 @@
                         (indent-outdent-action true)
                         (tag-action)
                         (camera-action)
+                        (upload-asset-action)
                         (page-ref-action)
                         (audio-action)
                         (slash-action)
