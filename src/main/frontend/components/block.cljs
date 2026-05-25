@@ -226,7 +226,7 @@
 (defonce *resizing-image? (atom false))
 
 (rum/defc ^:large-vars/cleanup-todo asset-container
-  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}]
+  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text hide-title?]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)
         asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))]
@@ -259,12 +259,13 @@
                       (open-lightbox! e)))
         :ref *el-ref}
        [:img.rounded-sm.relative.fade-in.fade-in-faster
-        (merge
-         {:loading "lazy"
-          :referrerPolicy "no-referrer"
-          :src src'
-          :title title}
-         metadata)]
+        (cond-> (merge
+                 {:loading "lazy"
+                  :referrerPolicy "no-referrer"
+                  :src src'
+                  :title title}
+                 metadata)
+          hide-title? (dissoc :title))]
        (when (and (not breadcrumb?)
                   (not positioned?))
          [:<>
@@ -412,7 +413,8 @@
                                             {:breadcrumb? breadcrumb?
                                              :positioned? positioned?
                                              :local? local?
-                                             :full-text full-text})]
+                                             :full-text full-text
+                                             :hide-title? (:hide-title? config)})]
     (if (or (:disable-resize? config)
             (:table-view? config)
             (not resizable?))

@@ -26,6 +26,10 @@
     @apply flex items-center cursor-pointer;
   }
 
+  .ls-table-asset-file-preview .asset-container img {
+    @apply cursor-pointer;
+  }
+
   .ls-table-rows {
     > .relative {
       @apply pt-[34px] pb-[38px];

@@ -22,12 +22,15 @@
    :header header-cp
    :cell (fn [_table row _column]
            (when-let [asset-cp (state/get-component :block/asset-cp)]
-             [:div.block-content.overflow-hidden.flex.items-center
+             [:div.block-content.ls-table-asset-file-preview.overflow-hidden.flex.items-center
               {:class pv/asset-thumb-fit-class
                :style {:width "100%"
                        :height 30
                        :max-height 30}}
-              (asset-cp (assoc config :disable-resize? true) row)]))
+              (asset-cp (assoc config
+                                :disable-resize? true
+                                :hide-title? true)
+                        row)]))
    :disable-hide? true})
 
 (defn- pdf-annotation-title
