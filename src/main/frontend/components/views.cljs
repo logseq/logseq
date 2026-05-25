@@ -643,10 +643,12 @@
 (rum/defc add-property-button < rum/static
   []
   [:div.ls-table-header-cell.!border-0
-   (shui/button
-    {:variant "text"
-     :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"}
-    (ui/icon "plus")
+   (ui/tooltip
+    (shui/button
+     {:variant "text"
+      :aria-label (t :view/new-property)
+      :class "h-8 w-8 !px-0 !py-0 hover:text-foreground justify-center"}
+     (ui/icon "plus"))
     (t :view/new-property))])
 
 (rum/defc action-bar < rum/static
@@ -823,6 +825,8 @@
   (let [set-ordered-columns! (get-in table [:data-fns :set-ordered-columns!])
         pinned (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
+        sized-columns (get-in table [:state :sized-columns])
+        add-property-width (table-core/get-column-size {:id :add-property} sized-columns)
         build-item (fn [column]
                      {:id (:name column)
                       :value (:id column)
@@ -832,8 +836,8 @@
         unpinned-items (if show-add-property?
                          (conj (mapv build-item unpinned)
                                {:id "add property"
-                                :prop {:style {:width "-webkit-fill-available"
-                                               :min-width 160}
+                                :prop {:style {:width add-property-width
+                                               :min-width add-property-width}
                                        :on-click (fn [e] (when (fn? add-property!) (add-property! e)))}
                                 :value :add-new-property
                                 :content (add-property-button)

@@ -27,7 +27,7 @@
       :else
       (case id
         :select 32
-        :add-property 160
+        :add-property 32
         (:block/title :block/name) 360
         (:block/created-at :block/updated-at) 160
         180))))
