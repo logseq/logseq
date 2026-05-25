@@ -87,7 +87,7 @@
 
       (if (:block/title ref-block)
         (if-not (nil? (:logseq.property/ls-type ref-block))
-          (println "[existed ref block]" ref-block)
+          (do (println "[existed ref block]" ref-block) ref-block)
           ;; update ref block properties
           (let [properties (build-props)]
             (when (seq properties)
