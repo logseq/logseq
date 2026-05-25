@@ -1022,7 +1022,7 @@
  :mobile.toolbar/indent "缩进"
  :mobile.toolbar/outdent "取消缩进"
  :mobile.toolbar/photo "照片"
- :mobile.toolbar/reaction "反应"
+ :mobile.toolbar/reaction "表情回应"
  :mobile.toolbar/redo "重做"
  :mobile.toolbar/reference "引用"
  :mobile.toolbar/slash "斜杠"
