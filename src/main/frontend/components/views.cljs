@@ -1437,9 +1437,27 @@
          [property operator])))
    filters))
 
+(defn- visible-ordered-column-ids
+  [columns visible-columns]
+  (->> columns
+       (remove (fn [column]
+                 (or (= :select (:id column))
+                     (false? (get visible-columns (:id column))))))
+       (keep :id)
+       vec))
+
+(defn- ordered-columns-sync-for-empty-hidden
+  [entity columns visible-columns hidden-columns]
+  (when (and (empty? hidden-columns)
+             (seq (:logseq.property.table/ordered-columns entity)))
+    (let [current-ordered-columns (:logseq.property.table/ordered-columns entity)
+          next-ordered-columns (visible-ordered-column-ids columns visible-columns)]
+      (when (not= next-ordered-columns current-ordered-columns)
+        next-ordered-columns))))
+
 (defn- db-set-table-state!
   [entity {:keys [set-sorting! set-filters! set-visible-columns!
-                  set-ordered-columns! set-sized-columns!]}]
+                  set-ordered-columns! set-sized-columns! columns]}]
   {:set-sorting!
    (fn [sorting]
      (p/do!
@@ -1453,13 +1471,19 @@
         (property-handler/set-block-property! (:db/id entity) :logseq.property.table/filters filters)
         (set-filters! filters))))
    :set-visible-columns!
-   (fn [columns]
+   (fn [visible-columns]
      (let [hidden-columns (vec (keep (fn [[column visible?]]
                                        (when (false? visible?)
-                                         column)) columns))]
+                                         column)) visible-columns))]
        (p/do!
         (property-handler/set-block-property! (:db/id entity) :logseq.property.table/hidden-columns hidden-columns)
-        (set-visible-columns! columns))))
+        (let [next-ordered-columns (ordered-columns-sync-for-empty-hidden entity columns visible-columns hidden-columns)]
+          ;; Empty hidden-columns is removed by generic property writes, so ordered-columns
+          ;; must carry the visible column set when it is the only persisted fallback.
+          (when next-ordered-columns
+            (property-handler/set-block-property! (:db/id entity) :logseq.property.table/ordered-columns next-ordered-columns)
+            (set-ordered-columns! (vec (cons :select next-ordered-columns)))))
+        (set-visible-columns! visible-columns))))
    :set-ordered-columns!
    (fn [ordered-columns]
      (let [ids (vec (remove #{:select} ordered-columns))]
@@ -1991,15 +2015,16 @@
         sized-columns (:logseq.property.table/sized-columns view-entity)
         [ordered-columns set-ordered-columns!] (rum/use-state ordered-columns)
         [sized-columns set-sized-columns!] (rum/use-state sized-columns)
+        columns (sort-columns columns ordered-columns)
         {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns! set-sized-columns!]}
         (db-set-table-state! view-entity {:set-sorting! set-sorting!
                                           :set-filters! set-filters!
                                           :set-visible-columns! set-visible-columns!
                                           :set-sized-columns! set-sized-columns!
-                                          :set-ordered-columns! set-ordered-columns!})
+                                          :set-ordered-columns! set-ordered-columns!
+                                          :columns columns})
         [row-selection set-row-selection!] (rum/use-state {})
         [last-selected-idx set-last-selected-idx!] (rum/use-state nil)
-        columns (sort-columns columns ordered-columns)
         select? (first (filter (fn [item] (= (:id item) :select)) columns))
         id? (first (filter (fn [item] (= (:id item) :id)) columns))
         pinned-properties (set (cond->> (map :db/ident (:logseq.property.table/pinned-columns view-entity))

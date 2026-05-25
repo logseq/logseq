@@ -96,3 +96,22 @@
            (#'views/default-visible-columns
             {:logseq.property.table/ordered-columns [:block/title]}
             columns)))))
+
+(deftest ordered-columns-sync-for-empty-hidden-should-only-run-for-persisted-empty-hidden
+  (let [columns [{:id :select}
+                 {:id :id}
+                 {:id :block/title}
+                 {:id :user.property/style}]
+        entity {:logseq.property.table/ordered-columns [:block/title]}
+        visible-columns {:id false
+                         :user.property/style true}]
+    (is (= [:block/title :user.property/style]
+           (#'views/ordered-columns-sync-for-empty-hidden
+            entity columns visible-columns [])))
+    (is (nil? (#'views/ordered-columns-sync-for-empty-hidden
+               entity columns visible-columns [:id])))
+    (is (nil? (#'views/ordered-columns-sync-for-empty-hidden
+               {} columns visible-columns [])))
+    (is (nil? (#'views/ordered-columns-sync-for-empty-hidden
+               {:logseq.property.table/ordered-columns [:block/title :user.property/style]}
+               columns visible-columns [])))))
