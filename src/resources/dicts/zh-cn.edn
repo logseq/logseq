@@ -114,6 +114,7 @@
  :block.comments/label "评论"
  :block.comments/on-those-blocks "在这些块上"
  :block.comments/placeholder "回复..."
+ :block.comments/save-error "保存评论失败。"
  :block.comments/yesterday-at "昨天 {1}"
 
  :block.macro/embed-deprecated "{{embed}} 已弃用。请改用“/节点嵌入”命令。"

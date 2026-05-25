@@ -9,6 +9,7 @@
             [frontend.date :as date]
             [frontend.format.block :as block]
             [frontend.handler.comments :as comments-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.reaction :as reaction-handler]
             [frontend.handler.user :as user-handler]
@@ -337,8 +338,11 @@
           :refocus-after-submit? false
           :on-cancel #(set-editing! false)
           :on-submit (fn [content]
-                       (comments-handler/save-comment! comment-block content)
-                       (set-editing! false))})
+                       (-> (comments-handler/save-comment! comment-block content)
+                           (p/then (fn [_]
+                                     (set-editing! false)))
+                           (p/catch (fn [_error]
+                                      (notification/show! (t :block.comments/save-error) :error)))))})
         [:div.ls-comment-body
          (block-content-or-editor
           config

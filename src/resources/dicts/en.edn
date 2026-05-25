@@ -117,6 +117,7 @@
  :block.comments/label "Comments"
  :block.comments/on-those-blocks "On those blocks"
  :block.comments/placeholder "Reply..."
+ :block.comments/save-error "Failed to save comment."
  :block.comments/yesterday-at "Yesterday at {1}"
 
  :block.macro/embed-deprecated "{{embed}} is deprecated. Use '/Node embed' command instead."
