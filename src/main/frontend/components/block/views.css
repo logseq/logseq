@@ -1,6 +1,7 @@
 .ls-cards {
   --ls-gallery-card-width: 220px;
   --ls-gallery-card-height: 320px;
+  position: relative;
 
   .ls-card-item {
     @apply w-full overflow-hidden rounded-md border border-transparent bg-transparent shadow-none transition-all;
@@ -42,9 +43,25 @@
     @apply w-full;
   }
 
+  .ls-gallery-action-bar-slot {
+    @apply fixed inset-x-0 bottom-0 z-[100] flex justify-center px-4;
+    background: linear-gradient(to top, var(--ls-primary-background-color) 0%, var(--ls-primary-background-color) 42%, transparent 100%);
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    pointer-events: none;
+  }
+
   .ls-gallery-action-bar {
-    @apply sticky top-0 z-[100] mb-2 flex w-full items-center py-1;
-    background: var(--ls-primary-background-color);
+    @apply flex h-8 max-w-[calc(100vw-2rem)] flex-row items-center overflow-x-auto rounded-md border border-border bg-background;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.18), 0 2px 6px rgb(0 0 0 / 0.12);
+    pointer-events: auto;
+  }
+
+  .ls-gallery-action-select-all {
+    @apply flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center border-r border-border;
+  }
+
+  .ls-gallery-action-bar .ls-table-actions > div:first-child {
+    @apply px-2;
   }
 
   .virtuoso-grid-list {
@@ -81,7 +98,6 @@
     align-items: center;
     justify-content: center;
     background-color: rgb(255 255 255 / 0.7);
-    border-color: rgb(17 24 39 / 0.8);
     border-radius: 5px;
     box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
     backdrop-filter: blur(2px);
@@ -96,7 +112,6 @@
   .ls-gallery-card-select button[role="checkbox"][data-state="checked"] {
     color: white;
     background-color: rgb(2 132 199 / 0.9);
-    border-color: rgb(255 255 255 / 0.85);
   }
 
   .ls-gallery-card-select button[role="checkbox"]:focus-visible {
@@ -106,13 +121,11 @@
 
   .dark-theme .ls-gallery-card-select button[role="checkbox"] {
     background-color: rgb(15 23 42 / 0.65);
-    border-color: rgb(226 232 240 / 0.9);
     box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
   }
 
   .dark-theme .ls-gallery-card-select button[role="checkbox"][data-state="checked"] {
     background-color: rgb(14 165 233 / 0.78);
-    border-color: rgb(240 249 255 / 0.9);
   }
 
   .dark-theme .ls-gallery-card-select button[role="checkbox"]:focus-visible {
@@ -125,7 +138,7 @@
   }
 
   .ls-card-item.is-selected {
-    @apply border-primary shadow-md;
+    @apply shadow-md;
   }
 
   .ls-card-item.has-gallery-asset .ls-gallery-card-media {
@@ -164,7 +177,7 @@
   }
 
   .ls-gallery-card-meta {
-    @apply flex flex-col gap-1 py-1.5;
+    @apply flex flex-col gap-1 px-1 py-1.5;
     box-sizing: border-box;
     width: 0;
     min-width: 100%;

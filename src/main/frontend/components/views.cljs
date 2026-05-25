@@ -2058,6 +2058,32 @@
   [option]
   (select-keys option [:properties]))
 
+(rum/defc gallery-action-bar
+  [table option view-parent view-feature-type selected-rows]
+  (when (seq selected-rows)
+    (let [checkbox-id (str (:db/id (:view-entity table)) "-gallery-select-all")
+          checked? (or (:selected-all? table)
+                       (and (:selected-some? table) "indeterminate"))]
+      [:div.ls-gallery-action-bar-slot
+       [:div.ls-gallery-action-bar
+        [:label.ls-gallery-action-select-all
+         {:html-for checkbox-id
+          :title (t :view.table/select-all)}
+         (shui/checkbox
+          {:id checkbox-id
+           :checked checked?
+           :on-checked-change (fn [value]
+                                (p/do
+                                  (when value
+                                    (db-async/<get-blocks (state/get-current-repo) (:rows table) {}))
+                                  ((:toggle-selected-all! table) table value)))
+           :aria-label (t :view.table/select-all)
+           :class "flex"})]
+        (action-bar table selected-rows
+                    (assoc option
+                           :on-delete-rows (fn [table selected-ids]
+                                             (on-delete-rows view-parent view-feature-type table selected-ids))))]])))
+
 (rum/defcs gallery-view < rum/static mixins/container-id
   [state {:keys [config view-parent view-feature-type] :as option} table view-entity blocks row-selection *scroller-ref]
   (let [config' (assoc config :container-id (:container-id state))
@@ -2069,28 +2095,23 @@
     [:div.ls-cards
      {:style {"--ls-gallery-card-width" (str (:width dimensions) "px")
               "--ls-gallery-card-height" (str (:height dimensions) "px")}}
-     (when (seq selected-rows)
-       [:div.ls-gallery-action-bar
-        (action-bar table selected-rows
-                    (assoc option
-                           :on-delete-rows (fn [table selected-ids]
-                                             (on-delete-rows view-parent view-feature-type table selected-ids))))])
      (when (seq blocks)
        (ui/virtualized-grid
-        {:ref #(reset! *scroller-ref %)
-         :total-count (count blocks)
-         :custom-scroll-parent (get-scroll-parent config)
-         :skipAnimationFrameInResizeObserver true
-         :compute-item-key (fn [idx]
+         {:ref #(reset! *scroller-ref %)
+          :total-count (count blocks)
+          :custom-scroll-parent (get-scroll-parent config)
+          :skipAnimationFrameInResizeObserver true
+          :compute-item-key (fn [idx]
                              (str (:db/id view-entity) "-card-" (util/nth-safe blocks idx)))
-         :item-content (fn [idx]
+          :item-content (fn [idx]
                          (lazy-item blocks idx
                                     (assoc (gallery-lazy-item-opts option)
                                            :gallery-view? true)
                                     (fn [block]
                                       (gallery-card-item table view-entity block config'
                                                          {:asset-property-ident asset-property-ident
-                                                          :display-property-idents display-property-idents}))))}))]))
+                                                          :display-property-idents display-property-idents}))))}))
+     (gallery-action-bar table option view-parent view-feature-type selected-rows)]))
 
 (defn- run-effects!
   [option {:keys [data]} *scroller-ref gallery? set-ready?]
@@ -2297,17 +2318,19 @@
                                (t :view/rename))
                               (shui/dropdown-menu-sub-content
                                (when-let [block-container-cp (state/get-component :block/container)]
-                                 (block-container-cp {:display-title (display-view-title view)} view))))
-                             (shui/dropdown-menu-item
-                              {:key "Delete"
-                               :on-click (fn []
-                                           (p/do!
-                                            (editor-handler/delete-block-aux! view)
-                                            (let [views' (remove (fn [v] (= (:db/id v) (:db/id view))) views)]
-                                              (set-views! views')
-                                              (set-view-entity! (first views'))
-                                              (shui/popup-hide!))))}
-                              (t :ui/delete))])
+                                 (block-container-cp {:display-title (display-view-title view)
+                                                      :hide-block-control? true} view))))
+                             (when (> (count views) 1)
+                               (shui/dropdown-menu-item
+                                {:key "Delete"
+                                 :on-click (fn []
+                                             (p/do!
+                                              (editor-handler/delete-block-aux! view)
+                                              (let [views' (remove (fn [v] (= (:db/id v) (:db/id view))) views)]
+                                                (set-views! views')
+                                                (set-view-entity! (first views'))
+                                                (shui/popup-hide!))))}
+                                (t :ui/delete)))])
                           {:as-dropdown? true
                            :dropdown-menu? true
                            :align "start"
