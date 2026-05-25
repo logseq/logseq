@@ -520,9 +520,8 @@
           (p/then (fn [url]
                     (reset! src (common-util/safe-decode-uri-component url))))
           (p/catch #(js/console.log "Failed to load asset:" %))))
-    (:image-placeholder config)
     (if (nil? @src)
-      (:image-placeholder config)
+      nil
       (let [asset-block (:asset-block config)
             ext (block-asset/link-ext @src href asset-block)
             repo (state/get-current-repo)
@@ -1155,7 +1154,7 @@
                               href
                               img-metadata
                               nil)
-                  (and image? (not gallery-image?))
+                  (and image? (not gallery-image?) (false? file-exists?))
                   img-placeholder)]
     (if progress-view
       [:div.asset-transfer-shell
