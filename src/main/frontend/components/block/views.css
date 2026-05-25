@@ -3,8 +3,8 @@
   --ls-gallery-card-height: 320px;
 
   .ls-card-item {
-    @apply w-full overflow-hidden rounded-md border bg-background shadow-sm transition-shadow;
-    @apply hover:shadow-md dark:border-gray-700 dark:hover:shadow-gray-800;
+    @apply w-full overflow-hidden rounded-md border border-transparent bg-background shadow-none transition-all;
+    @apply hover:border-border hover:shadow-sm active:border-primary active:shadow-md dark:hover:border-gray-700 dark:hover:shadow-gray-800;
     height: var(--ls-gallery-card-height);
     cursor: pointer;
     display: grid;
@@ -26,12 +26,12 @@
   }
 
   .ls-gallery-card-media {
-    @apply flex items-center justify-center overflow-hidden bg-gray-02 text-muted-foreground;
+    @apply flex items-center justify-start overflow-hidden text-muted-foreground;
     min-height: 0;
   }
 
   .ls-gallery-card-media .asset-container {
-    @apply flex h-full w-full items-center justify-center;
+    @apply flex h-full w-full items-center justify-start;
   }
 
   .ls-gallery-card-media img {
@@ -44,7 +44,7 @@
   }
 
   .ls-gallery-card-meta {
-    @apply flex flex-col gap-1 p-3;
+    @apply flex flex-col gap-1 py-3;
     min-width: 0;
   }
 
