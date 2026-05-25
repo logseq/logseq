@@ -1955,6 +1955,21 @@
       [:div.flex.flex-1.flex-col  title (body-fn)]
       (ui/foldable title body-fn {:title-trigger? false}))))
 
+(defn- default-visible-columns
+  [view-entity columns]
+  (cond
+    (contains? view-entity :logseq.property.table/hidden-columns)
+    (zipmap (:logseq.property.table/hidden-columns view-entity) (repeat false))
+
+    (seq (:logseq.property.table/ordered-columns view-entity))
+    (zipmap (set/difference (set (map :id columns))
+                            (set (:logseq.property.table/ordered-columns view-entity))
+                            #{:select :id :block/created-at :block/updated-at})
+            (repeat false))
+
+    :else
+    {:id false}))
+
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
   [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! display-type group-by-property-ident config] :as option*}
    *scroller-ref]
@@ -1963,16 +1978,8 @@
                       (-> (remove #{:id :select} (map :id columns))
                           (conj :block/uuid :block/name)
                           vec))
-        default-visible-columns (if-let [hidden-columns (conj (:logseq.property.table/hidden-columns view-entity) :id)]
-                                  (zipmap hidden-columns (repeat false))
-                                  ;; This case can happen for imported tables
-                                  (if (seq (:logseq.property.table/ordered-columns view-entity))
-                                    (zipmap (set/difference (set (map :id columns))
-                                                            (set (:logseq.property.table/ordered-columns view-entity))
-                                                            #{:select :block/created-at :block/updated-at})
-                                            (repeat false))
-                                    {}))
-        [visible-columns set-visible-columns!] (rum/use-state default-visible-columns)
+        initial-visible-columns (default-visible-columns view-entity columns)
+        [visible-columns set-visible-columns!] (rum/use-state initial-visible-columns)
         ordered-columns (vec (concat [:select] (:logseq.property.table/ordered-columns view-entity)))
         sized-columns (:logseq.property.table/sized-columns view-entity)
         [ordered-columns set-ordered-columns!] (rum/use-state ordered-columns)

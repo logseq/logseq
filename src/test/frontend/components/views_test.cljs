@@ -76,3 +76,23 @@
         updated-at-column (some #(when (= :block/updated-at (:id %)) %) columns)]
     (is (false? (:editable? created-at-column)))
     (is (false? (:editable? updated-at-column)))))
+
+(deftest default-visible-columns-should-respect-persisted-hidden-columns
+  (let [columns [{:id :select}
+                 {:id :id}
+                 {:id :block/title}
+                 {:id :user.property/status}]]
+    (is (= {:id false}
+           (#'views/default-visible-columns {} columns)))
+    (is (= {}
+           (#'views/default-visible-columns
+            {:logseq.property.table/hidden-columns []}
+            columns)))
+    (is (= {:user.property/status false}
+           (#'views/default-visible-columns
+            {:logseq.property.table/hidden-columns [:user.property/status]}
+            columns)))
+    (is (= {:user.property/status false}
+           (#'views/default-visible-columns
+            {:logseq.property.table/ordered-columns [:block/title]}
+            columns)))))
