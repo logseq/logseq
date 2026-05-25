@@ -2285,6 +2285,8 @@
       (util/scroll-to-block block)
       (state/exit-editing-and-set-selected-blocks! [block]))))
 
+(declare property-value-node? property-value-inner-block focus-trigger)
+
 (defn- select-up-down [direction]
   (let [selected-blocks (state/get-selection-blocks)
         selected (case direction
@@ -2296,16 +2298,38 @@
         sibling-block (navigable-sibling-block selected
                                                f
                                                {:up-down? true
-                                                :direction direction
-                                                :exclude-property? true})]
-    (when (and sibling-block
-               (or (dom/attr sibling-block "blockid") (dom/attr sibling-block "parentblockid")))
-      (util/scroll-to-block sibling-block)
-      (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
+                                                :direction direction})
+        property-value-container (when (property-value-node? sibling-block)
+                                   sibling-block)
+        sibling-block (or (property-value-inner-block property-value-container)
+                          sibling-block)]
+    (cond
+      property-value-container
+      (do
+        (state/clear-selection!)
+        (util/scroll-to-block property-value-container)
+        (focus-trigger selected property-value-container {:edit-navigation? false}))
+
+      (and sibling-block
+           (or (dom/attr sibling-block "blockid") (dom/attr sibling-block "parentblockid")))
+      (do
+        (util/scroll-to-block sibling-block)
+        (state/exit-editing-and-set-selected-blocks! [sibling-block])))))
 
 (defn- property-value-node?
   [node]
   (some-> node (dom/has-class? "property-value-container")))
+
+(defn- property-value-inner-block
+  [node]
+  (when (property-value-node? node)
+    (some-> node (.querySelector ".ls-block[blockid]"))))
+
+(defn- property-value-container-node
+  [node]
+  (or (when (property-value-node? node)
+        node)
+      (some-> node (.closest ".property-value-container"))))
 
 (defn- bottom-properties-row-node
   [node]
@@ -2444,20 +2468,62 @@
         (state/exit-editing-and-set-selected-blocks! [comments-node])))))
 
 (defn- focus-trigger
-  [_current-block sibling-block]
-  (if-let [trigger (first (dom/by-class sibling-block "jtrigger"))]
-    (do
-      (state/clear-edit!)
-      (if (or (dom/has-class? trigger "ls-number")
-              (dom/has-class? trigger "ls-empty-text-property"))
-        (.click trigger)
-        (.focus trigger)))
-    (when-let [row (bottom-properties-row-node sibling-block)]
-      (.focus row))))
+  ([current-block sibling-block]
+   (focus-trigger current-block sibling-block {:edit-navigation? true}))
+  ([_current-block sibling-block {:keys [edit-navigation?]}]
+   (if-let [trigger (first (dom/by-class sibling-block "jtrigger"))]
+     (do
+       (.setAttribute trigger "data-property-nav-mode" (if edit-navigation? "edit" "focus"))
+       (state/clear-edit!)
+       (if (or (dom/has-class? trigger "ls-number")
+               (dom/has-class? trigger "ls-empty-text-property"))
+         (.click trigger)
+         (.focus trigger)))
+     (when-let [row (bottom-properties-row-node sibling-block)]
+       (.focus row)))))
+
+(defn move-property-focus-up-down
+  [direction]
+  (let [active-element js/document.activeElement
+        f (case direction
+            :up util/get-prev-block-non-collapsed
+            :down util/get-next-block-non-collapsed)
+        current-block (util/rec-get-node active-element "ls-block")
+        sibling-block (navigable-sibling-block current-block
+                                               f
+                                               {:up-down? true
+                                                :direction direction})
+        property-value-container (property-value-container-node sibling-block)
+        sibling-block (or (property-value-inner-block property-value-container)
+                          sibling-block)
+        bottom-properties-row (bottom-properties-row-node sibling-block)]
+    (cond
+      property-value-container
+      (do
+        (state/clear-selection!)
+        (util/scroll-to-block property-value-container)
+        (focus-trigger current-block property-value-container {:edit-navigation? false}))
+
+      bottom-properties-row
+      (do
+        (state/clear-edit!)
+        (.focus bottom-properties-row))
+
+      (comments-area-node? sibling-block)
+      (enter-comments-area-node! sibling-block)
+
+      :else
+      (when-let [sibling-block-id (node-attr sibling-block "blockid")]
+        (let [container-id (some-> (node-attr sibling-block "containerid") js/parseInt)
+              block (db/entity [:block/uuid (cljs.core/uuid sibling-block-id)])]
+          (edit-block! block 0 {:container-id container-id
+                                :direction direction}))))))
 
 (defn move-cross-boundary-up-down
   [direction move-opts]
-  (let [input (or (:input move-opts) (state/get-input))
+  (let [input (if (contains? move-opts :input)
+                (:input move-opts)
+                (state/get-input))
         active-element js/document.activeElement
         input-or-active-element (or input active-element)]
     (when input-or-active-element
@@ -2473,13 +2539,15 @@
                                                      (:exclude-property? move-opts)
                                                      (assoc :exclude-property? true)))
             {:block/keys [uuid title]} (state/get-edit-block)
-            sibling-block (or (when (property-value-node? sibling-block)
-                                (util/rec-get-node sibling-block "ls-block"))
+            property-value-container (when (property-value-node? sibling-block)
+                                       sibling-block)
+            sibling-block (or (property-value-inner-block property-value-container)
                               sibling-block)
             current-bottom-properties-row (bottom-properties-row-in-block current-block)
             bottom-properties-row (bottom-properties-row-node sibling-block)
             sibling-bottom-properties-row (bottom-properties-row-in-block sibling-block)
-            property-value-container? (property-value-node? sibling-block)]
+            property-value-container? (and property-value-container
+                                           (nil? (property-value-inner-block property-value-container)))]
         (if sibling-block
           (let [value (state/get-edit-content)]
             (p/do!
@@ -2514,7 +2582,7 @@
                  (.focus bottom-properties-row))
 
                property-value-container?
-               (focus-trigger current-block sibling-block)
+               (focus-trigger current-block sibling-block {:edit-navigation? true})
 
                (comments-area-node? sibling-block)
                (enter-comments-area-node! sibling-block)
@@ -2572,10 +2640,12 @@
         editing-block (state/get-editor-block-container)
         f (if up? util/get-prev-block-non-collapsed util/get-next-block-non-collapsed)
         sibling-block (navigable-sibling-block editing-block f {:direction direction})
-        sibling-block (or (when (and sibling-block (property-value-node? sibling-block))
-                            (if (and up? editing-block (gdom/contains sibling-block editing-block))
-                              (navigable-sibling-block sibling-block f {:direction direction})
-                              (util/rec-get-node sibling-block "ls-block")))
+        property-value-container (when (and sibling-block (property-value-node? sibling-block))
+                                   sibling-block)
+        sibling-block (or (when (and up? editing-block property-value-container
+                                     (gdom/contains property-value-container editing-block))
+                            (navigable-sibling-block property-value-container f {:direction direction}))
+                          (property-value-inner-block property-value-container)
                           sibling-block)]
     (when sibling-block
       (let [content (:block/title block)
