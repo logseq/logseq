@@ -5,6 +5,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.handler.comments :as comments-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.mobile.haptics :as haptics]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util.url :as url-util]
@@ -117,9 +118,8 @@
                                       "action"
                                       (fn [^js e]
                                         (when-let [id (.-id e)]
-                                          (prn :debug :id id
-                                               :handler (.-current handlers-ref))
                                           (when-let [handler (get (.-current handlers-ref) id)]
+                                            (haptics/haptics)
                                             (handler)))))
                actions' {:actions (map (fn [{:keys [id label system-icon]}]
                                          {:id id
