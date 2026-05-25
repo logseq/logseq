@@ -160,10 +160,11 @@
                              (when v
                                (db-async/<get-block (state/get-current-repo) (:db/id row) {:skip-refresh? true
                                                                                            :children? false}))
-                             (if v
-                               (set-last-selected-idx! (.indexOf data (:db/id row)))
-                               (when (= (:db/id row) last-selected-idx)
-                                 (set-last-selected-idx! nil)))
+                             (let [idx (.indexOf data (:db/id row))]
+                               (if v
+                                 (set-last-selected-idx! idx)
+                                 (when (= idx last-selected-idx)
+                                   (set-last-selected-idx! nil))))
                              (row-toggle-selected! row-selection row v)))
        :aria-label (t :view.table/select-row)
        :class "flex"})]))
@@ -534,11 +535,23 @@
               (= :asset (:logseq.property/type property))))
           columns))
 
+(def ^:private gallery-default-card-dimensions
+  {:width 220
+   :height 320})
+
+(def ^:private gallery-compact-card-dimensions
+  {:width 160
+   :height 232})
+
+(def ^:private gallery-min-card-dimension 100)
+
+(def ^:private gallery-max-card-dimension 1024)
+
 (defn- clamp-gallery-card-dimension
   [value]
   (-> value
-      (max db-view/gallery-min-card-dimension)
-      (min db-view/gallery-max-card-dimension)))
+      (max gallery-min-card-dimension)
+      (min gallery-max-card-dimension)))
 
 (defn- gallery-column-ident
   [column]
@@ -600,7 +613,7 @@
   [view]
   (case (:logseq.property.view/gallery-card-size view)
     :compact
-    db-view/gallery-compact-card-dimensions
+    gallery-compact-card-dimensions
 
     :custom
     (let [width (:logseq.property.view/gallery-card-width view)
@@ -608,9 +621,9 @@
       (if (and (number? width) (number? height) (pos? width) (pos? height))
         {:width (clamp-gallery-card-dimension width)
          :height (clamp-gallery-card-dimension height)}
-        db-view/gallery-default-card-dimensions))
+        gallery-default-card-dimensions))
 
-    db-view/gallery-default-card-dimensions))
+    gallery-default-card-dimensions))
 
 (defn- set-gallery-display-properties!
   [view-entity property-idents]
@@ -664,8 +677,8 @@
 (defn- gallery-slider-value
   [value]
   (-> (js/Math.round value)
-      (max db-view/gallery-min-card-dimension)
-      (min db-view/gallery-max-card-dimension)))
+      (max gallery-min-card-dimension)
+      (min gallery-max-card-dimension)))
 
 (rum/defc gallery-card-size-slider
   [label value on-change on-commit]
@@ -676,8 +689,8 @@
    (shui/slider
     {:class "relative flex w-full touch-none select-none items-center"
      :value #js [value]
-     :min db-view/gallery-min-card-dimension
-     :max db-view/gallery-max-card-dimension
+     :min gallery-min-card-dimension
+     :max gallery-max-card-dimension
      :step 1
      :on-value-change (fn [result]
                         (on-change (gallery-slider-value (first result))))

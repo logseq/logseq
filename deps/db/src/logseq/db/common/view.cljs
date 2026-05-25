@@ -17,18 +17,6 @@
 
 (def valid-type-for-sort? (some-fn number? string? boolean?))
 
-(def gallery-default-card-dimensions
-  {:width 220
-   :height 320})
-
-(def gallery-compact-card-dimensions
-  {:width 160
-   :height 232})
-
-(def gallery-min-card-dimension 100)
-
-(def gallery-max-card-dimension 1024)
-
 (defn get-property-value-for-search
   [block property]
   (let [v (get block (:db/ident property))]
