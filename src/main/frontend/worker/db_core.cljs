@@ -424,16 +424,21 @@
   [:logseq.class/Comments
    :logseq.class/Comment])
 
+(def ^:private built-in-sync-repair-unordered-classes
+  #{:logseq.class/Comments
+    :logseq.class/Comment})
+
 ;; Fixed so duplicate repair txs from multiple clients converge on the same datoms.
 (def ^:private built-in-sync-repair-timestamp 0)
 
 (defn- stable-built-in-sync-repair-item
   [order item]
   (if (and (map? item) (:block/uuid item))
-    (assoc item
-           :block/created-at built-in-sync-repair-timestamp
-           :block/updated-at built-in-sync-repair-timestamp
-           :block/order order)
+    (cond-> (assoc item
+                   :block/created-at built-in-sync-repair-timestamp
+                   :block/updated-at built-in-sync-repair-timestamp)
+      (not (contains? built-in-sync-repair-unordered-classes (:db/ident item)))
+      (assoc :block/order order))
     item))
 
 (defn- built-in-sync-repair-tx-data
