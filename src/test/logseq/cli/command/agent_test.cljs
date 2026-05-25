@@ -1641,6 +1641,86 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest test-execute-agent-bridge-shares-routing-claims-between-listener-and-initial-scan
+  (async done
+         (let [root (temp-root)
+               handler* (atom nil)
+               starts* (atom 0)
+               session-writes* (atom [])
+               block (task-block {})]
+           (try
+             (-> (p/with-redefs [agent-command/codex-available? (fn [_] true)
+                                 cli-server/ensure-server! (fn [cfg _repo]
+                                                             (assoc cfg :base-url "http://127.0.0.1:1234"))
+                                 agent-command/register-agent-bridge! (fn [_cfg _repo _agent-name]
+                                                                        (p/resolved true))
+                                 agent-command/ensure-agent-bridge-prompt-templates!
+                                 (fn [_cfg _repo]
+                                   (p/resolved {:task "Task {{graph}} {{block-uuid}} {{agent-name}}\n{{task-block-tree}}"
+                                                :comment "Comment {{graph}} {{comment-uuid}} {{agent-name}}\n{{comment-target-context}}\n{{comment-thread-context}}\n{{requesting-comment}}"}))
+                                 transport/connect-events! (fn [_cfg handler]
+                                                             (reset! handler* handler)
+                                                             {:close! (fn [] nil)})
+                                 agent-command/list-routable-tasks (fn [_cfg _repo _agent-name]
+                                                                     (p/resolved [{:block block
+                                                                                   :tree-text "- Ship the CLI bridge"}]))
+                                 show-command/execute-show (fn [_action _cfg]
+                                                             (p/resolved {:status :ok
+                                                                          :data {:message "- Ship the CLI bridge"}}))
+                                 transport/invoke (fn [_cfg method args]
+                                                    (case method
+                                                      :thread-api/q
+                                                      (p/resolved nil)
+
+                                                      :thread-api/pull
+                                                      (let [[_repo _selector lookup] args]
+                                                        (if (= (:db/id block) lookup)
+                                                          (p/resolved block)
+                                                          (p/rejected (ex-info "unexpected pull"
+                                                                               {:lookup lookup}))))
+
+                                                      :thread-api/apply-outliner-ops
+                                                      (p/resolved {:ok true})
+
+                                                      (p/rejected (ex-info "unexpected invoke"
+                                                                           {:method method
+                                                                            :args args}))))
+                                 agent-command/start-codex! (fn [_command _opts]
+                                                              (let [start-count (swap! starts* inc)]
+                                                                (when (= 1 start-count)
+                                                                  (@handler* :sync-db-changes
+                                                                             {:tx-data [{:e (:db/id block)
+                                                                                         :a :logseq.property/status
+                                                                                         :v :logseq.property/status.todo
+                                                                                         :added true}]}))
+                                                                (p/let [_ (p/delay 20)]
+                                                                  {:session (str "session-" start-count)
+                                                                   :status :running})))
+                                 agent-command/write-agent-session-id! (fn [_cfg repo block-uuid session-id]
+                                                                         (swap! session-writes* conj [repo block-uuid session-id])
+                                                                         (p/resolved true))]
+                   (do
+                     (agent-command/execute-bridge {:type :agent-bridge
+                                                    :repo "logseq_db_demo"
+                                                    :graph "demo"
+                                                    :dry-run? false}
+                                                   {:root-dir root
+                                                    :agent-name "build-host"
+                                                    :log-fn (fn [_] nil)})
+                     (p/let [_ (p/delay 60)]
+                       (is (= 1 @starts*))
+                       (is (= [["logseq_db_demo" (:block/uuid block) "session-1"]]
+                              @session-writes*)))))
+                 (p/catch (fn [e]
+                            (is false (str "unexpected error: " e))))
+                 (p/finally (fn []
+                              (fs/rmSync root #js {:recursive true :force true})
+                              (done))))
+             (catch :default e
+               (fs/rmSync root #js {:recursive true :force true})
+               (is false (str "unexpected setup error: " e))
+               (done))))))
+
 (deftest test-execute-agent-bridge-bounds-initial-task-routing-concurrency
   (async done
          (let [root (temp-root)
