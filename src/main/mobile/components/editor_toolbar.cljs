@@ -174,7 +174,7 @@
             (camera-action)
             (upload-asset-action)
             (audio-action)]
-     :trailing nil}
+     :trailing (keyboard-action)}
     (let [keyboard (keyboard-action)
           main-actions [(undo-action)
                         (todo-action)
