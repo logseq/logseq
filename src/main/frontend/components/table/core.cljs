@@ -236,8 +236,8 @@
         (:asset-table/nested? row)
         (assoc :data-asset-table-nested true)))
      (when (seq pinned-columns)
-       [:div.sticky-columns.ls-table-row-cells.flex.flex-row
+       [:div.sticky-columns.flex.flex-row
         (map #(row-cell-f % {}) pinned-columns)])
      (when (seq unpinned-columns)
-       [:div.ls-table-row-cells.flex.flex-row
+       [:div.flex.flex-row
         (map #(row-cell-f % {:lazy? true}) unpinned-columns)]))))

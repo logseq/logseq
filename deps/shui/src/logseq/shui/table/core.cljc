@@ -232,7 +232,7 @@
         el-ref (rum/use-ref nil)
         _ (when-not (mobile?) (use-sticky-element! el-ref (:main-container prop)))]
     [:div.ls-table-header
-     (merge {:class "border-y transition-colors bg-gray-01"
+     (merge {:class "transition-colors bg-gray-01"
              :ref el-ref
              :style {:z-index 9}}
             (dissoc prop :main-container))
@@ -247,22 +247,28 @@
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
     [:div.ls-table-row.ls-block.flex.flex-row.items-center
-     (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted bg-gray-01 items-stretch"}
+     (merge {:class "transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted bg-gray-01 items-stretch"}
             prop)
      children]))
 
 (rum/defc table-cell < rum/static
   [& prop-and-children]
-  (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div.ls-table-cell.flex.relative.h-full (dissoc prop :select? :add-property?)
-     [:div {:class (str "flex align-middle h-full w-full overflow-x-clip items-center"
+  (let [[prop children] (get-prop-and-children prop-and-children)
+        outer-class (str (:class prop)
+                         (when (:select? prop) " ls-table-select-cell")
+                         (when (:add-property? prop) " ls-table-add-property-cell"))
+        outer-prop (cond-> (dissoc prop :select? :add-property?)
+                     (seq outer-class)
+                     (assoc :class outer-class))]
+    [:div.ls-table-cell.flex.relative.h-full outer-prop
+     [:div {:class (str "ls-table-cell-content flex align-middle h-full w-full overflow-x-clip items-center"
                         (cond
                           (:select? prop)
                           " px-0"
                           (:add-property? prop)
                           ""
                           :else
-                          " border-r px-2"))}
+                          " px-2"))}
       children]]))
 
 (rum/defc table-actions < rum/static

@@ -1,5 +1,6 @@
 .ls-table {
-  --ls-table-row-divider-color: hsl(var(--border));
+  --ls-table-row-height: 32px;
+  --ls-table-inner-divider-color: hsl(var(--border));
   --ls-table-edge-divider-color: var(--ls-border-color, hsl(var(--border)));
 
   .asset-container {
@@ -41,9 +42,10 @@
   }
 
   .ls-table-row {
-    @apply h-[33px] min-h-[33px] max-h-[33px];
     position: relative;
-    border-bottom-color: transparent;
+    height: var(--ls-table-row-height);
+    min-height: var(--ls-table-row-height);
+    max-height: var(--ls-table-row-height);
 
     &::after {
       content: "";
@@ -53,9 +55,7 @@
       bottom: 0;
       height: 1px;
       pointer-events: none;
-      background-color: var(--ls-table-row-divider-color);
-      transform: scaleY(0.5);
-      transform-origin: bottom;
+      background-color: var(--ls-table-inner-divider-color);
       z-index: 8;
     }
 
@@ -70,10 +70,6 @@
     .multi-values {
       @apply !flex-nowrap;
     }
-
-    > .ls-table-row-cells {
-      height: calc(100% + 1px);
-    }
   }
 
   div[data-testid='virtuoso-item-list'] > div:last-child .ls-table-row::after {
@@ -84,7 +80,8 @@
     @apply flex flex-row items-center w-fit absolute left-0 top-0;
 
     min-width: 100%;
-    border-color: var(--ls-table-edge-divider-color);
+    border-top: 1px solid var(--ls-table-edge-divider-color);
+    border-bottom: 1px solid var(--ls-table-edge-divider-color);
 
     will-change: transform;
     transform: translate3d(0, 0, 0);
@@ -111,14 +108,24 @@
   }
 
   .ls-table-header-cell {
-    @apply cursor-pointer transition-colors hover:bg-muted/50 text-left align-middle font-medium text-muted-foreground border-r;
+    @apply cursor-pointer transition-colors hover:bg-muted/50 text-left align-middle font-medium text-muted-foreground;
+    border-right: 1px solid var(--ls-table-edge-divider-color);
   }
 
   .ls-table-cell {
     @apply overflow-hidden;
   }
 
-  .ls-table-index-cell > div {
+  .ls-table-cell-content {
+    border-right: 1px solid var(--ls-table-inner-divider-color);
+  }
+
+  .ls-table-select-cell > .ls-table-cell-content,
+  .ls-table-add-property-cell > .ls-table-cell-content {
+    border-right: 0;
+  }
+
+  .ls-table-index-cell > .ls-table-cell-content {
     @apply justify-end;
   }
 
@@ -137,11 +144,15 @@
 
   .ls-table-footer {
     @apply absolute left-0 bottom-[8px] w-full;
+  }
 
-    > div {
-      border-top: 1px solid var(--ls-table-edge-divider-color);
-      border-bottom-color: var(--ls-table-edge-divider-color);
-    }
+  .ls-table-new-row {
+    border-top: 1px solid var(--ls-table-edge-divider-color);
+    border-bottom: 1px solid var(--ls-table-edge-divider-color);
+  }
+
+  .ls-table-new-row[data-empty="true"] {
+    border-top: 0;
   }
 
   .ls-table-resize-handle {
