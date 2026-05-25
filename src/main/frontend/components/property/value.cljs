@@ -50,6 +50,46 @@
      (when-not (string/starts-with? (get block (:db/ident property)) "zotero://")
        (state/pub-event! [:asset/dialog-edit-external-url block])))})
 
+(def ^:private editor-navigation-trigger-class "jtrigger")
+
+(defn- property-value-block-container-class
+  []
+  (str "property-block-container content w-full " editor-navigation-trigger-class))
+
+(defn- editing-navigation?
+  [e]
+  (= "edit" (some-> (.-currentTarget e) (.getAttribute "data-property-nav-mode"))))
+
+(defn- move-property-value-boundary!
+  [e direction]
+  (util/stop e)
+  (if (editing-navigation? e)
+    (editor-handler/move-cross-boundary-up-down direction {:input nil})
+    (editor-handler/move-property-focus-up-down direction)))
+
+(defn- property-value-block-container-props
+  [property]
+  {:class (property-value-block-container-class)
+   :tabIndex 0
+   :on-key-down (fn [e]
+                  (when (= (.-currentTarget e) js/document.activeElement)
+                    (case (util/ekey e)
+                      "ArrowUp"
+                      (move-property-value-boundary! e :up)
+
+                      "ArrowDown"
+                      (move-property-value-boundary! e :down)
+
+                      nil)))
+   :style (if (= (:db/ident property) :logseq.property/default-value)
+            {:min-width 300}
+            {})})
+
+(defn- show-inline-asset-picker?
+  [editing? value]
+  (and editing?
+       (not (and value (:db/id value)))))
+
 (defn- entity-map?
   [m]
   (and (map? m) (:db/id m)))
@@ -1130,10 +1170,7 @@
         :property-ident (:db/ident property)})
       (cond
         (seq value-block)
-        [:div.property-block-container.content.w-full
-         {:style (if (= (:db/ident property) :logseq.property/default-value)
-                   {:min-width 300}
-                   {})}
+        [:div (property-value-block-container-props property)
          (let [config {:id (str (if multiple-values?
                                   (:block/uuid block)
                                   (:block/uuid value-block)))
@@ -1836,7 +1873,7 @@
                                                                  asset-embedded-control-selector)))
                                   (util/stop e)
                                   (show-grid! (or (.-currentTarget e) (rum/deref *el)))))]
-    (if editing?
+    (if (show-inline-asset-picker? editing? value)
       [:div.property-select.w-full
        (asset-grid-popup-content block property opts)]
       (shui/trigger-as
@@ -1848,6 +1885,12 @@
         :on-click show-grid-from-click!
         :on-key-down (fn [e]
                        (case (util/ekey e)
+                         "ArrowUp"
+                         (move-property-value-boundary! e :up)
+
+                         "ArrowDown"
+                         (move-property-value-boundary! e :down)
+
                          ("Backspace" "Delete")
                          (when-not config/publishing?
                            (delete-block-property! block property))

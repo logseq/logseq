@@ -115,6 +115,7 @@
   .property-panel-bullet {
     @apply inline-flex items-center opacity-60;
     margin-left: 2px;
+    min-height: 24px;
   }
 
   .property-panel-bullet .bullet-container {
