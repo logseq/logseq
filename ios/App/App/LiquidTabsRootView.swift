@@ -450,6 +450,10 @@ private struct LiquidTabs26View: View {
                 }
 
                 if newSelection != selectedTab {
+                    let isExternalSelectionChange = store.tabId(for: selectedTab) != id
+                    if isExternalSelectionChange {
+                        prepareForSelectionChange(to: newSelection)
+                    }
                     selectedTab = newSelection
                 }
             }
