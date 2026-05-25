@@ -16,6 +16,30 @@
         db
         attr)))
 
+(defn- extends-idents
+  [db entity]
+  (let [parents (:logseq.property.class/extends entity)]
+    (map (fn [parent]
+           (:db/ident (if (number? parent)
+                        (d/entity db parent)
+                        parent)))
+         (cond
+           (nil? parents) []
+           (set? parents) parents
+           (sequential? parents) parents
+           :else [parents]))))
+
+(defn- ref-ids
+  [refs]
+  (set
+   (map (fn [ref]
+          (if (number? ref) ref (:db/id ref)))
+        (cond
+          (nil? refs) []
+          (set? refs) refs
+          (sequential? refs) refs
+          :else [refs]))))
+
 (def ^:private legacy-65-24-schema
   (merge db-schema/schema
          {:block/pre-block? {:db/index true}
@@ -210,7 +234,7 @@
     (d/transact! conn [{:db/ident :logseq.kv/schema-version
                         :kv/value {:major 65 :minor 30}}])
 
-    (let [result (db-migrate/migrate conn)]
+    (let [result (db-migrate/migrate conn :target-version {:major 65 :minor 31})]
       (is (= {:major 65 :minor 31}
              (:kv/value (d/entity @conn :logseq.kv/schema-version))))
       (let [property (d/entity @conn :logseq.property.agent/session-id)]
@@ -224,3 +248,73 @@
       (is (some #(= {:properties [:logseq.property.agent/session-id]}
                     (:migrate-updates %))
                 (:upgrade-result-coll result))))))
+
+(deftest migrate-65-32-adds-root-extends-to-comment-classes
+  (let [conn (d/create-conn db-schema/schema)
+        target-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        comments-area-uuid #uuid "22222222-2222-2222-2222-222222222222"]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 31}}
+                       {:db/ident :logseq.class/Root
+                        :block/title "Root Tag"}
+                       {:db/ident :logseq.class/Comments
+                        :block/title "Comments"
+                        :block/order "a0"}
+                       {:db/ident :logseq.class/Comment
+                        :block/title "Comment"
+                        :block/order "a1"}
+                       {:block/uuid target-uuid
+                        :block/title "target"}
+                       {:block/uuid comments-area-uuid
+                        :block/title "Comments"
+                        :block/parent [:block/uuid target-uuid]
+                        :block/tags #{:logseq.class/Comments}}])
+
+    (let [result (db-migrate/migrate conn :target-version {:major 65 :minor 32})
+          migration-report (first (:upgrade-result-coll result))
+          migration-db (:db-after migration-report)]
+
+      (is (= {:major 65 :minor 32}
+             (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+      (is (= [:logseq.class/Root]
+             (extends-idents migration-db (d/entity migration-db :logseq.class/Comments))))
+      (is (nil? (:block/order (d/entity migration-db :logseq.class/Comments))))
+      (is (= [:logseq.class/Root]
+             (extends-idents migration-db (d/entity migration-db :logseq.class/Comment))))
+      (is (nil? (:block/order (d/entity migration-db :logseq.class/Comment))))
+      (is (= #{(:db/id (d/entity migration-db [:block/uuid target-uuid]))}
+             (ref-ids (:logseq.property.comments/blocks
+                       (d/entity migration-db [:block/uuid comments-area-uuid]))))))))
+
+(deftest migrate-65-33-adds-gallery-view-properties
+  (let [conn (d/create-conn db-schema/schema)
+        property-idents [:logseq.property.view/gallery-asset-property
+                         :logseq.property.view/gallery-display-properties
+                         :logseq.property.view/gallery-card-size
+                         :logseq.property.view/gallery-card-width
+                         :logseq.property.view/gallery-card-height]]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 32}}])
+
+    (is (every? nil? (map #(d/entity @conn %) property-idents)))
+
+    (db-migrate/migrate conn :target-version {:major 65 :minor 33})
+
+    (is (= {:major 65 :minor 33}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (every? some? (map #(d/entity @conn %) property-idents)))
+    (is (= :property
+           (:logseq.property/type
+            (d/entity @conn :logseq.property.view/gallery-asset-property))))
+    (is (= :db.cardinality/many
+           (:db/cardinality
+            (d/entity @conn :logseq.property.view/gallery-display-properties))))
+    (is (= :keyword
+           (:logseq.property/type
+            (d/entity @conn :logseq.property.view/gallery-card-size))))
+    (is (= :default
+           (:logseq.property/scalar-default-value
+            (d/entity @conn :logseq.property.view/gallery-card-size))))
+    (is (every? #(= :raw-number (:logseq.property/type (d/entity @conn %)))
+                [:logseq.property.view/gallery-card-width
+                 :logseq.property.view/gallery-card-height]))))

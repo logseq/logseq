@@ -147,7 +147,10 @@
     ""
     "Do not operate outside the target graph."
     "Write task results back into the graph."
-    "Report the final status, files changed, commands run, verification, and any blockers."
+    "If the target graph is sync-enabled, make sure it is synced after writing back to the graph."
+    "Keep the report short when possible."
+    "Report blockers only if there is a blocker."
+    "Report root cause and Steps to verify only for bug fixes."
     ""
     "Task block tree:"
     "{{task-block-tree}}"]))
@@ -163,7 +166,10 @@
     ""
     "Do not operate outside the target graph."
     "Complete the request from the mentioned comment."
-    "Report the final status, files changed, commands run, verification, and any blockers."
+    "If the target graph is sync-enabled, make sure it is synced after writing back to the graph."
+    "Keep the report short when possible."
+    "Report blockers only if there is a blocker."
+    "Report root cause and Steps to verify only for bug fixes."
     ""
     "Comment target context:"
     "{{comment-target-context}}"
@@ -177,6 +183,7 @@
     "Reply instructions:"
     "For a short reply, append a comment after the requesting comment."
     "For a long reply, write a normal block tree after the comments area and append a comment that references that tree."
+    "When referencing result blocks in DB graphs, reference result blocks with [[block-uuid]], not ((block-uuid))."
     "If the request is blocked or fails, make that clear in the reply."]))
 
 (def ^:private prompt-template-vars
@@ -822,6 +829,50 @@
                                {}])]
     true))
 
+(def ^:private task-start-reaction "eyes")
+(def ^:private comment-start-reaction "eyes")
+(def ^:private comment-complete-reaction "white_check_mark")
+(def ^:private comment-failed-reaction "x")
+
+(def ^:private reaction-query
+  '[:find ?r .
+    :in $ ?target-uuid ?emoji-id
+    :where
+    [?target :block/uuid ?target-uuid]
+    [?r :logseq.property.reaction/target ?target]
+    [?r :logseq.property.reaction/emoji-id ?emoji-id]
+    [(missing? $ ?r :logseq.property/created-by-ref)]])
+
+(defn- ensure-reaction!
+  [cfg repo target-uuid emoji-id]
+  (p/let [existing (transport/invoke cfg :thread-api/q [repo [reaction-query target-uuid emoji-id]])]
+    (when-not (some? existing)
+      (transport/invoke cfg :thread-api/apply-outliner-ops
+                        [repo [[:toggle-reaction [target-uuid emoji-id nil]]] {}]))))
+
+(def ^:private task-status-query
+  '[:find ?status-ident .
+    :in $ ?block-uuid
+    :where
+    [?block :block/uuid ?block-uuid]
+    [?block :logseq.property/status ?status]
+    [?status :db/ident ?status-ident]])
+
+(defn- mark-agent-bridge-task-started!
+  [cfg repo block]
+  (let [block-uuid (:block/uuid block)]
+    (p/let [_ (ensure-reaction! cfg repo block-uuid task-start-reaction)
+            current-status (when (contains? block :logseq.property/status)
+                             (transport/invoke cfg :thread-api/q [repo [task-status-query block-uuid]]))
+            _ (when (= :logseq.property/status.todo current-status)
+                (transport/invoke cfg :thread-api/apply-outliner-ops
+                                  [repo [[:batch-set-property [[block-uuid]
+                                                                :logseq.property/status
+                                                                :logseq.property/status.doing
+                                                                {}]]]
+                                   {}]))]
+      true)))
+
 (def ^:private routable-task-query
   '[:find [(pull ?e [:db/id
                      :block/uuid
@@ -912,7 +963,8 @@
                                 {:code :codex-session-id-missing})))
             cfg* (cli-server/ensure-server! cfg repo)
             _ (record-session! cfg* (session-record graph agent-name block session :running))
-            _ (write-agent-session-id! cfg* repo (:block/uuid block) session)]
+            _ (write-agent-session-id! cfg* repo (:block/uuid block) session)
+            _ (mark-agent-bridge-task-started! cfg* repo block)]
       (emit-log! cfg (log-line (str "agent-session-id written for " (block-uuid-str block))))
       {:block (block-uuid-str block)
        :session session
@@ -956,13 +1008,14 @@
           (partition-all limit coll)))
 
 (defn- process-tasks!
-  [cfg {:keys [repo graph agent-name prompt-templates]}]
+  [cfg {:keys [repo graph agent-name prompt-templates routing-blocks*]}]
   (p/let [tasks (list-routable-tasks cfg repo agent-name)]
     (p-map-batched max-concurrent-routes
                    #(route-task-once! cfg {:repo repo
                                            :graph graph
                                            :agent-name agent-name
-                                           :prompt-templates prompt-templates}
+                                           :prompt-templates prompt-templates
+                                           :routing-blocks* routing-blocks*}
                                       %)
                    tasks)))
 
@@ -1010,19 +1063,6 @@
    {:block/tags [:db/ident :block/title]}
    {:logseq.property.comments/blocks (comment-target-block-selector session-property-ident)}])
 
-(def ^:private comment-start-reaction "eyes")
-(def ^:private comment-complete-reaction "white_check_mark")
-(def ^:private comment-failed-reaction "x")
-
-(def ^:private comment-reaction-query
-  '[:find ?r .
-    :in $ ?target-uuid ?emoji-id
-    :where
-    [?target :block/uuid ?target-uuid]
-    [?r :logseq.property.reaction/target ?target]
-    [?r :logseq.property.reaction/emoji-id ?emoji-id]
-    [(missing? $ ?r :logseq.property/created-by-ref)]])
-
 (defn- unknown-attr-datom?
   [datom]
   (let [attr (:a datom)]
@@ -1044,13 +1084,41 @@
        (or (string/includes? (:v datom) (str "[[" agent-name "]]"))
            (string/includes? (:v datom) "[["))))
 
-(defn- task-routability-datom?
-  [datom]
-  (and (true? (:added datom))
-       (or (and (= :block/tags (:a datom))
-                (= :logseq.class/Task (:v datom)))
-           (and (= :logseq.property/status (:a datom))
-                (= :logseq.property/status.todo (:v datom))))))
+(def ^:private routability-entity-selector
+  [:db/id :db/ident])
+
+(defn- task-routability-attr?
+  [attr]
+  (or (= :block/tags attr)
+      (= :logseq.property/status attr)))
+
+(defn- task-routability-ident?
+  [attr ident]
+  (case attr
+    :block/tags (= :logseq.class/Task ident)
+    :logseq.property/status (= :logseq.property/status.todo ident)
+    false))
+
+(defn- resolve-routability-datom-ident
+  [cfg repo datom]
+  (let [value (:v datom)]
+    (if (keyword? value)
+      (p/resolved value)
+      (p/let [entity (transport/invoke cfg :thread-api/pull [repo routability-entity-selector value])]
+        (:db/ident entity)))))
+
+(defn- resolve-routability-datoms
+  [cfg repo tx-data]
+  (let [candidates (filter #(and (true? (:added %))
+                                  (task-routability-attr? (:a %)))
+                           tx-data)]
+    (p/let [resolved (p/all
+                      (mapv (fn [datom]
+                              (p/let [ident (resolve-routability-datom-ident cfg repo datom)]
+                                (when (task-routability-ident? (:a datom) ident)
+                                  datom)))
+                            candidates))]
+      (keep identity resolved))))
 
 (defn- pull-assignee-property
   [cfg repo]
@@ -1138,10 +1206,7 @@
 
 (defn- ensure-comment-reaction!
   [cfg repo target-uuid emoji-id]
-  (p/let [existing (transport/invoke cfg :thread-api/q [repo [comment-reaction-query target-uuid emoji-id]])]
-    (when-not (some? existing)
-      (transport/invoke cfg :thread-api/apply-outliner-ops
-                        [repo [[:toggle-reaction [target-uuid emoji-id nil]]] {}]))))
+  (ensure-reaction! cfg repo target-uuid emoji-id))
 
 (defn- comment-session-record
   [graph agent-name comment-block session-id status]
@@ -1258,9 +1323,9 @@
 
 (defn- process-sync-db-changes-event!
   [cfg {:keys [repo] :as opts} {:keys [tx-data]}]
-  (p/let [assignee-datoms (resolve-assignee-datoms cfg repo tx-data)]
-    (let [routability-datoms (filter task-routability-datom? tx-data)
-          comment-datoms (filter #(comment-title-datom? % (:agent-name opts)) tx-data)
+  (p/let [assignee-datoms (resolve-assignee-datoms cfg repo tx-data)
+          routability-datoms (resolve-routability-datoms cfg repo tx-data)]
+    (let [comment-datoms (filter #(comment-title-datom? % (:agent-name opts)) tx-data)
           routing (vec (concat (map #(route-assignee-datom! cfg opts %) assignee-datoms)
                                (map #(route-routability-datom! cfg opts %) routability-datoms)
                                (map #(route-comment-datom! cfg opts %) comment-datoms)))]
@@ -1268,8 +1333,8 @@
         (p/all routing)))))
 
 (defn- listen-forever!
-  [cfg {:keys [repo graph agent-name prompt-templates]}]
-  (let [routing-blocks* (atom #{})
+  [cfg {:keys [repo graph agent-name prompt-templates routing-blocks*]}]
+  (let [routing-blocks* (or routing-blocks* (atom #{}))
         handle-error! (fn [e]
                         (emit-log! cfg (log-line (str "Codex invocation failed: "
                                                       (or (ex-message e) (str e)))))
@@ -1338,24 +1403,29 @@
                   (do
                     (doseq [line (conj logs (log-line "listening graph changes ..."))]
                       (emit-log! cfg line))
-                    (p/let [routed (process-tasks! cfg {:repo repo
-                                                        :graph graph
-                                                        :agent-name agent-name
-                                                        :prompt-templates prompt-templates})]
-                      {:status :ok
-                       :command :agent-bridge
-                       :data {:mode :processed-once
-                              :graph graph
-                              :agent-name agent-name
-                              :routed routed}}))
-                  (let [listen-promise (listen-forever! cfg {:repo repo
+                    (let [routing-blocks* (atom #{})]
+                      (p/let [routed (process-tasks! cfg {:repo repo
+                                                          :graph graph
+                                                          :agent-name agent-name
+                                                          :prompt-templates prompt-templates
+                                                          :routing-blocks* routing-blocks*})]
+                        {:status :ok
+                         :command :agent-bridge
+                         :data {:mode :processed-once
+                                :graph graph
+                                :agent-name agent-name
+                                :routed routed}})))
+                  (let [routing-blocks* (atom #{})
+                        listen-promise (listen-forever! cfg {:repo repo
                                                              :graph graph
                                                              :agent-name agent-name
-                                                             :prompt-templates prompt-templates})]
+                                                             :prompt-templates prompt-templates
+                                                             :routing-blocks* routing-blocks*})]
                     (doseq [line (conj logs (log-line "listening graph changes ..."))]
                       (emit-log! cfg line))
                     (p/let [_ (process-tasks! cfg {:repo repo
                                                    :graph graph
                                                    :agent-name agent-name
-                                                   :prompt-templates prompt-templates})]
+                                                   :prompt-templates prompt-templates
+                                                   :routing-blocks* routing-blocks*})]
                       listen-promise)))))))))))
