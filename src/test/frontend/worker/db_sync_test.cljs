@@ -1585,6 +1585,87 @@
             (is (= asset-uuid (get-in asset-op [:update-asset 2 :block-uuid])))
             (is (= :update-asset (first (:update-asset asset-op))))))))))
 
+(defn- process-pending-asset-op!
+  [asset-uuid]
+  (client-op/add-asset-ops test-repo [[:update-asset 10 {:block-uuid asset-uuid}]])
+  (let [fail-fast-called? (atom false)
+        broadcast-count (atom 0)
+        asset-op (first (client-op/get-all-asset-ops test-repo))]
+    (#'sync-assets/process-asset-op!
+     test-repo
+     "graph-id"
+     asset-op
+     {:current-client-f (constantly {:repo test-repo})
+      :broadcast-rtc-state!-f (fn [_client] (swap! broadcast-count inc))
+      :fail-fast-f (fn [tag data]
+                     (reset! fail-fast-called? true)
+                     (throw (ex-info (name tag) data)))})
+    {:fail-fast-called? @fail-fast-called?
+     :broadcast-count @broadcast-count
+     :pending-count (client-op/get-unpushed-asset-ops-count test-repo)}))
+
+(deftest process-asset-op-drops-update-when-asset-entity-is-missing-test
+  (testing "stale asset upload ops should not block sync when the entity no longer exists"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          asset-uuid (random-uuid)]
+      (with-datascript-conns
+        conn
+        client-ops-conn
+        (fn []
+          (let [result (process-pending-asset-op! asset-uuid)]
+            (is (false? (:fail-fast-called? result)))
+            (is (= 1 (:broadcast-count result)))
+            (is (= 0 (:pending-count result)))))))))
+
+(deftest process-asset-op-drops-update-when-asset-type-is-missing-test
+  (testing "asset upload ops should be dropped when the entity is missing asset type"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          asset-uuid (random-uuid)]
+      (d/transact! conn [{:block/uuid asset-uuid
+                          :block/title "asset-without-type"
+                          :logseq.property.asset/checksum "sha-256-value"}])
+      (with-datascript-conns
+        conn
+        client-ops-conn
+        (fn []
+          (let [result (process-pending-asset-op! asset-uuid)]
+            (is (false? (:fail-fast-called? result)))
+            (is (= 1 (:broadcast-count result)))
+            (is (= 0 (:pending-count result)))))))))
+
+(deftest process-asset-op-drops-update-when-asset-checksum-is-missing-test
+  (testing "asset upload ops should be dropped when the entity is missing checksum"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          asset-uuid (random-uuid)]
+      (d/transact! conn [{:block/uuid asset-uuid
+                          :block/title "asset.png"
+                          :logseq.property.asset/type "png"}])
+      (with-datascript-conns
+        conn
+        client-ops-conn
+        (fn []
+          (let [result (process-pending-asset-op! asset-uuid)]
+            (is (false? (:fail-fast-called? result)))
+            (is (= 1 (:broadcast-count result)))
+            (is (= 0 (:pending-count result)))))))))
+
+(deftest process-asset-op-drops-update-when-required-asset-attributes-are-blank-test
+  (testing "asset upload ops should be dropped when required attributes are blank"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          asset-uuid (random-uuid)]
+      (d/transact! conn [{:block/uuid asset-uuid
+                          :block/title "asset.png"
+                          :logseq.property.asset/type "png"
+                          :logseq.property.asset/checksum ""}])
+      (with-datascript-conns
+        conn
+        client-ops-conn
+        (fn []
+          (let [result (process-pending-asset-op! asset-uuid)]
+            (is (false? (:fail-fast-called? result)))
+            (is (= 1 (:broadcast-count result)))
+            (is (= 0 (:pending-count result)))))))))
+
 (deftest apply-history-action-does-not-reuse-original-tx-id-test
   (testing "undo/redo history actions should not overwrite the original pending tx row"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)

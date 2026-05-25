@@ -340,6 +340,16 @@
       (p/let [stop-result (profile/time! (:profile-session config)
                                           "server.restart-version-mismatch"
                                           (fn []
+                                            (log/info :cli-server-restart-version-mismatch
+                                                      {:repo repo
+                                                       :expected-revision expected
+                                                       :current-revision (:revision server)
+                                                       :owner-source (:owner-source server)
+                                                       :pid (:pid server)
+                                                       :host (:host server)
+                                                       :port (:port server)
+                                                       :root-dir (:root-dir server)
+                                                       :status (:status server)})
                                             (stop-version-mismatched-server! config repo server)))]
         (when-not (:ok? stop-result)
           (throw (ex-info "db-worker-node revision mismatch and restart failed"
