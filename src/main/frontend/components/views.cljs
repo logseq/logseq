@@ -1865,26 +1865,6 @@
             (lazy-item-render rows idx)
             (str "partition-" idx)))))))
 
-(defn- gallery-card-asset-block
-  [block asset-property-ident]
-  (let [asset-value (when (and block asset-property-ident (not= :block/uuid asset-property-ident))
-                      (get block asset-property-ident))]
-    (cond
-      (= :block/uuid asset-property-ident)
-      block
-
-      (de/entity? asset-value)
-      asset-value
-
-      (number? asset-value)
-      (db/entity asset-value)
-
-      (set? asset-value)
-      (some #(if (number? %) (db/entity %) %) asset-value)
-
-      (sequential? asset-value)
-      (some #(if (number? %) (db/entity %) %) asset-value))))
-
 (rum/defc gallery-property-value
   [block property-ident]
   (if (= :block/title property-ident)
@@ -1900,7 +1880,7 @@
 
 (rum/defc gallery-card-item
   [view-entity block config {:keys [asset-property-ident display-property-idents]}]
-  (let [asset-block (gallery-card-asset-block block asset-property-ident)]
+  (let [asset-block (get block asset-property-ident)]
     [:div.ls-card-item.content
      {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))
       :on-click (fn [e]
