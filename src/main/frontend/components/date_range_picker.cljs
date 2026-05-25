@@ -41,6 +41,15 @@
   (let [[y m d] (int->parts n)]
     (js/Date. y (dec m) d 0 0 0 0)))
 
+(defn- precision-from-int
+  "Derive date precision from the YYYYMMDD integer encoding.
+   yyyy0000 → :year, yyyymm00 → :month, yyyymmdd → :day."
+  [n]
+  (cond
+    (zero? (mod n 10000)) :year
+    (zero? (mod n 100))   :month
+    :else                 :day))
+
 ;;; ─── Flexible date parser ────────────────────────────────────────────────────
 
 (def ^:private month-name->int
@@ -159,29 +168,35 @@
   ["" "Jan" "Feb" "Mar" "Apr" "May" "Jun"
    "Jul" "Aug" "Sep" "Oct" "Nov" "Dec"])
 
+(defn- fmt-endpoint
+  "Format a single YYYYMMDD integer for display, deriving precision from
+   the integer encoding (yyyy0000 → year, yyyymm00 → month, else day)."
+  [n]
+  (let [[y m d] (int->parts n)]
+    (cond
+      (zero? (mod n 10000)) (str y)
+      (zero? (mod n 100))   (str (get month-abbr m "?") " " y)
+      :else                 (str (get month-abbr m "?") " " d ", " y))))
+
 (defn format-label
-  "Return a human-readable string for a date-range value map."
-  [{:keys [precision start end]}]
+  "Return a human-readable string for a date-range value map.
+   Precision is derived from the integer encoding; the :precision key
+   is accepted but ignored (kept for call-site backwards compat)."
+  [{:keys [start end]}]
   (when start
-    (let [fmt (case precision
-                :year  (fn [n] (str (quot n 10000)))
-                :month (fn [n]
-                         (let [[y m] (int->parts n)]
-                           (str (get month-abbr m "?") " " y)))
-                (fn [n]
-                  (let [[y m d] (int->parts n)]
-                    (str (get month-abbr m "?") " " d ", " y))))]
-      (if end
-        (str (fmt start) " – " (fmt end))
-        (fmt start)))))
+    (if end
+      (str (fmt-endpoint start) " – " (fmt-endpoint end))
+      (fmt-endpoint start))))
 
 ;;; ─── Sub-pickers ─────────────────────────────────────────────────────────────
 
 (rum/defc year-picker
-  "Shows the current year with ‹/› navigation. The ‹/› buttons call on-navigate
-   with the new year; clicking the year label calls on-select with that year."
+  "Shows the current year with ‹/› navigation, sized to match the day calendar
+   width (276 px = 2×12 px padding + 7×36 px cells).  The ‹/› buttons call
+   on-navigate with the new year; clicking the year label calls on-select."
   [{:keys [year on-select on-navigate]}]
   [:div.flex.items-center.justify-center.gap-3
+   {:style {:width "100%" :padding "12px"}}
    (shui/button {:variant :ghost :size :icon
                  :on-click #(on-navigate (dec year))}
                 (ui/icon "chevron-left" {:size 14}))
@@ -194,13 +209,16 @@
                 (ui/icon "chevron-right" {:size 14}))])
 
 (rum/defc month-grid
-  "A 4×3 month grid with year navigation. on-navigate changes the display year;
-   on-select is called with a YYYYMMDD integer for the 1st of the chosen month."
+  "A 4×3 month grid with year navigation, sized to match the day calendar width
+   (276 px = 2×12 px padding + 7×36 px cells).
+   on-navigate changes the display year;
+   on-select is called with a YYYYMMDD integer for the chosen month."
   [{:keys [year month on-select on-navigate]}]
   (let [rows [["Jan" "Feb" "Mar"] ["Apr" "May" "Jun"]
               ["Jul" "Aug" "Sep"] ["Oct" "Nov" "Dec"]]]
     [:div.flex.flex-col.gap-1
-     [:div.flex.items-center.justify-between.px-1
+     {:style {:width "100%" :padding "12px"}}
+     [:div.flex.items-center.justify-between
       (shui/button {:variant :ghost :size :icon
                     :on-click #(on-navigate (dec year))}
                    (ui/icon "chevron-left" {:size 14}))
@@ -239,15 +257,20 @@
 
 (rum/defcs endpoint-picker < (rum/local nil ::display-year)
   "Picker for a single start or end date.
-   on-navigate changes the displayed year without updating the value.
+   Renders inside a fixed-size 276×310 px box so that switching between
+   Year / Month / Day precision does not resize the pop-over.
    on-select is called with a YYYYMMDD integer when the user picks a date."
-  [state {:keys [precision value label on-select]}]
+  [state {:keys [precision value on-select]}]
   (let [*display-year (::display-year state)
         [val-year val-month _] (when value (int->parts value))
         display-year  (or @*display-year val-year (t/year (t/now)))]
-    [:div.flex.flex-col.gap-2
-     (when label
-       [:span.text-xs.font-medium.uppercase.tracking-wide.text-muted-foreground label])
+    ;; Fixed-height container.  Using height (not min-height) so the box never
+    ;; expands when the day calendar renders a 6-week month, which prevents the
+    ;; small jump when switching away from Day precision.  330px safely covers
+    ;; the tallest DayPicker layout (6 weeks × ~44px + caption + padding).
+    [:div {:style {:width "276px" :height "330px"
+                   :display "flex" :flex-direction "column"
+                   :align-items "flex-start" :overflow "hidden"}}
      (case precision
        :year
        (year-picker {:year        display-year
@@ -265,14 +288,15 @@
        (day-calendar {:value     value
                       :on-select on-select}))]))
 
-;;; ─── Main component ──────────────────────────────────────────────────────────
+;;; ─── Main component ────────────────────────────────────────────────────────────────────────────
 
 (rum/defcs date-range-picker-inner <
   rum/reactive
   ;; Sentinel :unset means "not yet overridden by user" — actual initial value
   ;; is derived from the value prop on every render.  Once the user makes a
   ;; selection the atom holds the chosen value.
-  (rum/local :unset ::precision)
+  (rum/local :unset ::start-precision)
+  (rum/local :unset ::end-precision)
   (rum/local :unset ::range?)
   (rum/local :unset ::draft-start)
   (rum/local :unset ::draft-end)
@@ -282,57 +306,78 @@
   {:will-mount   (fn [state] (state/set-editor-action! :property-set-date) state)
    :will-unmount (fn [state] (shui/popup-hide!) (state/set-editor-action! nil) state)}
   [state {:keys [value on-change on-delete del-btn?]}]
-  (let [*precision   (::precision state)
-        *range?      (::range? state)
-        *draft-start (::draft-start state)
-        *draft-end   (::draft-end state)
-        *text-input    (::text-input state)
-        *text-error    (::text-error state)
-        *hint-visible? (::hint-visible? state)
+  (let [*start-precision (::start-precision state)
+        *end-precision   (::end-precision state)
+        *range?          (::range? state)
+        *draft-start     (::draft-start state)
+        *draft-end       (::draft-end state)
+        *text-input      (::text-input state)
+        *text-error      (::text-error state)
+        *hint-visible?   (::hint-visible? state)
 
         ;; Resolve effective values: user override takes priority; fall back to
         ;; the value prop so that editing an existing value shows current data.
-        precision    (let [p @*precision]
-                       (if (= p :unset) (or (:precision value) :day) p))
-        range?       (let [r @*range?]
-                       (if (= r :unset) (boolean (and value (:end value))) r))
-        draft-start  (let [s @*draft-start]
-                       (if (= s :unset) (:start value) s))
-        draft-end    (let [e @*draft-end]
-                       (if (= e :unset) (:end value) e))
+        start-precision  (let [p @*start-precision]
+                           (if (= p :unset) (or (:precision value) :day) p))
+        end-precision    (let [p @*end-precision]
+                           (if (= p :unset) (or (:precision value) :day) p))
+        range?           (let [r @*range?]
+                           (if (= r :unset) (boolean (and value (:end value))) r))
+        draft-start      (let [s @*draft-start]
+                           (if (= s :unset) (:start value) s))
+        draft-end        (let [e @*draft-end]
+                           (if (= e :unset) (:end value) e))
         ;; Text box: sentinel :unset means show the formatted existing value.
-        text-input   (let [t @*text-input]
-                       (if (= t :unset) (or (format-label value) "") t))
-        text-error   @*text-error
+        text-input       (let [t @*text-input]
+                           (if (= t :unset) (or (format-label value) "") t))
+        text-error       @*text-error
 
-        set-precision!
+        ;; Re-reading helpers so closures always see the latest atom values.
+        eff-start  #(let [s @*draft-start] (if (= s :unset) (:start value) s))
+        eff-end    #(let [e @*draft-end]   (if (= e :unset) (:end value) e))
+        eff-range? #(let [r @*range?]      (if (= r :unset) (boolean (and value (:end value))) r))
+
+        ;; Adjust a YYYYMMDD integer to the requested precision.
+        adjust-to-prec
+        (fn [n p]
+          (let [[y m d] (int->parts n)]
+            (case p
+              :year  (ymd->int y 0 0)
+              :month (ymd->int y (max m 1) 0)
+              (ymd->int y (max m 1) (max d 1)))))
+
+        set-start-precision!
         (fn [p]
-          (let [cur-start (let [s @*draft-start] (if (= s :unset) (:start value) s))
-                cur-end   (let [e @*draft-end]   (if (= e :unset) (:end value) e))]
-            (reset! *precision p)
-            (when cur-start
-              (let [[y m d] (int->parts cur-start)]
-                (reset! *draft-start (case p
-                                       :year  (ymd->int y 0 0)
-                                       :month (ymd->int y m 0)
-                                       (ymd->int y (max m 1) (max d 1))))))
-            (when cur-end
-              (let [[ey em ed] (int->parts cur-end)]
-                (reset! *draft-end (case p
-                                     :year  (ymd->int ey 0 0)
-                                     :month (ymd->int ey em 0)
-                                     (ymd->int ey (max em 1) (max ed 1))))))))
+          (reset! *start-precision p)
+          (when-let [cur (eff-start)]
+            (let [new-s (adjust-to-prec cur p)]
+              (reset! *draft-start new-s)
+              (reset! *text-input
+                      (format-label {:start new-s
+                                     :end   (when (eff-range?) (eff-end))})))))
+
+        set-end-precision!
+        (fn [p]
+          (reset! *end-precision p)
+          (when-let [cur (eff-end)]
+            (let [new-e (adjust-to-prec cur p)]
+              (reset! *draft-end new-e)
+              (when-let [s (eff-start)]
+                (reset! *text-input
+                        (format-label {:start s :end new-e}))))))
 
         ;; Apply a successfully parsed text result to the draft atoms.
         ;; When the parsed map includes :end, also update *draft-end and
-        ;; switch on range mode automatically.
+        ;; switch on range mode automatically.  Each half's precision is
+        ;; derived independently from its YYYYMMDD integer encoding.
         apply-parsed!
         (fn [{p :precision s :start e :end}]
           (reset! *draft-start s)
-          (reset! *precision p)
+          (reset! *start-precision p)
           (reset! *text-error nil)
           (when (some? e)
             (reset! *draft-end e)
+            (reset! *end-precision (precision-from-int e))
             (reset! *range? true)))
 
         ;; Called on Enter: canonicalise text if valid, show error if not.
@@ -351,58 +396,70 @@
           ;; Re-parse the text box so that typing then clicking OK (without Enter) works.
           (let [from-text   (when-not (string/blank? (string/trim text-input))
                               (parse-date-range-text text-input))
-                final-prec  (or (:precision from-text) precision)
                 final-start (or (:start from-text) draft-start)
                 ;; Text end takes priority; fall back to calendar-clicked end.
-                final-end   (or (:end from-text) (when range? draft-end))]
+                final-end   (or (:end from-text) (when range? draft-end))
+                final-prec  (if final-start (precision-from-int final-start) start-precision)]
             (when (and (fn? on-change) final-start)
               (on-change {:precision final-prec
                           :start     final-start
-                          :end       final-end}))))]
+                          :end       final-end}))))
+
+        ;; Renders a row of Year / Month / Day toggle buttons.
+        precision-buttons
+        (fn [active-prec on-set!]
+          [:div.flex.gap-1
+           (for [p [:year :month :day]]
+             (shui/button
+              {:key      (name p)
+               :variant  (if (= p active-prec) :default :outline)
+               :size     :sm
+               :on-click (fn [] (on-set! p))}
+              (string/capitalize (name p))))])]
 
     [:div.flex.flex-col.gap-3.p-1
 
-     ;; ── precision selector ────────────────────────────────────────────────
-     [:div.flex.gap-1
-      (for [p [:year :month :day]]
-        (shui/button
-         {:key      (name p)
-          :variant  (if (= p precision) :default :outline)
-          :size     :sm
-          :on-click (fn [] (set-precision! p))}
-         (string/capitalize (name p))))]
-
-     ;; ── calendars (side-by-side in range mode) ───────────────────────────
-     ;; Each endpoint-picker is keyed by its value's YYYYMM so that typing a
-     ;; date in a different month forces a remount.  On remount the local
-     ;; *display-year atom starts as nil and day-calendar's :default-month
-     ;; seeds the correct month, keeping the view in sync with the text box.
+     ;; ── calendars (side-by-side in range mode) ───────────────────────────────────────────
+     ;; Each endpoint is its own column: a precision-button row at the top,
+     ;; then a fixed-height endpoint-picker below.  Each endpoint-picker is
+     ;; keyed by its value's YYYYMM so that typing a date in a different
+     ;; month forces a remount and seeds the correct display month.
      [:div.flex.flex-row.gap-6
-      (rum/with-key
-        (endpoint-picker {:precision precision
-                          :value     draft-start
-                          :label     (when range? "Start date")
-                          :on-select (fn [v]
-                                       (reset! *draft-start v)
-                                       (reset! *text-input
-                                               (format-label {:precision precision
-                                                              :start     v
-                                                              :end       (when range? draft-end)})))})
-        (str "s-" (quot (or draft-start 0) 100)))
-      (when range?
-        (rum/with-key
-          (endpoint-picker {:precision precision
-                            :value     draft-end
-                            :label     "End date"
-                            :on-select (fn [v]
-                                         (reset! *draft-end v)
-                                         (reset! *text-input
-                                                 (format-label {:precision precision
-                                                                :start     draft-start
-                                                                :end       v})))})
-          (str "e-" (quot (or draft-end 0) 100))))]
 
-     ;; ── text input (below calendar, auto-focused on open) ────────────────
+      ;; ── Start column ───────────────────────────────────────────────────────────────────
+      [:div.flex.flex-col.gap-2
+       ;; Always render the label so it occupies the same vertical space
+       ;; whether range mode is on or off, keeping the picker height stable.
+       [:span.text-xs.font-medium.uppercase.tracking-wide.text-muted-foreground
+        {:style {:visibility (if range? "visible" "hidden")}}
+        "Start"]
+       (precision-buttons start-precision set-start-precision!)
+       (rum/with-key
+         (endpoint-picker {:precision start-precision
+                           :value     draft-start
+                           :on-select (fn [v]
+                                        (reset! *draft-start v)
+                                        (reset! *text-input
+                                                (format-label {:start v
+                                                               :end   (when range? draft-end)})))})
+         (str "s-" (quot (or draft-start 0) 100)))]
+
+      ;; ── End column (only in range mode) ────────────────────────────────────────────────────────────
+      (when range?
+        [:div.flex.flex-col.gap-2
+         [:span.text-xs.font-medium.uppercase.tracking-wide.text-muted-foreground "End"]
+         (precision-buttons end-precision set-end-precision!)
+         (rum/with-key
+           (endpoint-picker {:precision end-precision
+                             :value     draft-end
+                             :on-select (fn [v]
+                                          (reset! *draft-end v)
+                                          (reset! *text-input
+                                                  (format-label {:start draft-start
+                                                                 :end   v})))})
+           (str "e-" (quot (or draft-end 0) 100)))])]
+
+     ;; ── text input (below calendar, auto-focused on open) ────────────────────────
      [:div.flex.flex-col.gap-1
       [:div.relative
        (shui/input
@@ -414,10 +471,15 @@
          :on-mouse-leave  #(reset! *hint-visible? false)
          :on-change       (fn [e]
                             (let [new-text  (.. e -target -value)
-                                  ;; Capture previous text before overwriting, so we
-                                  ;; can detect when the user deletes the separator.
+                                  ;; Capture previous text before overwriting so we can
+                                  ;; detect when the user removes the range separator.
+                                  ;; When the atom is still :unset the picker just opened
+                                  ;; with an existing value — use the formatted label so
+                                  ;; that clearing the box from that state works correctly.
                                   prev-text (let [t @*text-input]
-                                              (when-not (= t :unset) t))]
+                                              (if (= t :unset)
+                                                (or (format-label value) "")
+                                                t))]
                               (reset! *text-input new-text)
                               (reset! *text-error nil)
                               ;; Live parse — handle single dates and ranges incrementally.
@@ -427,16 +489,19 @@
                               (if-let [[p1 p2] (split-range-text new-text)]
                                 (do
                                   ;; Separator present → show end calendar immediately.
+                                  ;; Even if p2 is blank the user may still be typing,
+                                  ;; so we don't collapse range mode here.
                                   (reset! *range? true)
                                   (when-let [sp (parse-date-text p1)]
                                     (reset! *draft-start (:start sp))
-                                    (reset! *precision (:precision sp)))
+                                    (reset! *start-precision (:precision sp)))
                                   (when-let [ep (parse-date-text p2)]
-                                    (reset! *draft-end (:start ep))))
+                                    (reset! *draft-end (:start ep))
+                                    (reset! *end-precision (:precision ep))))
                                 (do
                                   ;; No separator now.  If the previous text had one,
-                                  ;; the user just deleted the separator — revert to
-                                  ;; single-date mode.
+                                  ;; the user deleted it (or cleared the whole box) —
+                                  ;; revert to single-date mode.
                                   (when (and range?
                                              (some? prev-text)
                                              (split-range-text prev-text))
@@ -455,17 +520,17 @@
                                 (ok!))))})
        (when @*hint-visible?
          [:div.absolute.left-0.bottom-full.mb-1.rounded.shadow-md.px-2.py-1
-          {:style {:background  "var(--ls-tooltip-background-color, #374151)"
-                   :color       "var(--ls-tooltip-text-color, #f9fafb)"
-                   :font-size   "0.75rem"
-                   :white-space "nowrap"
-                   :z-index     1000
+          {:style {:background     "var(--ls-tooltip-background-color, #374151)"
+                   :color          "var(--ls-tooltip-text-color, #f9fafb)"
+                   :font-size      "0.75rem"
+                   :white-space    "nowrap"
+                   :z-index        1000
                    :pointer-events "none"}}
           "e.g. yyyy-mm, d mmm yyyy, yyyy - yyyy"])]
       (when text-error
         [:span.text-xs.text-destructive text-error])]
 
-     ;; ── footer ───────────────────────────────────────────────────────────
+     ;; ── footer ────────────────────────────────────────────────────────────────────────────
      [:div.flex.justify-between.items-center.pt-1
       [:div.flex.gap-1
        (when-not range?
