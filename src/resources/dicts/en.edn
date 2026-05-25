@@ -1927,6 +1927,7 @@
  :view.filter/to "to"
  :view.filter/type-to-search "Type to search"
 
+ :view.table/add-sort "Add sort"
  :view.table/ascending "Ascending"
  :view.table/columns-visibility "Columns visibility"
  :view.table/default-title (fn [total] (str total (if (<= total 1) " Node" " Nodes")))
@@ -1945,11 +1946,13 @@
  :view.table/pages "Pages"
  :view.table/pin "Pin"
  :view.table/row-number "Row number"
+ :view.table/search-property "Search property..."
  :view.table/select-all "Select all"
  :view.table/select-column "Select"
  :view.table/select-order "Select order"
  :view.table/select-row "Select row"
  :view.table/selected-count "Selected: {1}"
+ :view.table/sort "Sort"
  :view.table/sort-ascending "Sort ascending"
  :view.table/sort-descending "Sort descending"
  :view.table/sort-groups-by "Sort groups by"

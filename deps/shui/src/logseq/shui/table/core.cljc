@@ -96,6 +96,28 @@
     (set-sorting! value)
     value))
 
+(defn- column-replace-sorting!
+  [column set-sorting! asc?]
+  (let [value (when-not (nil? asc?)
+                [{:id (:id column) :asc? asc?}])]
+    (set-sorting! value)
+    value))
+
+(defn- column-append-sorting!
+  [column set-sorting! sorting asc?]
+  (let [id (:id column)
+        existing-column (some (fn [item] (when (= (:id item) id) item)) sorting)
+        value (->> (if existing-column
+                     (if (nil? asc?)
+                       (remove (fn [item] (= (:id item) id)) sorting)
+                       (map (fn [item] (if (= (:id item) id) (assoc item :asc? asc?) item)) sorting))
+                     (when-not (nil? asc?)
+                       (conj (vec sorting) {:id id :asc? asc?})))
+                   (remove nil?)
+                   vec)]
+    (set-sorting! value)
+    value))
+
 (defn get-selection-rows
   [row-selection rows]
   (if (:selected-all? row-selection)
@@ -135,7 +157,9 @@
            :row-toggle-selected! (fn [row-selection row value] (row-toggle-selected! row value set-row-selection! row-selection))
            :toggle-selected-all! (fn [table value]
                                    (toggle-selected-all! table value set-row-selection!))
-           :column-set-sorting! (fn [sorting column asc?] (column-set-sorting! column set-sorting! sorting asc?)))))
+           :column-set-sorting! (fn [sorting column asc?] (column-set-sorting! column set-sorting! sorting asc?))
+           :column-replace-sorting! (fn [column asc?] (column-replace-sorting! column set-sorting! asc?))
+           :column-append-sorting! (fn [sorting column asc?] (column-append-sorting! column set-sorting! sorting asc?)))))
 
 (defn- get-prop-and-children
   [prop-and-children]

@@ -49,6 +49,36 @@
   (is (= [1 2 3]
          (keep shui-table/table-row-id [1 {:db/id 2} {:foo "ignored"} 3]))))
 
+(deftest table-sorting-actions-should-replace-or-append-explicitly
+  (let [*sorting (atom nil)
+        table (shui-table/table-option
+               {:data []
+                :columns []
+                :state {}
+                :data-fns {:set-sorting! #(reset! *sorting %)}})]
+    (is (= [{:id :b :asc? true}]
+           ((:column-replace-sorting! table) {:id :b} true)))
+    (is (= [{:id :b :asc? true}]
+           @*sorting))
+    (is (= [{:id :a :asc? false}
+            {:id :b :asc? true}]
+           ((:column-append-sorting! table) [{:id :a :asc? false}] {:id :b} true)))
+    (is (= [{:id :a :asc? false}
+            {:id :b :asc? true}]
+           @*sorting))
+    (is (= [{:id :a :asc? true}
+            {:id :b :asc? true}]
+           ((:column-append-sorting! table) [{:id :a :asc? false}
+                                             {:id :b :asc? true}] {:id :a} true)))
+    (is (= [{:id :a :asc? true}
+            {:id :b :asc? true}]
+           @*sorting))
+    (is (= [{:id :b :asc? true}]
+           ((:column-append-sorting! table) [{:id :a :asc? true}
+                                             {:id :b :asc? true}] {:id :a} nil)))
+    (is (= [{:id :b :asc? true}]
+           @*sorting))))
+
 (deftest table-row-id-with-related-should-include-related-row-ids
   (let [table {:row-selection-related-ids-fn (fn [row]
                                               (when (= (:db/id row) 10)
@@ -76,6 +106,17 @@
         updated-at-column (some #(when (= :block/updated-at (:id %)) %) columns)]
     (is (false? (:editable? created-at-column)))
     (is (false? (:editable? updated-at-column)))))
+
+(deftest available-sorting-columns-should-exclude-sorted-and-index-columns
+  (let [columns [{:id :select :name "Select"}
+                 {:id :id :name "#"}
+                 {:id :add-new-property :name "+"}
+                 {:id :block/title :name "Name"}
+                 {:id :block/updated-at :name "Updated at"}
+                 {:id :user.property/status :name "Status"}]
+        sorting [{:id :block/updated-at :asc? false}]]
+    (is (= [:block/title :user.property/status]
+           (map :id (#'views/available-sorting-columns sorting columns))))))
 
 (deftest default-visible-columns-should-respect-persisted-hidden-columns
   (let [columns [{:id :select}
