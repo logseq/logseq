@@ -1412,16 +1412,21 @@
 
 (rum/defc add-new-row < rum/static
   [view-entity table {:keys [show-add-property?]}]
-  [:div.ls-table-new-row.py-1.px-2.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm
+  [:div.ls-table-new-row.py-1.px-2.flex.flex-row.items-center.w-full.text-sm
    {:style {:width (table-content-width table show-add-property?)
             :min-width "100%"}
-    :data-empty (str (empty? (:rows table)))
-    :on-click (fn [_]
-                (let [f (get-in table [:data-fns :add-new-object!])]
-                  (f view-entity table)))}
-   [:div.ls-table-new-row-content.flex.flex-row.items-center.gap-1
-    (ui/icon "plus" {:size 14})
-    [:div (t :view/new)]]])
+    :data-empty (str (empty? (:rows table)))}
+   [:div.ls-table-new-row-content
+    {:style {:background "transparent"}}
+    [:button.inline-flex.cursor-pointer.flex-row.items-center.gap-1.rounded-md.bg-transparent.px-1.text-muted-foreground.hover:bg-gray-03.hover:text-foreground
+     {:type "button"
+      :style {:cursor "pointer"}
+      :on-click (fn [e]
+                  (util/stop e)
+                  (let [f (get-in table [:data-fns :add-new-object!])]
+                    (f view-entity table)))}
+     (ui/icon "plus" {:size 14})
+     [:span (t :view/new)]]]])
 
 (defn- table-filters->persist-state
   [filters]
