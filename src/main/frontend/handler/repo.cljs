@@ -27,26 +27,48 @@
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
 ;; 2. Git pulls the new change (fn: load-files)
 
+(defn- repo-urls
+  [repos]
+  (->> repos
+       (keep :url)
+       distinct))
+
+(defn demo-only-repo?
+  [repo repos]
+  (let [url (:url repo)
+        urls (repo-urls repos)]
+    (and (some? url)
+         (config/demo-graph? url)
+         (= 1 (count urls)))))
+
+(defn removable-repo?
+  [repo repos]
+  (not (demo-only-repo? repo repos)))
+
 (defn remove-repo!
   [{:keys [url] :as repo} & {:keys [switch-graph?]
                              :or {switch-graph? true}}]
-  (let [current-repo (state/get-current-repo)]
-    (p/do!
-     (db/remove-conn! url)
-     (db-persist/delete-graph! url)
-     (search/remove-db! url)
-     (state/delete-repo! repo)
-     (when switch-graph?
-       (if (= current-repo url)
-         (do
-           (state/set-current-repo! nil)
-           (when-let [graph (:url (first (state/get-repos)))]
-             (notification/show! (t :graph/removed-and-redirecting
-                                    (text-util/get-graph-name-from-path url)
-                                    (text-util/get-graph-name-from-path graph))
-                                 :success)
-             (state/pub-event! [:graph/switch graph {:persist? false}])))
-           (notification/show! (t :graph/removed (text-util/get-graph-name-from-path url)) :success))))))
+  (if-not (removable-repo? repo (state/get-repos))
+    (p/rejected (ex-info "Cannot delete the demo graph when it is the only graph"
+                         {:code :demo-only-graph-delete
+                          :repo url}))
+    (let [current-repo (state/get-current-repo)]
+      (p/do!
+       (db/remove-conn! url)
+       (db-persist/delete-graph! url)
+       (search/remove-db! url)
+       (state/delete-repo! repo)
+       (when switch-graph?
+         (if (= current-repo url)
+           (do
+             (state/set-current-repo! nil)
+             (when-let [graph (:url (first (state/get-repos)))]
+               (notification/show! (t :graph/removed-and-redirecting
+                                      (text-util/get-graph-name-from-path url)
+                                      (text-util/get-graph-name-from-path graph))
+                                   :success)
+               (state/pub-event! [:graph/switch graph {:persist? false}])))
+           (notification/show! (t :graph/removed (text-util/get-graph-name-from-path url)) :success)))))))
 
 (defn start-repo-db-if-not-exists!
   [repo & {:as opts}]

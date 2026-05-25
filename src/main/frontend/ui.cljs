@@ -490,8 +490,7 @@
                                {:id (str "ac-" react-key)
                                 :tab-index "0"
                                 :class (when chosen? "chosen")
-                                ;; TODO: should have more tests on touch devices
-                                        ;:on-pointer-down #(util/stop %)
+                                :on-mouse-down util/stop
                                 :on-click (fn [e]
                                             (util/stop e)
                                             (when-not (:disabled? item)
@@ -1021,6 +1020,7 @@
   (shui/calendar
    (merge
     {:mode "single"
+     :weekStartsOn (mod (inc (state/get-start-of-week)) 7)
      :caption-layout "dropdown-buttons"
      :fromYear 1000
      :toYear 3000

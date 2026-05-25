@@ -136,6 +136,90 @@
                           (is false (str e))
                           (done)))))))
 
+(deftest rtc-download-graph-rejects-while-another-download-is-active-test
+  (async done
+         (let [state-prev @state/state
+               worker-calls (atom [])]
+           (swap! state/state assoc
+                  :rtc/downloading-graph-uuid "graph-1"
+                  :rtc/uploading? false)
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                           (resolve true))
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! worker-calls conj args)
+                                                         (p/resolved :ok))
+                               state/pub-event! (fn [& _] nil)]
+                 (db-sync/<rtc-download-graph! "demo-graph" "graph-2" false))
+               (p/then (fn [_]
+                         (is false "expected rejection")
+                         (reset! state/state state-prev)
+                         (done)))
+               (p/catch (fn [error]
+                          (is (= :db-sync/graph-operation-in-progress
+                                 (:type (ex-data error))))
+                          (is (empty? @worker-calls))
+                          (reset! state/state state-prev)
+                          (done)))))))
+
+(deftest rtc-download-graph-rejects-while-upload-is-active-test
+  (async done
+         (let [state-prev @state/state
+               worker-calls (atom [])]
+           (swap! state/state assoc
+                  :rtc/downloading-graph-uuid nil
+                  :rtc/uploading? true)
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                           (resolve true))
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! worker-calls conj args)
+                                                         (p/resolved :ok))
+                               state/pub-event! (fn [& _] nil)]
+                 (db-sync/<rtc-download-graph! "demo-graph" "graph-1" false))
+               (p/then (fn [_]
+                         (is false "expected rejection")
+                         (reset! state/state state-prev)
+                         (done)))
+               (p/catch (fn [error]
+                          (is (= :db-sync/graph-operation-in-progress
+                                 (:type (ex-data error))))
+                          (is (empty? @worker-calls))
+                          (reset! state/state state-prev)
+                          (done)))))))
+
+(deftest rtc-upload-graph-rejects-while-download-is-active-test
+  (async done
+         (let [state-prev @state/state
+               upload-calls (atom [])
+               refresh-calls (atom 0)
+               start-calls (atom [])]
+           (swap! state/state assoc
+                  :rtc/downloading-graph-uuid "graph-1"
+                  :rtc/uploading? false)
+           (-> (p/with-redefs [state/<invoke-db-worker (fn [& args]
+                                                         (swap! upload-calls conj args)
+                                                         (p/resolved :ok))
+                               db-sync/<get-remote-graphs (fn []
+                                                            (swap! refresh-calls inc)
+                                                            (p/resolved []))
+                               db-sync/<rtc-start! (fn [repo & _]
+                                                     (swap! start-calls conj repo)
+                                                     (p/resolved :ok))]
+                 (db-sync/<rtc-upload-graph! "logseq_db_demo" false))
+               (p/then (fn [_]
+                         (is false "expected rejection")
+                         (reset! state/state state-prev)
+                         (done)))
+               (p/catch (fn [error]
+                          (is (= :db-sync/graph-operation-in-progress
+                                 (:type (ex-data error))))
+                          (is (empty? @upload-calls))
+                          (is (zero? @refresh-calls))
+                          (is (empty? @start-calls))
+                          (reset! state/state state-prev)
+                          (done)))))))
+
 (deftest rtc-create-graph-and-start-sync-does-not-upload-snapshot-test
   (async done
          (let [create-calls (atom [])

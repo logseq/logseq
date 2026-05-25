@@ -383,11 +383,11 @@
                        (let [ident (:db/ident m)]
 
                          (cond
-                           (or (some->> ident db-property/logseq-property?)
+                           (or (and ident (db-property/logseq-property? ident))
                                (contains? db-property/db-attribute-properties (:db/ident m)))
                            :internal
 
-                           (some->> ident db-property/plugin-property?)
+                           (and ident (db-property/plugin-property? ident))
                            :plugin
 
                            :else

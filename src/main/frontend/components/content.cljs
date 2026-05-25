@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
+            [frontend.components.block.comments-model :as comments-model]
             [frontend.components.editor :as editor]
             [frontend.components.export :as export]
             [frontend.components.icon :as icon-component]
@@ -13,7 +14,9 @@
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.common.developer :as dev-common-handler]
+            [frontend.handler.comments :as comments-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
@@ -34,11 +37,11 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-;; TODO i18n support
-
 (rum/defc ^:large-vars/cleanup-todo custom-context-menu-content
   []
-  (let [[set-icon-sub-menu-open? set-icon-sub-menu-open] (rum/use-state false)]
+  (let [[set-icon-sub-menu-open? set-icon-sub-menu-open] (rum/use-state false)
+        comment-targets (comments-model/comment-target-blocks
+                         (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids)))]
     [:<>
      (ui/menu-background-color #(property-handler/batch-set-block-property! (state/get-selection-block-ids)
                                                                             :logseq.property/background-color
@@ -122,6 +125,18 @@
          :on-click #(fsrs/batch-make-cards!)}
         (t :context-menu/make-a-flashcard)))
 
+     (when (seq comment-targets)
+       (shui/dropdown-menu-item
+         {:key "Add comment"
+          :on-click (fn [_e]
+                     (p/let [comments-area (comments-handler/ensure-comments-area-for-selected-blocks!
+                                            comment-targets)]
+                       (when comments-area
+                         (comments-handler/reveal-comments-area! comments-area))
+                       (state/hide-custom-context-menu!)
+                       (shui/popup-hide!)))}
+        (t :block.comments/add-comment)))
+
      (shui/dropdown-menu-item
       {:key "Toggle number list"
        :on-click #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
@@ -190,6 +205,13 @@
           (t :sidebar.right/open)
           (ui/dropdown-shortcut "shift+click"))
 
+         (shui/dropdown-menu-item
+          {:key "Add comment"
+           :on-click (fn [_e]
+                       (p/let [comments-area (comments-handler/ensure-comments-area! block-id)]
+                         (comments-handler/reveal-comments-area! comments-area {:focus-editor? true})))}
+          (t :block.comments/add-comment))
+
          (shui/dropdown-menu-sub
           (shui/dropdown-menu-sub-trigger
            (t :command.editor/add-reaction))
@@ -250,9 +272,10 @@
            (shui/dropdown-menu-item
             {:key "Copy block URL"
              :on-click (fn [_e]
-                         (let [current-repo (state/get-current-repo)
-                               tap-f (fn [block-id]
-                                       (url-util/get-logseq-graph-uuid-url nil current-repo block-id))]
+                         (let [tap-f (fn [block-id]
+                                       (url-util/get-logseq-web-block-url config/app-website
+                                                                         (graph-handler/current-graph-id)
+                                                                         block-id))]
                            (editor-handler/copy-block-ref! block-id tap-f)))}
             (t :block/copy-url)))
 
@@ -356,7 +379,6 @@
                   (let [token (state/get-auth-id-token)
                         graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
                     (p/let [blocks-versions (state/<invoke-db-worker :thread-api/rtc-get-block-content-versions token graph-uuid block-id)]
-                      (prn :dev/show-block-content-history)
                       (doseq [[block-uuid versions] blocks-versions]
                         (prn :block-uuid block-uuid)
                         (pp/print-table [:content :created-at]

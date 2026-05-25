@@ -12,6 +12,7 @@
             [frontend.db.conn-state :as db-conn-state]
             [frontend.dicts :as dicts]
             [frontend.flows :as flows]
+            [frontend.graph-tab :as graph-tab]
             [frontend.mobile.util :as mobile-util]
             [frontend.spec.storage :as storage-spec]
             [frontend.storage :as storage]
@@ -77,7 +78,9 @@
 (defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
         current-graph  (let [url-graph (:graph (util/parse-params))
-                             graph (or url-graph (storage/get :git/current-repo))]
+                             graph (or url-graph
+                                       (graph-tab/get-tab-repo)
+                                       (storage/get :git/current-repo))]
                          (when graph (ipc/ipc "setCurrentGraph" graph))
                          graph)]
     (atom
@@ -1233,6 +1236,7 @@ Similar to re-frame subscriptions"
   (when clear-editing-block?
     (set-state! :editor/editing? nil)
     (set-state! :editor/block nil))
+  (set-state! :editor/args nil)
   (when clear-editing-block?
     (let [online-users (some-> @state :rtc/state deref :online-users)]
       (when (and (coll? online-users) (> (count online-users) 1))

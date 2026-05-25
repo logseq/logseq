@@ -6,6 +6,7 @@
             [cljs-time.format :as tf]
             [clojure.set :as set]
             [clojure.string :as string]
+            [datascript.core :as d]
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.common.missionary :as c.m]
@@ -132,7 +133,50 @@
        :class (str "flex transition-opacity "
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
 
+(rum/defc gallery-card-checkbox < rum/static
+  [{:keys [row-selected? row-toggle-selected! data state data-fns]} row]
+  (let [id (str (:db/id row) "-gallery-checkbox")
+        checked? (row-selected? row)
+        {:keys [last-selected-idx row-selection]} state
+        {:keys [set-last-selected-idx! set-row-selection!]} data-fns]
+    [:label.ls-gallery-card-select.flex.items-center.justify-center.cursor-pointer
+     {:html-for id
+      :on-click util/stop-propagation}
+     (shui/checkbox
+      {:id id
+       :checked checked?
+       :on-click (fn [e]
+                   (when (and (.-shiftKey e) last-selected-idx)
+                     (util/stop e)
+                     (let [idx (.indexOf data (:db/id row))]
+                       (when (not= last-selected-idx idx)
+                         (let [new-ids (keep (fn [idx] (util/nth-safe data idx))
+                                             (range (min last-selected-idx idx)
+                                                    (inc (max last-selected-idx idx))))]
+                           (when (seq new-ids)
+                             (set-row-selection! (update row-selection :selected-ids set/union (set new-ids)))))))))
+       :on-checked-change (fn [v]
+                            (p/do!
+                             (when v
+                               (db-async/<get-block (state/get-current-repo) (:db/id row) {:skip-refresh? true
+                                                                                           :children? false}))
+                             (let [idx (.indexOf data (:db/id row))]
+                               (if v
+                                 (set-last-selected-idx! idx)
+                                 (when (= idx last-selected-idx)
+                                   (set-last-selected-idx! nil))))
+                             (row-toggle-selected! row-selection row v)))
+       :aria-label (t :view.table/select-row)
+       :class "flex"})]))
+
 (defonce *last-header-action-target (atom nil))
+
+(defn- prevent-view-action-button-focus
+  [^js e]
+  (let [target (.-target e)]
+    (when (and (some-> target (.closest "button, [tabindex]"))
+               (not (some-> target (.closest "input, textarea, select, [contenteditable='true']"))))
+      (.preventDefault e))))
 
 (defn- header-dropdown-click-should-hide?
   [target]
@@ -476,6 +520,252 @@
 (defonce groups-sort-by-property-identity->name
   (set/map-invert groups-sort-by-name->property-identity))
 
+(def ^:private groupable-property-types
+  #{:checkbox :class :date :default :node :number :string :url})
+
+(def ^:private groupable-many-property-types
+  #{:class :default :node})
+
+(defn group-by-column?
+  [column]
+  (when-let [id (:id column)]
+    (when-not (= id :block/title)
+      (when-let [property (db/entity id)]
+        (and (contains? groupable-property-types (:logseq.property/type property))
+             (or (not (db-property/many? property))
+                 (contains? groupable-many-property-types (:logseq.property/type property))))))))
+
+(defn- set-view-property!
+  [view-entity property-ident value]
+  (property-handler/set-block-property! (:db/id view-entity) property-ident value))
+
+(defn- property-ident->id
+  [property-ident]
+  (:db/id (db/entity property-ident)))
+
+(defn- gallery-asset-columns
+  [columns]
+  (filter (fn [column]
+            (when-let [property (db/entity (:id column))]
+              (= :asset (:logseq.property/type property))))
+          columns))
+
+(def ^:private gallery-default-card-dimensions
+  {:width 220
+   :height 320})
+
+(def ^:private gallery-compact-card-dimensions
+  {:width 160
+   :height 232})
+
+(def ^:private gallery-min-card-dimension 100)
+
+(def ^:private gallery-max-card-dimension 1024)
+
+(defn- clamp-gallery-card-dimension
+  [value]
+  (-> value
+      (max gallery-min-card-dimension)
+      (min gallery-max-card-dimension)))
+
+(defn- gallery-column-ident
+  [column]
+  (or (:id column)
+      (:db/ident column)))
+
+(defn- gallery-column-property
+  [db column]
+  (cond
+    (de/entity? column) column
+    (gallery-column-ident column) (d/entity db (gallery-column-ident column))))
+
+(defn- gallery-asset-property-column?
+  [db column]
+  (= :asset (:logseq.property/type (gallery-column-property db column))))
+
+(defn- gallery-asset-property-idents
+  [db columns]
+  (->> columns
+       (filter #(gallery-asset-property-column? db %))
+       (keep gallery-column-ident)
+       vec))
+
+(defn- gallery-asset-property-ident
+  [db view columns]
+  (let [configured-ident (:db/ident (:logseq.property.view/gallery-asset-property view))
+        view-for (:logseq.property/view-for view)
+        feature-type (:logseq.property.view/feature-type view)
+        asset-tag? (= :logseq.class/Asset (:db/ident view-for))
+        tag-view? (and (= :class-objects feature-type)
+                       (ldb/class? view-for))
+        query-view? (= :query-result feature-type)]
+    (cond
+      asset-tag?
+      :block/uuid
+
+      configured-ident
+      configured-ident
+
+      (or tag-view? query-view?)
+      (let [asset-idents (gallery-asset-property-idents db columns)]
+        (when (= 1 (count asset-idents))
+          (first asset-idents))))))
+
+(defn- gallery-display-property-idents
+  [view columns asset-property-ident]
+  (let [configured-idents (set (keep :db/ident (:logseq.property.view/gallery-display-properties view)))
+        display-idents (if (seq configured-idents)
+                         (->> columns
+                              (keep gallery-column-ident)
+                              (filter configured-idents)
+                              vec)
+                         [:block/title])]
+    (->> display-idents
+         (remove #{:select :id asset-property-ident})
+         vec)))
+
+(defn- gallery-card-dimensions
+  [view]
+  (case (:logseq.property.view/gallery-card-size view)
+    :compact
+    gallery-compact-card-dimensions
+
+    :custom
+    (let [width (:logseq.property.view/gallery-card-width view)
+          height (:logseq.property.view/gallery-card-height view)]
+      (if (and (number? width) (number? height) (pos? width) (pos? height))
+        {:width (clamp-gallery-card-dimension width)
+         :height (clamp-gallery-card-dimension height)}
+        gallery-default-card-dimensions))
+
+    gallery-default-card-dimensions))
+
+(defn- set-gallery-display-properties!
+  [view-entity property-idents]
+  (set-view-property! view-entity
+                      :logseq.property.view/gallery-display-properties
+                      (vec (keep property-ident->id property-idents))))
+
+(defn- gallery-display-properties-menu
+  [view-entity columns]
+  (let [asset-property-ident (gallery-asset-property-ident (db/get-db) view-entity columns)
+        display-property-idents (set (gallery-display-property-idents view-entity columns asset-property-ident))
+        property-columns (remove #(contains? #{:select :id asset-property-ident} (:id %)) columns)]
+    (shui/dropdown-menu-sub
+     (shui/dropdown-menu-sub-trigger
+      (t :view.gallery/display-properties))
+     (shui/dropdown-menu-sub-content
+      (for [column property-columns]
+        (shui/dropdown-menu-checkbox-item
+         {:key (str "gallery-display-" (:id column))
+          :checked (contains? display-property-idents (:id column))
+          :onCheckedChange (fn [checked?]
+                             (let [new-idents (if checked?
+                                                (conj display-property-idents (:id column))
+                                                (disj display-property-idents (:id column)))]
+                               (set-gallery-display-properties! view-entity
+                                                                (filter new-idents (map :id property-columns)))))
+          :onSelect (fn [e] (.preventDefault e))}
+         (:name column)))))))
+
+(defn- gallery-asset-property-menu
+  [view-entity columns]
+  (let [asset-columns (seq (gallery-asset-columns columns))]
+    (when asset-columns
+      (let [asset-property-ident (gallery-asset-property-ident (db/get-db) view-entity columns)]
+        (shui/dropdown-menu-sub
+         (shui/dropdown-menu-sub-trigger
+          (t :view.gallery/asset-property))
+         (shui/dropdown-menu-sub-content
+          (for [column asset-columns]
+            (shui/dropdown-menu-checkbox-item
+             {:key (str "gallery-asset-" (:id column))
+              :checked (= asset-property-ident (:id column))
+              :onCheckedChange (fn [checked?]
+                                 (when checked?
+                                   (set-view-property! view-entity
+                                                       :logseq.property.view/gallery-asset-property
+                                                       (property-ident->id (:id column)))))
+              :onSelect (fn [e] (.preventDefault e))}
+             (:name column)))))))))
+
+(defn- gallery-slider-value
+  [value]
+  (-> (js/Math.round value)
+      (max gallery-min-card-dimension)
+      (min gallery-max-card-dimension)))
+
+(rum/defc gallery-card-size-slider
+  [label value on-change on-commit]
+  [:div.flex.flex-col.gap-2
+   [:div.flex.flex-row.items-center.justify-between.gap-3.text-sm.leading-none
+    [:span label]
+    [:span.font-medium.tabular-nums (str value \p \x)]]
+   (shui/slider
+    {:class "relative flex w-full touch-none select-none items-center"
+     :value #js [value]
+     :min gallery-min-card-dimension
+     :max gallery-max-card-dimension
+     :step 1
+     :on-value-change (fn [result]
+                        (on-change (gallery-slider-value (first result))))
+     :on-value-commit (fn [result]
+                        (on-commit (gallery-slider-value (first result))))}
+    (shui/slider-track
+     {:class "relative h-2 w-full grow overflow-hidden rounded-full bg-secondary"}
+     (shui/slider-range
+      {:class "absolute h-full bg-primary"}))
+    (shui/slider-thumb
+     {:class "block h-4 w-4 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none"}))])
+
+(rum/defc gallery-custom-card-size-inputs
+  [view-entity dimensions set-size!]
+  (let [[width set-width!] (hooks/use-state (:width dimensions))
+        [height set-height!] (hooks/use-state (:height dimensions))
+        save-dimensions! (fn [width' height']
+                           (p/do!
+                            (set-size! :custom)
+                            (set-view-property! view-entity :logseq.property.view/gallery-card-width width')
+                            (set-view-property! view-entity :logseq.property.view/gallery-card-height height')))
+        stop-menu-input! (fn [e]
+                           (when-not (= "Escape" (util/ekey e))
+                             (util/stop-propagation e)))]
+    [:div
+     {:class "flex flex-col items-stretch gap-2 w-[320px] max-w-[calc(100vw-32px)] px-4 py-2"
+      :on-click util/stop-propagation
+      :on-key-down stop-menu-input!}
+     [:div.w-full.text-sm.leading-8 (t :view.gallery/custom-size)]
+     [:div.flex.flex-col.gap-4.w-full
+      (gallery-card-size-slider
+       (t :view.gallery/width)
+       width
+       set-width!
+       #(save-dimensions! % height))
+      (gallery-card-size-slider
+       (t :view.gallery/height)
+       height
+       set-height!
+       #(save-dimensions! width %))]]))
+
+(defn- gallery-card-size-menu
+  [view-entity]
+  (let [size (:logseq.property.view/gallery-card-size view-entity)
+        dimensions (gallery-card-dimensions view-entity)
+        set-size! #(set-view-property! view-entity :logseq.property.view/gallery-card-size %)]
+    (shui/dropdown-menu-sub
+     (shui/dropdown-menu-sub-trigger
+      (t :view.gallery/card-size))
+     (shui/dropdown-menu-sub-content
+      (for [[value label] [[:default (t :view.gallery/default-size)]
+                           [:compact (t :view.gallery/compact-size)]]]
+        (shui/dropdown-menu-checkbox-item
+         {:key (str "gallery-size-" (name value))
+          :checked (= value (or size :default))
+          :onCheckedChange #(when % (set-size! value))
+          :onSelect (fn [e] (.preventDefault e))}
+         label))
+      (gallery-custom-card-size-inputs view-entity dimensions set-size!)))))
+
 (rum/defc groups-sort
   [view-entity sort-by-value]
   (let [property-ident (or (:db/ident sort-by-value) :block/journal-day)]
@@ -519,18 +809,15 @@
   [view-entity columns {:keys [column-visible? rows column-toggle-visibility]} {:keys [group-by-property-ident]}]
   (let [display-type (:db/ident (:logseq.property.view/type view-entity))
         table? (= display-type :logseq.property.view/type.table)
+        gallery? (= display-type :logseq.property.view/type.gallery)
         group-by-columns (concat (when (or
                                         (contains? #{:linked-references :unlinked-references}
                                                    (:logseq.property.view/feature-type view-entity))
                                         (:logseq.property/query view-entity))
                                    [{:id :block/page
                                      :name (t :view.table/page)}])
-                                 (filter (fn [column]
-                                           (when (:id column)
-                                             (when-let [p (db/entity (:id column))]
-                                               (and (not (db-property/many? p))
-                                                    (contains? #{:default :number :checkbox :url :node :date}
-                                                               (:logseq.property/type p)))))) columns))
+                                         (filter (fn [column]
+                                                   (group-by-column? column)) columns))
         group-by-page? (some #{:block/page} (map :id group-by-columns))]
     (shui/dropdown-menu
      (shui/dropdown-menu-trigger
@@ -541,7 +828,8 @@
         :size :sm}
        (ui/icon "dots" {:size 15})))
      (shui/dropdown-menu-content
-      {:align "end"}
+      {:align "end"
+       :onCloseAutoFocus #(.preventDefault %)}
       (shui/dropdown-menu-group
        (when table?
          (shui/dropdown-menu-sub
@@ -557,6 +845,12 @@
                :onCheckedChange #(column-toggle-visibility column %)
                :onSelect (fn [e] (.preventDefault e))}
               (:name column))))))
+       (when gallery?
+         (gallery-display-properties-menu view-entity columns))
+       (when gallery?
+         (gallery-asset-property-menu view-entity columns))
+       (when gallery?
+         (gallery-card-size-menu view-entity))
        (when (seq group-by-columns)
          (shui/dropdown-menu-sub
           (shui/dropdown-menu-sub-trigger
@@ -624,6 +918,7 @@
      :selected-blocks selected-rows
      :hide-dots? true
      :button-border? true
+     :outliner? false
      :view-parent (:logseq.property/view-for (:view-entity table))})))
 
 (rum/defc column-resizer
@@ -1204,7 +1499,8 @@
                                   (fn []
                                     (filter-property view-entity columns table opts))
                                   {:align :end
-                                   :auto-focus? true}))}
+                                   :focus-trigger? false
+                                   :content-props {:onCloseAutoFocus #(.preventDefault %)}}))}
    (ui/icon "filter")))
 
 (defn operator->text
@@ -1341,7 +1637,7 @@
                   false
                   true)]
       (shui/button
-       {:class "!px-2 rounded-none border-r"
+       {:class "!px-2 rounded-none border-r min-w-0 max-w-full overflow-hidden"
         :variant "ghost"
         :size :sm
         :on-click (fn [e]
@@ -1422,25 +1718,26 @@
                      (keep #(db/entity [:block/uuid %]) value)
                      :else
                      value)]
-         [:div.flex.flex-row.items-center.gap-1.text-xs
-          (cond
-            (de/entity? value)
-            [:div (get-property-value-content value)]
+        [:div.ls-view-filter-value.flex.flex-row.items-center.gap-1.text-xs.min-w-0.max-w-full.overflow-hidden
+         (cond
+           (de/entity? value)
+           [:div.ls-view-filter-value-item (get-property-value-content value)]
 
-            (string? value)
-            [:div value]
+           (string? value)
+           [:div.ls-view-filter-value-item value]
 
-            (boolean? value)
-            [:div (str value)]
+           (boolean? value)
+           [:div.ls-view-filter-value-item (str value)]
 
-            (= value :empty)
-            [:div (t :view.filter/empty)]
+           (= value :empty)
+           [:div.ls-view-filter-value-item (t :view.filter/empty)]
 
-            (seq value)
-            (->> (map (fn [v] [:div (get-property-value-content v)]) value)
-                 (interpose [:div (t :view.filter/or)]))
-            :else
-            (t :view/all))])))))
+           (seq value)
+           (->> (map (fn [v] [:span (get-property-value-content v)]) value)
+                (interpose [:span.flex-none ", "])
+                (into [:div.ls-view-filter-value-item]))
+           :else
+           (t :view/all))])))))
 
 (rum/defc filter-value < rum/static
   [view-entity table property operator value filters set-filters! idx opts]
@@ -1476,8 +1773,8 @@
   (let [filters (get-in table [:state :filters])
         {:keys [set-filters!]} data-fns]
     (when (seq (:filters filters))
-      [:div.filters-row.flex.flex-row.items-center.gap-4.justify-between.flex-wrap.py-2
-       [:div.flex.flex-row.items-center.gap-2
+      [:div.filters-row.flex.flex-row.items-center.gap-4.justify-between.flex-wrap.py-2.min-w-0.max-w-full
+       [:div.flex.flex-row.items-center.gap-2.flex-wrap.min-w-0.max-w-full
         (map-indexed
          (fn [idx filter']
            (let [[property-ident operator value] filter'
@@ -1488,7 +1785,7 @@
                                 (some (fn [column] (when (= (:id column) property-ident)
                                                      {:db/ident (:id column)
                                                       :block/title (:name column)})) columns)))]
-             [:div.flex.flex-row.items-center.border.rounded
+             [:div.flex.flex-row.items-center.border.rounded.min-w-0.max-w-full
               (shui/button
                {:class "!px-2 rounded-none border-r"
                 :variant "ghost"
@@ -1599,7 +1896,7 @@
       (set-sized-columns! sized-columns)))})
 
 (rum/defc lazy-item
-  [data idx {:keys [properties list-view? scrolling?]} item-render]
+  [data idx {:keys [properties list-view? gallery-view? scrolling?]} item-render]
   (let [item (util/nth-safe data idx)
         db-id (cond (map? item) (:db/id item)
                     (number? item) item
@@ -1609,7 +1906,8 @@
                    (when (= :full (:block.temp/load-status e))
                      e)))
         [item set-item!] (hooks/use-state entity)
-        opts (if list-view?
+        list-or-gallery? (or list-view? gallery-view?)
+        opts (if list-or-gallery?
                {:skip-refresh? true
                 :children? false}
                {:children? false
@@ -1621,7 +1919,7 @@
        (m/sp
          (when (and db-id (not item) (not scrolling?))
            (let [block (c.m/<? (db-async/<get-block (state/get-current-repo) db-id opts))
-                 block' (if list-view? (db/entity db-id) block)]
+                 block' (if list-or-gallery? (db/entity db-id) block)]
              (set-item! block')))))
      [db-id scrolling?])
     (let [item' (cond (map? item) item (number? item) {:db/id item})]
@@ -1716,33 +2014,220 @@
             (lazy-item-render rows idx)
             (str "partition-" idx)))))))
 
+(rum/defc gallery-property-value
+  [block property-ident]
+  (if (= :block/title property-ident)
+    [:div.ls-gallery-card-title
+     (some->> (:block/title block)
+              string/trim
+              string/split-lines
+              first)]
+    (when-let [property (db/entity property-ident)]
+      [:div.ls-gallery-card-property
+       (pv/property-value block property {:view? true
+                                          :gallery-view? true})])))
+
+(defn gallery-card-asset-block
+  [block asset-property-ident]
+  (let [asset-value (when (and block asset-property-ident (not= :block/uuid asset-property-ident))
+                      (get block asset-property-ident))
+        ->entity (fn [value]
+                   (cond
+                     (de/entity? value) value
+                     (number? value) (db/entity value)
+                     (uuid? value) (db/entity [:block/uuid value])
+                     :else value))]
+    (cond
+      (= :block/uuid asset-property-ident)
+      block
+
+      (set? asset-value)
+      (some ->entity asset-value)
+
+      (sequential? asset-value)
+      (some ->entity asset-value)
+
+      :else
+      (->entity asset-value))))
+
 (rum/defc gallery-card-item
-  [view-entity block config]
-  [:div.ls-card-item.content
-   {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))}
-   [:div.-ml-4
-    (block-container (assoc config
-                            :id (str (:block/uuid block))
-                            :gallery-view? true
-                            :view? true)
-                     block)]])
+  [table view-entity block config {:keys [asset-property-ident display-property-idents]}]
+  (let [asset-block (gallery-card-asset-block block asset-property-ident)
+        asset-cp (state/get-component :block/asset-cp)
+        render-asset? (and asset-block (fn? asset-cp))
+        selected? ((:row-selected? table) block)]
+    [:div.ls-card-item.content
+     {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))
+      :data-state (when selected? "selected")
+      :class (str (when render-asset? "has-gallery-asset")
+                  (when selected? " is-selected"))
+      :on-click (fn [e]
+                  (when-not (some-> (.-target e) (.closest (str "button, a, input, textarea, select, [role='menuitem'], "
+                                                                 ".ls-gallery-card-media, .ls-gallery-card-property")))
+                    (route-handler/redirect-to-page! (:block/uuid block))))}
+     [:div.ls-gallery-card-content
+      [:div.ls-gallery-card-media
+       (gallery-card-checkbox table block)
+       (when render-asset?
+         (asset-cp (assoc config :disable-resize? true :gallery-view? true) asset-block))]
+      [:div.ls-gallery-card-meta
+       (for [property-ident display-property-idents
+             :let [property-value (gallery-property-value block property-ident)]
+             :when property-value]
+          (rum/with-key
+            property-value
+            (str "gallery-property-" (:db/id block) "-" property-ident)))]]]))
+
+(defn gallery-lazy-item-opts
+  [option]
+  (select-keys option [:properties]))
+
+(defn view-row-ids
+  [rows]
+  (mapcat
+   (fn [row]
+     (cond
+       (number? row)
+       [row]
+
+       (map? row)
+       (when-let [id (:db/id row)]
+         [id])
+
+       (and (vector? row) (= 2 (count row)))
+       (view-row-ids (second row))
+
+       :else
+       []))
+   rows))
+
+(defn grouped-gallery-row-ids
+  [groups]
+  (vec (distinct (view-row-ids groups))))
+
+(defn group-readable-property-value
+  [value]
+  (cond
+    (and (map? value) (or (:block/title value) (:logseq.property/value value)))
+    (db-property/property-value-content value)
+
+    (= (:db/ident value) :logseq.property/empty-placeholder)
+    (t :ui/empty)
+
+    :else
+    (str value)))
+
+(rum/defc gallery-action-bar
+  [table option view-parent view-feature-type selected-rows]
+  (when (seq selected-rows)
+    (let [checkbox-id (str (:db/id (:view-entity table)) "-gallery-select-all")
+          checked? (or (:selected-all? table)
+                       (and (:selected-some? table) "indeterminate"))]
+      [:div.ls-gallery-action-bar-slot
+       [:div.ls-gallery-action-bar
+        [:label.ls-gallery-action-select-all
+         {:html-for checkbox-id
+          :title (t :view.table/select-all)}
+         (shui/checkbox
+          {:id checkbox-id
+           :checked checked?
+           :on-checked-change (fn [value]
+                                (p/do
+                                  (when value
+                                    (db-async/<get-blocks (state/get-current-repo) (:rows table) {}))
+                                  ((:toggle-selected-all! table) table value)))
+           :aria-label (t :view.table/select-all)
+           :class "flex"})]
+        (action-bar table selected-rows
+                    (assoc option
+                           :on-delete-rows (fn [table selected-ids]
+                                             (on-delete-rows view-parent view-feature-type table selected-ids))))]])))
 
 (rum/defcs gallery-view < rum/static mixins/container-id
-  [state {:keys [config]} table view-entity blocks *scroller-ref]
-  (let [config' (assoc config :container-id (:container-id state))]
+  [state {:keys [config view-parent view-feature-type] :as option} table view-entity blocks row-selection *scroller-ref]
+  (let [config' (assoc config :container-id (:container-id state))
+        columns (:columns table)
+        dimensions (gallery-card-dimensions view-entity)
+        asset-property-ident (gallery-asset-property-ident (db/get-db) view-entity columns)
+        display-property-idents (gallery-display-property-idents view-entity columns asset-property-ident)
+        selected-rows (shui/table-get-selection-rows row-selection (:rows table))
+        render-card (fn [idx]
+                      (lazy-item blocks idx
+                                 (assoc (gallery-lazy-item-opts option)
+                                        :gallery-view? true)
+                                 (fn [block]
+                                   (gallery-card-item table view-entity block config'
+                                                      {:asset-property-ident asset-property-ident
+                                                       :display-property-idents display-property-idents}))))]
     [:div.ls-cards
+     {:style {"--ls-gallery-card-width" (str (:width dimensions) "px")
+              "--ls-gallery-card-height" (str (:height dimensions) "px")}}
      (when (seq blocks)
-       (ui/virtualized-grid
-        {:ref #(reset! *scroller-ref %)
-         :total-count (count blocks)
-         :custom-scroll-parent (get-scroll-parent config)
-         :skipAnimationFrameInResizeObserver true
-         :compute-item-key (fn [idx]
-                             (str (:db/id view-entity) "-card-" idx))
-         :item-content (fn [idx]
-                         (lazy-item (:data table) idx {}
-                                    (fn [block]
-                                      (gallery-card-item view-entity block config'))))}))]))
+       (if (:disable-virtualized? option)
+         [:div.virtuoso-grid-list
+          (for [idx (range (count blocks))]
+            [:div.virtuoso-grid-item
+             {:key (str (:db/id view-entity) "-card-" (util/nth-safe blocks idx))}
+             (render-card idx)])]
+         (ui/virtualized-grid
+          {:ref #(reset! *scroller-ref %)
+           :total-count (count blocks)
+           :custom-scroll-parent (get-scroll-parent config)
+           :skipAnimationFrameInResizeObserver true
+           :compute-item-key (fn [idx]
+                               (str (:db/id view-entity) "-card-" (util/nth-safe blocks idx)))
+           :item-content render-card})))
+     (when-not (:hide-action-bar? option)
+       (gallery-action-bar table option view-parent view-feature-type selected-rows))]))
+
+(rum/defc gallery-group
+  [view-entity option row-selection *scroller-ref groups idx table-map group-by-page? group-by-property]
+  (let [[value group] (nth groups idx)
+        table' (shui/table-option (assoc table-map :data group))
+        title (cond
+                (and group-by-page? (nil? value))
+                [:div.text-muted-foreground.text-sm
+                 (t :view.table/pages)]
+
+                (some? value)
+                (group-readable-property-value value)
+
+                :else
+                (t :view.table/no-group-value (:block/title group-by-property)))]
+    [:div.ls-gallery-group
+     [:div.my-2 title]
+     (gallery-view (assoc option
+                          :disable-virtualized? true
+                          :hide-action-bar? true)
+                   table'
+                   view-entity
+                   group
+                   row-selection
+                   *scroller-ref)]))
+
+(rum/defc grouped-gallery-view < rum/static
+  [table-map table option view-entity groups row-selection group-by-property group-by-property-ident *scroller-ref]
+  (let [gallery-rows (grouped-gallery-row-ids groups)
+        gallery-action-table (shui/table-option
+                              (assoc table-map
+                                     :data gallery-rows
+                                     :full-data (:full-data table)))
+        selected-rows (shui/table-get-selection-rows row-selection (:rows gallery-action-table))
+        group-by-page? (= :block/page group-by-property-ident)]
+    [:div.flex.flex-col.border-t.pt-2.gap-2
+     (virtualized-list
+      {:class "group-gallery-view"
+       :custom-scroll-parent (util/app-scroll-container-node)
+       :increase-viewport-by {:top 300 :bottom 300}
+       :compute-item-key (fn [idx]
+                           (str "gallery-group-" (:db/id view-entity) "-" idx))
+       :skipAnimationFrameInResizeObserver true
+       :total-count (count groups)
+       :item-content
+       (fn [idx]
+         (gallery-group view-entity option row-selection *scroller-ref groups idx table-map group-by-page? group-by-property))}
+      false)
+     (gallery-action-bar gallery-action-table option (:view-parent option) (:view-feature-type option) selected-rows)]))
 
 (defn- run-effects!
   [option {:keys [data]} *scroller-ref gallery? set-ready?]
@@ -1832,7 +2317,9 @@
                 (shui/popup-show! (.-target e)
                                   (fn [] (view-sorting-config table sorting columns))
                                   {:align :end
-                                   :dropdown-menu? true}))}
+                                   :dropdown-menu? true
+                                   :focus-trigger? false
+                                   :content-props {:onCloseAutoFocus #(.preventDefault %)}}))}
    (ui/icon "arrows-up-down")))
 
 (rum/defc view-cp
@@ -1847,7 +2334,7 @@
        (list-view option view-entity table *scroller-ref)
 
        :logseq.property.view/type.gallery
-       (gallery-view option table view-entity (:rows table) *scroller-ref)
+       (gallery-view option table view-entity (:rows table) row-selection *scroller-ref)
 
        (table-view table option row-selection *scroller-ref))]))
 
@@ -1947,21 +2434,25 @@
                                (t :view/rename))
                               (shui/dropdown-menu-sub-content
                                (when-let [block-container-cp (state/get-component :block/container)]
-                                 (block-container-cp {:display-title (display-view-title view)} view))))
-                             (shui/dropdown-menu-item
-                              {:key "Delete"
-                               :on-click (fn []
-                                           (p/do!
-                                            (editor-handler/delete-block-aux! view)
-                                            (let [views' (remove (fn [v] (= (:db/id v) (:db/id view))) views)]
-                                              (set-views! views')
-                                              (set-view-entity! (first views'))
-                                              (shui/popup-hide!))))}
-                              (t :ui/delete))])
+                                 (block-container-cp {:display-title (display-view-title view)
+                                                      :hide-block-control? true} view))))
+                             (when (> (count views) 1)
+                               (shui/dropdown-menu-item
+                                {:key "Delete"
+                                 :on-click (fn []
+                                             (p/do!
+                                              (editor-handler/delete-block-aux! view)
+                                              (let [views' (remove (fn [v] (= (:db/id v) (:db/id view))) views)]
+                                                (set-views! views')
+                                                (set-view-entity! (first views'))
+                                                (shui/popup-hide!))))}
+                                (t :ui/delete)))])
                           {:as-dropdown? true
                            :dropdown-menu? true
                            :align "start"
-                           :content-props {:onClick shui/popup-hide!}})
+                           :focus-trigger? false
+                           :content-props {:onClick shui/popup-hide!
+                                           :onCloseAutoFocus #(.preventDefault %)}})
                          (do
                            (set-view-entity! view)
                            (set-data! nil))))}
@@ -2017,7 +2508,8 @@
                                                   :opacity opacity
                                                   :references? references?)))]
      [:div.view-actions.flex.items-center.gap-1.transition-opacity.ease-in.duration-300
-      {:class opacity}
+      {:class opacity
+       :on-mouse-down prevent-view-action-button-focus}
 
       (when (seq additional-actions)
         [:<> (for [action additional-actions]
@@ -2035,29 +2527,34 @@
                       :set-input! set-input!})]
 
       [:div.view-action-type.text-muted-foreground.text-sm
-       (pv/property-value view-entity (db/entity :logseq.property.view/type) {:icon? true})]
+       (pv/property-value view-entity (db/entity :logseq.property.view/type) {:icon? true
+                                                                              :popup-focus-trigger? false
+                                                                              :popup-auto-focus-trigger? false})]
 
       (more-actions view-entity columns table option)
 
       (when add-new-object! (new-record-button table view-entity))]]))
 
 (rum/defc group-item
-  [view-entity table' group group-by-property value option view-opts {:keys [list-view? group-by-page? readable-property-value]}]
+  [view-entity table' group group-by-property value option view-opts {:keys [list-view? gallery? group-by-page? readable-property-value]}]
   (let [title [:div
                {:class (when-not list-view? "my-2")}
                (cond
-                 group-by-page?
-                 (if value
-                   (let [c (state/get-component :block/page-cp)]
-                     (c {:disable-preview? true} value))
-                   [:div.text-muted-foreground.text-sm
-                    (t :view.table/pages)])
+                         group-by-page?
+                         (if value
+                           (let [c (state/get-component :block/page-cp)]
+                             (if (fn? c)
+                               (c {:disable-preview? true} value)
+                               (readable-property-value value)))
+                           [:div.text-muted-foreground.text-sm
+                            (t :view.table/pages)])
 
-                 (some? value)
-                 (let [icon (pu/get-block-property-value value :logseq.property/icon)]
-                   [:div.flex.flex-row.gap-1.items-center
-                    (when icon (icon-component/icon icon {:color? true}))
-                    (readable-property-value value)])
+                         (some? value)
+                         (let [icon (when (map? value)
+                                      (pu/get-block-property-value value :logseq.property/icon))]
+                           [:div.flex.flex-row.gap-1.items-center
+                            (when icon (icon-component/icon icon {:color? true}))
+                            (readable-property-value value)])
 
                  :else
                  (t :view.table/no-group-value (:block/title group-by-property)))]
@@ -2066,7 +2563,8 @@
                                         (assoc table' :rows group)
                                         (assoc option
                                                                       ;; disabled virtualization for nested view
-                                               :disable-virtualized? true)
+                                               :disable-virtualized? true
+                                               :hide-action-bar? gallery?)
                                         view-opts)]
                     (if (and list-view? (not (util/mobile?)))
                       [:div.-ml-2 render]
@@ -2167,40 +2665,35 @@
                           :add-new-object! add-new-object!}]
            (if (and group-by-property-ident (not (number? (first (:rows table)))))
              (when (and ready? (seq (:rows table)))
-               [:div.flex.flex-col.border-t.pt-2.gap-2
-                (virtualized-list
-                 {:class (when list-view? "group-list-view")
-                  :custom-scroll-parent (util/app-scroll-container-node (rum/deref *view-ref))
-                  :increase-viewport-by {:top 300 :bottom 300}
-                  :compute-item-key (fn [idx]
-                                      (str "table-group" idx))
-                  :skipAnimationFrameInResizeObserver true
-                  :total-count (count (:rows table))
-                  :item-content (fn [idx]
-                                  (let [[value group] (nth (:rows table) idx)
-                                        add-new-object! (when (fn? add-new-object!)
-                                                          (fn [_]
-                                                            (add-new-object! view-entity table
-                                                                             {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
-                                        table' (shui/table-option (-> table-map
-                                                                      (assoc-in [:data-fns :add-new-object!] add-new-object!)
-                                                                      (assoc :data group ; data for this group
-                                                                             )))
-                                        readable-property-value #(cond (and (map? %) (or (:block/title %) (:logseq.property/value %)))
-                                                                       (db-property/property-value-content %)
-                                                                       (= (:db/ident %) :logseq.property/empty-placeholder)
-                                                                       (t :ui/empty)
-                                                                       :else
-                                                                       (str %))
-                                        group-by-page? (= :block/page group-by-property-ident)
-                                        key (str (:db/id view-entity) "-group-idx-" idx)]
-                                    (rum/with-key
-                                      (group-item view-entity table' group group-by-property value option view-opts
-                                                  {:list-view? list-view?
-                                                   :group-by-page? group-by-page?
-                                                   :readable-property-value readable-property-value})
-                                      key)))}
-                 disable-virtualized?)])
+               (if gallery?
+                 (grouped-gallery-view table-map table option view-entity (:rows table) row-selection
+                                       group-by-property group-by-property-ident *scroller-ref)
+                 [:div.flex.flex-col.border-t.pt-2.gap-2
+                  (virtualized-list
+                   {:class (when list-view? "group-list-view")
+                    :custom-scroll-parent (util/app-scroll-container-node (rum/deref *view-ref))
+                    :increase-viewport-by {:top 300 :bottom 300}
+                    :compute-item-key (fn [idx]
+                                        (str "table-group" idx))
+                    :skipAnimationFrameInResizeObserver true
+                    :total-count (count (:rows table))
+                    :item-content (fn [idx]
+                                    (let [[value group] (nth (:rows table) idx)
+                                          add-new-object! (when (fn? add-new-object!)
+                                                            (fn [_]
+                                                              (add-new-object! view-entity table
+                                                                               {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
+                                          table' (shui/table-option (-> table-map
+                                                                        (assoc-in [:data-fns :add-new-object!] add-new-object!)
+                                                                        (assoc :data group)))
+                                          key (str (:db/id view-entity) "-group-idx-" idx)]
+                                      (rum/with-key
+                                        (group-item view-entity table' group group-by-property value option view-opts
+                                                    {:list-view? list-view?
+                                                     :group-by-page? (= :block/page group-by-property-ident)
+                                                     :readable-property-value group-readable-property-value})
+                                        key)))}
+                   disable-virtualized?)]))
              (view-cp view-entity table
                       (assoc option
                              :group-by-property-ident group-by-property-ident

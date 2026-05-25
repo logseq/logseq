@@ -10,7 +10,11 @@
             [datascript.impl.entity :as e]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [frontend.components.avatar :as avatar]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
+            [frontend.components.block.asset :as block-asset]
+            [frontend.components.block.comments :as block-comments]
+            [frontend.components.block.comments-model :as comments-model]
             [frontend.components.block.drop :as block-drop]
             [frontend.components.block.image :as block-image]
             [frontend.components.block.macros :as block-macros]
@@ -45,6 +49,7 @@
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.comments :as comments-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
@@ -89,7 +94,6 @@
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [logseq.shui.util :as shui-util]
             [medley.core :as medley]
             [missionary.core :as m]
             [promesa.core :as p]
@@ -105,6 +109,10 @@
 (defonce *drag-to-block
   (atom nil))
 (def *move-to (atom nil))
+(def ^:private comment-thread-presence-ttl-ms 30000)
+(defonce *comment-thread-presence (atom {}))
+(defonce *comment-thread-presence-requests (atom {}))
+(defonce *comment-thread-presence-flush-scheduled? (atom false))
 
 ;; TODO:
 ;; add `key`
@@ -218,13 +226,13 @@
 (defonce *resizing-image? (atom false))
 
 (rum/defc ^:large-vars/cleanup-todo asset-container
-  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}]
+  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text gallery-view?]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)
         asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))]
     (hooks/use-effect!
      (fn []
-       (when (:block/uuid asset-block)
+       (when (and (seq src) (:block/uuid asset-block))
          (when-not (or asset-width asset-height)
            (measure-image!
             src
@@ -236,9 +244,11 @@
        (fn []))
      [])
     (let [*el-ref (rum/use-ref nil)
-          image-src (fs/asset-path-normalize src)
-          src' (if (or (string/starts-with? src "/")
-                       (string/starts-with? src "~"))
+          image-src (when (seq src)
+                      (fs/asset-path-normalize src))
+          src' (if (and (seq src)
+                        (or (string/starts-with? src "/")
+                            (string/starts-with? src "~")))
                  (str "file://" src)
                  src)
           get-blockid #(some-> (rum/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
@@ -252,10 +262,11 @@
         :ref *el-ref}
        [:img.rounded-sm.relative.fade-in.fade-in-faster
         (merge
-         {:loading "lazy"
-          :referrerPolicy "no-referrer"
-          :src src'
-          :title title}
+         (cond-> {:loading "lazy"
+                  :referrerPolicy "no-referrer"
+                  :src src'}
+           (not gallery-view?)
+           (assoc :title title))
          metadata)]
        (when (and (not breadcrumb?)
                   (not positioned?))
@@ -404,7 +415,8 @@
                                             {:breadcrumb? breadcrumb?
                                              :positioned? positioned?
                                              :local? local?
-                                             :full-text full-text})]
+                                             :full-text full-text
+                                             :gallery-view? (:gallery-view? config)})]
     (if (or (:disable-resize? config)
             (:table-view? config)
             (not resizable?))
@@ -508,11 +520,10 @@
           (p/then (fn [url]
                     (reset! src (common-util/safe-decode-uri-component url))))
           (p/catch #(js/console.log "Failed to load asset:" %))))
-    (:image-placeholder config)
-    (if (and (:image-placeholder config) (nil? @src))
-      (:image-placeholder config)
-      (let [ext (keyword (or (util/get-file-ext @src)
-                             (util/get-file-ext href)))
+    (if (nil? @src)
+      nil
+      (let [asset-block (:asset-block config)
+            ext (block-asset/link-ext @src href asset-block)
             repo (state/get-current-repo)
             repo-dir (config/get-repo-dir repo)
             share-fn (fn [event]
@@ -553,15 +564,14 @@
            title]
 
           util/web-platform?
-          (let [file-name (str (:block/title (:asset-block config)) "." (name ext))]
+          (let [file-name (block-asset/link-file-name asset-block ext)]
             [:a.asset-ref
              {:href @src
               :download file-name}
              file-name])
 
-          (and (util/electron?) (:asset-block config))
-          (let [asset-block (:asset-block config)
-                file-name (str (:block/title asset-block) "." (name ext))]
+          (and (util/electron?) asset-block)
+          (let [file-name (block-asset/link-file-name asset-block ext)]
             [:a.asset-ref
              {:on-click (fn [e]
                           (util/stop e)
@@ -575,7 +585,7 @@
                                  file-fpath (if local-ext-url?
                                               ;; Plugin-sourced asset stored under assets/storages/<plugin-id>/...
                                               (path/path-join repo-dir (string/replace ext-url #"^[./]+" ""))
-                                              (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) "." (name ext))))]
+                                              (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) (when ext (str "." (name ext))))))]
                              (if remote-ext-url?
                                (js/window.apis.openExternal ext-url)
                                (js/window.apis.openPath file-fpath))))}
@@ -1113,6 +1123,7 @@
                          [:div.asset-transfer-progress-bar
                           [:span {:style {:width (str percent "%")}}]]])
         image? (contains? (common-config/img-formats) (keyword asset-type))
+        gallery-image? (and (:gallery-view? config) image?)
         width (get-in block [:logseq.property.asset/resize-metadata :width])
         asset-width (:logseq.property.asset/width block)
         asset-height (:logseq.property.asset/height block)
@@ -1135,15 +1146,15 @@
         href (or (:logseq.property.asset/external-url block)
                  (path/path-join (str "../" common-config/local-assets-dir) file))
         content (cond
-                  file-ready?
-                  (asset-link (assoc config
-                                     :asset-block block
-                                     :image-placeholder img-placeholder)
+                  (or file-ready? gallery-image?)
+                  (asset-link (cond-> (assoc config :asset-block block)
+                                (not gallery-image?)
+                                (assoc :image-placeholder img-placeholder))
                               (:block/title block)
                               href
                               img-metadata
                               nil)
-                  image?
+                  (and image? (not gallery-image?) (false? file-exists?))
                   img-placeholder)]
     (if progress-view
       [:div.asset-transfer-shell
@@ -2041,12 +2052,144 @@
   [block]
   (string/blank? (:block/title block)))
 
-(defn- user-initials
-  [user-name]
-  (when (string? user-name)
-    (let [name (string/trim user-name)]
-      (when-not (string/blank? name)
-        (-> name (subs 0 (min 2 (count name))) string/upper-case)))))
+(defn- element-in-viewport?
+  [^js el]
+  (when el
+    (let [rect (.getBoundingClientRect el)
+          viewport-height (or (.-innerHeight js/window)
+                              (some-> js/document .-documentElement .-clientHeight))
+          viewport-width (or (.-innerWidth js/window)
+                             (some-> js/document .-documentElement .-clientWidth))]
+      (and (< (.-top rect) viewport-height)
+           (> (.-bottom rect) 0)
+           (< (.-left rect) viewport-width)
+           (> (.-right rect) 0)))))
+
+(defn- comments-area-in-viewport?
+  [comments-area]
+  (some-> (:block/uuid comments-area)
+          (str)
+          ((fn [uuid] (gdom/getElement (str "ls-block-" uuid))))
+          element-in-viewport?))
+
+(defn- inline-comment-thread?
+  [inline-thread target-block-uuid comments-area]
+  (and comments-area
+       (= (:target-block-uuid inline-thread) (str target-block-uuid))
+       (= (:comments-area-uuid inline-thread) (str (:block/uuid comments-area)))))
+
+(defn- open-comment-thread!
+  [target-block-uuid comments-area]
+  (case (comments-model/comment-thread-click-action (comments-area-in-viewport? comments-area))
+    :focus-comments-area
+    (do
+      (state/set-state! :comments/inline-thread nil)
+      (comments-handler/reveal-comments-area! comments-area {:focus-editor? true}))
+
+    :show-inline-comments
+    (do
+      (comments-handler/expand-comments-area! comments-area)
+      (state/set-state! :comments/inline-thread
+                        (comments-model/next-inline-comment-thread
+                         (get @state/state :comments/inline-thread)
+                         target-block-uuid
+                         (:block/uuid comments-area))))))
+
+(defn- ui-comment-thread-for-block
+  [block]
+  (when-let [uuid (:block/uuid block)]
+    (comments-model/comment-thread-for-block
+     block
+     (db/entity [:block/uuid uuid]))))
+
+(defn- comment-thread-presence-key
+  [block]
+  (when-let [uuid (:block/uuid block)]
+    (when-let [repo (state/get-current-repo)]
+      [repo (str uuid)])))
+
+(defn- fresh-comment-thread-presence
+  [cache-key]
+  (when-let [{:keys [checked-at] :as entry} (get @*comment-thread-presence cache-key)]
+    (when (< (- (js/Date.now) checked-at) comment-thread-presence-ttl-ms)
+      entry)))
+
+(defn- cache-comment-thread-presence!
+  [cache-key present?]
+  (swap! *comment-thread-presence
+         assoc
+         cache-key
+         {:present? (boolean present?)
+          :checked-at (js/Date.now)}))
+
+(declare flush-comment-thread-presence!)
+
+(defn- schedule-comment-thread-presence-check!
+  [state block]
+  (when-let [cache-key (comment-thread-presence-key block)]
+    (let [*comment-thread-present? (get state ::comment-thread-present?)
+          cached-entry (fresh-comment-thread-presence cache-key)]
+      (cond
+        (or (comments-model/protected-comment-block? block)
+            (ui-comment-thread-for-block block))
+        (reset! *comment-thread-present? nil)
+
+        cached-entry
+        (reset! *comment-thread-present? (:present? cached-entry))
+
+        :else
+        (do
+          (swap! *comment-thread-presence-requests
+                 update
+                 cache-key
+                 (fnil conj #{})
+                 *comment-thread-present?)
+          (when (compare-and-set! *comment-thread-presence-flush-scheduled? false true)
+            (util/schedule flush-comment-thread-presence!)))))))
+
+(defn- flush-comment-thread-presence!
+  []
+  (let [requests @*comment-thread-presence-requests]
+    (reset! *comment-thread-presence-requests {})
+    (reset! *comment-thread-presence-flush-scheduled? false)
+    (doseq [[repo repo-requests] (group-by (fn [[cache-key _listeners]] (first cache-key))
+                                           requests)]
+      (let [repo-cache-keys (mapv first repo-requests)
+            block-uuids (mapv second repo-cache-keys)]
+        (when (seq block-uuids)
+          (p/let [commented-block-uuids (comments-handler/<get-comment-thread-block-uuids repo block-uuids)
+                  commented-block-uuids (into #{} commented-block-uuids)]
+            (doseq [[cache-key listeners] repo-requests
+                    :let [present? (contains? commented-block-uuids (second cache-key))]]
+              (cache-comment-thread-presence! cache-key present?)
+              (doseq [*listener listeners]
+                (reset! *listener present?)))))))))
+
+(defn- hydrate-comment-thread!
+  [state block]
+  (when-let [uuid (:block/uuid block)]
+    (let [*hydrated-comment-thread (get state ::hydrated-comment-thread)
+          cache-key (comment-thread-presence-key block)]
+      (p/let [threads (comments-handler/<get-comment-threads-for-block uuid)
+              thread (or (ui-comment-thread-for-block block)
+                         (comments-model/comment-thread-for-block
+                          (assoc block :logseq.property.comments/_blocks threads)))]
+        (when cache-key
+          (cache-comment-thread-presence! cache-key thread))
+        (reset! *hydrated-comment-thread (when thread
+                                           {:block-uuid uuid
+                                            :thread thread}))
+        (some-> (get state ::comment-thread-present?)
+                (reset! (boolean thread)))
+        thread))))
+
+(defn- open-comment-thread-for-block!
+  [state block comment-thread]
+  (if comment-thread
+    (open-comment-thread! (:block/uuid block) comment-thread)
+    (p/let [comment-thread (hydrate-comment-thread! state block)]
+      (when comment-thread
+        (open-comment-thread! (:block/uuid block) comment-thread)))))
 
 (defn- editing-user-for-block
   [block-uuid online-users current-user-uuid]
@@ -2060,18 +2203,15 @@
 
 (defn- editing-user-avatar
   [{:user/keys [name uuid]}]
-  (let [user-name (or name uuid)
-        initials (user-initials user-name)
-        color (when uuid (shui-util/uuid-color uuid))]
-    (when initials
+  (let [user-name (or name uuid)]
+    (when (avatar/initials user-name)
       [:span.block-editing-avatar-wrap
-       (shui/avatar
+       (avatar/user-avatar
         {:class "block-editing-avatar w-4 h-4 flex-none"
-         :title user-name}
-        (shui/avatar-fallback
-         {:style {:background-color (when color (str color "50"))
-                  :font-size 9}}
-         initials))])))
+         :title user-name
+         :name user-name
+         :uuid uuid
+         :fallback-props {:style {:font-size 9}}})])))
 
 (rum/defcs ^:large-vars/cleanup-todo block-control < rum/reactive
   (rum/local false ::dragging?)
@@ -2103,7 +2243,8 @@
                             (:logseq.property/icon block)
                             link?
                             (some :logseq.property/icon (:block/tags block))
-                            (contains? #{"pdf"} (:logseq.property.asset/type block))))]
+                            (contains? #{"pdf"} (:logseq.property.asset/type block))))
+        movable? (not (comments-model/comment-block? block))]
     [:div.block-control-wrap.flex.flex-row.items-center.h-6
      {:class (util/classnames [{:is-order-list order-list?
                                 :is-with-icon with-icon?
@@ -2130,7 +2271,7 @@
                      (when (and (state/developer-mode?) (.-metaKey event))
                        (js/console.debug "[block config]==" config)))}
         [:span {:class (if (or (and control-show? (or collapsed? collapsable?))
-                               (and collapsed? (or page-title? order-list? config/publishing? (util/mobile?))))
+                               (and collapsed? (or order-list? config/publishing? (util/mobile?))))
                          "control-show cursor-pointer"
                          "control-hide")}
          (ui/rotating-arrow collapsed?)]])
@@ -2147,7 +2288,7 @@
                                                (not collapsed?))
                                       " hide-inner-bullet")
                                     (when order-list? " as-order-list typed-list"))}
-                        (not (util/mobile?))
+                        (and movable? (not (util/mobile?)))
                         (assoc
                          :draggable true
                          :on-drag-start (fn [event]
@@ -2427,6 +2568,10 @@
    (dom/closest target ".cloze-revealed")
    (dom/closest target ".query-table")))
 
+(defn- comments-area-target?
+  [target]
+  (boolean (util/rec-get-node target "ls-comments-area")))
+
 (defn- block-content-on-pointer-down
   [e block block-id edit-input-id content config]
   (when-not @(:ui/scrolling? @state/state)
@@ -2436,7 +2581,7 @@
           mobile? (util/mobile?)
           mobile-selection? (and mobile? (seq selection-blocks))
           block-dom-element (util/rec-get-node target "ls-block")]
-      (if mobile-selection?
+      (if (and mobile-selection? (not (comments-area-target? target)))
         (let [ids (set (state/get-selection-block-ids))]
           (if (contains? ids (:block/uuid block))
             (do
@@ -2445,6 +2590,7 @@
                 (state/set-state! :mobile/show-action-bar? false)))
             (state/conj-selection-block! block-dom-element)))
         (when-not (or
+                   (comments-area-target? target)
                    (:closed-values? config)
                    (> (count content) (state/block-content-max-length (state/get-current-repo))))
           (let [target (gobj/get e "target")
@@ -3113,8 +3259,9 @@
                                (asset-cp config block)]})
             (if show-editor?
               [:div.mt-1 editor-cp]
-              [:div.text-xs.opacity-60.mt-1.cursor-text
-               {:on-click #(edit-block-content config block edit-input-id)}
+              [:div
+               (assoc block-asset/read-mode-title-attrs
+                      :on-click #(edit-block-content config block edit-input-id))
                (text-block-title (dissoc config :raw-title?) block)])]
 
            show-editor?
@@ -3560,16 +3707,18 @@
   [^js e block *control-show? block-id doc-mode? selection-block-ids]
   (let [last-client-y (:client-y @*block-last-mouse-event)
         client-y (.-clientY e)
-        block-dom-node (util/rec-get-node (.-target e) "ls-block")]
+        target (.-target e)
+        block-dom-node (util/rec-get-node target "ls-block")]
     (remember-block-pointer! e)
     (reset! *control-show? true)
-    (when (block-selection/select-on-hover?
-           {:last-client-y last-client-y
-            :client-y client-y
-            :dragging? @*dragging?
-            :editing-same-block? (= (:block/uuid block)
-                                    (:block/uuid (state/get-edit-block)))
-            :active-selection? (boolean (seq (state/get-selection-blocks)))})
+    (when (and (not (comments-area-target? target))
+               (block-selection/select-on-hover?
+                {:last-client-y last-client-y
+                 :client-y client-y
+                 :dragging? @*dragging?
+                 :editing-same-block? (= (:block/uuid block)
+                                         (:block/uuid (state/get-edit-block)))
+                 :active-selection? (boolean (seq (state/get-selection-blocks)))}))
       (.preventDefault e)
       (when-let [parent (gdom/getElement block-id)]
         (let [node (.querySelector parent ".bullet-container")]
@@ -3756,19 +3905,31 @@
       page-icon)
 
     [:div.flex.flex-col.w-full
-     (let [parsed-block (merge block (block/parse-title-and-body uuid (get block :block/format :markdown) title))
+     (let [comments-area? (comments-model/comments-area? block)
+           parsed-block (merge block (block/parse-title-and-body uuid (get block :block/format :markdown) title))
            hide-block-refs-count? (or (and (:embed? config)
                                         (= (:block/uuid parsed-block) (:embed-id config)))
                                     table?)]
-       (block-content-or-editor config
-         parsed-block
-         {:edit-input-id edit-input-id
-          :block-id block-id
-          :edit? editing?
-          :refs-count refs-count
-          :*hide-block-refs? *hide-block-refs?
-          :hide-block-refs-count? hide-block-refs-count?
-          :*show-query? *show-query?}))]]
+       (if comments-area?
+         (block-comments/comments-area-view
+          config
+          block
+          (ldb/get-children block)
+         collapsed?
+         *hide-block-refs?
+         *show-query?
+         {:block-content-or-editor block-content-or-editor
+          :block-reactions block-reactions}
+          {})
+         (block-content-or-editor config
+           parsed-block
+           {:edit-input-id edit-input-id
+            :block-id block-id
+            :edit? editing?
+            :refs-count refs-count
+            :*hide-block-refs? *hide-block-refs?
+            :hide-block-refs-count? hide-block-refs-count?
+            :*show-query? *show-query?})))]]
 
    (when (and (not collapsed?) (not (or table? property?)))
      (block-positioned-properties config block :block-below))
@@ -3808,7 +3969,17 @@
                     ::show-query? (atom false)
                     ::refs-count *refs-count
                     ::plugin-renderer-error? (atom false)
-                    ::use-plugin-renderer? (atom true))))}
+                    ::use-plugin-renderer? (atom true)
+                    ::hydrated-comment-thread (atom nil)
+                    ::comment-thread-present? (atom nil))))
+   :did-mount (fn [state]
+                (let [[_container-state _repo _config block] (:rum/args state)]
+                  (schedule-comment-thread-presence-check! state block))
+                state)
+   :did-update (fn [state]
+                 (let [[_container-state _repo _config block] (:rum/args state)]
+                   (schedule-comment-thread-presence-check! state block))
+                 state)}
   (mixins/event-mixin
    (fn [state]
      (let [*ref (::ref state)]
@@ -3822,6 +3993,10 @@
         show-query? (rum/react *show-query?)
         *plugin-renderer-error? (get state ::plugin-renderer-error?)
         *use-plugin-renderer? (get state ::use-plugin-renderer?)
+        *hydrated-comment-thread (get state ::hydrated-comment-thread)
+        hydrated-comment-thread (rum/react *hydrated-comment-thread)
+        *comment-thread-present? (get state ::comment-thread-present?)
+        comment-thread-present? (rum/react *comment-thread-present?)
         plugin-renderer-error? (rum/react *plugin-renderer-error?)
         use-plugin-renderer? (rum/react *use-plugin-renderer?)
         switch-to-plugin-renderer! (fn []
@@ -3879,6 +4054,15 @@
         own-number-list? (:own-order-number-list? config)
         order-list? (boolean own-number-list?)
         children (ldb/get-children block)
+        comments-area? (comments-model/comments-area? block)
+        comment-thread (when-not comments-area?
+                         (or (ui-comment-thread-for-block block)
+                             (when (= uuid (:block-uuid hydrated-comment-thread))
+                               (:thread hydrated-comment-thread))))
+        has-comment-thread? (or comment-thread
+                                (true? comment-thread-present?))
+        inline-thread (state/sub :comments/inline-thread)
+        show-inline-comments? (inline-comment-thread? inline-thread uuid comment-thread)
         page-icon (when (:page-title? config)
                     (let [icon' (get block :logseq.property/icon)]
                       (when-let [icon (and (ldb/page? block)
@@ -3960,11 +4144,14 @@
         :blockid (str uuid)
         :containerid container-id
         :data-is-property (ldb/property? block)
+        :data-comments-area comments-area?
         :ref #(when (nil? @*ref) (reset! *ref %))
         :data-collapsed (and collapsed? has-child?)
         :class (str (when selected? "selected")
                  (when (ldb/recycled? block) " line-through opacity-70")
                  (when order-list? " is-order-list")
+                 (when comments-area? " is-comments-area")
+                 (when has-comment-thread? " has-comment-thread")
                  (when (string/blank? title) " is-blank")
                  (when original-block " embed-block"))
         :haschild (str (boolean has-child?))
@@ -3978,7 +4165,9 @@
         :on-touch-cancel (fn [e]
                            (block-handler/on-touch-cancel e))}
 
-       (and (util/capacitor?) (not (ldb/page? block)))
+       (and (util/capacitor?)
+            (not (ldb/page? block))
+            (not (comments-model/comment-block? block)))
        (assoc
          :draggable true
          :on-drag-start
@@ -4049,7 +4238,7 @@
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
-        (when (and (not property?) (not (:table-block-title? config)))
+        (when (and (not property?) (not (:table-block-title? config)) (not (:hide-block-control? config)))
           (let [edit? (or editing?
                         (= uuid (:block/uuid (state/get-edit-block))))]
             (block-control (assoc config :hide-bullet? (:page-title? config))
@@ -4087,14 +4276,43 @@
               (str "block-renderer-" (:key matched-block-renderer) "-" uuid))]]
 
           ;; --- Original outline ---
-          outline-view-cp)])
+          outline-view-cp)
+
+        (when (and has-comment-thread? (not table?) (not property?))
+          (shui/button
+           {:variant :ghost
+            :size :icon
+            :class "ls-block-comment-thread-button"
+            :title (t :block.comments/label)
+            :aria-label (t :block.comments/label)
+            :on-pointer-down util/stop
+            :on-click (fn [e]
+                        (util/stop e)
+                        (open-comment-thread-for-block! state block comment-thread))}
+           (shui/tabler-icon "message-circle" {:size 15})))])
+
+     (when show-inline-comments?
+       [:div.ls-inline-comments
+        (when-not (:page-title? config)
+          {:class "ls-block-content-indent"})
+        (block-comments/comments-area-view
+         (assoc config :container-id (comments-model/inline-comment-container-id (:container-id config)))
+         comment-thread
+         (ldb/get-children comment-thread)
+         false
+         *hide-block-refs?
+         *show-query?
+         {:block-content-or-editor block-content-or-editor
+          :block-reactions block-reactions}
+         {:focus-editor? true
+          :inline? true})])
 
      (when (and (not (:library? config))
              (or (:tag-dialog? config)
                (and
                  (not collapsed?)
                  (not (or table? property?)))))
-       [:div (when-not (:page-title? config) {:style {:padding-left (if (util/mobile?) 12 45)}})
+       [:div (when-not (:page-title? config) {:class "ls-block-content-indent"})
         (db-properties-cp config block {:in-block-container? true})])
 
      (when (and show-query? (not (:table? config)))
@@ -4136,6 +4354,7 @@
      (when-not (or (:hide-children? config)
                  table?
                  property?
+                 comments-area?
                  (block-renderer-hides-outline-children?
                    renderer-display-mode
                    {:matched-block-renderer matched-block-renderer}))
@@ -4167,7 +4386,7 @@
 
 (defn- config-block-should-update?
   [old-state new-state]
-  (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :edit? :hide-bullet? :ref-matched-children-ids]
+  (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :edit? :hide-bullet? :hide-block-control? :ref-matched-children-ids]
         b1 (second (:rum/args old-state))
         b2 (second (:rum/args new-state))
         result (or
