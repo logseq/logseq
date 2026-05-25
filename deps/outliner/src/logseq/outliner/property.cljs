@@ -921,7 +921,7 @@
         property-type (:logseq.property/type property)
         node-many? (and (= :node property-type)
                         (= :db.cardinality/many (:db/cardinality property)))
-        default-bottom? (and (not= :url property-type)
+        default-bottom? (and (not (contains? #{:url :asset} property-type))
                              (or node-many?
                                  (not= :default property-type)
                                  (seq (:property/closed-values property)))
