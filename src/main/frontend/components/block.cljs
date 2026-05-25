@@ -232,7 +232,7 @@
         asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))]
     (hooks/use-effect!
      (fn []
-       (when (:block/uuid asset-block)
+       (when (and (seq src) (:block/uuid asset-block))
          (when-not (or asset-width asset-height)
            (measure-image!
             src
@@ -244,9 +244,11 @@
        (fn []))
      [])
     (let [*el-ref (rum/use-ref nil)
-          image-src (fs/asset-path-normalize src)
-          src' (if (or (string/starts-with? src "/")
-                       (string/starts-with? src "~"))
+          image-src (when (seq src)
+                      (fs/asset-path-normalize src))
+          src' (if (and (seq src)
+                        (or (string/starts-with? src "/")
+                            (string/starts-with? src "~")))
                  (str "file://" src)
                  src)
           get-blockid #(some-> (rum/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
@@ -519,7 +521,7 @@
                     (reset! src (common-util/safe-decode-uri-component url))))
           (p/catch #(js/console.log "Failed to load asset:" %))))
     (:image-placeholder config)
-    (if (and (:image-placeholder config) (nil? @src))
+    (if (nil? @src)
       (:image-placeholder config)
       (let [asset-block (:asset-block config)
             ext (block-asset/link-ext @src href asset-block)
