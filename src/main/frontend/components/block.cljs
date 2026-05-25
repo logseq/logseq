@@ -3258,9 +3258,9 @@
            [:div.flex.flex-col.asset-block-wrap.w-full
             (if show-editor?
               [:div.mt-1 editor-cp]
-              [:div.mt-1.cursor-text
-               (assoc block-asset/read-mode-title-attrs
-                 :on-click #(edit-block-content config block edit-input-id))
+              [:div.asset-title-slot.cursor-text
+               {:style {:min-height 24}
+                :on-click #(edit-block-content config block edit-input-id)}
                (text-block-title (dissoc config :raw-title?) block)])
 
             (block-content-f {:custom-block-content
