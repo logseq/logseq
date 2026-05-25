@@ -319,10 +319,18 @@
            (or (not (and (map? item) (:block/uuid item)))
                (and (number? (:block/created-at item))
                     (number? (:block/updated-at item))
-                    (string? (:block/order item))
-                    (db-order/validate-order-key? (:block/order item)))))
+                    (or (contains? #{:logseq.class/Comments :logseq.class/Comment} (:db/ident item))
+                        (and (string? (:block/order item))
+                             (db-order/validate-order-key? (:block/order item)))))))
          tx-data)
-        "Block-shaped repair items keep valid timestamps and order")
+        "Block-shaped repair items keep valid timestamps and order when order is allowed")
+    (is (not-any?
+         (fn [item]
+           (and (map? item)
+                (contains? #{:logseq.class/Comments :logseq.class/Comment} (:db/ident item))
+                (contains? item :block/order)))
+         tx-data)
+        "#Comments and #Comment repair class blocks should not have block order")
     (is (not-any?
          (fn [item]
            (or (and (map? item)
