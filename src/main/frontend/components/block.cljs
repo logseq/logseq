@@ -2388,7 +2388,7 @@
       {:data-type block-type}
 
       ;; children
-      (let [area? (= :area hl-type)
+      (let [area? (= :area (keyword hl-type))
             hl-ref #(when (not (#{:default} block-type))
                       [:div.prefix-link
                        {:data-hl-type hl-type
@@ -3057,9 +3057,7 @@
         plugin-slotted? (and config/lsp-enabled? (state/slot-hook-exist? uuid))
         stop-events? (:stop-events? config)
         block-ref-with-title? (and block-ref? (not (state/show-full-blocks?)) (seq ast-title))
-        block-type (or
-                    (pu/lookup block :logseq.property/ls-type)
-                    :default)
+        block-type (or (keyword (pu/lookup block :logseq.property/ls-type)) :default)
         mouse-down-key (if (util/mobile?)
                          :on-click
                          :on-pointer-down)                  ; TODO: it seems that Safari doesn't work well with on-pointer-down
