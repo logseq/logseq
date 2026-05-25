@@ -164,7 +164,7 @@
   }
 
   .ls-gallery-card-meta {
-    @apply flex flex-col gap-1 px-1 py-1.5;
+    @apply flex flex-col gap-1 py-1.5;
     box-sizing: border-box;
     width: 0;
     min-width: 100%;

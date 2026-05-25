@@ -6,6 +6,7 @@
             [cljs-time.format :as tf]
             [clojure.set :as set]
             [clojure.string :as string]
+            [datascript.core :as d]
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.common.missionary :as c.m]
@@ -533,6 +534,84 @@
               (= :asset (:logseq.property/type property))))
           columns))
 
+(defn- clamp-gallery-card-dimension
+  [value]
+  (-> value
+      (max db-view/gallery-min-card-dimension)
+      (min db-view/gallery-max-card-dimension)))
+
+(defn- gallery-column-ident
+  [column]
+  (or (:id column)
+      (:db/ident column)))
+
+(defn- gallery-column-property
+  [db column]
+  (cond
+    (de/entity? column) column
+    (gallery-column-ident column) (d/entity db (gallery-column-ident column))))
+
+(defn- gallery-asset-property-column?
+  [db column]
+  (= :asset (:logseq.property/type (gallery-column-property db column))))
+
+(defn- gallery-asset-property-idents
+  [db columns]
+  (->> columns
+       (filter #(gallery-asset-property-column? db %))
+       (keep gallery-column-ident)
+       vec))
+
+(defn- gallery-asset-property-ident
+  [db view columns]
+  (let [configured-ident (:db/ident (:logseq.property.view/gallery-asset-property view))
+        view-for (:logseq.property/view-for view)
+        feature-type (:logseq.property.view/feature-type view)
+        asset-tag? (= :logseq.class/Asset (:db/ident view-for))
+        tag-view? (and (= :class-objects feature-type)
+                       (ldb/class? view-for))
+        query-view? (= :query-result feature-type)]
+    (cond
+      asset-tag?
+      :block/uuid
+
+      configured-ident
+      configured-ident
+
+      (or tag-view? query-view?)
+      (let [asset-idents (gallery-asset-property-idents db columns)]
+        (when (= 1 (count asset-idents))
+          (first asset-idents))))))
+
+(defn- gallery-display-property-idents
+  [view columns asset-property-ident]
+  (let [configured-idents (set (keep :db/ident (:logseq.property.view/gallery-display-properties view)))
+        display-idents (if (seq configured-idents)
+                         (->> columns
+                              (keep gallery-column-ident)
+                              (filter configured-idents)
+                              vec)
+                         [:block/title])]
+    (->> display-idents
+         (remove #{:select :id asset-property-ident})
+         vec)))
+
+(defn- gallery-card-dimensions
+  [view]
+  (case (:logseq.property.view/gallery-card-size view)
+    :compact
+    db-view/gallery-compact-card-dimensions
+
+    :custom
+    (let [width (:logseq.property.view/gallery-card-width view)
+          height (:logseq.property.view/gallery-card-height view)]
+      (if (and (number? width) (number? height) (pos? width) (pos? height))
+        {:width (clamp-gallery-card-dimension width)
+         :height (clamp-gallery-card-dimension height)}
+        db-view/gallery-default-card-dimensions))
+
+    db-view/gallery-default-card-dimensions))
+
 (defn- set-gallery-display-properties!
   [view-entity property-idents]
   (set-view-property! view-entity
@@ -541,8 +620,8 @@
 
 (defn- gallery-display-properties-menu
   [view-entity columns]
-  (let [asset-property-ident (db-view/gallery-asset-property-ident (db/get-db) view-entity columns)
-        display-property-idents (set (db-view/gallery-display-property-idents view-entity columns asset-property-ident))
+  (let [asset-property-ident (gallery-asset-property-ident (db/get-db) view-entity columns)
+        display-property-idents (set (gallery-display-property-idents view-entity columns asset-property-ident))
         property-columns (remove #(contains? #{:select :id asset-property-ident} (:id %)) columns)]
     (shui/dropdown-menu-sub
      (shui/dropdown-menu-sub-trigger
@@ -565,7 +644,7 @@
   [view-entity columns]
   (let [asset-columns (seq (gallery-asset-columns columns))]
     (when asset-columns
-      (let [asset-property-ident (db-view/gallery-asset-property-ident (db/get-db) view-entity columns)]
+      (let [asset-property-ident (gallery-asset-property-ident (db/get-db) view-entity columns)]
         (shui/dropdown-menu-sub
          (shui/dropdown-menu-sub-trigger
           (t :view.gallery/asset-property))
@@ -593,7 +672,7 @@
   [:div.flex.flex-col.gap-2
    [:div.flex.flex-row.items-center.justify-between.gap-3.text-sm.leading-none
     [:span label]
-    [:span.font-medium.tabular-nums (str value "px")]]
+    [:span.font-medium.tabular-nums (str value \p \x)]]
    (shui/slider
     {:class "relative flex w-full touch-none select-none items-center"
      :value #js [value]
@@ -643,7 +722,7 @@
 (defn- gallery-card-size-menu
   [view-entity]
   (let [size (:logseq.property.view/gallery-card-size view-entity)
-        dimensions (db-view/gallery-card-dimensions view-entity)
+        dimensions (gallery-card-dimensions view-entity)
         set-size! #(set-view-property! view-entity :logseq.property.view/gallery-card-size %)]
     (shui/dropdown-menu-sub
      (shui/dropdown-menu-sub-trigger
@@ -1965,9 +2044,8 @@
      [:div.ls-gallery-card-content
       [:div.ls-gallery-card-media
        (gallery-card-checkbox table block)
-       (if render-asset?
-         (asset-cp (assoc config :disable-resize? true :gallery-view? true) asset-block)
-         (ui/icon "photo" {:size 36}))]
+       (when render-asset?
+         (asset-cp (assoc config :disable-resize? true :gallery-view? true) asset-block))]
       [:div.ls-gallery-card-meta
        (for [property-ident display-property-idents
              :let [property-value (gallery-property-value block property-ident)]
@@ -1984,9 +2062,9 @@
   [state {:keys [config view-parent view-feature-type] :as option} table view-entity blocks row-selection *scroller-ref]
   (let [config' (assoc config :container-id (:container-id state))
         columns (:columns table)
-        dimensions (db-view/gallery-card-dimensions view-entity)
-        asset-property-ident (db-view/gallery-asset-property-ident (db/get-db) view-entity columns)
-        display-property-idents (db-view/gallery-display-property-idents view-entity columns asset-property-ident)
+        dimensions (gallery-card-dimensions view-entity)
+        asset-property-ident (gallery-asset-property-ident (db/get-db) view-entity columns)
+        display-property-idents (gallery-display-property-idents view-entity columns asset-property-ident)
         selected-rows (shui/table-get-selection-rows row-selection (:rows table))]
     [:div.ls-cards
      {:style {"--ls-gallery-card-width" (str (:width dimensions) "px")
