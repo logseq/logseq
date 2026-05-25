@@ -275,7 +275,7 @@
                           {:block/title "cat task" :build/tags [:Cat]}
                           {:block/title "project task" :build/tags [:Project]}]}]})
         page1 (:block/uuid (db-test/find-page-by-title @conn "page1"))
-        [empty-task cat project]
+        [empty-task cat-task project]
         (map #(:block/uuid (db-test/find-block-by-content @conn %)) ["" "cat task" "project task"])]
 
     (outliner-property/batch-set-property! conn [empty-task] :logseq.property/status :logseq.property/status.doing)
@@ -288,9 +288,9 @@
            (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid page1])))))
         "Adds Task to page without tag")
 
-    (outliner-property/batch-set-property! conn [cat] :logseq.property/status :logseq.property/status.doing)
+    (outliner-property/batch-set-property! conn [cat-task] :logseq.property/status :logseq.property/status.doing)
     (is (= #{:logseq.class/Task :user.class/Cat}
-           (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid cat])))))
+           (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid cat-task])))))
         "Adds Task to tagged block when its classes do not provide status")
 
     (outliner-property/batch-set-property! conn [project] :logseq.property/status :logseq.property/status.doing)
