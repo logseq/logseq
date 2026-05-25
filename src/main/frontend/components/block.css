@@ -430,8 +430,6 @@ html.is-mobile .ls-block-content-indent {
 }
 
 .ls-comment-body {
-  max-height: 300px;
-  overflow: auto;
   cursor: text;
 }
 
