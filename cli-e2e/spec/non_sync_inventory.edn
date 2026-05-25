@@ -154,6 +154,11 @@
   {:commands ["doctor"]
    :options ["--dev-script"]}
 
+  :agent
+  {:commands ["agent bridge"
+              "agent bridge list"]
+   :options ["--all"]}
+
   :completion
   {:commands ["completion"]
    :options ["bash"

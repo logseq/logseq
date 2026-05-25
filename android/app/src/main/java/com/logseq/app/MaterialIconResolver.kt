@@ -1,6 +1,7 @@
 package com.logseq.app
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Comment
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.CloudUpload
@@ -67,6 +68,7 @@ object MaterialIconResolver {
             "camera" -> Icons.Outlined.CameraAlt
             "keyboard-chevron-compact-down", "keyboard-hide" -> Icons.Outlined.KeyboardHide
             "doc-on-doc", "copy" -> Icons.Outlined.ContentCopy
+            "text-bubble", "comment" -> Icons.AutoMirrored.Outlined.Comment
             "trash", "delete" -> Icons.Outlined.Delete
             "r-square", "bookmark-ref" -> Icons.Outlined.BookmarkAdd
             "link" -> Icons.Outlined.Link

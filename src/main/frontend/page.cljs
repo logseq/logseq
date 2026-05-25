@@ -7,6 +7,7 @@
             [frontend.handler.export :as export]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -103,8 +104,9 @@
                  (t :page/open-all-graphs-desc)
                  :links
                  [{:on-click (fn []
-                               (set! (.-href js/window.location) (rfe/href :graphs))
-                               (.reload js/window.location))}])]
+                               (if (util/capacitor?)
+                                 (state/pub-event! [:mobile/set-tab "graphs"])
+                                 (route-handler/redirect-to-all-graphs)))}])]
                [:p.m-0
                 (interpolate-sentence
                  (t :page/open-issue-desc)
@@ -137,12 +139,14 @@
   []
   (if-let [route-match (state/sub :route-match)]
     (when-let [view (:view (:data route-match))]
-      (ui/catch-error-and-notify
-       (helpful-default-error-screen)
-       [:<>
-        (container/root-container
-         route-match
-         (view route-match))
-        (when config/lsp-enabled?
-          (plugin/hook-daemon-renderers))]))
+      (rum/with-key
+        (ui/catch-error-and-notify
+         (helpful-default-error-screen)
+         [:<>
+          (container/root-container
+           route-match
+           (view route-match))
+          (when config/lsp-enabled?
+            (plugin/hook-daemon-renderers))])
+        (:path route-match)))
     (not-found)))

@@ -93,6 +93,24 @@
     ;; return global fn back to previous behavior
     (ldb/register-transact-pipeline-fn! identity)))
 
+(deftest ensure-comments-blocks-property-on-tag-additions-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "target"
+                                             :build/children [{:block/title ""}]}]}]})
+        target (db-test/find-block-by-content @conn "target")
+        empty-block (first (:block/_parent target))]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (ldb/transact! conn [[:db/add (:db/id empty-block) :block/tags :logseq.class/Comments]])
+      (let [comments-area (d/entity @conn (:db/id empty-block))]
+        (is (= #{(:db/id target)}
+               (set (map :db/id (:logseq.property.comments/blocks comments-area))))
+            "Tagging an existing empty child block with #Comments should target its parent"))
+      (finally
+        ;; return global fn back to previous behavior
+        (ldb/register-transact-pipeline-fn! identity)))))
+
 (deftest code-block-tag-addition-preserves-explicit-code-lang-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "page1"}}]})
@@ -189,7 +207,7 @@
 (deftest create-journal-page-name-uses-default-formatter-test
   (let [conn (db-test/create-conn)]
     (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]])
-    (let [[_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {})
+    (let [[_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {:journal? true})
           page (d/entity @conn [:block/uuid page-uuid])
           journal-day (:block/journal-day page)
           expected-title (date-time-util/int->journal-title journal-day "yyyy-MM-dd EEEE")
