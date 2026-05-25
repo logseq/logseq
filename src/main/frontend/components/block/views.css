@@ -1,3 +1,24 @@
+.ls-gallery-action-bar-slot {
+  @apply fixed inset-x-0 bottom-0 z-[100] flex justify-center px-4;
+  background: linear-gradient(to top, var(--ls-primary-background-color) 0%, var(--ls-primary-background-color) 42%, transparent 100%);
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.ls-gallery-action-bar {
+  @apply flex h-8 max-w-[calc(100vw-2rem)] flex-row items-center overflow-x-auto rounded-md border border-border bg-background;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18), 0 2px 6px rgb(0 0 0 / 0.12);
+  pointer-events: auto;
+}
+
+.ls-gallery-action-select-all {
+  @apply flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center border-r border-border;
+}
+
+.ls-gallery-action-bar .ls-table-actions > div:first-child {
+  @apply px-2;
+}
+
 .ls-cards {
   --ls-gallery-card-width: 220px;
   --ls-gallery-card-height: 320px;
@@ -41,27 +62,6 @@
 
   > div[data-virtuoso-scroller] {
     @apply w-full;
-  }
-
-  .ls-gallery-action-bar-slot {
-    @apply fixed inset-x-0 bottom-0 z-[100] flex justify-center px-4;
-    background: linear-gradient(to top, var(--ls-primary-background-color) 0%, var(--ls-primary-background-color) 42%, transparent 100%);
-    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
-    pointer-events: none;
-  }
-
-  .ls-gallery-action-bar {
-    @apply flex h-8 max-w-[calc(100vw-2rem)] flex-row items-center overflow-x-auto rounded-md border border-border bg-background;
-    box-shadow: 0 8px 24px rgb(0 0 0 / 0.18), 0 2px 6px rgb(0 0 0 / 0.12);
-    pointer-events: auto;
-  }
-
-  .ls-gallery-action-select-all {
-    @apply flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center border-r border-border;
-  }
-
-  .ls-gallery-action-bar .ls-table-actions > div:first-child {
-    @apply px-2;
   }
 
   .virtuoso-grid-list {

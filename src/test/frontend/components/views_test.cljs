@@ -1,5 +1,6 @@
 (ns frontend.components.views-test
   (:require [cljs.test :refer [deftest is]]
+            [frontend.db]
             [frontend.components.views :as views]))
 
 (deftest build-columns-should-allow-name-property-when-no-object-name
@@ -50,3 +51,24 @@
                :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}]
     (is (= block
            (views/gallery-card-asset-block block :block/uuid)))))
+
+(deftest view-row-ids-should-flatten-grouped-rows
+  (is (= [1 2 3 4]
+         (#'views/view-row-ids
+          [[:group-a [1 2]]
+           [:group-b [3 4]]]))))
+
+(deftest grouped-gallery-row-ids-should-deduplicate-grouped-rows
+  (is (= [1 2 3]
+         (#'views/grouped-gallery-row-ids
+          [[:group-a [1 2]]
+           [:group-b [{:db/id 2} 3]]]))))
+
+(deftest group-by-column-should-exclude-name-and-include-many-properties
+  (with-redefs [frontend.db/entity (fn [id]
+                                     (case id
+                                       :block/title {:logseq.property/type :string}
+                                       :block/tags {:logseq.property/type :class
+                                                    :db/cardinality :db.cardinality/many}))]
+    (is (not (views/group-by-column? {:id :block/title})))
+    (is (views/group-by-column? {:id :block/tags}))))

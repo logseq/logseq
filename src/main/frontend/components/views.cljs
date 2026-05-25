@@ -520,6 +520,21 @@
 (defonce groups-sort-by-property-identity->name
   (set/map-invert groups-sort-by-name->property-identity))
 
+(def ^:private groupable-property-types
+  #{:checkbox :class :date :default :node :number :string :url})
+
+(def ^:private groupable-many-property-types
+  #{:class :default :node})
+
+(defn group-by-column?
+  [column]
+  (when-let [id (:id column)]
+    (when-not (= id :block/title)
+      (when-let [property (db/entity id)]
+        (and (contains? groupable-property-types (:logseq.property/type property))
+             (or (not (db-property/many? property))
+                 (contains? groupable-many-property-types (:logseq.property/type property))))))))
+
 (defn- set-view-property!
   [view-entity property-ident value]
   (property-handler/set-block-property! (:db/id view-entity) property-ident value))
@@ -801,12 +816,8 @@
                                         (:logseq.property/query view-entity))
                                    [{:id :block/page
                                      :name (t :view.table/page)}])
-                                 (filter (fn [column]
-                                           (when (:id column)
-                                             (when-let [p (db/entity (:id column))]
-                                               (and (not (db-property/many? p))
-                                                    (contains? #{:default :number :checkbox :url :node :date}
-                                                               (:logseq.property/type p)))))) columns))
+                                         (filter (fn [column]
+                                                   (group-by-column? column)) columns))
         group-by-page? (some #{:block/page} (map :id group-by-columns))]
     (shui/dropdown-menu
      (shui/dropdown-menu-trigger
@@ -2043,7 +2054,7 @@
   [table view-entity block config {:keys [asset-property-ident display-property-idents]}]
   (let [asset-block (gallery-card-asset-block block asset-property-ident)
         asset-cp (state/get-component :block/asset-cp)
-        render-asset? (and asset-block asset-cp)
+        render-asset? (and asset-block (fn? asset-cp))
         selected? ((:row-selected? table) block)]
     [:div.ls-card-item.content
      {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))
@@ -2070,6 +2081,41 @@
 (defn gallery-lazy-item-opts
   [option]
   (select-keys option [:properties]))
+
+(defn view-row-ids
+  [rows]
+  (mapcat
+   (fn [row]
+     (cond
+       (number? row)
+       [row]
+
+       (map? row)
+       (when-let [id (:db/id row)]
+         [id])
+
+       (and (vector? row) (= 2 (count row)))
+       (view-row-ids (second row))
+
+       :else
+       []))
+   rows))
+
+(defn grouped-gallery-row-ids
+  [groups]
+  (vec (distinct (view-row-ids groups))))
+
+(defn group-readable-property-value
+  [value]
+  (cond
+    (and (map? value) (or (:block/title value) (:logseq.property/value value)))
+    (db-property/property-value-content value)
+
+    (= (:db/ident value) :logseq.property/empty-placeholder)
+    (t :ui/empty)
+
+    :else
+    (str value)))
 
 (rum/defc gallery-action-bar
   [table option view-parent view-feature-type selected-rows]
@@ -2104,27 +2150,84 @@
         dimensions (gallery-card-dimensions view-entity)
         asset-property-ident (gallery-asset-property-ident (db/get-db) view-entity columns)
         display-property-idents (gallery-display-property-idents view-entity columns asset-property-ident)
-        selected-rows (shui/table-get-selection-rows row-selection (:rows table))]
+        selected-rows (shui/table-get-selection-rows row-selection (:rows table))
+        render-card (fn [idx]
+                      (lazy-item blocks idx
+                                 (assoc (gallery-lazy-item-opts option)
+                                        :gallery-view? true)
+                                 (fn [block]
+                                   (gallery-card-item table view-entity block config'
+                                                      {:asset-property-ident asset-property-ident
+                                                       :display-property-idents display-property-idents}))))]
     [:div.ls-cards
      {:style {"--ls-gallery-card-width" (str (:width dimensions) "px")
               "--ls-gallery-card-height" (str (:height dimensions) "px")}}
      (when (seq blocks)
-       (ui/virtualized-grid
-         {:ref #(reset! *scroller-ref %)
-          :total-count (count blocks)
-          :custom-scroll-parent (get-scroll-parent config)
-          :skipAnimationFrameInResizeObserver true
-          :compute-item-key (fn [idx]
-                             (str (:db/id view-entity) "-card-" (util/nth-safe blocks idx)))
-          :item-content (fn [idx]
-                         (lazy-item blocks idx
-                                    (assoc (gallery-lazy-item-opts option)
-                                           :gallery-view? true)
-                                    (fn [block]
-                                      (gallery-card-item table view-entity block config'
-                                                         {:asset-property-ident asset-property-ident
-                                                          :display-property-idents display-property-idents}))))}))
-     (gallery-action-bar table option view-parent view-feature-type selected-rows)]))
+       (if (:disable-virtualized? option)
+         [:div.virtuoso-grid-list
+          (for [idx (range (count blocks))]
+            [:div.virtuoso-grid-item
+             {:key (str (:db/id view-entity) "-card-" (util/nth-safe blocks idx))}
+             (render-card idx)])]
+         (ui/virtualized-grid
+          {:ref #(reset! *scroller-ref %)
+           :total-count (count blocks)
+           :custom-scroll-parent (get-scroll-parent config)
+           :skipAnimationFrameInResizeObserver true
+           :compute-item-key (fn [idx]
+                               (str (:db/id view-entity) "-card-" (util/nth-safe blocks idx)))
+           :item-content render-card})))
+     (when-not (:hide-action-bar? option)
+       (gallery-action-bar table option view-parent view-feature-type selected-rows))]))
+
+(rum/defc gallery-group
+  [view-entity option row-selection *scroller-ref groups idx table-map group-by-page? group-by-property]
+  (let [[value group] (nth groups idx)
+        table' (shui/table-option (assoc table-map :data group))
+        title (cond
+                (and group-by-page? (nil? value))
+                [:div.text-muted-foreground.text-sm
+                 (t :view.table/pages)]
+
+                (some? value)
+                (group-readable-property-value value)
+
+                :else
+                (t :view.table/no-group-value (:block/title group-by-property)))]
+    [:div.ls-gallery-group
+     [:div.my-2 title]
+     (gallery-view (assoc option
+                          :disable-virtualized? true
+                          :hide-action-bar? true)
+                   table'
+                   view-entity
+                   group
+                   row-selection
+                   *scroller-ref)]))
+
+(rum/defc grouped-gallery-view < rum/static
+  [table-map table option view-entity groups row-selection group-by-property group-by-property-ident *scroller-ref]
+  (let [gallery-rows (grouped-gallery-row-ids groups)
+        gallery-action-table (shui/table-option
+                              (assoc table-map
+                                     :data gallery-rows
+                                     :full-data (:full-data table)))
+        selected-rows (shui/table-get-selection-rows row-selection (:rows gallery-action-table))
+        group-by-page? (= :block/page group-by-property-ident)]
+    [:div.flex.flex-col.border-t.pt-2.gap-2
+     (virtualized-list
+      {:class "group-gallery-view"
+       :custom-scroll-parent (util/app-scroll-container-node)
+       :increase-viewport-by {:top 300 :bottom 300}
+       :compute-item-key (fn [idx]
+                           (str "gallery-group-" (:db/id view-entity) "-" idx))
+       :skipAnimationFrameInResizeObserver true
+       :total-count (count groups)
+       :item-content
+       (fn [idx]
+         (gallery-group view-entity option row-selection *scroller-ref groups idx table-map group-by-page? group-by-property))}
+      false)
+     (gallery-action-bar gallery-action-table option (:view-parent option) (:view-feature-type option) selected-rows)]))
 
 (defn- run-effects!
   [option {:keys [data]} *scroller-ref gallery? set-ready?]
@@ -2433,22 +2536,25 @@
       (when add-new-object! (new-record-button table view-entity))]]))
 
 (rum/defc group-item
-  [view-entity table' group group-by-property value option view-opts {:keys [list-view? group-by-page? readable-property-value]}]
+  [view-entity table' group group-by-property value option view-opts {:keys [list-view? gallery? group-by-page? readable-property-value]}]
   (let [title [:div
                {:class (when-not list-view? "my-2")}
                (cond
-                 group-by-page?
-                 (if value
-                   (let [c (state/get-component :block/page-cp)]
-                     (c {:disable-preview? true} value))
-                   [:div.text-muted-foreground.text-sm
-                    (t :view.table/pages)])
+                         group-by-page?
+                         (if value
+                           (let [c (state/get-component :block/page-cp)]
+                             (if (fn? c)
+                               (c {:disable-preview? true} value)
+                               (readable-property-value value)))
+                           [:div.text-muted-foreground.text-sm
+                            (t :view.table/pages)])
 
-                 (some? value)
-                 (let [icon (pu/get-block-property-value value :logseq.property/icon)]
-                   [:div.flex.flex-row.gap-1.items-center
-                    (when icon (icon-component/icon icon {:color? true}))
-                    (readable-property-value value)])
+                         (some? value)
+                         (let [icon (when (map? value)
+                                      (pu/get-block-property-value value :logseq.property/icon))]
+                           [:div.flex.flex-row.gap-1.items-center
+                            (when icon (icon-component/icon icon {:color? true}))
+                            (readable-property-value value)])
 
                  :else
                  (t :view.table/no-group-value (:block/title group-by-property)))]
@@ -2457,7 +2563,8 @@
                                         (assoc table' :rows group)
                                         (assoc option
                                                                       ;; disabled virtualization for nested view
-                                               :disable-virtualized? true)
+                                               :disable-virtualized? true
+                                               :hide-action-bar? gallery?)
                                         view-opts)]
                     (if (and list-view? (not (util/mobile?)))
                       [:div.-ml-2 render]
@@ -2558,40 +2665,35 @@
                           :add-new-object! add-new-object!}]
            (if (and group-by-property-ident (not (number? (first (:rows table)))))
              (when (and ready? (seq (:rows table)))
-               [:div.flex.flex-col.border-t.pt-2.gap-2
-                (virtualized-list
-                 {:class (when list-view? "group-list-view")
-                  :custom-scroll-parent (util/app-scroll-container-node (rum/deref *view-ref))
-                  :increase-viewport-by {:top 300 :bottom 300}
-                  :compute-item-key (fn [idx]
-                                      (str "table-group" idx))
-                  :skipAnimationFrameInResizeObserver true
-                  :total-count (count (:rows table))
-                  :item-content (fn [idx]
-                                  (let [[value group] (nth (:rows table) idx)
-                                        add-new-object! (when (fn? add-new-object!)
-                                                          (fn [_]
-                                                            (add-new-object! view-entity table
-                                                                             {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
-                                        table' (shui/table-option (-> table-map
-                                                                      (assoc-in [:data-fns :add-new-object!] add-new-object!)
-                                                                      (assoc :data group ; data for this group
-                                                                             )))
-                                        readable-property-value #(cond (and (map? %) (or (:block/title %) (:logseq.property/value %)))
-                                                                       (db-property/property-value-content %)
-                                                                       (= (:db/ident %) :logseq.property/empty-placeholder)
-                                                                       (t :ui/empty)
-                                                                       :else
-                                                                       (str %))
-                                        group-by-page? (= :block/page group-by-property-ident)
-                                        key (str (:db/id view-entity) "-group-idx-" idx)]
-                                    (rum/with-key
-                                      (group-item view-entity table' group group-by-property value option view-opts
-                                                  {:list-view? list-view?
-                                                   :group-by-page? group-by-page?
-                                                   :readable-property-value readable-property-value})
-                                      key)))}
-                 disable-virtualized?)])
+               (if gallery?
+                 (grouped-gallery-view table-map table option view-entity (:rows table) row-selection
+                                       group-by-property group-by-property-ident *scroller-ref)
+                 [:div.flex.flex-col.border-t.pt-2.gap-2
+                  (virtualized-list
+                   {:class (when list-view? "group-list-view")
+                    :custom-scroll-parent (util/app-scroll-container-node (rum/deref *view-ref))
+                    :increase-viewport-by {:top 300 :bottom 300}
+                    :compute-item-key (fn [idx]
+                                        (str "table-group" idx))
+                    :skipAnimationFrameInResizeObserver true
+                    :total-count (count (:rows table))
+                    :item-content (fn [idx]
+                                    (let [[value group] (nth (:rows table) idx)
+                                          add-new-object! (when (fn? add-new-object!)
+                                                            (fn [_]
+                                                              (add-new-object! view-entity table
+                                                                               {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
+                                          table' (shui/table-option (-> table-map
+                                                                        (assoc-in [:data-fns :add-new-object!] add-new-object!)
+                                                                        (assoc :data group)))
+                                          key (str (:db/id view-entity) "-group-idx-" idx)]
+                                      (rum/with-key
+                                        (group-item view-entity table' group group-by-property value option view-opts
+                                                    {:list-view? list-view?
+                                                     :group-by-page? (= :block/page group-by-property-ident)
+                                                     :readable-property-value group-readable-property-value})
+                                        key)))}
+                   disable-virtualized?)]))
              (view-cp view-entity table
                       (assoc option
                              :group-by-property-ident group-by-property-ident
