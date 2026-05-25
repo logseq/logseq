@@ -1236,6 +1236,7 @@ Similar to re-frame subscriptions"
   (when clear-editing-block?
     (set-state! :editor/editing? nil)
     (set-state! :editor/block nil))
+  (set-state! :editor/args nil)
   (when clear-editing-block?
     (let [online-users (some-> @state :rtc/state deref :online-users)]
       (when (and (coll? online-users) (> (count online-users) 1))
