@@ -850,11 +850,21 @@
       (transport/invoke cfg :thread-api/apply-outliner-ops
                         [repo [[:toggle-reaction [target-uuid emoji-id nil]]] {}]))))
 
+(def ^:private task-status-query
+  '[:find ?status-ident .
+    :in $ ?block-uuid
+    :where
+    [?block :block/uuid ?block-uuid]
+    [?block :logseq.property/status ?status]
+    [?status :db/ident ?status-ident]])
+
 (defn- mark-agent-bridge-task-started!
   [cfg repo block]
   (let [block-uuid (:block/uuid block)]
     (p/let [_ (ensure-reaction! cfg repo block-uuid task-start-reaction)
-            _ (when (contains? block :logseq.property/status)
+            current-status (when (contains? block :logseq.property/status)
+                             (transport/invoke cfg :thread-api/q [repo [task-status-query block-uuid]]))
+            _ (when (= :logseq.property/status.todo current-status)
                 (transport/invoke cfg :thread-api/apply-outliner-ops
                                   [repo [[:batch-set-property [[block-uuid]
                                                                 :logseq.property/status
@@ -941,8 +951,7 @@
         command (build-codex-command prompt {})
         preview (command-preview command)]
     (emit-log! cfg (log-line (str "Codex command prepared for " (block-uuid-str block) ": " preview)))
-    (p/let [_ (mark-agent-bridge-task-started! cfg repo block)
-            {:keys [session]} (start-codex! command
+    (p/let [{:keys [session]} (start-codex! command
                                             {:on-exit (fn [code session-id]
                                                         (when session-id
                                                           (update-session-status! cfg session-id
@@ -954,7 +963,8 @@
                                 {:code :codex-session-id-missing})))
             cfg* (cli-server/ensure-server! cfg repo)
             _ (record-session! cfg* (session-record graph agent-name block session :running))
-            _ (write-agent-session-id! cfg* repo (:block/uuid block) session)]
+            _ (write-agent-session-id! cfg* repo (:block/uuid block) session)
+            _ (mark-agent-bridge-task-started! cfg* repo block)]
       (emit-log! cfg (log-line (str "agent-session-id written for " (block-uuid-str block))))
       {:block (block-uuid-str block)
        :session session

@@ -1136,7 +1136,7 @@
 
 (deftest test-agent-bridge-task-route-marks-started
   (async done
-         (let [ops* (atom [])
+         (let [calls* (atom [])
                block (task-block {})
                block-without-status (dissoc block :logseq.property/status)
                route-opts {:repo "logseq_db_demo"
@@ -1151,7 +1151,130 @@
            (-> (p/with-redefs [transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/q
-                                                    (p/resolved nil)
+                                                    (if (string/includes? (pr-str args) ":logseq.property/status")
+                                                      (p/resolved :logseq.property/status.todo)
+                                                      (p/resolved nil))
+
+                                                    :thread-api/apply-outliner-ops
+                                                    (let [[_ ops _] args]
+                                                      (swap! calls* conj [:apply-ops ops])
+                                                      (p/resolved {:ok true}))
+
+                                                    (p/rejected (ex-info "unexpected invoke"
+                                                                         {:method method
+                                                                          :args args}))))
+                                cli-server/ensure-server! (fn [cfg _repo]
+                                                            (assoc cfg :base-url "http://127.0.0.1:1234"))
+                                agent-command/start-codex! (fn [_command _opts]
+                                                             (swap! calls* conj [:codex])
+                                                             (p/resolved {:session "session-123"
+                                                                          :status :running}))
+                                agent-command/record-session! (fn [_cfg _session-record]
+                                                                (swap! calls* conj [:record-session])
+                                                                true)
+                                agent-command/write-agent-session-id! (fn [_cfg _repo block-uuid session-id]
+                                                                        (swap! calls* conj [:write-session block-uuid session-id])
+                                                                        (p/resolved true))]
+                 (p/let [_ (route! block)
+                         _ (route! block-without-status)]
+                   (is (= [[:codex]
+                           [:record-session]
+                           [:write-session (:block/uuid block) "session-123"]
+                           [:apply-ops [[:toggle-reaction [(:block/uuid block) "eyes" nil]]]]
+                           [:apply-ops [[:batch-set-property [[(:block/uuid block)]
+                                                              :logseq.property/status
+                                                              :logseq.property/status.doing
+                                                              {}]]]]
+                           [:codex]
+                           [:record-session]
+                           [:write-session (:block/uuid block) "session-123"]
+                           [:apply-ops [[:toggle-reaction [(:block/uuid block) "eyes" nil]]]]]
+                          @calls*))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-agent-bridge-task-route-does-not-mark-started-before-session-id-is-written
+  (async done
+         (let [block (task-block {})
+               route-opts {:repo "logseq_db_demo"
+                           :graph "demo"
+                           :agent-name "build-host"
+                           :prompt-templates {:task "Task {{graph}} {{block-uuid}} {{agent-name}}\n{{task-block-tree}}"}}
+               route! (fn []
+                        (#'agent-command/route-task! {:root-dir "/tmp/logseq"}
+                                                    route-opts
+                                                    {:block block
+                                                     :tree-text "- Ship the CLI bridge"}))
+               run-scenario (fn [{:keys [start-codex record-session write-session]}]
+                              (let [ops* (atom [])]
+                                (p/with-redefs [transport/invoke (fn [_ method args]
+                                                                   (case method
+                                                                     :thread-api/q
+                                                                     (p/resolved nil)
+
+                                                                     :thread-api/apply-outliner-ops
+                                                                     (let [[_ ops _] args]
+                                                                       (swap! ops* into ops)
+                                                                       (p/resolved {:ok true}))
+
+                                                                     (p/rejected (ex-info "unexpected invoke"
+                                                                                          {:method method
+                                                                                           :args args}))))
+                                                cli-server/ensure-server! (fn [cfg _repo]
+                                                                            (assoc cfg :base-url "http://127.0.0.1:1234"))
+                                                agent-command/start-codex! start-codex
+                                                agent-command/record-session! record-session
+                                                agent-command/write-agent-session-id! write-session]
+                                  (p/let [result (p/catch (route!)
+                                                   (fn [_e] :rejected))]
+                                    {:result result
+                                     :ops @ops*}))))
+               started {:start-codex (fn [_command _opts]
+                                       (p/resolved {:session "session-123"
+                                                    :status :running}))
+                        :record-session (fn [_cfg _session-record]
+                                          true)
+                        :write-session (fn [_cfg _repo _block-uuid _session-id]
+                                         (p/resolved true))}]
+           (-> (p/let [start-failure (run-scenario (assoc started :start-codex
+                                                           (fn [_command _opts]
+                                                             (p/rejected (ex-info "codex failed"
+                                                                                  {:code :codex-failed})))))
+                       record-failure (run-scenario (assoc started :record-session
+                                                            (fn [_cfg _session-record]
+                                                              (p/rejected (ex-info "record failed"
+                                                                                   {:code :record-failed})))))
+                       write-failure (run-scenario (assoc started :write-session
+                                                           (fn [_cfg _repo _block-uuid _session-id]
+                                                             (p/rejected (ex-info "write failed"
+                                                                                  {:code :write-failed})))))]
+                 (is (= {:result :rejected :ops []} start-failure))
+                 (is (= {:result :rejected :ops []} record-failure))
+                 (is (= {:result :rejected :ops []} write-failure)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-agent-bridge-task-route-does-not-regress-completed-task-status
+  (async done
+         (let [ops* (atom [])
+               block (task-block {})
+               route-opts {:repo "logseq_db_demo"
+                           :graph "demo"
+                           :agent-name "build-host"
+                           :prompt-templates {:task "Task {{graph}} {{block-uuid}} {{agent-name}}\n{{task-block-tree}}"}}
+               route! (fn []
+                        (#'agent-command/route-task! {:root-dir "/tmp/logseq"}
+                                                    route-opts
+                                                    {:block block
+                                                     :tree-text "- Ship the CLI bridge"}))]
+           (-> (p/with-redefs [transport/invoke (fn [_ method args]
+                                                  (case method
+                                                    :thread-api/q
+                                                    (if (string/includes? (pr-str args) ":logseq.property/status")
+                                                      (p/resolved :logseq.property/status.done)
+                                                      (p/resolved nil))
 
                                                     :thread-api/apply-outliner-ops
                                                     (let [[_ ops _] args]
@@ -1170,14 +1293,8 @@
                                                                 true)
                                 agent-command/write-agent-session-id! (fn [_cfg _repo _block-uuid _session-id]
                                                                         (p/resolved true))]
-                 (p/let [_ (route! block)
-                         _ (route! block-without-status)]
-                   (is (= [[:toggle-reaction [(:block/uuid block) "eyes" nil]]
-                           [:batch-set-property [[(:block/uuid block)]
-                                                 :logseq.property/status
-                                                 :logseq.property/status.doing
-                                                 {}]]
-                           [:toggle-reaction [(:block/uuid block) "eyes" nil]]]
+                 (p/let [_ (route!)]
+                   (is (= [[:toggle-reaction [(:block/uuid block) "eyes" nil]]]
                           @ops*))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -1346,7 +1463,9 @@
                                 transport/invoke (fn [_cfg method args]
                                                    (case method
                                                      :thread-api/q
-                                                     (p/resolved nil)
+                                                     (if (string/includes? (pr-str args) ":logseq.property/status")
+                                                       (p/resolved :logseq.property/status.todo)
+                                                       (p/resolved nil))
 
                                                      :thread-api/apply-outliner-ops
                                                      (let [[repo ops _] args]
@@ -1377,14 +1496,14 @@
                             [:prompt-templates "logseq_db_demo"]
                             [:register "logseq_db_demo" "build-host"]
                             [:list "logseq_db_demo" "build-host"]
+                            [:codex (conj codex-exec-prefix "Task demo 11111111-1111-1111-1111-111111111111 build-host\n- Ship the CLI bridge")]
+                            [:ensure-server root "logseq_db_demo"]
+                            [:write-session "logseq_db_demo" (:block/uuid block) "session-123"]
                             [:apply-ops "logseq_db_demo" [[:toggle-reaction [(:block/uuid block) "eyes" nil]]]]
                             [:apply-ops "logseq_db_demo" [[:batch-set-property [[(:block/uuid block)]
                                                                                  :logseq.property/status
                                                                                  :logseq.property/status.doing
-                                                                                 {}]]]]
-                            [:codex (conj codex-exec-prefix "Task demo 11111111-1111-1111-1111-111111111111 build-host\n- Ship the CLI bridge")]
-                            [:ensure-server root "logseq_db_demo"]
-                            [:write-session "logseq_db_demo" (:block/uuid block) "session-123"]]
+                                                                                 {}]]]]]
                            @calls))
                     (let [sessions (agent-command/list-sessions {:root-dir root} {})]
                       (is (= [{:session "session-123"
