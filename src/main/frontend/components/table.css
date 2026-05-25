@@ -59,6 +59,14 @@
       z-index: 8;
     }
 
+    &:hover > .sticky-columns {
+      background-color: hsl(var(--muted) / 0.5);
+    }
+
+    &[data-state="selected"] > .sticky-columns {
+      background-color: hsl(var(--muted));
+    }
+
     div, span, a {
       @apply whitespace-nowrap;
     }
