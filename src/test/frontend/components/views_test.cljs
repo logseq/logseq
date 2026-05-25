@@ -43,3 +43,10 @@
   (let [properties [:block/title :user.property/cover :block/uuid]]
     (is (= {:properties properties}
            (views/gallery-lazy-item-opts {:properties properties})))))
+
+(deftest gallery-card-asset-block-should-use-row-for-asset-class
+  (let [block {:db/id 1
+               :block/title "Inception poster"
+               :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}]
+    (is (= block
+           (views/gallery-card-asset-block block :block/uuid)))))

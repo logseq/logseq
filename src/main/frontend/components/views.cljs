@@ -1879,9 +1879,32 @@
        (pv/property-value block property {:view? true
                                           :gallery-view? true})])))
 
+(defn gallery-card-asset-block
+  [block asset-property-ident]
+  (let [asset-value (when (and block asset-property-ident (not= :block/uuid asset-property-ident))
+                      (get block asset-property-ident))
+        ->entity (fn [value]
+                   (cond
+                     (de/entity? value) value
+                     (number? value) (db/entity value)
+                     (uuid? value) (db/entity [:block/uuid value])
+                     :else value))]
+    (cond
+      (= :block/uuid asset-property-ident)
+      block
+
+      (set? asset-value)
+      (some ->entity asset-value)
+
+      (sequential? asset-value)
+      (some ->entity asset-value)
+
+      :else
+      (->entity asset-value))))
+
 (rum/defc gallery-card-item
   [view-entity block config {:keys [asset-property-ident display-property-idents]}]
-  (let [asset-block (get block asset-property-ident)]
+  (let [asset-block (gallery-card-asset-block block asset-property-ident)]
     [:div.ls-card-item.content
      {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))
       :on-click (fn [e]
