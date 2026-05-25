@@ -1484,6 +1484,16 @@
                                                                   (swap! active* dec)
                                                                   {:session (str "session-" (random-uuid))
                                                                    :status :running})))
+                                 transport/invoke (fn [_cfg method _args]
+                                                    (case method
+                                                      :thread-api/q
+                                                      (p/resolved nil)
+
+                                                      :thread-api/apply-outliner-ops
+                                                      (p/resolved {:ok true})
+
+                                                      (p/rejected (ex-info "unexpected invoke"
+                                                                           {:method method}))))
                                  agent-command/write-agent-session-id! (fn [_cfg _repo block-uuid session-id]
                                                                          (swap! routed* conj [block-uuid session-id])
                                                                          (p/resolved true))]
@@ -1623,6 +1633,12 @@
                                  transport/invoke (fn [_cfg method args]
                                                     (swap! calls conj [method args])
                                                     (case method
+                                                      :thread-api/q
+                                                      (p/resolved nil)
+
+                                                      :thread-api/apply-outliner-ops
+                                                      (p/resolved {:ok true})
+
                                                       :thread-api/pull
                                                       (let [[_repo selector lookup] args]
                                                         (cond
@@ -1706,6 +1722,12 @@
                                  transport/invoke (fn [_cfg method args]
                                                     (swap! calls conj [method args])
                                                     (case method
+                                                      :thread-api/q
+                                                      (p/resolved nil)
+
+                                                      :thread-api/apply-outliner-ops
+                                                      (p/resolved {:ok true})
+
                                                       :thread-api/pull
                                                       (let [[_repo _selector lookup] args]
                                                         (cond
