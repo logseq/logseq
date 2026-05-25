@@ -36,3 +36,22 @@
               :route {:to :page
                       :page-id "00000001-2026-0520-0000-000000000000"}}
              (parse-f "http://localhost:3001/#/page/00000001-2026-0520-0000-000000000000?graph-id=dc4b7cbd-65f7-4e76-9591-dcb3d14f11cf"))))))
+
+(deftest parse-web-url-target-reads-compatibility-graph-identifier-test
+  (let [parse-f (some-> (resolve 'frontend.util.url/parse-web-url-target) deref)]
+    (is (fn? parse-f) "Web URL target parser should exist")
+    (when parse-f
+      (is (= {:graph-identifier "work"}
+             (parse-f "https://logseq.com/#/?graph=work")))
+      (is (= {:graph-identifier "work"
+              :route {:to :page
+                      :page-id "Home"}}
+             (parse-f "https://logseq.com/#/page/Home?graph=work")))
+      (is (= {:graph-identifier "work"
+              :route {:to :page
+                      :page-id "Home"}}
+             (parse-f "https://logseq.com/?graph=work#/page/Home")))
+      (is (= {:graph-id "remote-graph-uuid"
+              :route {:to :page
+                      :page-id "Home"}}
+             (parse-f "https://logseq.com/#/page/Home?graph=work&graph-id=remote-graph-uuid"))))))
