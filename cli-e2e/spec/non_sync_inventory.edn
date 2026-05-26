@@ -155,9 +155,8 @@
    :options ["--dev-script"]}
 
   :agent
-  {:commands ["agent bridge"
-              "agent bridge list"]
-   :options ["--all"]}
+  {:commands ["agent bridge"]
+   :options ["--dry-run"]}
 
   :completion
   {:commands ["completion"]

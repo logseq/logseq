@@ -130,14 +130,16 @@
 
 (deftest test-agent-command-entries
   (testing "parse agent bridge command surface"
-    (let [bridge (commands/parse-args ["agent" "bridge" "--graph" "demo" "--dry-run"])
-          list-result (commands/parse-args ["agent" "bridge" "list"])]
+    (let [bridge (commands/parse-args ["agent" "bridge" "--graph" "demo" "--dry-run"])]
       (is (true? (:ok? bridge)))
       (is (= :agent-bridge (:command bridge)))
       (is (= "demo" (get-in bridge [:options :graph])))
-      (is (true? (get-in bridge [:options :dry-run])))
-      (is (true? (:ok? list-result)))
-      (is (= :agent-bridge-list (:command list-result)))))
+      (is (true? (get-in bridge [:options :dry-run])))))
+
+  (testing "agent bridge list is not a command"
+    (let [result (commands/parse-args ["agent" "bridge" "list"])]
+      (is (false? (:ok? result)))
+      (is (= :unknown-command (get-in result [:error :code])))))
 
   (testing "top-level help exposes the agent utility group"
     (let [summary (:summary (commands/parse-args ["--help"]))]
@@ -166,14 +168,14 @@
       (is (= "logseq_db_demo" (get-in result [:action :repo])))
       (is (true? (get-in result [:action :dry-run?])))))
 
-  (testing "agent bridge list is root-dir scoped and does not require graph"
+  (testing "agent bridge list action is not supported"
     (let [result (commands/build-action {:ok? true
                                          :command :agent-bridge-list
                                          :options {}
                                          :args []}
                                         {})]
-      (is (true? (:ok? result)))
-      (is (= :agent-bridge-list (get-in result [:action :type]))))))
+      (is (false? (:ok? result)))
+      (is (= :unknown-command (get-in result [:error :code]))))))
 
 (deftest test-resolve-agent-name
   (testing "config overrides hostname"
@@ -1264,6 +1266,72 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest test-agent-bridge-task-route-marks-successful-completion-in-review
+  (async done
+         (let [block (task-block {})
+               route-opts {:repo "logseq_db_demo"
+                           :graph "demo"
+                           :agent-name "build-host"
+                           :prompt-templates {:task "Task {{graph}} {{block-uuid}} {{agent-name}}\n{{task-block-tree}}"}}
+               route! (fn []
+                        (#'agent-command/route-task! {:root-dir "/tmp/logseq"}
+                                                    route-opts
+                                                    {:block block
+                                                     :tree-text "- Ship the CLI bridge"}))
+               run-scenario
+               (fn [exit-code]
+                 (let [ops* (atom [])
+                       session-statuses* (atom [])]
+                   (p/let [_ (p/with-redefs [transport/invoke
+                                              (fn [_ method args]
+                                                (case method
+                                                  :thread-api/q
+                                                  (if (string/includes? (pr-str args) ":logseq.property/status")
+                                                    (p/resolved :logseq.property/status.todo)
+                                                    (p/resolved nil))
+
+                                                  :thread-api/apply-outliner-ops
+                                                  (let [[_ ops _] args]
+                                                    (swap! ops* into ops)
+                                                    (p/resolved {:ok true}))
+
+                                                  (p/rejected (ex-info "unexpected invoke"
+                                                                       {:method method
+                                                                        :args args}))))
+                                              cli-server/ensure-server! (fn [cfg _repo]
+                                                                          (assoc cfg :base-url "http://127.0.0.1:1234"))
+                                              agent-command/start-codex! (fn [_command opts]
+                                                                           ((:on-exit opts) exit-code "session-123")
+                                                                           (p/resolved {:session "session-123"
+                                                                                        :status :running}))
+                                              agent-command/record-session! (fn [_cfg _session-record]
+                                                                              true)
+                                              agent-command/update-session-status! (fn [_cfg session-id status]
+                                                                                     (swap! session-statuses* conj [session-id status])
+                                                                                     true)
+                                              agent-command/write-agent-session-id! (fn [_cfg _repo _block-uuid _session-id]
+                                                                                      (p/resolved true))]
+                               (p/let [_ (route!)
+                                       _ (p/delay 10)]
+                                 true))]
+                     {:ops @ops*
+                      :session-statuses @session-statuses*})))
+               in-review-op [:batch-set-property [[(:block/uuid block)]
+                                                   :logseq.property/status
+                                                   :logseq.property/status.in-review
+                                                   {}]]]
+           (-> (p/let [success (run-scenario 0)
+                       failure (run-scenario 1)]
+                 (is (= [["session-123" :completed]]
+                        (:session-statuses success)))
+                 (is (some #(= in-review-op %) (:ops success)))
+                 (is (= [["session-123" :failed]]
+                        (:session-statuses failure)))
+                 (is (not-any? #(= in-review-op %) (:ops failure))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest test-agent-bridge-task-route-does-not-mark-started-before-session-id-is-written
   (async done
          (let [block (task-block {})
@@ -1390,15 +1458,10 @@
                                              :agent "build-host"
                                              :started-at 1000
                                              :updated-at 3000})
-      (testing "list hides completed sessions by default"
-        (is (= ["codex-running"]
-               (mapv :session (agent-command/list-sessions config {})))))
-      (testing "list can include completed sessions"
-        (is (= ["codex-running" "codex-done"]
-               (mapv :session (agent-command/list-sessions config {:all? true})))))
       (testing "session file is EDN data"
         (let [payload (reader/read-string (fs/readFileSync (agent-command/session-store-path config) "utf8"))]
-          (is (= 2 (count (:sessions payload))))))
+          (is (= ["codex-running" "codex-done"]
+                 (mapv :session (:sessions payload))))))
       (finally
         (fs/rmSync root #js {:recursive true :force true})))))
 
@@ -1415,7 +1478,8 @@
                                              :agent "build-host"
                                              :started-at 1000
                                              :updated-at 2000})
-      (let [session (first (agent-command/list-sessions config {:all? true}))]
+      (let [payload (reader/read-string (fs/readFileSync (agent-command/session-store-path config) "utf8"))
+            session (first (:sessions payload))]
         (is (= :completed (:status session)))
         (is (= :codex (:backend session)))
         (is (= "demo" (:graph session)))
@@ -1423,32 +1487,6 @@
         (is (= "build-host" (:agent session)))
         (is (= 1000 (:started-at session)))
         (is (= 2000 (:updated-at session))))
-      (finally
-        (fs/rmSync root #js {:recursive true :force true})))))
-
-(deftest test-execute-agent-bridge-list-and-format
-  (let [root (temp-root)]
-    (try
-      (agent-command/record-session! {:root-dir root}
-                                     {:session "codex-running"
-                                      :status :running
-                                      :backend :codex
-                                      :graph "demo"
-                                      :block "11111111-1111-1111-1111-111111111111"
-                                      :agent "build-host"
-                                      :started-at 1000
-                                      :updated-at 2000})
-      (let [result (agent-command/execute-list {:type :agent-bridge-list} {:root-dir root})
-            output (cli-format/format-result result {:output-format :human :now-ms 3000})]
-        (is (= :ok (:status result)))
-        (is (string/includes? output "SESSION"))
-        (is (string/includes? output "STATUS"))
-        (is (string/includes? output "BACKEND"))
-        (is (string/includes? output "codex-running"))
-        (is (string/includes? output "running"))
-        (is (not (string/includes? output ":running")))
-        (is (not (string/includes? output ":codex")))
-        (is (string/includes? output "Count: 1")))
       (finally
         (fs/rmSync root #js {:recursive true :force true})))))
 
@@ -1575,7 +1613,8 @@
                                                                                  :logseq.property/status.doing
                                                                                  {}]]]]]
                            @calls))
-                    (let [sessions (agent-command/list-sessions {:root-dir root} {})]
+                    (let [payload (reader/read-string (fs/readFileSync (agent-command/session-store-path {:root-dir root}) "utf8"))
+                          sessions (:sessions payload)]
                       (is (= [{:session "session-123"
                                :status :running
                                :backend :codex
