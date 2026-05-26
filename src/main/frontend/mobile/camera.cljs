@@ -58,9 +58,15 @@
                  (log/error :file/write-failed {:error error})
                  nil))))
 
-(defn embed-photo [id]
-  (let [block (state/get-edit-block)
-        format (get block :block/format :markdown)]
-    (p/let [file (take-or-choose-photo)]
-      (when (and id file)
-        (editor-handler/upload-asset! id [file] format editor-handler/*asset-uploading? true)))))
+(defn embed-photo
+  ([id] (embed-photo id nil))
+  ([id {:keys [target-block]}]
+   (let [block (state/get-edit-block)
+         format (get block :block/format :markdown)]
+     (p/let [file (take-or-choose-photo)]
+       (when file
+         (if target-block
+           (editor-handler/db-based-save-assets! (state/get-current-repo) [file]
+                                                 :target-block target-block)
+           (when id
+             (editor-handler/upload-asset! id [file] format editor-handler/*asset-uploading? true))))))))

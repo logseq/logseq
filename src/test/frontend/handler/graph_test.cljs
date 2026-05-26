@@ -3,6 +3,7 @@
             [frontend.common.idb :as idb]
             [frontend.handler.graph]
             [frontend.state :as state]
+            [frontend.util.url :as url-util]
             [logseq.common.graph-registry :as graph-registry]
             [promesa.core :as p]))
 
@@ -74,6 +75,24 @@
                           :graph-id "tab-uuid"}]
                         [{:url "logseq_db_current"}]
                         {:graph-id "url-uuid"}
+                        {:repo "logseq_db_tab"
+                         :graph-id "tab-uuid"}
+                        "logseq_db_current"))))))
+
+(deftest resolve-startup-repo-prefers-compatibility-url-graph-test
+  (let [resolve-f (some-> (resolve 'frontend.handler.graph/resolve-startup-repo) deref)]
+    (is (fn? resolve-f) "Startup repo resolver should exist")
+    (when resolve-f
+      (is (= "logseq_db_work"
+             (resolve-f [{:repo "logseq_db_work"
+                          :graph-name "work"
+                          :graph-id "work-uuid"}
+                         {:repo "logseq_db_tab"
+                          :graph-name "tab"
+                          :graph-id "tab-uuid"}]
+                        [{:url "logseq_db_current"}]
+                        (url-util/parse-web-url-target
+                         "https://logseq.com/#/page/Home?graph=work")
                         {:repo "logseq_db_tab"
                          :graph-id "tab-uuid"}
                         "logseq_db_current"))))))

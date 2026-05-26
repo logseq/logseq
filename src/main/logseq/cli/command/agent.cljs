@@ -850,11 +850,21 @@
       (transport/invoke cfg :thread-api/apply-outliner-ops
                         [repo [[:toggle-reaction [target-uuid emoji-id nil]]] {}]))))
 
+(def ^:private task-status-query
+  '[:find ?status-ident .
+    :in $ ?block-uuid
+    :where
+    [?block :block/uuid ?block-uuid]
+    [?block :logseq.property/status ?status]
+    [?status :db/ident ?status-ident]])
+
 (defn- mark-agent-bridge-task-started!
   [cfg repo block]
   (let [block-uuid (:block/uuid block)]
     (p/let [_ (ensure-reaction! cfg repo block-uuid task-start-reaction)
-            _ (when (contains? block :logseq.property/status)
+            current-status (when (contains? block :logseq.property/status)
+                             (transport/invoke cfg :thread-api/q [repo [task-status-query block-uuid]]))
+            _ (when (= :logseq.property/status.todo current-status)
                 (transport/invoke cfg :thread-api/apply-outliner-ops
                                   [repo [[:batch-set-property [[block-uuid]
                                                                 :logseq.property/status
@@ -941,8 +951,7 @@
         command (build-codex-command prompt {})
         preview (command-preview command)]
     (emit-log! cfg (log-line (str "Codex command prepared for " (block-uuid-str block) ": " preview)))
-    (p/let [_ (mark-agent-bridge-task-started! cfg repo block)
-            {:keys [session]} (start-codex! command
+    (p/let [{:keys [session]} (start-codex! command
                                             {:on-exit (fn [code session-id]
                                                         (when session-id
                                                           (update-session-status! cfg session-id
@@ -954,7 +963,8 @@
                                 {:code :codex-session-id-missing})))
             cfg* (cli-server/ensure-server! cfg repo)
             _ (record-session! cfg* (session-record graph agent-name block session :running))
-            _ (write-agent-session-id! cfg* repo (:block/uuid block) session)]
+            _ (write-agent-session-id! cfg* repo (:block/uuid block) session)
+            _ (mark-agent-bridge-task-started! cfg* repo block)]
       (emit-log! cfg (log-line (str "agent-session-id written for " (block-uuid-str block))))
       {:block (block-uuid-str block)
        :session session
@@ -998,13 +1008,14 @@
           (partition-all limit coll)))
 
 (defn- process-tasks!
-  [cfg {:keys [repo graph agent-name prompt-templates]}]
+  [cfg {:keys [repo graph agent-name prompt-templates routing-blocks*]}]
   (p/let [tasks (list-routable-tasks cfg repo agent-name)]
     (p-map-batched max-concurrent-routes
                    #(route-task-once! cfg {:repo repo
                                            :graph graph
                                            :agent-name agent-name
-                                           :prompt-templates prompt-templates}
+                                           :prompt-templates prompt-templates
+                                           :routing-blocks* routing-blocks*}
                                       %)
                    tasks)))
 
@@ -1073,13 +1084,41 @@
        (or (string/includes? (:v datom) (str "[[" agent-name "]]"))
            (string/includes? (:v datom) "[["))))
 
-(defn- task-routability-datom?
-  [datom]
-  (and (true? (:added datom))
-       (or (and (= :block/tags (:a datom))
-                (= :logseq.class/Task (:v datom)))
-           (and (= :logseq.property/status (:a datom))
-                (= :logseq.property/status.todo (:v datom))))))
+(def ^:private routability-entity-selector
+  [:db/id :db/ident])
+
+(defn- task-routability-attr?
+  [attr]
+  (or (= :block/tags attr)
+      (= :logseq.property/status attr)))
+
+(defn- task-routability-ident?
+  [attr ident]
+  (case attr
+    :block/tags (= :logseq.class/Task ident)
+    :logseq.property/status (= :logseq.property/status.todo ident)
+    false))
+
+(defn- resolve-routability-datom-ident
+  [cfg repo datom]
+  (let [value (:v datom)]
+    (if (keyword? value)
+      (p/resolved value)
+      (p/let [entity (transport/invoke cfg :thread-api/pull [repo routability-entity-selector value])]
+        (:db/ident entity)))))
+
+(defn- resolve-routability-datoms
+  [cfg repo tx-data]
+  (let [candidates (filter #(and (true? (:added %))
+                                  (task-routability-attr? (:a %)))
+                           tx-data)]
+    (p/let [resolved (p/all
+                      (mapv (fn [datom]
+                              (p/let [ident (resolve-routability-datom-ident cfg repo datom)]
+                                (when (task-routability-ident? (:a datom) ident)
+                                  datom)))
+                            candidates))]
+      (keep identity resolved))))
 
 (defn- pull-assignee-property
   [cfg repo]
@@ -1284,9 +1323,9 @@
 
 (defn- process-sync-db-changes-event!
   [cfg {:keys [repo] :as opts} {:keys [tx-data]}]
-  (p/let [assignee-datoms (resolve-assignee-datoms cfg repo tx-data)]
-    (let [routability-datoms (filter task-routability-datom? tx-data)
-          comment-datoms (filter #(comment-title-datom? % (:agent-name opts)) tx-data)
+  (p/let [assignee-datoms (resolve-assignee-datoms cfg repo tx-data)
+          routability-datoms (resolve-routability-datoms cfg repo tx-data)]
+    (let [comment-datoms (filter #(comment-title-datom? % (:agent-name opts)) tx-data)
           routing (vec (concat (map #(route-assignee-datom! cfg opts %) assignee-datoms)
                                (map #(route-routability-datom! cfg opts %) routability-datoms)
                                (map #(route-comment-datom! cfg opts %) comment-datoms)))]
@@ -1294,8 +1333,8 @@
         (p/all routing)))))
 
 (defn- listen-forever!
-  [cfg {:keys [repo graph agent-name prompt-templates]}]
-  (let [routing-blocks* (atom #{})
+  [cfg {:keys [repo graph agent-name prompt-templates routing-blocks*]}]
+  (let [routing-blocks* (or routing-blocks* (atom #{}))
         handle-error! (fn [e]
                         (emit-log! cfg (log-line (str "Codex invocation failed: "
                                                       (or (ex-message e) (str e)))))
@@ -1364,24 +1403,29 @@
                   (do
                     (doseq [line (conj logs (log-line "listening graph changes ..."))]
                       (emit-log! cfg line))
-                    (p/let [routed (process-tasks! cfg {:repo repo
-                                                        :graph graph
-                                                        :agent-name agent-name
-                                                        :prompt-templates prompt-templates})]
-                      {:status :ok
-                       :command :agent-bridge
-                       :data {:mode :processed-once
-                              :graph graph
-                              :agent-name agent-name
-                              :routed routed}}))
-                  (let [listen-promise (listen-forever! cfg {:repo repo
+                    (let [routing-blocks* (atom #{})]
+                      (p/let [routed (process-tasks! cfg {:repo repo
+                                                          :graph graph
+                                                          :agent-name agent-name
+                                                          :prompt-templates prompt-templates
+                                                          :routing-blocks* routing-blocks*})]
+                        {:status :ok
+                         :command :agent-bridge
+                         :data {:mode :processed-once
+                                :graph graph
+                                :agent-name agent-name
+                                :routed routed}})))
+                  (let [routing-blocks* (atom #{})
+                        listen-promise (listen-forever! cfg {:repo repo
                                                              :graph graph
                                                              :agent-name agent-name
-                                                             :prompt-templates prompt-templates})]
+                                                             :prompt-templates prompt-templates
+                                                             :routing-blocks* routing-blocks*})]
                     (doseq [line (conj logs (log-line "listening graph changes ..."))]
                       (emit-log! cfg line))
                     (p/let [_ (process-tasks! cfg {:repo repo
                                                    :graph graph
                                                    :agent-name agent-name
-                                                   :prompt-templates prompt-templates})]
+                                                   :prompt-templates prompt-templates
+                                                   :routing-blocks* routing-blocks*})]
                       listen-promise)))))))))))

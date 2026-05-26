@@ -41,7 +41,7 @@ private class NativeSelectionActionBarView: UIView {
         let stack = UIStackView()
         stack.axis = .horizontal
         stack.alignment = .center
-        stack.spacing = 8
+        stack.spacing = 6
         stack.isLayoutMarginsRelativeArrangement = true
         stack.layoutMargins = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -66,10 +66,10 @@ private class NativeSelectionActionBarView: UIView {
         stack.axis = .horizontal
         stack.alignment = .center
         stack.distribution = .fillEqually   // equal widths for main actions
-        stack.spacing = 8
+        stack.spacing = 4
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.isLayoutMarginsRelativeArrangement = true
-        stack.layoutMargins = UIEdgeInsets(top: 0, left: 2, bottom: 0, right: 2)
+        stack.layoutMargins = .zero
         return stack
     }()
 
@@ -78,7 +78,7 @@ private class NativeSelectionActionBarView: UIView {
         let stack = UIStackView()
         stack.axis = .horizontal
         stack.alignment = .center
-        stack.spacing = 8
+        stack.spacing = 6
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.isUserInteractionEnabled = true
         return stack

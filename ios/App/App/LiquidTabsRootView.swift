@@ -283,7 +283,7 @@ private struct LiquidTabs26View: View {
 
     private func waitForWebBackedTab(_ selection: LiquidTabsTabSelection) {
         if let id = webBackedTabId(for: selection) {
-            store.waitForWebTab(id)
+            store.beginWebTabTransitionIfNeeded(id)
         }
     }
 
@@ -450,7 +450,10 @@ private struct LiquidTabs26View: View {
                 }
 
                 if newSelection != selectedTab {
-                    prepareForSelectionChange(to: newSelection)
+                    let isExternalSelectionChange = store.tabId(for: selectedTab) != id
+                    if isExternalSelectionChange {
+                        prepareForSelectionChange(to: newSelection)
+                    }
                     selectedTab = newSelection
                 }
             }
@@ -877,6 +880,8 @@ private struct LiquidTabs16View: View {
                             guard let id = newValue else { return }
 
                             if id != store.selectedId {
+                                store.beginWebTabTransitionIfNeeded(id)
+
                                 if id == "search" {
                                     store.suppressSearchNotifications = true
                                     resetSearchState()
@@ -941,6 +946,12 @@ private struct LiquidTabs16View: View {
                             store.selectedId ?? store.firstTab?.id
                         })
                         .frame(width: 0, height: 0)
+                    }
+                    .overlay {
+                        if store.pendingWebTabId != nil {
+                            Color.logseqBackground
+                                .ignoresSafeArea()
+                        }
                     }
                 }
                 .onAppear {

@@ -117,6 +117,7 @@
  :block.comments/label "Comments"
  :block.comments/on-those-blocks "On those blocks"
  :block.comments/placeholder "Reply..."
+ :block.comments/save-error "Failed to save comment."
  :block.comments/yesterday-at "Yesterday at {1}"
 
  :block.macro/embed-deprecated "{{embed}} is deprecated. Use '/Node embed' command instead."
@@ -1026,6 +1027,7 @@
  :mobile.toolbar/indent "Indent"
  :mobile.toolbar/outdent "Outdent"
  :mobile.toolbar/photo "Photo"
+ :mobile.toolbar/reaction "Reaction"
  :mobile.toolbar/redo "Redo"
  :mobile.toolbar/reference "Reference"
  :mobile.toolbar/slash "Slash"
@@ -1914,6 +1916,15 @@
  :view.filter/relative-3-months-ago "3 months ago"
  :view.filter/to "to"
  :view.filter/type-to-search "Type to search"
+
+ :view.gallery/asset-property "Asset property"
+ :view.gallery/card-size "Card size"
+ :view.gallery/compact-size "Compact"
+ :view.gallery/custom-size "Custom"
+ :view.gallery/default-size "Default"
+ :view.gallery/display-properties "Display properties"
+ :view.gallery/height "Height"
+ :view.gallery/width "Width"
 
  :view.table/ascending "Ascending"
  :view.table/columns-visibility "Columns visibility"
