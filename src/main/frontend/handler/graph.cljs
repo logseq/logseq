@@ -11,6 +11,7 @@
             [frontend.util :as util]
             [logseq.common.config :as common-config]
             [logseq.common.graph-registry :as graph-registry]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -96,6 +97,20 @@
                   (ldb/get-graph-local-uuid db*))
               str))))
 
+(defn- new-local-graph-uuid
+  []
+  (uuid (str "00000000" (subs (str (common-uuid/gen-uuid)) 8))))
+
+(defn- <ensure-local-graph-uuid!
+  [repo db*]
+  (if-let [local-graph-uuid (ldb/get-graph-local-uuid db*)]
+    (p/resolved local-graph-uuid)
+    (let [local-graph-uuid (new-local-graph-uuid)]
+      (p/let [_ (db/transact! repo
+                              [(ldb/kv :logseq.kv/local-graph-uuid local-graph-uuid)]
+                              {:graph-open/ensure-local-graph-uuid? true})]
+        local-graph-uuid))))
+
 (defn remember-current-graph-id-in-tab!
   []
   (when-let [repo (state/get-current-repo)]
@@ -106,13 +121,15 @@
   []
   (when-let [repo (state/get-current-repo)]
     (when-let [db* (db/get-db repo)]
-      (<upsert-graph-registry-entry!
-       {:repo repo
-        :graph-name (common-config/strip-leading-db-version-prefix repo)
-        :local-graph-id (some-> (ldb/get-graph-local-uuid db*) str)
-        :graph-id (some-> (or (ldb/get-graph-rtc-uuid db*)
-                              (ldb/get-graph-local-uuid db*))
-                          str)}))))
+      (p/let [local-graph-uuid (<ensure-local-graph-uuid! repo db*)
+              db* (or (db/get-db repo) db*)
+              graph-uuid (or (ldb/get-graph-rtc-uuid db*)
+                             local-graph-uuid)]
+        (<upsert-graph-registry-entry!
+         {:repo repo
+          :graph-name (common-config/strip-leading-db-version-prefix repo)
+          :local-graph-id (str local-graph-uuid)
+          :graph-id (some-> graph-uuid str)})))))
 
 (defn settle-metadata-to-local!
   [m]
