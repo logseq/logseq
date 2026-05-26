@@ -25,6 +25,21 @@
          :logseq.property.pdf/hl-image {:db/id 30}
          :logseq.property.pdf/hl-page 8}]}})
 
+(deftest enhance-columns-adds-non-property-file-column
+  (let [columns [{:id :select}
+                 {:id :block/title}
+                 {:id :logseq.property.asset/type}]
+        result (asset-table/enhance-columns
+                {:config {}
+                 :columns columns
+                 :annotation-index annotation-index
+                 :set-expanded-pdf-ids! identity})
+        file-column (some #(when (= :file (:id %)) %) result)]
+    (is (= [:select :block/title :file :logseq.property.asset/type]
+           (mapv :id result)))
+    (is (= false (:column-list? file-column)))
+    (is (fn? (:header file-column)))))
+
 (deftest build-pdf-annotation-table-data-groups-images-under-expanded-pdf
   (testing "collapsed PDFs hide their area highlight image assets from the top level"
     (is (= [10 40]

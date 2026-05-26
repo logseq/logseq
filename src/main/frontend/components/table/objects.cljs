@@ -146,7 +146,6 @@
         columns (asset-table/enhance-columns
                  {:config config
                   :columns columns*
-                  :header-cp views/header-cp
                   :annotation-index annotation-index
                   :set-expanded-pdf-ids! set-expanded-pdf-ids!})
         add-new-object! (fn [view table _opts]

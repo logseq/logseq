@@ -188,6 +188,25 @@
           menu-item
           (not submenu-trigger?)))))
 
+(def ^:private sort-excluded-column-ids
+  #{:select :id :add-new-property})
+
+(defn- column-list-enabled?
+  "Whether this column should participate in column-level option lists.
+  Normal columns default to true; synthetic/internal columns can opt out with
+  `:column-list? false` so they do not look or behave like editable properties."
+  [column]
+  (:column-list? column true))
+
+(defn- sorting-column-option?
+  "Whether this column can appear in the explicit sorting field picker.
+  This builds on `column-list-enabled?` so columns hidden from column operations
+  are also excluded from sorting options."
+  [{:keys [id name] :as column}]
+  (and (column-list-enabled? column)
+       (not (contains? sort-excluded-column-ids id))
+       (not (string/blank? (str name)))))
+
 (defn header-cp
   [{:keys [view-entity column-replace-sorting! state]} column]
   (let [sorting (:sorting state)
@@ -610,7 +629,7 @@
           (shui/dropdown-menu-sub-trigger
            (t :view.table/columns-visibility))
           (shui/dropdown-menu-sub-content
-           (for [column (remove #(or (false? (:column-list? %))
+           (for [column (remove #(or (not (column-list-enabled? %))
                                      (:disable-hide? %)) columns)]
              (shui/dropdown-menu-checkbox-item
               {:key (str (:id column))
@@ -757,15 +776,18 @@
         sized-columns (get-in table [:state :sized-columns])
         set-sized-columns! (get-in table [:data-fns :set-sized-columns!])
         width (table-core/get-column-size column sized-columns)
-        select? (= :select (:id column))]
+        select? (= :select (:id column))
+        column-actions-enabled? (column-list-enabled? column)]
     [:div.ls-table-header-cell
      {:style {:width width
               :min-width width}
-      :class (when select? "!border-0")}
+      :class (string/join " " (remove nil? [(when select? "!border-0")
+                                            (when-not column-actions-enabled?
+                                              "!cursor-default hover:!bg-transparent")]))}
      (if (fn? header-fn)
        (header-fn table column)
        header-fn)
-                                   ;; resize handle
+
      (when-not (false? (:resizable? column))
        (column-resizer column
                        (fn [size]
@@ -952,7 +974,7 @@
         timestamp? (datetime-property? property)
         set-filters! (:set-filters! data-fns)
         filters (get-in table [:state :filters])
-        columns (remove #(or (false? (:column-list? %))
+        columns (remove #(or (not (column-list-enabled? %))
                              (= :id (:id %))) columns)
         items (map (fn [column]
                      {:label (:name column)
@@ -1749,17 +1771,13 @@
                        (shui/popup-hide!))))}
       (ui/icon "x"))]]])
 
-(def ^:private sort-excluded-column-ids
-  #{:select :id :add-new-property})
-
 (defn- available-sorting-columns
   [sorting columns]
   (let [sorting-ids (set (map :id sorting))]
     (->> columns
-         (remove (fn [{:keys [id name]}]
-                   (or (contains? sort-excluded-column-ids id)
-                       (contains? sorting-ids id)
-                       (string/blank? (str name)))))
+         (filter sorting-column-option?)
+         (remove (fn [{:keys [id]}]
+                   (contains? sorting-ids id)))
          vec)))
 
 (defn- sorting-column-match?
@@ -1825,9 +1843,9 @@
                                        columns))
                                sorting)
         available-name-lens (->> columns
+                                 (filter sorting-column-option?)
                                  (remove (fn [{:keys [id]}]
-                                           (or (contains? sort-excluded-column-ids id)
-                                               (contains? sorting-ids id))))
+                                           (contains? sorting-ids id)))
                                  (map (comp count str :name)))
         max-name-len (apply max 0 (concat sorted-name-lens available-name-lens))
         width (+ 220 (* 7 (min max-name-len 24)))]

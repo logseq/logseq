@@ -15,11 +15,18 @@
 
 (defn- build-asset-file-column
   "Builds the Asset table file preview column."
-  [config header-cp]
+  [config]
   {:id :file
    :name (t :file/label)
    :type :string
-   :header header-cp
+   ;; The file preview is a synthetic rendering of the asset block, not a real
+   ;; property, so property header actions and sorting do not apply to it.
+   :column-list? false
+   :header (fn [_table column]
+             [:div.h-8.w-full.flex.items-center.justify-start.px-2.text-muted-foreground
+              [:span.max-w-full.overflow-hidden.text-ellipsis
+               {:title (str (:name column))}
+               (:name column)]])
    :cell (fn [_table row _column]
            (when-let [asset-cp (state/get-component :block/asset-cp)]
              [:div.block-content.ls-table-asset-file-preview.overflow-hidden.flex.items-center
@@ -133,12 +140,11 @@
   |-------------------------|-------------
   | `:config`               | View config passed to Asset-specific cell renderers.
   | `:columns`              | Base table columns produced before Asset column enhancement.
-  | `:header-cp`            | Header renderer for the inserted file column.
   | `:annotation-index`     | PDF annotation lookup data used by title cells.
   | `:set-expanded-pdf-ids!` | State updater for toggling expanded PDF rows."
-  [{:keys [config columns header-cp annotation-index set-expanded-pdf-ids!]}]
+  [{:keys [config columns annotation-index set-expanded-pdf-ids!]}]
   (let [[before-cols after-cols] (split-with #(not (db-property/logseq-property? (:id %))) columns)
-        columns' (concat before-cols [(build-asset-file-column config header-cp)] after-cols)]
+        columns' (concat before-cols [(build-asset-file-column config)] after-cols)]
     (mapv (fn [column]
             (if (= :block/title (:id column))
               (wrap-asset-title-column column annotation-index

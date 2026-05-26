@@ -111,6 +111,7 @@
   (let [columns [{:id :select :name "Select"}
                  {:id :id :name "#"}
                  {:id :add-new-property :name "+"}
+                 {:id :file :name "File" :column-list? false}
                  {:id :block/title :name "Name"}
                  {:id :block/updated-at :name "Updated at"}
                  {:id :user.property/status :name "Status"}]
