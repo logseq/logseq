@@ -218,21 +218,10 @@
 
 (def ^:private default-embedding-pipeline-devices ["cpu"])
 
-(defn- embedding-cpu-thread-count
-  []
-  (-> (count (.cpus os))
-      (max 1)
-      (min 4)))
-
 (defn- embedding-pipeline-options
   [device]
   #js {:device device
-       :dtype "q8"
-       :session_options #js {:intraOpNumThreads (embedding-cpu-thread-count)
-                             :interOpNumThreads (embedding-cpu-thread-count)
-                             :executionMode "parallel"
-                             :enableCpuMemArena true
-                             :enableMemPattern true}})
+       :dtype "q8"})
 
 (defn- <embedding-pipeline-for-device
   [model-id device]
@@ -252,7 +241,7 @@
                                                                  :device device
                                                                  :error error})
                        (<embedding-pipeline-with-fallback model-id remaining))
-                     (throw error)))))))
+                     (log/error ::embedding-failed error)))))))
 
 (defn- <embedding-pipeline
   [model-id devices]
@@ -345,8 +334,7 @@
         fields (js-obj)]
     (gobj/set vectors zvec-vector-field (clj->js embedding))
     (gobj/set fields zvec-page-field page)
-    (when vector-title
-      (gobj/set fields zvec-title-field vector-title))
+    (gobj/set fields zvec-title-field (or vector-title ""))
     #js {:id id
          :vectors vectors
          :fields fields}))

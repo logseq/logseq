@@ -92,7 +92,6 @@
     config
     default-graph-config-content))
 
-
 (defn- node-runtime?
   []
   (= :node (platform/env-flag (platform/current) :runtime)))
@@ -394,8 +393,8 @@
       (.exec sqlite-db "VACUUM")
       (ldb/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
                                        :kv/value (common-util/time-ms)}]
-        {:skip-validate-db? true
-         :persist-op? false}))))
+                     {:skip-validate-db? true
+                      :persist-op? false}))))
 
 (defn- run-client-ops-cleanup!
   [repo]
@@ -928,9 +927,9 @@
         (fn [error]
           (if (= 1 (count batch))
             (throw error)
-            (let [split-at (quot (count batch) 2)
-                  left (subvec (vec batch) 0 split-at)
-                  right (subvec (vec batch) split-at)]
+            (let [split-index (quot (count batch) 2)
+                  left (subvec (vec batch) 0 split-index)
+                  right (subvec (vec batch) split-index)]
               (p/let [left-embedded (<embed-index-batch-with-fallback embed-texts-fn left)
                       right-embedded (<embed-index-batch-with-fallback embed-texts-fn right)]
                 (into left-embedded right-embedded)))))))))
@@ -948,24 +947,28 @@
     @selected))
 
 (defn- <embed-index-batches
-  [batches]
-  (let [batches (vec batches)]
-    (if (empty? batches)
-      (p/resolved [])
-      (let [queue (atom (mapv vector (range (count batches)) batches))
-            results (atom {})
-            worker-count (min vector-embedding-parallelism (count batches))]
-        (letfn [(worker []
-                  (if-let [[idx batch] (pop-embedding-batch! queue)]
-                    (-> (<embed-index-batch-with-fallback batch)
-                        (p/then (fn [embedded]
-                                  (swap! results assoc idx embedded)
-                                  (worker))))
-                    (p/resolved nil)))]
-          (p/let [_ (p/all (mapv (fn [_] (worker)) (range worker-count)))]
-            (into [] (mapcat (fn [idx]
-                               (get @results idx))
-                             (range (count batches))))))))))
+  ([batches]
+   (<embed-index-batches batches nil))
+  ([batches on-batch-embedded]
+   (let [batches (vec batches)]
+     (if (empty? batches)
+       (p/resolved [])
+       (let [queue (atom (mapv vector (range (count batches)) batches))
+             results (atom {})
+             worker-count (min vector-embedding-parallelism (count batches))]
+         (letfn [(worker []
+                   (if-let [[idx batch] (pop-embedding-batch! queue)]
+                     (-> (<embed-index-batch-with-fallback batch)
+                         (p/then (fn [embedded]
+                                   (swap! results assoc idx embedded)
+                                   (when on-batch-embedded
+                                     (on-batch-embedded (count embedded)))
+                                   (worker))))
+                     (p/resolved nil)))]
+           (p/let [_ (p/all (mapv (fn [_] (worker)) (range worker-count)))]
+             (into [] (mapcat (fn [idx]
+                                (get @results idx))
+                              (range (count batches)))))))))))
 
 (defn- <embed-index-blocks
   [repo blocks]
@@ -1301,7 +1304,22 @@
                     (remove search/hidden-entity?)
                     vec)
         vector-context (search/build-vector-context-cache blocks)
-        total (count blocks)]
+        total (count blocks)
+        vector-index? (boolean (worker-state/get-vector-index repo))
+        fts-progress-scale (if vector-index? 50 100)
+        vector-progress-base (if vector-index? 50 100)
+        progress-for-fts (fn [processed]
+                           (if (zero? total)
+                             vector-progress-base
+                             (min vector-progress-base
+                                  (int (* fts-progress-scale (/ processed total))))))
+        report-progress! (fn [progress processed total]
+                           (report-search-index-progress! repo {:build-id build-id
+                                                                :status :running
+                                                                :stage :search-index
+                                                                :progress progress
+                                                                :processed processed
+                                                                :total total}))]
     (p/do!
      (report-search-index-progress! repo {:build-id build-id
                                           :status :running
@@ -1312,49 +1330,50 @@
      (<wait-for-search-index-idle! repo build-id)
      (p/loop [remaining (seq blocks)
               processed 0
-              last-progress 0]
+              last-progress 0
+              indexed-blocks []]
        (ensure-active-search-index-build! repo build-id)
        (if (seq remaining)
          (let [[batch remaining'] (take-search-index-batch remaining
                                                            search-index-build-batch-size
                                                            search-index-build-time-budget-ms)
                processed' (+ processed (count batch))
-               indexed (keep #(search/block->index-with-context vector-context %) batch)
-               progress (if (zero? total)
-                          100
-                          (min 100 (int (* 100 (/ processed' total)))))
+               indexed (vec (keep #(search/block->index-with-context vector-context %) batch))
+               indexed-blocks' (into indexed-blocks indexed)
+               progress (progress-for-fts processed')
                should-report? (> progress last-progress)]
-           (p/let [_ (when (worker-state/get-vector-index repo)
-                       (report-search-index-progress! repo {:build-id build-id
-                                                            :status :running
-                                                            :stage :search-index
-                                                            :progress progress
-                                                            :processed processed'
-                                                            :total total}))
-                   _ (when (seq indexed)
-                       (p/let [vector-blocks (<embed-index-blocks repo indexed)]
-                         (search/upsert-vector-blocks! (worker-state/get-vector-index repo) vector-blocks)
-                         (search/upsert-blocks! search-db (bean/->js indexed))))
+           (p/let [_ (when (seq indexed)
+                       (search/upsert-blocks! search-db (bean/->js indexed)))
                    _ (when should-report?
-                       (report-search-index-progress! repo {:build-id build-id
-                                                            :status :running
-                                                            :stage :search-index
-                                                            :progress progress
-                                                            :processed processed'
-                                                            :total total}))
+                       (report-progress! progress processed' total))
                    _ (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))]
-             (p/recur remaining' processed' (if should-report? progress last-progress))))
+             (p/recur remaining' processed' (if should-report? progress last-progress) indexed-blocks')))
          (do
            (ensure-active-search-index-build! repo build-id)
-           (persist-vector-index-metadata! repo)
-           (.exec search-db (str "PRAGMA user_version = " search-db-version))
-           (report-search-index-progress! repo {:build-id build-id
-                                                :status :completed
-                                                :stage :search-index
-                                                :progress 100
-                                                :processed total
-                                                :total total})
-           (prn :debug :build-search-index-spent (- (.now js/performance) start-time))))))))
+           (p/let [_ (when (and vector-index? (seq indexed-blocks))
+                       (let [vector-total (count indexed-blocks)
+                             vector-processed (atom 0)
+                             vector-batches (vector-embedding-batches indexed-blocks)]
+                         (p/let [vector-blocks (<embed-index-batches
+                                                vector-batches
+                                                (fn [embedded-count]
+                                                  (let [processed' (swap! vector-processed + embedded-count)
+                                                        progress (+ vector-progress-base
+                                                                    (if (zero? vector-total)
+                                                                      50
+                                                                      (min 50 (int (* 50 (/ processed' vector-total))))))]
+                                                    (report-progress! progress processed' vector-total))))]
+                           (search/upsert-vector-blocks! (worker-state/get-vector-index repo) vector-blocks))))
+                   _ (do
+                       (persist-vector-index-metadata! repo)
+                       (.exec search-db (str "PRAGMA user_version = " search-db-version))
+                       (report-search-index-progress! repo {:build-id build-id
+                                                            :status :completed
+                                                            :stage :search-index
+                                                            :progress 100
+                                                            :processed total
+                                                            :total total}))]
+             (prn :debug :build-search-index-spent (- (.now js/performance) start-time)))))))))
 
 (def-thread-api :thread-api/search-build-blocks-indice-in-worker
   [repo & [force?]]
@@ -1368,11 +1387,11 @@
           (when-let [conn (worker-state/get-datascript-conn repo)]
             (let [build-id (start-search-index-build! repo)]
               (-> (report-search-index-progress! repo {:build-id build-id
-                                                        :status :running
-                                                        :stage :search-index
-                                                        :progress 0
-                                                        :processed 0
-                                                        :total 0})
+                                                       :status :running
+                                                       :stage :search-index
+                                                       :progress 0
+                                                       :processed 0
+                                                       :total 0})
                   (p/then (fn [_]
                             (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))))
                   (p/then (fn [_]

@@ -668,10 +668,7 @@
           parent (assoc parent :block/_parent [prev current next])
           current (assoc current
                          :block/parent parent
-                         :block/_parent [child])
-          prev (assoc prev :block/parent parent)
-          next (assoc next :block/parent parent)
-          child (assoc child :block/parent current)]
+                         :block/_parent [child])]
       (with-redefs [ldb/sort-by-order (fn [children] (sort-by :block/order children))
                     ldb/hidden? (constantly false)]
         (is (= [(uuid "00000000-0000-0000-0000-000000000293")
@@ -703,7 +700,6 @@
                                                :block/order "a"}
                                               {:block/title "Which team is Tony in?"
                                                :block/order "b"}]}]})
-          tony (db-test/find-block-by-content @conn "Which team is Tony in?")
           spurs (db-test/find-block-by-content @conn "Spurs")
           tx-report (d/transact! conn [[:db/add (:db/id spurs) :block/order "c"]])
           blocks-to-add (:blocks-to-add (search/sync-search-indice tx-report))

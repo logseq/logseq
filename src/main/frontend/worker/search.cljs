@@ -15,6 +15,7 @@
 
 (def ^:private max-vector-search-results 10)
 (def ^:private min-vector-search-score 0.62)
+(def ^:private vector-upsert-batch-size 1024)
 
 (defn- add-blocks-fts-triggers!
   "Table bindings of blocks tables and the blocks FTS virtual tables"
@@ -1126,7 +1127,8 @@ DROP TRIGGER IF EXISTS blocks_au;
                                 (assoc :vector-title vector-title)))))
                     vec)]
       (when (seq docs)
-        (upsert-fn docs)))))
+        (doseq [batch (partition-all vector-upsert-batch-size docs)]
+          (upsert-fn (vec batch)))))))
 
 (defn delete-vector-blocks!
   [vector-index ids]

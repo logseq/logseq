@@ -58,14 +58,14 @@
      :unmatched-expected-ids (filterv (complement (set matched-ids)) expected-ids)}))
 
 (defn- run-backend-case
-  [{search :search backend-id :id} {:keys [expected-ids expected-in-top-k] :as case}]
+  [{search :search backend-id :id} {:keys [expected-ids expected-in-top-k] :as benchmark-case}]
   (let [start (.now js/Date)]
-    (-> (search case)
+    (-> (search benchmark-case)
         (p/then (fn [results]
                   (assoc (score-results results expected-ids (or expected-in-top-k 5))
-                         :case-id (:id case)
+                         :case-id (:id benchmark-case)
                          :backend-id backend-id
-                         :query (:query case)
+                         :query (:query benchmark-case)
                          :latency-ms (- (.now js/Date) start)
                          :result-ids (mapv result-id results)))))))
 
@@ -98,8 +98,8 @@
 (defn run-benchmark
   [cases backends]
   (p/let [results (p/all
-                   (for [case cases
+                   (for [benchmark-case cases
                          backend backends]
-                     (run-backend-case backend case)))]
+                     (run-backend-case backend benchmark-case)))]
     {:results (vec results)
      :summary (summarize-results results)}))

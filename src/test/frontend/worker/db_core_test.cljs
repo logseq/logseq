@@ -469,6 +469,9 @@
               conn (d/create-conn db-schema/schema)
               progress-calls (atom [])
               progress-seen-before-rebuild-work? (atom nil)
+              record-progress! (fn [repo payload]
+                                 (swap! progress-calls conj {:repo repo
+                                                             :payload payload}))
               search-db #js {:exec (fn [sql-or-opts]
                                      (let [sql (if (string? sql-or-opts)
                                                  sql-or-opts
@@ -482,6 +485,13 @@
                                          #js [])))
                             :close (fn [] nil)}
               idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
+          (platform/set-platform!
+           (build-test-platform
+            {:runtime :node
+             :post-message! (fn [type payload]
+                              (when (= type :thread-api/search-index-build-progress)
+                                (let [[repo payload'] payload]
+                                  (record-progress! repo payload'))))}))
           (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
           (reset! worker-state/*datascript-conns {test-repo conn})
           (reset! idle-status-atom {test-repo {:idle? true
@@ -490,8 +500,7 @@
                   (fn [qkw & args]
                     (when (= qkw :thread-api/search-index-build-progress)
                       (let [[repo payload] args]
-                        (swap! progress-calls conj {:repo repo
-                                                    :payload payload})))
+                        (record-progress! repo payload)))
                     (p/resolved nil)))
           (-> (build-index! test-repo true)
               (p/then (fn [_]
@@ -547,6 +556,11 @@
           (d/transact! conn [{:block/uuid (random-uuid)}])
           (platform/set-platform! (build-test-platform
                                    {:runtime :node
+                                    :post-message! (fn [type payload]
+                                                     (when (= type :thread-api/search-index-build-progress)
+                                                       (let [[repo payload'] payload]
+                                                         (swap! progress-calls conj {:repo repo
+                                                                                     :payload payload'}))))
                                     :embed-texts (fn [_texts]
                                                    (p/resolved [[0.1 0.2 0.3]]))}))
           (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
@@ -571,16 +585,15 @@
                                                             :title "Hello"})]
             (p/let [_ (build-index! test-repo true)]
               (let [stages (keep #(get-in % [:payload :stage]) @progress-calls)
-                    running-progress (some #(when (and (= :running (get-in % [:payload :status]))
-                                                       (= 100 (get-in % [:payload :progress])))
-                                              %)
-                                           @progress-calls)]
+                    terminal-progress (some #(when (= 100 (get-in % [:payload :progress]))
+                                               %)
+                                            @progress-calls)]
                 (is (not-any? #{:vector-index :keyword-index} stages))
                 (is (some #{:search-index} stages))
-                (is (= test-repo (:repo running-progress)))
-                (is (= :search-index (get-in running-progress [:payload :stage])))
-                (is (= 1 (get-in running-progress [:payload :processed])))
-                (is (= 1 (get-in running-progress [:payload :total])))))))))
+                (is (= test-repo (:repo terminal-progress)))
+                (is (= :search-index (get-in terminal-progress [:payload :stage])))
+                (is (= 1 (get-in terminal-progress [:payload :processed])))
+                (is (= 1 (get-in terminal-progress [:payload :total])))))))))
      (p/catch (fn [error]
                 (is false (str "unexpected error: " error))))
      (p/finally done))))
@@ -638,19 +651,18 @@
     (->
      (restoring-worker-state
       (fn []
-        (do
-          (platform/set-platform! (build-test-platform {:runtime :node}))
-          (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [_] nil)}})
-          (p/let [result (#'db-core/<embed-index-blocks
-                          test-repo
-                          [{:id "block-1"
-                            :page "page-1"
-                            :title "Hello"}])]
-            (is (= [{:id "block-1"
-                     :page "page-1"
-                     :title "Hello"
-                     :embedding [0]}]
-                   result))))))
+        (platform/set-platform! (build-test-platform {:runtime :node}))
+        (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [_] nil)}})
+        (p/let [result (#'db-core/<embed-index-blocks
+                        test-repo
+                        [{:id "block-1"
+                          :page "page-1"
+                          :title "Hello"}])]
+          (is (= [{:id "block-1"
+                   :page "page-1"
+                   :title "Hello"
+                   :embedding [0]}]
+                 result)))))
      (p/catch (fn [error]
                 (is false (str "unexpected error: " error))))
      (p/finally done))))
