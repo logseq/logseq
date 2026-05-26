@@ -21,6 +21,14 @@
   []
   (.mkdtempSync fs (node-path/join (.tmpdir os) "logseq-agent-bridge-test-")))
 
+(defn- spawn-result
+  ([status]
+   (spawn-result status "" ""))
+  ([status stdout stderr]
+   #js {:status status
+        :stdout stdout
+        :stderr stderr}))
+
 (defn- read-dict
   [filename]
   (reader/read-string
@@ -1068,6 +1076,35 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []
+	                            (set! (.-spawn child-process) original-spawn)
+	                            (done)))))))
+
+(deftest test-start-codex-uses-configured-cwd
+  (async done
+         (let [original-spawn (.-spawn child-process)
+               spawn-opts* (atom nil)]
+           (set! (.-spawn child-process)
+                 (fn [_bin _args opts]
+                   (reset! spawn-opts* opts)
+                   (let [child (events/EventEmitter.)
+                         stdout (events/EventEmitter.)
+                         stderr (events/EventEmitter.)]
+                     (set! (.-stdout child) stdout)
+                     (set! (.-stderr child) stderr)
+                     (js/setTimeout (fn []
+                                      (.emit stdout "data" "{\"type\":\"thread.started\",\"thread_id\":\"thread-cwd\"}\n")
+                                      (.emit stdout "close")
+                                      (.emit child "close" 0 nil))
+                                    0)
+                     child)))
+           (-> (agent-command/start-codex! ["codex" "exec" "--json" "prompt"]
+                                           {:cwd "/tmp/logseq-copy-1"})
+               (p/then (fn [result]
+                         (is (= "thread-cwd" (:session result)))
+                         (is (= "/tmp/logseq-copy-1" (unchecked-get @spawn-opts* "cwd")))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
                             (set! (.-spawn child-process) original-spawn)
                             (done)))))))
 
@@ -1423,8 +1460,72 @@
         (is (= "build-host" (:agent session)))
         (is (= 1000 (:started-at session)))
         (is (= 2000 (:updated-at session))))
-      (finally
-        (fs/rmSync root #js {:recursive true :force true})))))
+	      (finally
+	        (fs/rmSync root #js {:recursive true :force true})))))
+
+(deftest test-agent-bridge-workspace-pool-validation
+  (async done
+         (let [root (temp-root)
+               workspace-a (node-path/join root "copy-a")
+               workspace-b (node-path/join root "copy-b")
+               original-spawn-sync (.-spawnSync child-process)]
+           (fs/mkdirSync workspace-a #js {:recursive true})
+           (fs/mkdirSync workspace-b #js {:recursive true})
+           (set! (.-spawnSync child-process)
+                 (fn [_bin _args _opts]
+                   (spawn-result 0 "" "")))
+           (-> (p/with-redefs [agent-command/codex-available? (fn [_] true)
+                                cli-server/ensure-server! (fn [cfg _repo] cfg)
+                                agent-command/register-agent-bridge! (fn [_cfg _repo _agent-name]
+                                                                       (p/resolved true))
+                                agent-command/ensure-agent-bridge-prompt-templates!
+                                (fn [_cfg _repo]
+                                  (p/resolved {:task "Task {{graph}} {{block-uuid}} {{agent-name}}\n{{task-block-tree}}"
+                                               :comment "Comment {{graph}} {{comment-uuid}} {{agent-name}}\n{{comment-target-context}}\n{{comment-thread-context}}\n{{requesting-comment}}"}))
+                                agent-command/list-routable-tasks (fn [_cfg _repo _agent-name]
+                                                                    (p/resolved []))]
+                 (p/let [valid (agent-command/execute-bridge
+                                {:type :agent-bridge
+                                 :repo "logseq_db_demo"
+                                 :graph "demo"
+                                 :dry-run? true}
+                                {:root-dir root
+                                 :agent-name "build-host"
+                                 :agent-bridge {:workspaces [{:id "copy-a"
+                                                              :cwd workspace-a}
+                                                             {:id "copy-b"
+                                                              :cwd workspace-b}]}})
+                         duplicate (agent-command/execute-bridge
+                                    {:type :agent-bridge
+                                     :repo "logseq_db_demo"
+                                     :graph "demo"
+                                     :dry-run? true}
+                                    {:root-dir root
+                                     :agent-name "build-host"
+                                     :agent-bridge {:workspaces [{:id "copy-a"
+                                                                  :cwd workspace-a}
+                                                                 {:id "copy-a"
+                                                                  :cwd workspace-b}]}})
+                         relative (agent-command/execute-bridge
+                                   {:type :agent-bridge
+                                    :repo "logseq_db_demo"
+                                    :graph "demo"
+                                    :dry-run? true}
+                                   {:root-dir root
+                                    :agent-name "build-host"
+                                    :agent-bridge {:workspaces [{:id "copy-a"
+                                                                 :cwd "relative-copy"}]}})]
+                   (is (= :ok (:status valid)))
+                   (is (= :error (:status duplicate)))
+                   (is (= :agent-workspace-invalid (get-in duplicate [:error :code])))
+                   (is (= :error (:status relative)))
+                   (is (= :agent-workspace-invalid (get-in relative [:error :code])))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! (.-spawnSync child-process) original-spawn-sync)
+                            (fs/rmSync root #js {:recursive true :force true})
+                            (done)))))))
 
 (deftest test-execute-agent-bridge-list-and-format
   (let [root (temp-root)]
@@ -1432,21 +1533,27 @@
       (agent-command/record-session! {:root-dir root}
                                      {:session "codex-running"
                                       :status :running
-                                      :backend :codex
-                                      :graph "demo"
-                                      :block "11111111-1111-1111-1111-111111111111"
-                                      :agent "build-host"
-                                      :started-at 1000
-                                      :updated-at 2000})
-      (let [result (agent-command/execute-list {:type :agent-bridge-list} {:root-dir root})
-            output (cli-format/format-result result {:output-format :human :now-ms 3000})]
+	                                      :backend :codex
+	                                      :graph "demo"
+	                                      :block "11111111-1111-1111-1111-111111111111"
+	                                      :agent "build-host"
+	                                      :workspace-id "copy-a"
+	                                      :cwd "/tmp/logseq-copy-a"
+	                                      :branch "feat/x-feature"
+	                                      :started-at 1000
+	                                      :updated-at 2000})
+	      (let [result (agent-command/execute-list {:type :agent-bridge-list} {:root-dir root})
+	            output (cli-format/format-result result {:output-format :human :now-ms 3000})]
         (is (= :ok (:status result)))
-        (is (string/includes? output "SESSION"))
-        (is (string/includes? output "STATUS"))
-        (is (string/includes? output "BACKEND"))
-        (is (string/includes? output "codex-running"))
-        (is (string/includes? output "running"))
-        (is (not (string/includes? output ":running")))
+	        (is (string/includes? output "SESSION"))
+	        (is (string/includes? output "STATUS"))
+	        (is (string/includes? output "BACKEND"))
+	        (is (string/includes? output "WORKSPACE"))
+	        (is (string/includes? output "codex-running"))
+	        (is (string/includes? output "running"))
+	        (is (string/includes? output "copy-a"))
+	        (is (string/includes? output "feat/x-feature"))
+	        (is (not (string/includes? output ":running")))
         (is (not (string/includes? output ":codex")))
         (is (string/includes? output "Count: 1")))
       (finally
@@ -1589,9 +1696,166 @@
                  (fs/rmSync root #js {:recursive true :force true})
                  (done)))
              (catch :default e
-               (fs/rmSync root #js {:recursive true :force true})
-               (is false (str "unexpected setup error: " e))
-               (done))))))
+	               (fs/rmSync root #js {:recursive true :force true})
+	               (is false (str "unexpected setup error: " e))
+	               (done))))))
+
+(deftest test-execute-agent-bridge-routes-tasks-through-workspace-pool
+  (async done
+         (let [root (temp-root)
+               workspace-a (node-path/join root "copy-a")
+               workspace-b (node-path/join root "copy-b")
+               blocks [(task-block {:db/id 42
+                                     :block/uuid #uuid "11111111-1111-1111-1111-111111111111"})
+                       (task-block {:db/id 43
+                                     :block/uuid #uuid "22222222-2222-2222-2222-222222222222"})
+                       (task-block {:db/id 44
+                                     :block/uuid #uuid "33333333-3333-3333-3333-333333333333"})]
+               codex-starts* (atom [])
+               git-calls* (atom [])
+               original-spawn-sync (.-spawnSync child-process)]
+           (fs/mkdirSync workspace-a #js {:recursive true})
+           (fs/mkdirSync workspace-b #js {:recursive true})
+           (set! (.-spawnSync child-process)
+                 (fn [bin args _opts]
+                   (let [argv (js->clj args)]
+                     (swap! git-calls* conj [bin argv])
+                     (spawn-result 0 "" ""))))
+           (-> (p/with-redefs [agent-command/codex-available? (fn [_] true)
+                                cli-server/ensure-server! (fn [cfg _repo]
+                                                            (assoc cfg :base-url "http://127.0.0.1:1234"))
+                                agent-command/register-agent-bridge! (fn [_cfg _repo _agent-name]
+                                                                       (p/resolved true))
+                                agent-command/ensure-agent-bridge-prompt-templates!
+                                (fn [_cfg _repo]
+                                  (p/resolved {:task "Task {{graph}} {{block-uuid}} {{agent-name}}\n{{task-block-tree}}"
+                                               :comment "Comment {{graph}} {{comment-uuid}} {{agent-name}}\n{{comment-target-context}}\n{{comment-thread-context}}\n{{requesting-comment}}"}))
+                                agent-command/list-routable-tasks
+                                (fn [_cfg _repo _agent-name]
+                                  (p/resolved (mapv (fn [block]
+                                                      {:block block
+                                                       :tree-text (:block/title block)})
+                                                    blocks)))
+                                transport/invoke
+                                (fn [_cfg method _args]
+                                  (case method
+                                    :thread-api/q (p/resolved :logseq.property/status.todo)
+                                    :thread-api/apply-outliner-ops (p/resolved {:ok true})
+                                    (p/rejected (ex-info "unexpected invoke"
+                                                         {:method method}))))
+                                agent-command/start-codex!
+                                (fn [command opts]
+                                  (let [session-id (str "session-" (inc (count @codex-starts*)))]
+                                    (swap! codex-starts* conj {:session session-id
+                                                               :cwd (:cwd opts)
+                                                               :prompt (last command)})
+                                    (p/resolved {:session session-id
+                                                 :status :running})))]
+                 (p/let [result (agent-command/execute-bridge
+                                 {:type :agent-bridge
+                                  :repo "logseq_db_demo"
+                                  :graph "demo"
+                                  :dry-run? false
+                                  :process-once? true}
+                                 {:root-dir root
+                                  :agent-name "build-host"
+                                  :agent-bridge {:workspaces [{:id "copy-a"
+                                                               :cwd workspace-a}
+                                                              {:id "copy-b"
+                                                               :cwd workspace-b}]}
+                                  :log-fn (fn [_] nil)})]
+                   (is (= :ok (:status result)))
+                   (is (= [workspace-a workspace-b] (mapv :cwd @codex-starts*)))
+                   (is (= 2 (count (get-in result [:data :routed]))))
+                   (is (= 2 (count @codex-starts*)))
+                   (is (every? #(string/includes? (:prompt %) "create a new branch from the current master branch")
+                               @codex-starts*))
+                   (is (every? #(string/includes? (:prompt %) "fix/some-bug, feat/x-feature, enhance/xxx, or refactor/db-worker")
+                               @codex-starts*))
+                   (is (some #(= ["git" ["-C" workspace-a "checkout" "master"]] %) @git-calls*))
+                   (is (some #(= ["git" ["-C" workspace-a "pull" "--ff-only" "origin" "master"]] %) @git-calls*))
+                   (is (not-any? #(= ["git" ["-C" workspace-a "checkout" "-b"]] %) @git-calls*))
+                   (is (not-any? #(= ["git" ["-C" workspace-a "commit"]] %) @git-calls*))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! (.-spawnSync child-process) original-spawn-sync)
+                            (fs/rmSync root #js {:recursive true :force true})
+                            (done)))))))
+
+(deftest test-agent-bridge-workspace-complete-rejects-master-branch
+  (let [root (temp-root)
+        workspace-a (node-path/join root "copy-a")
+        workspace-pool (atom [{:id "copy-a"
+                               :cwd workspace-a
+                               :status :running}])
+        original-spawn-sync (.-spawnSync child-process)]
+    (fs/mkdirSync workspace-a #js {:recursive true})
+    (try
+      (set! (.-spawnSync child-process)
+            (fn [_bin args _opts]
+              (let [argv (js->clj args)
+                    git-args (subvec (vec argv) 2)]
+                (case (pr-str git-args)
+                  "[\"branch\" \"--show-current\"]" (spawn-result 0 "master\n" "")
+                  "[\"status\" \"--porcelain\"]" (spawn-result 0 "" "")
+                  (spawn-result 0 "" "")))))
+      (#'agent-command/complete-workspace-session! {:root-dir root}
+                                                  workspace-pool
+                                                  {:id "copy-a"
+                                                   :cwd workspace-a}
+                                                  "session-master"
+                                                  :completed)
+      (let [session (first (agent-command/list-sessions {:root-dir root} {:all? true}))
+            workspace (first @workspace-pool)]
+        (is (= :failed (:status session)))
+        (is (= "master" (:branch session)))
+        (is (= :dirty (:status workspace))))
+      (finally
+        (set! (.-spawnSync child-process) original-spawn-sync)
+        (fs/rmSync root #js {:recursive true :force true})))))
+
+(deftest test-agent-bridge-comment-resume-checks-out-recorded-workspace-branch
+  (let [root (temp-root)
+        workspace-a (node-path/join root "copy-a")
+        workspace-pool (atom [{:id "copy-a"
+                               :cwd workspace-a
+                               :status :idle}])
+        git-calls* (atom [])
+        original-spawn-sync (.-spawnSync child-process)]
+    (fs/mkdirSync workspace-a #js {:recursive true})
+    (try
+      (agent-command/record-session! {:root-dir root}
+                                     {:session "existing-session-123"
+                                      :status :completed
+                                      :backend :codex
+                                      :graph "demo"
+                                      :block "11111111-1111-1111-1111-111111111111"
+                                      :agent "build-host"
+                                      :workspace-id "copy-a"
+                                      :cwd workspace-a
+                                      :branch "feat/x-feature"
+                                      :started-at 1000
+                                      :updated-at 2000})
+      (set! (.-spawnSync child-process)
+            (fn [bin args _opts]
+              (let [argv (js->clj args)]
+                (swap! git-calls* conj [bin argv])
+                (case (pr-str (subvec (vec argv) 2))
+                  "[\"branch\" \"--show-current\"]" (spawn-result 0 "feat/x-feature\n" "")
+                  (spawn-result 0 "" "")))))
+      (let [workspace-session (#'agent-command/acquire-existing-workspace-session!
+                               {:root-dir root}
+                               workspace-pool
+                               "existing-session-123")]
+        (is (= "copy-a" (:workspace-id workspace-session)))
+        (is (= workspace-a (:cwd workspace-session)))
+        (is (= "feat/x-feature" (:branch workspace-session)))
+        (is (some #(= ["git" ["-C" workspace-a "checkout" "feat/x-feature"]] %)
+                  @git-calls*)))
+      (finally
+        (set! (.-spawnSync child-process) original-spawn-sync)
+        (fs/rmSync root #js {:recursive true :force true})))))
 
 (deftest test-execute-agent-bridge-connects-listener-before-ready-log-and-initial-scan
   (async done

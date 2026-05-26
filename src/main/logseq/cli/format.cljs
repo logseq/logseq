@@ -584,7 +584,7 @@
                           (nil? value) nil
                           :else (str value)))]
     (format-counted-table
-     ["SESSION" "STATUS" "BACKEND" "GRAPH" "BLOCK" "AGENT" "STARTED" "UPDATED"]
+     ["SESSION" "STATUS" "BACKEND" "GRAPH" "BLOCK" "AGENT" "WORKSPACE" "BRANCH" "STARTED" "UPDATED"]
      (mapv (fn [session]
              [(session-field (:session session))
               (session-field (:status session))
@@ -592,6 +592,8 @@
               (session-field (:graph session))
               (session-field (:block session))
               (session-field (:agent session))
+              (session-field (:workspace-id session))
+              (session-field (:branch session))
               (human-ago (:started-at session) now-ms)
               (human-ago (:updated-at session) now-ms)])
            (or sessions [])))))
