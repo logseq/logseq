@@ -43,6 +43,35 @@
       (js/Object.defineProperty js/process "platform" platform-descriptor)
       (js/Object.defineProperty js/process "arch" arch-descriptor))))
 
+(defn- fake-open-vector-index
+  [metadata*]
+  (fn [{:keys [path]}]
+    (.mkdirSync fs path #js {:recursive true})
+    (let [docs* (atom [])]
+      (p/resolved
+       {:query (fn [_embedding limit page]
+                 (->> @docs*
+                      (filter #(or (nil? page)
+                                   (= page (:page %))))
+                      (take (or limit 100))
+                      (mapv #(select-keys % [:id :page :vector-title :vector-score]))))
+        :upsert! (fn [docs]
+                   (reset! docs* (vec docs))
+                   nil)
+        :delete! (fn [ids]
+                   (let [ids (set ids)]
+                     (swap! docs* #(vec (remove (comp ids :id) %))))
+                   nil)
+        :truncate! (fn []
+                     (reset! docs* [])
+                     nil)
+        :metadata (fn []
+                    (get @metadata* path))
+        :set-metadata! (fn [metadata]
+                         (swap! metadata* assoc path metadata)
+                         nil)
+        :close! (fn [] nil)}))))
+
 (defn- <open-test-db
   []
   (let [root-dir (node-helper/create-tmp-dir "platform-node")
@@ -187,7 +216,8 @@
     (let [root-dir (node-helper/create-tmp-dir "platform-node-vector")
           vector-path (node-path/join root-dir "graphs" "graph-a" "search" "vector")
           restore! (set-process-platform-arch! "darwin" "arm64")]
-      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir
+                                                         :open-vector-index-fn (fake-open-vector-index (atom {}))})
                   vector-index ((get-in platform [:vector :open-index])
                                 {:path vector-path
                                  :dimension 3})
@@ -211,10 +241,12 @@
     (let [root-dir (node-helper/create-tmp-dir "platform-node-vector-metadata")
           vector-path (node-path/join root-dir "graphs" "graph-a" "search" "vector")
           restore! (set-process-platform-arch! "darwin" "arm64")
+          metadata* (atom {})
           metadata {:embedding-model-id "test-model"
                     :embedding-dimension 3
                     :context-version 1}]
-      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir
+                                                         :open-vector-index-fn (fake-open-vector-index metadata*)})
                   open-index (get-in platform [:vector :open-index])
                   vector-index (open-index {:path vector-path
                                             :dimension 3})

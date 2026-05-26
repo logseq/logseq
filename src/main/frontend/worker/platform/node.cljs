@@ -653,12 +653,13 @@
 
 (defn node-platform
   [{:keys [root-dir event-fn write-guard-fn owner-source recreate-lock-fn
-           embedding-endpoint embedding-model-id]}]
+           embedding-endpoint embedding-model-id open-vector-index-fn]}]
   (let [root-dir (db-lock/resolve-root-dir root-dir)
         data-dir (db-lock/graphs-dir root-dir)
         owner-source (db-lock/normalize-owner-source owner-source)
         embedding-endpoint (resolve-embedding-endpoint embedding-endpoint)
         embedding-model-id (resolve-embedding-model-id embedding-model-id)
+        open-vector-index-fn (or open-vector-index-fn open-vector-index)
         kv (kv-store root-dir)
         vector-embedding-enabled? (macos-arm64?)]
     (p/do!
@@ -716,4 +717,4 @@
        (assoc :embedding {:model-id embedding-model-id
                           :embed-texts (fn [texts]
                                          (<embed-texts embedding-endpoint embedding-model-id texts))}
-              :vector {:open-index open-vector-index})))))
+              :vector {:open-index open-vector-index-fn})))))
