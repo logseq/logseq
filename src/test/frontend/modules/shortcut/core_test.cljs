@@ -1,8 +1,10 @@
 (ns frontend.modules.shortcut.core-test
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.modules.shortcut.config :as shortcut-config]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as dh]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [goog.object :as gobj]))
 
 (deftest test-core-basic
   (testing "get handler id"
@@ -152,6 +154,24 @@
   (testing "add comment shortcut appears in block-selection category"
     (is (some #{:editor/add-comment}
               (shortcut-config/get-category-shortcuts :shortcut.category/block-selection)))))
+
+(defn- shortcut-key-event
+  [{:keys [code key-code ctrl? alt? meta? shift?]}]
+  (let [event #js {:code code}
+        key-event #js {:keyCode  key-code
+                       :ctrlKey  (boolean ctrl?)
+                       :altKey   (boolean alt?)
+                       :metaKey  (boolean meta?)
+                       :shiftKey (boolean shift?)}]
+    (gobj/set key-event "event_" event)
+    key-event))
+
+(deftest zero-keycode-shortcut-keynames
+  (testing "Enter and Tab resolve from native KeyboardEvent.code when keyCode is 0"
+    (is (= " enter" (shortcut/keyname (shortcut-key-event {:key-code 0 :code "Enter"}))))
+    (is (= " tab" (shortcut/keyname (shortcut-key-event {:key-code 0 :code "Tab"})))))
+  (testing "modified letter shortcuts still resolve from native KeyboardEvent.code"
+    (is (= " ctrl+k" (shortcut/keyname (shortcut-key-event {:key-code 0 :code "KeyK" :ctrl? true}))))))
 
 (comment
   (cljs.test/run-tests))

@@ -16,11 +16,12 @@
             [lambdaisland.glogi :as log]
             [logseq.shui.ui :as shui])
   (:import [goog.events KeyCodes KeyNames]
-           [goog.ui KeyboardShortcutHandler]))
+           [goog.ui KeyboardShortcutHandler SyntheticKeyboardEvent]))
 
 (defonce *installed-handlers (atom {}))
 (defonce *pending-inited? (atom false))
 (defonce *pending-shortcuts (atom []))
+(defonce *keycode-normalizer-installed? (atom false))
 
 (def global-keys #js
                   [KeyCodes/TAB
@@ -30,7 +31,7 @@
 
 (def key-names (js->clj KeyNames))
 
-(declare register-shortcut!)
+(declare register-shortcut! ensure-keycode-normalizer!)
 
 (defn consume-pending-shortcuts!
   []
@@ -141,6 +142,8 @@
 
   (let [shortcut-map (dh/shortcuts-map-by-handler-id handler-id state)
         handler (new KeyboardShortcutHandler js/window)]
+    (ensure-keycode-normalizer!)
+
     ;; set arrows enter, tab to global
     (when set-global-keys?
       (.setGlobalKeys handler global-keys))
@@ -345,15 +348,52 @@
       :else
       (get code->key-name-map code))))
 
+(defn- event-code [e]
+  (or (gobj/getValueByKeys e "event_" "code")
+      (gobj/get e "code")))
+
 (defn- resolve-key-name
   "Resolve the key name from a KeyEvent. Tries key-names (keyCode) first,
-   then falls back to code->key-name (native KeyboardEvent.code) when a
-   modifier is held — corrects macOS Option+key corruption and AltGr on Windows."
+   then falls back to code->key-name (native KeyboardEvent.code)."
   [e]
   (or (get key-names (str (.-keyCode e)))
-      (when (or (.-altKey e) (.-ctrlKey e) (.-metaKey e))
-        (some-> (gobj/getValueByKeys e "event_" "code")
-                code->key-name))))
+      (some-> (event-code e)
+              code->key-name)))
+
+(defn- event-code->key-code
+  [e]
+  (some-> (event-code e)
+          code->key-name
+          KeyboardShortcutHandler/getKeyCode))
+
+(defn- zero-keycode? [e]
+  (zero? (or (gobj/get e "keyCode") 0)))
+
+(defn- needs-keycode-normalization?
+  [e]
+  (when (zero-keycode? e)
+    (when-let [key-name (some-> (event-code e) code->key-name)]
+      (not= (gobj/get e "key") key-name))))
+
+(defn- dispatch-normalized-keydown!
+  [e]
+  (when (needs-keycode-normalization? e)
+    (when-let [key-code (event-code->key-code e)]
+      (events/dispatchEvent
+       js/window
+       (SyntheticKeyboardEvent/createKeyDown
+        key-code
+        (boolean (gobj/get e "shiftKey"))
+        (boolean (gobj/get e "altKey"))
+        (boolean (gobj/get e "ctrlKey"))
+        (boolean (gobj/get e "metaKey"))
+        (or (gobj/get e "target") js/window)
+        #(.preventDefault e)
+        #(.stopPropagation e))))))
+
+(defn- ensure-keycode-normalizer! []
+  (when (compare-and-set! *keycode-normalizer-installed? false true)
+    (events/listen js/window "keydown" dispatch-normalized-keydown! true)))
 
 (defn- name-with-meta [e resolved-name]
   (let [ctrl (.-ctrlKey e)
