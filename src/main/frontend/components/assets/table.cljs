@@ -24,9 +24,10 @@
    :column-list? false
    :header (fn [_table column]
              [:div.h-8.w-full.flex.items-center.justify-start.px-2.text-muted-foreground
-              [:span.max-w-full.overflow-hidden.text-ellipsis
-               {:title (str (:name column))}
-               (:name column)]])
+              (let [title (str (:name column))]
+                (ui/tooltip
+                 [:span.max-w-full.overflow-hidden.text-ellipsis title]
+                 title))])
    :cell (fn [_table row _column]
            (when-let [asset-cp (state/get-component :block/asset-cp)]
              [:div.block-content.ls-table-asset-file-preview.overflow-hidden.flex.items-center
@@ -69,9 +70,6 @@
                     {:variant "ghost"
                      :size :sm
                      :class "!h-6 !w-6 shrink-0 !p-0 text-muted-foreground"
-                     :title (t (if expanded?
-                                 :asset/collapse-pdf-annotations
-                                 :asset/expand-pdf-annotations))
                      :aria-label (t (if expanded?
                                       :asset/collapse-pdf-annotations
                                       :asset/expand-pdf-annotations))
@@ -81,7 +79,14 @@
                                   (fn [ids]
                                     (toggle-expanded-pdf-id ids pdf-id))))}
                     (ui/icon (if expanded? "chevron-down" "chevron-right")))]
-        (original-cell table (assoc row :table/title-leading-action toggle) column style))
+        (original-cell table
+                       (assoc row :table/title-leading-action
+                              (ui/tooltip
+                               toggle
+                               (t (if expanded?
+                                    :asset/collapse-pdf-annotations
+                                    :asset/expand-pdf-annotations))))
+                       column style))
       (original-cell table row column style))))
 
 (rum/defc asset-annotation-title

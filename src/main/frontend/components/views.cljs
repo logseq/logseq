@@ -94,10 +94,11 @@
 
 (rum/defc header-index < rum/static
   []
-  [:label.h-8.w-full.flex.items-center.justify-end.pr-2
-   {:html-for "header-index"
-    :title (t :view.table/row-number)}
-   "#"])
+  (ui/tooltip
+   [:label.h-8.w-full.flex.items-center.justify-end.pr-2
+    {:html-for "header-index"}
+    "#"]
+   (t :view.table/row-number)))
 
 (defn- toggle-row-selection-with-related!
   [table row value]
@@ -322,9 +323,9 @@
       :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
       :on-click open-column-menu!}
      (let [title (str (:name column))]
-       [:span {:title title
-               :class "max-w-full overflow-hidden text-ellipsis"}
-        title])
+       (ui/tooltip
+        [:span.max-w-full.overflow-hidden.text-ellipsis title]
+        title))
      (case asc?
        true
        (ui/icon "arrow-up")
@@ -514,22 +515,26 @@
        (let [class (mobile-btn-class opacity)]
          [:div.absolute.right-0
           [:div.flex.flex-row.items-center
-           (shui/button
-            {:variant :ghost
-             :title (t :ui/open)
-             :on-click (fn [e]
-                         (util/stop-propagation e)
-                         (redirect!))
-             :class class}
-            (ui/icon "arrow-right"))
-           (shui/button
-            {:variant :ghost
-             :title (t :sidebar.right/open)
-             :class class
-             :on-click (fn [e]
-                         (util/stop-propagation e)
-                         (add-to-sidebar!))}
-            (ui/icon "layout-sidebar-right"))]]))]))
+           (ui/tooltip
+            (shui/button
+             {:variant :ghost
+              :aria-label (t :ui/open)
+              :on-click (fn [e]
+                          (util/stop-propagation e)
+                          (redirect!))
+              :class class}
+             (ui/icon "arrow-right"))
+            (t :ui/open))
+           (ui/tooltip
+            (shui/button
+             {:variant :ghost
+              :aria-label (t :sidebar.right/open)
+              :class class
+              :on-click (fn [e]
+                          (util/stop-propagation e)
+                          (add-to-sidebar!))}
+             (ui/icon "layout-sidebar-right"))
+            (t :sidebar.right/open))]]))]))
 
 (defn build-columns
   "Builds table columns with view-owned renderers.
