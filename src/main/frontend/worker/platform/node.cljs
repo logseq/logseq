@@ -216,13 +216,7 @@
 (def ^:private default-embedding-model "Xenova/all-MiniLM-L6-v2")
 (defonce ^:private *embedding-pipelines (atom {}))
 
-(def ^:private coreml-flag-use-cpu-and-gpu 0x020)
-
-(defn- default-embedding-pipeline-devices
-  []
-  (if (= "darwin" (.-platform js/process))
-    ["coreml" "cpu"]
-    ["cpu"]))
+(def ^:private default-embedding-pipeline-devices ["cpu"])
 
 (defn- embedding-cpu-thread-count
   []
@@ -230,30 +224,15 @@
       (max 1)
       (min 4)))
 
-(defn- embedding-dtype
-  [device]
-  (if (= "coreml" device)
-    "fp32"
-    "q8"))
-
-(defn- embedding-session-options
-  [device]
-  (let [options #js {:intraOpNumThreads (embedding-cpu-thread-count)
-                     :interOpNumThreads (embedding-cpu-thread-count)
-                     :executionMode "parallel"
-                     :enableCpuMemArena true
-                     :enableMemPattern true}]
-    (when (= "coreml" device)
-      (gobj/set options "executionProviders"
-                #js [#js {:name "coreml"
-                          :coreMlFlags coreml-flag-use-cpu-and-gpu}]))
-    options))
-
 (defn- embedding-pipeline-options
   [device]
   #js {:device device
-       :dtype (embedding-dtype device)
-       :session_options (embedding-session-options device)})
+       :dtype "q8"
+       :session_options #js {:intraOpNumThreads (embedding-cpu-thread-count)
+                             :interOpNumThreads (embedding-cpu-thread-count)
+                             :executionMode "parallel"
+                             :enableCpuMemArena true
+                             :enableMemPattern true}})
 
 (defn- <embedding-pipeline-for-device
   [model-id device]
@@ -693,7 +672,7 @@
   (let [root-dir (db-lock/resolve-root-dir root-dir)
         data-dir (db-lock/graphs-dir root-dir)
         owner-source (db-lock/normalize-owner-source owner-source)
-        embedding-devices (vec (or embedding-devices (default-embedding-pipeline-devices)))
+        embedding-devices (vec (or embedding-devices default-embedding-pipeline-devices))
         kv (kv-store root-dir)]
     (p/do!
      (ensure-dir! root-dir)
