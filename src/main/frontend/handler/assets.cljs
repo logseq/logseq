@@ -55,8 +55,7 @@
   block - `hl-image` for compatibility with old PDF assets, or the block itself for new PDF assets.
   The block should have the `block/uuid` property."
   [block]
-  (when-let [image (or (:logseq.property.pdf/hl-image block) block)]
-    (str "./assets/" (:block/uuid image) ".png")))
+  (str "./assets/" (:block/uuid block) ".png"))
 
 (defn resolve-asset-real-path-url
   [repo rpath]

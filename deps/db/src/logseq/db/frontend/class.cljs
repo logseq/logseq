@@ -93,7 +93,7 @@
       :properties {:logseq.property.class/hide-from-node true}
       :schema {:properties [:logseq.property/ls-type :logseq.property.pdf/hl-color :logseq.property/asset
                             :logseq.property.pdf/hl-page :logseq.property.pdf/hl-value
-                            :logseq.property.pdf/hl-type :logseq.property.pdf/hl-image]
+                            :logseq.property.pdf/hl-type]
                :required-properties [:logseq.property/ls-type :logseq.property.pdf/hl-color :logseq.property/asset
                                      :logseq.property.pdf/hl-page :logseq.property.pdf/hl-value]}}
 

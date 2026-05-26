@@ -2413,10 +2413,7 @@
 
                        [:span.hl-page
                         [:strong.forbid-edit
-                         (str "P" (or hl-page "?"))]]
-
-                       (when (and area? (:logseq.property.pdf/hl-image block))
-                         (pdf-assets/area-display block))])]
+                         (str "P" (or hl-page "?"))]]])]
         (remove-nils
           (concat
             ;; highlight ref block (inline)

@@ -81,9 +81,7 @@
                                :logseq.property.pdf/hl-value hl}
 
                               asset?
-                              (assoc :logseq.property.pdf/hl-type :area
-                                ;; Can't set this block itself as own property value.
-                                :logseq.property.pdf/hl-image nil)))))]
+                              (assoc :logseq.property.pdf/hl-type :area)))))]
 
       (if (:block/title ref-block)
         (if-not (nil? (:logseq.property/ls-type ref-block))
@@ -113,8 +111,7 @@
 
 (defn ensure-ref-block!
   [pdf-current hl insert-opts]
-  (p/let [ref-block (db-based-ensure-ref-block! pdf-current hl insert-opts)
-          _ (:logseq.property.pdf/hl-image ref-block)]
+  (p/let [ref-block (db-based-ensure-ref-block! pdf-current hl insert-opts)]
     ref-block))
 
 (defn db-based-load-hls-data$
@@ -287,47 +284,3 @@
 
     (when (seq images)
       (lightbox/preview-images! images))))
-
-(rum/defcs area-display <
-  (rum/local nil ::src)
-  [state block]
-  (let [*src (::src state)]
-    (when-let [asset-path' (and block (assets-handler/get-area-block-asset-url block))]
-      (when (nil? @*src)
-        (p/let [asset-path (assets-handler/<make-asset-url asset-path')]
-          (reset! *src asset-path)))
-      (when @*src
-        (let [asset-block (some-> block (:logseq.property.pdf/hl-image))
-              resize-metadata (some-> asset-block :logseq.property.asset/resize-metadata)
-              style (when-let [w (:width resize-metadata)] {:style {:width w}})]
-          [:div.hl-area style
-           [:div.asset-container
-            {:style {:width (if style "100%" "auto")}}
-            [:span.asset-action-bar
-             (when-let [asset-uuid (some-> asset-block (:block/uuid))]
-               [:button.asset-action-btn
-                {:title (t :asset/ref-block)
-                 :tabIndex "-1"
-                 :on-pointer-down util/stop
-                 :on-click (fn [] (route-handler/redirect-to-page! asset-uuid))}
-                (ui/icon "file-symlink")])
-
-             (when-not config/publishing?
-               [:button.asset-action-btn
-                {:title (t :asset/copy)
-                 :tabIndex "-1"
-                 :on-pointer-down util/stop
-                 :on-click (fn [e]
-                             (util/stop e)
-                             (-> (util/copy-image-to-clipboard (common-config/remove-asset-protocol @*src))
-                                 (p/then #(notification/show! (t :notification/copied) :success))))}
-                (ui/icon "copy")])
-
-             [:button.asset-action-btn
-              {:title (t :asset/maximize)
-               :tabIndex "-1"
-               :on-pointer-down util/stop
-               :on-click open-lightbox!}
-
-              (ui/icon "maximize")]]
-            [:img.w-full {:src @*src}]]])))))
