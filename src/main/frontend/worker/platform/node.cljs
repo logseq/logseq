@@ -395,9 +395,9 @@
   [collection embedding topk]
   (.querySync ^js collection
               #js {:fieldName zvec-vector-field
-	                   :topk topk
-	                   :vector (clj->js embedding)
-	                   :outputFields #js [zvec-page-field zvec-title-field]
+                   :topk topk
+                   :vector (clj->js embedding)
+                   :outputFields #js [zvec-page-field zvec-title-field]
                    :params #js {:indexType (zvec-enum-value "ZVecIndexType" "HNSW")
                                 :ef 300}}))
 

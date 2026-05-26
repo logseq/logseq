@@ -1287,13 +1287,15 @@
       (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve search-index-build-pause-ms)))]
         (p/recur)))))
 
-(defn- <build-blocks-fts!
+(defn- <build-blocks-index!
   "Build FTS/vector index in batches with yielding. Sets user_version to search-db-version on completion."
   [repo search-db conn build-id]
   (ensure-active-search-index-build! repo build-id)
   (search/truncate-table! search-db)
   (search/truncate-vector-index! (worker-state/get-vector-index repo))
-  (let [db @conn
+  (let [start-time (.now js/performance)
+        _ (prn :debug :build-search-index-start start-time)
+        db @conn
         blocks (->> (d/datoms db :avet :block/uuid)
                     (keep #(d/entity db (:e %)))
                     (remove search/hidden-entity?)
@@ -1351,7 +1353,8 @@
                                                 :stage :search-index
                                                 :progress 100
                                                 :processed total
-                                                :total total})))))))
+                                                :total total})
+           (prn :debug :build-search-index-spent (- (.now js/performance) start-time))))))))
 
 (def-thread-api :thread-api/search-build-blocks-indice-in-worker
   [repo & [force?]]
@@ -1373,7 +1376,7 @@
                   (p/then (fn [_]
                             (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))))
                   (p/then (fn [_]
-                            (<build-blocks-fts! repo search-db conn build-id)))
+                            (<build-blocks-index! repo search-db conn build-id)))
                   (p/catch (fn [error]
                              (when-not (= :search/stale-index-build (:type (ex-data error)))
                                (throw error))))

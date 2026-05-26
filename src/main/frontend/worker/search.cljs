@@ -794,7 +794,7 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn- unique-search-results
   [results]
   (->> (or results [])
-       (reduce (fn [{:keys [order by-id] :as acc} {:keys [id] :as result}]
+       (reduce (fn [{:keys [by-id] :as acc} {:keys [id] :as result}]
                  (if (nil? id)
                    acc
                    (cond-> acc
