@@ -20,23 +20,13 @@
   {:dry-run {:desc "Print Codex commands without starting Codex or writing agent-session-id"
              :coerce :boolean}})
 
-(def ^:private bridge-list-spec
-  {:all {:desc "Include completed sessions"
-         :coerce :boolean}})
-
 (def entries
   [(core/command-entry ["agent" "bridge"]
                        :agent-bridge
                        "Run task agent bridge"
                        bridge-spec
                        {:examples ["logseq agent bridge --graph my-graph"
-                                   "logseq agent bridge --graph my-graph --dry-run"]})
-   (core/command-entry ["agent" "bridge" "list"]
-                       :agent-bridge-list
-                       "List agent bridge sessions"
-                       bridge-list-spec
-                       {:examples ["logseq agent bridge list"
-                                   "logseq agent bridge list --all"]})])
+                                   "logseq agent bridge --graph my-graph --dry-run"]})])
 
 (defn- trim-non-empty
   [value]
@@ -74,11 +64,6 @@
                 :repo repo
                 :graph graph
                 :dry-run? (boolean (:dry-run options))}})
-
-    :agent-bridge-list
-    {:ok? true
-     :action {:type :agent-bridge-list
-              :all? (boolean (:all options))}}
 
     {:ok? false
      :error {:code :unknown-command
@@ -455,19 +440,6 @@
   (record-session! config {:session session-id
                            :status status
                            :updated-at (js/Date.now)}))
-
-(defn list-sessions
-  [config {:keys [all?]}]
-  (let [sessions (vec (:sessions (read-session-store config)))]
-    (if all?
-      sessions
-      (vec (remove #(= :completed (:status %)) sessions)))))
-
-(defn execute-list
-  [action config]
-  {:status :ok
-   :command :agent-bridge-list
-   :data {:sessions (list-sessions config {:all? (:all? action)})}})
 
 (defn- now-iso
   []
@@ -873,6 +845,17 @@
                                    {}]))]
       true)))
 
+(defn- mark-agent-bridge-task-in-review!
+  [cfg repo block]
+  (let [block-uuid (:block/uuid block)]
+    (p/let [_ (transport/invoke cfg :thread-api/apply-outliner-ops
+                                [repo [[:batch-set-property [[block-uuid]
+                                                              :logseq.property/status
+                                                              :logseq.property/status.in-review
+                                                              {}]]]
+                                 {}])]
+      true)))
+
 (def ^:private routable-task-query
   '[:find [(pull ?e [:db/id
                      :block/uuid
@@ -953,11 +936,18 @@
     (emit-log! cfg (log-line (str "Codex command prepared for " (block-uuid-str block) ": " preview)))
     (p/let [{:keys [session]} (start-codex! command
                                             {:on-exit (fn [code session-id]
-                                                        (when session-id
-                                                          (update-session-status! cfg session-id
-                                                                                  (if (zero? (or code 1))
-                                                                                    :completed
-                                                                                    :failed))))})
+                                                        (let [success? (zero? (or code 1))]
+                                                          (when session-id
+                                                            (update-session-status! cfg session-id
+                                                                                    (if success?
+                                                                                      :completed
+                                                                                      :failed))
+                                                            (when success?
+                                                              (-> (p/let [cfg* (cli-server/ensure-server! cfg repo)
+                                                                          _ (mark-agent-bridge-task-in-review! cfg* repo block)]
+                                                                    true)
+                                                                  (p/catch (fn [e]
+                                                                             (log/error :agent-bridge-task-in-review-failed e))))))))})
             _ (when-not (seq session)
                 (throw (ex-info "codex session id missing"
                                 {:code :codex-session-id-missing})))
