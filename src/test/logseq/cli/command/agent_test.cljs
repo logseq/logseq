@@ -1560,10 +1560,10 @@
                                  :dry-run? true}
                                 {:root-dir root
                                  :agent-name "build-host"
-                                 :agent-bridge {:workspaces [{:id "copy-a"
-                                                              :cwd workspace-a}
-                                                             {:id "copy-b"
-                                                              :cwd workspace-b}]}})
+                                 :workspaces {"demo" [{:id "copy-a"
+                                                       :cwd workspace-a}
+                                                      {:id "copy-b"
+                                                       :cwd workspace-b}]}})
                          duplicate (agent-command/execute-bridge
                                     {:type :agent-bridge
                                      :repo "logseq_db_demo"
@@ -1571,10 +1571,10 @@
                                      :dry-run? true}
                                     {:root-dir root
                                      :agent-name "build-host"
-                                     :agent-bridge {:workspaces [{:id "copy-a"
-                                                                  :cwd workspace-a}
-                                                                 {:id "copy-a"
-                                                                  :cwd workspace-b}]}})
+                                     :workspaces {"demo" [{:id "copy-a"
+                                                           :cwd workspace-a}
+                                                          {:id "copy-a"
+                                                           :cwd workspace-b}]}})
                          relative (agent-command/execute-bridge
                                    {:type :agent-bridge
                                     :repo "logseq_db_demo"
@@ -1582,13 +1582,27 @@
                                     :dry-run? true}
                                    {:root-dir root
                                     :agent-name "build-host"
-                                    :agent-bridge {:workspaces [{:id "copy-a"
-                                                                 :cwd "relative-copy"}]}})]
+                                    :workspaces {"demo" [{:id "copy-a"
+                                                          :cwd "relative-copy"}]}})
+                         other-graph (agent-command/execute-bridge
+                                      {:type :agent-bridge
+                                       :repo "logseq_db_demo"
+                                       :graph "demo"
+                                       :dry-run? true}
+                                      {:root-dir root
+                                       :agent-name "build-host"
+                                       :workspaces {"other graph" [{:id "copy-a"
+                                                                    :cwd "relative-copy"}]}})]
                    (is (= :ok (:status valid)))
+                   (is (some #(string/includes? % "using workspaces: 2")
+                             (get-in valid [:data :logs])))
                    (is (= :error (:status duplicate)))
                    (is (= :agent-workspace-invalid (get-in duplicate [:error :code])))
                    (is (= :error (:status relative)))
-                   (is (= :agent-workspace-invalid (get-in relative [:error :code])))))
+                   (is (= :agent-workspace-invalid (get-in relative [:error :code])))
+                   (is (= :ok (:status other-graph)))
+                   (is (not-any? #(string/includes? % "using workspaces")
+                                 (get-in other-graph [:data :logs])))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []
@@ -1797,10 +1811,10 @@
                                   :process-once? true}
                                  {:root-dir root
                                   :agent-name "build-host"
-                                  :agent-bridge {:workspaces [{:id "copy-a"
-                                                               :cwd workspace-a}
-                                                              {:id "copy-b"
-                                                               :cwd workspace-b}]}
+                                  :workspaces {"demo" [{:id "copy-a"
+                                                        :cwd workspace-a}
+                                                       {:id "copy-b"
+                                                        :cwd workspace-b}]}
                                   :log-fn (fn [_] nil)})]
                    (is (= :ok (:status result)))
                    (is (= [workspace-a workspace-b] (mapv :cwd @codex-starts*)))

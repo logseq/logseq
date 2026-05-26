@@ -535,15 +535,20 @@
      :status :idle}))
 
 (defn- resolve-workspaces!
-  [config]
-  (let [workspaces (vec (get-in config [:agent-bridge :workspaces]))]
-    (when (seq workspaces)
-      (let [resolved (mapv validate-workspace-config! workspaces)
-            ids (mapv :id resolved)]
-        (when-not (= (count ids) (count (set ids)))
-          (throw (ex-info "agent bridge workspace ids must be unique"
-                          {:code :agent-workspace-invalid})))
-        resolved))))
+  [config graph]
+  (when-let [workspaces-by-graph (:workspaces config)]
+    (when-not (map? workspaces-by-graph)
+      (throw (ex-info "agent bridge workspaces must be a map keyed by graph name"
+                      {:code :agent-workspace-invalid})))
+    (let [workspaces (vec (get workspaces-by-graph graph))]
+      (when (seq workspaces)
+        (let [resolved (mapv validate-workspace-config! workspaces)
+              ids (mapv :id resolved)]
+          (when-not (= (count ids) (count (set ids)))
+            (throw (ex-info "agent bridge workspace ids must be unique"
+                            {:code :agent-workspace-invalid
+                             :graph graph})))
+          resolved)))))
 
 (defn- make-workspace-pool
   [workspaces]
@@ -1711,7 +1716,7 @@
                          (log-line (str "using agent name: " agent-name))
                          (log-line "checking codex cli ..."))]
           (try
-            (let [workspaces (resolve-workspaces! config)
+            (let [workspaces (resolve-workspaces! config graph)
                   workspace-pool (make-workspace-pool workspaces)
                   logs (cond-> logs
                          (seq workspaces)

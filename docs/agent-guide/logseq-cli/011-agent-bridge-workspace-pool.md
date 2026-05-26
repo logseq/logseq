@@ -9,12 +9,12 @@ The bridge reads an optional workspace pool from `cli.edn`:
 ```clojure
 {:graph "dev"
  :agent-name "logseq-coder"
- :agent-bridge {:workspaces [{:id "copy-1" :cwd "/abs/path/logseq-1"}
-                             {:id "copy-2" :cwd "/abs/path/logseq-2"}
-                             {:id "copy-3" :cwd "/abs/path/logseq-3"}]}}
+ :workspaces {"dev" [{:id "copy-1" :cwd "/abs/path/logseq-1"}
+                     {:id "copy-2" :cwd "/abs/path/logseq-2"}
+                     {:id "copy-3" :cwd "/abs/path/logseq-3"}]}}
 ```
 
-When `:agent-bridge :workspaces` is absent or empty, the bridge keeps the existing behavior and starts Codex without an explicit working directory. In that mode Codex inherits the bridge process cwd.
+`:workspaces` is a map keyed by graph name. The bridge only uses the workspace list for the graph it is currently running against. When `:workspaces` is absent, empty, or has no entry for the current graph, the bridge keeps the existing behavior and starts Codex without an explicit working directory. In that mode Codex inherits the bridge process cwd.
 
 Each workspace entry must have:
 
