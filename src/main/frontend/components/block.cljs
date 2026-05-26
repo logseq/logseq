@@ -2956,6 +2956,22 @@
                             trigger-bottom-pill-edit!))}
        (ui/icon "edit" {:size 15})])]]))
 
+(def ^:private max-bottom-property-pills-per-line 3)
+
+(defn- bottom-property-pill-items
+  [block properties opts]
+  (let [last-index (dec (count properties))]
+    (mapcat
+     (fn [index property]
+       (cond-> [(bottom-property-pill-cp block property opts)]
+         (and (< index last-index)
+              (zero? (mod (inc index) max-bottom-property-pills-per-line)))
+         (conj [:div.bottom-property-pill-line-break
+                {:key (str "bottom-property-pill-line-break-" (:db/id block) "-" index)
+                 :aria-hidden true}])))
+     (cljs.core/range)
+     properties)))
+
 (defn- block-below-positioned-properties-cp
   [block properties opts show-hidden-properties-toggle? show-add-property-button?]
   [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden
@@ -2963,8 +2979,7 @@
     {:data-bottom-properties-row (:block/uuid block)
      :tab-index -1
      :on-key-down handle-bottom-properties-row-key-down!}
-    (for [property properties]
-      (bottom-property-pill-cp block property opts))
+    (bottom-property-pill-items block properties opts)
     (when show-hidden-properties-toggle?
       (property-component/hidden-properties-toggle-button block {:icon-only? true
                                                                  :bottom-row-nav? true
