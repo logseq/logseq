@@ -9,6 +9,7 @@
             [clojure.string :as string]
             [electron.cli-install :as cli-install]
             [electron.db :as db]
+            [electron.embedding-server :as embedding-server]
             [electron.exceptions :as exceptions]
             [electron.handler :as handler]
             [electron.i18n :as i18n :refer [t]]
@@ -378,10 +379,11 @@
                             t2 (setup-app-manager! win)
                             t3 (handler/set-ipc-handler! win)
                             t4 (server/setup! win)
+                            t5 (embedding-server/setup! app')
                             tt (exceptions/setup-exception-listeners!)]
 
                         (vreset! *teardown-fn
-                                 #(doseq [f [t0 t1 t2 t3 t4 tt]]
+                                 #(doseq [f [t0 t1 t2 t3 t4 t5 tt]]
                                     (and f (f)))))))
 
            ;; setup effects
@@ -412,6 +414,7 @@
                                     nil)))))
            (.on app' "before-quit" (fn [_e]
                                      (reset! win/*quitting? true)
+                                     (embedding-server/stop!)
                                      (handler/stop-all-db-workers!)))
 
            (.on app' "activate" #(when @*win (.show win)))))))
@@ -449,6 +452,7 @@
 
       (.on app "window-all-closed" (fn []
                                      (logger/debug "window-all-closed" "Quitting...")
+                                     (embedding-server/stop!)
                                      (handler/stop-all-db-workers!)
                                      (.quit app)))
       (on-app-ready! app))))

@@ -27,6 +27,22 @@
       (gobj/set bind k v))
     bind))
 
+(defn- set-process-platform-arch!
+  [platform arch]
+  (let [platform-descriptor (js/Object.getOwnPropertyDescriptor js/process "platform")
+        arch-descriptor (js/Object.getOwnPropertyDescriptor js/process "arch")]
+    (js/Object.defineProperty js/process "platform"
+                              #js {:value platform
+                                   :enumerable true
+                                   :configurable true})
+    (js/Object.defineProperty js/process "arch"
+                              #js {:value arch
+                                   :enumerable true
+                                   :configurable true})
+    (fn []
+      (js/Object.defineProperty js/process "platform" platform-descriptor)
+      (js/Object.defineProperty js/process "arch" arch-descriptor))))
+
 (defn- <open-test-db
   []
   (let [root-dir (node-helper/create-tmp-dir "platform-node")
@@ -60,53 +76,104 @@
     (is (string/includes? source "\"node:sqlite\""))
     (is (not (string/includes? source "\"better-sqlite3\"")))))
 
-(deftest node-platform-uses-transformers-default-embedding-model
+(deftest node-platform-requires-zvec-directly
   (let [source (node-platform-source)]
-    (is (string/includes? source "\"@huggingface/transformers\""))
-    (is (string/includes? source "all-MiniLM-L6-v2"))
-    (is (string/includes? source "feature-extraction"))
-    (is (string/includes? source "q8"))
-    (is (string/includes? source "default-embedding-pipeline-devices [\"cpu\"]"))
-    (is (not (string/includes? source "embedding-pipeline-devices [\"gpu\" \"cpu\"]")))
-    (is (not (string/includes? source "\"coreml\"")))
-    (is (not (string/includes? source "\"dml\"")))
-    (is (not (string/includes? source "\"cuda\"")))
-    (is (not (string/includes? source ":device \"auto\"")))
-    (is (string/includes? source "intraOpNumThreads"))
-    (is (string/includes? source "executionMode \"parallel\""))
-    (is (not (string/includes? source ":executionProviders #js [\"cpu\"]")))
-    (is (string/includes? source "pooling"))
-    (is (string/includes? source "mean"))
-    (is (string/includes? source "normalize"))))
+    (is (string/includes? source "[\"@zvec/zvec\" :as zvec]"))
+    (is (not (string/includes? source "zvec-module")))))
+
+(deftest node-platform-uses-local-embedding-backend
+  (let [source (node-platform-source)]
+    (is (not (string/includes? source "\"@huggingface/transformers\"")))
+    (is (not (string/includes? source "feature-extraction")))
+    (is (not (string/includes? source "onnx")))
+    (is (string/includes? source "/v1/embeddings"))
+    (is (string/includes? source "LOGSEQ_EMBEDDINGS_URL"))))
 
 (deftest node-platform-provides-default-embedding-backend
   (async done
-    (let [root-dir (node-helper/create-tmp-dir "platform-node-embedding")]
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-embedding")
+          restore! (set-process-platform-arch! "darwin" "arm64")]
       (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
                   embedding (:embedding platform)]
-            (is (= "Xenova/all-MiniLM-L6-v2" (:model-id embedding)))
+            (is (= "all-MiniLM-L6-v2" (:model-id embedding)))
             (is (fn? (:embed-texts embedding))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
-          (p/finally done)))))
+          (p/finally (fn []
+                       (restore!)
+                       (done)))))))
 
-(deftest node-platform-embedding-backend-embeds-text
+(deftest node-platform-disables-vector-embedding-off-macos
   (async done
-    (let [root-dir (node-helper/create-tmp-dir "platform-node-embedding-text")]
-      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir
-                                                         :embedding-devices ["cpu"]})
-                  embeddings ((get-in platform [:embedding :embed-texts]) ["hello"])]
-            (is (= 1 (count embeddings)))
-            (is (= 384 (count (first embeddings))))
-            (is (every? number? (first embeddings))))
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-no-vector-embedding")
+          restore! (set-process-platform-arch! "linux" "x64")]
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})]
+            (is (nil? (:embedding platform)))
+            (is (nil? (:vector platform))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
-          (p/finally done)))))
+          (p/finally (fn []
+                       (restore!)
+                       (done)))))))
+
+(deftest node-platform-enables-vector-embedding-on-macos
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-vector-embedding")
+          restore! (set-process-platform-arch! "darwin" "x64")]
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})]
+            (is (= "all-MiniLM-L6-v2" (get-in platform [:embedding :model-id])))
+            (is (fn? (get-in platform [:embedding :embed-texts])))
+            (is (fn? (get-in platform [:vector :open-index]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (restore!)
+                       (done)))))))
+
+(deftest node-platform-embedding-backend-calls-local-server
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-embedding-text")
+          restore-platform! (set-process-platform-arch! "darwin" "arm64")
+          original-fetch js/fetch
+          calls (atom [])]
+      (set! js/fetch
+            (fn [url opts]
+              (swap! calls conj {:url url
+                                 :method (gobj/get opts "method")
+                                 :headers (js->clj (gobj/get opts "headers"))
+                                 :body (js->clj (js/JSON.parse (gobj/get opts "body"))
+                                                :keywordize-keys true)})
+              (p/resolved #js {:ok true
+                                :status 200
+                                :json (fn []
+                                        (p/resolved
+                                         (clj->js {:data [{:index 1
+                                                           :embedding [4 5 6]}
+                                                          {:index 0
+                                                           :embedding [1 2 3]}]})))})))
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir
+                                                         :embedding-endpoint "http://127.0.0.1:8765/v1/embeddings"
+                                                         :embedding-model-id "test-embedding-model"})
+                  embeddings ((get-in platform [:embedding :embed-texts]) ["hello" "world"])]
+            (is (= [[1 2 3] [4 5 6]] embeddings))
+            (is (= [{:url "http://127.0.0.1:8765/v1/embeddings"
+                     :method "POST"
+                     :headers {"Content-Type" "application/json"}
+                     :body {:model "test-embedding-model"
+                            :input ["hello" "world"]}}]
+                   @calls)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! js/fetch original-fetch)
+                       (restore-platform!)
+                       (done)))))))
 
 (deftest node-platform-vector-index-creates-missing-collection-path
   (async done
     (let [root-dir (node-helper/create-tmp-dir "platform-node-vector")
-          vector-path (node-path/join root-dir "graphs" "graph-a" "search" "vector")]
+          vector-path (node-path/join root-dir "graphs" "graph-a" "search" "vector")
+          restore! (set-process-platform-arch! "darwin" "arm64")]
       (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
                   vector-index ((get-in platform [:vector :open-index])
                                 {:path vector-path
@@ -122,12 +189,15 @@
             ((:close! vector-index)))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
-          (p/finally done)))))
+          (p/finally (fn []
+                       (restore!)
+                       (done)))))))
 
 (deftest node-platform-vector-index-persists-metadata
   (async done
     (let [root-dir (node-helper/create-tmp-dir "platform-node-vector-metadata")
           vector-path (node-path/join root-dir "graphs" "graph-a" "search" "vector")
+          restore! (set-process-platform-arch! "darwin" "arm64")
           metadata {:embedding-model-id "test-model"
                     :embedding-dimension 3
                     :context-version 1}]
@@ -143,7 +213,9 @@
             ((:close! reopened)))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
-          (p/finally done)))))
+          (p/finally (fn []
+                       (restore!)
+                       (done)))))))
 
 (deftest node-platform-vector-page-query-topks-expand-adaptively
   (let [topks #'platform-node/vector-query-topks]

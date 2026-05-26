@@ -1,12 +1,11 @@
 (ns frontend.worker.platform.node
   "Node.js platform adapter for db-worker."
-  (:require ["@huggingface/transformers" :as transformers]
-            ["@zvec/zvec" :as zvec]
-            ["fs" :as node-fs]
+  (:require ["fs" :as node-fs]
             ["fs/promises" :as fs]
             ["node:sqlite" :as node-sqlite]
             ["os" :as os]
             ["path" :as node-path]
+            ["@zvec/zvec" :as zvec]
             [clojure.string :as string]
             [cognitect.transit :as transit]
             [frontend.worker.db-worker-node-lock :as db-lock]
@@ -30,6 +29,10 @@
 
 (def ^:private DatabaseSync
   (resolve-database-sync-ctor))
+
+(defn- macos?
+  []
+  (= "darwin" (.-platform js/process)))
 
 (defn- expand-home
   [path]
@@ -213,66 +216,47 @@
   (p/let [_ (ensure-dir! (node-path/dirname path))]
     (wrap-node-sqlite-db (new DatabaseSync path) write-guard-fn)))
 
-(def ^:private default-embedding-model "Xenova/all-MiniLM-L6-v2")
-(defonce ^:private *embedding-pipelines (atom {}))
+(def ^:private default-embedding-model "all-MiniLM-L6-v2")
+(def ^:private default-embedding-endpoint "http://127.0.0.1:8765/v1/embeddings")
 
-(def ^:private default-embedding-pipeline-devices ["cpu"])
+(defn- resolve-embedding-endpoint
+  [configured-endpoint]
+  (or configured-endpoint
+      (gobj/get (.-env js/process) "LOGSEQ_EMBEDDINGS_URL")
+      default-embedding-endpoint))
 
-(defn- embedding-pipeline-options
-  [device]
-  #js {:device device
-       :dtype "q8"})
+(defn- resolve-embedding-model-id
+  [configured-model-id]
+  (or configured-model-id
+      (gobj/get (.-env js/process) "LOGSEQ_EMBEDDING_MODEL")
+      default-embedding-model))
 
-(defn- <embedding-pipeline-for-device
-  [model-id device]
-  ((gobj/get transformers "pipeline")
-   "feature-extraction"
-   model-id
-   (embedding-pipeline-options device)))
-
-(defn- <embedding-pipeline-with-fallback
-  [model-id devices]
-  (let [device (first devices)]
-    (-> (<embedding-pipeline-for-device model-id device)
-        (p/catch (fn [error]
-                   (if-let [remaining (seq (rest devices))]
-                     (do
-                       (log/warn :embedding/gpu-pipeline-failed {:model-id model-id
-                                                                 :device device
-                                                                 :error error})
-                       (<embedding-pipeline-with-fallback model-id remaining))
-                     (log/error ::embedding-failed error)))))))
-
-(defn- <embedding-pipeline
-  [model-id devices]
-  (if-let [pipeline-promise (get @*embedding-pipelines [model-id devices])]
-    pipeline-promise
-    (let [pipeline-promise (<embedding-pipeline-with-fallback model-id devices)]
-      (swap! *embedding-pipelines assoc [model-id devices] pipeline-promise)
-      pipeline-promise)))
-
-(defn- tensor->vectors
-  [^js tensor]
-  (let [values (js->clj (.tolist tensor))]
-    (if (every? number? values)
-      [(vec values)]
-      (mapv vec values))))
+(defn- embedding-response->vectors
+  [response]
+  (let [data (-> (js->clj response :keywordize-keys true)
+                 :data)]
+    (->> data
+         (sort-by #(or (:index %) 0))
+         (mapv (comp vec :embedding)))))
 
 (defn- <embed-texts
-  [model-id devices texts]
+  [endpoint model-id texts]
   (let [texts (vec texts)]
     (if (empty? texts)
       (p/resolved [])
-      (p/let [extractor (<embedding-pipeline model-id devices)
-              tensor (.call (gobj/get extractor "_call")
-                            extractor
-                            (clj->js texts)
-                            #js {:pooling "mean"
-                                 :normalize true})]
-        (let [vectors (tensor->vectors tensor)]
-          (when-let [dispose (gobj/get tensor "dispose")]
-            (.call dispose tensor))
-          vectors)))))
+      (p/let [resp (js/fetch endpoint
+                             #js {:method "POST"
+                                  :headers #js {"Content-Type" "application/json"}
+                                  :body (js/JSON.stringify
+                                         (clj->js {:model model-id
+                                                   :input texts}))})
+              _ (when-not (.-ok resp)
+                  (throw (ex-info "embedding server request failed"
+                                  {:endpoint endpoint
+                                   :status (.-status resp)
+                                   :model-id model-id})))
+              body (.json resp)]
+        (embedding-response->vectors body)))))
 
 (defonce ^:private *zvec-initialized? (atom false))
 
@@ -656,63 +640,68 @@
                (fs/writeFile kv-path payload "utf8")))}))
 
 (defn node-platform
-  [{:keys [root-dir event-fn write-guard-fn owner-source recreate-lock-fn embedding-devices]}]
+  [{:keys [root-dir event-fn write-guard-fn owner-source recreate-lock-fn
+           embedding-endpoint embedding-model-id]}]
   (let [root-dir (db-lock/resolve-root-dir root-dir)
         data-dir (db-lock/graphs-dir root-dir)
         owner-source (db-lock/normalize-owner-source owner-source)
-        embedding-devices (vec (or embedding-devices default-embedding-pipeline-devices))
-        kv (kv-store root-dir)]
+        embedding-endpoint (resolve-embedding-endpoint embedding-endpoint)
+        embedding-model-id (resolve-embedding-model-id embedding-model-id)
+        kv (kv-store root-dir)
+        vector-embedding-enabled? (macos?)]
     (p/do!
      (ensure-dir! root-dir)
      (ensure-dir! data-dir)
      (log/info :db-worker-node-platform {:root-dir root-dir})
-     {:env {:publishing? false
-            :runtime :node
-            :root-dir root-dir
-            :owner-source owner-source
-            :recreate-lock-fn recreate-lock-fn}
-      :storage {:install-opfs-pool (fn [sqlite-module pool-name]
-                                     (install-opfs-pool data-dir sqlite-module pool-name))
-                :list-graphs (fn [] (list-graphs data-dir))
-                :db-exists? (fn [graph] (db-exists? data-dir graph))
-                :resolve-db-path (fn [_repo pool path]
-                                   (pool-path pool path))
-                :export-file export-file
-                :import-db (fn [pool path data] (import-db write-guard-fn pool path data))
-                :remove-vfs! (fn [pool] (remove-vfs! pool))
-                :read-text! (fn [path] (read-text! data-dir path))
-                :write-text! (fn [path text] (write-text! write-guard-fn data-dir path text))
-                :write-text-atomic! (fn [path text] (write-text-atomic! write-guard-fn data-dir path text))
-                :delete-file! (fn [path] (delete-file! write-guard-fn data-dir path))
-                :asset-read-bytes! (fn [repo file-name]
-                                     (asset-read-bytes! data-dir repo file-name))
-                :asset-write-bytes! (fn [repo file-name payload]
-                                      (asset-write-bytes! write-guard-fn data-dir repo file-name payload))
-                :asset-stat (fn [repo file-name]
-                              (asset-stat data-dir repo file-name))
-                :asset-delete! (fn [repo file-name]
-                                 (asset-delete! write-guard-fn data-dir repo file-name))}
-      :kv {:get (:get kv)
-           :set! (:set! kv)}
-      :broadcast {:post-message! (fn [type payload]
-                                   (when event-fn
-                                     (event-fn type payload)))}
-      :websocket {:connect websocket-connect}
-      :sqlite {:init! (fn [] nil)
-               :open-db (fn [opts] (open-sqlite-db write-guard-fn opts))
-               :close-db (fn [db] (.close db))
-               :exec (fn [db sql-or-opts] (.exec db sql-or-opts))
-               :transaction (fn [db f] (.transaction db f))
-               :backup-db (fn [^js db path]
-                            (.backup db path))}
-      :embedding {:model-id default-embedding-model
-                  :embed-texts (fn [texts]
-                                 (<embed-texts default-embedding-model embedding-devices texts))}
-      :vector {:open-index open-vector-index}
-      :crypto {:save-secret-text! (fn [key text]
-                                    (<save-secret-text-by-owner! kv owner-source key text))
-               :read-secret-text (fn [key]
-                                   (<read-secret-text-by-owner kv owner-source key))
-               :delete-secret-text! (fn [key]
-                                      (<delete-secret-text-by-owner! kv owner-source key))}
-      :timers {:set-interval! (fn [f ms] (js/setInterval f ms))}})))
+     (cond->
+      {:env {:publishing? false
+             :runtime :node
+             :root-dir root-dir
+             :owner-source owner-source
+             :recreate-lock-fn recreate-lock-fn}
+       :storage {:install-opfs-pool (fn [sqlite-module pool-name]
+                                      (install-opfs-pool data-dir sqlite-module pool-name))
+                 :list-graphs (fn [] (list-graphs data-dir))
+                 :db-exists? (fn [graph] (db-exists? data-dir graph))
+                 :resolve-db-path (fn [_repo pool path]
+                                    (pool-path pool path))
+                 :export-file export-file
+                 :import-db (fn [pool path data] (import-db write-guard-fn pool path data))
+                 :remove-vfs! (fn [pool] (remove-vfs! pool))
+                 :read-text! (fn [path] (read-text! data-dir path))
+                 :write-text! (fn [path text] (write-text! write-guard-fn data-dir path text))
+                 :write-text-atomic! (fn [path text] (write-text-atomic! write-guard-fn data-dir path text))
+                 :delete-file! (fn [path] (delete-file! write-guard-fn data-dir path))
+                 :asset-read-bytes! (fn [repo file-name]
+                                      (asset-read-bytes! data-dir repo file-name))
+                 :asset-write-bytes! (fn [repo file-name payload]
+                                       (asset-write-bytes! write-guard-fn data-dir repo file-name payload))
+                 :asset-stat (fn [repo file-name]
+                               (asset-stat data-dir repo file-name))
+                 :asset-delete! (fn [repo file-name]
+                                  (asset-delete! write-guard-fn data-dir repo file-name))}
+       :kv {:get (:get kv)
+            :set! (:set! kv)}
+       :broadcast {:post-message! (fn [type payload]
+                                    (when event-fn
+                                      (event-fn type payload)))}
+       :websocket {:connect websocket-connect}
+       :sqlite {:init! (fn [] nil)
+                :open-db (fn [opts] (open-sqlite-db write-guard-fn opts))
+                :close-db (fn [db] (.close db))
+                :exec (fn [db sql-or-opts] (.exec db sql-or-opts))
+                :transaction (fn [db f] (.transaction db f))
+                :backup-db (fn [^js db path]
+                             (.backup db path))}
+       :crypto {:save-secret-text! (fn [key text]
+                                     (<save-secret-text-by-owner! kv owner-source key text))
+                :read-secret-text (fn [key]
+                                    (<read-secret-text-by-owner kv owner-source key))
+                :delete-secret-text! (fn [key]
+                                       (<delete-secret-text-by-owner! kv owner-source key))}
+       :timers {:set-interval! (fn [f ms] (js/setInterval f ms))}}
+       vector-embedding-enabled?
+       (assoc :embedding {:model-id embedding-model-id
+                          :embed-texts (fn [texts]
+                                         (<embed-texts embedding-endpoint embedding-model-id texts))}
+              :vector {:open-index open-vector-index})))))
