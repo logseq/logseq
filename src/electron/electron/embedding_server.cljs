@@ -2,7 +2,6 @@
   (:require ["child_process" :as child-process]
             ["fs-extra" :as fs]
             ["path" :as node-path]
-            [electron.logger :as logger]
             [promesa.core :as p]))
 
 (def ^:private default-host "127.0.0.1")
@@ -19,6 +18,14 @@
 (defonce ^:private *startup-promise (atom nil))
 
 (declare find-port! run-command! spawn-server! wait-ready! stop!)
+
+(defn- default-logger
+  []
+  (let [logger (js/require "electron-log")]
+    {:debug (.-debug logger)
+     :info (.-info logger)
+     :warn (.-warn logger)
+     :error (.-error logger)}))
 
 (defn- macos?
   [platform]
@@ -63,6 +70,7 @@
      :exists? (or (:exists? opts) #(fs/existsSync %))
      :ensure-dir! (or (:ensure-dir! opts) #(fs/ensureDirSync %))
      :write-file! (or (:write-file! opts) #(.writeFileSync fs %1 %2 "utf8"))
+     :logger (:logger opts)
      :find-port! (or (:find-port! opts) find-port!)
      :set-env! (or (:set-env! opts) #(aset js/process.env %1 %2))
      :run-command! (or (:run-command! opts) run-command!)
@@ -77,13 +85,13 @@
            (log-fn label (.toString data))))))
 
 (defn- run-command!
-  [cmd args {:keys [cwd]}]
+  [cmd args {:keys [cwd logger]}]
   (js/Promise.
    (fn [resolve reject]
      (let [proc (.spawn child-process cmd (clj->js args) #js {:cwd cwd
                                                               :stdio "pipe"})]
-       (log-stream! (.-stdout proc) logger/debug :embedding-server/setup)
-       (log-stream! (.-stderr proc) logger/warn :embedding-server/setup)
+       (log-stream! (.-stdout proc) (:debug logger) :embedding-server/setup)
+       (log-stream! (.-stderr proc) (:warn logger) :embedding-server/setup)
        (.on proc "error" reject)
        (.on proc "close"
             (fn [code]
@@ -139,17 +147,17 @@
       (poll!))))
 
 (defn- attach-exit-handler!
-  [^js proc]
+  [^js proc logger]
   (when (and proc (fn? (.-on proc)))
     (.on proc "exit"
          (fn [code signal]
            (when (identical? proc @*server-process)
              (reset! *server-process nil))
-           (logger/info :embedding-server/exited {:code code
-                                                  :signal signal})))))
+           ((:info logger) :embedding-server/exited {:code code
+                                                     :signal signal})))))
 
 (defn- spawn-server!
-  [{:keys [venv-python script-path host port model-id]
+  [{:keys [venv-python script-path host port model-id logger]
     sidecar-root :sidecar-dir}]
   (let [proc (.spawn child-process
                      venv-python
@@ -159,25 +167,27 @@
                                "--model" model-id])
                      #js {:cwd sidecar-root
                           :stdio "pipe"})]
-    (log-stream! (.-stdout proc) logger/info :embedding-server)
-    (log-stream! (.-stderr proc) logger/warn :embedding-server)
+    (log-stream! (.-stdout proc) (:info logger) :embedding-server)
+    (log-stream! (.-stderr proc) (:warn logger) :embedding-server)
     (.on proc "error"
          (fn [error]
-           (logger/error :embedding-server/start-failed error)))
+           ((:error logger) :embedding-server/start-failed error)))
     proc))
 
 (defn- install-runtime!
   [{:keys [runtime-dir venv-python deps-stamp python-command
-           ensure-dir! exists? write-file!] :as cfg}]
+           ensure-dir! exists? write-file! logger] :as cfg}]
   (ensure-dir! runtime-dir)
   (let [run-command-fn (:run-command! cfg)
         needs-venv? (not (exists? venv-python))
         needs-deps? (or needs-venv?
                         (not (exists? deps-stamp)))]
     (p/let [_ (when needs-venv?
-                (run-command-fn python-command ["-m" "venv" venv-name] {:cwd runtime-dir}))
+                (run-command-fn python-command ["-m" "venv" venv-name] {:cwd runtime-dir
+                                                                         :logger logger}))
             _ (when needs-deps?
-                (run-command-fn venv-python ["-m" "pip" "install" dependency] {:cwd runtime-dir}))]
+                (run-command-fn venv-python ["-m" "pip" "install" dependency] {:cwd runtime-dir
+                                                                               :logger logger}))]
       (when needs-deps?
         (write-file! deps-stamp (str dependency "\n")))
       cfg)))
@@ -197,18 +207,19 @@
        @*startup-promise
 
        :else
-       (let [startup (-> (p/let [cfg (allocate-port! cfg)
+       (let [cfg (assoc cfg :logger (or (:logger cfg) (default-logger)))
+             startup (-> (p/let [cfg (allocate-port! cfg)
                                  cfg (install-runtime! cfg)
                                  proc ((:spawn-server! cfg) cfg)
                                  _ (do
                                      (reset! *server-process proc)
-                                     (attach-exit-handler! proc))
+                                     (attach-exit-handler! proc (:logger cfg)))
                                  _ ((:wait-ready! cfg) (embedding-health-endpoint (:host cfg) (:port cfg)))]
                            ((:set-env! cfg) embedding-url-env (embedding-endpoint (:host cfg) (:port cfg)))
                            :started)
                          (p/catch (fn [error]
                                     (stop!)
-                                    (logger/error :embedding-server/setup-failed error)
+                                    ((:error (:logger cfg)) :embedding-server/setup-failed error)
                                     (throw error)))
                          (p/finally (fn []
                                       (reset! *startup-promise nil))))]
@@ -225,7 +236,8 @@
 
 (defn setup!
   [app']
-  (-> (start! app')
+  (let [logger (default-logger)]
+    (-> (start! app')
       (p/catch (fn [error]
-                 (logger/error :embedding-server/setup-failed error))))
+                 ((:error logger) :embedding-server/setup-failed error)))))
   stop!)

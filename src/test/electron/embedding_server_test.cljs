@@ -34,6 +34,10 @@
                :ensure-dir! #(swap! ensured-dirs conj %)
                :find-port! (fn [_host]
                              (p/resolved (or allocated-port 54321)))
+               :logger {:debug (fn [& _args])
+                        :info (fn [& _args])
+                        :warn (fn [& _args])
+                        :error (fn [& _args])}
                :set-env! (fn [k v]
                            (swap! events conj [:set-env k v])
                            (swap! env assoc k v))
