@@ -67,6 +67,15 @@
       background-color: hsl(var(--muted));
     }
 
+    &[data-asset-table-nested] {
+      --ls-table-asset-annotation-text-color: hsl(var(--muted-foreground));
+
+      .ls-table-cell-content,
+      .ls-table-cell-content :is(span, div, a, button, input, textarea) {
+        color: var(--ls-table-asset-annotation-text-color) !important;
+      }
+    }
+
     div, span, a {
       @apply whitespace-nowrap;
     }

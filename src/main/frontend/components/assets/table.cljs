@@ -101,7 +101,7 @@
            :table/title-edit-block annotation
            :table/title-renderer
            (fn [_row]
-             [:div.flex.h-full.w-full.min-w-0.items-center.gap-1.pl-8
+             [:div.flex.h-full.w-full.min-w-0.items-center.gap-1.pl-6
               (if annotation
                 (asset-annotation-title annotation)
                 [:span.truncate.text-muted-foreground (:block/title row)])]))))
