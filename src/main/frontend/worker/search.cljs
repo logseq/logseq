@@ -14,7 +14,7 @@
             [logseq.graph-parser.text :as text]))
 
 (def ^:private max-vector-search-results 10)
-(def ^:private min-vector-search-score 0.62)
+(def ^:private min-vector-search-score 0.5)
 (def ^:private vector-upsert-batch-size 1024)
 
 (defn- add-blocks-fts-triggers!
@@ -112,8 +112,6 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defn- throw-upsert-blocks-error!
   [item]
-  (js/console.error "Upsert blocks wrong data: ")
-  (js/console.dir item)
   (throw (ex-info "Search upsert-blocks wrong data: "
                   (bean/->clj item))))
 
@@ -707,6 +705,10 @@ DROP TRIGGER IF EXISTS blocks_au;
          (keep identity)
          (string/join "\n")))))
 
+(defn- block-result-title
+  [block]
+  (db-content/recur-replace-uuid-in-block-title block))
+
 (defn- matched-alias
   [q block]
   (when-not (string/blank? q)
@@ -981,13 +983,15 @@ DROP TRIGGER IF EXISTS blocks_au;
         (let [alias-source (some-> (first (:block/_alias block))
                                    (select-keys [:block/uuid :block/title]))
               alias-match (matched-alias q block)
+              page-or-object-result? (page-or-object? block)
+              result-title (if page-or-object-result?
+                             (block-result-title block)
+                             (or title (:block/title block)))
               display-title (if (:enable-snippet? option)
-                              (if (page-or-object? block)
-                                (ensure-highlighted-snippet snippet (:block/title block) q)
-                                (ensure-highlighted-snippet snippet (or title (:block/title block)) q))
-                              (if (page-or-object? block)
-                                (:block/title block)
-                                (or snippet title (:block/title block))))
+                              (ensure-highlighted-snippet snippet result-title q)
+                              (if page-or-object-result?
+                                result-title
+                                (or snippet result-title)))
               block-page (or
                           (:block/uuid (:block/page block))
                           (when (and page (common-util/uuid-string? page))
@@ -1157,7 +1161,7 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defn build-blocks-indice
   [db]
-  (let [blocks (get-all-blocks db)
+  (let [blocks (vec (get-all-blocks db))
         context (build-vector-context-cache blocks)]
     (->> blocks
          (keep #(block->index* context %)))))

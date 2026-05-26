@@ -1,4 +1,5 @@
 (ns frontend.worker.search-benchmark
+  "Small benchmark helpers for comparing worker search result quality."
   (:require [promesa.core :as p]))
 
 (defn- result-id

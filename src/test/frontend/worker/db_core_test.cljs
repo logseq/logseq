@@ -465,7 +465,8 @@
     (->
      (restoring-worker-state
       (fn []
-        (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
+        (let [repo (str test-repo "-progress-" (random-uuid))
+              build-index! #'db-core/<build-blocks-index!
               conn (d/create-conn db-schema/schema)
               progress-calls (atom [])
               progress-seen-before-rebuild-work? (atom nil)
@@ -485,30 +486,30 @@
                                          #js [])))
                             :close (fn [] nil)}
               idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
-          (platform/set-platform!
-           (build-test-platform
-            {:runtime :node
-             :post-message! (fn [type payload]
-                              (when (= type :thread-api/search-index-build-progress)
-                                (let [[repo payload'] payload]
-                                  (record-progress! repo payload'))))}))
-          (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
-          (reset! worker-state/*datascript-conns {test-repo conn})
-          (reset! idle-status-atom {test-repo {:idle? true
-                                               :ts (.now js/Date)}})
-          (reset! worker-state/*main-thread
-                  (fn [qkw & args]
-                    (when (= qkw :thread-api/search-index-build-progress)
-                      (let [[repo payload] args]
-                        (record-progress! repo payload)))
-                    (p/resolved nil)))
-          (-> (build-index! test-repo true)
-              (p/then (fn [_]
-                        (is @progress-seen-before-rebuild-work?
-                            "Progress should reach the main thread before rebuild prep starts")
-                        (is (= :running (get-in (first @progress-calls) [:payload :status])))))
-              (p/catch (fn [error]
-                         (is false (str error))))))))
+          (platform/set-platform! (build-test-platform))
+          (d/transact! conn [{:block/uuid (random-uuid)}])
+          (reset! idle-status-atom {repo {:idle? true
+                                          :ts (.now js/Date)}})
+          (p/with-redefs [db-core/report-search-index-progress! (fn [repo payload]
+                                                                  (record-progress! repo payload)
+                                                                  (p/resolved nil))
+                          search/truncate-table! (fn [db]
+                                                   (.exec db "truncate"))
+                          search/truncate-vector-index! (fn [_vector-index] nil)
+                          search/upsert-blocks! (fn [_db _blocks] nil)
+                          search/hidden-entity? (constantly false)
+                          search/block->index-with-context (fn [_context _entity]
+                                                             {:id "block-1"
+                                                              :page "page-1"
+                                                              :title "Hello"})]
+            (let [build-id (#'db-core/start-search-index-build! repo)]
+              (-> (build-index! repo search-db conn build-id)
+                (p/then (fn [_]
+                          (is @progress-seen-before-rebuild-work?
+                              "Progress should be emitted before rebuild prep starts")
+                          (is (= :running (get-in (first @progress-calls) [:payload :status])))))
+                (p/catch (fn [error]
+                           (is false (str error))))))))))
      (p/finally done))))
 
 (deftest search-upsert-blocks-does-not-wait-for-vector-embedding-test

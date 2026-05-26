@@ -38,17 +38,17 @@
         runtime-dir (node-path/join user-data-dir runtime-dir-name)
         venv-dir (node-path/join runtime-dir venv-name)
         venv-python (node-path/join venv-dir "bin" "python")
-        sidecar-dir (sidecar-dir {:packaged? packaged?
-                                  :resources-path (or (:resources-path opts)
-                                                      (.-resourcesPath js/process))
-                                  :dirname (or (:dirname opts) js/__dirname)})
-        script-path (node-path/join sidecar-dir "embedding_server.py")]
+        sidecar-root (sidecar-dir {:packaged? packaged?
+                                   :resources-path (or (:resources-path opts)
+                                                       (.-resourcesPath js/process))
+                                   :dirname (or (:dirname opts) js/__dirname)})
+        script-path (node-path/join sidecar-root "embedding_server.py")]
     {:platform platform
      :runtime-dir runtime-dir
      :venv-dir venv-dir
      :venv-python venv-python
      :deps-stamp (node-path/join runtime-dir deps-stamp-name)
-     :sidecar-dir sidecar-dir
+     :sidecar-dir sidecar-root
      :script-path script-path
      :python-command (or (:python-command opts)
                          (.-LOGSEQ_EMBEDDINGS_PYTHON js/process.env)
@@ -111,10 +111,12 @@
   (str "http://" host ":" port "/v1/embeddings"))
 
 (defn- allocate-port!
-  [{:keys [host port find-port! set-env!] :as cfg}]
-  (p/let [port (or port (find-port! host))]
-    (set-env! embedding-url-env (embedding-endpoint host port))
-    (assoc cfg :port port)))
+  [{:keys [host port] :as cfg}]
+  (let [find-port-fn (:find-port! cfg)
+        set-env-fn (:set-env! cfg)]
+    (p/let [port (or port (find-port-fn host))]
+      (set-env-fn embedding-url-env (embedding-endpoint host port))
+      (assoc cfg :port port))))
 
 (defn- attach-exit-handler!
   [^js proc]
@@ -127,14 +129,15 @@
                                                   :signal signal})))))
 
 (defn- spawn-server!
-  [{:keys [venv-python script-path sidecar-dir host port model-id]}]
+  [{:keys [venv-python script-path host port model-id]
+    sidecar-root :sidecar-dir}]
   (let [proc (.spawn child-process
                      venv-python
                      (clj->js [script-path
                                "--host" host
                                "--port" (str port)
                                "--model" model-id])
-                     #js {:cwd sidecar-dir
+                     #js {:cwd sidecar-root
                           :stdio "pipe"})]
     (log-stream! (.-stdout proc) logger/info :embedding-server)
     (log-stream! (.-stderr proc) logger/warn :embedding-server)
@@ -144,16 +147,17 @@
     proc))
 
 (defn- install-runtime!
-  [{:keys [runtime-dir venv-python deps-stamp python-command run-command!
+  [{:keys [runtime-dir venv-python deps-stamp python-command
            ensure-dir! exists? write-file!] :as cfg}]
   (ensure-dir! runtime-dir)
-  (let [needs-venv? (not (exists? venv-python))
+  (let [run-command-fn (:run-command! cfg)
+        needs-venv? (not (exists? venv-python))
         needs-deps? (or needs-venv?
                         (not (exists? deps-stamp)))]
     (p/let [_ (when needs-venv?
-                (run-command! python-command ["-m" "venv" venv-name] {:cwd runtime-dir}))
+                (run-command-fn python-command ["-m" "venv" venv-name] {:cwd runtime-dir}))
             _ (when needs-deps?
-                (run-command! venv-python ["-m" "pip" "install" dependency] {:cwd runtime-dir}))]
+                (run-command-fn venv-python ["-m" "pip" "install" dependency] {:cwd runtime-dir}))]
       (when needs-deps?
         (write-file! deps-stamp (str dependency "\n")))
       cfg)))

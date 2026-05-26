@@ -146,7 +146,7 @@
 (deftest start-default-port-allocator-uses-node-net
   (async done
     (embedding-server/stop!)
-    (let [runtime-dir "/users/me/logseq/embedding-server"
+    (let [_runtime-dir "/users/me/logseq/embedding-server"
           venv-python "/users/me/logseq/embedding-server/.venv/bin/python"
           deps-stamp "/users/me/logseq/embedding-server/deps-v1.ok"
           {:keys [runtime spawns env]} (fake-runtime {:existing-paths #{venv-python deps-stamp}})

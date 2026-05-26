@@ -1294,18 +1294,15 @@
   "Build FTS/vector index in batches with yielding. Sets user_version to search-db-version on completion."
   [repo search-db conn build-id]
   (ensure-active-search-index-build! repo build-id)
-  (search/truncate-table! search-db)
-  (search/truncate-vector-index! (worker-state/get-vector-index repo))
-  (let [start-time (.now js/performance)
-        _ (prn :debug :build-search-index-start start-time)
-        db @conn
+  (let [db @conn
         blocks (->> (d/datoms db :avet :block/uuid)
                     (keep #(d/entity db (:e %)))
                     (remove search/hidden-entity?)
                     vec)
         vector-context (search/build-vector-context-cache blocks)
         total (count blocks)
-        vector-index? (boolean (worker-state/get-vector-index repo))
+        vector-index (worker-state/get-vector-index repo)
+        vector-index? (boolean vector-index)
         fts-progress-scale (if vector-index? 50 100)
         vector-progress-base (if vector-index? 50 100)
         progress-for-fts (fn [processed]
@@ -1328,6 +1325,9 @@
                                           :processed 0
                                           :total total})
      (<wait-for-search-index-idle! repo build-id)
+     (ensure-active-search-index-build! repo build-id)
+     (search/truncate-table! search-db)
+     (search/truncate-vector-index! vector-index)
      (p/loop [remaining (seq blocks)
               processed 0
               last-progress 0
@@ -1373,7 +1373,7 @@
                                                             :progress 100
                                                             :processed total
                                                             :total total}))]
-             (prn :debug :build-search-index-spent (- (.now js/performance) start-time)))))))))
+             nil)))))))
 
 (def-thread-api :thread-api/search-build-blocks-indice-in-worker
   [repo & [force?]]
