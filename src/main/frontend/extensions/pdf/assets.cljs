@@ -5,7 +5,6 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
-            [frontend.extensions.lightbox :as lightbox]
             [frontend.extensions.pdf.windows :as pdf-windows]
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
