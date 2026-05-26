@@ -17,6 +17,11 @@
    :route {:to name :path-params {} :query-params {}}
    :route-match (route-match name)})
 
+(defn- stack-paths
+  [stack]
+  (->> (get-in @@#'mobile-nav/stack-history [stack :history])
+       (mapv :path)))
+
 (defn- reset-navigation-state! []
   (reset! @#'mobile-nav/navigation-source nil)
   (reset! @#'mobile-nav/initialised-stacks {})
@@ -102,6 +107,36 @@
         (is (empty? @payloads))
         (is (= [[:home {} {}]
                 [:page {} {}]]
+               @replace-calls))))))
+
+(deftest browser-back-prunes-active-stack-before-tab-restore
+  (testing "a page popped by Back should not be restored when switching back to the tab"
+    (let [route-matches (atom [])
+          replace-calls (atom [])]
+      (reset! mobile-state/*tab "home")
+      (reset! @#'mobile-nav/active-stack "home")
+      (reset! @#'mobile-nav/initialised-stacks {"home" true
+                                                "graphs" true})
+      (reset! @#'mobile-nav/stack-history
+              {"home" {:history [(stack-entry :home "/")
+                                  (stack-entry :page "/page/recent")]}
+               "graphs" {:history [(stack-entry :graphs "/__stack__/graphs")]}})
+      (with-redefs [mobile-nav/orig-replace-state (fn [& args] (swap! replace-calls conj args))
+                    route-handler/set-route-match! (fn [match] (swap! route-matches conj match))
+                    mobile-util/native-platform? (constantly false)]
+        (reset! @#'mobile-nav/navigation-source :pop)
+        (mobile-nav/notify-route-change!
+         {:route {:to :home
+                  :path-params {}
+                  :query-params {}}
+          :route-match (route-match :home)
+          :path "/"
+          :stack "home"})
+        (mobile-state/set-tab! "graphs")
+        (mobile-state/set-tab! "home")
+        (is (= ["/"] (stack-paths "home")))
+        (is (= :home (get-in (last @route-matches) [:data :name])))
+        (is (= [[:home {} {}]]
                @replace-calls))))))
 
 (deftest leaving-search-does-not-clear-query-during-tab-transition
