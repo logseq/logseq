@@ -646,7 +646,7 @@
     prompt))
 
 (defn- prepare-workspace-session!
-  [workspace-pool agent-name block]
+  [workspace-pool]
   (when workspace-pool
     (when-let [workspace (acquire-workspace! workspace-pool)]
       (let [cwd (:cwd workspace)]
@@ -1209,7 +1209,7 @@
 
 (defn- route-task!
   [cfg {:keys [repo graph agent-name prompt-templates workspace-pool]} {:keys [block tree-text]}]
-  (let [workspace-session (prepare-workspace-session! workspace-pool agent-name block)]
+  (let [workspace-session (prepare-workspace-session! workspace-pool)]
     (if (and workspace-pool (nil? workspace-session))
       (p/resolved nil)
       (let [prompt (append-workspace-prompt-instructions
@@ -1538,7 +1538,7 @@
            resume-session-id (first (keep identity target-session-ids))
            workspace-session (if resume-session-id
                                (acquire-existing-workspace-session! cfg workspace-pool resume-session-id)
-                               (prepare-workspace-session! workspace-pool agent-name comment-block))
+                               (prepare-workspace-session! workspace-pool))
            _ (when (and workspace-pool (nil? workspace-session))
                (throw (ex-info "agent bridge workspace is not available"
                                {:code :agent-workspace-unavailable
