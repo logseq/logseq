@@ -205,7 +205,8 @@
 
                (seq (get pdf-id->annotations id))
                (let [expanded? (contains? expanded-pdf-ids id)
-                     result' (conj result row)]
+                     row' (if (map? row) row {:db/id row})
+                     result' (conj result (assoc row' :asset-table/expanded? expanded?))]
                  (if expanded?
                    (into result' (child-rows (get pdf-id->annotations id)))
                    result'))

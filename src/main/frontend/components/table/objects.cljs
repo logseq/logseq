@@ -119,7 +119,6 @@
                                                 :columns columns
                                                 :header-cp views/header-cp
                                                 :annotation-index annotation-index
-                                                :expanded-pdf-ids expanded-pdf-ids
                                                 :set-expanded-pdf-ids! set-expanded-pdf-ids!})
                   columns)
         add-new-object! (when (or asset? (not (ldb/private-tags db-ident)))

@@ -876,7 +876,8 @@
   (let [block (db/sub-block (:db/id row))
         block' (if (contains? #{:self :full} (:block.temp/load-status block)) block row)
         row-meta (select-keys row [:asset-table/nested?
-                                   :asset-table/annotation-id])
+                                   :asset-table/annotation-id
+                                   :asset-table/expanded?])
         row' (when block'
                (-> (merge block' row-meta)
                    (update :block/tags (fn [tags]
@@ -1510,7 +1511,8 @@
   (let [source-item (util/nth-safe data idx)
         source-item-meta (when (map? source-item)
                            (select-keys source-item [:asset-table/nested?
-                                                     :asset-table/annotation-id]))
+                                                     :asset-table/annotation-id
+                                                     :asset-table/expanded?]))
         db-id (cond (map? source-item) (:db/id source-item)
                     (number? source-item) source-item
                     :else nil)
@@ -1556,7 +1558,12 @@
                                (-> (:config option)
                                    (assoc :viewel (js/document.getElementById (:viewid option)))))
         :compute-item-key (fn [idx]
-                            (view-row-key "table-row-" rows idx))
+                            (let [base-key (view-row-key "table-row-" rows idx)
+                                  row (util/nth-safe rows idx)
+                                  expanded? (:asset-table/expanded? row)]
+                              (if (some? expanded?)
+                                (str base-key (if expanded? "-e" "-c"))
+                                base-key)))
         :skipAnimationFrameInResizeObserver true
         :total-count (count rows)
         :context {:scrolling scrolling?}

@@ -53,10 +53,10 @@
     (conj ids pdf-id)))
 
 (rum/defc asset-pdf-title-cell
-  [original-cell table row column style annotation-index expanded-pdf-ids set-expanded-pdf-ids!]
+  [original-cell table row column style annotation-index set-expanded-pdf-ids!]
   (let [pdf-id (:db/id row)
         annotations (get-in annotation-index [:pdf-id->annotations pdf-id])
-        expanded? (contains? expanded-pdf-ids pdf-id)]
+        expanded? (:asset-table/expanded? row)]
     (if (seq annotations)
       (let [toggle (shui/button
                     {:variant "ghost"
@@ -108,7 +108,7 @@
 
 (defn- wrap-asset-title-column
   "Wraps the title column with PDF expand and annotation title behavior."
-  [column annotation-index expanded-pdf-ids set-expanded-pdf-ids!]
+  [column annotation-index set-expanded-pdf-ids!]
   (let [original-cell (:cell column)]
     (assoc column
            :cell (fn [table row column style]
@@ -119,7 +119,7 @@
                      (and (pdf-annotations/pdf-asset? row)
                           (seq (get-in annotation-index [:pdf-id->annotations (:db/id row)])))
                      (asset-pdf-title-cell original-cell table row column style annotation-index
-                                           expanded-pdf-ids set-expanded-pdf-ids!)
+                                           set-expanded-pdf-ids!)
 
                      :else
                      (original-cell table row column style))))))
@@ -135,14 +135,13 @@
   | `:columns`              | Base table columns produced before Asset column enhancement.
   | `:header-cp`            | Header renderer for the inserted file column.
   | `:annotation-index`     | PDF annotation lookup data used by title cells.
-  | `:expanded-pdf-ids`     | Set of PDF asset ids currently expanded in the table.
   | `:set-expanded-pdf-ids!` | State updater for toggling expanded PDF rows."
-  [{:keys [config columns header-cp annotation-index expanded-pdf-ids set-expanded-pdf-ids!]}]
+  [{:keys [config columns header-cp annotation-index set-expanded-pdf-ids!]}]
   (let [[before-cols after-cols] (split-with #(not (db-property/logseq-property? (:id %))) columns)
         columns' (concat before-cols [(build-asset-file-column config header-cp)] after-cols)]
     (mapv (fn [column]
             (if (= :block/title (:id column))
               (wrap-asset-title-column column annotation-index
-                                       expanded-pdf-ids set-expanded-pdf-ids!)
+                                       set-expanded-pdf-ids!)
               column))
           columns')))

@@ -33,7 +33,8 @@
                   [10 20 30 40] annotation-index #{})))))
 
   (testing "expanded PDFs insert area highlight image rows directly under the PDF"
-    (is (= [10
+    (is (= [{:db/id 10
+             :asset-table/expanded? true}
             {:db/id 20
              :asset-table/nested? true
              :asset-table/annotation-id 200}
@@ -61,7 +62,8 @@
                                 :logseq.property/asset {:db/id 10}
                                 :logseq.property.pdf/hl-image {:db/id 50}
                                 :logseq.property.pdf/hl-page 10}))]
-      (is (= [10
+      (is (= [{:db/id 10
+               :asset-table/expanded? true}
               {:db/id 20
                :asset-table/nested? true
                :asset-table/annotation-id 200}
@@ -85,7 +87,8 @@
           effective-index (pdf-annotations/augment-pdf-annotation-asset-index
                            annotation-index
                            [10 20 30 40 row])]
-      (is (= [10
+      (is (= [{:db/id 10
+               :asset-table/expanded? true}
               {:db/id 20
                :asset-table/nested? true
                :asset-table/annotation-id 200}
@@ -103,7 +106,8 @@
     (let [row {:db/id 50}]
       (with-redefs [pdf-assets/pending-area-image-asset? (fn [_repo asset-id]
                                                            (= 50 asset-id))]
-        (is (= [10
+        (is (= [{:db/id 10
+                 :asset-table/expanded? true}
                 {:db/id 20
                  :asset-table/nested? true
                  :asset-table/annotation-id 200}
