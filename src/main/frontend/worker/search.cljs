@@ -108,8 +108,6 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defn- throw-upsert-blocks-error!
   [item]
-  (js/console.error "Upsert blocks wrong data: ")
-  (js/console.dir item)
   (throw (ex-info "Search upsert-blocks wrong data: "
                   (bean/->clj item))))
 
@@ -537,6 +535,10 @@ DROP TRIGGER IF EXISTS blocks_au;
            (string/join " "))
       title)))
 
+(defn- block-result-title
+  [block]
+  (db-content/recur-replace-uuid-in-block-title block))
+
 (defn- matched-alias
   [q block]
   (when-not (string/blank? q)
@@ -670,9 +672,13 @@ DROP TRIGGER IF EXISTS blocks_au;
         (let [alias-source (some-> (first (:block/_alias block))
                                    (select-keys [:block/uuid :block/title]))
               alias-match (matched-alias q block)
+              page-or-object-result? (page-or-object? block)
+              result-title (if page-or-object-result? (block-result-title block) title)
               display-title (if (:enable-snippet? option)
-                              (ensure-highlighted-snippet snippet title q)
-                              (or snippet title))
+                              (ensure-highlighted-snippet snippet result-title q)
+                              (if page-or-object-result?
+                                result-title
+                                (or snippet title)))
               block-page (or
                           (:block/uuid (:block/page block))
                           (when (and page (common-util/uuid-string? page))
