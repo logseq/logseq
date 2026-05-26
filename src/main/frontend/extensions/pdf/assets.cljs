@@ -1,7 +1,7 @@
 (ns frontend.extensions.pdf.assets
   (:require [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.context.i18n :as i18n :refer [t]]
+            [frontend.context.i18n :as i18n]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
