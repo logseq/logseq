@@ -65,6 +65,13 @@
            (pdf-annotations/build-pdf-annotation-table-data
             [20 40] annotation-index #{}))))
 
+  (testing "PDFs stay expandable when annotation image rows are not in the current rows"
+    (is (= [{:db/id 10
+             :asset-table/expanded? true}
+            40]
+           (pdf-annotations/build-pdf-annotation-table-data
+            [10 40] annotation-index #{10}))))
+
   (testing "newly indexed annotation images move from top-level rows to the expanded PDF"
     (let [index (-> annotation-index
                     (assoc-in [:image-id->annotation 50]

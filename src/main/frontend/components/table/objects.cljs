@@ -124,8 +124,10 @@
   (let [*ref (hooks/use-ref nil)
         [expanded-pdf-ids set-expanded-pdf-ids!] (hooks/use-state #{})
         [annotation-index set-annotation-index!] (hooks/use-state nil)
-        pdf-annotation-changes-version (:pdf-annotation-changes-version config)
-        pdf-annotation-changes-version (hooks/use-debounced-value pdf-annotation-changes-version 100)
+        asset-data-changes-version (:asset-data-changes-version config)
+        asset-data-changes-version (hooks/use-debounced-value asset-data-changes-version 100)
+        pdf-annotation-data-changes-version (:pdf-annotation-data-changes-version config)
+        pdf-annotation-data-changes-version (hooks/use-debounced-value pdf-annotation-data-changes-version 100)
         table-data-transform (hooks/use-callback
                               (fn [rows]
                                 (pdf-annotations/build-pdf-annotation-table-data
@@ -174,7 +176,7 @@
                             (set-annotation-index! pdf-annotations/empty-pdf-annotation-asset-index)))))
            (fn [] (reset! cancelled? true)))
          (set-annotation-index! pdf-annotations/empty-pdf-annotation-asset-index)))
-     [(state/get-current-repo) pdf-annotation-changes-version])
+     [(state/get-current-repo) asset-data-changes-version pdf-annotation-data-changes-version])
 
     (if (nil? annotation-index)
       [:div.flex.flex-col.space-2.gap-2.my-2
@@ -199,12 +201,16 @@
   (when class
     (let [class (db/sub-block (:db/id class))
           asset? (= (:db/ident class) :logseq.class/Asset)
-          pdf-annotation-changes-version (when asset?
-                                           (some-> (sub-class-objects-data-changes :logseq.class/Pdf-annotation)
-                                                   rum/react))
+          pdf-annotation-data-changes-version (when asset?
+                                                (some-> (sub-class-objects-data-changes :logseq.class/Pdf-annotation)
+                                                        rum/react))
+          asset-data-changes-version (when asset?
+                                       (some-> (sub-class-objects-data-changes :logseq.class/Asset)
+                                               rum/react))
           config (cond-> (assoc config :container-id (:container-id state))
                    asset?
-                   (assoc :pdf-annotation-changes-version pdf-annotation-changes-version))
+                   (assoc :asset-data-changes-version asset-data-changes-version
+                          :pdf-annotation-data-changes-version pdf-annotation-data-changes-version))
           properties (outliner-property/get-class-properties class)]
       [:div.ml-1
        (class-objects-inner config class properties)])))
