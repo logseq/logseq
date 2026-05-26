@@ -1358,7 +1358,16 @@
           version
           (when-let [conn (worker-state/get-datascript-conn repo)]
             (let [build-id (start-search-index-build! repo)]
-              (-> (<build-blocks-fts! repo search-db conn build-id)
+              (-> (report-search-index-progress! repo {:build-id build-id
+                                                        :status :running
+                                                        :stage :search-index
+                                                        :progress 0
+                                                        :processed 0
+                                                        :total 0})
+                  (p/then (fn [_]
+                            (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))))
+                  (p/then (fn [_]
+                            (<build-blocks-fts! repo search-db conn build-id)))
                   (p/catch (fn [error]
                              (when-not (= :search/stale-index-build (:type (ex-data error)))
                                (throw error))))

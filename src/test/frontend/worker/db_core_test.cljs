@@ -460,6 +460,48 @@
                            (is false (str error)))))))))
      (p/finally done))))
 
+(deftest search-build-blocks-indice-in-worker-reports-progress-before-rebuild-work-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
+              conn (d/create-conn db-schema/schema)
+              progress-calls (atom [])
+              progress-seen-before-rebuild-work? (atom nil)
+              search-db #js {:exec (fn [sql-or-opts]
+                                     (let [sql (if (string? sql-or-opts)
+                                                 sql-or-opts
+                                                 (gobj/get sql-or-opts "sql"))]
+                                       (when (and (not= sql "PRAGMA user_version")
+                                                  (nil? @progress-seen-before-rebuild-work?))
+                                         (reset! progress-seen-before-rebuild-work?
+                                                 (boolean (seq @progress-calls))))
+                                       (if (= sql "PRAGMA user_version")
+                                         #js [#js [0]]
+                                         #js [])))
+                            :close (fn [] nil)}
+              idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
+          (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
+          (reset! worker-state/*datascript-conns {test-repo conn})
+          (reset! idle-status-atom {test-repo {:idle? true
+                                               :ts (.now js/Date)}})
+          (reset! worker-state/*main-thread
+                  (fn [qkw & args]
+                    (when (= qkw :thread-api/search-index-build-progress)
+                      (let [[repo payload] args]
+                        (swap! progress-calls conj {:repo repo
+                                                    :payload payload})))
+                    (p/resolved nil)))
+          (-> (build-index! test-repo true)
+              (p/then (fn [_]
+                        (is @progress-seen-before-rebuild-work?
+                            "Progress should reach the main thread before rebuild prep starts")
+                        (is (= :running (get-in (first @progress-calls) [:payload :status])))))
+              (p/catch (fn [error]
+                         (is false (str error))))))))
+     (p/finally done))))
+
 (deftest search-upsert-blocks-does-not-wait-for-vector-embedding-test
   (async done
     (->
