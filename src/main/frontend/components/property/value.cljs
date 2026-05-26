@@ -2011,8 +2011,9 @@
   [block property v {:keys [on-chosen editing?] :as opts}]
   (let [type (:logseq.property/type property)
         date? (= type :date)
-        closed-values? (seq (:property/closed-values property))
-        closed-value-chip? (= (:closed-value-display opts) :chip)
+        chip-display? (and (= (:closed-value-display opts) :chip)
+                           (or (seq (:property/closed-values property))
+                               (= :block/tags (:db/ident property))))
         *el (hooks/use-ref nil)
         items (cond->> (if (entity-map? v) #{v} v)
                 (= (:db/ident property) :block/tags)
@@ -2076,7 +2077,7 @@
                  (rum/with-key
                    (asset-value-content item)
                    (or (:block/uuid item) (str item))))
-               (if (and closed-value-chip? closed-values?)
+               (if chip-display?
                  (for [item items]
                    (rum/with-key
                      (closed-value-chip item opts)

@@ -103,7 +103,8 @@
                             (let [opts (cond->
                                          {:view? true
                                           :table-view? true
-                                          :closed-value-display (when (seq (:property/closed-values property))
+                                          :closed-value-display (when (or (= :block/tags (:db/ident property))
+                                                                          (seq (:property/closed-values property)))
                                                                   :chip)
                                           :table-text-property-render
                                           (fn [block opts]
