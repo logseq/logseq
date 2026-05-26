@@ -112,6 +112,7 @@
            :table/hide-title-actions? true
            :table/title-only-editor? (some? annotation)
            :table/title-edit-block annotation
+           :table/title-cursor-class "cursor-text"
            :table/title-renderer
            (fn [_row]
              [:div.flex.h-full.w-full.min-w-0.items-center.gap-1.pl-6

@@ -423,8 +423,9 @@
      (fn []
        #(some-> focus-timeout js/clearTimeout))
      [])
-    [:div.table-block-title.relative.flex.items-center.w-full.h-full.cursor-pointer.items-center
+    [:div.table-block-title.relative.flex.items-center.w-full.h-full.items-center
      {:ref *ref
+      :class (or (:table/title-cursor-class block) "cursor-pointer")
       :on-mouse-over #(set-opacity! 100)
       :on-mouse-out #(set-opacity! 0)
       :on-click (fn [e]
