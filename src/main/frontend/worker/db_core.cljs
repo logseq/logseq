@@ -996,9 +996,13 @@
              (not (:page-only? option))
              (not (:query-embedding option))
              (not (string/blank? q)))
-      (p/let [embeddings (platform/embed-texts (platform/current) [q])
-              _ (validate-embedding-count! [{:title q}] embeddings)]
-        (search-blocks repo q (assoc option :query-embedding (first embeddings))))
+      (-> (p/let [embeddings (platform/embed-texts (platform/current) [q])
+                  _ (validate-embedding-count! [{:title q}] embeddings)]
+            (search-blocks repo q (assoc option :query-embedding (first embeddings))))
+          (p/catch (fn [error]
+                     (log/warn :search/query-embedding-failed {:repo repo
+                                                               :error error})
+                     (search-blocks repo q option))))
       (p/resolved (search-blocks repo q option)))))
 
 (def-thread-api :thread-api/block-refs-check

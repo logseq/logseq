@@ -12,11 +12,13 @@
 (def ^:private venv-name ".venv")
 (def ^:private dependency "sentence-transformers")
 (def ^:private deps-stamp-name "deps-v1.ok")
+(def ^:private ready-timeout-ms 15000)
+(def ^:private ready-poll-ms 100)
 
 (defonce ^:private *server-process (atom nil))
 (defonce ^:private *startup-promise (atom nil))
 
-(declare find-port! run-command! spawn-server!)
+(declare find-port! run-command! spawn-server! wait-ready! stop!)
 
 (defn- macos?
   [platform]
@@ -64,6 +66,7 @@
      :find-port! (or (:find-port! opts) find-port!)
      :set-env! (or (:set-env! opts) #(aset js/process.env %1 %2))
      :run-command! (or (:run-command! opts) run-command!)
+     :wait-ready! (or (:wait-ready! opts) wait-ready!)
      :spawn-server! (or (:spawn-server! opts) spawn-server!)}))
 
 (defn- log-stream!
@@ -110,13 +113,29 @@
   [host port]
   (str "http://" host ":" port "/v1/embeddings"))
 
+(defn- embedding-health-endpoint
+  [host port]
+  (str "http://" host ":" port "/healthz"))
+
 (defn- allocate-port!
   [{:keys [host port] :as cfg}]
-  (let [find-port-fn (:find-port! cfg)
-        set-env-fn (:set-env! cfg)]
+  (let [find-port-fn (:find-port! cfg)]
     (p/let [port (or port (find-port-fn host))]
-      (set-env-fn embedding-url-env (embedding-endpoint host port))
       (assoc cfg :port port))))
+
+(defn- wait-ready!
+  [endpoint]
+  (let [deadline (+ (js/Date.now) ready-timeout-ms)]
+    (p/loop []
+      (-> (js/fetch endpoint)
+          (p/then (fn [resp]
+                    (when-not (.-ok resp)
+                      (throw (js/Error. (str "Embedding server health check failed: " (.-status resp)))))))
+          (p/catch (fn [error]
+                     (if (< (js/Date.now) deadline)
+                       (p/let [_ (p/delay ready-poll-ms)]
+                         (p/recur))
+                       (throw error))))))))
 
 (defn- attach-exit-handler!
   [^js proc]
@@ -179,11 +198,15 @@
        :else
        (let [startup (-> (p/let [cfg (allocate-port! cfg)
                                  cfg (install-runtime! cfg)
-                                 proc ((:spawn-server! cfg) cfg)]
-                           (reset! *server-process proc)
-                           (attach-exit-handler! proc)
+                                 proc ((:spawn-server! cfg) cfg)
+                                 _ (do
+                                     (reset! *server-process proc)
+                                     (attach-exit-handler! proc))
+                                 _ ((:wait-ready! cfg) (embedding-health-endpoint (:host cfg) (:port cfg)))]
+                           ((:set-env! cfg) embedding-url-env (embedding-endpoint (:host cfg) (:port cfg)))
                            :started)
                          (p/catch (fn [error]
+                                    (stop!)
                                     (logger/error :embedding-server/setup-failed error)
                                     (throw error)))
                          (p/finally (fn []

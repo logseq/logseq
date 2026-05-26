@@ -5,7 +5,6 @@
             ["node:sqlite" :as node-sqlite]
             ["os" :as os]
             ["path" :as node-path]
-            ["@zvec/zvec" :as zvec]
             [clojure.string :as string]
             [cognitect.transit :as transit]
             [frontend.worker.db-worker-node-lock :as db-lock]
@@ -33,6 +32,11 @@
 (defn- macos?
   []
   (= "darwin" (.-platform js/process)))
+
+(defn- macos-arm64?
+  []
+  (and (macos?)
+       (= "arm64" (.-arch js/process))))
 
 (defn- expand-home
   [path]
@@ -258,6 +262,7 @@
               body (.json resp)]
         (embedding-response->vectors body)))))
 
+(defonce ^:private *zvec-module (atom nil))
 (defonce ^:private *zvec-initialized? (atom false))
 
 (def ^:private zvec-vector-field "embedding")
@@ -266,16 +271,23 @@
 
 (defn- zvec-enum-value
   [enum-name value-name]
-  (gobj/get (gobj/get zvec enum-name) value-name))
+  (gobj/get (gobj/get @*zvec-module enum-name) value-name))
+
+(defn- zvec-module []
+  (or @*zvec-module
+      (let [module (js/require "@zvec/zvec")]
+        (reset! *zvec-module module)
+        module)))
 
 (defn- initialize-zvec! []
+  (zvec-module)
   (when (compare-and-set! *zvec-initialized? false true)
-    ((gobj/get zvec "ZVecInitialize")
+    ((gobj/get @*zvec-module "ZVecInitialize")
      #js {:logLevel (zvec-enum-value "ZVecLogLevel" "WARN")})))
 
 (defn- zvec-schema
   [dimension]
-  (let [Schema (gobj/get zvec "ZVecCollectionSchema")]
+  (let [Schema (gobj/get @*zvec-module "ZVecCollectionSchema")]
     (new Schema
          #js {:name "blocks"
               :vectors #js [#js {:name zvec-vector-field
@@ -291,7 +303,7 @@
 
 (defn- create-zvec-collection!
   [path dimension]
-  ((gobj/get zvec "ZVecCreateAndOpen")
+  ((gobj/get @*zvec-module "ZVecCreateAndOpen")
    path
    (zvec-schema dimension)
    #js {:enableMMAP true}))
@@ -306,7 +318,7 @@
   [path dimension]
   (initialize-zvec!)
   (try
-    ((gobj/get zvec "ZVecOpen") path #js {:enableMMAP true})
+    ((gobj/get @*zvec-module "ZVecOpen") path #js {:enableMMAP true})
     (catch :default error
       (if (zvec-collection-missing-error? error)
         (create-zvec-collection! path dimension)
@@ -648,7 +660,7 @@
         embedding-endpoint (resolve-embedding-endpoint embedding-endpoint)
         embedding-model-id (resolve-embedding-model-id embedding-model-id)
         kv (kv-store root-dir)
-        vector-embedding-enabled? (macos?)]
+        vector-embedding-enabled? (macos-arm64?)]
     (p/do!
      (ensure-dir! root-dir)
      (ensure-dir! data-dir)

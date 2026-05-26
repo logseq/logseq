@@ -14,11 +14,12 @@
                     "userData" user-data-dir))})
 
 (defn- fake-runtime
-  [{:keys [existing-paths allocated-port]}]
+  [{:keys [existing-paths allocated-port run-command! wait-ready!]}]
   (let [ensured-dirs (atom [])
         commands (atom [])
         writes (atom [])
         spawns (atom [])
+        events (atom [])
         env (atom {})
         killed? (atom false)
         proc #js {:kill (fn []
@@ -34,16 +35,23 @@
                :find-port! (fn [_host]
                              (p/resolved (or allocated-port 54321)))
                :set-env! (fn [k v]
+                           (swap! events conj [:set-env k v])
                            (swap! env assoc k v))
-               :run-command! (fn [cmd args opts]
-                               (swap! commands conj {:cmd cmd
-                                                     :args args
-                                                     :cwd (:cwd opts)})
-                               (p/resolved nil))
+               :run-command! (or run-command!
+                                  (fn [cmd args opts]
+                                    (swap! commands conj {:cmd cmd
+                                                          :args args
+                                                          :cwd (:cwd opts)})
+                                    (p/resolved nil)))
+               :wait-ready! (or wait-ready!
+                                (fn [endpoint]
+                                  (swap! events conj [:wait-ready endpoint])
+                                  (p/resolved nil)))
                :write-file! (fn [file content]
                               (swap! writes conj {:file file
                                                   :content content}))
                :spawn-server! (fn [cfg]
+                                (swap! events conj [:spawn-server (:port cfg)])
                                 (swap! spawns conj (select-keys cfg [:runtime-dir
                                                                      :venv-dir
                                                                      :venv-python
@@ -57,6 +65,7 @@
      :commands commands
      :writes writes
      :spawns spawns
+     :events events
      :env env
      :killed? killed?}))
 
@@ -113,6 +122,42 @@
             (is @killed?))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest start-sets-embedding-env-after-server-is-ready
+  (async done
+    (embedding-server/stop!)
+    (let [{:keys [runtime events env]} (fake-runtime {:existing-paths #{"/users/me/logseq/embedding-server/.venv/bin/python"
+                                                                        "/users/me/logseq/embedding-server/deps-v1.ok"}
+                                                       :allocated-port 56789})
+          app (fake-app "/users/me/logseq" false)]
+      (-> (p/let [result (embedding-server/start! app runtime)]
+            (is (= :started result))
+            (is (= [[:spawn-server 56789]
+                    [:wait-ready "http://127.0.0.1:56789/healthz"]
+                    [:set-env "LOGSEQ_EMBEDDINGS_URL" "http://127.0.0.1:56789/v1/embeddings"]]
+                   @events))
+            (is (= {"LOGSEQ_EMBEDDINGS_URL" "http://127.0.0.1:56789/v1/embeddings"}
+                   @env))
+            (embedding-server/stop!))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest start-does-not-set-embedding-env-when-setup-fails
+  (async done
+    (embedding-server/stop!)
+    (let [{:keys [runtime env spawns]} (fake-runtime {:existing-paths #{}
+                                                      :allocated-port 56789
+                                                      :run-command! (fn [_cmd _args _opts]
+                                                                      (p/rejected (js/Error. "venv failed")))})
+          app (fake-app "/users/me/logseq" false)]
+      (-> (embedding-server/start! app runtime)
+          (p/then (fn [_]
+                    (is false "start should fail")))
+          (p/catch (fn [_]
+                     (is (empty? @env))
+                     (is (empty? @spawns))))
           (p/finally done)))))
 
 (deftest start-reuses-existing-venv-and-installed-deps-with-allocated-port

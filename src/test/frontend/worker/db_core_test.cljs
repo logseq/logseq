@@ -544,6 +544,27 @@
                 (is false (str "unexpected error: " error))))
      (p/finally done))))
 
+(deftest search-blocks-falls-back-to-keyword-search-when-query-embedding-fails-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [search! (get @thread-api/*thread-apis :thread-api/search-blocks)
+              conn (d/create-conn db-schema/schema)
+              search-db #js {:exec (fn [_opts] #js [])}]
+          (platform/set-platform! (build-test-platform
+                                   {:runtime :node
+                                    :embed-texts (fn [_texts]
+                                                   (p/rejected (js/Error. "embedding unavailable")))}))
+          (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
+          (reset! worker-state/*datascript-conns {test-repo conn})
+          (reset! worker-state/*vector-indexes {test-repo {:query (fn [& _] [])}})
+          (p/let [result (search! test-repo "alpha" {:limit 5})]
+            (is (empty? result))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
 (deftest search-build-blocks-indice-in-worker-reports-unified-progress-test
   (async done
     (->

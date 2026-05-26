@@ -76,10 +76,10 @@
     (is (string/includes? source "\"node:sqlite\""))
     (is (not (string/includes? source "\"better-sqlite3\"")))))
 
-(deftest node-platform-requires-zvec-directly
+(deftest node-platform-loads-zvec-lazily
   (let [source (node-platform-source)]
-    (is (string/includes? source "[\"@zvec/zvec\" :as zvec]"))
-    (is (not (string/includes? source "zvec-module")))))
+    (is (not (string/includes? source "[\"@zvec/zvec\" :as zvec]")))
+    (is (string/includes? source "(js/require \"@zvec/zvec\")"))))
 
 (deftest node-platform-uses-local-embedding-backend
   (let [source (node-platform-source)]
@@ -116,14 +116,27 @@
                        (restore!)
                        (done)))))))
 
-(deftest node-platform-enables-vector-embedding-on-macos
+(deftest node-platform-enables-vector-embedding-on-macos-arm64
   (async done
     (let [root-dir (node-helper/create-tmp-dir "platform-node-vector-embedding")
-          restore! (set-process-platform-arch! "darwin" "x64")]
+          restore! (set-process-platform-arch! "darwin" "arm64")]
       (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})]
             (is (= "all-MiniLM-L6-v2" (get-in platform [:embedding :model-id])))
             (is (fn? (get-in platform [:embedding :embed-texts])))
             (is (fn? (get-in platform [:vector :open-index]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (restore!)
+                       (done)))))))
+
+(deftest node-platform-disables-vector-embedding-on-macos-x64
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-vector-embedding-x64")
+          restore! (set-process-platform-arch! "darwin" "x64")]
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})]
+            (is (nil? (:embedding platform)))
+            (is (nil? (:vector platform))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []

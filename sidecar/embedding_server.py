@@ -27,6 +27,13 @@ def normalize_input(value):
 class EmbeddingHandler(BaseHTTPRequestHandler):
     server_version = "LogseqEmbeddingServer/1.0"
 
+    def do_GET(self):
+        if self.path == "/healthz":
+            self.send_json({"status": "ok"})
+            return
+
+        self.send_json({"error": "not found"}, status=404)
+
     def do_POST(self):
         if self.path != "/v1/embeddings":
             self.send_json({"error": "not found"}, status=404)
