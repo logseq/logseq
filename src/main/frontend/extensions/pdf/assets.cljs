@@ -260,23 +260,3 @@
   ([current id]
    (when current
      (rfe/push-state :page {:name (:block/uuid (:block current))} (if id {:anchor (str "block-content-" + id)} nil)))))
-
-(defn open-lightbox!
-  [e]
-  (let [images (js/document.querySelectorAll ".hl-area img")
-        images (to-array images)
-        images (if-not (= (count images) 1)
-                 (let [^js image (.closest (.-target e) ".hl-area")
-                       image     (. image querySelector "img")]
-                   (->> images
-                        (sort-by (juxt #(.-y %) #(.-x %)))
-                        (split-with (complement #{image}))
-                        reverse
-                        (apply concat)))
-                 images)
-        images (for [^js it images] {:src (.-src it)
-                                     :w   (.-naturalWidth it)
-                                     :h   (.-naturalHeight it)})]
-
-    (when (seq images)
-      (lightbox/preview-images! images))))
