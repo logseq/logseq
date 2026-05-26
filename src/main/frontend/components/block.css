@@ -1573,6 +1573,14 @@ html.is-mac {
     padding-bottom: 0;
   }
 
+  .bottom-property-pill-line-break {
+    flex-basis: 100%;
+    width: 0;
+    height: 0;
+    padding: 0;
+    margin: 0;
+  }
+
   .bottom-property-pill-focusable:focus {
     outline: none;
     box-shadow: none;
