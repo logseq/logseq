@@ -1336,7 +1336,7 @@
        (inline-text-cp (str value)))]))
 
 (rum/defc single-value-select
-  [block property value select-opts {:keys [value-render] :as opts}]
+  [block property value select-opts {:keys [value-render popup-focus-trigger? popup-auto-focus-trigger?] :as opts}]
   (let [*el (hooks/use-ref nil)
         editing? (:editing? opts)
         type (:logseq.property/type property)
@@ -1352,10 +1352,13 @@
         trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
         show-popup! (fn [target]
                       (shui/popup-show! target (fn [] (popup-content target))
-                                        {:align "start"
-                                         :as-dropdown? true
-                                         :auto-focus? true
-                                         :trigger-id trigger-id}))]
+                                        (cond->
+                                         {:align "start"
+                                          :as-dropdown? true
+                                          :auto-focus? (not (false? popup-auto-focus-trigger?))
+                                          :trigger-id trigger-id}
+                                          (some? popup-focus-trigger?)
+                                          (assoc :focus-trigger? popup-focus-trigger?))))]
     (if editing?
       (popup-content nil)
       (let [show! (fn [e]

@@ -20,11 +20,14 @@ class NativeBottomSheetPlugin : Plugin() {
     private val snapshotTag = "bottom-sheet"
     private val mainHandler = Handler(Looper.getMainLooper())
     private var dialog: BottomSheetDialog? = null
+    private var awaitingContentReady = false
     private var previousParent: ViewGroup? = null
     private var previousIndex: Int = -1
     private var previousLayoutParams: ViewGroup.LayoutParams? = null
     private var placeholder: View? = null
     private var container: FrameLayout? = null
+    private var pendingRestoreWebView: View? = null
+    private var dismissalFallback: Runnable? = null
 
     @PluginMethod
     fun present(call: PluginCall) {
@@ -39,6 +42,7 @@ class NativeBottomSheetPlugin : Plugin() {
 
         activity.runOnUiThread {
             WebViewSnapshotManager.registerWindow(activity.window)
+            pendingRestoreWebView?.let { finishDismissal(it) }
             if (dialog != null) {
                 call.resolve()
                 return@runOnUiThread
@@ -109,17 +113,9 @@ class NativeBottomSheetPlugin : Plugin() {
                 mainHandler.post {
                     restoreWebView(webView)
                     webView.alpha = 0f
-
-                    webView.postDelayed({
-                        webView.alpha = 1f
-                        WebViewSnapshotManager.clearSnapshot(snapshotTag)
-                        notifyListeners(
-                            "state",
-                            JSObject()
-                                .put("presented", false)
-                                .put("dismissing", false)
-                        )
-                    }, 120)
+                    pendingRestoreWebView = webView
+                    awaitingContentReady = true
+                    scheduleDismissalFallback()
                 }
 
                 dialog = null
@@ -138,12 +134,27 @@ class NativeBottomSheetPlugin : Plugin() {
     fun dismiss(call: PluginCall) {
         activity?.runOnUiThread {
             if (dialog == null) {
-                WebViewSnapshotManager.clearSnapshot(snapshotTag)
+                pendingRestoreWebView?.let { finishDismissal(it) }
+                    ?: WebViewSnapshotManager.clearSnapshot(snapshotTag)
                 call.resolve()
                 return@runOnUiThread
             }
 
             dialog?.dismiss()
+            call.resolve()
+        } ?: call.resolve()
+    }
+
+    @PluginMethod
+    fun contentReady(call: PluginCall) {
+        activity?.runOnUiThread {
+            val webView = pendingRestoreWebView
+            if (!awaitingContentReady || webView == null) {
+                call.resolve()
+                return@runOnUiThread
+            }
+
+            finishDismissal(webView)
             call.resolve()
         } ?: call.resolve()
     }
@@ -197,5 +208,38 @@ class NativeBottomSheetPlugin : Plugin() {
         previousLayoutParams = null
         previousIndex = -1
         container = null
+    }
+
+    private fun finishDismissal(webView: View) {
+        dismissalFallback?.let(mainHandler::removeCallbacks)
+        dismissalFallback = null
+        awaitingContentReady = false
+        pendingRestoreWebView = null
+
+        webView.alpha = 1f
+        webView.requestLayout()
+        webView.invalidate()
+
+        WebViewSnapshotManager.clearSnapshot(snapshotTag)
+        notifyListeners(
+            "state",
+            JSObject()
+                .put("presented", false)
+                .put("dismissing", false)
+        )
+    }
+
+    private fun scheduleDismissalFallback() {
+        dismissalFallback?.let(mainHandler::removeCallbacks)
+
+        val runnable = Runnable {
+            val webView = pendingRestoreWebView
+            if (awaitingContentReady && webView != null) {
+                finishDismissal(webView)
+            }
+        }
+
+        dismissalFallback = runnable
+        mainHandler.postDelayed(runnable, 2_000)
     }
 }

@@ -490,8 +490,7 @@
                                {:id (str "ac-" react-key)
                                 :tab-index "0"
                                 :class (when chosen? "chosen")
-                                ;; TODO: should have more tests on touch devices
-                                        ;:on-pointer-down #(util/stop %)
+                                :on-mouse-down util/stop
                                 :on-click (fn [e]
                                             (util/stop e)
                                             (when-not (:disabled? item)

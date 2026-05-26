@@ -8,7 +8,7 @@
   [conn feature-type & {:keys [view-for-id]}]
   (let [tx (d/transact! conn [(cond-> {:db/id -100
                                        :block/title "Test view"
-                                       :block/uuid #uuid "00000000-0000-0000-0000-000000000100"
+                                       :block/uuid (random-uuid)
                                        :logseq.property.view/feature-type feature-type
                                        :logseq.property.view/type :logseq.property.view/type.table}
                                 view-for-id
@@ -85,6 +85,41 @@
         titles (map (fn [id] (:block/title (d/entity @conn id))) (:data result))]
     (is (= 1 (:count result)))
     (is (= ["B"] titles))))
+
+(deftest get-view-data-class-objects-groups-by-title-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}}
+               :pages-and-blocks
+               [{:page {:block/title "A" :build/tags [:Topic]}}
+                {:page {:block/title "B" :build/tags [:Topic]}}]})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        _ (d/transact! conn [[:db/add view-id :logseq.property.view/group-by-property :block/title]])
+        result (db-view/get-view-data @conn view-id {:view-feature-type :class-objects
+                                                     :view-for-id class-id})
+        group-titles (map first (:data result))]
+    (is (= ["A" "B"] group-titles))))
+
+(deftest get-view-data-class-objects-groups-by-many-values-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}
+                         :SciFi {:block/title "Sci-Fi"}
+                         :Drama {:block/title "Drama"}}
+               :pages-and-blocks
+               [{:page {:block/title "Movie A" :build/tags [:Topic :SciFi :Drama]}}
+                {:page {:block/title "Movie B" :build/tags [:Topic :SciFi]}}]})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        _ (d/transact! conn [[:db/add view-id :logseq.property.view/group-by-property :block/tags]])
+        result (db-view/get-view-data @conn view-id {:view-feature-type :class-objects
+                                                     :view-for-id class-id})
+        group->titles (into {}
+                            (map (fn [[group rows]]
+                                   [(:block/title group)
+                                    (set (map (fn [id] (:block/title (d/entity @conn id))) rows))]))
+                            (:data result))]
+    (is (= #{"Movie A" "Movie B"} (get group->titles "Sci-Fi")))
+    (is (= #{"Movie A"} (get group->titles "Drama")))))
 
 (deftest get-view-data-linked-references-page-view-does-not-crash-on-missing-db-ident-test
   (let [conn (db-test/create-conn-with-blocks

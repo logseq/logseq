@@ -9,6 +9,7 @@
             [frontend.date :as date]
             [frontend.format.block :as block]
             [frontend.handler.comments :as comments-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.reaction :as reaction-handler]
             [frontend.handler.user :as user-handler]
@@ -43,9 +44,18 @@
   (when-let [closest-fn (and target (gobj/get target "closest"))]
     (.call closest-fn target ".ls-comments-area")))
 
+(defn- closest-editor-autocomplete
+  [target]
+  (when-let [closest-fn (and target (gobj/get target "closest"))]
+    (.call closest-fn target "#ui__ac")))
+
 (defn- inside-comments-area?
   [target]
   (boolean (closest-comments-area target)))
+
+(defn- inside-editor-autocomplete?
+  [target]
+  (boolean (closest-editor-autocomplete target)))
 
 (defn- activate-comment-editor!
   ([input-id block content container-id]
@@ -80,6 +90,7 @@
       input-id
       (assoc config
              :comment-editor? true
+             :comment-asset-target-block asset-target-block
              :skip-focus? (not focus-editor?)
              :editor-opts
              {:default-value draft
@@ -159,7 +170,8 @@
    (fn []
      (when active?
        (let [on-pointer-down (fn [e]
-                               (when-not (inside-comments-area? (.-target e))
+                               (when-not (or (inside-comments-area? (.-target e))
+                                             (inside-editor-autocomplete? (.-target e)))
                                  (exit-comment-editor!)))]
          (.addEventListener js/document "pointerdown" on-pointer-down true)
          #(.removeEventListener js/document "pointerdown" on-pointer-down true))))
@@ -326,8 +338,11 @@
           :refocus-after-submit? false
           :on-cancel #(set-editing! false)
           :on-submit (fn [content]
-                       (comments-handler/save-comment! comment-block content)
-                       (set-editing! false))})
+                       (-> (comments-handler/save-comment! comment-block content)
+                           (p/then (fn [_]
+                                     (set-editing! false)))
+                           (p/catch (fn [_error]
+                                      (notification/show! (t :block.comments/save-error) :error)))))})
         [:div.ls-comment-body
          (block-content-or-editor
           config

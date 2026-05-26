@@ -89,6 +89,8 @@
                                :type :error}
                      :property-id property-ident}))))
 
+(declare get-block-classes-properties)
+
 (defn- validate-batch-deletion-of-property
   "Validates that the given property can be batch deleted from multiple nodes"
   [entities property-ident]
@@ -96,6 +98,19 @@
   (when (= :block/tags property-ident) (throw-error-if-removing-private-tag entities))
   (outliner-validate/disallow-editing-private-built-in-nodes entities)
   (throw-error-if-deleting-required-property property-ident))
+
+(defn- block-classes-provide-property?
+  [db block property-id]
+  (->> (:classes-properties (get-block-classes-properties db (:db/id block)))
+       (some #(= property-id (:db/ident %)))
+       boolean))
+
+(defn- should-add-task-tag-for-property?
+  [conn block property-id]
+  (and (contains? #{:logseq.property/status :logseq.property/scheduled :logseq.property/deadline} property-id)
+       (or (empty? (:block/tags block))
+           (ldb/internal-page? block)
+           (not (block-classes-provide-property? @conn block property-id)))))
 
 (defn- build-property-value-tx-data
   [conn block property-id value]
@@ -110,9 +125,7 @@
           update-block-tx (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                             true
                             (assoc property-id value)
-                            (and (contains? #{:logseq.property/status :logseq.property/scheduled :logseq.property/deadline} property-id)
-                                 (or (empty? (:block/tags block)) (ldb/internal-page? block))
-                                 (not (get (d/pull @conn [property-id] (:db/id block)) property-id)))
+                            (should-add-task-tag-for-property? conn block property-id)
                             (assoc :block/tags :logseq.class/Task)
                             (= :logseq.property/template-applied-to property-id)
                             (assoc :block/tags :logseq.class/Template))]

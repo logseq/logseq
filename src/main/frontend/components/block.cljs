@@ -226,13 +226,13 @@
 (defonce *resizing-image? (atom false))
 
 (rum/defc ^:large-vars/cleanup-todo asset-container
-  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text hide-title?]}]
+  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text hide-title? gallery-view?]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)
         asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))]
     (hooks/use-effect!
      (fn []
-       (when (:block/uuid asset-block)
+       (when (and (seq src) (:block/uuid asset-block))
          (when-not (or asset-width asset-height)
            (measure-image!
             src
@@ -244,9 +244,11 @@
        (fn []))
      [])
     (let [*el-ref (rum/use-ref nil)
-          image-src (fs/asset-path-normalize src)
-          src' (if (or (string/starts-with? src "/")
-                       (string/starts-with? src "~"))
+          image-src (when (seq src)
+                      (fs/asset-path-normalize src))
+          src' (if (and (seq src)
+                        (or (string/starts-with? src "/")
+                            (string/starts-with? src "~")))
                  (str "file://" src)
                  src)
           get-blockid #(some-> (rum/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
@@ -259,13 +261,13 @@
                       (open-lightbox! e)))
         :ref *el-ref}
        [:img.rounded-sm.relative.fade-in.fade-in-faster
-        (cond-> (merge
-                 {:loading "lazy"
+        (merge
+         (cond-> {:loading "lazy"
                   :referrerPolicy "no-referrer"
-                  :src src'
-                  :title title}
-                 metadata)
-          hide-title? (dissoc :title))]
+                  :src src'}
+           (not (or hide-title? gallery-view?))
+           (assoc :title title))
+         metadata)]
        (when (and (not breadcrumb?)
                   (not positioned?))
          [:<>
@@ -414,7 +416,8 @@
                                              :positioned? positioned?
                                              :local? local?
                                              :full-text full-text
-                                             :hide-title? (:hide-title? config)})]
+                                             :hide-title? (:hide-title? config)
+                                             :gallery-view? (:gallery-view? config)})]
     (if (or (:disable-resize? config)
             (:table-view? config)
             (not resizable?))
@@ -518,9 +521,8 @@
           (p/then (fn [url]
                     (reset! src (common-util/safe-decode-uri-component url))))
           (p/catch #(js/console.log "Failed to load asset:" %))))
-    (:image-placeholder config)
-    (if (and (:image-placeholder config) (nil? @src))
-      (:image-placeholder config)
+    (if (nil? @src)
+      nil
       (let [asset-block (:asset-block config)
             ext (block-asset/link-ext @src href asset-block)
             repo (state/get-current-repo)
@@ -1122,6 +1124,7 @@
                          [:div.asset-transfer-progress-bar
                           [:span {:style {:width (str percent "%")}}]]])
         image? (contains? (common-config/img-formats) (keyword asset-type))
+        gallery-image? (and (:gallery-view? config) image?)
         width (get-in block [:logseq.property.asset/resize-metadata :width])
         asset-width (:logseq.property.asset/width block)
         asset-height (:logseq.property.asset/height block)
@@ -1144,15 +1147,15 @@
         href (or (:logseq.property.asset/external-url block)
                  (path/path-join (str "../" common-config/local-assets-dir) file))
         content (cond
-                  file-ready?
-                  (asset-link (assoc config
-                                     :asset-block block
-                                     :image-placeholder img-placeholder)
+                  (or file-ready? gallery-image?)
+                  (asset-link (cond-> (assoc config :asset-block block)
+                                (not gallery-image?)
+                                (assoc :image-placeholder img-placeholder))
                               (:block/title block)
                               href
                               img-metadata
                               nil)
-                  image?
+                  (and image? (not gallery-image?) (false? file-exists?))
                   img-placeholder)]
     (if progress-view
       [:div.asset-transfer-shell
@@ -2242,7 +2245,7 @@
                             link?
                             (some :logseq.property/icon (:block/tags block))
                             (contains? #{"pdf"} (:logseq.property.asset/type block))))
-        movable? (not (comments-model/protected-comment-block? block))]
+        movable? (not (comments-model/comment-block? block))]
     [:div.block-control-wrap.flex.flex-row.items-center.h-6
      {:class (util/classnames [{:is-order-list order-list?
                                 :is-with-icon with-icon?
@@ -2269,7 +2272,7 @@
                      (when (and (state/developer-mode?) (.-metaKey event))
                        (js/console.debug "[block config]==" config)))}
         [:span {:class (if (or (and control-show? (or collapsed? collapsable?))
-                               (and collapsed? (or page-title? order-list? config/publishing? (util/mobile?))))
+                               (and collapsed? (or order-list? config/publishing? (util/mobile?))))
                          "control-show cursor-pointer"
                          "control-hide")}
          (ui/rotating-arrow collapsed?)]])
@@ -3257,8 +3260,9 @@
                                (asset-cp config block)]})
             (if show-editor?
               [:div.mt-1 editor-cp]
-              [:div.text-xs.opacity-60.mt-1.cursor-text
-               {:on-click #(edit-block-content config block edit-input-id)}
+              [:div
+               (assoc block-asset/read-mode-title-attrs
+                      :on-click #(edit-block-content config block edit-input-id))
                (text-block-title (dissoc config :raw-title?) block)])]
 
            show-editor?
@@ -4060,7 +4064,6 @@
                                 (true? comment-thread-present?))
         inline-thread (state/sub :comments/inline-thread)
         show-inline-comments? (inline-comment-thread? inline-thread uuid comment-thread)
-        protected-comment-block? (comments-model/protected-comment-block? block)
         page-icon (when (:page-title? config)
                     (let [icon' (get block :logseq.property/icon)]
                       (when-let [icon (and (ldb/page? block)
@@ -4163,7 +4166,9 @@
         :on-touch-cancel (fn [e]
                            (block-handler/on-touch-cancel e))}
 
-       (and (util/capacitor?) (not (ldb/page? block)) (not protected-comment-block?))
+       (and (util/capacitor?)
+            (not (ldb/page? block))
+            (not (comments-model/comment-block? block)))
        (assoc
          :draggable true
          :on-drag-start
@@ -4234,7 +4239,7 @@
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
-        (when (and (not property?) (not (:table-block-title? config)))
+        (when (and (not property?) (not (:table-block-title? config)) (not (:hide-block-control? config)))
           (let [edit? (or editing?
                         (= uuid (:block/uuid (state/get-edit-block))))]
             (block-control (assoc config :hide-bullet? (:page-title? config))
@@ -4382,7 +4387,7 @@
 
 (defn- config-block-should-update?
   [old-state new-state]
-  (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :edit? :hide-bullet? :ref-matched-children-ids]
+  (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :edit? :hide-bullet? :hide-block-control? :ref-matched-children-ids]
         b1 (second (:rum/args old-state))
         b2 (second (:rum/args new-state))
         result (or

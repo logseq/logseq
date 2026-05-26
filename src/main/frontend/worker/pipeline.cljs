@@ -327,6 +327,29 @@
                         :logseq.property/query [:block/uuid value-uuid]})]))))))
          tagged-block-ids)))))
 
+(defn- ensure-comments-blocks-property-on-tag-additions
+  [tx-report]
+  (let [{:keys [db-after tx-data tx-meta]} tx-report
+        comments-class (d/entity db-after :logseq.class/Comments)]
+    (when (and comments-class
+               (not (rtc-tx-or-download-graph? tx-meta))
+               (not (:undo? tx-meta))
+               (not (:redo? tx-meta)))
+      (->> tx-data
+           (keep (fn [datom]
+                   (when (and (= :block/tags (:a datom))
+                              (:added datom)
+                              (= (:db/id comments-class) (:v datom)))
+                     (:e datom))))
+           distinct
+           (keep (fn [eid]
+                   (when-let [block (d/entity db-after eid)]
+                     (when (and (:block/parent block)
+                                (not (seq (:logseq.property.comments/blocks block))))
+                       (outliner-core/block-with-updated-at
+                        {:db/id eid
+                         :logseq.property.comments/blocks (:db/id (:block/parent block))})))))))))
+
 (defn- invoke-hooks-for-imported-graph [conn {:keys [tx-meta] :as tx-report}]
   (let [refs-tx-report (outliner-pipeline/transact-new-db-graph-refs conn tx-report)
         full-tx-data (concat (:tx-data tx-report) (:tx-data refs-tx-report))
@@ -454,6 +477,7 @@
                                         (toggle-page-and-block db tx-report))
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data tx-meta)
         ensure-query-tx-data (ensure-query-property-on-tag-additions tx-report)
+        ensure-comments-tx-data (ensure-comments-blocks-property-on-tag-additions tx-report)
         commands-tx (when-not (or (:undo? tx-meta)
                                   (= :rebase (:outliner-op tx-meta))
                                   (rtc-tx-or-download-graph? tx-meta))
@@ -465,6 +489,7 @@
             toggle-page-and-block-tx-data
             display-blocks-tx-data
             ensure-query-tx-data
+            ensure-comments-tx-data
             commands-tx
             insert-templates-tx
             created-by-tx
