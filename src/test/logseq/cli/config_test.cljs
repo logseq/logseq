@@ -1,9 +1,11 @@
 (ns logseq.cli.config-test
   (:require [cljs.reader :as reader]
             [cljs.test :refer [deftest is testing]]
+            [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
             [goog.object :as gobj]
             [logseq.cli.config :as config]
+            [logseq.common.path :as path]
             ["fs" :as fs]
             ["os" :as os]
             ["path" :as node-path]))
@@ -48,7 +50,7 @@
         result (with-env env #(config/resolve-config opts))]
     (is (= cfg-path (:config-path result)))
     (is (= "cli-repo" (:graph result)))
-    (is (= (node-path/resolve "cli-root") (:root-dir result)))
+    (is (= (string/replace (node-path/resolve "cli-root") #"\\" "/") (:root-dir result)))
     (is (= 333 (:timeout-ms result)))
     (is (= 888 (:login-timeout-ms result)))
     (is (= 999 (:logout-timeout-ms result)))
@@ -65,7 +67,7 @@
              "LOGSEQ_CLI_ROOT_DIR" "env-root"}
         result (with-env env #(config/resolve-config {:config-path cfg-path}))]
     (is (= "env-repo" (:graph result)))
-    (is (= (node-path/resolve "env-root") (:root-dir result)))))
+    (is (= (string/replace (node-path/resolve "env-root") #"\\" "/") (:root-dir result)))))
 
 (deftest test-output-format-env-overrides-file
   (let [dir (node-helper/create-tmp-dir)
@@ -110,7 +112,7 @@
                           "LOGSEQ_CLI_CONFIG" nil}
                  #(config/resolve-config {:config-path cfg-path}))]
     (is (= cfg-path (:config-path result)))
-    (is (= (node-path/join (.homedir os) "logseq") (:root-dir result)))
+    (is (= (path/path-join (.homedir os) "logseq") (:root-dir result)))
     (is (= "wss://api.logseq.io/sync/%s" (:ws-url result)))
     (is (= "https://api.logseq.io" (:http-base result)))
     (is (= 10000 (:timeout-ms result)))
@@ -127,7 +129,7 @@
                           "LOGSEQ_CLI_OUTPUT" nil
                           "LOGSEQ_CLI_CONFIG" nil}
                  #(config/resolve-config {:root-dir "~/custom-logseq"}))]
-    (is (= (node-path/join (.homedir os) "custom-logseq") (:root-dir result)))
+    (is (= (path/path-join (.homedir os) "custom-logseq") (:root-dir result)))
     (is (= (node-path/join (.homedir os) "custom-logseq" "cli.edn")
            (:config-path result)))))
 
@@ -137,15 +139,15 @@
         result (config/resolve-config {:config-path cfg-path
                                        :root-dir "~/custom-logseq"})]
     (is (= cfg-path (:config-path result)))
-    (is (= (node-path/join (.homedir os) "custom-logseq") (:root-dir result)))))
+    (is (= (path/path-join (.homedir os) "custom-logseq") (:root-dir result)))))
 
 (deftest test-server-list-path-follows-root-dir
   (let [root-dir (node-path/join (node-helper/create-tmp-dir "cli-root") "nested-root")
-        expected (node-path/join root-dir "server-list")]
+        expected (path/path-join root-dir "server-list")]
     (is (= expected (config/server-list-path root-dir)))))
 
 (deftest test-server-list-path-defaults-under-default-root-dir
-  (let [expected (node-path/join (.homedir os) "logseq" "server-list")]
+  (let [expected (path/path-join (.homedir os) "logseq" "server-list")]
     (is (= expected (config/server-list-path nil)))))
 
 (deftest test-list-title-max-display-width-config
