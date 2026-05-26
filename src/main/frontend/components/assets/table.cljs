@@ -91,16 +91,17 @@
 
 (rum/defc asset-annotation-title
   [annotation]
-  (shui/button
-   {:variant "ghost"
-    :size :sm
-    :class "min-w-0 justify-start !px-1 text-left font-normal"
-    :title (t :asset/open-pdf-annotation)
-    :aria-label (t :asset/open-pdf-annotation)
-    :on-click (fn [e]
-                (util/stop e)
-                (pdf-assets/open-block-ref! annotation))}
-   [:span.truncate (pdf-annotation-title annotation)]))
+  (ui/tooltip
+   (shui/button
+    {:variant "ghost"
+     :size :sm
+     :class "min-w-0 justify-start !px-1 text-left font-normal"
+     :aria-label (t :asset/open-pdf-annotation)
+     :on-click (fn [e]
+                 (util/stop e)
+                 (pdf-assets/open-block-ref! annotation))}
+    [:span.truncate (pdf-annotation-title annotation)])
+   (t :asset/open-pdf-annotation)))
 
 (defn- annotation-title-row
   "Adds title rendering metadata to an Asset annotation image row."
