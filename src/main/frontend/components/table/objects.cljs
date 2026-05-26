@@ -82,12 +82,47 @@
                  {:query-fn (fn [_] (swap! *version inc))}
                  nil)))))
 
-(rum/defc class-objects-inner < rum/static
+(defn- class-objects-view
+  [*ref config class columns view-options]
+  [:div {:ref *ref}
+   (views/view
+    (merge
+     view-options
+     {:config config
+      :view-parent class
+      :view-feature-type :class-objects
+      :columns columns
+      :show-add-property? true
+      :show-items-count? true
+      :add-property! (fn [e]
+                       (state/pub-event! [:editor/new-property {:block class
+                                                                :class-schema? true
+                                                                :target (.-target e)}]))}))])
+
+(rum/defc regular-class-objects-inner < rum/static
+  [config class properties]
+  (let [*ref (hooks/use-ref nil)
+        db-ident (:db/ident class)
+        properties' (remove nil? properties)
+        columns* (views/build-columns config properties' {:add-tags-column? true
+                                                          :class-ident db-ident})
+        columns (if (= db-ident :logseq.class/Pdf-annotation)
+                  (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)
+                  columns*)
+        add-new-object! (when-not (ldb/private-tags db-ident)
+                          (fn [view table {:keys [properties]}]
+                            (p/let [block (add-new-class-object! class properties)]
+                              (when (:db/id block)
+                                (refresh-view-data! class view table [(:db/id block)])
+                                (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)))))]
+    (class-objects-view
+     *ref config class columns
+     {:add-new-object! add-new-object!})))
+
+(rum/defc asset-class-objects-inner < rum/static
   [config class properties]
   (let [*ref (hooks/use-ref nil)
         [expanded-pdf-ids set-expanded-pdf-ids!] (hooks/use-state #{})
-        db-ident (:db/ident class)
-        asset? (= db-ident :logseq.class/Asset)
         [annotation-index set-annotation-index!] (hooks/use-state nil)
         pdf-annotation-changes-version (:pdf-annotation-changes-version config)
         pdf-annotation-changes-version (hooks/use-debounced-value pdf-annotation-changes-version 100)
@@ -105,78 +140,60 @@
                                  #(pdf-annotations/expand-selected-asset-row-ids %1 %2 %3 annotation-index)
                                  [annotation-index])
         properties' (remove nil? properties)
-        columns* (views/build-columns config properties' {:add-tags-column? true
-                                                          :class-ident db-ident})
-        columns (cond
-                  (= db-ident :logseq.class/Pdf-annotation)
-                  (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)
-                  (= db-ident :logseq.class/Asset)
-                  (remove #(contains? #{:logseq.property.asset/checksum} (:id %)) columns*)
-                  :else
-                  columns*)
-        columns (if asset?
-                  (asset-table/enhance-columns {:config config
-                                                :columns columns
-                                                :header-cp views/header-cp
-                                                :annotation-index annotation-index
-                                                :set-expanded-pdf-ids! set-expanded-pdf-ids!})
-                  columns)
-        add-new-object! (when (or asset? (not (ldb/private-tags db-ident)))
-                          (fn [view table {:keys [properties]}]
-                            (if asset?
-                              (shui/dialog-open!
-                               (fn []
-                                 [:div.flex.flex-col.gap-2
-                                  [:div.font-medium (t :asset/add-assets)]
-                                  (filepicker/picker
-                                   {:on-change (fn [_e files]
-                                                 (p/let [entities (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)]
-                                                   (shui/dialog-close!)
-                                                   (when (seq entities)
-                                                     (refresh-view-data! class view table (map :db/id entities)))))})]))
-                              (p/let [block (add-new-class-object! class properties)]
-                                (when (:db/id block)
-                                  (refresh-view-data! class view table [(:db/id block)])
-                                  (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block))))))]
+        columns* (remove #(contains? #{:logseq.property.asset/checksum} (:id %))
+                         (views/build-columns config properties' {:add-tags-column? true
+                                                                  :class-ident :logseq.class/Asset}))
+        columns (asset-table/enhance-columns
+                 {:config config
+                  :columns columns*
+                  :header-cp views/header-cp
+                  :annotation-index annotation-index
+                  :set-expanded-pdf-ids! set-expanded-pdf-ids!})
+        add-new-object! (fn [view table _opts]
+                          (shui/dialog-open!
+                           (fn []
+                             [:div.flex.flex-col.gap-2
+                              [:div.font-medium (t :asset/add-assets)]
+                              (filepicker/picker
+                               {:on-change (fn [_e files]
+                                             (p/let [entities (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)]
+                                               (shui/dialog-close!)
+                                               (when (seq entities)
+                                                 (refresh-view-data! class view table (map :db/id entities)))))})])))]
     (hooks/use-effect!
      (fn []
-       (if asset?
-         (if-let [repo (state/get-current-repo)]
-           (let [cancelled? (atom false)]
-             (-> (pdf-annotations/<pdf-annotation-asset-index repo)
-                 (p/then (fn [index]
-                           (when-not @cancelled?
-                             (set-annotation-index! index))))
-                 (p/catch (fn [error]
-                            (log/error :msg "Failed to load PDF annotation asset index"
-                                       :error error)
-                            (when-not @cancelled?
-                              (set-annotation-index! pdf-annotations/empty-pdf-annotation-asset-index)))))
-             (fn [] (reset! cancelled? true)))
-           (set-annotation-index! pdf-annotations/empty-pdf-annotation-asset-index))
+       (if-let [repo (state/get-current-repo)]
+         (let [cancelled? (atom false)]
+           (-> (pdf-annotations/<pdf-annotation-asset-index repo)
+               (p/then (fn [index]
+                         (when-not @cancelled?
+                           (set-annotation-index! index))))
+               (p/catch (fn [error]
+                          (log/error :msg "Failed to load PDF annotation asset index"
+                                     :error error)
+                          (when-not @cancelled?
+                            (set-annotation-index! pdf-annotations/empty-pdf-annotation-asset-index)))))
+           (fn [] (reset! cancelled? true)))
          (set-annotation-index! pdf-annotations/empty-pdf-annotation-asset-index)))
-     [asset? (state/get-current-repo) pdf-annotation-changes-version])
+     [(state/get-current-repo) pdf-annotation-changes-version])
 
-    (if (and asset? (nil? annotation-index))
+    (if (nil? annotation-index)
       [:div.flex.flex-col.space-2.gap-2.my-2
        (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
-      [:div {:ref *ref}
-       (views/view {:config config
-                    :view-parent class
-                    :view-feature-type :class-objects
-                    :columns columns
-                    :table-data-transform (when asset? table-data-transform)
-                    :row-selection-related-ids-fn (when asset? row-selection-related-ids-fn)
-                    :expand-selected-rows-fn (when asset? expand-selected-rows-fn)
-                    :delete-rows-fn (when asset? delete-asset-rows!)
-                    :additional-actions (when asset? [asset-orphans/orphan-assets-action])
-                    :add-new-object! add-new-object!
-                    :show-add-property? true
-                    :show-items-count? true
-                    :add-property! (fn [e]
-                                     (state/pub-event! [:editor/new-property {:block class
-                                                                              :class-schema? true
-                                                                              :target (.-target e)}]))})])))
+      (class-objects-view
+       *ref config class columns
+       {:table-data-transform table-data-transform
+        :row-selection-related-ids-fn row-selection-related-ids-fn
+        :expand-selected-rows-fn expand-selected-rows-fn
+        :delete-rows-fn delete-asset-rows!
+        :additional-actions [asset-orphans/orphan-assets-action]
+        :add-new-object! add-new-object!}))))
+
+(rum/defc class-objects-inner < rum/static
+  [config class properties]
+  (if (= (:db/ident class) :logseq.class/Asset)
+    (asset-class-objects-inner config class properties)
+    (regular-class-objects-inner config class properties)))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
   [state class config]
