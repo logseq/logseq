@@ -20,23 +20,13 @@
   {:dry-run {:desc "Print Codex commands without starting Codex or writing agent-session-id"
              :coerce :boolean}})
 
-(def ^:private bridge-list-spec
-  {:all {:desc "Include completed sessions"
-         :coerce :boolean}})
-
 (def entries
   [(core/command-entry ["agent" "bridge"]
                        :agent-bridge
                        "Run task agent bridge"
                        bridge-spec
                        {:examples ["logseq agent bridge --graph my-graph"
-                                   "logseq agent bridge --graph my-graph --dry-run"]})
-   (core/command-entry ["agent" "bridge" "list"]
-                       :agent-bridge-list
-                       "List agent bridge sessions"
-                       bridge-list-spec
-                       {:examples ["logseq agent bridge list"
-                                   "logseq agent bridge list --all"]})])
+                                   "logseq agent bridge --graph my-graph --dry-run"]})])
 
 (defn- trim-non-empty
   [value]
@@ -74,11 +64,6 @@
                 :repo repo
                 :graph graph
                 :dry-run? (boolean (:dry-run options))}})
-
-    :agent-bridge-list
-    {:ok? true
-     :action {:type :agent-bridge-list
-              :all? (boolean (:all options))}}
 
     {:ok? false
      :error {:code :unknown-command
@@ -459,19 +444,6 @@
                            :status status
                            :updated-at (js/Date.now)}))
 
-(defn list-sessions
-  [config {:keys [all?]}]
-  (let [sessions (vec (:sessions (read-session-store config)))]
-    (if all?
-      sessions
-      (vec (remove #(= :completed (:status %)) sessions)))))
-
-(defn execute-list
-  [action config]
-  {:status :ok
-   :command :agent-bridge-list
-   :data {:sessions (list-sessions config {:all? (:all? action)})}})
-
 (defn- now-iso
   []
   (.toISOString (js/Date.)))
@@ -632,12 +604,19 @@
   (when-let [cwd (:cwd workspace-session)]
     (string/join
      "\n"
-     [""
-      "Workspace instructions:"
-      (str "You are running in this project copy: " cwd)
-      "Before making code changes, create a new branch from the current master branch."
-      "Choose a concise branch name that matches the change, for example fix/some-bug, feat/x-feature, enhance/xxx, or refactor/db-worker."
-      "Before finishing, commit all local changes with a concise commit message you choose."])))
+     (cond-> [""
+              "Workspace instructions:"
+              (str "You are running in this project copy: " cwd)]
+       (:branch workspace-session)
+       (conj (str "Continue on the existing session branch: " (:branch workspace-session))
+             "Do not create or switch to a new branch unless the user explicitly asks for it.")
+
+       (not (:branch workspace-session))
+       (conj "Before making code changes, create a new branch from the current master branch."
+             "Choose a concise branch name that matches the change, for example fix/some-bug, feat/x-feature, enhance/xxx, or refactor/db-worker.")
+
+       true
+       (conj "Before finishing, commit all local changes with a concise commit message you choose.")))))
 
 (defn- append-workspace-prompt-instructions
   [prompt workspace-session]
@@ -664,10 +643,17 @@
             (set-workspace-status! workspace-pool (:id workspace) :dirty)
             (throw e)))))))
 
+(defn- prepare-workspace-session-result
+  [workspace-pool]
+  (try
+    {:workspace-session (prepare-workspace-session! workspace-pool)}
+    (catch :default e
+      {:error e})))
+
 (defn- session-by-id
   [config session-id]
   (first (filter #(= session-id (:session %))
-                 (list-sessions config {:all? true}))))
+                 (:sessions (read-session-store config)))))
 
 (defn- current-workspace-branch
   [workspace]
@@ -737,8 +723,11 @@
                                     :status final-status
                                     :updated-at (js/Date.now)}
                              branch (assoc :branch branch)))
-      (set-workspace-status! workspace-pool (:id workspace) (if success? :idle :dirty)))
-    (update-session-status! cfg session-id status)))
+      (set-workspace-status! workspace-pool (:id workspace) (if success? :idle :dirty))
+      final-status)
+    (do
+      (update-session-status! cfg session-id status)
+      status)))
 
 (defn- log-bridge-exit!
   [{:keys [repo graph agent-name reason exit-code error]}]
@@ -1129,6 +1118,17 @@
                                    {}]))]
       true)))
 
+(defn- mark-agent-bridge-task-in-review!
+  [cfg repo block]
+  (let [block-uuid (:block/uuid block)]
+    (p/let [_ (transport/invoke cfg :thread-api/apply-outliner-ops
+                                [repo [[:batch-set-property [[block-uuid]
+                                                              :logseq.property/status
+                                                              :logseq.property/status.in-review
+                                                              {}]]]
+                                 {}])]
+      true)))
+
 (def ^:private routable-task-query
   '[:find [(pull ?e [:db/id
                      :block/uuid
@@ -1209,9 +1209,17 @@
 
 (defn- route-task!
   [cfg {:keys [repo graph agent-name prompt-templates workspace-pool]} {:keys [block tree-text]}]
-  (let [workspace-session (prepare-workspace-session! workspace-pool)]
-    (if (and workspace-pool (nil? workspace-session))
+  (let [{:keys [workspace-session error]} (prepare-workspace-session-result workspace-pool)]
+    (cond
+      error
+      (do
+        (log/error :agent-bridge-workspace-prepare-failed error)
+        (p/rejected error))
+
+      (and workspace-pool (nil? workspace-session))
       (p/resolved nil)
+
+      :else
       (let [prompt (append-workspace-prompt-instructions
                     (build-codex-prompt {:graph graph
                                          :agent-name agent-name
@@ -1227,16 +1235,24 @@
          (p/let [{:keys [session]} (start-codex! command
                                                  {:cwd (:cwd workspace-session)
                                                   :on-exit (fn [code session-id]
-                                                             (when session-id
-                                                               (let [status (if (zero? (or code 1))
-                                                                              :completed
-                                                                              :failed)]
-                                                                 (try
-                                                                   (complete-workspace-session! cfg workspace-pool workspace session-id status)
-                                                                   (catch :default e
-                                                                     (log/error :agent-bridge-workspace-complete-failed e)
-                                                                     (update-session-status! cfg session-id :failed)
-                                                                     (set-workspace-status! workspace-pool (:id workspace) :dirty))))))})
+                                                             (let [success? (zero? (or code 1))]
+                                                               (when session-id
+                                                                 (let [final-status (try
+                                                                                      (complete-workspace-session! cfg workspace-pool workspace session-id
+                                                                                                                   (if success?
+                                                                                                                     :completed
+                                                                                                                     :failed))
+                                                                                      (catch :default e
+                                                                                        (log/error :agent-bridge-workspace-complete-failed e)
+                                                                                        (update-session-status! cfg session-id :failed)
+                                                                                        (set-workspace-status! workspace-pool (:id workspace) :dirty)
+                                                                                        :failed))]
+                                                                   (when (= :completed final-status)
+                                                                     (-> (p/let [cfg* (cli-server/ensure-server! cfg repo)
+                                                                                 _ (mark-agent-bridge-task-in-review! cfg* repo block)]
+                                                                           true)
+                                                                         (p/catch (fn [e]
+                                                                                    (log/error :agent-bridge-task-in-review-failed e)))))))))})
                  _ (when-not (seq session)
                      (throw (ex-info "codex session id missing"
                                      {:code :codex-session-id-missing})))
@@ -1522,65 +1538,74 @@
                                {:code :agent-comment-parent-invalid
                                 :block (block-uuid-str comment-block)})))
            target-blocks (vec (:logseq.property.comments/blocks comments-area))
-           _ (ensure-comment-reaction! cfg repo comment-uuid comment-start-reaction)
-           target-tree-texts (p/all (mapv #(show-block-tree cfg repo %) target-blocks))
-           comments-area-tree-text (show-block-tree cfg repo comments-area)
-           comment-tree-text (show-block-tree cfg repo comment-block)
-           prompt (build-comment-codex-prompt {:graph graph
-                                               :agent-name agent-name
-                                               :comment comment-block
-                                               :target-tree-texts target-tree-texts
-                                               :comments-area-tree-text comments-area-tree-text
-                                               :comment-tree-text comment-tree-text
-                                               :prompt-template (:comment prompt-templates)})
            target-session-ids (p/all (mapv #(comment-target-session-id agent-name %)
                                            target-blocks))
-           resume-session-id (first (keep identity target-session-ids))
-           workspace-session (if resume-session-id
-                               (acquire-existing-workspace-session! cfg workspace-pool resume-session-id)
-                               (prepare-workspace-session! workspace-pool))
-           _ (when (and workspace-pool (nil? workspace-session))
-               (throw (ex-info "agent bridge workspace is not available"
-                               {:code :agent-workspace-unavailable
-                                :block (block-uuid-str comment-block)})))
-           workspace (:workspace workspace-session)
-           prompt (append-workspace-prompt-instructions prompt workspace-session)
-           command (if resume-session-id
-                     (build-codex-resume-command resume-session-id prompt {})
-                     (build-codex-command prompt {}))
-           preview (command-preview command)
-           _ (emit-log! cfg (log-line (str "Codex command prepared for comment " (block-uuid-str comment-block) ": " preview)))
-           {:keys [session]} (start-codex! command
-                                           {:cwd (:cwd workspace-session)
-                                            :on-exit (fn [code session-id]
-                                                       (when session-id
-                                                         (let [status (if (zero? (or code 1))
-                                                                        :completed
-                                                                        :failed)]
-                                                           (try
-                                                             (complete-workspace-session! cfg workspace-pool workspace session-id status)
-                                                             (catch :default e
-                                                               (log/error :agent-bridge-workspace-complete-failed e)
-                                                               (update-session-status! cfg session-id :failed)
-                                                               (set-workspace-status! workspace-pool (:id workspace) :dirty)))))
-                                                       (-> (ensure-comment-reaction! cfg repo comment-uuid
-                                                                                     (if (zero? (or code 1))
-                                                                                       comment-complete-reaction
-                                                                                       comment-failed-reaction))
-                                                           (p/catch (fn [e]
-                                                                      (log/error :agent-bridge-comment-reaction-failed e)))))})
-           _ (when-not (seq session)
-               (throw (ex-info "codex session id missing"
-                               {:code :codex-session-id-missing})))
-           cfg* (cli-server/ensure-server! cfg repo)
-           _ (record-session! cfg* (comment-session-record graph agent-name comment-block session :running workspace-session))]
-     {:block (block-uuid-str comment-block)
-      :session session
-      :backend :codex
-      :preview preview
-      :request :comment
-      :workspace-id (:workspace-id workspace-session)
-      :cwd (:cwd workspace-session)})
+           resume-session-id (first (keep identity target-session-ids))]
+     (let [{:keys [workspace-session error]} (if resume-session-id
+                                               (try
+                                                 {:workspace-session (acquire-existing-workspace-session! cfg workspace-pool resume-session-id)}
+                                                 (catch :default e
+                                                   {:error e}))
+                                               (prepare-workspace-session-result workspace-pool))]
+       (cond
+         error
+         (throw error)
+
+         (and workspace-pool (nil? workspace-session))
+         nil
+
+         :else
+         (p/let [_ (ensure-comment-reaction! cfg repo comment-uuid comment-start-reaction)
+                 target-tree-texts (p/all (mapv #(show-block-tree cfg repo %) target-blocks))
+                 comments-area-tree-text (show-block-tree cfg repo comments-area)
+                 comment-tree-text (show-block-tree cfg repo comment-block)
+                 prompt (append-workspace-prompt-instructions
+                         (build-comment-codex-prompt {:graph graph
+                                                      :agent-name agent-name
+                                                      :comment comment-block
+                                                      :target-tree-texts target-tree-texts
+                                                      :comments-area-tree-text comments-area-tree-text
+                                                      :comment-tree-text comment-tree-text
+                                                      :prompt-template (:comment prompt-templates)})
+                         workspace-session)
+                 workspace (:workspace workspace-session)
+                 command (if resume-session-id
+                           (build-codex-resume-command resume-session-id prompt {})
+                           (build-codex-command prompt {}))
+                 preview (command-preview command)
+                 _ (emit-log! cfg (log-line (str "Codex command prepared for comment " (block-uuid-str comment-block) ": " preview)))
+                 {:keys [session]} (start-codex! command
+                                                 {:cwd (:cwd workspace-session)
+                                                  :on-exit (fn [code session-id]
+                                                             (when session-id
+                                                               (let [status (if (zero? (or code 1))
+                                                                              :completed
+                                                                              :failed)]
+                                                                 (try
+                                                                   (complete-workspace-session! cfg workspace-pool workspace session-id status)
+                                                                   (catch :default e
+                                                                     (log/error :agent-bridge-workspace-complete-failed e)
+                                                                     (update-session-status! cfg session-id :failed)
+                                                                     (set-workspace-status! workspace-pool (:id workspace) :dirty)))))
+                                                             (-> (ensure-comment-reaction! cfg repo comment-uuid
+                                                                                           (if (zero? (or code 1))
+                                                                                             comment-complete-reaction
+                                                                                             comment-failed-reaction))
+                                                                 (p/catch (fn [e]
+                                                                            (log/error :agent-bridge-comment-reaction-failed e)))))})
+                 _ (when-not (seq session)
+                     (throw (ex-info "codex session id missing"
+                                     {:code :codex-session-id-missing})))
+                 cfg* (cli-server/ensure-server! cfg repo)
+                 _ (record-session! cfg* (comment-session-record graph agent-name comment-block session :running workspace-session))]
+           (cond-> {:block (block-uuid-str comment-block)
+                    :session session
+                    :backend :codex
+                    :preview preview
+                    :request :comment}
+             (:workspace-id workspace-session)
+             (assoc :workspace-id (:workspace-id workspace-session)
+                    :cwd (:cwd workspace-session)))))))
    (fn [e]
      (if-let [comment-uuid (:block/uuid comment-block)]
        (p/let [_ (ensure-comment-reaction! cfg repo comment-uuid comment-failed-reaction)]
