@@ -576,26 +576,6 @@
       (str table "\n\n" warning)
       table)))
 
-(defn- format-agent-bridge-list
-  [sessions now-ms]
-  (let [session-field (fn [value]
-                        (cond
-                          (keyword? value) (name value)
-                          (nil? value) nil
-                          :else (str value)))]
-    (format-counted-table
-     ["SESSION" "STATUS" "BACKEND" "GRAPH" "BLOCK" "AGENT" "STARTED" "UPDATED"]
-     (mapv (fn [session]
-             [(session-field (:session session))
-              (session-field (:status session))
-              (session-field (:backend session))
-              (session-field (:graph session))
-              (session-field (:block session))
-              (session-field (:agent session))
-              (human-ago (:started-at session) now-ms)
-              (human-ago (:updated-at session) now-ms)])
-           (or sessions [])))))
-
 (defn- format-agent-bridge
   [data]
   (if (seq (:logs data))
@@ -1051,7 +1031,6 @@
         :server-list (format-server-list (:servers data)
                                          (get-in human [:server-list :revision-mismatch]))
         :agent-bridge (format-agent-bridge data)
-        :agent-bridge-list (format-agent-bridge-list (:sessions data) now-ms)
         :server-cleanup (format-server-cleanup data)
         (:server-start :server-stop :server-restart)
         (format-server-action command data)

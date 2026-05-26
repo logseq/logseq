@@ -8,7 +8,7 @@ import subprocess
 import time
 
 
-TASK_TITLE = "测试 agent bridge 功能，把当前task status设置为done"
+TASK_TITLE = "Test AgentBridge task routing and completion status"
 EXPECTED_SESSION = "thread-e2e-agent-bridge"
 PARALLEL_TASK_TITLES = [
     "测试 agent bridge 并行执行任务 1",
