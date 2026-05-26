@@ -126,16 +126,17 @@
 (defn- wait-ready!
   [endpoint]
   (let [deadline (+ (js/Date.now) ready-timeout-ms)]
-    (p/loop []
-      (-> (js/fetch endpoint)
-          (p/then (fn [resp]
-                    (when-not (.-ok resp)
-                      (throw (js/Error. (str "Embedding server health check failed: " (.-status resp)))))))
-          (p/catch (fn [error]
-                     (if (< (js/Date.now) deadline)
-                       (p/let [_ (p/delay ready-poll-ms)]
-                         (p/recur))
-                       (throw error))))))))
+    (letfn [(poll! []
+              (-> (js/fetch endpoint)
+                  (p/then (fn [resp]
+                            (when-not (.-ok resp)
+                              (throw (js/Error. (str "Embedding server health check failed: " (.-status resp)))))))
+                  (p/catch (fn [error]
+                             (if (< (js/Date.now) deadline)
+                               (p/let [_ (p/delay ready-poll-ms)]
+                                 (poll!))
+                               (throw error))))))]
+      (poll!))))
 
 (defn- attach-exit-handler!
   [^js proc]
