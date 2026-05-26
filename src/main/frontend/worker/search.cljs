@@ -14,7 +14,7 @@
             [logseq.graph-parser.text :as text]))
 
 (def ^:private max-vector-search-results 10)
-(def ^:private min-vector-search-score 0.5)
+(def ^:private min-vector-search-score 0.62)
 
 (defn- add-blocks-fts-triggers!
   "Table bindings of blocks tables and the blocks FTS virtual tables"

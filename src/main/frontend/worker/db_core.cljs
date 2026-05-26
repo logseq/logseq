@@ -667,8 +667,14 @@
 
 (defn- report-search-index-progress!
   [repo payload]
-  (-> (worker-state/<invoke-main-thread :thread-api/search-index-build-progress repo payload)
-      (p/catch (fn [_error] nil))))
+  (if (node-runtime?)
+    (do
+      (platform/post-message! (platform/current)
+                              :thread-api/search-index-build-progress
+                              [repo payload])
+      (p/resolved nil))
+    (-> (worker-state/<invoke-main-thread :thread-api/search-index-build-progress repo payload)
+        (p/catch (fn [_error] nil)))))
 
 (def-thread-api :thread-api/init
   []
@@ -1282,7 +1288,7 @@
         (p/recur)))))
 
 (defn- <build-blocks-fts!
-  "Build FTS index in batches with yielding. Sets user_version to search-db-version on completion."
+  "Build FTS/vector index in batches with yielding. Sets user_version to search-db-version on completion."
   [repo search-db conn build-id]
   (ensure-active-search-index-build! repo build-id)
   (search/truncate-table! search-db)
