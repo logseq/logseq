@@ -2231,8 +2231,7 @@
 
     [:div.flex.shrink-0.flex-row.items-center.gap-1
      (shui/select
-      {:default-value (if asc? "asc" "desc")
-       :value (if asc? "asc" "desc")
+      {:value (if asc? "asc" "desc")
        :on-value-change (fn [v]
                           (let [asc? (= v "asc")
                                 f (:column-set-sorting! table)]
@@ -2254,10 +2253,8 @@
        :size :sm
        :on-click (fn []
                    (let [f (:column-set-sorting! table)
-                         new-sorting (f sorting {:id id} nil)
-                         f (get-in table [:data-fns :set-sorting!])]
+                         new-sorting (f sorting {:id id} nil)]
                      (set-sorting! new-sorting)
-                     (f new-sorting)
                      (when (empty? new-sorting)
                        (shui/popup-hide!))))}
       (ui/icon "x"))]]])
