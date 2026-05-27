@@ -590,6 +590,21 @@
     (is (= [{:value "tldraw" :uuid closed-value-uuid}]
            (get-in export-edn [:properties property-id :build/closed-values])))))
 
+(deftest graph-export-ignores-scalar-values-when-finding-referenced-closed-values
+  (let [property-id :user.property/datetime
+        conn (db-test/create-conn-with-import-map
+              {:properties {property-id {:logseq.property/type :datetime}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"
+                                             :build/properties {property-id 1779841453610}}]}]})
+        export-edn (sqlite-export/build-export @conn {:export-type :graph})
+        validation (sqlite-export/validate-export export-edn)]
+    (is (nil? (:error validation)))
+    (is (= {:logseq.property/type :datetime
+            :db/cardinality :db.cardinality/one
+            :block/title "datetime"}
+           (get-in export-edn [:properties property-id])))))
+
 (deftest import-view-blocks
   (let [original-data
         ;; Test a mix of page and block types
