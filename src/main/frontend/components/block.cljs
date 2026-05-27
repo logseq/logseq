@@ -2605,7 +2605,7 @@
                 mobile-range (when mobile? (get-cursor-range))]
             (when (and (not forbidden-edit?) (contains? #{1 0} button))
               (when (= 1 button)
-                (block-selection/set-pointer-down-block! block-dom-element))
+                (block-selection/set-pointer-down!))
               (cond
                 (and meta? shift?)
                 (when-not (empty? selection-blocks)
