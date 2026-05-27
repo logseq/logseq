@@ -15,6 +15,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.log :as log]
@@ -132,37 +133,67 @@
     (->> (ldb/get-class-extends class)
          (map :db/id))))
 
-(defn- direct-extends-retraction-tx-data
-  [class redundant-parent-ids reason]
-  (when (and (ldb/class? class) (seq redundant-parent-ids))
-    (let [redundant-parents (filter #(contains? redundant-parent-ids (:db/id %))
-                                    (:logseq.property.class/extends class))]
-      (when (seq redundant-parents)
-        (log/info :msg "Clean redundant class extends"
-                  :class (:block/title class)
-                  :reason reason
-                  :removed-tags (mapv :block/title redundant-parents)))
-      (map (fn [parent]
-             [:db/retract (:db/id class) :logseq.property.class/extends (:db/id parent)])
-           redundant-parents))))
+(defn- direct-extends-retractions
+  [db class-id redundant-parent-ids reason]
+  (when (and class-id (seq redundant-parent-ids))
+    (->> (d/q '[:find ?class ?parent
+                :in $ ?class [?parent ...]
+                :where
+                [?class :logseq.property.class/extends ?parent]]
+              db class-id redundant-parent-ids)
+         (map (fn [[class-id parent-id]]
+                {:class-id class-id
+                 :parent-id parent-id
+                 :reason reason})))))
+
+(defn- descendant-extends-retractions
+  [db class-id redundant-parent-ids reason]
+  (when (and class-id (seq redundant-parent-ids))
+    (->> (d/q '[:find ?child ?parent
+                :in $ ?class [?parent ...] %
+                :where
+                (class-extends ?class ?child)
+                [?child :logseq.property.class/extends ?parent]]
+              db class-id redundant-parent-ids (:class-extends rules/rules))
+         (remove (fn [[child-id _parent-id]] (= class-id child-id)))
+         (map (fn [[child-id parent-id]]
+                {:class-id child-id
+                 :parent-id parent-id
+                 :reason reason})))))
+
+(defn- log-redundant-extends-retractions
+  [db retractions]
+  (when (seq retractions)
+    (log/info :msg "Clean redundant class extends"
+              :changes (->> retractions
+                            (group-by (fn [{:keys [class-id reason]}] [class-id reason]))
+                            (mapv (fn [[[class-id reason] retractions]]
+                                    {:class (:block/title (d/entity db class-id))
+                                     :reason reason
+                                     :removed-tags (mapv (fn [{:keys [parent-id]}]
+                                                           (:block/title (d/entity db parent-id)))
+                                                         retractions)}))))))
 
 (defn- redundant-extends-retraction-tx-data
   [db class value]
   (let [parent-ids (set (->entity-ids db value))
         ancestor-ids (set (mapcat #(class-ancestor-ids db %) parent-ids))
-        inherited-parent-ids (set/union parent-ids ancestor-ids)]
-    (concat
-     (direct-extends-retraction-tx-data
-      class
-      ancestor-ids
-      "The removed parent tag is already inherited through the new parent tag.")
-     (mapcat
-      (fn [child-id]
-        (direct-extends-retraction-tx-data
-         (d/entity db child-id)
-         inherited-parent-ids
-         "The removed parent tag is already inherited through an updated ancestor tag."))
-      (db-class/get-structured-children db (:db/id class))))))
+        inherited-parent-ids (set/union parent-ids ancestor-ids)
+        retractions (concat
+                     (direct-extends-retractions
+                      db
+                      (:db/id class)
+                      ancestor-ids
+                      "The removed parent tag is already inherited through the new parent tag.")
+                     (descendant-extends-retractions
+                      db
+                      (:db/id class)
+                      inherited-parent-ids
+                      "The removed parent tag is already inherited through an updated ancestor tag."))]
+    (log-redundant-extends-retractions db retractions)
+    (map (fn [{:keys [class-id parent-id]}]
+           [:db/retract class-id :logseq.property.class/extends parent-id])
+         retractions)))
 
 (defn- build-property-value-tx-data
   [conn block property-id value]
