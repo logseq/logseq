@@ -17,6 +17,7 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.log :as log]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.validate :as outliner-validate]
@@ -112,6 +113,57 @@
            (ldb/internal-page? block)
            (not (block-classes-provide-property? @conn block property-id)))))
 
+(defn- ->entity-ids
+  [db value]
+  (->> (cond
+         (nil? value) []
+         (de/entity? value) [value]
+         (coll? value) value
+         :else [value])
+       (keep (fn [item]
+               (cond
+                 (de/entity? item) (:db/id item)
+                 (integer? item) item
+                 (keyword? item) (:db/id (d/entity db item)))))))
+
+(defn- class-ancestor-ids
+  [db class-id]
+  (when-let [class (d/entity db class-id)]
+    (->> (ldb/get-class-extends class)
+         (map :db/id))))
+
+(defn- direct-extends-retraction-tx-data
+  [class redundant-parent-ids reason]
+  (when (and (ldb/class? class) (seq redundant-parent-ids))
+    (let [redundant-parents (filter #(contains? redundant-parent-ids (:db/id %))
+                                    (:logseq.property.class/extends class))]
+      (when (seq redundant-parents)
+        (log/info :msg "Clean redundant class extends"
+                  :class (:block/title class)
+                  :reason reason
+                  :removed-tags (mapv :block/title redundant-parents)))
+      (map (fn [parent]
+             [:db/retract (:db/id class) :logseq.property.class/extends (:db/id parent)])
+           redundant-parents))))
+
+(defn- redundant-extends-retraction-tx-data
+  [db class value]
+  (let [parent-ids (set (->entity-ids db value))
+        ancestor-ids (set (mapcat #(class-ancestor-ids db %) parent-ids))
+        inherited-parent-ids (set/union parent-ids ancestor-ids)]
+    (concat
+     (direct-extends-retraction-tx-data
+      class
+      ancestor-ids
+      "The removed parent tag is already inherited through the new parent tag.")
+     (mapcat
+      (fn [child-id]
+        (direct-extends-retraction-tx-data
+         (d/entity db child-id)
+         inherited-parent-ids
+         "The removed parent tag is already inherited through an updated ancestor tag."))
+      (db-class/get-structured-children db (:db/id class))))))
+
 (defn- build-property-value-tx-data
   [conn block property-id value]
   (when (some? value)
@@ -122,9 +174,10 @@
           multiple-values-empty? (and (sequential? old-value)
                                       (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
           extends? (= property-id :logseq.property.class/extends)
+          tx-value (if (and extends? (coll? value)) (set value) value)
           update-block-tx (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                             true
-                            (assoc property-id value)
+                            (assoc property-id tx-value)
                             (should-add-task-tag-for-property? conn block property-id)
                             (assoc :block/tags :logseq.class/Task)
                             (= :logseq.property/template-applied-to property-id)
@@ -135,9 +188,7 @@
         retract-multiple-values?
         (conj [:db/retract (:db/id update-block-tx) property-id])
         extends?
-        (concat
-         (let [extends (ldb/get-class-extends (d/entity @conn value))]
-           (map (fn [extend] [:db/retract (:db/id block) property-id (:db/id extend)]) extends)))
+        (into (redundant-extends-retraction-tx-data @conn block value))
         true
         (conj update-block-tx)))))
 
@@ -535,10 +586,11 @@
   (when (= property-id :block/tags)
     (outliner-validate/validate-tags-property @conn block-eids v))
   (when (= property-id :logseq.property.class/extends)
-    (outliner-validate/validate-extends-property
-     @conn
-     (if (number? v) (d/entity @conn v) v)
-     (map #(d/entity @conn %) block-eids))))
+    (doseq [parent-id (->entity-ids @conn v)]
+      (outliner-validate/validate-extends-property
+       @conn
+       (d/entity @conn parent-id)
+       (map #(d/entity @conn %) block-eids)))))
 
 (defn- normalize-default-url-property-value
   [conn property value]
