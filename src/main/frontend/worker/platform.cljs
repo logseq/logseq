@@ -151,6 +151,12 @@
   [platform]
   (get-in platform [:embedding :model-id]))
 
+(defn embedding-dimension
+  [platform]
+  (or (get-in platform [:embedding :dimension])
+      (throw (ex-info "platform embedding/dimension missing"
+                      {:model-id (embedding-model-id platform)}))))
+
 (defn embed-texts
   [platform texts]
   (if-let [f (get-in platform [:embedding :embed-texts])]

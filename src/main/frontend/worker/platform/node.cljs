@@ -222,6 +222,9 @@
 
 (def ^:private default-embedding-model "all-MiniLM-L6-v2")
 (def ^:private default-embedding-endpoint "http://127.0.0.1:8765/v1/embeddings")
+(def ^:private embedding-model-dimensions
+  {default-embedding-model 384
+   "Qwen/Qwen3-Embedding-0.6B" 1024})
 
 (defn- resolve-embedding-endpoint
   [configured-endpoint]
@@ -234,6 +237,12 @@
   (or configured-model-id
       (gobj/get (.-env js/process) "LOGSEQ_EMBEDDING_MODEL")
       default-embedding-model))
+
+(defn- resolve-embedding-dimension
+  [model-id]
+  (or (get embedding-model-dimensions model-id)
+      (throw (ex-info "Unsupported embedding model dimension"
+                      {:model-id model-id}))))
 
 (defn- embedding-response->vectors
   [response]
@@ -659,6 +668,7 @@
         owner-source (db-lock/normalize-owner-source owner-source)
         embedding-endpoint (resolve-embedding-endpoint embedding-endpoint)
         embedding-model-id (resolve-embedding-model-id embedding-model-id)
+        embedding-dimension (resolve-embedding-dimension embedding-model-id)
         open-vector-index-fn (or open-vector-index-fn open-vector-index)
         kv (kv-store root-dir)
         vector-embedding-enabled? (macos-arm64?)]
@@ -715,6 +725,7 @@
        :timers {:set-interval! (fn [f ms] (js/setInterval f ms))}}
        vector-embedding-enabled?
        (assoc :embedding {:model-id embedding-model-id
+                          :dimension embedding-dimension
                           :embed-texts (fn [texts]
                                          (<embed-texts embedding-endpoint embedding-model-id texts))}
               :vector {:open-index open-vector-index-fn})))))

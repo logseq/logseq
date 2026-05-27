@@ -367,7 +367,7 @@
                                              :path search-path})
             vector-index (platform/vector-open (platform/current)
                                                {:path vector-path
-                                                :dimension search/vector-embedding-dimension})
+                                                :dimension (platform/embedding-dimension (platform/current))})
             _ (log/info :db-worker/get-dbs-open {:repo repo :client-ops-path client-ops-path})
             client-ops-db (platform/sqlite-open (platform/current)
                                                 {:sqlite @*sqlite
@@ -626,7 +626,7 @@
 (defn- expected-vector-index-metadata
   []
   {:embedding-model-id (platform/embedding-model-id (platform/current))
-   :embedding-dimension search/vector-embedding-dimension
+   :embedding-dimension (platform/embedding-dimension (platform/current))
    :context-version search/vector-context-version})
 
 (defn- vector-index-current?
@@ -1388,8 +1388,8 @@
                  (vector-index-current? repo)
                  (not force?))
           version
-          (when-let [conn (worker-state/get-datascript-conn repo)]
-            (let [build-id (start-search-index-build! repo)]
+         (when-let [conn (worker-state/get-datascript-conn repo)]
+           (let [build-id (start-search-index-build! repo)]
               (-> (report-search-index-progress! repo {:build-id build-id
                                                        :status :running
                                                        :stage :search-index
@@ -1402,12 +1402,14 @@
                             (<build-blocks-index! repo search-db conn build-id)))
                   (p/catch (fn [error]
                              (when-not (= :search/stale-index-build (:type (ex-data error)))
-                               (throw error))))
+                               (log/error :search/index-build-failed {:repo repo
+                                                                      :error error}))))
                   (p/finally (fn []
                                (when (= build-id (get @*search-index-build-ids repo))
                                  (report-search-index-progress! repo {:build-id build-id
                                                                       :status :idle}))
-                               (clear-search-index-build! repo build-id)))))))))))
+                               (clear-search-index-build! repo build-id))))
+              :started)))))))
 
 (def-thread-api :thread-api/search-build-pages-indice
   [_repo]

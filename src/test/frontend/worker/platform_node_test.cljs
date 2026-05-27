@@ -194,14 +194,13 @@
                                                           {:index 0
                                                            :embedding [1 2 3]}]})))})))
       (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir
-                                                         :embedding-endpoint "http://127.0.0.1:8765/v1/embeddings"
-                                                         :embedding-model-id "test-embedding-model"})
+                                                         :embedding-endpoint "http://127.0.0.1:8765/v1/embeddings"})
                   embeddings ((get-in platform [:embedding :embed-texts]) ["hello" "world"])]
             (is (= [[1 2 3] [4 5 6]] embeddings))
             (is (= [{:url "http://127.0.0.1:8765/v1/embeddings"
                      :method "POST"
                      :headers {"Content-Type" "application/json"}
-                     :body {:model "test-embedding-model"
+                     :body {:model "all-MiniLM-L6-v2"
                             :input ["hello" "world"]}}]
                    @calls)))
           (p/catch (fn [e]

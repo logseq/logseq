@@ -102,6 +102,7 @@
              :transaction (fn [db f] (.transaction db f))}
     :crypto {}
     :embedding {:model-id "test-model"
+                :dimension search/vector-embedding-dimension
                 :embed-texts embed-texts}
     :timers {:set-interval! (fn [_ _] nil)}}))
 
@@ -803,7 +804,9 @@
                                                            {:id "block-1"
                                                             :page "page-1"
                                                             :title "Hello"})]
-            (p/let [_ (build-index! test-repo false)]
+            (p/let [result (build-index! test-repo false)
+                    _ (p/delay 10)]
+              (is (= :started result))
               (is (= 1 @truncate-calls))
               (is (= [{:embedding-model-id "test-model"
                        :embedding-dimension search/vector-embedding-dimension

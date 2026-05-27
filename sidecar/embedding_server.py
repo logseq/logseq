@@ -7,6 +7,7 @@ from sentence_transformers import SentenceTransformer
 
 
 DEFAULT_MODEL = "all-MiniLM-L6-v2"
+WARMUP_INPUT = "Logseq embedding server warmup"
 _MODELS = {}
 
 
@@ -14,6 +15,11 @@ def load_model(model_name):
     if model_name not in _MODELS:
         _MODELS[model_name] = SentenceTransformer(model_name)
     return _MODELS[model_name]
+
+
+def warm_model(model_name):
+    model = load_model(model_name)
+    model.encode([WARMUP_INPUT], normalize_embeddings=True)
 
 
 def normalize_input(value):
@@ -88,6 +94,7 @@ def main():
     parser.add_argument("--model", default=DEFAULT_MODEL)
     args = parser.parse_args()
 
+    warm_model(args.model)
     server = EmbeddingServer((args.host, args.port), EmbeddingHandler, args.model)
     print(
         f"Embedding server listening on http://{args.host}:{args.port}/v1/embeddings",
