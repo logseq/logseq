@@ -68,6 +68,15 @@
     (assert (fn? f) (str "thread api not registered: " k))
     f))
 
+(defn- <wait-for-progress!
+  [progress-calls pred max-tries]
+  (p/loop [remaining max-tries]
+    (if (or (pred @progress-calls)
+            (zero? remaining))
+      nil
+      (p/let [_ (p/delay 5)]
+        (p/recur (dec remaining))))))
+
 (defn- build-test-platform
   ([]
    (build-test-platform {}))
@@ -441,12 +450,10 @@
                                                             :page "page-1"
                                                             :title "Hello"})]
             (-> (p/let [_ (build-index! test-repo true)
-                        _ (p/loop [remaining 20]
-                            (if (or (seq @progress-calls)
-                                    (zero? remaining))
-                              nil
-                              (p/let [_ (p/delay 5)]
-                                (p/recur (dec remaining)))))]
+                        _ (<wait-for-progress! progress-calls
+                                               (fn [calls]
+                                                 (= :idle (get-in (last calls) [:payload :status])))
+                                               50)]
                   (let [statuses (map (comp :status :payload) @progress-calls)
                         completed (some #(when (= :completed (get-in % [:payload :status]))
                                            %)
@@ -606,7 +613,11 @@
                                                            {:id "block-1"
                                                             :page "page-1"
                                                             :title "Hello"})]
-            (p/let [_ (build-index! test-repo true)]
+            (p/let [_ (build-index! test-repo true)
+                    _ (<wait-for-progress! progress-calls
+                                           (fn [calls]
+                                             (= :idle (get-in (last calls) [:payload :status])))
+                                           50)]
               (let [stages (keep #(get-in % [:payload :stage]) @progress-calls)
                     terminal-progress (some #(when (= 100 (get-in % [:payload :progress]))
                                                %)

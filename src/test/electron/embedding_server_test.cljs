@@ -137,9 +137,9 @@
           app (fake-app "/users/me/logseq" false)]
       (-> (p/let [result (embedding-server/start! app runtime)]
             (is (= :started result))
-            (is (= [[:spawn-server 56789]
-                    [:wait-ready "http://127.0.0.1:56789/healthz"]
-                    [:set-env "LOGSEQ_EMBEDDINGS_URL" "http://127.0.0.1:56789/v1/embeddings"]]
+            (is (= [[:set-env "LOGSEQ_EMBEDDINGS_URL" "http://127.0.0.1:56789/v1/embeddings"]
+                    [:spawn-server 56789]
+                    [:wait-ready "http://127.0.0.1:56789/healthz"]]
                    @events))
             (is (= {"LOGSEQ_EMBEDDINGS_URL" "http://127.0.0.1:56789/v1/embeddings"}
                    @env))
@@ -148,7 +148,7 @@
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
-(deftest start-does-not-set-embedding-env-when-setup-fails
+(deftest start-publishes-embedding-env-before-setup-completes
   (async done
     (embedding-server/stop!)
     (let [{:keys [runtime env spawns]} (fake-runtime {:existing-paths #{}
@@ -160,7 +160,8 @@
           (p/then (fn [_]
                     (is false "start should fail")))
           (p/catch (fn [_]
-                     (is (empty? @env))
+                     (is (= {"LOGSEQ_EMBEDDINGS_URL" "http://127.0.0.1:56789/v1/embeddings"}
+                            @env))
                      (is (empty? @spawns))))
           (p/finally done)))))
 

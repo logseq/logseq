@@ -129,16 +129,12 @@
   [host port]
   (str "http://" host ":" port "/healthz"))
 
-(defn endpoint
-  []
-  @*endpoint)
-
 (defn- publish-endpoint!
   [{:keys [host port set-env!]}]
-  (let [endpoint (embedding-endpoint host port)]
-    (reset! *endpoint endpoint)
-    (set-env! embedding-url-env endpoint)
-    endpoint))
+  (let [endpoint-url (embedding-endpoint host port)]
+    (reset! *endpoint endpoint-url)
+    (set-env! embedding-url-env endpoint-url)
+    endpoint-url))
 
 (defn- allocate-port!
   [{:keys [host port] :as cfg}]
@@ -147,10 +143,10 @@
       (assoc cfg :port port))))
 
 (defn- wait-ready!
-  [endpoint]
+  [endpoint-url]
   (let [deadline (+ (js/Date.now) ready-timeout-ms)]
     (letfn [(poll! []
-              (-> (js/fetch endpoint)
+              (-> (js/fetch endpoint-url)
                   (p/then (fn [resp]
                             (when-not (.-ok resp)
                               (throw (js/Error. (str "Embedding server health check failed: " (.-status resp)))))))
@@ -220,9 +216,9 @@
        @*startup-promise
 
        @*server-process
-       (if-let [endpoint @*endpoint]
+       (if-let [endpoint-url @*endpoint]
          (do
-           ((:set-env! cfg) embedding-url-env endpoint)
+           ((:set-env! cfg) embedding-url-env endpoint-url)
            (p/resolved :already-started))
          (p/rejected (js/Error. "Embedding server endpoint is missing")))
 
@@ -236,8 +232,8 @@
                                  (reset! endpoint-reject reject)))
              _ (reset! *endpoint-promise endpoint-promise)
              startup (-> (p/let [cfg (allocate-port! cfg)
-                                 endpoint (publish-endpoint! cfg)
-                                 _ (@endpoint-resolve endpoint)
+                                 endpoint-url (publish-endpoint! cfg)
+                                 _ (@endpoint-resolve endpoint-url)
                                  cfg (install-runtime! cfg)
                                  proc ((:spawn-server! cfg) cfg)
                                  _ (do

@@ -353,6 +353,7 @@
                 (.unpauseVfs pool))
             db-path (resolve-db-path repo pool repo-path)
             search-path (resolve-db-path repo pool (str "search" repo-path))
+            current-platform (platform/current)
             vector-path (vector-index-path repo pool)
             client-ops-path (resolve-db-path repo pool (str "client-ops-" repo-path))
             _ (log/info :db-worker/get-dbs-open {:repo repo :db-path db-path})
@@ -365,9 +366,10 @@
                                             {:sqlite @*sqlite
                                              :pool pool
                                              :path search-path})
-            vector-index (platform/vector-open (platform/current)
-                                               {:path vector-path
-                                                :dimension (platform/embedding-dimension (platform/current))})
+            vector-index (when (get-in current-platform [:vector :open-index])
+                           (platform/vector-open current-platform
+                                                 {:path vector-path
+                                                  :dimension (platform/embedding-dimension current-platform)}))
             _ (log/info :db-worker/get-dbs-open {:repo repo :client-ops-path client-ops-path})
             client-ops-db (platform/sqlite-open (platform/current)
                                                 {:sqlite @*sqlite
