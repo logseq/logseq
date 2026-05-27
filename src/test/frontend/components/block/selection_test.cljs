@@ -3,14 +3,14 @@
             [frontend.components.block.selection :as selection]))
 
 (deftest pointer-down-state-lifecycle
-  (selection/clear-pointer-down-block!)
+  (selection/clear-pointer-down!)
   (is (false? (selection/pointer-down?)))
-  (selection/set-pointer-down-block! :block)
+  (selection/set-pointer-down!)
   (is (true? (selection/pointer-down?)))
-  (selection/clear-pointer-down-block!)
+  (selection/clear-pointer-down!)
   (is (false? (selection/pointer-down?)))
-  (selection/set-pointer-down-block! :block)
-  (selection/clear-pointer-down-block! #js {:type "pointerup"})
+  (selection/set-pointer-down!)
+  (selection/clear-pointer-down! #js {:type "pointerup"})
   (is (false? (selection/pointer-down?))))
 
 (deftest select-on-hover-keeps-active-selection-while-scroll-moves-block-under-pointer
