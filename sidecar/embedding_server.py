@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import logging
+import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from sentence_transformers import SentenceTransformer
@@ -11,15 +13,32 @@ WARMUP_INPUT = "Logseq embedding server warmup"
 _MODELS = {}
 
 
+def configure_logging(log_file):
+    if not log_file:
+        return
+
+    log_dir = os.path.dirname(log_file)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+    logging.basicConfig(
+        filename=log_file,
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
+
+
 def load_model(model_name):
     if model_name not in _MODELS:
+        logging.info("Loading embedding model: %s", model_name)
         _MODELS[model_name] = SentenceTransformer(model_name)
     return _MODELS[model_name]
 
 
 def warm_model(model_name):
+    logging.info("Warming embedding model: %s", model_name)
     model = load_model(model_name)
     model.encode([WARMUP_INPUT], normalize_embeddings=True)
+    logging.info("Embedding model warmup finished: %s", model_name)
 
 
 def normalize_input(value):
@@ -67,6 +86,7 @@ class EmbeddingHandler(BaseHTTPRequestHandler):
                 }
             )
         except Exception as error:
+            logging.exception("Embedding request failed")
             self.send_json({"error": str(error)}, status=400)
 
     def log_message(self, _format, *_args):
@@ -74,11 +94,15 @@ class EmbeddingHandler(BaseHTTPRequestHandler):
 
     def send_json(self, payload, status=200):
         body = json.dumps(payload).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except BrokenPipeError:
+            logging.exception("Embedding response write failed")
+            raise
 
 
 class EmbeddingServer(ThreadingHTTPServer):
@@ -86,21 +110,36 @@ class EmbeddingServer(ThreadingHTTPServer):
         super().__init__(server_address, handler_class)
         self.default_model = default_model
 
+    def handle_error(self, request, client_address):
+        logging.exception("Unhandled embedding server error from %s", client_address)
+        super().handle_error(request, client_address)
+
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--log-file")
     args = parser.parse_args()
 
-    warm_model(args.model)
-    server = EmbeddingServer((args.host, args.port), EmbeddingHandler, args.model)
-    print(
-        f"Embedding server listening on http://{args.host}:{args.port}/v1/embeddings",
-        flush=True,
-    )
-    server.serve_forever()
+    configure_logging(args.log_file)
+    try:
+        warm_model(args.model)
+        server = EmbeddingServer((args.host, args.port), EmbeddingHandler, args.model)
+        logging.info(
+            "Embedding server listening on http://%s:%s/v1/embeddings",
+            args.host,
+            args.port,
+        )
+        print(
+            f"Embedding server listening on http://{args.host}:{args.port}/v1/embeddings",
+            flush=True,
+        )
+        server.serve_forever()
+    except Exception:
+        logging.exception("Embedding server failed")
+        raise
 
 
 if __name__ == "__main__":

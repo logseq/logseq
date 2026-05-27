@@ -383,8 +383,11 @@
                             tt (exceptions/setup-exception-listeners!)]
 
                         (vreset! *teardown-fn
-                                 #(doseq [f [t0 t1 t2 t3 t4 t5 tt]]
-                                    (and f (f)))))))
+                                 #(-> (handler/stop-all-db-workers!)
+                                      (p/finally
+                                        (fn []
+                                          (doseq [f [t0 t1 t2 t3 t4 t5 tt]]
+                                            (and f (f))))))))))
 
            ;; setup effects
            (@*setup-fn)
@@ -414,8 +417,10 @@
                                     nil)))))
            (.on app' "before-quit" (fn [_e]
                                      (reset! win/*quitting? true)
-                                     (embedding-server/stop!)
-                                     (handler/stop-all-db-workers!)))
+                                     (-> (handler/stop-all-db-workers!)
+                                         (p/finally
+                                           (fn []
+                                             (embedding-server/stop!))))))
 
            (.on app' "activate" #(when @*win (.show win)))))))
 
@@ -452,9 +457,11 @@
 
       (.on app "window-all-closed" (fn []
                                      (logger/debug "window-all-closed" "Quitting...")
-                                     (embedding-server/stop!)
-                                     (handler/stop-all-db-workers!)
-                                     (.quit app)))
+                                     (-> (handler/stop-all-db-workers!)
+                                         (p/finally
+                                           (fn []
+                                             (embedding-server/stop!)
+                                             (.quit app))))))
       (on-app-ready! app))))
 
 (defn start []

@@ -222,9 +222,12 @@
 
 (def ^:private default-embedding-model "all-MiniLM-L6-v2")
 (def ^:private default-embedding-endpoint "http://127.0.0.1:8765/v1/embeddings")
+(def ^:private embedding-fetch-timeout-ms 120000)
+(def ^:private embedding-fetch-retry-ms 250)
 (def ^:private embedding-model-dimensions
   {default-embedding-model 384
-   "Qwen/Qwen3-Embedding-0.6B" 1024})
+   "BAAI/bge-m3" 1024
+   "Qwen/Qwen3-Embedding-4B" 1024})
 
 (defn- resolve-embedding-endpoint
   [configured-endpoint]
@@ -252,17 +255,35 @@
          (sort-by #(or (:index %) 0))
          (mapv (comp vec :embedding)))))
 
+(defn- <fetch-embedding-response
+  [endpoint model-id request]
+  (let [deadline (+ (js/Date.now) embedding-fetch-timeout-ms)]
+    (letfn [(attempt! []
+              (-> (js/fetch endpoint request)
+                  (p/catch
+                   (fn [error]
+                     (if (< (js/Date.now) deadline)
+                       (p/let [_ (p/delay embedding-fetch-retry-ms)]
+                         (attempt!))
+                       (throw (ex-info "embedding server fetch failed"
+                                       {:endpoint endpoint
+                                        :model-id model-id}
+                                       error)))))))]
+      (attempt!))))
+
 (defn- <embed-texts
   [endpoint model-id texts]
   (let [texts (vec texts)]
     (if (empty? texts)
       (p/resolved [])
-      (p/let [resp (js/fetch endpoint
-                             #js {:method "POST"
-                                  :headers #js {"Content-Type" "application/json"}
-                                  :body (js/JSON.stringify
-                                         (clj->js {:model model-id
-                                                   :input texts}))})
+      (p/let [resp (<fetch-embedding-response
+                    endpoint
+                    model-id
+                    #js {:method "POST"
+                         :headers #js {"Content-Type" "application/json"}
+                         :body (js/JSON.stringify
+                                (clj->js {:model model-id
+                                          :input texts}))})
               _ (when-not (.-ok resp)
                   (throw (ex-info "embedding server request failed"
                                   {:endpoint endpoint
@@ -675,7 +696,9 @@
     (p/do!
      (ensure-dir! root-dir)
      (ensure-dir! data-dir)
-     (log/info :db-worker-node-platform {:root-dir root-dir})
+     (log/info :db-worker-node-platform {:root-dir root-dir
+                                          :embedding-endpoint embedding-endpoint
+                                          :embedding-model-id embedding-model-id})
      (cond->
       {:env {:publishing? false
              :runtime :node

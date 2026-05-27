@@ -11,11 +11,14 @@
 (def ^:private venv-name ".venv")
 (def ^:private dependency "sentence-transformers")
 (def ^:private deps-stamp-name "deps-v1.ok")
+(def ^:private log-file-name "embedding-server.log")
 (def ^:private ready-timeout-ms 120000)
 (def ^:private ready-poll-ms 100)
 
 (defonce ^:private *server-process (atom nil))
 (defonce ^:private *startup-promise (atom nil))
+(defonce ^:private *endpoint-promise (atom nil))
+(defonce ^:private *endpoint (atom nil))
 
 (declare find-port! run-command! spawn-server! wait-ready! stop!)
 
@@ -57,6 +60,7 @@
      :venv-dir venv-dir
      :venv-python venv-python
      :deps-stamp (node-path/join runtime-dir deps-stamp-name)
+     :log-file (node-path/join runtime-dir log-file-name)
      :sidecar-dir sidecar-root
      :script-path script-path
      :python-command (or (:python-command opts)
@@ -125,6 +129,17 @@
   [host port]
   (str "http://" host ":" port "/healthz"))
 
+(defn endpoint
+  []
+  @*endpoint)
+
+(defn- publish-endpoint!
+  [{:keys [host port set-env!]}]
+  (let [endpoint (embedding-endpoint host port)]
+    (reset! *endpoint endpoint)
+    (set-env! embedding-url-env endpoint)
+    endpoint))
+
 (defn- allocate-port!
   [{:keys [host port] :as cfg}]
   (let [find-port-fn (:find-port! cfg)]
@@ -157,14 +172,15 @@
                                                      :signal signal})))))
 
 (defn- spawn-server!
-  [{:keys [venv-python script-path host port model-id logger]
+  [{:keys [venv-python script-path host port model-id log-file logger]
     sidecar-root :sidecar-dir}]
   (let [proc (.spawn child-process
                      venv-python
                      (clj->js [script-path
                                "--host" host
                                "--port" (str port)
-                               "--model" model-id])
+                               "--model" model-id
+                               "--log-file" log-file])
                      #js {:cwd sidecar-root
                           :stdio "pipe"})]
     (log-stream! (.-stdout proc) (:info logger) :embedding-server)
@@ -200,24 +216,38 @@
        (not (macos? (:platform cfg)))
        (p/resolved :skipped)
 
-       @*server-process
-       (p/resolved :already-started)
+       @*startup-promise
+       @*startup-promise
 
-       @*startup-promise
-       @*startup-promise
+       @*server-process
+       (if-let [endpoint @*endpoint]
+         (do
+           ((:set-env! cfg) embedding-url-env endpoint)
+           (p/resolved :already-started))
+         (p/rejected (js/Error. "Embedding server endpoint is missing")))
 
        :else
        (let [cfg (assoc cfg :logger (or (:logger cfg) (default-logger)))
+             endpoint-resolve (atom nil)
+             endpoint-reject (atom nil)
+             endpoint-promise (js/Promise.
+                               (fn [resolve reject]
+                                 (reset! endpoint-resolve resolve)
+                                 (reset! endpoint-reject reject)))
+             _ (reset! *endpoint-promise endpoint-promise)
              startup (-> (p/let [cfg (allocate-port! cfg)
+                                 endpoint (publish-endpoint! cfg)
+                                 _ (@endpoint-resolve endpoint)
                                  cfg (install-runtime! cfg)
                                  proc ((:spawn-server! cfg) cfg)
                                  _ (do
                                      (reset! *server-process proc)
                                      (attach-exit-handler! proc (:logger cfg)))
                                  _ ((:wait-ready! cfg) (embedding-health-endpoint (:host cfg) (:port cfg)))]
-                           ((:set-env! cfg) embedding-url-env (embedding-endpoint (:host cfg) (:port cfg)))
                            :started)
                          (p/catch (fn [error]
+                                    (when @endpoint-reject
+                                      (@endpoint-reject error))
                                     (stop!)
                                     ((:error (:logger cfg)) :embedding-server/setup-failed error)
                                     (throw error)))
@@ -226,9 +256,32 @@
          (reset! *startup-promise startup)
          startup)))))
 
+(defn ensure-endpoint!
+  ([app'] (ensure-endpoint! app' {}))
+  ([app' opts]
+   (let [cfg (config app' opts)]
+     (cond
+       (not (macos? (:platform cfg)))
+       (p/resolved nil)
+
+       @*endpoint
+       (do
+         ((:set-env! cfg) embedding-url-env @*endpoint)
+         (p/resolved @*endpoint))
+
+       @*endpoint-promise
+       @*endpoint-promise
+
+       :else
+       (do
+         (start! app' opts)
+         @*endpoint-promise)))))
+
 (defn stop!
   []
   (reset! *startup-promise nil)
+  (reset! *endpoint-promise nil)
+  (reset! *endpoint nil)
   (when-let [^js proc @*server-process]
     (reset! *server-process nil)
     (when (fn? (.-kill proc))
