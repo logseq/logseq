@@ -11,7 +11,7 @@
 (def ^:private venv-name ".venv")
 (def ^:private dependency "sentence-transformers")
 (def ^:private deps-stamp-name "deps-v1.ok")
-(def ^:private ready-timeout-ms 15000)
+(def ^:private ready-timeout-ms 120000)
 (def ^:private ready-poll-ms 100)
 
 (defonce ^:private *server-process (atom nil))
