@@ -383,9 +383,9 @@
   (mixins/event-mixin
    (fn [state]
      (mixins/listen state js/window "pointerdown" hide-context-menu-and-clear-selection)
-     (mixins/listen state js/window "pointerup" block-selection/clear-pointer-down-block!)
-     (mixins/listen state js/window "pointercancel" block-selection/clear-pointer-down-block!)
-     (mixins/listen state js/window "blur" block-selection/clear-pointer-down-block!)
+     (mixins/listen state js/window "pointerup" block-selection/clear-pointer-down!)
+     (mixins/listen state js/window "pointercancel" block-selection/clear-pointer-down!)
+     (mixins/listen state js/window "blur" block-selection/clear-pointer-down!)
      (mixins/listen state js/window "keydown"
                     (fn [e]
                       (cond
