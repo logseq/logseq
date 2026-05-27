@@ -553,6 +553,58 @@
            (get-in export-edn [:classes :user.class/MyClass :build/class-properties])))
     (is (not (contains? (:properties export-edn) legacy-property)))))
 
+(deftest graph-export-omits-legacy-plugin-property-schema-attrs
+  (let [plugin-property :plugin.property.degrande-colors/mugpet_degrande_colors_controls
+        conn (db-test/create-conn-with-import-map
+              {:properties {plugin-property {:logseq.property/type :json}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"}]}]})
+        plugin-property-ent (d/entity @conn plugin-property)
+        _ (d/transact! conn [{:db/id (:db/id plugin-property-ent)
+                              :hide? true
+                              :public? false}])
+        export-edn (sqlite-export/build-export @conn {:export-type :graph})
+        validation (sqlite-export/validate-export export-edn)]
+    (is (nil? (:error validation)))
+    (is (= {:logseq.property/type :json
+            :db/cardinality :db.cardinality/one
+            :block/title "mugpet_degrande_colors_controls"}
+           (get-in export-edn [:properties plugin-property])))))
+
+(deftest graph-export-keeps-referenced-recycled-closed-value-config
+  (let [property-id :plugin.property.degrande-colors/tldraw
+        closed-value-uuid (random-uuid)
+        conn (db-test/create-conn-with-import-map
+              {:properties {property-id {:logseq.property/type :default
+                                          :build/closed-values [{:value "tldraw"
+                                                                 :uuid closed-value-uuid}]}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"
+                                             :build/properties {property-id [:block/uuid closed-value-uuid]}}]}]})
+        closed-value (d/entity @conn [:block/uuid closed-value-uuid])
+        _ (d/transact! conn [{:db/id (:db/id closed-value)
+                              :logseq.property/deleted-at 1}])
+        export-edn (sqlite-export/build-export @conn {:export-type :graph})
+        validation (sqlite-export/validate-export export-edn)]
+    (is (nil? (:error validation)))
+    (is (= [{:value "tldraw" :uuid closed-value-uuid}]
+           (get-in export-edn [:properties property-id :build/closed-values])))))
+
+(deftest graph-export-ignores-scalar-values-when-finding-referenced-closed-values
+  (let [property-id :user.property/datetime
+        conn (db-test/create-conn-with-import-map
+              {:properties {property-id {:logseq.property/type :datetime}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"
+                                             :build/properties {property-id 1779841453610}}]}]})
+        export-edn (sqlite-export/build-export @conn {:export-type :graph})
+        validation (sqlite-export/validate-export export-edn)]
+    (is (nil? (:error validation)))
+    (is (= {:logseq.property/type :datetime
+            :db/cardinality :db.cardinality/one
+            :block/title "datetime"}
+           (get-in export-edn [:properties property-id])))))
+
 (deftest import-view-blocks
   (let [original-data
         ;; Test a mix of page and block types
