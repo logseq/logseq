@@ -2231,9 +2231,10 @@
         order-list? (boolean own-number-list?)
         order-list-idx (:own-order-list-index config)
         page-title? (:page-title? config)
+        collapsable-page-title? (or page-title? (:collapsable-page-title? config))
         collapsable? (editor-handler/collapsable? uuid {:semantic? true
                                                         :ignore-children? page-title?
-                                                        :page-title? page-title?})
+                                                        :page-title? collapsable-page-title?})
         link? (boolean (:original-block config))
         icon-size (if collapsed? 12 14)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
@@ -2810,38 +2811,260 @@
                               :tag? true
                               :disable-preview? true
                               :disable-click? true) tag)])
-           [:div.text-sm.opacity-50.ml-1
+          [:div.text-sm.opacity-50.ml-1
             (str "+" (- tags-count 2))]])))))
+
+(defn- bottom-row-focus-elements
+  [^js row]
+  (->> (array-seq (.querySelectorAll row "[data-bottom-row-nav='true']"))
+       vec))
+
+(defn- focus-bottom-row-item!
+  [^js row index]
+  (when-let [el (nth (bottom-row-focus-elements row) index nil)]
+    (.focus el)
+    true))
+
+(defn- move-bottom-row-focus!
+  [^js el direction]
+  (when-let [^js row (.closest el ".bottom-properties-row")]
+    (let [items (bottom-row-focus-elements row)
+          current-index (or (first (keep-indexed (fn [idx item]
+                                                   (when (identical? item el) idx))
+                                                 items))
+                            0)
+          last-index (max 0 (dec (count items)))
+          next-index (case direction
+                       :prev (max 0 (dec current-index))
+                       :next (min last-index (inc current-index))
+                       current-index)]
+      (focus-bottom-row-item! row next-index))))
+
+(defn- trigger-bottom-pill-edit!
+  [^js pill]
+  (when-let [trigger (some-> pill
+                             (.querySelector ".bottom-property-content .jtrigger"))]
+    (if (some-> pill (.querySelector ".bottom-property-content [data-popup-active]"))
+      (shui/popup-hide!)
+      (.click trigger))
+    true))
+
+(defn- current-bottom-pill
+  [^js el]
+  (some-> el (.closest ".bottom-property-pill-focusable")))
+
+(defn- input-cursor-at-boundary?
+  [^js input key]
+  (let [start (.-selectionStart input)
+        end (.-selectionEnd input)
+        value (or (.-value input) "")]
+    (and (number? start)
+         (number? end)
+         (= start end)
+         (case key
+           "ArrowUp" (zero? start)
+           "ArrowDown" (= start (count value))
+           false))))
+
+(defn- focus-block-editor-from-bottom-row!
+  [^js row]
+  (when-let [^js current-block (.closest row ".ls-block")]
+    (.blur row)
+    (when-let [block-id (some-> (dom/attr current-block "blockid") uuid)]
+      (let [container-id (some-> (dom/attr current-block "containerid") js/parseInt)]
+        (editor-handler/edit-block! {:block/uuid block-id}
+                                    :max
+                                    {:container-id container-id})))))
+
+(defn- handle-bottom-properties-row-key-down!
+  [e]
+  (let [key (util/ekey e)
+        ^js row (.-currentTarget e)
+        ^js active-el (.-activeElement js/document)]
+    (cond
+      (= "ArrowUp" key)
+      (do
+        (util/stop e)
+        (focus-block-editor-from-bottom-row! row))
+
+      (= "ArrowDown" key)
+      (do
+        (util/stop e)
+        (editor-handler/move-cross-boundary-up-down :down {:exclude-property? true}))
+
+      (contains? #{"ArrowLeft" "ArrowRight"} key)
+      (do
+        (util/stop e)
+        (if (and active-el
+                 (= "true" (.getAttribute active-el "data-bottom-row-nav")))
+          (move-bottom-row-focus! active-el (if (= key "ArrowLeft") :prev :next))
+          (let [items (bottom-row-focus-elements row)]
+            (when (seq items)
+              (.focus (first items))))))
+
+      :else
+      nil)))
+
+(defn- handle-bottom-pill-key-down!
+  [e]
+  (let [key (util/ekey e)
+        ^js pill (.-currentTarget e)]
+    (cond
+      (contains? #{"ArrowUp" "ArrowDown"} key)
+      (do
+        (util/stop e)
+        (some-> (.closest pill ".bottom-properties-row") (.focus)))
+
+      (contains? #{" " "Enter"} key)
+      (do
+        (util/stop e)
+        (trigger-bottom-pill-edit! pill))
+
+      :else
+      nil)))
+
+(defn- bottom-property-pill-cp
+  [block property opts]
+  (let [many-node? (and (= :node (:logseq.property/type property))
+                        (= :db.cardinality/many (:db/cardinality property)))
+        property-value (get block (:db/ident property))
+        empty-placeholder? (= :logseq.property/empty-placeholder (:db/ident property-value))
+        has-value? (and (some? property-value) (not empty-placeholder?))]
+    [:div.bottom-property-pill.bottom-property-pill-focusable
+     {:key (str (:db/id block) "-" (:db/id property))
+      :class (util/classnames [{:bottom-property-pill-wrap many-node?}])
+      :data-bottom-pill-focusable true
+      :data-bottom-row-nav true
+      :tab-index -1
+      :on-key-down handle-bottom-pill-key-down!}
+   [:div.flex.flex-row.items-center
+    (property-component/property-key-cp block property opts)
+    [:div.select-none ":"]]
+   [:div {:class (util/classnames
+                  ["bottom-property-content property-value-container"
+                   {:bottom-property-content-wrap many-node?}])
+          :style {:min-height 20}}
+    (pv/property-value block property opts)
+    (when (and has-value?
+               (contains? #{:date :datetime} (:logseq.property/type property)))
+      [:button.bottom-property-edit-icon.select-none
+       {:type "button"
+        :on-click (fn [e]
+                    (util/stop e)
+                    (some-> (.-currentTarget e)
+                            (.closest ".bottom-property-pill")
+                            trigger-bottom-pill-edit!))}
+       (ui/icon "edit" {:size 15})])]]))
+
+(def ^:private max-bottom-property-pills-per-line 3)
+
+(defn- bottom-property-pill-items
+  [block properties opts]
+  (let [last-index (dec (count properties))]
+    (mapcat
+     (fn [index property]
+       (cond-> [(bottom-property-pill-cp block property opts)]
+         (and (< index last-index)
+              (zero? (mod (inc index) max-bottom-property-pills-per-line)))
+         (conj [:div.bottom-property-pill-line-break
+                {:key (str "bottom-property-pill-line-break-" (:db/id block) "-" index)
+                 :aria-hidden true}])))
+     (cljs.core/range)
+     properties)))
+
+(defn- block-below-positioned-properties-cp
+  [block properties opts show-hidden-properties-toggle? show-add-property-button?]
+  [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden
+   [:div.bottom-properties-row.flex.flex-row.gap-2.items-center.flex-wrap.overflow-x-hidden
+    {:data-bottom-properties-row (:block/uuid block)
+     :tab-index -1
+     :on-key-down handle-bottom-properties-row-key-down!}
+    (bottom-property-pill-items block properties opts)
+    (when show-hidden-properties-toggle?
+      (property-component/hidden-properties-toggle-button block {:icon-only? true
+                                                                 :bottom-row-nav? true
+                                                                 :tab-index 0}))
+    (when show-add-property-button?
+      (property-component/new-property block (assoc opts
+                                                    :property-position :block-below
+                                                    :bottom-row-nav? true
+                                                    :icon-only? true
+                                                    :tab-index 0)))]])
 
 (rum/defc block-positioned-properties
   [config block position]
-  (let [properties (outliner-property/get-block-positioned-properties (db/get-db) (:db/id block) position)
+  (let [properties (cond->> (outliner-property/get-block-positioned-properties (db/get-db) (:db/id block) position)
+                     (= position :block-below)
+                     (remove (fn [property]
+                               (= (:db/ident property) :logseq.property/icon))))
+        has-viewable-properties? (seq properties)
         opts (merge config
                     {:icon? true
                      :page-cp page-cp
                      :block-cp blocks-container
                      :inline-text inline-text
                      :other-position? true
-                     :property-position position})]
-    (when (seq properties)
-      (case position
+                     :property-position position})
+        show-page-hidden-properties-toggle? (and (ldb/page? block)
+                                                 (not config/publishing?))
+        show-hidden-properties-toggle? (and has-viewable-properties?
+                                            show-page-hidden-properties-toggle?
+                                            (property-component/has-hidden-properties? block config))
+        show-page-add-property? (and (ldb/page? block)
+                                     (not (ldb/class? block))
+                                     (not config/publishing?))
+        show-add-property-button? (and has-viewable-properties?
+                                       show-page-add-property?)]
+    (when (= position :block-below)
+      (hooks/use-effect!
+       (fn []
+         (let [block-uuid (:block/uuid block)
+               listener (fn [^js e]
+                          (let [key (util/ekey e)
+                                ^js active-el (.-activeElement js/document)
+                                edit-input-id (str "edit-block-" block-uuid)
+                                row (when block-uuid
+                                      (.querySelector js/document
+                                                      (str "[data-bottom-properties-row=\"" block-uuid "\"]")))]
+                            (when (and row
+                                       has-viewable-properties?
+                                       block-uuid
+                                       (contains? #{"ArrowUp" "ArrowDown"} key)
+                                       (not (or (.-metaKey e)
+                                                (.-ctrlKey e)
+                                                (.-altKey e)))
+                                       active-el
+                                       (= (.-id active-el) edit-input-id)
+                                       (input-cursor-at-boundary? active-el key))
+                              (util/stop e)
+                              (.focus row))
+
+                            (when (and row
+                                       (= key "Escape")
+                                       active-el
+                                       (.contains row active-el))
+                              (when-let [pill (current-bottom-pill active-el)]
+                                (js/setTimeout (fn [] (.focus pill)) 0)))))]
+           (.addEventListener js/document "keydown" listener)
+           (fn []
+             (.removeEventListener js/document "keydown" listener))))
+       [(:block/uuid block) has-viewable-properties?]))
+    (case position
         :block-below
-        [:div.positioned-properties.block-below.flex.flex-row.gap-2.item-center.flex-wrap.text-sm.overflow-x-hidden
-         (for [property properties]
-           [:div.flex.flex-row.items-center.gap-1
-            {:key (str (:db/id block) "-" (:db/id property))}
-            [:div.flex.flex-row.items-center
-             (property-component/property-key-cp block property opts)
-             [:div.select-none ":"]]
-            [:div.ls-block.property-value-container
-             {:style {:min-height 20}}
-             (pv/property-value block property opts)]])]
-        [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6.self-start
-         {:class (name position)}
-         (for [property properties]
-           (rum/with-key
-             (pv/property-value block property (assoc opts :show-tooltip? true))
-             (str (:db/id block) "-" (:db/id property))))]))))
+        (when has-viewable-properties?
+          (block-below-positioned-properties-cp block
+                                                properties
+                                                opts
+                                                show-hidden-properties-toggle?
+                                                show-add-property-button?))
+
+        (when (seq properties)
+          [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6.self-start
+           {:class (name position)}
+           (for [property properties]
+             (rum/with-key
+               (pv/property-value block property (assoc opts :show-tooltip? true))
+               (str (:db/id block) "-" (:db/id property))))]))))
 
 (rum/defc block-reactions < rum/reactive db-mixins/query
   [block]

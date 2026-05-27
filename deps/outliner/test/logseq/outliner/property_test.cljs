@@ -463,6 +463,129 @@
     (is (= [:user.property/p1 :user.property/p2 :user.property/p3]
            (map :db/ident (:classes-properties (outliner-property/get-block-classes-properties @conn (:db/id block))))))))
 
+(deftest property-with-other-position-default-bottom-rules
+  (testing "explicit non-properties ui-position remains other-position"
+    (is (true?
+         (outliner-property/property-with-other-position?
+          nil
+          {}
+          {:db/ident :user.property/p1
+           :logseq.property/type :number
+           :logseq.property/ui-position :block-left}))))
+
+  (testing "number property without explicit ui-position defaults to bottom position"
+    (is (true?
+         (outliner-property/property-with-other-position?
+          nil
+          {}
+          {:db/ident :user.property/p1
+           :logseq.property/type :number}))))
+
+  (testing "default property without closed values stays in normal property rows"
+    (is (false?
+         (outliner-property/property-with-other-position?
+          nil
+          {}
+          {:db/ident :user.property/p1
+           :logseq.property/type :default
+           :property/closed-values []}))))
+
+  (testing "default property with closed values is positioned in bottom row"
+    (is (true?
+         (outliner-property/property-with-other-position?
+          nil
+          {}
+          {:db/ident :user.property/p1
+           :logseq.property/type :default
+           :property/closed-values [{:db/id 1}]}))))
+
+  (testing "url property without explicit ui-position stays in normal property rows"
+    (is (false?
+         (outliner-property/property-with-other-position?
+          nil
+          {}
+          {:db/ident :user.property/p1
+           :logseq.property/type :url}))))
+
+  (testing "explicit left/right ui-position remains in positioned rows"
+    (is (true?
+         (outliner-property/property-with-other-position?
+          nil
+          {}
+          {:db/ident :user.property/p1
+           :logseq.property/type :url
+           :logseq.property/ui-position :block-left}))))
+
+  (testing "explicit properties ui-position keeps property in normal property rows"
+    (is (false?
+         (outliner-property/property-with-other-position?
+          nil
+          {}
+          {:db/ident :user.property/p1
+           :logseq.property/type :number
+           :logseq.property/ui-position :properties}))))
+
+  (testing "many node property without explicit ui-position defaults to bottom position"
+    (is (true?
+         (outliner-property/property-with-other-position?
+          nil
+          {}
+          {:db/ident :user.property/p1
+           :logseq.property/type :node
+           :db/cardinality :db.cardinality/many}))))
+
+  (testing "bidirectional config property stays in normal property rows"
+    (is (false?
+         (outliner-property/property-with-other-position?
+          nil
+          {}
+          {:db/ident :logseq.property.class/enable-bidirectional?
+           :logseq.property/type :checkbox}))))
+
+  (testing "tag properties and schema-related properties stay in normal property rows"
+    (is (false?
+         (outliner-property/property-with-other-position?
+          nil
+          {}
+          {:db/ident :block/tags
+           :logseq.property/type :class})))
+    (is (false?
+         (outliner-property/property-with-other-position?
+          nil
+          {}
+          {:db/ident :logseq.property.class/properties
+           :logseq.property/type :property})))
+    (is (false?
+         (outliner-property/property-with-other-position?
+          nil
+          {}
+          {:db/ident :logseq.property/public?
+           :logseq.property/type :checkbox}))))
+
+  (testing "a schema property is part of the shared schema set"
+    (is (contains? db-property/schema-properties :logseq.property/public?))))
+
+(deftest get-block-positioned-properties-filters-non-public
+  (let [conn (db-test/create-conn-with-blocks [])
+        journal-class (d/entity @conn :logseq.class/Journal)
+        positioned-properties (outliner-property/get-block-positioned-properties @conn (:db/id journal-class) :block-below)]
+    (is (every? #(not (false? (:logseq.property/public? %))) positioned-properties))
+    (is (not-any? #(= :logseq.property.journal/title-format (:db/ident %))
+                  positioned-properties))))
+
+(deftest get-block-positioned-properties-keeps-empty-inherited-tag-properties
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:authors {:logseq.property/type :node
+                                      :db/cardinality :db.cardinality/many}}
+               :classes {:Paper {:build/class-properties [:authors]}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "paper1"
+                                             :build/tags [:Paper]}]}]})
+        paper1 (db-test/find-block-by-content @conn "paper1")
+        positioned-properties (outliner-property/get-block-positioned-properties @conn (:db/id paper1) :block-below)
+        positioned-idents (set (map :db/ident positioned-properties))]
+    (is (contains? positioned-idents :user.property/authors))))
+
 (deftest extends-cycle
   (testing "Fail when creating a cycle of extends"
     (let [conn (db-test/create-conn-with-blocks

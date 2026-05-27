@@ -69,6 +69,19 @@
     (is (= (:logseq.property/default-value property)
            (#'property-value/resolved-property-value-for-render loaded-block property false)))))
 
+(deftest bottom-property-edit-pointer-dismiss-handler-test
+  (let [edit-button (js-obj "closest" (fn [selector]
+                                        (when (= selector ".bottom-property-edit-icon")
+                                          #js {})))
+        other-target (js-obj "closest" (constantly nil))
+        prevent-default-called? (atom false)
+        edit-event (js-obj "target" edit-button
+                           "preventDefault" #(reset! prevent-default-called? true))
+        other-event (js-obj "target" other-target)]
+    (is (false? (#'property-value/prevent-bottom-property-edit-pointer-dismiss edit-event)))
+    (is (true? @prevent-default-called?))
+    (is (nil? (#'property-value/prevent-bottom-property-edit-pointer-dismiss other-event)))))
+
 (deftest direct-value-picker-type-test
   (is (true? (property-value/direct-value-picker-type? :date)))
   (is (true? (property-value/direct-value-picker-type? :datetime)))
