@@ -481,6 +481,86 @@
            (outliner-property/set-block-property! conn (:db/id class3) :logseq.property.class/extends (:db/id class1)))
           "Extends cycle"))))
 
+(deftest extends-redundant-direct-parent-cleanup
+  (testing "Clean redundant direct parents from descendants when a class gets a new parent"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:A {}
+                           :B {}
+                           :C {:build/class-extends [:B]}
+                           :D {:build/class-extends [:A :C]}}})
+          b (d/entity @conn :user.class/B)]
+      (outliner-property/set-block-property! conn
+                                             (:db/id b)
+                                             :logseq.property.class/extends
+                                             (:db/id (d/entity @conn :user.class/A)))
+      (is (= [:user.class/C]
+             (:logseq.property.class/extends
+              (db-test/readable-properties (d/entity @conn :user.class/D))))
+          "D keeps only the nearest direct parent"))))
+
+(deftest extends-redundant-direct-parent-cleanup-for-batch-vector
+  (testing "Clean descendant redundant parents when batch setting multiple parents"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:A {}
+                           :B {}
+                           :C {:build/class-extends [:B]}
+                           :D {:build/class-extends [:A :C]}
+                           :E {}}})]
+      (outliner-property/batch-set-property! conn
+                                             [(:db/id (d/entity @conn :user.class/B))]
+                                             :logseq.property.class/extends
+                                             [(:db/id (d/entity @conn :user.class/A))
+                                              (:db/id (d/entity @conn :user.class/E))])
+      (is (= [:user.class/C]
+             (:logseq.property.class/extends
+              (db-test/readable-properties (d/entity @conn :user.class/D))))
+          "D removes the direct parent inherited through C"))))
+
+(deftest extends-redundant-direct-parent-cleanup-for-deep-descendants
+  (testing "Clean redundant parents from deeper descendants"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:A {}
+                           :B {}
+                           :C {:build/class-extends [:B]}
+                           :D {:build/class-extends [:C]}
+                           :E {:build/class-extends [:A :D]}}})]
+      (outliner-property/set-block-property! conn
+                                             (:db/id (d/entity @conn :user.class/B))
+                                             :logseq.property.class/extends
+                                             (:db/id (d/entity @conn :user.class/A)))
+      (is (= [:user.class/D]
+             (:logseq.property.class/extends
+              (db-test/readable-properties (d/entity @conn :user.class/E))))
+          "E removes the direct parent inherited through D"))))
+
+(deftest extends-redundant-direct-parent-cleanup-for-root-reset
+  (testing "Clean descendant Root parents when an ancestor is reset to Root"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:B {}
+                           :C {:build/class-extends [:B]}
+                           :D {:build/class-extends [:logseq.class/Root :C]}}})]
+      (outliner-property/set-block-property! conn
+                                             (:db/id (d/entity @conn :user.class/B))
+                                             :logseq.property.class/extends
+                                             :logseq.class/Root)
+      (is (= [:user.class/C]
+             (:logseq.property.class/extends
+              (db-test/readable-properties (d/entity @conn :user.class/D))))
+          "D removes the direct Root parent inherited through C"))))
+
+(deftest extends-redundant-direct-parent-cleanup-without-descendants
+  (testing "Setting extends on a class without descendants does not fail"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:A {}
+                           :B {}}})]
+      (outliner-property/set-block-property! conn
+                                             (:db/id (d/entity @conn :user.class/B))
+                                             :logseq.property.class/extends
+                                             (:db/id (d/entity @conn :user.class/A)))
+      (is (= [:user.class/A]
+             (:logseq.property.class/extends
+              (db-test/readable-properties (d/entity @conn :user.class/B))))))))
+
 (deftest delete-property-value!
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:C1 {}
