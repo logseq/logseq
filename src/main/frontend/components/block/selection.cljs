@@ -1,5 +1,21 @@
 (ns frontend.components.block.selection)
 
+(defonce *pointer-down? (atom false))
+
+(defn set-pointer-down-block!
+  [_block]
+  (reset! *pointer-down? true))
+
+(defn clear-pointer-down-block!
+  ([]
+   (reset! *pointer-down? false))
+  ([_]
+   (clear-pointer-down-block!)))
+
+(defn pointer-down?
+  []
+  (true? @*pointer-down?))
+
 (defn select-on-hover?
   [{:keys [last-client-y client-y dragging? editing-same-block? active-selection?]}]
   (and (or (not= last-client-y client-y)
