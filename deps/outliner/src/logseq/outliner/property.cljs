@@ -1,7 +1,6 @@
 (ns logseq.outliner.property
   "Property related operations"
-  (:require [clojure.pprint :as pprint]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
@@ -16,7 +15,6 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
@@ -114,16 +112,13 @@
            (ldb/internal-page? block)
            (not (block-classes-provide-property? @conn block property-id)))))
 
-(def ^:private class-lookup-ref-attrs
-  #{:db/ident :block/uuid})
-
 (defn- class-lookup-ref?
   [value]
   ;; Class extends accepts only entity refs that can point at class blocks.
   ;; Keep this narrow to avoid per-value schema/entity lookups while parsing vectors.
   (and (vector? value)
        (= 2 (count value))
-       (contains? class-lookup-ref-attrs (first value))))
+       (contains? #{:db/ident :block/uuid} (first value))))
 
 (defn- single-entity-ref?
   [value]
@@ -149,80 +144,43 @@
            :else [value])
          (map entity-id))))
 
+(defn- class-ancestor-ids
+  [db class-ids]
+  (set (mapcat (fn [class-id]
+                 (some->> (d/entity db class-id)
+                          ldb/get-class-extends
+                          (map :db/id)))
+               class-ids)))
+
+(defn- direct-extends-retraction-tx-data
+  [class redundant-parent-ids]
+  (when (and (ldb/class? class) (seq redundant-parent-ids))
+    (keep (fn [parent]
+            (when (contains? redundant-parent-ids (:db/id parent))
+              [:db/retract (:db/id class) :logseq.property.class/extends (:db/id parent)]))
+          (:logseq.property.class/extends class))))
+
+(defn- canonical-extends-ids
+  [db value]
+  (let [parent-ids (vec (->entity-ids db value))]
+    (remove (class-ancestor-ids db parent-ids) parent-ids)))
+
 (defn- normalize-extends-value
   [db value]
-  (let [ids (vec (->entity-ids db value))]
+  (let [ids (vec (canonical-extends-ids db value))]
     (if (single-entity-ref? value)
       (first ids)
       ids)))
 
-(defn- class-ancestor-ids
-  [db class-id]
-  (when-let [class (d/entity db class-id)]
-    (->> (ldb/get-class-extends class)
-         (map :db/id))))
-
-(defn- direct-extends-retractions
-  [db class-id redundant-parent-ids reason]
-  (when (and class-id (seq redundant-parent-ids))
-    (->> (d/q '[:find ?class ?parent
-                :in $ ?class [?parent ...]
-                :where
-                [?class :logseq.property.class/extends ?parent]]
-              db class-id redundant-parent-ids)
-         (map (fn [[class-id parent-id]]
-                {:class-id class-id
-                 :parent-id parent-id
-                 :reason reason})))))
-
-(defn- descendant-extends-retractions
-  [db class-id redundant-parent-ids reason]
-  (when (and class-id (seq redundant-parent-ids))
-    (->> (d/q '[:find ?child ?parent
-                :in $ ?class [?parent ...] %
-                :where
-                (class-extends ?class ?child)
-                [?child :logseq.property.class/extends ?parent]]
-              db class-id redundant-parent-ids (:class-extends rules/rules))
-         (remove (fn [[child-id _parent-id]] (= class-id child-id)))
-         (map (fn [[child-id parent-id]]
-                {:class-id child-id
-                 :parent-id parent-id
-                 :reason reason})))))
-
-(defn- log-redundant-extends-retractions
-  [db retractions]
-  (when (seq retractions)
-    (pprint/pprint {:msg "Clean redundant class extends"
-                    :changes (->> retractions
-                                  (group-by (fn [{:keys [class-id reason]}] [class-id reason]))
-                                  (mapv (fn [[[class-id reason] retractions]]
-                                          {:class (:block/title (d/entity db class-id))
-                                           :reason reason
-                                           :removed-tags (mapv (fn [{:keys [parent-id]}]
-                                                                 (:block/title (d/entity db parent-id)))
-                                                               retractions)})))})))
-
 (defn- redundant-extends-retraction-tx-data
   [db class value]
   (let [parent-ids (set (->entity-ids db value))
-        ancestor-ids (set (mapcat #(class-ancestor-ids db %) parent-ids))
-        inherited-parent-ids (set/union parent-ids ancestor-ids)
-        retractions (concat
-                     (direct-extends-retractions
-                      db
-                      (:db/id class)
-                      ancestor-ids
-                      "The removed parent tag is already inherited through the new parent tag.")
-                     (descendant-extends-retractions
-                      db
-                      (:db/id class)
-                      inherited-parent-ids
-                      "The removed parent tag is already inherited through an updated ancestor tag."))]
-    (log-redundant-extends-retractions db retractions)
-    (map (fn [{:keys [class-id parent-id]}]
-           [:db/retract class-id :logseq.property.class/extends parent-id])
-         retractions)))
+        ancestor-ids (class-ancestor-ids db parent-ids)
+        inherited-parent-ids (set/union parent-ids ancestor-ids)]
+    (concat
+     (direct-extends-retraction-tx-data class ancestor-ids)
+     (mapcat #(direct-extends-retraction-tx-data (d/entity db %) inherited-parent-ids)
+             (db-class/get-structured-children db (:db/id class))))))
 
 (defn- build-property-value-tx-data
   [conn block property-id value]
