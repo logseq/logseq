@@ -309,6 +309,40 @@ jobs:
           name: logseq-linux-arm64-builds
           path: builds
 
+  publish-linux-snap:
+    runs-on: ubuntu-22.04
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64 ]
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
+    steps:
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v4
+        with:
+          name: static
+          path: static
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Publish Snap (beta only)
+        run: |
+          if [ -z "${SNAPCRAFT_STORE_CREDENTIALS:-}" ]; then
+            echo "::error title=CheckFail::SNAPCRAFT_STORE_CREDENTIALS is required to publish beta snap"
+            exit 1
+          fi
+
+          pnpm install --frozen-lockfile
+          pnpm electron:publish-snap -- --config.snap.grade=devel --config.snap.publish.channels=beta
+        working-directory: ./static
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+
   build-windows-x64:
     runs-on: windows-latest
     needs: [ compile-cljs ]
@@ -720,7 +754,7 @@ jobs:
   release:
     # NOTE: For now, we only have beta channel to be released on GitHub
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64 ]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, publish-linux-snap, build-windows-x64, build-windows-arm64 ]
     runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
