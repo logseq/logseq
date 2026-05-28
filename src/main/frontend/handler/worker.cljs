@@ -2,6 +2,7 @@
   "Handle messages received from the webworkers"
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [frontend.common.thread-api :as thread-api]
             [frontend.common.crypt :as crypt]
             [frontend.context.i18n :as i18n]
             [frontend.handler.e2ee :as e2ee-handler]
@@ -56,6 +57,10 @@
     (state/update-state!
      :assets/asset-file-write-finish
      (fn [m] (assoc-in m [repo asset-id] (or ts (.now js/Date)))))))
+
+(defmethod handle :thread-api/search-index-build-progress [_ _worker args]
+  (when-let [f (get @thread-api/*thread-apis :thread-api/search-index-build-progress)]
+    (apply f args)))
 
 (defmethod handle :sync-db-changes [_ _worker data]
   (state/pub-event! [:db/sync-changes data]))
