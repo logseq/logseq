@@ -18,7 +18,7 @@
   [dom-id format]
   (let [selected-date (state/sub :date-picker/date)
         select-handler! (fn [^js d]
-                          (when-let [d (or d selected-date)]
+                          (when-let [d (or d (state/sub :date-picker/date))]
                             (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
                                   journal (date/js-date->journal-title gd)]
                               ;; similar to page reference
