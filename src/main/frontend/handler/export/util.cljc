@@ -1,5 +1,5 @@
-(ns logseq.cli.common.util
-  "Common util fns between CLI and frontend"
+(ns frontend.handler.export.util
+  "Utility functions for frontend export flows."
   (:require #?(:org.babashka/nbb ["jszip$default" :as JSZip]
                :cljs ["jszip" :as JSZip])
             #_:clj-kondo/ignore
@@ -7,7 +7,7 @@
 
 #?(:cljs
    (defn make-export-zip
-     "Makes a zipfile for an exported version of graph. Removes files with blank content"
+     "Makes a zip file for an exported graph and removes files with blank content."
      [zip-filename file-name-content & {:as file-opts}]
      (let [zip (JSZip.)
            folder (.folder zip zip-filename)

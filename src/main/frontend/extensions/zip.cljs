@@ -1,5 +1,5 @@
 (ns frontend.extensions.zip
-  (:require [logseq.cli.common.util :as cli-common-util]
+  (:require [frontend.handler.export.util :as export-util]
             [promesa.core :as p]))
 
 (defn make-file [content file-name args]
@@ -12,7 +12,7 @@
 (defn make-zip
   [zip-filename file-name-content _repo & {:keys [progress-fn compression]}]
   (let [compression (or compression "STORE")
-        zip (cli-common-util/make-export-zip zip-filename
+        zip (export-util/make-export-zip zip-filename
                                              file-name-content
                                              {:compression compression})
         opts #js {:type "blob"

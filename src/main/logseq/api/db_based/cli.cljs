@@ -5,7 +5,7 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
-            [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
+            [logseq.api.db-based.tools :as api-tools]
             [logseq.common.config :as common-config]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
@@ -32,7 +32,7 @@
     (clj->js resp)))
 
 (defn get-page-data
-  "Like get_page_blocks_tree but for MCP tools"
+  "Like get_page_blocks_tree but for API clients."
   [page-title]
   (p/let [resp (state/<invoke-db-worker :thread-api/api-get-page-data (state/get-current-repo) page-title)]
     (if resp
@@ -40,7 +40,7 @@
       #js {:error (str "Page " (pr-str page-title) " not found")})))
 
 (defn upsert-nodes
-  "Given a list of MCP operations, batch imports with resulting EDN data"
+  "Given a list of API operations, batch imports with resulting EDN data"
   [operations options*]
   (p/let [ops (js->clj operations :keywordize-keys true)
           {:keys [dry-run] :as options} (js->clj options* :keywordize-keys true)
@@ -51,7 +51,7 @@
                              (outliner-op/batch-import-edn! edn-data {})))]
     (when error (throw (ex-info error {})))
     (ui-handler/re-render-root!)
-    (cli-common-mcp-tools/summarize-upsert-operations ops options)))
+    (api-tools/summarize-upsert-operations ops options)))
 
 (defn import-edn
   "Given EDN data as a transitized string, converts to EDN and imports it."

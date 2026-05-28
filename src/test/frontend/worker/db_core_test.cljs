@@ -18,8 +18,8 @@
             [frontend.worker.undo-redo :as worker-undo-redo]
             [frontend.worker-common.util :as worker-util]
             [goog.object :as gobj]
+            [logseq.api.db-based.tools :as api-tools]
             [logseq.cli.common.db-worker :as cli-db-worker]
-            [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
             [logseq.db :as ldb]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.view :as db-view]
@@ -1894,21 +1894,21 @@
                      cli-db-worker/list-nodes (fn [db opt]
                                                 (swap! calls conj [:cli-list-nodes db opt])
                                                 [:node1])
-                     cli-common-mcp-tools/get-page-data (fn [db title]
-                                                          (swap! calls conj [:api-get-page-data db title])
-                                                          {:title title})
-                     cli-common-mcp-tools/list-properties (fn [db opt]
-                                                            (swap! calls conj [:api-list-properties db opt])
-                                                            [:ap1])
-                     cli-common-mcp-tools/list-tags (fn [db opt]
-                                                      (swap! calls conj [:api-list-tags db opt])
-                                                      [:at1])
-                     cli-common-mcp-tools/list-pages (fn [db opt]
-                                                       (swap! calls conj [:api-list-pages db opt])
-                                                       [:apg1])
-                     cli-common-mcp-tools/build-upsert-nodes-edn (fn [db input-ops]
-                                                                   (swap! calls conj [:api-build-upsert-nodes-edn db input-ops])
-                                                                   {:ops input-ops})]
+                     api-tools/get-page-data (fn [db title]
+                                               (swap! calls conj [:api-get-page-data db title])
+                                               {:title title})
+                     api-tools/list-properties (fn [db opt]
+                                                 (swap! calls conj [:api-list-properties db opt])
+                                                 [:ap1])
+                     api-tools/list-tags (fn [db opt]
+                                           (swap! calls conj [:api-list-tags db opt])
+                                           [:at1])
+                     api-tools/list-pages (fn [db opt]
+                                            (swap! calls conj [:api-list-pages db opt])
+                                            [:apg1])
+                     api-tools/build-upsert-nodes-edn (fn [db input-ops]
+                                                        (swap! calls conj [:api-build-upsert-nodes-edn db input-ops])
+                                                        {:ops input-ops})]
          (is (= [:p1] ((get-thread-api :thread-api/cli-list-properties) test-repo options)))
          (is (= [:t1] ((get-thread-api :thread-api/cli-list-tags) test-repo options)))
          (is (= [:pg1] ((get-thread-api :thread-api/cli-list-pages) test-repo options)))

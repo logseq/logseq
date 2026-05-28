@@ -1,12 +1,12 @@
-(ns logseq.cli.common.export.common
+(ns frontend.handler.export.common-impl
   "common fns for exporting.
   exclude some fns which produce lazy-seq, which can cause strange behaviors
   when use together with dynamic var."
   (:require [cljs.core.match :refer [match]]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.cli.common.file :as common-file]
-            [logseq.cli.common.util :as cli-common-util :refer-macros [removev concatv mapcatv]]
+            [frontend.handler.export.util :as export-util :refer-macros [removev concatv mapcatv]]
+            [logseq.common.export.file :as common-file]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -54,7 +54,7 @@
 ;; Global vars that are not explicitly passed in all fns
 ;; These vars must be bound in order to use most fns in this namespace
 (def ^:dynamic *current-db* nil)
-;; Config used by logseq.cli.common.file fns
+;; Config used by logseq.common.export.file fns
 (def ^:dynamic *content-config* nil)
 
 ;;; internal utils

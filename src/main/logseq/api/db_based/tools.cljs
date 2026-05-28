@@ -1,5 +1,5 @@
-(ns logseq.cli.common.mcp.tools
-  "MCP tool related fns shared between CLI and frontend"
+(ns logseq.api.db-based.tools
+  "Shared helpers for db-based API calls."
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
@@ -10,7 +10,6 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.tree :as otree]
             [logseq.outliner.validate :as outliner-validate]
             [malli.core :as m]
@@ -108,16 +107,6 @@
 
 ;; upsert-nodes tool
 ;; =================
-(defn- import-edn-data
-  [conn export-map]
-  (let [{:keys [init-tx block-props-tx misc-tx error] :as _txs}
-        (sqlite-export/build-import export-map @conn {})]
-    ;; (cljs.pprint/pprint _txs)
-    (when error
-      (throw (ex-info (str "Error while building import data: " error) {})))
-    (let [tx-meta {::sqlite-export/imported-data? true}]
-      (ldb/transact! conn (vec (concat init-tx block-props-tx misc-tx)) tx-meta))))
-
 (defn- get-ident [idents title]
   (or (get idents title)
       (throw (ex-info (str "No ident found for " (pr-str title)) {}))))
@@ -384,14 +373,5 @@
           (assoc :classes classes)
           (seq properties)
           (assoc :properties properties))]
-    (prn :debug-import-edn import-edn)
     (validate-import-edn import-edn)
     import-edn))
-
-(defn upsert-nodes
-  "Builds import-edn from llm generated operations and then imports resulting data. Only
-   used for CLI. See logseq.api/upsert_nodes for API equivalent"
-  [conn operations* {:keys [dry-run] :as opts}]
-  (let [import-edn (build-upsert-nodes-edn @conn operations*)]
-    (when-not dry-run (import-edn-data conn import-edn))
-    (summarize-upsert-operations operations* opts)))
