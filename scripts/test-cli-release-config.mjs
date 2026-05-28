@@ -9,6 +9,20 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const readText = (relativePath) =>
   fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
 
+const readJson = (relativePath) =>
+  JSON.parse(readText(relativePath));
+
+const rootPackage = readJson("package.json");
+const desktopPackage = readJson("resources/package.json");
+
+const zvecOptionalRuntimeDependencies = [
+  "@zvec/bindings-darwin-arm64",
+  "@zvec/bindings-linux-arm64",
+  "@zvec/bindings-linux-x64",
+  "@zvec/bindings-win32-x64",
+  "@zvec/zvec",
+];
+
 const assertNotContains = (text, needle, label) => {
   assert.equal(
     text.includes(needle),
@@ -90,6 +104,27 @@ assertNotContains(lintTask, '"deps/cli"', "lint task");
 const lintDepsTask = readText("scripts/src/logseq/tasks/dev/lint_test_deps.clj");
 assertNotContains(lintDepsTask, '"deps/cli"', "lint/test deps task");
 
+for (const dependencyName of zvecOptionalRuntimeDependencies) {
+  assert.equal(
+    rootPackage.dependencies?.[dependencyName],
+    undefined,
+    `${dependencyName} should not be a hard root runtime dependency`,
+  );
+  assert.ok(
+    rootPackage.optionalDependencies?.[dependencyName],
+    `${dependencyName} should be an optional root runtime dependency`,
+  );
+  assert.equal(
+    desktopPackage.dependencies?.[dependencyName],
+    undefined,
+    `${dependencyName} should not be a hard desktop runtime dependency`,
+  );
+  assert.ok(
+    desktopPackage.optionalDependencies?.[dependencyName],
+    `${dependencyName} should be an optional desktop runtime dependency`,
+  );
+}
+
 assert.equal(
   fs.existsSync(path.join(repoRoot, "src/main/logseq/cli/common/mcp/server.cljs")),
   false,
@@ -124,6 +159,17 @@ assert.equal(packageJson.dependencies?.zod, undefined);
 assert.ok(packageJson.dependencies?.["@js-joda/core"], "publish package should include @js-joda/core for release artifacts");
 assert.ok(packageJson.dependencies?.keytar, "publish package should include keytar for db-worker-node");
 assert.ok(packageJson.dependencies?.["string-width"], "publish package should include string-width for CLI rendering");
+for (const dependencyName of zvecOptionalRuntimeDependencies) {
+  assert.equal(
+    packageJson.dependencies?.[dependencyName],
+    undefined,
+    `${dependencyName} should not be a hard publish package dependency`,
+  );
+  assert.ok(
+    packageJson.optionalDependencies?.[dependencyName],
+    `${dependencyName} should be an optional publish package dependency`,
+  );
+}
 assert.deepEqual(packageJson.pnpm?.onlyBuiltDependencies, [
   "@zvec/zvec",
   "better-sqlite3",
