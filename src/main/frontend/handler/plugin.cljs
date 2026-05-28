@@ -354,6 +354,7 @@
                                             [(t :plugin/up-to-date ":)") :success]
 
                                             [error-code :error])
+                               rate-limit-error? (some-> msg str (string/includes? "API rate limit"))
                                pending? (seq (:plugin/updates-pending @state/state))]
 
                            (if (and only-check pending?)
@@ -365,11 +366,12 @@
                                  (state/consume-updates-from-coming-plugin! payload true))
 
                                ;; notify human tips
-                               (notification/show!
-                                 (str
-                                   (if (= :error type) "[Error]" "")
-                                   "<" (:id payload) "> "
-                                   msg) type)))
+                               (when-not rate-limit-error?
+                                 (notification/show!
+                                   (str
+                                     (if (= :error type) "[Error]" "")
+                                     "<" (:id payload) "> "
+                                     msg) type))))
 
                            (when-not fake-error?
                              (js/console.error "Update Error:" (:error-code payload))))

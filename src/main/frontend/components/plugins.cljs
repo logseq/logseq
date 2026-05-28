@@ -1668,7 +1668,7 @@
           [:div
            [:div (t :plugin/checking-for-updates)]
            (when sub-content [:p.opacity-60 sub-content])]
-          (ui/loading ""))
+          :info)
          (when uid (notification/clear! uid))))
      [check-pending? sub-content])
 

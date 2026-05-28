@@ -39,6 +39,29 @@
   (or (block-title pvalue)
       (:logseq.property/value pvalue)))
 
+(defn- referenced-property-value-contents
+  [db property]
+  (if (= :db.type/ref (:db/valueType property))
+    (->> (d/datoms db :avet (:db/ident property))
+         (keep (fn [datom]
+                 (some->> (:v datom)
+                          (d/entity db)
+                          property-value-content)))
+         set)
+    #{}))
+
+(defn- closed-values-for-export
+  [db property]
+  (let [referenced-contents (referenced-property-value-contents db property)]
+    (->> (concat (entity-plus/lookup-kv-then-entity property :property/closed-values)
+                 (filter #(contains? referenced-contents (property-value-content %))
+                         (:block/_closed-value-property property)))
+         (reduce (fn [closed-values value]
+                   (assoc closed-values (:db/id value) value))
+                 {})
+         vals
+         (sort-by :block/order))))
+
 (defn- shallow-copy-page
   "Given a page or journal entity, shallow copies it e.g. no properties or tags info included.
    Pages that are shallow copied are at the edges of export and help keep the export size reasonable and
@@ -147,7 +170,7 @@
         (->> user-property-idents
              (map (fn [ident]
                     (let [property (d/entity db ident)
-                          closed-values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
+                          closed-values (closed-values-for-export db property)]
                       [property
                        (cond-> (select-keys property
                                             (-> (disj db-property/schema-properties :logseq.property/classes)
