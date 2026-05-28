@@ -18,6 +18,8 @@ publish:
 extraResources:
   - from: .agents/skills/logseq-cli/SKILL.md
     to: .agents/skills/logseq-cli/SKILL.md
+  - from: ../sidecar
+    to: sidecar
 
 mac:
   artifactName: ${productName}-darwin-${arch}-${version}.${ext}
