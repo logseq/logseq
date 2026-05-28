@@ -20,6 +20,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.27.1
         version: 1.29.0(zod@4.3.6)
+      '@zvec/zvec':
+        specifier: 0.4.0
+        version: 0.4.0
       abort-controller:
         specifier: 3.0.0
         version: 3.0.0
@@ -275,6 +278,29 @@ packages:
     engines: {node: '>=10.0.0'}
     deprecated: this version has critical issues, please update to the latest version
 
+  '@zvec/bindings-darwin-arm64@0.4.0':
+    resolution: {integrity: sha512-Yw2KA8U8N6qqoFmahFsM7CmDv+WviViBBv5XiiY4m+p+s1mOlo/PStgcrBVCclt6N5PCTuO4ZiHfShGxfvOMrg==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@zvec/bindings-linux-arm64@0.4.0':
+    resolution: {integrity: sha512-aKA8jAjv6f/5xvZ+1TeafdLm+VNVRyR4vHgQfaGccX/GnKLklASKDEQaECkTyGggPEO8ET/MnfavN8eZSCiL8Q==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@zvec/bindings-linux-x64@0.4.0':
+    resolution: {integrity: sha512-RrlBiF5Z4dmMdP0RDomkxnRl4+mmuvYiYGYfq9frRvcgHYav7MPO+tpwGHv7XZ/ZeR7/Yv7G9SIF4qedd2hlng==}
+    cpu: [x64]
+    os: [linux]
+
+  '@zvec/bindings-win32-x64@0.4.0':
+    resolution: {integrity: sha512-YN0fEBAv3Bi0w8PTtIKRKgHEKVJzVAqxKm3bjGvOyiX+SqBoTjhO9waSboLjaDbFmVXmetOplGCmnPMSuIs+Mg==}
+    cpu: [x64]
+    os: [win32]
+
+  '@zvec/zvec@0.4.0':
+    resolution: {integrity: sha512-1ctdMjhYybs6HLpBO7nelTOnE3Pdewor+XHIRAe+c3uM41L3fB4qh2IH5JD1HmIXcYHS5p75q2vwYUkBTXlKHg==}
+
   abbrev@3.0.1:
     resolution: {integrity: sha512-AO2ac6pjRB3SJmGJo+v5/aK6Omggp6fsLrs6wN9bd35ulu4cCwaAU9+7ZhXjeqHVkaHThLuzH0nZr0YpCDhygg==}
     engines: {node: ^18.17.0 || >=20.5.0}
@@ -392,6 +418,9 @@ packages:
 
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
+
+  bindings@1.5.0:
+    resolution: {integrity: sha512-p2q/t/mhvuOj/UeLlV6566GD/guowlr0hHxClI0W9m7MWYkL1F0hLo+0Aexs9HSPCtR1SXQ0TD3MMKrXZajbiQ==}
 
   bl@4.1.0:
     resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
@@ -891,6 +920,9 @@ packages:
   fetch-blob@3.2.0:
     resolution: {integrity: sha512-7yAQpD2UMJzLi1Dqv7qFYnPbaPx7ZfFK6PiIxQ4PfkGPyNyl2Ugx+a/umUonmKqjhM4DnfbMvdX6otXq83soQQ==}
     engines: {node: ^12.20 || >= 14.13}
+
+  file-uri-to-path@1.0.0:
+    resolution: {integrity: sha512-0Zt+s3L7Vf1biwWZ29aARiVYLx7iMGnEUl9x33fbB/j3jR81u/O2LbqK+Bm1CDSNDKVtJ/YjwY7TUd5SkeLQLw==}
 
   filelist@1.0.6:
     resolution: {integrity: sha512-5giy2PkLYY1cP39p17Ech+2xlpTRL9HLspOfEgm0L6CwBXBTgsK5ou0JtzYuepxkaQ/tvhCFIJ5uXo0OrM2DxA==}
@@ -2482,6 +2514,27 @@ snapshots:
 
   '@xmldom/xmldom@0.8.12': {}
 
+  '@zvec/bindings-darwin-arm64@0.4.0':
+    optional: true
+
+  '@zvec/bindings-linux-arm64@0.4.0':
+    optional: true
+
+  '@zvec/bindings-linux-x64@0.4.0':
+    optional: true
+
+  '@zvec/bindings-win32-x64@0.4.0':
+    optional: true
+
+  '@zvec/zvec@0.4.0':
+    dependencies:
+      bindings: 1.5.0
+    optionalDependencies:
+      '@zvec/bindings-darwin-arm64': 0.4.0
+      '@zvec/bindings-linux-arm64': 0.4.0
+      '@zvec/bindings-linux-x64': 0.4.0
+      '@zvec/bindings-win32-x64': 0.4.0
+
   abbrev@3.0.1: {}
 
   abort-controller@3.0.0:
@@ -2608,6 +2661,10 @@ snapshots:
   balanced-match@4.0.4: {}
 
   base64-js@1.5.1: {}
+
+  bindings@1.5.0:
+    dependencies:
+      file-uri-to-path: 1.0.0
 
   bl@4.1.0:
     dependencies:
@@ -3220,6 +3277,8 @@ snapshots:
     dependencies:
       node-domexception: 1.0.0
       web-streams-polyfill: 3.3.3
+
+  file-uri-to-path@1.0.0: {}
 
   filelist@1.0.6:
     dependencies:

@@ -213,7 +213,7 @@
     :server-revision-mismatch-after-restart "Logseq restarted db-worker-node, but the replacement still reports a different revision. Check the installed Logseq build and retry"
     :agent-name-invalid "Set :agent-name in cli.edn to a non-empty string or ensure hostname is available"
     :codex-not-found "Install Codex CLI and ensure `codex` is on PATH"
-    :bridge-listener-failed "Retry with --dry-run or check db-worker-node event support"
+    :bridge-listener-failed "Check db-worker-node event support and retry"
     nil))
 
 (defn- format-candidates
