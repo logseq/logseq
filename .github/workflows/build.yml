@@ -250,8 +250,21 @@ jobs:
 
       - name: Validate created DB graphs
         run: |
-          node static/logseq-cli.js --root-dir scripts/cli-root --graph properties-graph graph validate
-          node static/logseq-cli.js --root-dir scripts/cli-root --graph schema-graph graph validate
+          print_db_worker_logs() {
+            find scripts/cli-root/graphs -name 'db-worker-node-*.log' -print -exec cat {} \; || true
+          }
+          node static/logseq-cli.js --root-dir scripts/cli-root --graph properties-graph graph validate || {
+            print_db_worker_logs
+            exit 1
+          }
+          node static/logseq-cli.js --root-dir scripts/cli-root --graph schema-graph graph validate || {
+            print_db_worker_logs
+            exit 1
+          }
 
       - name: Export a created DB graph
-        run: node static/logseq-cli.js --root-dir scripts/cli-root --graph properties-graph graph export --type edn --file scripts/properties.edn
+        run: |
+          node static/logseq-cli.js --root-dir scripts/cli-root --graph properties-graph graph export --type edn --file scripts/properties.edn || {
+            find scripts/cli-root/graphs -name 'db-worker-node-*.log' -print -exec cat {} \; || true
+            exit 1
+          }
