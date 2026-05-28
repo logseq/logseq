@@ -753,17 +753,52 @@
 (defn- datom-export? [export-map]
   (= :datoms (::graph-format export-map)))
 
+(def ^:private graph-datom-export-excluded-kvs
+  #{:logseq.kv/local-graph-uuid
+    :logseq.kv/graph-uuid
+    :logseq.kv/graph-local-tx
+    :logseq.kv/remote-schema-version
+    :logseq.kv/graph-rtc-e2ee?
+    :logseq.kv/graph-remote?
+    :logseq.kv/import-type
+    :logseq.kv/imported-at
+    :logseq.kv/graph-backup-folder
+    :logseq.kv/graph-last-gc-at
+    :logseq.kv/graph-git-sha})
+
+(def ^:private graph-datom-export-excluded-attrs
+  #{:block/tx-id
+    :logseq.property.embedding/hnsw-label
+    :logseq.property.embedding/hnsw-label-updated-at
+    :logseq.property/created-by-ref
+    :logseq.property.user/email
+    :logseq.property.user/name
+    :logseq.property.user/avatar})
+
+(defn- graph-datom-export-excluded-eids
+  [db]
+  (into #{}
+        (keep #(some-> (d/entity db %) :db/id))
+        graph-datom-export-excluded-kvs))
+
+(defn- exportable-graph-datom?
+  [excluded-eids datom]
+  (and (not (contains? excluded-eids (:e datom)))
+       (not (contains? graph-datom-export-excluded-attrs (:a datom)))))
+
 (defn- export-datom [datom]
   [(:e datom) (:a datom) (:v datom)])
 
 (defn- build-graph-datoms-export
   [db]
-  {::schema-version db-schema/version
-   ::graph-format :datoms
-   :datoms (->> (d/datoms db :eavt)
-                (map export-datom)
-                (sort-by :e)
-                vec)})
+  (let [excluded-eids (graph-datom-export-excluded-eids db)]
+    {::schema-version db-schema/version
+     ::graph-format :datoms
+     :datoms (->> (d/datoms db :eavt)
+                  (filter #(exportable-graph-datom? excluded-eids %))
+                  (map export-datom)
+                  (sort-by first)
+                  vec)}))
 
 (defn- find-undefined-classes-and-properties [{:keys [classes properties pages-and-blocks]}]
   (let [referenced-classes

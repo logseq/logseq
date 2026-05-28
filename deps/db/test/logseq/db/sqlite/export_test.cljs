@@ -26,6 +26,9 @@
 (defn- has-datom? [datoms e a v]
   (some #(= [e a v] %) datoms))
 
+(defn- has-datom-attr? [datoms a]
+  (some #(= a (second %)) datoms))
+
 (defn- export-block-and-import-to-another-block
   "Exports given block from one graph/conn, imports it to a 2nd block and then
    exports the 2nd block. The two blocks do not have to be in the same graph"
@@ -620,6 +623,53 @@
            (map first datoms))
         "Graph EDN datoms should be sorted by db id")
     (is (some #(= [(:db/id (db-test/find-block-by-content @conn "b1")) :block/title "b1"] %) datoms))))
+
+(deftest graph-export-omits-local-metadata-datoms
+  (let [excluded-kvs #{:logseq.kv/local-graph-uuid
+                       :logseq.kv/graph-uuid
+                       :logseq.kv/graph-local-tx
+                       :logseq.kv/remote-schema-version
+                       :logseq.kv/graph-rtc-e2ee?
+                       :logseq.kv/graph-remote?
+                       :logseq.kv/import-type
+                       :logseq.kv/imported-at
+                       :logseq.kv/graph-backup-folder
+                       :logseq.kv/graph-last-gc-at
+                       :logseq.kv/graph-git-sha}
+        excluded-attrs #{:block/tx-id
+                         :logseq.property.embedding/hnsw-label
+                         :logseq.property.embedding/hnsw-label-updated-at
+                         :logseq.property/created-by-ref
+                         :logseq.property.user/email
+                         :logseq.property.user/name
+                         :logseq.property.user/avatar}
+        conn (db-test/create-conn-with-import-map
+              {:pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"}]}]})
+        block (db-test/find-block-by-content @conn "b1")
+        user-uuid (random-uuid)
+        _ (d/transact! conn (concat
+                             (map (fn [kv-ident] {:db/ident kv-ident :kv/value (str kv-ident)})
+                                  excluded-kvs)
+                             [{:block/uuid user-uuid
+                               :block/title "Alice"
+                               :logseq.property.user/email "alice@example.com"
+                               :logseq.property.user/name "Alice"
+                               :logseq.property.user/avatar "avatar.png"}
+                              {:db/id (:db/id block)
+                               :block/tx-id 7
+                               :logseq.property.embedding/hnsw-label "label"
+                               :logseq.property.embedding/hnsw-label-updated-at 8
+                               :logseq.property/created-by-ref [:block/uuid user-uuid]}]))
+        datoms (:datoms (sqlite-export/build-export @conn {:export-type :graph}))]
+    (is (has-datom? datoms (:db/id block) :block/title "b1"))
+    (doseq [kv-ident excluded-kvs
+            :let [kv-eid (:db/id (d/entity @conn kv-ident))]]
+      (is (not-any? #(= kv-eid (first %)) datoms)
+          (str kv-ident " entity datoms should not be exported")))
+    (doseq [attr excluded-attrs]
+      (is (not (has-datom-attr? datoms attr))
+          (str attr " datoms should not be exported")))))
 
 (deftest graph-datom-export-import-is-idempotent
   (let [closed-value-uuid (random-uuid)
