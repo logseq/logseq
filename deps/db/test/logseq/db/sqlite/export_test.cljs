@@ -23,6 +23,9 @@
     (when (seq (:errors validation)) (cljs.pprint/pprint {:validate (:errors validation)}))
     (is (empty? (map :entity (:errors validation))) "Imported graph has no validation errors")))
 
+(defn- has-datom? [datoms e a v]
+  (some #(= [e a v] %) datoms))
+
 (defn- export-block-and-import-to-another-block
   "Exports given block from one graph/conn, imports it to a 2nd block and then
    exports the 2nd block. The two blocks do not have to be in the same graph"
@@ -566,14 +569,8 @@
         export-edn (sqlite-export/build-export @conn {:export-type :graph})
         validation (sqlite-export/validate-export export-edn)]
     (is (nil? (:error validation)))
-    (is (some #(and (= (:db/id plugin-property-ent) (:e %))
-                    (= :hide? (:a %))
-                    (= true (:v %)))
-              (:datoms export-edn)))
-    (is (some #(and (= (:db/id plugin-property-ent) (:e %))
-                    (= :public? (:a %))
-                    (= false (:v %)))
-              (:datoms export-edn)))))
+    (is (has-datom? (:datoms export-edn) (:db/id plugin-property-ent) :hide? true))
+    (is (has-datom? (:datoms export-edn) (:db/id plugin-property-ent) :public? false))))
 
 (deftest graph-export-keeps-referenced-recycled-closed-value-config
   (let [property-id :plugin.property.degrande-colors/tldraw
@@ -591,10 +588,7 @@
         export-edn (sqlite-export/build-export @conn {:export-type :graph})
         validation (sqlite-export/validate-export export-edn)]
     (is (nil? (:error validation)))
-    (is (some #(and (= (:db/id closed-value) (:e %))
-                    (= :logseq.property/deleted-at (:a %))
-                    (= 1 (:v %)))
-              (:datoms export-edn)))))
+    (is (has-datom? (:datoms export-edn) (:db/id closed-value) :logseq.property/deleted-at 1))))
 
 (deftest graph-export-ignores-scalar-values-when-finding-referenced-closed-values
   (let [property-id :user.property/datetime
@@ -606,10 +600,7 @@
         export-edn (sqlite-export/build-export @conn {:export-type :graph})
         validation (sqlite-export/validate-export export-edn)]
     (is (nil? (:error validation)))
-    (is (some #(and (= (:db/id (d/entity @conn property-id)) (:e %))
-                    (= :logseq.property/type (:a %))
-                    (= :datetime (:v %)))
-              (:datoms export-edn)))))
+    (is (has-datom? (:datoms export-edn) (:db/id (d/entity @conn property-id)) :logseq.property/type :datetime))))
 
 (deftest graph-export-uses-db-id-sorted-datoms
   (let [conn (db-test/create-conn-with-import-map
@@ -623,11 +614,12 @@
     (is (= :datoms (::sqlite-export/graph-format export-edn)))
     (is (vector? datoms))
     (is (seq datoms))
+    (is (every? #(and (vector? %) (= 3 (count %))) datoms))
     (is (not (contains? export-edn :pages-and-blocks)))
-    (is (= (sort (map :e datoms))
-           (map :e datoms))
+    (is (= (sort (map first datoms))
+           (map first datoms))
         "Graph EDN datoms should be sorted by db id")
-    (is (some #(and (= :block/title (:a %)) (= "b1" (:v %))) datoms))))
+    (is (some #(= [(:db/id (db-test/find-block-by-content @conn "b1")) :block/title "b1"] %) datoms))))
 
 (deftest graph-datom-export-import-is-idempotent
   (let [closed-value-uuid (random-uuid)

@@ -926,7 +926,7 @@
   (= :datoms (::graph-format export-map)))
 
 (defn- export-datom [datom]
-  (select-keys datom [:e :a :v]))
+  [(:e datom) (:a datom) (:v datom)])
 
 (defn- build-graph-datoms-export
   [db]
@@ -1168,7 +1168,7 @@
 
 (defn- build-datom-import
   [export-map]
-  {:init-tx (mapv (fn [{:keys [e a v]}] [:db/add e a v]) (:datoms export-map))
+  {:init-tx (mapv (fn [[e a v]] [:db/add e a v]) (:datoms export-map))
    :block-props-tx []
    :misc-tx []})
 
@@ -1177,7 +1177,7 @@
    an export map can have the following namespaced keys:
    * ::export-type - Keyword indicating export type
    * ::block - Block map for a :block export
-   * :datoms - Vec of datom maps for a :graph export
+   * :datoms - Vec of [e a v] datom tuples for a :graph export
    * ::graph-files - Vec of files for a legacy structured :graph export
    * ::kv-values - Vec of :kv/value maps for a legacy structured :graph export
    * ::property-history - Set of property history blocks for a legacy structured :graph export
