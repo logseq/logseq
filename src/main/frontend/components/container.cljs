@@ -42,6 +42,19 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
+(defn- focus-main-content-container-if-body!
+  []
+  (when-let [^js element (gdom/getElement "main-content-container")]
+    (let [active-element (.-activeElement js/document)]
+      (when (and (not (state/editing?))
+                 (not (state/modal-opened?))
+                 (or (nil? active-element)
+                     (identical? active-element (.-body js/document))))
+        (.focus element #js {:preventScroll true})))))
+
+(defn- schedule-main-content-focus! []
+  (util/schedule focus-main-content-container-if-body!))
+
 (rum/defc main <
   {:did-mount (fn [state]
                 (when-let [element (gdom/getElement "main-content-container")]
@@ -55,6 +68,7 @@
                   (common-handler/listen-to-scroll! element)
                   (when (:margin-less-pages? (first (:rum/args state))) ;; makes sure full screen pages displaying without scrollbar
                     (set! (.. element -scrollTop) 0)))
+                (schedule-main-content-focus!)
                 state)
    :will-unmount (fn [state]
                    (when-let [el (gdom/getElement "main-content-container")]
@@ -460,7 +474,8 @@
                           (d/remove-class! container "blocks-selection-mode")
                           (when (and (> (count (state/get-selection-blocks)) 1)
                                      (not (util/input? js/document.activeElement)))
-                            (util/clear-selection!))))}
+                            (util/clear-selection!)))
+                        (schedule-main-content-focus!))}
 
       [:button#skip-to-main
        {:on-click #(ui/focus-element (ui/main-node))
