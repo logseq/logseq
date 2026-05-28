@@ -10,6 +10,8 @@ on:
         type: choice
         required: true
         options:
+          # NOTE: For now, we only have beta channel to be released on GitHub
+          # - stable
           - beta
           - nightly
           - non-release
@@ -56,9 +58,9 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Check build options
-        if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta') && github.event.inputs.git-ref != 'master' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') && github.event.inputs.git-ref != 'master' }}
         run: |
-          echo "::error title=CheckFail::Nightly and Beta Release MUST be built from master"
+          echo "::error title=CheckFail::Nightly, Beta and Stable Release MUST be built from master"
           exit 1
 
       - name: Check out Git repository
@@ -115,7 +117,7 @@ jobs:
           echo "version=$pkgver" >> $GITHUB_OUTPUT
 
       - name: Do Not Overwrite Existing Release
-        if: ${{ github.event.inputs.build-target == 'beta' }}
+        if: ${{ github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable' }}
         run: |
           if curl -f "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.ref.outputs.version }}" &>/dev/null; then
             echo "::error title=CheckFail::Release already exists"
@@ -312,7 +314,7 @@ jobs:
   publish-linux-snap:
     runs-on: ubuntu-22.04
     needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64 ]
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') }}
     steps:
       - name: Download The Static Asset
         uses: actions/download-artifact@v4
@@ -330,17 +332,26 @@ jobs:
         with:
           version: 10.33.0
 
-      - name: Publish Snap (beta only)
+      - name: Publish Snap
         run: |
           if [ -z "${SNAPCRAFT_STORE_CREDENTIALS:-}" ]; then
-            echo "::error title=CheckFail::SNAPCRAFT_STORE_CREDENTIALS is required to publish beta snap"
+            echo "::error title=CheckFail::SNAPCRAFT_STORE_CREDENTIALS is required to publish snap"
             exit 1
           fi
 
+          if [ "${BUILD_TARGET}" = "stable" ]; then
+            snap_grade=stable
+            snap_channel=stable
+          else
+            snap_grade=devel
+            snap_channel=beta
+          fi
+
           pnpm install --frozen-lockfile
-          pnpm electron:publish-snap -- --config.snap.grade=devel --config.snap.publish.channels=beta
+          pnpm electron:publish-snap -- --config.snap.grade="${snap_grade}" --config.snap.publish.channels="${snap_channel}"
         working-directory: ./static
         env:
+          BUILD_TARGET: ${{ github.event.inputs.build-target }}
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
 
   build-windows-x64:
@@ -752,8 +763,7 @@ jobs:
             ./*.apk
 
   release:
-    # NOTE: For now, we only have beta channel to be released on GitHub
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') }}
     needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, publish-linux-snap, build-windows-x64, build-windows-arm64 ]
     runs-on: ubuntu-22.04
     steps:
@@ -823,7 +833,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.ref.outputs.version }}
-          name: Desktop APP ${{ steps.ref.outputs.version }} (Beta Testing)
+          name: ${{ github.event.inputs.build-target == 'beta' && format('Desktop APP {0} (Beta Testing)', steps.ref.outputs.version) || format('Desktop APP {0}', steps.ref.outputs.version) }}
           body: "TODO: Fill this changelog. Sorry for the inconvenience!"
           draft: ${{ github.event.inputs.is-draft }}
           prerelease: ${{ github.event.inputs.is-pre-release }}
