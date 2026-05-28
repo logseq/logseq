@@ -347,8 +347,18 @@ jobs:
             snap_channel=beta
           fi
 
+          printf '%s\n' \
+            'extends: ./electron-builder.yml' \
+            'snap:' \
+            "  grade: ${snap_grade}" \
+            '  publish:' \
+            '    provider: snapStore' \
+            '    channels:' \
+            "      - ${snap_channel}" \
+            > electron-builder.snap.yml
+
           pnpm install --frozen-lockfile
-          pnpm electron:publish-snap -- --config.snap.grade="${snap_grade}" --config.snap.publish.channels="${snap_channel}"
+          pnpm electron:publish-snap -- --config electron-builder.snap.yml
         working-directory: ./static
         env:
           BUILD_TARGET: ${{ github.event.inputs.build-target }}

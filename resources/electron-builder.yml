@@ -59,7 +59,3 @@ linux:
     - zip
   mimeTypes:
     - x-scheme-handler/logseq
-
-snap:
-  publish:
-    provider: snapStore
