@@ -9,7 +9,9 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.validate :as db-validate]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
             [medley.core :as medley]))
@@ -690,6 +692,60 @@
     (is (= nil
            (sqlite-export/diff-exports export-edn export-edn2))
         "No diff between original datom export and export after importing into a new graph")))
+
+(deftest graph-datom-import-replaces-seeded-data
+  (let [source-conn (d/create-conn db-schema/schema)
+        _ (d/transact! source-conn [{:block/uuid (random-uuid)}])
+        _ (d/transact! source-conn (sqlite-create-graph/build-db-initial-data "{}"))
+        export-edn (sqlite-export/build-export @source-conn {:export-type :graph})
+        valid-result (sqlite-export/validate-export export-edn)
+        export-edn2 (some-> (:db valid-result)
+                            (sqlite-export/build-export {:export-type :graph}))]
+    (is (nil? (:error valid-result))
+        "Datom import should replace seeded graph data before importing graph datoms")
+    (is (= nil
+           (sqlite-export/diff-exports export-edn export-edn2))
+        "No diff after importing datoms with built-in entities at different db ids")))
+
+(deftest graph-datom-import-applies-schema-datoms-before-values
+  (let [conn (db-test/create-conn)
+        export-edn {::sqlite-export/export-type :graph
+                    ::sqlite-export/graph-format :datoms
+                    :datoms [[1 :user.property/many "a"]
+                             [1 :user.property/many "b"]
+                             [2 :db/ident :user.property/many]
+                             [2 :db/cardinality :db.cardinality/many]]}
+        {:keys [init-tx]} (sqlite-export/build-import export-edn @conn {})
+        _ (d/transact! conn init-tx)
+        values (->> (d/datoms @conn :eavt 1 :user.property/many)
+                    (map :v)
+                    set)]
+    (is (= #{"a" "b"} values)
+        "Datom import should apply dynamic schema datoms before values that use them")))
+
+(deftest graph-datom-import-applies-lookup-ref-targets-before-values
+  (let [conn (db-test/create-conn)
+        target-uuid (random-uuid)
+        export-edn {::sqlite-export/export-type :graph
+                    ::sqlite-export/graph-format :datoms
+                    :datoms [[1 :block/refs [:block/uuid target-uuid]]
+                             [2 :block/uuid target-uuid]]}
+        {:keys [init-tx]} (sqlite-export/build-import export-edn @conn {})]
+    (d/transact! conn init-tx)
+    (is (has-datom? (mapv (juxt :e :a :v) (d/datoms @conn :eavt))
+                    1 :block/refs 2)
+        "Datom import should apply lookup-ref targets before values that use them")))
+
+(deftest graph-datom-export-resolves-lookup-ref-values
+  (let [conn (d/create-conn db-schema/schema)
+        target-uuid (random-uuid)
+        _ (d/transact! conn [[:db/add 1 :user.property/ref [:block/uuid target-uuid]]
+                             [:db/add 2 :block/uuid target-uuid]])
+        export-edn (sqlite-export/build-export @conn {:export-type :graph})]
+    (is (has-datom? (:datoms export-edn) 1 :user.property/ref 2)
+        "Graph datom export should normalize lookup-ref values to entity ids")
+    (is (not (has-datom? (:datoms export-edn) 1 :user.property/ref [:block/uuid target-uuid]))
+        "Graph datom export should not keep lookup-ref values when the entity exists")))
 
 (deftest import-supports-legacy-structured-graph-edn
   (let [conn (db-test/create-conn)

@@ -786,8 +786,19 @@
   (and (not (contains? excluded-eids (:e datom)))
        (not (contains? graph-datom-export-excluded-attrs (:a datom)))))
 
-(defn- export-datom [datom]
-  [(:e datom) (:a datom) (:v datom)])
+(defn- lookup-ref?
+  [v]
+  (and (vector? v)
+       (= 2 (count v))
+       (keyword? (first v))))
+
+(defn- export-datom [db datom]
+  [(:e datom)
+   (:a datom)
+   (let [v (:v datom)]
+     (if (lookup-ref? v)
+       (or (:db/id (d/entity db v)) v)
+       v))])
 
 (defn- build-graph-datoms-export
   [db]
@@ -796,7 +807,7 @@
      ::graph-format :datoms
      :datoms (->> (d/datoms db :eavt)
                   (filter #(exportable-graph-datom? excluded-eids %))
-                  (map export-datom)
+                  (map #(export-datom db %))
                   (sort-by first)
                   vec)}))
 
@@ -1029,9 +1040,60 @@
           :blocks [(dissoc block :block/page)]}]]
     (merge-export-maps export-map {:pages-and-blocks pages-and-blocks})))
 
+(defn- current-db-retract-tx
+  [db]
+  (->> (d/datoms db :eavt)
+       (map :e)
+       distinct
+       (mapv (fn [e] [:db/retractEntity e]))))
+
+(def ^:private datom-schema-attrs
+  #{:db/ident
+    :db/cardinality
+    :db/valueType
+    :db/unique
+    :db/index})
+
+(defn- schema-datom-eids
+  [datoms]
+  (let [ident-eids (into #{} (keep (fn [[e a _v]]
+                                     (when (= :db/ident a) e)))
+                         datoms)
+        schema-eids (into #{} (keep (fn [[e a _v]]
+                                      (when (and (not= :db/ident a)
+                                                 (datom-schema-attrs a))
+                                        e)))
+                          datoms)]
+    (set/intersection ident-eids schema-eids)))
+
+(defn- resolve-lookup-refs
+  [datoms]
+  (let [lookup-ref->eid (reduce (fn [m [e a v]]
+                                  (assoc m [a v] e))
+                                {}
+                                datoms)]
+    (map (fn [[e a v]]
+           [e a (if (lookup-ref? v)
+                  (get lookup-ref->eid v v)
+                  v)])
+         datoms)))
+
+(defn- datoms-for-import
+  [datoms]
+  (let [datoms (resolve-lookup-refs datoms)
+        schema-eids (schema-datom-eids datoms)
+        schema-datoms (filter (fn [[e a _v]]
+                                (and (schema-eids e)
+                                     (datom-schema-attrs a)))
+                              datoms)
+        schema-datoms' (set schema-datoms)]
+    (concat schema-datoms (remove schema-datoms' datoms))))
+
 (defn- build-datom-import
-  [export-map]
-  {:init-tx (mapv (fn [[e a v]] [:db/add e a v]) (:datoms export-map))
+  [export-map db]
+  {:init-tx (into (current-db-retract-tx db)
+                  (map (fn [[e a v]] [:db/add e a v]))
+                  (datoms-for-import (:datoms export-map)))
    :block-props-tx []
    :misc-tx []})
 
@@ -1056,7 +1118,7 @@
   [export-map* db {:keys [current-block]}]
   (cond
     (datom-export? export-map*)
-    (build-datom-import export-map*)
+    (build-datom-import export-map* db)
 
     :else
     (let [export-map (if (and (::block export-map*) current-block)
