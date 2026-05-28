@@ -123,7 +123,7 @@ The top-level help groups commands into graph inspection/editing, graph manageme
 
 ### Agent bridge
 
-`agent bridge` is the first AgentBridge command surface. It resolves the target graph using normal CLI config precedence, resolves the AgentBridge name from `:agent-name` in `cli.edn` or the machine hostname, checks that `codex` is available, starts or reuses the graph's db-worker-node, registers the AgentBridge name in the graph, scans TODO `#Task` blocks assigned to that AgentBridge name, and listens to db-worker-node events for follow-up scans. Matched tasks are routed to `codex exec --json`; the bridge records the Codex session/thread id in `agent-bridge-sessions.edn` and writes it to the task's `agent-session-id` property. `--dry-run` performs the setup and scan but only prints the Codex commands it would run.
+`agent bridge` is the first AgentBridge command surface. It resolves the target graph using normal CLI config precedence, resolves the AgentBridge name from `:agent-name` in `cli.edn` or the machine hostname, checks that `codex` is available, starts or reuses the graph's db-worker-node, registers the AgentBridge name in the graph, initializes the per-agent master prompt, scans TODO `#Task` blocks assigned to that AgentBridge name, and listens to db-worker-node events for follow-up scans. Matched task and comment requests are dispatched to the master Codex session.
 
 ## Global flags and output modes
 
