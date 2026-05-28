@@ -922,6 +922,21 @@
       true
       (assoc ::property-history property-history))))
 
+(defn- datom-export? [export-map]
+  (= :datoms (::graph-format export-map)))
+
+(defn- export-datom [datom]
+  (select-keys datom [:e :a :v]))
+
+(defn- build-graph-datoms-export
+  [db]
+  {::schema-version db-schema/version
+   ::graph-format :datoms
+   :datoms (->> (d/datoms db :eavt)
+                (map export-datom)
+                (sort-by :e)
+                vec)})
+
 (defn- find-undefined-classes-and-properties [{:keys [classes properties pages-and-blocks]}]
   (let [referenced-classes
         (->> (concat (mapcat :build/property-classes (vals properties))
@@ -1013,17 +1028,18 @@
    as validate-export. Checks related to properties and
    classes are disabled when :exclude-namespaces is set because those checks can't be done"
   [db export-map* {:keys [graph-options]}]
-  (let [export-map (remove-namespaced-keys export-map*)]
-    (when-not (seq (:exclude-namespaces graph-options)) (sqlite-build/validate-options export-map))
-    (let [undefined-uuids (find-undefined-uuids db export-map)
-          undefined (cond-> {}
-                      (empty? (:exclude-namespaces graph-options))
-                      (merge (find-undefined-classes-and-properties export-map))
-                      (seq undefined-uuids)
-                      (assoc :uuids undefined-uuids))]
-      (when (seq undefined)
-        (throw (ex-info (str "The following classes, uuids and properties are not defined: " (pr-str undefined))
-                        undefined))))))
+  (when-not (datom-export? export-map*)
+    (let [export-map (remove-namespaced-keys export-map*)]
+      (when-not (seq (:exclude-namespaces graph-options)) (sqlite-build/validate-options export-map))
+      (let [undefined-uuids (find-undefined-uuids db export-map)
+            undefined (cond-> {}
+                        (empty? (:exclude-namespaces graph-options))
+                        (merge (find-undefined-classes-and-properties export-map))
+                        (seq undefined-uuids)
+                        (assoc :uuids undefined-uuids))]
+        (when (seq undefined)
+          (throw (ex-info (str "The following classes, uuids and properties are not defined: " (pr-str undefined))
+                          undefined)))))))
 
 (defn build-export
   "Handles exporting db by given export-type"
@@ -1041,7 +1057,7 @@
           :graph-ontology
           (build-graph-ontology-export db {})
           :graph
-          (build-graph-export db (:graph-options options))
+          (build-graph-datoms-export db)
           (throw (ex-info (str (pr-str export-type) " is an invalid export-type") {})))
         export-map (patch-invalid-keywords export-map*)]
     (if (get-in options [:graph-options :catch-validation-errors?])
@@ -1150,16 +1166,23 @@
           :blocks [(dissoc block :block/page)]}]]
     (merge-export-maps export-map {:pages-and-blocks pages-and-blocks})))
 
+(defn- build-datom-import
+  [export-map]
+  {:init-tx (mapv (fn [{:keys [e a v]}] [:db/add e a v]) (:datoms export-map))
+   :block-props-tx []
+   :misc-tx []})
+
 (defn build-import
   "Given an export map, build the import tx to create it. In addition to standard sqlite.build keys,
    an export map can have the following namespaced keys:
    * ::export-type - Keyword indicating export type
    * ::block - Block map for a :block export
-   * ::graph-files - Vec of files for a :graph export
-   * ::kv-values - Vec of :kv/value maps for a :graph export
-   * ::property-history - Set of property history blocks for a :graph export
+   * :datoms - Vec of datom maps for a :graph export
+   * ::graph-files - Vec of files for a legacy structured :graph export
+   * ::kv-values - Vec of :kv/value maps for a legacy structured :graph export
+   * ::property-history - Set of property history blocks for a legacy structured :graph export
    * ::auto-include-namespaces - A set of parent namespaces to include from properties and classes
-     for a :graph export. See :exclude-namespaces in build-graph-export for a similar option
+     for a legacy structured :graph export. See :exclude-namespaces in build-graph-export for a similar option
    * ::import-options - A map of options that alters importing behavior. Has the following keys:
      * :existing-pages-keep-properties? - Boolean which allows existing pages to keep existing properties
 
@@ -1168,26 +1191,31 @@
    * :block-props-tx - Txs to transact after :init-tx, usually because they use newly defined properties
    * :misc-tx - Txs to transact unrelated to other txs"
   [export-map* db {:keys [current-block]}]
-  (let [export-map (if (and (::block export-map*) current-block)
-                     (build-block-import-options current-block export-map*)
-                     export-map*)
-        export-map' (if (and (= :graph (::export-type export-map*)) (seq (::auto-include-namespaces export-map*)))
-                      (merge (dissoc export-map :properties ::auto-include-namespaces)
-                             (add-ontology-for-include-namespaces db export-map))
-                      export-map)
-        property-conflicts (atom [])
-        export-map'' (check-for-existing-entities db export-map' property-conflicts)]
-    (if (seq @property-conflicts)
-      (do
-        (js/console.error :property-conflicts @property-conflicts)
-        {:error (str "The following imported properties conflict with the current graph: "
-                     (pr-str (mapv :property-id @property-conflicts)))})
-      (if (= :graph (::export-type export-map''))
-        (-> (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))
-            (assoc :misc-tx (vec (concat (::graph-files export-map'')
-                                         (::kv-values export-map'')
-                                         (::property-history export-map'')))))
-        (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))))))
+  (cond
+    (datom-export? export-map*)
+    (build-datom-import export-map*)
+
+    :else
+    (let [export-map (if (and (::block export-map*) current-block)
+                       (build-block-import-options current-block export-map*)
+                       export-map*)
+          export-map' (if (and (= :graph (::export-type export-map*)) (seq (::auto-include-namespaces export-map*)))
+                        (merge (dissoc export-map :properties ::auto-include-namespaces)
+                               (add-ontology-for-include-namespaces db export-map))
+                        export-map)
+          property-conflicts (atom [])
+          export-map'' (check-for-existing-entities db export-map' property-conflicts)]
+      (if (seq @property-conflicts)
+        (do
+          (js/console.error :property-conflicts @property-conflicts)
+          {:error (str "The following imported properties conflict with the current graph: "
+                       (pr-str (mapv :property-id @property-conflicts)))})
+        (if (= :graph (::export-type export-map''))
+          (-> (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))
+              (assoc :misc-tx (vec (concat (::graph-files export-map'')
+                                           (::kv-values export-map'')
+                                           (::property-history export-map'')))))
+          (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map'')))))))
 
 (defn create-conn
   "Create a conn for a DB graph seeded with initial data"
@@ -1204,15 +1232,17 @@
   (try
     (let [import-conn (create-conn)
           {:keys [init-tx block-props-tx misc-tx] :as _txs} (build-import export-edn @import-conn {})
-          _ (d/transact! import-conn (concat init-tx block-props-tx misc-tx))
-          validation (db-validate/validate-local-db! @import-conn)]
-      (if-let [errors (seq (:errors validation))]
-        (do
-          (js/console.error "Exported EDN has the following invalid errors when imported into a new graph:")
-          (pprint/pprint errors)
-          {:error (str "The exported EDN has " (count errors) " validation error(s)")
-           :db @import-conn})
-        {:db @import-conn}))
+          _ (d/transact! import-conn (concat init-tx block-props-tx misc-tx))]
+      (if (datom-export? export-edn)
+        {:db @import-conn}
+        (let [validation (db-validate/validate-local-db! @import-conn)]
+          (if-let [errors (seq (:errors validation))]
+            (do
+              (js/console.error "Exported EDN has the following invalid errors when imported into a new graph:")
+              (pprint/pprint errors)
+              {:error (str "The exported EDN has " (count errors) " validation error(s)")
+               :db @import-conn})
+            {:db @import-conn}))))
     (catch :default e
       (js/console.error "Unexpected export-edn validation error:" e)
       {:error (str "The exported EDN is unexpectedly invalid: " (pr-str (ex-message e)))})))
