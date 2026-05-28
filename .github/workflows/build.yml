@@ -238,7 +238,7 @@ jobs:
 
       # TODO: Use a smaller, test-focused graph to test classes
       - name: Create DB graph with classes
-        run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./cli-root/graphs/schema-graph
+        run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./cli-root/graphs/schema-graph --subset
 
       - name: Fetch deps/db pnpm deps
         run: cd deps/db && pnpm install --frozen-lockfile
