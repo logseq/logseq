@@ -16,10 +16,9 @@
              (state/set-state! :date-picker/date (t/today)))
            state)}
   [dom-id format]
-  (let [date (state/sub :date-picker/date)
+  (let [selected-date (state/sub :date-picker/date)
         select-handler! (fn [^js d]
-                          ;; d is nil when clicked more than once
-                          (when d
+                          (when-let [d (or d (state/sub :date-picker/date))]
                             (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
                                   journal (date/js-date->journal-title gd)]
                               ;; similar to page reference
@@ -37,7 +36,7 @@
        {:mode "single"
         :initial-focus true
         :show-week-number false
-        :selected date
+        :selected selected-date
         :on-select select-handler!
         :on-day-key-down (fn [^js d _ ^js e]
                            (when (= "Enter" (.-key e))
