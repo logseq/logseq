@@ -61,6 +61,7 @@ const buildWorkflow = readText(".github/workflows/build.yml");
 assert.match(buildWorkflow, /clojure -M:cljs release logseq-cli/, "db graph workflow should build release CLI");
 assert.match(buildWorkflow, /pnpm db-worker-node:release:bundle/, "db graph workflow should build release db-worker-node runtime");
 assert.match(buildWorkflow, /pnpm --dir dist\/cli-package install --prod/, "db graph workflow should install prepared CLI package dependencies");
+assert.match(buildWorkflow, /libsecret-1-0/, "db graph workflow should install keytar's Linux runtime dependency");
 assert.match(buildWorkflow, /pnpm --dir dist\/cli-package pack --pack-destination \.\.\//, "db graph workflow should verify the prepared CLI package with pnpm pack");
 assert.match(buildWorkflow, /node dist\/cli-package\/dist\/logseq\.js --root-dir scripts\/cli-root/, "db graph workflow should test packaged CLI");
 assert.match(buildWorkflow, /timeout 3s node dist\/cli-package\/dist\/logseq\.js --root-dir scripts\/cli-root.+--timeout-ms 3000/, "db graph workflow should fail fast when packaged CLI graph commands cannot start db-worker-node");

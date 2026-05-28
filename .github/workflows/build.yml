@@ -224,6 +224,9 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
+      - name: Install CLI Linux runtime deps
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
+
       - name: Fetch scripts pnpm deps
         run: cd scripts && pnpm install --frozen-lockfile
 
