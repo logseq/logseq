@@ -13,6 +13,7 @@
     "electron:debug": "electron --inspect=9229 .",
     "electron:make": "electron-builder --config electron-builder.yml --publish never",
     "electron:make-linux-arm64": "electron-builder --config electron-builder.yml --linux AppImage zip --arm64 --publish never",
+    "electron:publish-snap": "electron-builder --config electron-builder.yml --linux snap --x64 --publish always",
     "electron:make-macos-arm64": "electron-builder --config electron-builder.yml --mac dmg zip --arm64 --publish never",
     "electron:make-win-arm64": "electron-builder --config electron-builder.yml --win nsis zip --arm64 --publish never",
     "electron:publish:github": "electron-builder --config electron-builder.yml --publish always",
