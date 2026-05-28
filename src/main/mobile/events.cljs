@@ -8,7 +8,7 @@
             [reitit.frontend.easy :as rfe]))
 
 (defmethod events/handle :mobile/clear-edit [_]
-  (state/clear-edit!)
+  ;(state/clear-edit!)
   (init/keyboard-hide))
 
 (defmethod events/handle :mobile/start-audio-record [[_ {:keys [target-block save-to-today?]
