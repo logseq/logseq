@@ -1356,6 +1356,7 @@
                                          {:align "start"
                                           :as-dropdown? true
                                           :auto-focus? (not (false? popup-auto-focus-trigger?))
+                                          :content-props {:class "ls-property-select-dropdown-content"}
                                           :trigger-id trigger-id}
                                           (some? popup-focus-trigger?)
                                           (assoc :focus-trigger? popup-focus-trigger?))))]
@@ -2058,8 +2059,7 @@
                                                    :as-content? false
                                                    :align "start"
                                                    :auto-focus? true
-                                                   :content-props
-                                                   {:side-offset 0}})))))]
+                                                   :content-props {:side-offset 0 :class "ls-property-select-dropdown-content"}})))))]
         [:div.multi-values.jtrigger
          {:tab-index "0"
           :ref *el
