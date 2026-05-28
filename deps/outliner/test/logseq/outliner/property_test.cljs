@@ -516,6 +516,47 @@
               (db-test/readable-properties (d/entity @conn :user.class/D))))
           "D removes the direct parent inherited through C"))))
 
+(deftest extends-redundant-cleanup-with-lookup-ref-parent
+  (testing "Treat lookup refs as a single parent reference"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:A {}
+                           :B {}
+                           :C {:build/class-extends [:B]}
+                           :D {:build/class-extends [:A :C]}}})]
+      (outliner-property/set-block-property! conn
+                                             (:db/id (d/entity @conn :user.class/B))
+                                             :logseq.property.class/extends
+                                             [:db/ident :user.class/A])
+      (is (= [:user.class/A]
+             (:logseq.property.class/extends
+              (db-test/readable-properties (d/entity @conn :user.class/B))))
+          "B uses the lookup ref as one parent")
+      (is (= [:user.class/C]
+             (:logseq.property.class/extends
+              (db-test/readable-properties (d/entity @conn :user.class/D))))
+          "D removes the direct parent inherited through C"))))
+
+(deftest extends-redundant-cleanup-with-keyword-vector-parents
+  (testing "Treat a vector of class idents as multiple parents"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:A {}
+                           :B {}
+                           :C {:build/class-extends [:B]}
+                           :D {:build/class-extends [:A :C]}
+                           :E {}}})]
+      (outliner-property/batch-set-property! conn
+                                             [(:db/id (d/entity @conn :user.class/B))]
+                                             :logseq.property.class/extends
+                                             [:user.class/A :user.class/E])
+      (is (= [:user.class/A :user.class/E]
+             (:logseq.property.class/extends
+              (db-test/readable-properties (d/entity @conn :user.class/B))))
+          "B uses both keyword idents as parents")
+      (is (= [:user.class/C]
+             (:logseq.property.class/extends
+              (db-test/readable-properties (d/entity @conn :user.class/D))))
+          "D removes the direct parent inherited through C"))))
+
 (deftest extends-redundant-direct-parent-cleanup-for-deep-descendants
   (testing "Clean redundant parents from deeper descendants"
     (let [conn (db-test/create-conn-with-blocks
