@@ -23,7 +23,6 @@
     "@fastify/cors": "11.2.0",
     "@js-joda/core": "3.2.0",
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "@zvec/zvec": "0.4.0",
     "abort-controller": "3.0.0",
     "command-exists": "1.2.9",
     "diff-match-patch": "1.0.5",
@@ -53,6 +52,13 @@
     "electron": "39.8.8",
     "electron-builder": "26.8.2",
     "electron-devtools-installer": "4.0.0"
+  },
+  "optionalDependencies": {
+    "@zvec/bindings-darwin-arm64": "0.4.0",
+    "@zvec/bindings-linux-arm64": "0.4.0",
+    "@zvec/bindings-linux-x64": "0.4.0",
+    "@zvec/bindings-win32-x64": "0.4.0",
+    "@zvec/zvec": "0.4.0"
   },
   "resolutions": {
     "node-abi": "4.28.0"
