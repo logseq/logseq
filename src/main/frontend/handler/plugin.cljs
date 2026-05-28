@@ -57,6 +57,25 @@
 (defonce stats-url (str central-endpoint "stats.json"))
 (declare select-a-plugin-theme get-ls-dotdir-root)
 
+(defn- installed-plugin-url
+  [url]
+  (if-not (and (util/electron?) (string? url))
+    url
+    (let [dotroot (some-> (get-ls-dotdir-root) util/node-path.normalize)
+          plugins-root (some-> dotroot (util/node-path.join "plugins") util/node-path.normalize)
+          url' (-> url
+                 (string/replace-first #"^file://" "")
+                 util/node-path.normalize)]
+      (if (and plugins-root
+            (or (= url' plugins-root)
+              (string/starts-with? url' (str plugins-root "/"))
+              (string/starts-with? url' (str plugins-root "\\"))))
+        (let [relative-path (-> (subs url' (count plugins-root))
+                              (string/replace #"^[\\/]+" "")
+                              (string/replace #"\\" "/"))]
+          (str "lsp://logseq.io/" (js/encodeURI relative-path)))
+        url))))
+
 (def ^:private illegal-plugin-package-error-pattern
   #"^Parse package config error #(.+)[/\\]package\.json$")
 
@@ -332,7 +351,7 @@
                                         (t :plugin/update-plugin name (.-version (.-options pl))) :success)
                                       (state/consume-updates-from-coming-plugin! payload true))))
                                ;; register plugin
-                               (-> (js/LSPluginCore.register (bean/->js {:key id :url dst :webPkg web-pkg}))
+                               (-> (js/LSPluginCore.register (bean/->js {:key id :url (installed-plugin-url dst) :webPkg web-pkg}))
                                  (p/then (fn []
                                            (when-let [^js pl (get-plugin-inst id)]
                                              (when theme (js/setTimeout #(select-a-plugin-theme id) 300))
@@ -1043,7 +1062,7 @@
     (p/then #(bean/->clj %))
     (p/then (fn [plugins]
               (if (util/electron?)
-                (map #(hash-map :url %) plugins)
+                (map #(hash-map :url (installed-plugin-url %)) plugins)
                 (some->> (vals plugins)
                   (filter #(:url %))))))
     (p/catch (fn [e]
