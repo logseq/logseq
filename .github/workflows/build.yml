@@ -193,7 +193,7 @@ jobs:
 
     runs-on: ${{ matrix.operating-system }}
     env:
-      LOGSEQ_CLI_TIMEOUT_MS: 120000
+      LOGSEQ_CLI_TIMEOUT_MS: 30000
 
     steps:
       - name: Checkout

@@ -264,18 +264,16 @@
            vec))))
 
 (defn- wait-for-discovered-server
-  ([config repo]
-   (wait-for-discovered-server config repo 8000))
-  ([config repo timeout-ms]
-   (let [server* (atom nil)]
-     (-> (wait-for (fn []
-                     (p/let [servers (discover-servers config)
-                             server (repo-server config servers repo)]
-                       (reset! server* server)
-                       (some? server)))
-                   {:timeout-ms (if (some? timeout-ms) timeout-ms 8000)
-                    :interval-ms 50})
-         (p/then (fn [_] @server*))))))
+  [config repo]
+  (let [server* (atom nil)]
+    (-> (wait-for (fn []
+                    (p/let [servers (discover-servers config)
+                            server (repo-server config servers repo)]
+                      (reset! server* server)
+                      (some? server)))
+                  {:timeout-ms 8000
+                   :interval-ms 50})
+        (p/then (fn [_] @server*)))))
 
 (defn- ensure-server-started-once!
   [config repo]
@@ -321,7 +319,7 @@
                                             (-> (profile/time! profile-session
                                                                "server.wait-publish"
                                                                (fn []
-                                                                 (wait-for-discovered-server config repo (:timeout-ms config))))
+                                                                 (wait-for-discovered-server config repo)))
                                                 (p/catch (fn [e]
                                                            (if (= :timeout (:code (ex-data e)))
                                                              (throw (ex-info "db-worker-node failed to publish health"

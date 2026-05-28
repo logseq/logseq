@@ -695,7 +695,6 @@
                read-lock-calls (atom 0)
                discover-calls (atom 0)
                lock-timeout (atom nil)
-               publish-timeout (atom nil)
                ready-timeout (atom nil)]
            (-> (p/with-redefs [daemon/read-lock (fn [_]
                                                   (if (= 1 (swap! read-lock-calls inc))
@@ -706,12 +705,6 @@
                                daemon/wait-for-lock (fn [_ timeout-ms]
                                                       (reset! lock-timeout timeout-ms)
                                                       (p/resolved true))
-                               daemon/wait-for (fn [pred-fn opts]
-                                                 (reset! publish-timeout (:timeout-ms opts))
-                                                 (p/let [published? (pred-fn)]
-                                                   (if published?
-                                                     true
-                                                     (pred-fn))))
                                cli-server/discover-servers (fn [_]
                                                             (p/resolved (if (= 1 (swap! discover-calls inc))
                                                                           []
@@ -730,7 +723,6 @@
                                             repo))
                (p/then (fn [_]
                          (is (= 30000 @lock-timeout))
-                         (is (= 30000 @publish-timeout))
                          (is (= 30000 @ready-timeout))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
