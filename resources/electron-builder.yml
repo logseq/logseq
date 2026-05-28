@@ -5,6 +5,9 @@ directories:
   buildResources: .
   output: dist
 
+toolsets:
+  appimage: "1.0.3"
+
 protocols:
   - name: logseq
     schemes:
