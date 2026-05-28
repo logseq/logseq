@@ -142,6 +142,29 @@
     (f opts)
     (throw (ex-info "platform sqlite/open-db missing" {:opts opts}))))
 
+(defn vector-open
+  [platform opts]
+  (when-let [f (get-in platform [:vector :open-index])]
+    (f opts)))
+
+(defn embedding-model-id
+  [platform]
+  (get-in platform [:embedding :model-id]))
+
+(defn embedding-dimension
+  [platform]
+  (or (get-in platform [:embedding :dimension])
+      (throw (ex-info "platform embedding/dimension missing"
+                      {:model-id (embedding-model-id platform)}))))
+
+(defn embed-texts
+  [platform texts]
+  (if-let [f (get-in platform [:embedding :embed-texts])]
+    (f texts)
+    (throw (ex-info "platform embedding/embed-texts missing"
+                    {:model-id (embedding-model-id platform)
+                     :text-count (count texts)}))))
+
 (defn post-message!
   [platform type payload]
   (when-let [f (get-in platform [:broadcast :post-message!])]

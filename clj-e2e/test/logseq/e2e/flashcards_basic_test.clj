@@ -3,11 +3,9 @@
             [logseq.e2e.api :refer [ls-api-call!]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.fixtures :as fixtures]
-            [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
             [logseq.e2e.util :as util]
-            [wally.main :as w]
-            [wally.repl :as repl]))
+            [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -17,7 +15,10 @@
 (defn- open-flashcards
   []
   (util/double-esc)
-  (k/press ["t" "c"])
+  (when-not (w/visible? ".flashcards-nav")
+    (w/click "#left-menu")
+    (w/wait-for ".flashcards-nav"))
+  (w/eval-js "selector => document.querySelector(selector)?.click()" ".flashcards-nav a")
   (assert/assert-is-visible "#cards-modal"))
 
 (defn- select-cards-option
