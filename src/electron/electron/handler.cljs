@@ -17,6 +17,7 @@
             [electron.configs :as cfgs]
             [electron.db :as db]
             [electron.db-worker :as db-worker]
+            [electron.embedding-server :as embedding-server]
             [electron.find-in-page :as find]
             [electron.handler-interface :refer [handle]]
             [electron.i18n :as i18n]
@@ -239,7 +240,11 @@
 (defmethod handle :db-worker-runtime [^js window [_ repo]]
   (if (string/blank? repo)
     (p/rejected (ex-info "repo is required" {:code :missing-repo}))
-    (db-worker/ensure-runtime! (canonical-repo repo) (.-id window))))
+    (p/let [embedding-endpoint (embedding-server/ensure-endpoint! app)]
+      (db-worker/ensure-runtime! (canonical-repo repo)
+                                 (.-id window)
+                                 {:embedding-endpoint embedding-endpoint
+                                  :embedding-model-id (.-LOGSEQ_EMBEDDING_MODEL js/process.env)}))))
 
 (defmethod handle :releaseDbWorkerRuntime [^js window [_ repo]]
   (if (string/blank? repo)
