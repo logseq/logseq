@@ -19,7 +19,7 @@ export const path =
 export const IS_DEV = process.env.NODE_ENV === 'development'
 export const PROTOCOL_FILE = 'file://'
 export const PROTOCOL_LSP = 'lsp://'
-export const URL_LSP = PROTOCOL_LSP + 'logseq.io/'
+export const URL_LSP = PROTOCOL_LSP + 'logseq.com/plugins/'
 
 let _appPathRoot: string
 
