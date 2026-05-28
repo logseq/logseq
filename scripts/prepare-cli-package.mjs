@@ -38,6 +38,10 @@ const assertReleaseEntrypoint = (content) => {
 
 const dependencyNames = [
   "@js-joda/core",
+  "@zvec/bindings-darwin-arm64",
+  "@zvec/bindings-linux-arm64",
+  "@zvec/bindings-linux-x64",
+  "@zvec/bindings-win32-x64",
   "@zvec/zvec",
   "better-sqlite3",
   "fs-extra",
@@ -54,16 +58,28 @@ const onlyBuiltDependencies = rootPackage.pnpm.onlyBuiltDependencies.filter(
 );
 
 const dependencyVersion = (name) =>
-  rootPackage.dependencies?.[name] ?? rootPackage.devDependencies?.[name];
+  rootPackage.dependencies?.[name] ??
+  rootPackage.optionalDependencies?.[name] ??
+  rootPackage.devDependencies?.[name];
+
+const dependencyEntries = dependencyNames.map((name) => {
+  const version = dependencyVersion(name);
+  if (!version) {
+    throw new Error(`Missing CLI runtime dependency in package.json: ${name}`);
+  }
+  return [name, version];
+});
+
+const optionalDependencyNames = new Set(
+  Object.keys(rootPackage.optionalDependencies ?? {}),
+);
 
 const dependencies = Object.fromEntries(
-  dependencyNames.map((name) => {
-    const version = dependencyVersion(name);
-    if (!version) {
-      throw new Error(`Missing CLI runtime dependency in package.json: ${name}`);
-    }
-    return [name, version];
-  }),
+  dependencyEntries.filter(([name]) => !optionalDependencyNames.has(name)),
+);
+
+const optionalDependencies = Object.fromEntries(
+  dependencyEntries.filter(([name]) => optionalDependencyNames.has(name)),
 );
 
 assertReleaseEntrypoint(
@@ -105,6 +121,7 @@ const packageJson = {
   ],
   files: packageFiles,
   dependencies,
+  optionalDependencies,
   pnpm: {
     onlyBuiltDependencies,
   },
