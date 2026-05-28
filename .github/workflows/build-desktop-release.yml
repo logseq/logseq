@@ -313,7 +313,7 @@ jobs:
 
   publish-linux-snap:
     runs-on: ubuntu-22.04
-    needs: [ build-linux-x64, build-linux-arm64 ]
+    needs: [ compile-cljs ]
     if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') }}
     steps:
       - name: Download The Static Asset
