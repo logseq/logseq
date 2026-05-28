@@ -304,8 +304,8 @@ importers:
         specifier: 7.7.4
         version: 7.7.4
       shadow-cljs:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.6
+        version: 3.4.6
       source-map-loader:
         specifier: ^5.0.0
         version: 5.0.0(webpack@5.106.2)
@@ -4055,8 +4055,8 @@ packages:
   shadow-cljs-jar@1.3.4:
     resolution: {integrity: sha512-cZB2pzVXBnhpJ6PQdsjO+j/MksR28mv4QD/hP/2y1fsIa9Z9RutYgh3N34FZ8Ktl4puAXaIGlct+gMCJ5BmwmA==}
 
-  shadow-cljs@3.4.11:
-    resolution: {integrity: sha512-996uqtadZItXdD80Vtoh9IoE8oUOKoXOXd48gOxkZWUAHcxgcBlcRqMmPYiy4A1QqvSUQkdNGpv9AIWOgLx9Vg==}
+  shadow-cljs@3.4.6:
+    resolution: {integrity: sha512-4IyEN00b38MEGBBAhSJJmilkCvSK/t/TPxsqhPBDWDLO6Xpt8zn0TiCO0eIhcR8AbmJ5V02Qzc4N3mffl61MFA==}
     engines: {node: '>=6.0.0'}
     hasBin: true
 
@@ -8771,7 +8771,7 @@ snapshots:
 
   shadow-cljs-jar@1.3.4: {}
 
-  shadow-cljs@3.4.11:
+  shadow-cljs@3.4.6:
     dependencies:
       buffer: 6.0.3
       process: 0.11.10
