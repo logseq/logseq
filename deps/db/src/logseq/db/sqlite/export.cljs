@@ -41,12 +41,14 @@
 
 (defn- referenced-property-value-contents
   [db property]
-  (->> (d/datoms db :avet (:db/ident property))
-       (keep (fn [datom]
-               (some->> (:v datom)
-                        (d/entity db)
-                        property-value-content)))
-       set))
+  (if (= :db.type/ref (:db/valueType property))
+    (->> (d/datoms db :avet (:db/ident property))
+         (keep (fn [datom]
+                 (some->> (:v datom)
+                          (d/entity db)
+                          property-value-content)))
+         set)
+    #{}))
 
 (defn- closed-values-for-export
   [db property]
