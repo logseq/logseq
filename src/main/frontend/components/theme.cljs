@@ -140,8 +140,7 @@
      [settings-open?])
 
     [:div#root-container.theme-container
-     {:on-click on-click
-      :tab-index -1}
+     {:on-click on-click}
      child
 
      (pdf/default-embed-playground)
