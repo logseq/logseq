@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [dommy.core :as d]
             [frontend.components.block.selection :as block-selection]
+            [frontend.components.container.keyboard :as container-keyboard]
             [frontend.components.content :as cp-content]
             [frontend.components.find-in-page :as find-in-page]
             [frontend.components.handbooks :as handbooks]
@@ -388,6 +389,7 @@
      (mixins/listen state js/window "blur" block-selection/clear-pointer-down!)
      (mixins/listen state js/window "keydown"
                     (fn [e]
+                      (container-keyboard/handle-page-scroll-keydown! e)
                       (cond
                         (= 27 (.-keyCode e))
                         (if (and (state/modal-opened?)
