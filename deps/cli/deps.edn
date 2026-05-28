@@ -1,7 +1,0 @@
-{:paths ["src"]
- :deps
- {logseq/outliner {:local/root "../outliner"}}
-
- :aliases
- {:clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.04.15"}}
-              :main-opts    ["-m" "clj-kondo.main"]}}}

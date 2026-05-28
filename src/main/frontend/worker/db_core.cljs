@@ -32,8 +32,8 @@
    [frontend.worker.undo-redo :as worker-undo-redo]
    [goog.functions :as gfun]
    [lambdaisland.glogi :as log]
+   [logseq.api.db-based.tools :as api-tools]
    [logseq.cli.common.db-worker :as cli-db-worker]
-   [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
    [logseq.common.graph-dir :as graph-dir]
    [logseq.common.util :as common-util]
    [logseq.db :as ldb]
@@ -1612,27 +1612,27 @@
 (def-thread-api :thread-api/api-get-page-data
   [repo page-title]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-common-mcp-tools/get-page-data @conn page-title)))
+    (api-tools/get-page-data @conn page-title)))
 
 (def-thread-api :thread-api/api-list-properties
   [repo options]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-common-mcp-tools/list-properties @conn options)))
+    (api-tools/list-properties @conn options)))
 
 (def-thread-api :thread-api/api-list-tags
   [repo options]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-common-mcp-tools/list-tags @conn options)))
+    (api-tools/list-tags @conn options)))
 
 (def-thread-api :thread-api/api-list-pages
   [repo options]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-common-mcp-tools/list-pages @conn options)))
+    (api-tools/list-pages @conn options)))
 
 (def-thread-api :thread-api/api-build-upsert-nodes-edn
   [repo ops]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-common-mcp-tools/build-upsert-nodes-edn @conn ops)))
+    (api-tools/build-upsert-nodes-edn @conn ops)))
 
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs

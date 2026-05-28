@@ -1,5 +1,5 @@
-(ns logseq.cli.common.mcp.server
-  "MCP server related fns shared between CLI and frontend"
+(ns electron.mcp-server
+  "MCP server routes for the desktop API server."
   (:require ["@modelcontextprotocol/sdk/server/mcp.js" :refer [McpServer]]
             ["@modelcontextprotocol/sdk/server/streamableHttp.js" :refer [StreamableHTTPServerTransport]]
             ["@modelcontextprotocol/sdk/types.js" :refer [isInitializeRequest]]
