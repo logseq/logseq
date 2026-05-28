@@ -192,6 +192,8 @@ jobs:
         operating-system: [ubuntu-latest]
 
     runs-on: ${{ matrix.operating-system }}
+    env:
+      LOGSEQ_CLI_TIMEOUT_MS: 30000
 
     steps:
       - name: Checkout

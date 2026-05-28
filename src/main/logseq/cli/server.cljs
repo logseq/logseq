@@ -167,12 +167,16 @@
   (daemon/wait-for pred-fn opts))
 
 (defn- wait-for-lock
-  [path]
-  (daemon/wait-for-lock path))
+  [path timeout-ms]
+  (if (some? timeout-ms)
+    (daemon/wait-for-lock path timeout-ms)
+    (daemon/wait-for-lock path)))
 
 (defn- wait-for-ready
-  [lock]
-  (daemon/wait-for-ready lock))
+  [lock timeout-ms]
+  (if (some? timeout-ms)
+    (daemon/wait-for-ready lock timeout-ms)
+    (daemon/wait-for-ready lock)))
 
 (defn- fetch-healthz
   [{:keys [host port]}]
@@ -297,7 +301,7 @@
                                  (-> (profile/time! profile-session
                                                     "server.wait-lock"
                                                     (fn []
-                                                      (wait-for-lock path)))
+                                                      (wait-for-lock path (:timeout-ms config))))
                                      (p/catch (fn [e]
                                                 (if (= :timeout (:code (ex-data e)))
                                                   (throw (ex-info "db-worker-node failed to create lock"
@@ -327,7 +331,7 @@
                        (p/let [_ (profile/time! profile-session
                                                 "server.wait-ready"
                                                 (fn []
-                                                  (wait-for-ready repo-server')))]
+                                                  (wait-for-ready repo-server' (:timeout-ms config))))]
                          (let [lock-owner (lock-owner-source lock)]
                            (assoc repo-server'
                                   :owner-source lock-owner
