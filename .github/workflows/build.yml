@@ -247,11 +247,21 @@ jobs:
           pnpm --dir deps/db-sync build:node-adapter
           node scripts/prepare-cli-package.mjs
           pnpm --dir dist/cli-package install --prod
+          pnpm --dir dist/cli-package pack --pack-destination ../
+
+      - name: Smoke test packaged db-worker-node
+        run: node dist/cli-package/static/js/db-worker-node.js --version
 
       - name: Validate created DB graphs
         run: |
-          node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph properties-graph graph validate
-          node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph schema-graph graph validate
+          node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph properties-graph --timeout-ms 3000 --profile --verbose graph validate
+          node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph schema-graph --timeout-ms 3000 --profile --verbose graph validate
+
+      - name: Print db-worker-node logs on graph validation failure
+        if: failure()
+        run: |
+          find scripts/cli-root/graphs -maxdepth 2 -name 'db-worker-node-*.log' -print -exec tail -n 200 {} \; || true
+          pgrep -af db-worker-node || true
 
       - name: Export a created DB graph
-        run: node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph properties-graph graph export --type edn --file scripts/properties.edn
+        run: node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph properties-graph --timeout-ms 3000 graph export --type edn --file scripts/properties.edn
