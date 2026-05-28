@@ -643,7 +643,6 @@
           :graph/remove
           :graph/add
           :graph/db-add
-          :graph/db-save
           :editor/cycle-todo
           :editor/up
           :editor/down
@@ -690,6 +689,7 @@
           :go/backward
           :go/forward
           :search/re-index
+          :graph/db-save
           :sidebar/open-today-page
           :sidebar/clear
           :shell/run

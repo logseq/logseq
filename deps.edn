@@ -42,7 +42,6 @@
   logseq/outliner                       {:local/root "deps/outliner"}
   logseq/db-sync                        {:local/root "deps/db-sync"}
   logseq/publishing                     {:local/root "deps/publishing"}
-  logseq/cli                            {:local/root "deps/cli"}
   logseq/shui                           {:local/root "deps/shui"}
   metosin/malli                         {:git/url "https://github.com/metosin/malli"
                                          :sha     "52ea58a36ff5172b38dfc526ca638afa7226a4a0"}

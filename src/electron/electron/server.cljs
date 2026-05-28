@@ -9,9 +9,9 @@
             [clojure.string :as string]
             [electron.configs :as cfgs]
             [electron.logger :as logger]
+            [electron.mcp-server :as desktop-mcp-server]
             [electron.utils :as utils]
             [electron.window :as window]
-            [logseq.cli.common.mcp.server :as cli-common-mcp-server]
             [promesa.core :as p]))
 
 (defonce ^:private *win (atom nil))
@@ -137,13 +137,13 @@
                  (if-let [meth' (resolve-real-api-method meth)]
                    (invoke-logseq-api! meth' args)
                    #js {:error (str "No method found for " (pr-str meth))}))
-        mcp-server (cli-common-mcp-server/create-mcp-api-server api-fn)]
+        mcp-server (desktop-mcp-server/create-mcp-api-server api-fn)]
     (logger/debug "[server] MCP routes initialized")
     (.post server "/mcp"
-           #(cli-common-mcp-server/handle-post-request mcp-server {:port (get-port)
-                                                                   :host (get-host)} %1 %2))
-    (.get server "/mcp" cli-common-mcp-server/handle-get-request)
-    (.delete server "/mcp" cli-common-mcp-server/handle-get-request)))
+           #(desktop-mcp-server/handle-post-request mcp-server {:port (get-port)
+                                                                :host (get-host)} %1 %2))
+    (.get server "/mcp" desktop-mcp-server/handle-get-request)
+    (.delete server "/mcp" desktop-mcp-server/handle-delete-request)))
 
 (defn start!
   []

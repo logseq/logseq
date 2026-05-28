@@ -63,6 +63,8 @@
           "--repo" (recur (subvec args 2) (assoc opts :repo (second args)))
           "--owner-source" (recur (subvec args 2) (assoc opts :owner-source (second args)))
           "--log-level" (recur (subvec args 2) (assoc opts :log-level (second args)))
+          "--embedding-endpoint" (recur (subvec args 2) (assoc opts :embedding-endpoint (second args)))
+          "--embedding-model-id" (recur (subvec args 2) (assoc opts :embedding-model-id (second args)))
           "--create-empty-db" (recur (subvec args 1) (assoc opts :create-empty-db? true))
           "--version" (recur (subvec args 1) (assoc opts :version? true))
           "--help" (recur (subvec args 1) (assoc opts :help? true))
@@ -403,6 +405,8 @@
   (println (str "  " (style/bold "--root-dir") " <path>    (required)"))
   (println (str "  " (style/bold "--repo") " <name>        (required)"))
   (println (str "  " (style/bold "--create-empty-db") "  (start with empty initial datoms)"))
+  (println (str "  " (style/bold "--embedding-endpoint") " <url>"))
+  (println (str "  " (style/bold "--embedding-model-id") " <id>"))
   (println (str "  " (style/bold "--log-level") " <level>  (default info)"))
   (println (str "  " (style/bold "--version") "            (print build metadata and exit)"))
   (println "  logs: <root-dir>/graphs/<graph-dir>/db-worker-node-YYYYMMDD.log (retains 7)"))
@@ -559,7 +563,9 @@
                                                              :event-fn handle-event!
                                                              :write-guard-fn assert-lock-owner!
                                                              :owner-source owner-source
-                                                             :recreate-lock-fn recreate-lock!})
+                                                             :recreate-lock-fn recreate-lock!
+                                                             :embedding-endpoint (:embedding-endpoint opts)
+                                                             :embedding-model-id (:embedding-model-id opts)})
                       proxy (db-core/init-core! platform)
                       _ (<init-worker! proxy)
                       {:keys [path lock]} (db-lock/ensure-lock! {:root-dir root-dir
@@ -604,6 +610,8 @@
                                 :repo repo
                                 :create-empty-db? (:create-empty-db? opts)
                                 :owner-source owner-source
+                                :embedding-endpoint (:embedding-endpoint opts)
+                                :embedding-model-id (:embedding-model-id opts)
                                 :on-stopped! (fn []
                                                (log/info :db-worker-node-stopped nil)
                                                (.exit js/process 0))
