@@ -25,14 +25,28 @@
   [root-dir]
   (server-list/path root-dir))
 
+(def ^:private cors-headers
+  #js {"Access-Control-Allow-Origin" "*"
+       "Access-Control-Allow-Methods" "GET,POST,OPTIONS"
+       "Access-Control-Allow-Headers" "Content-Type,Authorization"})
+
+(defn- response-headers
+  [headers]
+  (js/Object.assign #js {} cors-headers headers))
+
+(defn- send-no-content!
+  [^js res]
+  (.writeHead res 204 cors-headers)
+  (.end res))
+
 (defn- send-json!
   [^js res status payload]
-  (.writeHead res status #js {"Content-Type" "application/json"})
+  (.writeHead res status (response-headers #js {"Content-Type" "application/json"}))
   (.end res (js/JSON.stringify (clj->js payload))))
 
 (defn- send-text!
   [^js res status text]
-  (.writeHead res status #js {"Content-Type" "text/plain"})
+  (.writeHead res status (response-headers #js {"Content-Type" "text/plain"}))
   (.end res text))
 
 (defn- <read-body-buffer
@@ -117,9 +131,9 @@
 
 (defn- sse-handler
   [^js req ^js res]
-  (.writeHead res 200 #js {"Content-Type" "text/event-stream"
-                           "Cache-Control" "no-cache"
-                           "Connection" "keep-alive"})
+  (.writeHead res 200 (response-headers #js {"Content-Type" "text/event-stream"
+                                              "Cache-Control" "no-cache"
+                                              "Connection" "keep-alive"}))
   (.write res "\n")
   (swap! *sse-clients conj res)
   (.on req "close" (fn []
@@ -308,6 +322,9 @@
            request-path (.-pathname parsed-url)
            method (.-method req)]
        (cond
+         (= method "OPTIONS")
+         (send-no-content! res)
+
          (= request-path "/healthz")
          (send-json! res (if @*ready? 200 503)
                      (health-payload {:bound-repo bound-repo
