@@ -732,132 +732,6 @@
       (seq classes)
       (assoc :classes classes))))
 
-(defn- get-graph-content-ref-uuids
-  [db {:keys [:exclude-built-in-pages?]}]
-  (let [;; Add support for exclude-built-in-pages? and block-titles as needed
-        block-titles (map :v (d/datoms db :avet :block/title))
-        block-links (if exclude-built-in-pages?
-                      (->> (d/datoms db :avet :block/link)
-                           (keep #(when-not (:logseq.property/built-in? (:block/page (d/entity db (:e %))))
-                                    (:block/uuid (d/entity db (:v %))))))
-                      (->> (d/datoms db :avet :block/link)
-                           (map #(:block/uuid (d/entity db (:v %))))))
-        content-ref-uuids (concat (->> block-titles
-                                       (filter string?)
-                                       (mapcat db-content/get-matched-ids))
-                                  block-links)]
-    (set content-ref-uuids)))
-
-(defn- build-graph-pages-export
-  "Handles pages, journals and their blocks"
-  [db graph-ontology options*]
-  (let [options (merge options*
-                       {:graph-ontology graph-ontology}
-                       ;; dont exclude when ontology is incomplete because :closed values can fail so have to build ontology
-                       (when (empty? (:exclude-namespaces options*))
-                         {:exclude-ontology? true}))
-        page-ids (concat (map :e (d/datoms db :avet :block/tags :logseq.class/Page))
-                         (map :e (d/datoms db :avet :block/tags :logseq.class/Journal)))
-        ontology-ids (set/union (set (map :e (d/datoms db :avet :block/tags :logseq.class/Tag)))
-                                (set (map :e (d/datoms db :avet :block/tags :logseq.class/Property))))
-        page-exports (mapv (fn [eid]
-                             (let [page-blocks (get-page-blocks db eid)]
-                               (build-page-export* db eid page-blocks (merge options {:include-uuid-fn (constantly true)
-                                                                                      :include-pvalue-uuid-fn (constantly true)}))))
-                           page-ids)
-        ontology-page-exports
-        (vec
-         (keep (fn [eid]
-                 (when-let [page-blocks (seq (remove :logseq.property/created-from-property (get-page-blocks db eid)))]
-                   (build-page-export* db eid page-blocks (merge options {:include-uuid-fn (constantly true)
-                                                                          :include-pvalue-uuid-fn (constantly true)
-                                                                          :ontology-page? true}))))
-               ontology-ids))
-        page-exports' (remove (fn [page-export]
-                                (and (:exclude-built-in-pages? options)
-                                     (get-in page-export [:pages-and-blocks 0 :page :build/properties :logseq.property/built-in?])))
-                              (concat page-exports ontology-page-exports))
-        alias-uuids  (concat (mapcat (fn [{:keys [pages-and-blocks]}]
-                                       (mapcat #(map second (get-in % [:page :block/alias]))
-                                               pages-and-blocks))
-                                     page-exports')
-                             (mapcat #(map second (:block/alias %))
-                                     (vals (:classes graph-ontology)))
-                             (mapcat #(map second (:block/alias %))
-                                     (vals (:properties graph-ontology))))
-        uuids-to-keep (set/union (set (mapcat :pvalue-uuids page-exports'))
-                                 (set alias-uuids)
-                                 (set (map #(get-in % [:pages-and-blocks 0 :page :block/uuid]) ontology-page-exports)))
-        pages-export {:pages-and-blocks (vec (mapcat :pages-and-blocks page-exports'))
-                      ;; :pvalue-uuids is a misleading name here but using it to keep uuid key consistent across exports
-                      :pvalue-uuids uuids-to-keep}]
-    pages-export))
-
-(defn- build-graph-files
-  [db {:keys [include-timestamps?]}]
-  (->> (d/q '[:find [(pull ?b [:file/path :file/content :file/created-at :file/last-modified-at]) ...]
-              :where [?b :file/path]] db)
-       ;; Sort so the export is deterministic across DB backends and import order
-       (sort-by :file/path)
-       (mapv #(if include-timestamps?
-                (select-keys % [:file/path :file/content :file/created-at :file/last-modified-at])
-                (select-keys % [:file/path :file/content])))))
-
-(defn- build-kv-values
-  [db]
-  (->> (d/q '[:find [(pull ?b [:db/ident :kv/value]) ...]
-              :where [?b :kv/value]] db)
-       ;; Don't export schema-version as frontend sets this and shouldn't be overridden
-       (remove #(= :logseq.kv/schema-version (:db/ident %)))
-       vec))
-
-(defn- build-property-history
-  "Builds property history. Always include timestamps regardless of :include-timestamps? because
-   timestamps are a necessary part of history"
-  [db]
-  (->> (d/q '[:find [(pull ?b [:block/uuid
-                               :block/created-at
-                               {:logseq.property.history/block [:block/uuid]}
-                               {:logseq.property.history/property [:db/ident]}
-                               {:logseq.property.history/ref-value [:db/ident :block/uuid]}
-                               :logseq.property.history/scalar-value]) ...]
-              :where [?b :logseq.property.history/block]] db)
-       (map (fn [history]
-              (cond-> (-> history
-                          (update :logseq.property.history/block
-                                  (fn [m] [:block/uuid (:block/uuid m)]))
-                          (update :logseq.property.history/property :db/ident)
-                          (update :logseq.property.history/ref-value
-                                  (fn [m]
-                                    (if (:db/ident m)
-                                      (:db/ident m)
-                                      [:block/uuid (:block/uuid m)]))))
-                (nil? (:logseq.property.history/ref-value history))
-                (dissoc :logseq.property.history/ref-value)
-                (not (contains? history :logseq.property.history/scalar-value))
-                (dissoc :logseq.property.history/scalar-value))))
-       set))
-
-(defn remove-uuids-if-not-ref [export-map all-ref-uuids]
-  (let [remove-uuid-if-not-ref (partial remove-uuid-if-not-ref-given-uuids all-ref-uuids)]
-    (-> export-map
-        (update :classes update-vals remove-uuid-if-not-ref)
-        (update :properties update-vals remove-uuid-if-not-ref)
-        (update :pages-and-blocks
-                (fn [pages-and-blocks]
-                  (mapv (fn [{:keys [page blocks]}]
-                          (let [page-map {:page (remove-uuid-if-not-ref page)
-                                          :blocks (sqlite-build/update-each-block blocks remove-uuid-if-not-ref)}
-                                ;; TODO: Walk data structure via :build/properties instead of slower walk
-                                page-map'
-                                (walk/postwalk (fn [f]
-                                                 (if (sqlite-build/block-property-value? f)
-                                                   (remove-uuid-if-not-ref f)
-                                                   f))
-                                               page-map)]
-                            page-map'))
-                        pages-and-blocks))))))
-
 (defn- add-ontology-for-include-namespaces
   "Adds :properties to export for given namespace parents. Current use case is for :exclude-namespaces
    so no need to add :classes yet"
@@ -875,52 +749,6 @@
     (-> (merge-export-maps (select-keys graph-export [:properties])
                            {:properties used-properties})
         (select-keys [:properties]))))
-
-(defn- build-graph-export
-  "Exports whole graph. Has the following options:
-   * :include-timestamps? - When set, timestamps are included on all blocks except for property value blocks
-   * :exclude-namespaces - A set of parent namespaces to exclude from properties and classes.
-     This is useful for graphs seeded with an ontology e.g. schema.org as it eliminates noisy and needless
-     export+import
-   * :exclude-built-in-pages? - When set, built-in pages are excluded from export
-   * :exclude-files? - When set, files are excluded from export"
-  [db {:keys [exclude-files?] :as options*}]
-  (let [options (merge options* {:property-value-uuids? true
-                                 :include-alias? true})
-        content-ref-uuids (get-graph-content-ref-uuids db options)
-        ontology-options (merge options {:include-uuid? true})
-        ontology-export (build-graph-ontology-export db ontology-options)
-        ontology-pvalue-uuids (set (concat (mapcat get-pvalue-uuids (vals (:properties ontology-export)))
-                                           (mapcat get-pvalue-uuids (vals (:classes ontology-export)))))
-        pages-export (build-graph-pages-export db ontology-export (assoc options :include-pvalue-uuid-fn content-ref-uuids))
-        graph-export* (-> (merge ontology-export pages-export) (dissoc :pvalue-uuids))
-        graph-export (if (seq (:exclude-namespaces options))
-                       (assoc graph-export* ::auto-include-namespaces (:exclude-namespaces options))
-                       graph-export*)
-        property-history (build-property-history db)
-        property-history-ref-uuids
-        (->> property-history
-             (mapcat (fn [history]
-                       (keep #(when (vector? %) (second %))
-                             [(:logseq.property.history/block history)
-                              (:logseq.property.history/ref-value history)])))
-             set)
-        all-ref-uuids (set/union content-ref-uuids ontology-pvalue-uuids (:pvalue-uuids pages-export)
-                                 property-history-ref-uuids)
-        files (when-not exclude-files? (build-graph-files db options))
-        kv-values (build-kv-values db)
-        ;; Remove all non-ref uuids after all nodes are built.
-        ;; Only way to ensure all pvalue uuids present across block types
-        graph-export' (-> (remove-uuids-if-not-ref graph-export all-ref-uuids)
-                          (update :pages-and-blocks sort-pages-and-blocks)
-                          (assoc ::schema-version db-schema/version))]
-    (cond-> graph-export'
-      (not exclude-files?)
-      (assoc ::graph-files files)
-      true
-      (assoc ::kv-values kv-values)
-      true
-      (assoc ::property-history property-history))))
 
 (defn- datom-export? [export-map]
   (= :datoms (::graph-format export-map)))
@@ -1182,7 +1010,7 @@
    * ::kv-values - Vec of :kv/value maps for a legacy structured :graph export
    * ::property-history - Set of property history blocks for a legacy structured :graph export
    * ::auto-include-namespaces - A set of parent namespaces to include from properties and classes
-     for a legacy structured :graph export. See :exclude-namespaces in build-graph-export for a similar option
+     for a legacy structured :graph export
    * ::import-options - A map of options that alters importing behavior. Has the following keys:
      * :existing-pages-keep-properties? - Boolean which allows existing pages to keep existing properties
 
