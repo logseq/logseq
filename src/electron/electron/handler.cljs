@@ -31,7 +31,6 @@
             [electron.utils :as utils]
             [electron.window :as win]
             [electron.graph-switch-flow :as graph-switch-flow]
-            [logseq.cli.common.graph :as cli-common-graph]
             [logseq.cli.common :as cli-common]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
@@ -197,7 +196,7 @@
 (defn get-graphs
   "Returns all graph names"
   []
-  (distinct (cli-common-graph/get-db-based-graphs)))
+  (distinct (common-graph/get-db-based-graphs)))
 
 (defn- canonical-repo
   [graph]
