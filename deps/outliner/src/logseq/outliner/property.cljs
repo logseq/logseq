@@ -1,6 +1,7 @@
 (ns logseq.outliner.property
   "Property related operations"
-  (:require [clojure.set :as set]
+  (:require [clojure.pprint :as pprint]
+            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
@@ -18,7 +19,6 @@
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.common.log :as log]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.validate :as outliner-validate]
@@ -193,15 +193,15 @@
 (defn- log-redundant-extends-retractions
   [db retractions]
   (when (seq retractions)
-    (log/info :msg "Clean redundant class extends"
-              :changes (->> retractions
-                            (group-by (fn [{:keys [class-id reason]}] [class-id reason]))
-                            (mapv (fn [[[class-id reason] retractions]]
-                                    {:class (:block/title (d/entity db class-id))
-                                     :reason reason
-                                     :removed-tags (mapv (fn [{:keys [parent-id]}]
-                                                           (:block/title (d/entity db parent-id)))
-                                                         retractions)}))))))
+    (pprint/pprint {:msg "Clean redundant class extends"
+                    :changes (->> retractions
+                                  (group-by (fn [{:keys [class-id reason]}] [class-id reason]))
+                                  (mapv (fn [[[class-id reason] retractions]]
+                                          {:class (:block/title (d/entity db class-id))
+                                           :reason reason
+                                           :removed-tags (mapv (fn [{:keys [parent-id]}]
+                                                                 (:block/title (d/entity db parent-id)))
+                                                               retractions)})))})))
 
 (defn- redundant-extends-retraction-tx-data
   [db class value]
@@ -716,7 +716,7 @@
                                :i18n-key :page.validation/alias-batch-multiple-owners
                                :message "Aliases can't be batch-set on multiple pages."}}))))
 
-(defn batch-set-property!
+(defn ^:large-vars/cleanup-todo batch-set-property!
   "Sets properties for multiple blocks. Automatically handles property value refs.
    Does no validation of property values. For :many properties, passing a collection
    replaces existing values in one call, while passing a scalar preserves add-single-value behavior."
