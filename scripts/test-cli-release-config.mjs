@@ -63,10 +63,10 @@ assert.match(buildWorkflow, /pnpm db-worker-node:release:bundle/, "db graph work
 assert.match(buildWorkflow, /pnpm --dir dist\/cli-package install --prod/, "db graph workflow should install prepared CLI package dependencies");
 assert.match(buildWorkflow, /libsecret-1-0/, "db graph workflow should install keytar's Linux runtime dependency");
 assert.match(buildWorkflow, /pnpm --dir dist\/cli-package pack --pack-destination \.\.\//, "db graph workflow should verify the prepared CLI package with pnpm pack");
-assert.match(buildWorkflow, /create_graph_with_schema_org\.cljs .*--subset/, "db graph workflow should use the schema subset fixture within the 3s CLI request timeout");
+assertNotContains(buildWorkflow, "create_graph_with_schema_org.cljs ./cli-root/graphs/schema-graph --subset", "db graph workflow");
 assert.match(buildWorkflow, /node dist\/cli-package\/dist\/logseq\.js --root-dir scripts\/cli-root/, "db graph workflow should test packaged CLI");
 assert.match(buildWorkflow, /node dist\/cli-package\/dist\/logseq\.js --root-dir scripts\/cli-root.+--timeout-ms 3000/, "db graph workflow should use a 3s CLI request timeout for packaged CLI graph commands");
-assertNotContains(buildWorkflow, "--timeout-ms 120000", "db graph workflow");
+assert.match(buildWorkflow, /--graph schema-graph --timeout-ms 120000/, "db graph workflow should allow the full schema graph validation to finish in CI");
 assertNotContains(buildWorkflow, "clojure -M:cljs compile logseq-cli", "db graph workflow");
 assertNotContains(buildWorkflow, "pnpm db-worker-node:compile:bundle", "db graph workflow");
 

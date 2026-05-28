@@ -236,9 +236,8 @@ jobs:
       - name: Create DB graph with properties
         run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ./cli-root/graphs/properties-graph
 
-      # TODO: Use a smaller, test-focused graph to test classes
       - name: Create DB graph with classes
-        run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./cli-root/graphs/schema-graph --subset
+        run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./cli-root/graphs/schema-graph
 
       - name: Fetch deps/db pnpm deps
         run: cd deps/db && pnpm install --frozen-lockfile
@@ -258,7 +257,7 @@ jobs:
       - name: Validate created DB graphs
         run: |
           node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph properties-graph --timeout-ms 3000 --profile --verbose graph validate
-          node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph schema-graph --timeout-ms 3000 --profile --verbose graph validate
+          node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph schema-graph --timeout-ms 120000 --profile --verbose graph validate
 
       - name: Print db-worker-node logs on graph validation failure
         if: failure()
