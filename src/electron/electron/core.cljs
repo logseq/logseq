@@ -32,6 +32,7 @@
 (defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
 (defonce STATIC_URL (str LSP_PROTOCOL "logseq.io/"))
 (defonce PLUGIN_URL (str STATIC_URL "plugins/"))
+(defonce EXTERNAL_PLUGIN_URL (str STATIC_URL "external/"))
 (defonce PLUGINS_ROOT (.join node-path (.homedir os) ".logseq/plugins"))
 
 (defonce *setup-fn (volatile! nil))
@@ -98,13 +99,32 @@
      (let [url (.-url request)
            url' ^js (js/URL. url)
            plugin-url? (string/starts-with? url PLUGIN_URL)
-           ROOT (if plugin-url? PLUGINS_ROOT js/__dirname)
-
+           external-plugin-url? (string/starts-with? url EXTERNAL_PLUGIN_URL)
            path' (.-pathname url')
-           path' (utils/safe-decode-uri-component path')
-           path' (cond-> path'
-                   plugin-url? (string/replace-first #"^/plugins" ""))
-           path' (.join node-path ROOT path')]
+           path' (cond
+                   plugin-url?
+                   (->> path'
+                        (utils/safe-decode-uri-component)
+                        (#(string/replace-first % #"^/plugins" ""))
+                        (.join node-path PLUGINS_ROOT))
+
+                   external-plugin-url?
+                   (let [external-path (subs path' (count "/external/"))
+                         separator-index (string/index-of external-path "/")
+                         encoded-root (if separator-index
+                                        (subs external-path 0 separator-index)
+                                        external-path)
+                         relative-path (if separator-index
+                                         (subs external-path separator-index)
+                                         "")
+                         root (utils/safe-decode-uri-component encoded-root)
+                         relative-path (utils/safe-decode-uri-component relative-path)]
+                     (.join node-path root relative-path))
+
+                   :else
+                   (->> path'
+                        (utils/safe-decode-uri-component)
+                        (.join node-path js/__dirname)))]
 
        (callback #js {:path path'}))))
 

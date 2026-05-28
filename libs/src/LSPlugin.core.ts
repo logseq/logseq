@@ -11,6 +11,7 @@ import {
   getSDKPathRoot,
   PROTOCOL_FILE,
   URL_LSP,
+  URL_LSP_EXTERNAL,
   safetyPathJoin,
   path,
   safetyPathNormalize,
@@ -451,14 +452,26 @@ function initApiProxyHandlers(pluginLocal: PluginLocal) {
   })
 }
 
-function convertToLSPResource(fullUrl: string, dotPluginRoot: string) {
-  if (dotPluginRoot && fullUrl.startsWith(PROTOCOL_FILE + dotPluginRoot)) {
+function convertToLSPResource(
+  fullUrl: string,
+  localRoot: string,
+  lspRoot = URL_LSP
+) {
+  if (localRoot && fullUrl.startsWith(PROTOCOL_FILE + localRoot)) {
     fullUrl = safetyPathJoin(
-      URL_LSP,
-      fullUrl.substr(PROTOCOL_FILE.length + dotPluginRoot.length)
+      lspRoot,
+      fullUrl.substr(PROTOCOL_FILE.length + localRoot.length)
     )
   }
   return fullUrl
+}
+
+function convertToExternalLSPResource(fullUrl: string, localRoot: string) {
+  return convertToLSPResource(
+    fullUrl,
+    localRoot,
+    safetyPathJoin(URL_LSP_EXTERNAL, encodeURIComponent(localRoot))
+  )
 }
 
 class IllegalPluginPackageError extends Error {
@@ -610,9 +623,11 @@ class PluginLocal extends EventEmitter<
       const url = path.join(localRoot, filePath)
       filePath = reg.test(url) ? url : PROTOCOL_FILE + url
     }
-    return this.isInstalledInLocalDotRoot
-      ? convertToLSPResource(filePath, this.dotPluginsRoot)
-      : filePath
+    if (this.isInstalledInLocalDotRoot) {
+      return convertToLSPResource(filePath, this.dotPluginsRoot)
+    }
+
+    return convertToExternalLSPResource(filePath, localRoot)
   }
 
   async _preparePackageConfigs() {
@@ -682,7 +697,7 @@ class PluginLocal extends EventEmitter<
     if (logseq.devEntry) {
       // development mode entry
       this._options.devEntry = logseq.devEntry
-      this._options.entry = logseq.devEntry
+      this._options.entry = this._resolveResourceFullUrl(logseq.devEntry, localRoot)
     } else {
       // theme has no main
       this._options.entry = this._resolveResourceFullUrl(entry, localRoot)
@@ -747,7 +762,10 @@ class PluginLocal extends EventEmitter<
     devEntry = devEntry || settings?.get('_devEntry')
 
     if (devEntry) {
-      this._options.entry = devEntry
+      this._options.entry = this._resolveResourceFullUrl(
+        devEntry,
+        this._localRoot
+      )
       return
     }
 
@@ -791,6 +809,11 @@ class PluginLocal extends EventEmitter<
       entry = convertToLSPResource(
         entry,
         this.dotPluginsRoot
+      )
+    } else {
+      entry = convertToExternalLSPResource(
+        entry,
+        path.dirname(entryPath)
       )
     }
 
