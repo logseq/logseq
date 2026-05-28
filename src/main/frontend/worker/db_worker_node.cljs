@@ -555,7 +555,11 @@
           (reset! *lock-info nil)
           (reset! *server-list-file server-list-file)
           (set-main-thread-stub!)
-          (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir
+          (-> (p/let [{:keys [path lock]} (db-lock/ensure-lock! {:root-dir root-dir
+                                                                 :repo repo
+                                                                 :owner-source owner-source})
+                      _ (reset! *lock-info {:path path :lock lock})
+                      platform (platform-node/node-platform {:root-dir root-dir
                                                              :event-fn handle-event!
                                                              :write-guard-fn assert-lock-owner!
                                                              :owner-source owner-source
@@ -564,10 +568,6 @@
                                                              :embedding-model-id (:embedding-model-id opts)})
                       proxy (db-core/init-core! platform)
                       _ (<init-worker! proxy)
-                      {:keys [path lock]} (db-lock/ensure-lock! {:root-dir root-dir
-                                                                 :repo repo
-                                                                 :owner-source owner-source})
-                      _ (reset! *lock-info {:path path :lock lock})
                       _ (let [method-kw :thread-api/create-or-open-db
                               method-str (normalize-method-str method-kw)]
                           (<invoke! proxy method-str method-kw [repo (startup-db-opts opts)]))]
