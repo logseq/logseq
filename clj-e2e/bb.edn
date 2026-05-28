@@ -5,6 +5,10 @@
   :init (do
           (def cli-opts (cli/parse-opts *command-line-args* {:alias {:p :port :n :namespace :i :include :v :var}
                                                              :coerce {:port :int :headers :edn}}))
+          (defn ensure-cpcache-dir!
+            []
+            (.mkdirs (java.io.File. ".cpcache")))
+
           (defn clojure-with-port
             [cmd]
             (if-let [port (:port cli-opts)]
@@ -41,12 +45,15 @@
                                   (System/exit 0))}
 
   -run-rtc-extra-test {:depends [serve prn rtc-extra-test]}
-  run-rtc-extra-test {:task (run '-run-rtc-extra-test {:parallel true})}
+  run-rtc-extra-test {:task (do (ensure-cpcache-dir!)
+                                (run '-run-rtc-extra-test {:parallel true}))}
 
   -run-rtc-extra-part2-test {:depends [serve prn rtc-extra-part2-test]}
-  run-rtc-extra-part2-test {:task (run '-run-rtc-extra-part2-test {:parallel true})}
+  run-rtc-extra-part2-test {:task (do (ensure-cpcache-dir!)
+                                      (run '-run-rtc-extra-part2-test {:parallel true}))}
 
   -dev {:depends [serve prn test]}
 
   dev {:doc "serve and test"
-       :task (run '-dev {:parallel true})}}}
+       :task (do (ensure-cpcache-dir!)
+                 (run '-dev {:parallel true}))}}}
