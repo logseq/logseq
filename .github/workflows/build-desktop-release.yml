@@ -723,6 +723,8 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') }}
     needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64 ]
     runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.ref.outputs.version }}
     steps:
       - name: Download MacOS x64 Artifacts
         uses: actions/download-artifact@v4
@@ -805,6 +807,11 @@ jobs:
             ./*.AppImage
             ./*.apk
 
+  trigger-flathub-release:
+    runs-on: ubuntu-22.04
+    needs: [ release ]
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') }}
+    steps:
       - name: Trigger Flathub release
         run: |
           if [ -z "${FLATHUB_WORKFLOW_TOKEN:-}" ]; then
@@ -823,15 +830,26 @@ jobs:
             --arg version "$VERSION" \
             '{ref: $ref, inputs: {force: true, version: $version}}')
 
-          curl -fsS -X POST \
+          response=$(mktemp)
+          status=$(curl -sS -o "$response" -w "%{http_code}" -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${FLATHUB_WORKFLOW_TOKEN}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/flathub/com.logseq.Logseq/actions/workflows/update.yml/dispatches \
-            -d "$payload"
+            -d "$payload") || status=000
+
+          echo "Flathub dispatch returned HTTP ${status}"
+          if [ -s "$response" ]; then
+            cat "$response"
+          fi
+
+          if [ "$status" != "204" ]; then
+            echo "::error title=FlathubDispatchFailed::Failed to trigger Flathub release workflow"
+            exit 1
+          fi
         env:
           BUILD_TARGET: ${{ github.event.inputs.build-target }}
-          VERSION: ${{ steps.ref.outputs.version }}
+          VERSION: ${{ needs.release.outputs.version }}
           FLATHUB_WORKFLOW_TOKEN: ${{ secrets.FLATHUB_WORKFLOW_TOKEN }}
 
   publish-linux-snap:
