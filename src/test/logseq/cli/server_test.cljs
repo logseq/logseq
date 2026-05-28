@@ -683,51 +683,6 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
-(deftest ensure-server-forwards-timeout-ms-to-startup-waits
-  (async done
-         (let [root-dir (node-helper/create-tmp-dir "cli-server-start-timeout")
-               repo (str "logseq_db_start_timeout_" (subs (str (random-uuid)) 0 8))
-               lock {:repo repo
-                     :pid (.-pid js/process)
-                     :host "127.0.0.1"
-                     :port 9302
-                     :owner-source :cli}
-               read-lock-calls (atom 0)
-               discover-calls (atom 0)
-               lock-timeout (atom nil)
-               ready-timeout (atom nil)]
-           (-> (p/with-redefs [daemon/read-lock (fn [_]
-                                                  (if (= 1 (swap! read-lock-calls inc))
-                                                    nil
-                                                    lock))
-                               daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
-                               daemon/spawn-server! (fn [_] nil)
-                               daemon/wait-for-lock (fn [_ timeout-ms]
-                                                      (reset! lock-timeout timeout-ms)
-                                                      (p/resolved true))
-                               cli-server/discover-servers (fn [_]
-                                                            (p/resolved (if (= 1 (swap! discover-calls inc))
-                                                                          []
-                                                                          [{:repo repo
-                                                                            :host "127.0.0.1"
-                                                                            :port 9302
-                                                                            :pid (.-pid js/process)
-                                                                            :owner-source :cli
-                                                                            :revision (version/revision)
-                                                                            :status :ready}])))
-                               daemon/wait-for-ready (fn [_ timeout-ms]
-                                                       (reset! ready-timeout timeout-ms)
-                                                       (p/resolved true))]
-                 (cli-server/ensure-server! {:root-dir root-dir
-                                             :timeout-ms 30000}
-                                            repo))
-               (p/then (fn [_]
-                         (is (= 30000 @lock-timeout))
-                         (is (= 30000 @ready-timeout))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally done)))))
-
 (deftest ensure-server-records-profile-stages-on-spawn-path
   (async done
          (let [root-dir (node-helper/create-tmp-dir "cli-server-profile")

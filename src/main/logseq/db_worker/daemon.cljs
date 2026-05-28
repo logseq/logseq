@@ -209,21 +209,17 @@
        (tick)))))
 
 (defn wait-for-lock
-  ([path]
-   (wait-for-lock path 8000))
-  ([path timeout-ms]
-   (wait-for (fn []
-               (p/resolved (fs/existsSync path)))
-             {:timeout-ms (or timeout-ms 8000)
-              :interval-ms 50})))
+  [path]
+  (wait-for (fn []
+              (p/resolved (fs/existsSync path)))
+            {:timeout-ms 8000
+             :interval-ms 50}))
 
 (defn wait-for-ready
-  ([lock]
-   (wait-for-ready lock 8000))
-  ([lock timeout-ms]
-   (wait-for (fn [] (ready? lock))
-             {:timeout-ms (or timeout-ms 8000)
-              :interval-ms 50})))
+  [lock]
+  (wait-for (fn [] (ready? lock))
+            {:timeout-ms 8000
+             :interval-ms 50}))
 
 (defn spawn-server!
   [{:keys [script repo root-dir owner-source create-empty-db? embedding-endpoint embedding-model-id]}]
