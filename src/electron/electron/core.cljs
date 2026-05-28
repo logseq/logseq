@@ -97,12 +97,13 @@
    (fn [^js request callback]
      (let [url (.-url request)
            url' ^js (js/URL. url)
-           [_ ROOT] (if (string/starts-with? url PLUGIN_URL)
-                      [PLUGIN_URL PLUGINS_ROOT]
-                      [STATIC_URL js/__dirname])
+           plugin-url? (string/starts-with? url PLUGIN_URL)
+           ROOT (if plugin-url? PLUGINS_ROOT js/__dirname)
 
            path' (.-pathname url')
            path' (utils/safe-decode-uri-component path')
+           path' (cond-> path'
+                   plugin-url? (string/replace-first #"^/plugins" ""))
            path' (.join node-path ROOT path')]
 
        (callback #js {:path path'}))))
