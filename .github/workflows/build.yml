@@ -240,8 +240,11 @@ jobs:
       - name: Fetch deps/db pnpm deps
         run: cd deps/db && pnpm install --frozen-lockfile
 
-      - name: Build logseq CLI
-        run: clojure -M:cljs release logseq-cli
+      - name: Build logseq CLI runtime
+        run: |
+          clojure -M:cljs compile logseq-cli
+          pnpm db-worker-node:compile:bundle
+          pnpm --dir deps/db-sync build:node-adapter
 
       - name: Validate created DB graphs
         run: |
