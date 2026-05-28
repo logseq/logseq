@@ -2605,6 +2605,8 @@
                                           util/caret-range)
                 mobile-range (when mobile? (get-cursor-range))]
             (when (and (not forbidden-edit?) (contains? #{1 0} button))
+              (when (= 1 button)
+                (block-selection/set-pointer-down!))
               (cond
                 (and meta? shift?)
                 (when-not (empty? selection-blocks)
@@ -3680,6 +3682,7 @@
 (defn- select-block-under-pointer!
   [selection-block-ids scroll-direction]
   (when (and (seq selection-block-ids)
+             (block-selection/pointer-down?)
              (or (state/get-selection-start-block)
                  (seq (state/get-selection-blocks))))
     (when-let [block-dom-node (or (visible-selection-boundary-block selection-block-ids scroll-direction)

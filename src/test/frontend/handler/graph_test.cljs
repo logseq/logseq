@@ -1,10 +1,14 @@
 (ns frontend.handler.graph-test
   (:require [cljs.test :refer [async deftest is testing]]
+            [datascript.core :as d]
+            [frontend.db :as db]
             [frontend.common.idb :as idb]
             [frontend.handler.graph]
             [frontend.state :as state]
             [frontend.util.url :as url-util]
             [logseq.common.graph-registry :as graph-registry]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
 (deftest graph-registry-key-is-indexeddb-compatible-test
@@ -48,6 +52,42 @@
         (is (= {:repo "logseq_db_work"
                 :graph-id "remote-uuid"}
                @stored-graph))))))
+
+(deftest upsert-current-graph-registry-repairs-missing-local-graph-uuid-test
+  (async done
+    (let [upsert-current-f (some-> (resolve 'frontend.handler.graph/<upsert-current-graph-registry!) deref)
+          conn (d/create-conn db-schema/schema)
+          registry-entry (atom nil)]
+      (is (fn? upsert-current-f) "Current graph registry upsert should exist")
+      (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                          :kv/value db-schema/version}])
+      (p/with-redefs [state/get-current-repo (constantly "logseq_db_broken")
+                      db/get-db (fn
+                                  ([repo]
+                                   (when (= "logseq_db_broken" repo) @conn))
+                                  ([repo deref?]
+                                   (when (= "logseq_db_broken" repo)
+                                     (if deref? @conn conn))))
+                      db/transact! (fn [repo tx-data tx-meta]
+                                     (is (= "logseq_db_broken" repo))
+                                     (d/transact! conn tx-data tx-meta)
+                                     (p/resolved nil))
+                      frontend.handler.graph/<upsert-graph-registry-entry!
+                      (fn [entry]
+                        (reset! registry-entry entry)
+                        (p/resolved nil))]
+        (-> (upsert-current-f)
+            (.then (fn [_]
+                     (let [local-graph-uuid (ldb/get-graph-local-uuid @conn)]
+                       (is (uuid? local-graph-uuid))
+                       (is (= (str local-graph-uuid)
+                              (:local-graph-id @registry-entry)))
+                       (is (= (:local-graph-id @registry-entry)
+                              (:graph-id @registry-entry)))
+                       (done))))
+            (.catch (fn [e]
+                      (is false (str e))
+                      (done))))))))
 
 (deftest resolve-startup-repo-prefers-tab-repo-before-global-current-test
   (let [resolve-f (some-> (resolve 'frontend.handler.graph/resolve-startup-repo) deref)]

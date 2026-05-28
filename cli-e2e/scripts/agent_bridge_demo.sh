@@ -26,7 +26,7 @@ root_dir=""
 graph="agent-bridge-demo-$(date +%s)"
 timeout_sec=45
 agent_name="AgentBridgeDemo"
-task_title="AgentBridge demo task: mark this block done"
+task_title="AgentBridge demo task: mark this block in review"
 expected_session="thread-agent-bridge-demo"
 bridge_pid=""
 graph_created=0
@@ -247,7 +247,7 @@ agent_session=""
 while (( SECONDS < deadline )); do
   task_status="$(query_task_status "$task_id")"
   agent_session="$(query_agent_session "$task_id")"
-  if [[ "$task_status" == "logseq.property/status.done" && "$agent_session" == "$expected_session" ]]; then
+  if [[ "$task_status" == "logseq.property/status.in-review" && "$agent_session" == "$expected_session" ]]; then
     break
   fi
   if [[ -n "${bridge_pid:-}" ]] && ! kill -0 "$bridge_pid" 2>/dev/null; then
@@ -259,8 +259,8 @@ while (( SECONDS < deadline )); do
   sleep 0.5
 done
 
-if [[ "$task_status" != "logseq.property/status.done" ]]; then
-  echo "Expected task status done, got: ${task_status:-<empty>}" >&2
+if [[ "$task_status" != "logseq.property/status.in-review" ]]; then
+  echo "Expected task status in-review, got: ${task_status:-<empty>}" >&2
   cat "$bridge_log" >&2
   cat "$bridge_err" >&2
   exit 1
@@ -293,6 +293,6 @@ if "Block UUID:" not in prompt:
     raise SystemExit("block uuid missing from Codex prompt")
 PY
 
-echo "task status: done"
+echo "task status: in-review"
 echo "agent-session-id: $agent_session"
 echo "agent bridge demo completed"
