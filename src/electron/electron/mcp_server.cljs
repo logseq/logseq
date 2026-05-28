@@ -1,5 +1,5 @@
-(ns logseq.cli.common.mcp.server
-  "MCP server related fns shared between CLI and frontend"
+(ns electron.mcp-server
+  "MCP server routes for the desktop API server."
   (:require ["@modelcontextprotocol/sdk/server/mcp.js" :refer [McpServer]]
             ["@modelcontextprotocol/sdk/server/streamableHttp.js" :refer [StreamableHTTPServerTransport]]
             ["@modelcontextprotocol/sdk/types.js" :refer [isInitializeRequest]]
@@ -54,7 +54,7 @@
     (js/console.log "GET /mcp" session-id)
     (if-let [transport (and session-id (@transports session-id))]
       (.handleRequest ^js transport (.-raw req) (.-raw res))
-      (-> res (.status 400) (.send res "Invalid or missing session ID")))))
+      (-> res (.code 400) (.send "Invalid or missing session ID")))))
 
 (defn handle-delete-request
   [req res]
@@ -64,7 +64,7 @@
       (do
         (.close transport)
         (-> res (.code 200) (.send #js {:ok true})))
-      (-> res (.status 400) (.send res "Invalid or missing session ID")))))
+      (-> res (.code 400) (.send "Invalid or missing session ID")))))
 
 (defn mcp-error-response [msg]
   #js {:content
