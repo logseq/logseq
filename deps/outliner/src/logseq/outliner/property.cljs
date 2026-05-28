@@ -114,18 +114,47 @@
            (ldb/internal-page? block)
            (not (block-classes-provide-property? @conn block property-id)))))
 
+(def ^:private class-lookup-ref-attrs
+  #{:db/ident :block/uuid})
+
+(defn- class-lookup-ref?
+  [value]
+  ;; Class extends accepts only entity refs that can point at class blocks.
+  ;; Keep this narrow to avoid per-value schema/entity lookups while parsing vectors.
+  (and (vector? value)
+       (= 2 (count value))
+       (contains? class-lookup-ref-attrs (first value))))
+
+(defn- single-entity-ref?
+  [value]
+  (or (de/entity? value)
+      (integer? value)
+      (keyword? value)
+      (class-lookup-ref? value)))
+
 (defn- ->entity-ids
   [db value]
-  (->> (cond
-         (nil? value) []
-         (de/entity? value) [value]
-         (coll? value) value
-         :else [value])
-       (keep (fn [item]
-               (cond
-                 (de/entity? item) (:db/id item)
-                 (integer? item) item
-                 (keyword? item) (:db/id (d/entity db item)))))))
+  (letfn [(entity-id [item]
+            (or (cond
+                  (de/entity? item) (:db/id item)
+                  (integer? item) item
+                  (keyword? item) (:db/id (d/entity db item))
+                  (class-lookup-ref? item) (:db/id (d/entity db item)))
+                (throw (ex-info "Unsupported class extends entity reference"
+                                {:value item}))))]
+    (->> (cond
+           (nil? value) []
+           (single-entity-ref? value) [value]
+           (coll? value) value
+           :else [value])
+         (map entity-id))))
+
+(defn- normalize-extends-value
+  [db value]
+  (let [ids (vec (->entity-ids db value))]
+    (if (single-entity-ref? value)
+      (first ids)
+      ids)))
 
 (defn- class-ancestor-ids
   [db class-id]
@@ -205,7 +234,10 @@
           multiple-values-empty? (and (sequential? old-value)
                                       (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
           extends? (= property-id :logseq.property.class/extends)
-          tx-value (if (and extends? (coll? value)) (set value) value)
+          tx-value (if extends?
+                     (let [value' (normalize-extends-value @conn value)]
+                       (if (coll? value') (set value') value'))
+                     value)
           update-block-tx (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                             true
                             (assoc property-id tx-value)
@@ -705,12 +737,20 @@
            many? (= :db.cardinality/many (:db/cardinality property))
            entity-id? (and (:entity-id? options) (number? v))
            ref? (contains? db-property-type/all-ref-property-types property-type)
+           extends? (= property-id :logseq.property.class/extends)
            default-url-not-closed? (and (contains? #{:default :url} property-type)
+                                        (not extends?)
                                         (not (seq (entity-plus/lookup-kv-then-entity property :property/closed-values))))
-           v' (if (and ref? (not entity-id?))
+           v' (cond
+                extends?
+                (normalize-extends-value @conn v)
+
+                (and ref? (not entity-id?))
                 (if default-url-not-closed?
                   (normalize-and-validate-default-url-property-values conn property v many?)
                   (convert-ref-property-values conn property-id v property-type {:many? many?}))
+
+                :else
                 v)
            _ (when (nil? v')
                (throw (ex-info "Property value must be not nil" {:v v})))
@@ -813,8 +853,15 @@
            property (d/entity @conn property-id)
            property-type (get property :logseq.property/type :default)
            ref? (db-property-type/all-ref-property-types property-type)
-           v' (if ref?
+           extends? (= property-id :logseq.property.class/extends)
+           v' (cond
+                extends?
+                (normalize-extends-value @conn v)
+
+                ref?
                 (convert-ref-property-value conn property-id v property-type block-eid)
+
+                :else
                 v)]
        (when-not (and block property)
          (throw (ex-info "Set block property failed: block or property doesn't exist"
@@ -827,8 +874,9 @@
          (do
            (when (= property-id :block/tags)
              (outliner-validate/validate-tags-property @conn [block-eid] v'))
-           (when (= property-id :logseq.property.class/extends)
-             (outliner-validate/validate-extends-property @conn v' [block]))
+           (when extends?
+             (doseq [parent-id (->entity-ids @conn v')]
+               (outliner-validate/validate-extends-property @conn (d/entity @conn parent-id) [block])))
            (cond
              db-attribute?
              (set-block-db-attribute! conn block property property-id v v')
