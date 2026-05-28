@@ -242,14 +242,16 @@ jobs:
 
       - name: Build logseq CLI runtime
         run: |
-          clojure -M:cljs compile logseq-cli
-          pnpm db-worker-node:compile:bundle
+          clojure -M:cljs release logseq-cli
+          pnpm db-worker-node:release:bundle
           pnpm --dir deps/db-sync build:node-adapter
+          node scripts/prepare-cli-package.mjs
+          pnpm --dir dist/cli-package install --prod
 
       - name: Validate created DB graphs
         run: |
-          node static/logseq-cli.js --root-dir scripts/cli-root --graph properties-graph graph validate
-          node static/logseq-cli.js --root-dir scripts/cli-root --graph schema-graph graph validate
+          node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph properties-graph graph validate
+          node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph schema-graph graph validate
 
       - name: Export a created DB graph
-        run: node static/logseq-cli.js --root-dir scripts/cli-root --graph properties-graph graph export --type edn --file scripts/properties.edn
+        run: node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph properties-graph graph export --type edn --file scripts/properties.edn

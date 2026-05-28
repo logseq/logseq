@@ -8,11 +8,22 @@ const rootPackage = JSON.parse(
   fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"),
 );
 
-const requiredFiles = [
+const packageFiles = [
   "dist/logseq.js",
   "static/logseq-cli.js",
   "static/logseq-cli.js.map",
+  "static/js/db-worker-node.js",
+  "static/js/db-worker-node-assets.json",
   ".agents/skills/logseq-cli/SKILL.md",
+];
+
+const copyEntries = [
+  ["dist/logseq.js", "dist/logseq.js"],
+  ["static/logseq-cli.js", "static/logseq-cli.js"],
+  ["static/logseq-cli.js.map", "static/logseq-cli.js.map"],
+  ["dist/db-worker-node.js", "static/js/db-worker-node.js"],
+  ["dist/db-worker-node-assets.json", "static/js/db-worker-node-assets.json"],
+  [".agents/skills/logseq-cli/SKILL.md", ".agents/skills/logseq-cli/SKILL.md"],
 ];
 
 const assertReleaseEntrypoint = (content) => {
@@ -26,14 +37,21 @@ const assertReleaseEntrypoint = (content) => {
 };
 
 const dependencyNames = [
+  "@js-joda/core",
   "@zvec/zvec",
   "better-sqlite3",
   "fs-extra",
   "jszip",
+  "keytar",
   "mldoc",
   "picocolors",
+  "string-width",
   "ws",
 ];
+
+const onlyBuiltDependencies = rootPackage.pnpm.onlyBuiltDependencies.filter(
+  (name) => dependencyNames.includes(name),
+);
 
 const dependencyVersion = (name) =>
   rootPackage.dependencies?.[name] ?? rootPackage.devDependencies?.[name];
@@ -54,12 +72,12 @@ assertReleaseEntrypoint(
 
 fs.rmSync(packageRoot, { recursive: true, force: true });
 
-for (const relativePath of requiredFiles) {
-  const source = path.join(repoRoot, relativePath);
+for (const [sourcePath, packagePath] of copyEntries) {
+  const source = path.join(repoRoot, sourcePath);
   if (!fs.existsSync(source)) {
-    throw new Error(`Missing CLI package input: ${relativePath}`);
+    throw new Error(`Missing CLI package input: ${sourcePath}`);
   }
-  const destination = path.join(packageRoot, relativePath);
+  const destination = path.join(packageRoot, packagePath);
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   fs.copyFileSync(source, destination);
 }
@@ -85,8 +103,11 @@ const packageJson = {
     "note taking",
     "clojurescript",
   ],
-  files: requiredFiles,
+  files: packageFiles,
   dependencies,
+  pnpm: {
+    onlyBuiltDependencies,
+  },
 };
 
 fs.writeFileSync(

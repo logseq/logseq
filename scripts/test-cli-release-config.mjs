@@ -53,8 +53,17 @@ assertNotContains(workflow, "deps/cli", "deps-cli workflow");
 assert.match(workflow, /src\/main\/logseq\/cli\/\*\*/, "workflow should watch new CLI sources");
 assert.match(workflow, /src\/test\/logseq\/cli\/\*\*/, "workflow should watch new CLI tests");
 assert.match(workflow, /clojure -M:cljs release logseq-cli/, "workflow should build new CLI");
+assert.match(workflow, /pnpm db-worker-node:release:bundle/, "workflow should build bundled db-worker-node runtime");
 assert.match(workflow, /node scripts\/prepare-cli-package\.mjs/, "workflow should prepare publish package");
 assert.match(workflow, /working-directory: dist\/cli-package/, "workflow should publish prepared package");
+
+const buildWorkflow = readText(".github/workflows/build.yml");
+assert.match(buildWorkflow, /clojure -M:cljs release logseq-cli/, "db graph workflow should build release CLI");
+assert.match(buildWorkflow, /pnpm db-worker-node:release:bundle/, "db graph workflow should build release db-worker-node runtime");
+assert.match(buildWorkflow, /pnpm --dir dist\/cli-package install --prod/, "db graph workflow should install prepared CLI package dependencies");
+assert.match(buildWorkflow, /node dist\/cli-package\/dist\/logseq\.js --root-dir scripts\/cli-root/, "db graph workflow should test packaged CLI");
+assertNotContains(buildWorkflow, "clojure -M:cljs compile logseq-cli", "db graph workflow");
+assertNotContains(buildWorkflow, "pnpm db-worker-node:compile:bundle", "db graph workflow");
 
 assert.equal(
   fs.existsSync(path.join(repoRoot, "deps/cli/package.json")),
@@ -107,10 +116,20 @@ assert.equal(packageJson.bin.logseq, "dist/logseq.js");
 assert.equal(packageJson.private, undefined);
 assert.equal(packageJson.dependencies?.["@modelcontextprotocol/sdk"], undefined);
 assert.equal(packageJson.dependencies?.zod, undefined);
+assert.ok(packageJson.dependencies?.["@js-joda/core"], "publish package should include @js-joda/core for release artifacts");
+assert.ok(packageJson.dependencies?.keytar, "publish package should include keytar for db-worker-node");
+assert.ok(packageJson.dependencies?.["string-width"], "publish package should include string-width for CLI rendering");
+assert.deepEqual(packageJson.pnpm?.onlyBuiltDependencies, [
+  "@zvec/zvec",
+  "better-sqlite3",
+  "keytar",
+]);
 assert.deepEqual(packageJson.files, [
   "dist/logseq.js",
   "static/logseq-cli.js",
   "static/logseq-cli.js.map",
+  "static/js/db-worker-node.js",
+  "static/js/db-worker-node-assets.json",
   ".agents/skills/logseq-cli/SKILL.md",
 ]);
 
@@ -126,4 +145,9 @@ assertNoShadowRuntime(readText("static/logseq-cli.js"), "root CLI release artifa
 assertNoShadowRuntime(
   fs.readFileSync(path.join(packageRoot, "static/logseq-cli.js"), "utf8"),
   "publish package CLI release artifact",
+);
+
+assertNoShadowRuntime(
+  fs.readFileSync(path.join(packageRoot, "static/js/db-worker-node.js"), "utf8"),
+  "publish package db-worker-node release artifact",
 );
