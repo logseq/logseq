@@ -62,10 +62,12 @@ export type CodeMirror6LanguageDescriptor = {
 
 export type CodeMirror6ExtensionFactoryContext = {
   apiVersion: 1
+  blockUuid?: string
   editorId?: string
   view?: unknown
   state?: unknown
   language?: CodeMirror6LanguageDescriptor
+  dispatch?: (transactionSpec: unknown) => void
 }
 
 export type CodeMirror6ExtensionFactory = (

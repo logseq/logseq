@@ -7,6 +7,7 @@
             [frontend.extensions.code-cm6 :as cm6]
             [frontend.handler.code :as code-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.plugin :refer [hook-extensions-enhancers-by-key]]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
@@ -14,6 +15,10 @@
             [rum.core :as rum]))
 
 (def editor-root-ref-name "cm6-editor-root")
+
+(defn- extra-codemirror-options []
+  (get (state/get-config)
+       :editor/extra-codemirror-options {}))
 
 (defn- save-editor!
   [config]
@@ -161,6 +166,7 @@
                     :language-name (or original-mode "plain-text")
                     :editable? (not config/publishing?)
                     :block-uuid (:block/uuid (or code-block edit-block))
+                    :user-options (extra-codemirror-options)
                     :on-change (fn [new-code]
                                  (when (= original-mode "calc")
                                    (reset! (:calc-atom state) (calc/eval-lines new-code))))
@@ -168,7 +174,12 @@
     (when context
       (when *editor-ref
         (reset! *editor-ref context))
-      (install-event-handlers! context config state edit-block code-block *update-cursor!))))
+      (install-event-handlers! context config state edit-block code-block *update-cursor!)
+      (when-let [legacy-enhancers (seq (hook-extensions-enhancers-by-key :codemirror))]
+        (cm6/apply-enhancers! context (map #(assoc % :type :codemirror) legacy-enhancers)))
+      (when-let [enhancers (seq (hook-extensions-enhancers-by-key :codemirror-6))]
+        (cm6/apply-enhancers! context enhancers))
+      context)))
 
 (defn- load-and-render!
   [state]

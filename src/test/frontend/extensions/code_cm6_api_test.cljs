@@ -11,15 +11,34 @@
   (let [payload (api/make-enhancer-payload
                  {:editor-id "editor-1"
                   :view {:cm6-view true}
+                  :dispatch! noop
+                  :language {:id :clojure
+                             :names #{"clojure" "clj"}
+                             :source :nextjournal
+                             :package "@nextjournal/lang-clojure"
+                             :entry :clojure}
                   :register-extension! noop
                   :register-language! noop
-                  :get-language noop})]
+                  :get-language (constantly nil)})
+        js-payload (api/enhancer-payload->js payload)]
     (is (= 1 (:api-version payload)))
     (is (contains? (:capabilities payload) :code-editor/cm6))
     (is (contains? (:capabilities payload) :code-editor/extensions))
     (is (contains? (:capabilities payload) :code-editor/language-registry))
     (is (= "editor-1" (:editor-id payload)))
-    (is (true? (api/valid-enhancer-payload? payload)))))
+    (is (true? (api/valid-enhancer-payload? payload)))
+    (is (= 1 (.-apiVersion js-payload)))
+    (is (= "codemirror-6" (.-enhancerType js-payload)))
+    (is (= #{"code-editor/cm6"
+             "code-editor/extensions"
+             "code-editor/language-registry"}
+           (set (js->clj (.-capabilities js-payload)))))
+    (is (= "editor-1" (.-editorId js-payload)))
+    (is (= "clojure" (.. js-payload -language -id)))
+    (is (fn? (.-dispatch js-payload)))
+    (is (fn? (.-registerExtension js-payload)))
+    (is (fn? (.-registerLanguage js-payload)))
+    (is (fn? (.-getLanguage js-payload)))))
 
 (deftest enhancer-payload-rejects-cm5-shaped-integrations
   (testing "CM6 plugins must receive a versioned host API, not window.CodeMirror"
@@ -69,3 +88,113 @@
     (is (= "old" (cm6/default-value context)))
     (is (identical? context (cm6/set-default-value! context "new")))
     (is (= "new" (cm6/default-value context)))))
+
+(deftest cm6-enhancers-can-register-extensions-through-versioned-payload
+  (let [context {:editor-id "editor-1"
+                 :view #js {}
+                 :*state (atom {:plugin-extensions {}
+                                :plugin-languages {}})}
+        calls (atom [])]
+    (is (identical?
+         context
+         (cm6/apply-enhancers!
+          context
+          [{:key :plugin-a
+            :enhancer (fn [^js payload]
+                        (swap! calls conj {:api-version (.-apiVersion payload)
+                                           :enhancer-type (.-enhancerType payload)
+                                           :editor-id (.-editorId payload)})
+                        ((.-registerExtension payload) "plugin-a/keymap" [:extension]))}])))
+    (is (= [{:api-version 1
+             :enhancer-type "codemirror-6"
+             :editor-id "editor-1"}]
+           @calls))
+    (is (= [:extension]
+           (get-in @(:*state context) [:plugin-extensions "plugin-a/keymap"])))))
+
+(deftest cm6-enhancers-can-register-extension-factories
+  (let [context {:editor-id "editor-1"
+                 :view #js {}
+                 :*state (atom {:plugin-extensions {}
+                                :plugin-languages {}})}
+        calls (atom [])]
+    (cm6/apply-enhancers!
+     context
+     [{:key :plugin-a
+       :enhancer (fn [^js payload]
+                   ((.-registerExtension payload)
+                    "plugin-a/factory"
+                    (fn [^js factory-context]
+                      (swap! calls conj (.-editorId factory-context))
+                      [:factory-extension])))}])
+    (is (= ["editor-1"] @calls))
+    (is (= [:factory-extension]
+           (get-in @(:*state context) [:plugin-extensions "plugin-a/factory"])))))
+
+(deftest cm6-enhancers-can-register-js-language-descriptors
+  (let [context {:editor-id "editor-1"
+                 :view #js {}
+                 :*state (atom {:plugin-extensions {}
+                                :plugin-languages {}})}
+        calls (atom [])]
+    (cm6/apply-enhancers!
+     context
+     [{:key :plugin-a
+       :enhancer (fn [^js payload]
+                   ((.-registerLanguage payload)
+                    #js {:id "racket"
+                         :names #js ["racket" "rkt"]
+                         :source "legacy"
+                         :extensions #js ["rkt"]
+                         :package "@codemirror/legacy-modes"
+                         :entry "scheme"})
+                   (let [^js language ((.-getLanguage payload) "rkt")]
+                     (swap! calls conj (.-id language))))}])
+    (is (= ["racket"] @calls))
+    (is (= {:id :racket
+            :names #{"racket" "rkt"}
+            :source :legacy
+            :extensions #{"rkt"}
+            :package "@codemirror/legacy-modes"
+            :entry :scheme}
+           (get-in @(:*state context) [:plugin-languages :racket])))))
+
+(deftest cm6-enhancers-reject-legacy-cm5-enhancer-type
+  (let [legacy-called? (atom false)
+        context {:editor-id "editor-1"
+                 :view #js {}
+                 :*state (atom {:plugin-extensions {}
+                                :plugin-languages {}})}]
+    (is (identical?
+         context
+         (cm6/apply-enhancers!
+          context
+          [{:key :legacy-plugin
+            :type api/legacy-enhancer-type
+            :enhancer (fn [_payload]
+                        (reset! legacy-called? true))}])))
+    (is (false? @legacy-called?))
+    (is (empty? (:plugin-extensions @(:*state context))))))
+
+(deftest user-options-are-limited-to-cm6-supported-contract
+  (is (= {:line-wrapping? true
+          :line-numbers? false}
+         (api/validate-user-options!
+          {:line-wrapping? true
+           :line-numbers? false})))
+  (is (thrown-with-msg?
+       js/Error
+       #"Unsupported CodeMirror 5 option"
+       (api/validate-user-options! {:lineNumbers true})))
+  (is (thrown-with-msg?
+       js/Error
+       #"Unsupported CodeMirror option"
+       (api/validate-user-options! {:read-only? true})))
+  (is (thrown-with-msg?
+       js/Error
+       #"Unsupported CodeMirror option"
+       (api/validate-user-options! {:tab-size 2})))
+  (is (thrown-with-msg?
+       js/Error
+       #"Unsupported CodeMirror option"
+       (api/validate-user-options! {:unknown-option true}))))

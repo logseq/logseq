@@ -1,9 +1,11 @@
 (ns frontend.extensions.code-cm6
-  (:require ["@codemirror/state" :refer [EditorState]]
-            ["@codemirror/view" :refer [EditorView]]
+  (:require [clojure.string :as string]
+            ["@codemirror/state" :refer [EditorState StateEffect]]
+            ["@codemirror/view" :refer [EditorView lineNumbers]]
             [frontend.extensions.code-cm6.api :as api]
             [frontend.extensions.code-language-registry :as language-registry]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [lambdaisland.glogi :as log]))
 
 (def context-property "__logseqCodeEditorContext")
 
@@ -30,6 +32,25 @@
       (language-registry/language-by-extension language-name)
       (throw (ex-info "Unsupported CodeMirror 6 language"
                       {:language language-name}))))
+
+(defn- normalize-language-lookup
+  [language-name]
+  (some-> language-name str string/lower-case string/trim))
+
+(defn- plugin-language-by-name
+  [context language-name]
+  (let [lookup-key (normalize-language-lookup language-name)]
+    (some
+     (fn [descriptor]
+       (when (or (= lookup-key (api/external-name (:id descriptor)))
+                 (contains? (:names descriptor) lookup-key))
+         descriptor))
+     (vals (:plugin-languages @(:*state context))))))
+
+(defn- language-by-name
+  [context language-name]
+  (or (plugin-language-by-name context language-name)
+      (language-registry/language-by-name language-name)))
 
 (defn get-value
   [context]
@@ -119,34 +140,67 @@
 
 (defn set-language!
   [context language-name]
-  (let [language (resolve-language! language-name)]
+  (let [language (or (plugin-language-by-name context language-name)
+                     (resolve-language! language-name))]
     (swap! (:*state context) assoc :language language)
     language))
+
+(declare enhancer-payload)
+
+(defn- js-enhancer-payload
+  [context]
+  (api/enhancer-payload->js (enhancer-payload context)))
+
+(defn- resolve-extension
+  [context extension]
+  (if (fn? extension)
+    (extension (js-enhancer-payload context))
+    extension))
 
 (defn register-extension!
   [context key extension]
   (when-not key
     (throw (ex-info "CodeMirror 6 extension key is required" {})))
-  (swap! (:*state context) assoc-in [:plugin-extensions key] extension)
+  (let [extension (resolve-extension context extension)]
+    (swap! (:*state context) assoc-in [:plugin-extensions key] extension)
+    (when-let [^js view (:view context)]
+      (when (and extension (fn? (.-dispatch view)))
+        (.dispatch view #js {:effects (.of (.-appendConfig StateEffect) extension)}))))
   context)
 
 (defn register-language!
   [context descriptor]
-  (when-not (language-registry/valid-language-descriptor? descriptor)
-    (throw (ex-info "Invalid CodeMirror 6 language descriptor"
-                    {:descriptor descriptor})))
-  (swap! (:*state context) assoc-in [:plugin-languages (:id descriptor)] descriptor)
+  (let [descriptor (api/normalize-language-descriptor descriptor)]
+    (when-not (language-registry/valid-language-descriptor? descriptor)
+      (throw (ex-info "Invalid CodeMirror 6 language descriptor"
+                      {:descriptor descriptor})))
+    (swap! (:*state context) assoc-in [:plugin-languages (:id descriptor)] descriptor))
+  context)
+
+(defn apply-enhancers!
+  [context enhancers]
+  (let [payload (js-enhancer-payload context)]
+    (doseq [{:keys [key type enhancer]} enhancers]
+      (cond
+        (= api/legacy-enhancer-type type)
+        (log/error :code-editor/legacy-codemirror-enhancer
+                   {:key key
+                    :message "Legacy CodeMirror enhancer is not supported by the CodeMirror 6 editor"})
+
+        (fn? enhancer)
+        (enhancer payload))))
   context)
 
 (defn enhancer-payload
   [context]
-  (let [^js view (:view context)]
+  (when-let [^js view (:view context)]
     (api/make-enhancer-payload
      {:editor-id (:editor-id context)
       :view view
       :state (.-state view)
+      :dispatch! #(.dispatch view %)
       :language (:language @(:*state context))
-      :get-language language-registry/language-by-name
+      :get-language #(language-by-name context %)
       :register-extension! #(register-extension! context %1 %2)
       :register-language! #(register-language! context %)})))
 
@@ -160,12 +214,23 @@
     (.destroy view))
   context)
 
+(defn- user-option-extensions
+  [options]
+  (cond-> []
+    (:line-numbers? options)
+    (conj (lineNumbers))
+
+    (:line-wrapping? options)
+    (conj (.-lineWrapping EditorView))))
+
 (defn create-context!
-  [{:keys [parent initial-doc editor-id language-name on-change on-selection-change editable? block-uuid]
+  [{:keys [parent initial-doc editor-id language-name on-change on-selection-change editable? block-uuid user-options]
     :or {initial-doc ""
          editable? true}}]
   (assert-parent! parent)
-  (let [language (or (language-registry/language-by-name language-name)
+  (let [user-options (merge api/default-user-options
+                            (api/validate-user-options! user-options))
+        language (or (language-registry/language-by-name language-name)
                      (language-registry/language-by-extension language-name)
                      (language-registry/plain-text-language))
         *state (atom {:default-value initial-doc
@@ -180,9 +245,11 @@
                                  (on-selection-change))))
         editable-extension (.of (.-editable EditorView) editable?)
         read-only-extension (.of (.-readOnly EditorState) (not editable?))
+        user-extensions (user-option-extensions user-options)
         state (EditorState.create
                #js {:doc initial-doc
-                    :extensions #js [update-listener editable-extension read-only-extension]})
+                    :extensions (to-array (into [update-listener editable-extension read-only-extension]
+                                                user-extensions))})
         view (EditorView. #js {:state state
                                :parent parent})
         context {:block-uuid block-uuid
