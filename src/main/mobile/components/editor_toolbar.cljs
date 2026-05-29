@@ -236,10 +236,10 @@
 
     [:<>]))
 
-(rum/defc mobile-bar < rum/reactive
+(rum/defc mobile-bar
   []
-  (let [editing? (state/sub :editor/editing?)
-        code-block? (state/sub :editor/code-block-context)
+  (let [editing? (state/use-sub :editor/editing?)
+        code-block? (state/use-sub :editor/code-block-context)
         show? (and (not code-block?)
                    editing?)
         actions (toolbar-actions)]

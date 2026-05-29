@@ -25,18 +25,15 @@
      (when scroll-container
        (page/page-blocks-cp page {:scroll-container scroll-container}))]))
 
-(rum/defc quick-add <
-  {:will-mount (fn [state]
-                 (state/clear-selection!)
-                 state)
-   :will-unmount (fn [state]
-                   (state/clear-selection!)
-                   state)
-   :did-mount (fn [state]
-                (when-not (util/mobile?)
-                  (editor-handler/quick-add-open-last-block!))
-                state)}
+(rum/defc quick-add
   []
+  (hooks/use-effect!
+   (fn []
+     (state/clear-selection!)
+     (when-not (util/mobile?)
+       (editor-handler/quick-add-open-last-block!))
+     #(state/clear-selection!))
+   [])
   (when (model/get-today-journal-page)
     (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
       (let [mobile? (util/mobile?)

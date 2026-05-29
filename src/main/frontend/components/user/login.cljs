@@ -72,9 +72,9 @@
               user' (bean/->clj (.-sessionUser op))]
           (user-pane sign-out!' user'))))]))
 
-(rum/defcs modal-inner <
-  shortcut/disable-all-shortcuts
-  [_state]
+(rum/defc modal-inner
+  []
+  (shortcut/use-disable-all-shortcuts!)
   (page-impl))
 
 (rum/defc page

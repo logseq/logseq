@@ -32,7 +32,7 @@
      {:ref   *el
       :class "top-1/2 -left-1/2 z-[-999]"}]))
 
-(rum/defc ^:large-vars/cleanup-todo container < rum/static
+(rum/defc ^:large-vars/cleanup-todo container
   [{:keys [route theme accent-color editor-font on-click current-repo db-restoring?
            settings-open? sidebar-open? system-theme? sidebar-blocks-len preferred-language]} child]
   (let [mounted-fn (use-mounted)

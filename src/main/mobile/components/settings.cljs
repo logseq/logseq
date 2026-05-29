@@ -223,13 +223,13 @@
           :sortable? false
           :toggle-tab! toggle-tab!}))]]))
 
-(rum/defc page < rum/reactive
+(rum/defc page
   []
-  (let [login? (and (state/sub :auth/id-token)
+  (let [login? (and (state/use-sub :auth/id-token)
                     (user-handler/logged-in?))
-        theme (state/sub :ui/theme)
-        system-theme? (state/sub :ui/system-theme?)
-        preferred-language (state/sub :preferred-language)
+        theme (state/use-sub :ui/theme)
+        system-theme? (state/use-sub :ui/system-theme?)
+        preferred-language (state/use-sub :preferred-language)
         theme-value (if system-theme?
                       "system"
                       (or theme "system"))]

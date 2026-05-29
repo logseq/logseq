@@ -436,8 +436,8 @@
   [config block]
   (let [block-uuid (:block/uuid block)
         container-id (:container-id config)
-        editing-in-container? (state/sub-editing? [container-id block-uuid])
-        editing-in-unknown-container? (state/sub-editing? [:unknown-container block-uuid])]
+        editing-in-container? (state/use-sub-editing? [container-id block-uuid])
+        editing-in-unknown-container? (state/use-sub-editing? [:unknown-container block-uuid])]
     (boolean
      (and block-uuid
           (or editing-in-container?

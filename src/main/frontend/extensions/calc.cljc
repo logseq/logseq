@@ -218,9 +218,9 @@
 ;; UI
 
 #?(:cljs
-   (rum/defc results < rum/reactive
-     [calc-atom]
-     (when-let [output-lines (rum/react calc-atom)]
+   (rum/defc results
+     [output-lines]
+     (when output-lines
        ;; the editor's parent will go into edit mode if any elements are clicked
        ;; if we stop click propagation on this element, we allow the user to
        ;; copy and paste the calc results
@@ -228,7 +228,7 @@
                                                             (.stopPropagation e))}
         ;; TODO: add react keys
         (for [[i line] (map-indexed vector output-lines)]
-          [:div.extensions__code-calc-output-line.CodeMirror-line {:key i}
+          [:div.extensions__code-calc-output-line {:key i}
            [:span (cond
                     (nil? line)           ""
                     (failure? line) "?"

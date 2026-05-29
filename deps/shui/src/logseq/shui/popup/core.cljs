@@ -202,7 +202,6 @@
            (popup-content content-props content)))))))
 
 (rum/defc install-popups
-  < rum/static
   []
   (let [[popups _set-popups!] (use-atom *popups)]
     [:<>

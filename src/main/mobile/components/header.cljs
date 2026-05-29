@@ -16,6 +16,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.rum :as r]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [goog.date :as gdate]
@@ -389,10 +390,10 @@
 
     [:<>]))
 
-(rum/defc header < rum/reactive
+(rum/defc header
   [current-repo tab]
-  (let [route-match (state/sub :route-match)
-        flashcards-header (rum/react mobile-state/*flashcards-header)]
+  (let [route-match (state/use-sub :route-match)
+        flashcards-header (r/use-value mobile-state/*flashcards-header)]
     (header-inner current-repo tab
                   route-match
                   flashcards-header)))

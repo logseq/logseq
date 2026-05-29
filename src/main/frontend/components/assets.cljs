@@ -100,12 +100,10 @@
              :on-click #(js/logseq.api.relaunch)
              :small? true :intent "logseq"))
 
-(rum/defcs ^:large-vars/data-var alias-directories
-  < rum/reactive
-  (rum/local nil ::ext-editing-dir)
-  [_state]
-  (let [*ext-editing-dir (::ext-editing-dir _state)
-        directories      (into [] (state/sub :assets/alias-dirs))
+(rum/defc ^:large-vars/data-var alias-directories
+  []
+  (let [[ext-editing-dir set-ext-editing-dir!] (hooks/use-state nil)
+        directories      (into [] (state/use-sub :assets/alias-dirs))
         pick-exist       assets-handler/get-alias-by-dir
         set-dir!         (fn [name dir exts]
                            (when (and name dir)
@@ -159,7 +157,7 @@
               {:key ext :on-click #(del-ext dir ext)}
               [:span ext]
               (ui/icon "circle-minus")])
-           (if (= dir @*ext-editing-dir)
+           (if (= dir ext-editing-dir)
              (input-auto-complete
               {:items        (-get-all-formats)
 
@@ -169,24 +167,24 @@
 
                :on-chosen    (fn [{:keys [value]}]
                                (add-ext dir value)
-                               (reset! *ext-editing-dir nil))
+                               (set-ext-editing-dir! nil))
                :on-keydown   (fn [^js e *input-val]
                                (let [^js input (.-target e)]
                                  (case (.-which e)
                                    27                       ;; esc
                                    (do (if-not (string/blank? (.-value input))
                                          (reset! *input-val "")
-                                         (reset! *ext-editing-dir nil))
+                                         (set-ext-editing-dir! nil))
                                        (util/stop e))
 
                                    :dune)))
-               :input-opts   {:class       "cp__assets-alias-ext-input"
+                              :input-opts   {:class       "cp__assets-alias-ext-input"
                               :placeholder (t :asset/file-extension-placeholder)
                               :on-blur
-                              #(reset! *ext-editing-dir nil)}})
+                              #(set-ext-editing-dir! nil)}})
 
              [:small.ext-label.is-plus
-              {:on-click #(reset! *ext-editing-dir dir)}
+              {:on-click #(set-ext-editing-dir! dir)}
               (ui/icon "plus") (t :asset/acceptable-file-extensions)])]
 
           [:span.ctrls.flex.space-x-3.text-xs.opacity-30.hover:opacity-100.whitespace-nowrap.hidden.mt-1
@@ -201,14 +199,11 @@
                       (confirm-dir path set-dir!)))
        :small? true)]]))
 
-(rum/defcs settings-content
-  < rum/reactive
-  (rum/local (state/sub :assets/alias-enabled?) ::alias-enabled?)
-  [_state]
-
-  (let [*pre-alias-enabled?    (::alias-enabled? _state)
-        alias-enabled?         (state/sub :assets/alias-enabled?)
-        alias-enabled-changed? (not= @*pre-alias-enabled? alias-enabled?)]
+(rum/defc settings-content
+  []
+  (let [[pre-alias-enabled?]   (hooks/use-state (state/sub :assets/alias-enabled?))
+        alias-enabled?         (state/use-sub :assets/alias-enabled?)
+        alias-enabled-changed? (not= pre-alias-enabled? alias-enabled?)]
 
     [:div.cp__assets-settings.panel-wrap
      [:div.it

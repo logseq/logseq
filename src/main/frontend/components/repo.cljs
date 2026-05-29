@@ -280,18 +280,13 @@
                                                      (state/set-state! :rtc/loading-graphs? false)))))))))}
               (t :graph/leave-action))))))]]]))
 
-(rum/defc repos-cp < rum/reactive
-  {:will-mount (fn [state]
-                 (let [login? (:auth/id-token @state/state)]
-                   (when (and login? (user-handler/rtc-group?))
-                     (rtc-handler/<get-remote-graphs)))
-                 state)}
+(rum/defc repos-cp
   []
-  (let [login? (boolean (state/sub :auth/id-token))
-        repos (state/sub [:me :repos])
+  (let [login? (boolean (state/use-sub :auth/id-token))
+        repos (state/use-sub [:me :repos])
         repos (util/distinct-by :url repos)
-        remotes (state/sub :rtc/graphs)
-        remotes-loading? (state/sub :rtc/loading-graphs?)
+        remotes (state/use-sub :rtc/graphs)
+        remotes-loading? (state/use-sub :rtc/loading-graphs?)
         repos (->> (if (and login? (seq remotes))
                      (repo-handler/combine-local-&-remote-graphs repos remotes)
                      repos)
@@ -305,6 +300,11 @@
         {remote-graphs true local-graphs false} (group-by (comp boolean :remote?) repos)
         {own-graphs true shared-graphs false}
         (group-by (fn [graph] (= "manager" (:graph<->user-user-type graph))) remote-graphs)]
+    (hooks/use-effect!
+     (fn []
+       (when (and login? (user-handler/rtc-group?))
+         (rtc-handler/<get-remote-graphs)))
+     [login?])
     [:div#graphs
      (when-not (util/capacitor?)
        [:h1.title (t :graph/all-graphs)])
@@ -424,15 +424,15 @@
                                  (route-handler/redirect-to-all-graphs)))}
                   (shui/tabler-icon "layout-2") [:span (t :graph/all-graphs)]))])
 
-(rum/defcs repos-dropdown-content < rum/reactive
-  [_state & {:keys [contentid footer?] :as opts
-             :or {footer? true}}]
-  (let [current-repo (state/sub :git/current-repo)
-        login? (boolean (state/sub :auth/id-token))
-        repos (state/sub [:me :repos])
-        rtc-graphs (state/sub :rtc/graphs)
-        downloading-graph-id (state/sub :rtc/downloading-graph-uuid)
-        remotes-loading? (state/sub :rtc/loading-graphs?)
+(rum/defc repos-dropdown-content
+  [& {:keys [contentid footer?] :as opts
+      :or {footer? true}}]
+  (let [current-repo (state/use-sub :git/current-repo)
+        login? (boolean (state/use-sub :auth/id-token))
+        repos (state/use-sub [:me :repos])
+        rtc-graphs (state/use-sub :rtc/graphs)
+        downloading-graph-id (state/use-sub :rtc/downloading-graph-uuid)
+        remotes-loading? (state/use-sub :rtc/loading-graphs?)
         repos (sort-repos-with-metadata-local repos)
         repos (->>
                (if (and (seq rtc-graphs) login?)
@@ -509,8 +509,8 @@
        (ui/icon "trash")
        (t :graph/delete-local-action)])]))
 
-(rum/defcs graphs-selector < rum/reactive
-  [_state]
+(rum/defc graphs-selector
+  []
   (let [current-repo (state/get-current-repo)
         user-repos (state/get-repos)
         current-repo' (some->> user-repos (medley/find-first #(= current-repo (:url %))))
@@ -693,7 +693,7 @@
         (ui/loading (t :graph/creating))
         (t :ui/submit)))]))
 
-(rum/defc new-db-graph < rum/reactive
+(rum/defc new-db-graph
   []
   (let [rtc-group? (user-handler/rtc-group?)]
     (new-db-graph-inner rtc-group?)))

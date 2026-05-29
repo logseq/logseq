@@ -5,6 +5,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.undo-redo :as undo-redo]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
@@ -98,24 +99,22 @@
          (str label "-" idx)))
      [:div.text-sm.opacity-50 "Empty"])])
 
-(rum/defcs undo-redo-debug-ui < rum/reactive
-  (rum/local #{} ::expanded)
-  (rum/local false ::filter-ui-state?)
-  (rum/local nil ::history)
-  [state]
-  (let [repo (state/sub :git/current-repo)
-        history* (::history state)
-        _ (rum/react history*)
+(rum/defc undo-redo-debug-ui
+  []
+  (let [repo (state/use-sub :git/current-repo)
+        expanded?* (hooks/use-memo #(atom #{}) [])
+        filter-ui-state?* (hooks/use-memo #(atom false) [])
+        history* (hooks/use-memo #(atom nil) [])
+        [history] (hooks/use-atom history*)
+        [filter-ui-state?] (hooks/use-atom filter-ui-state?*)
+        _ (hooks/use-atom expanded?*)
         refresh! (fn []
                    (when repo
                      (-> (undo-redo/<get-debug-state repo)
                          (.then #(reset! history* %))))
                    nil)
-        undo-stack (or (:undo-ops @history*) [])
-        redo-stack (or (:redo-ops @history*) [])
-        expanded?* (::expanded state)
-        filter-ui-state?* (::filter-ui-state? state)
-        filter-ui-state? @filter-ui-state?*
+        undo-stack (or (:undo-ops history) [])
+        redo-stack (or (:redo-ops history) [])
         filter-stack (fn [stack]
                        (if filter-ui-state?
                          (->> stack

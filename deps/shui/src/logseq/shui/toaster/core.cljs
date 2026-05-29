@@ -21,7 +21,6 @@
        dismiss!])))
 
 (rum/defc install-toaster
-  < rum/static
   []
   (let [^js js-toast (js/window.LSUI.useToast)]
     (hooks/use-effect!

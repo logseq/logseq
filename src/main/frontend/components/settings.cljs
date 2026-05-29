@@ -50,10 +50,10 @@
      (ui/toggle state on-toggle true)
      detail-text]]])
 
-(rum/defcs app-updater < rum/reactive
-  [state version]
-  (let [update-pending? (state/sub :electron/updater-pending?)
-        {:keys [type payload]} (state/sub :electron/updater)]
+(rum/defc app-updater
+  [version]
+  (let [update-pending? (state/use-sub :electron/updater-pending?)
+        {:keys [type payload]} (state/use-sub :electron/updater)]
     [:span.cp__settings-app-updater
      [:div.ctls.flex.items-center
       [:div.mt-1.sm:mt-0.sm:col-span-2.flex.gap-4.items-center.flex-wrap
@@ -286,9 +286,9 @@
                       :on-checked-change #(state/set-editor-font! {:global %})})
       [:span.pl-1.text-sm.opacity-70 (t :settings.general/editor-font-set-global)]]]]])
 
-(rum/defcs switch-spell-check-row < rum/reactive
-  [state t]
-  (let [enabled? (state/sub [:electron/user-cfgs :spell-check])]
+(rum/defc switch-spell-check-row
+  [t]
+  (let [enabled? (state/use-sub [:electron/user-cfgs :spell-check])]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       (t :settings.editor/spell-checker)]
@@ -303,8 +303,8 @@
                      (js/logseq.api.relaunch))))
         true)]]]))
 
-(rum/defc app-auto-update-row < rum/reactive [t]
-  (let [enabled? (state/sub [:electron/user-cfgs :auto-update])
+(rum/defc app-auto-update-row [t]
+  (let [enabled? (state/use-sub [:electron/user-cfgs :auto-update])
         enabled? (if (nil? enabled?) true enabled?)]
     (toggle "usage-diagnostics"
             (t :settings.advanced/auto-updater)
@@ -328,17 +328,17 @@
                              :-for       "preferred_language"
                              :action     action})))
 
-(rum/defc theme-modes-row < rum/reactive
+(rum/defc theme-modes-row
   [t]
-  (let [theme (state/sub :ui/theme)
+  (let [theme (state/use-sub :ui/theme)
         dark? (= "dark" theme)
-        system-theme? (state/sub :ui/system-theme?)
+        system-theme? (state/use-sub :ui/system-theme?)
         switch-theme (if dark? "light" "dark")
         switch-theme-label (case switch-theme
                              "light" (t :settings.general/theme-light)
                              "dark" (t :settings.general/theme-dark)
                              (t :settings.general/theme-system))
-        color-accent (state/sub :ui/radix-color)
+        color-accent (state/use-sub :ui/radix-color)
         pick-theme [:ul.cp__theme-modes-options
                     [:li {:on-click (partial state/use-theme-mode! "light")
                           :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light {:class (when color-accent "radix")}] [:strong (t :settings.general/theme-light)]]
@@ -353,9 +353,9 @@
                                           (shortcut-helper/gen-shortcut-seq :ui/toggle-theme)
                                           :shortcut-id :ui/toggle-theme)})))
 
-(rum/defc accent-color-row < rum/reactive
+(rum/defc accent-color-row
   [_in-modal?]
-  (let [color-accent (state/sub :ui/radix-color)
+  (let [color-accent (state/use-sub :ui/radix-color)
         color-label (fn [color]
                       (case color
                         :none [:p {:style {:max-width "300px"}}
@@ -413,14 +413,17 @@
      [:div.text-sm.opacity-50.mt-1
       (t :settings.general/accent-color-alert)]]))
 
-(rum/defc appearance < rum/reactive
+(rum/defc appearance
   []
-  [:div#appearance_settings.cp__settings-appearance-modal-inner
-   (theme-modes-row t)
-   (editor-font-family-row t (state/sub :ui/editor-font))
-   (toggle-wide-mode-row t (state/sub :ui/wide-mode?))
-   (show-brackets-row t (state/show-brackets?))
-   (accent-color-row true)])
+  (let [_config (state/use-sub :config)
+        editor-font (state/use-sub :ui/editor-font)
+        wide-mode? (state/use-sub :ui/wide-mode?)]
+    [:div#appearance_settings.cp__settings-appearance-modal-inner
+     (theme-modes-row t)
+     (editor-font-family-row t editor-font)
+     (toggle-wide-mode-row t wide-mode?)
+     (show-brackets-row t (state/show-brackets?))
+     (accent-color-row true)]))
 
 (defn date-format-row [t preferred-date-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
@@ -745,12 +748,13 @@
    {:left-label (t :settings.features/enable-flashcards)
     :action (flashcards-enabled-switcher enable-flashcards?)}))
 
-(rum/defcs markdown-mirror-row < rum/reactive
-  (rum/local false ::regenerating?)
-  [state t]
+(rum/defc markdown-mirror-row
+  [t]
   (let [repo (state/get-current-repo)
-        enabled? (true? (:feature/markdown-mirror? (when repo (state/sub [:config repo]))))
-        *regenerating? (::regenerating? state)
+        repo-config (when repo (state/use-sub [:config repo]))
+        enabled? (true? (:feature/markdown-mirror? repo-config))
+        *regenerating? (hooks/use-memo #(atom false) [])
+        [regenerating?] (hooks/use-atom *regenerating?)
         regenerate! (fn []
                       (when (and repo @state/*db-worker (not @*regenerating?))
                         (reset! *regenerating? true)
@@ -786,7 +790,7 @@
        (t :settings.features/markdown-mirror-regenerate)
        :icon "refresh"
        :class "text-sm"
-       :disabled @*regenerating?
+       :disabled regenerating?
        :on-click regenerate!)])))
 
 (defn https-user-agent-row [agent-opts]
@@ -794,11 +798,11 @@
    {:left-label (t :settings.advanced/network-proxy)
     :action (user-proxy-settings agent-opts)}))
 
-(rum/defcs auto-chmod-row < rum/reactive
-  [state t]
-  (let [enabled? (if (= nil (state/sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))
+(rum/defc auto-chmod-row
+  [t]
+  (let [enabled? (if (= nil (state/use-sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))
                    true
-                   (state/sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))]
+                   (state/use-sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))]
     (toggle
      "automatic-chmod"
      (t :settings.advanced/auto-chmod)
@@ -808,9 +812,9 @@
         (ipc/ipc :userAppCfgs :feature/enable-automatic-chmod? (not enabled?)))
      [:span.text-sm.opacity-50 (t :settings.advanced/auto-chmod-desc)])))
 
-(rum/defcs native-titlebar-row < rum/reactive
-  [state t]
-  (let [enabled? (state/sub [:electron/user-cfgs :window/native-titlebar?])]
+(rum/defc native-titlebar-row
+  [t]
+  (let [enabled? (state/use-sub [:electron/user-cfgs :window/native-titlebar?])]
     (toggle
      "native-titlebar"
      (t :settings.general/native-titlebar)
@@ -821,11 +825,11 @@
         (js/logseq.api.relaunch))
      [:span.text-sm.opacity-50 (t :settings.general/native-titlebar-desc)])))
 
-(rum/defcs settings-general < rum/reactive
-  [_state current-repo]
-  (let [preferred-language (state/sub [:preferred-language])
+(rum/defc settings-general
+  [current-repo]
+  (let [preferred-language (state/use-sub [:preferred-language])
         show-radix-themes? true
-        editor-font (state/sub :ui/editor-font)]
+        editor-font (state/use-sub :ui/editor-font)]
     [:div.panel-wrap.is-general
      (version-row t fv/version)
      (language-row t preferred-language)
@@ -838,18 +842,19 @@
      (when current-repo (edit-custom-css))
      (when (and current-repo (util/electron?)) (edit-export-css))]))
 
-(rum/defcs settings-editor < rum/reactive
-  [_state]
-  (let [preferred-date-format (state/get-date-formatter)
+(rum/defc settings-editor
+  []
+  (let [_config (state/use-sub :config)
+        preferred-date-format (state/get-date-formatter)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
         show-full-blocks? (state/show-full-blocks?)
         preferred-pasting-file? (state/preferred-pasting-file?)
         auto-expand-block-refs? (state/auto-expand-block-refs?)
         enable-tooltip? (state/enable-tooltip?)
-        enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
+        enable-shortcut-tooltip? (state/use-sub :ui/shortcut-tooltip?)
         show-brackets? (state/show-brackets?)
-        wide-mode? (state/sub :ui/wide-mode?)]
+        wide-mode? (state/use-sub :ui/wide-mode?)]
 
     [:div.panel-wrap.is-editor
      (date-format-row t preferred-date-format)
@@ -867,11 +872,11 @@
        (tooltip-row t enable-tooltip?))
      (enable-all-pages-public-row t enable-all-pages-public?)]))
 
-(rum/defc settings-advanced < rum/reactive
+(rum/defc settings-advanced
   []
-  (let [instrument-disabled? (state/sub :instrument/disabled?)
-        developer-mode? (state/sub [:ui/developer-mode?])
-        https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])]
+  (let [instrument-disabled? (state/use-sub :instrument/disabled?)
+        developer-mode? (state/use-sub [:ui/developer-mode?])
+        https-agent-opts (state/use-sub [:electron/user-cfgs :settings/agent])]
     [:div.panel-wrap.is-advanced
      (when (and (or util/mac? util/win32?) (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
@@ -933,11 +938,13 @@
                                         :min-width "0.5rem"
                                         :max-width "100%"}}]])]))
 
-(rum/defc ^:large-vars/cleanup-todo settings-account < rum/reactive
+(rum/defc ^:large-vars/cleanup-todo settings-account
   []
   (let [graph-usage []
-        logged-in? (user-handler/logged-in?)
-        user-info (state/get-user-info)
+        auth-refresh-token (state/use-sub :auth/refresh-token)
+        logged-in? (and (string? auth-refresh-token)
+                        (not (string/blank? auth-refresh-token)))
+        user-info (state/use-sub :user/info)
         paid-user? (#{"active" "on_trial" "cancelled"} (:LemonStatus user-info))
         gift-user? (some #{"pro"} (:UserGroups user-info))
         pro-account? (or paid-user? gift-user?)
@@ -1075,9 +1082,10 @@
              [:li (t :account/early-access-alpha-beta)]
              [:li (t :account/upcoming-cloud-features)]]]]]])]]))
 
-(rum/defc settings-features < rum/reactive
+(rum/defc settings-features
   []
-  (let [current-repo (state/get-current-repo)
+  (let [_config (state/use-sub :config)
+        current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
         logged-in? (user-handler/logged-in?)]
@@ -1123,7 +1131,7 @@
 (def DEFAULT-ACTIVE-TAB-STATE (if config/ENABLE-SETTINGS-ACCOUNT-TAB [:account :account] [:general :general]))
 
 (rum/defc settings-effect
-  < rum/static
+  <
   [active]
 
   (hooks/use-effect!
@@ -1386,36 +1394,27 @@
    (when (util/electron?)
      (mcp-server-row t))])
 
-(rum/defcs ^:large-vars/cleanup-todo settings
-  < (rum/local DEFAULT-ACTIVE-TAB-STATE ::active)
-  {:will-mount
-   (fn [state]
-     (state/load-app-user-cfgs)
-     state)
-   :did-mount
-   (fn [state]
-     (let [active-tab (first (:rum/args state))
-           active-tab (if (and (= active-tab :ai) (not (util/electron?)))
-                        :advanced
-                        active-tab)
-           *active (::active state)]
-       (when (keyword? active-tab)
-         (reset! *active [active-tab nil])))
-     state)
-   :will-unmount
-   (fn [state]
-     (state/close-settings!)
-     state)}
-  rum/reactive
-  [state _active-tab]
-  (let [current-repo (state/sub :git/current-repo)
-        _installed-plugins (state/sub :plugin/installed-plugins)
+(rum/defc ^:large-vars/cleanup-todo settings
+  [_active-tab]
+  (let [current-repo (state/use-sub :git/current-repo)
+        _installed-plugins (state/use-sub :plugin/installed-plugins)
         plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
-        *active (::active state)
+        *active (hooks/use-memo #(atom DEFAULT-ACTIVE-TAB-STATE) [])
+        [active] (hooks/use-atom *active)
         logged-in? (user-handler/logged-in?)]
+    (hooks/use-effect!
+     (fn []
+       (state/load-app-user-cfgs)
+       (let [active-tab (if (and (= _active-tab :ai) (not (util/electron?)))
+                          :advanced
+                          _active-tab)]
+         (when (keyword? active-tab)
+           (reset! *active [active-tab nil])))
+       #(state/close-settings!))
+     [])
 
     [:div#settings.cp__settings-main
-     (settings-effect @*active)
+     (settings-effect active)
      [:div.cp__settings-inner
       [:aside.md:w-64 {:style {:min-width "10rem"}}
        [:header.cp__settings-header
@@ -1445,22 +1444,22 @@
             [:li.settings-menu-item
              {:key      text
               :data-id  (name text)
-              :class    (classnames [{:active (= label (first @*active))}])
+              :class    (classnames [{:active (= label (first active))}])
               :on-click (fn []
                           (if (= label :plugins-setting)
                             (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])
-                            (reset! *active [label (first @*active)])))}
+                            (reset! *active [label (first active)])))}
 
              [:a.flex.items-center.settings-menu-link icon [:strong text]]]))]]
 
       [:article
        [:header.cp__settings-header
-        [:h1.cp__settings-category-title (t (keyword (str "settings/" (name (first @*active)))))]]
+        [:h1.cp__settings-category-title (t (keyword (str "settings/" (name (first active)))))]]
 
-      (case (first @*active)
+      (case (first active)
 
         :plugins-setting
-        (let [label (second @*active)]
+        (let [label (second active)]
           (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])
           (reset! *active [label label])
           nil)

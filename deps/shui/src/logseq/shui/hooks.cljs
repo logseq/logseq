@@ -24,7 +24,11 @@
 #_{:clj-kondo/ignore [:discouraged-var]}
 (defn use-effect!
   "setup-fn will be invoked every render of component when no deps arg provided"
-  ([setup-fn] (rum/use-effect! setup-fn))
+  ([setup-fn]
+   (assert (fn? setup-fn) "use-effect! setup-fn should be a function")
+   (rum/use-effect! (fn []
+                      (let [result (setup-fn)]
+                        (when (fn? result) result)))))
   ([setup-fn deps & {:keys [equal-fn]}]
    (assert (fn? setup-fn) "use-effect! setup-fn should be a function")
    (rum/use-effect! (fn [& deps]
@@ -36,7 +40,11 @@
 
 #_{:clj-kondo/ignore [:discouraged-var]}
 (defn use-layout-effect!
-  ([setup-fn] (rum/use-layout-effect! setup-fn))
+  ([setup-fn]
+   (assert (fn? setup-fn) "use-layout-effect! setup-fn should be a function")
+   (rum/use-layout-effect! (fn []
+                             (let [result (setup-fn)]
+                               (when (fn? result) result)))))
   ([setup-fn deps & {:keys [equal-fn]}]
    (assert (fn? setup-fn) "use-layout-effect! setup-fn should be a function")
    (rum/use-layout-effect! (fn [& deps]
@@ -52,6 +60,61 @@
   (rum/use-callback callback (if (empty? deps)
                                deps
                                #js[(memo-deps equal-fn deps)])))
+
+(defn- event-target
+  [target]
+  (cond
+    (fn? target)
+    (target)
+
+    (and target (not (undefined? (.-current target))))
+    (.-current target)
+
+    :else
+    target))
+
+(defn use-event-listener
+  ([target event-name handler deps]
+   (use-event-listener target event-name handler deps nil))
+  ([target event-name handler deps options]
+   (use-effect!
+    (fn []
+      (when-let [target' (event-target target)]
+        (.addEventListener target' event-name handler options)
+        #(.removeEventListener target' event-name handler options)))
+    (into [target event-name options] deps))))
+
+(defn use-window-keydown
+  ([handler deps]
+   (use-window-keydown handler deps nil))
+  ([handler deps options]
+   (use-event-listener js/window "keydown" handler deps options)))
+
+(defn use-window-keyup
+  ([handler deps]
+   (use-window-keyup handler deps nil))
+  ([handler deps options]
+   (use-event-listener js/window "keyup" handler deps options)))
+
+(defn use-hide-on-esc-or-outside
+  [{:keys [active? root-ref on-hide ignore-class outside-event outside-options]
+    :or {ignore-class "ignore-outside-event"
+         outside-event "mousedown"}}]
+  (let [outside-handler (use-callback
+                         (fn [e]
+                           (when (and active?
+                                      (not (some-> (event-target root-ref)
+                                                   (.contains (.-target e))))
+                                      (not (some-> e .-target .-classList (.contains ignore-class))))
+                             (on-hide)))
+                         [active? root-ref on-hide ignore-class])
+        keydown-handler (use-callback
+                         (fn [e]
+                           (when (and active? (= 27 (.-keyCode e)))
+                             (on-hide)))
+                         [active? on-hide])]
+    (use-event-listener js/window outside-event outside-handler [outside-handler] outside-options)
+    (use-window-keydown keydown-handler [keydown-handler])))
 
 ;;; unchanged hooks, link to rum/use-xxx directly
 (def use-ref rum/use-ref)
@@ -138,6 +201,9 @@
   (let [[val set-val] (use-state (getter-fn @a))]
     (use-effect!
      (fn []
+       (let [current-value (getter-fn @a)]
+         (when-not (= val current-value)
+           (set-val current-value)))
        (let [id (str (random-uuid))]
          (add-watch a id (fn [_ _ prev-state next-state]
                            (let [prev-value (getter-fn prev-state)
@@ -145,7 +211,7 @@
                              (when-not (= prev-value next-value)
                                (set-val next-value)))))
          #(remove-watch a id)))
-     [])
+     [a])
     [val #(swap! a setter-fn %)]))
 
 (defn use-atom
@@ -157,3 +223,45 @@
   [a ks]
   (let [ks (if (keyword? ks) [ks] ks)]
     (use-atom-fn a #(get-in % ks) (fn [a' v] (assoc-in a' ks v)))))
+
+(defn use-modal-state
+  [initial-open?]
+  (let [open-atom (use-memo #(atom (boolean initial-open?)) [])
+        [open-value] (use-atom open-atom)
+        close-fn #(reset! open-atom false)
+        open-fn #(reset! open-atom true)
+        toggle-fn #(swap! open-atom not)]
+    {:open? open-value
+     :open-atom open-atom
+     :close-fn close-fn
+     :open-fn open-fn
+     :toggle-fn toggle-fn}))
+
+(defn use-value
+  "Subscribe to an optional atom-like ref and return its current value."
+  [a]
+  (let [[value set-value!] (use-state (when a @a))]
+    (use-effect!
+     (fn []
+       (if a
+         (let [current-value @a
+               id (str (random-uuid))]
+           (when-not (= value current-value)
+             (set-value! current-value))
+           (add-watch a id (fn [_ _ prev-state next-state]
+                             (when-not (= prev-state next-state)
+                               (set-value! next-state))))
+           #(remove-watch a id))
+         (set-value! nil)))
+     [a])
+    value))
+
+(defn use-mounted
+  []
+  (let [mounted-ref (use-ref false)]
+    (use-effect!
+     (fn []
+       (set-ref! mounted-ref true)
+       #(set-ref! mounted-ref false))
+     [])
+    #(deref mounted-ref)))

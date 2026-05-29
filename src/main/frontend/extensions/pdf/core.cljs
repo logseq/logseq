@@ -17,7 +17,6 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.rum :refer [use-atom]]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
@@ -40,26 +39,29 @@
   []
   (state/set-state! :pdf/current nil))
 
-(rum/defcs pdf-highlight-finder
-  < rum/static rum/reactive
-  (rum/local false ::mounted?)
-  [state ^js viewer]
-  (let [*mounted? (::mounted? state)]
-    (when viewer
-      (when-let [ref-hl (state/sub :pdf/ref-highlight)]
-        ;; delay handle: aim to fix page blink
-        (js/setTimeout
-         (fn []
-           (if (:id ref-hl)
-             (pdf-utils/scroll-to-highlight viewer ref-hl)
-             (set! (.-currentPageNumber viewer) (or (:page ref-hl) 1))))
-         (if @*mounted? 50 500))
+(rum/defc pdf-highlight-finder
+  [^js viewer]
+  (let [*mounted? (hooks/use-ref false)
+        ref-hl (state/use-sub :pdf/ref-highlight)]
+    (hooks/use-effect!
+     (fn []
+       (when viewer
+         (when-let [ref-hl ref-hl]
+           ;; delay handle: aim to fix page blink
+           (js/setTimeout
+            (fn []
+              (if (:id ref-hl)
+                (pdf-utils/scroll-to-highlight viewer ref-hl)
+                (set! (.-currentPageNumber viewer) (or (:page ref-hl) 1))))
+            (if (hooks/deref *mounted?) 50 500))
 
-        (js/setTimeout
-         #(state/set-state! :pdf/ref-highlight nil) 1000)))
-    (reset! *mounted? true)))
+           (js/setTimeout
+            #(state/set-state! :pdf/ref-highlight nil) 1000)))
+       (hooks/set-ref! *mounted? true))
+     [viewer ref-hl])
+    nil))
 
-(rum/defc pdf-page-finder < rum/static
+(rum/defc pdf-page-finder <
   [^js viewer]
   (hooks/use-effect!
    (fn []
@@ -417,7 +419,7 @@
 
         [start, set-start!] (rum/use-state nil)
         [end, set-end!] (rum/use-state nil)
-        [_ set-area-mode!] (use-atom *area-mode?)
+        [_ set-area-mode!] (hooks/use-atom *area-mode?)
 
         should-start (fn [^js e]
                        (let [^js target (.-target e)]
@@ -773,7 +775,7 @@
         [state, set-state!] (rum/use-state {:viewer nil :bus nil :link nil :el nil})
         [ano-state, set-ano-state!] (rum/use-state {:loaded-pages []})
         [page-ready?, set-page-ready!] (rum/use-state false)
-        [area-dashed?, _set-area-dashed?] (use-atom *area-dashed?)]
+        [area-dashed?, _set-area-dashed?] (hooks/use-atom *area-dashed?)]
 
     ;; instant pdfjs viewer
     (hooks/use-effect!
@@ -872,10 +874,9 @@
                           :pdf-current pdf-current})
             "pdf-toolbar")])])))
 
-(rum/defcs pdf-password-input <
-  (rum/local "" ::password)
-  [state confirm-fn]
-  (let [password (get state ::password)]
+(rum/defc pdf-password-input
+  [confirm-fn]
+  (let [password (hooks/use-memo #(atom "") [])]
     [:div.container
      [:div.text-lg.mb-4 (t :pdf/password-required)]
      [:div.sm:flex.sm:items-start
@@ -1035,8 +1036,8 @@
                              :set-hls-extra! set-hls-extra!}) "pdf-viewer")])))])))
 
 (rum/defc pdf-container-outer
-  < (shortcut/mixin :shortcut.handler/pdf false)
   [child]
+  (shortcut/use-shortcut-handler! :shortcut.handler/pdf)
   [:<> child])
 
 (rum/defc pdf-container
@@ -1076,11 +1077,10 @@
    [active])
   nil)
 
-(rum/defcs default-embed-playground
-  < rum/static rum/reactive
-  [state]
-  (let [pdf-current (state/sub :pdf/current)
-        system-win? (state/sub :pdf/system-win?)]
+(rum/defc default-embed-playground
+  []
+  (let [pdf-current (state/use-sub :pdf/current)
+        system-win? (state/use-sub :pdf/system-win?)]
     [:div.extensions__pdf-playground
 
      (playground-effects (and (not system-win?)
@@ -1092,8 +1092,7 @@
          (pdf-container pdf-current))
         (js/document.querySelector "#app-single-container")))]))
 
-(rum/defcs system-embed-playground
-  < rum/reactive
+(rum/defc system-embed-playground
   []
-  (let [pdf-current (state/sub :pdf/current)]
+  (let [pdf-current (state/use-sub :pdf/current)]
     (pdf-container pdf-current)))

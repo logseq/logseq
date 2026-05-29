@@ -169,7 +169,7 @@
                                  (.stopRecording ^js @*recorder))}
                     (shui/tabler-icon "player-stop" {:size 22}))]]]))
 
-(rum/defc audio-recorder-aux < rum/static
+(rum/defc audio-recorder-aux
   []
   [:div.app-audio-recorder
    [:div.flex.flex-row.justify-between.items-center.font-medium

@@ -278,7 +278,6 @@
                   :size :sm} ok-label)]])))))
 
 (rum/defc install-modals
-  < rum/static
   []
   (let [[modals _set-modals!] (util/use-atom *modals)]
     (for [config modals

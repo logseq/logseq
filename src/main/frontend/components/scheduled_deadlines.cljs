@@ -9,6 +9,7 @@
             [frontend.db.async :as db-async]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -18,16 +19,15 @@
        (not (true? (state/scheduled-deadlines-disabled?)))
        (db/today-journal-page? page-name)))
 
-(rum/defcs scheduled-and-deadlines < rum/reactive
-  {:init (fn [state]
-           (let [*result (atom nil)
-                 page-name (first (:rum/args state))]
-             (p/let [result (when (scheduled-or-deadlines? page-name)
-                              (db-async/<get-date-scheduled-or-deadlines (string/capitalize page-name)))]
-               (reset! *result result))
-             (assoc state ::result *result)))}
-  [state page-name]
-  (let [scheduled-or-deadlines (rum/react (::result state))]
+(rum/defc scheduled-and-deadlines
+  [page-name]
+  (let [[scheduled-or-deadlines set-scheduled-or-deadlines!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (p/let [result (when (scheduled-or-deadlines? page-name)
+                        (db-async/<get-date-scheduled-or-deadlines (string/capitalize page-name)))]
+         (set-scheduled-or-deadlines! result)))
+     [page-name])
     (when (seq scheduled-or-deadlines)
       [:div.scheduled-or-deadlines
        (ui/foldable

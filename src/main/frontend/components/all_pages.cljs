@@ -24,7 +24,7 @@
        (remove nil?)
        vec))
 
-(rum/defc all-pages < rum/static
+(rum/defc all-pages
   []
   (let [columns' (views/build-columns {} (columns)
                                       {:with-object-name? false

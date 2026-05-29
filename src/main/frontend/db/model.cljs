@@ -117,7 +117,7 @@ independent of format as format specific heading characters are stripped"
 (def sort-by-order ldb/sort-by-order)
 
 (defn sub-block
-  "Used together with rum/reactive db-mixins/query"
+  "Used from components wrapped in `frontend.db.hooks/query-scope`."
   [id & {:keys [ref?]
          :or {ref? false}}]
   (when-let [repo (state/get-current-repo)]

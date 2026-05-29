@@ -69,15 +69,8 @@
 (def use-atom hooks/use-atom)
 (def use-atom-in hooks/use-atom-in)
 
-(defn use-mounted
-  []
-  (let [*mounted (rum/use-ref false)]
-    (hooks/use-effect!
-     (fn []
-       (rum/set-ref! *mounted true)
-       #(rum/set-ref! *mounted false))
-     [])
-    #(rum/deref *mounted)))
+(def use-value hooks/use-value)
+(def use-mounted hooks/use-mounted)
 
 (defn use-bounding-client-rect
   "Returns the bounding client rect for a given dom node

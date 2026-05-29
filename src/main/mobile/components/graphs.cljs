@@ -3,7 +3,7 @@
   (:require [frontend.components.repo :as repo]
             [rum.core :as rum]))
 
-(rum/defc page < rum/reactive
+(rum/defc page
   []
   [:div.app-index-graphs
    (repo/repos-cp)])

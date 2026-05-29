@@ -1,9 +1,9 @@
 (ns frontend.ui
   "Main ns for reusable components"
   (:require ["@emoji-mart/data" :as emoji-data]
-            ["@logseq/react-tweet-embed" :as react-tweet-embed]
             ["emoji-mart" :as emoji-mart]
             ["react-intersection-observer" :as react-intersection-observer]
+            ["@sentry/react" :refer [ErrorBoundary]]
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             ["react-virtuoso" :refer [Virtuoso VirtuosoGrid]]
@@ -14,10 +14,9 @@
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.date :as date]
-            [frontend.db-mixins :as db-mixins]
+            [frontend.db.hooks :as db-hooks]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
@@ -46,8 +45,8 @@
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
 (defonce virtualized-list (r/adapt-class Virtuoso))
 (defonce virtualized-grid (r/adapt-class VirtuosoGrid))
+(defonce error-boundary (r/adapt-class ErrorBoundary))
 
-(def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 (def useInView (gobj/get react-intersection-observer "useInView"))
 (defonce _emoji-init-data ((gobj/get emoji-mart "init") #js {:data emoji-data}))
 ;; (def EmojiPicker (r/adapt-class (gobj/get Picker "default")))
@@ -115,31 +114,9 @@
                                                        active-ring)}} "-"]]]])))
 
 (rum/defc ls-textarea
-  < rum/reactive
-  {:did-mount (fn [state]
-                (let [^js el (rum/dom-node state)
-                      *mouse-point (volatile! nil)]
-                  (doto el
-                    (.addEventListener "select"
-                                       #(let [start (util/get-selection-start el)
-                                              end (util/get-selection-end el)]
-                                          (when (and start end)
-                                            (when-let [e (and (not= start end)
-                                                              (let [caret-pos (cursor/get-caret-pos el)]
-                                                                {:caret caret-pos
-                                                                 :start start :end end
-                                                                 :text  (. (.-value el) substring start end)
-                                                                 :point (select-keys (or @*mouse-point caret-pos) [:x :y])}))]
-                                              (plugin-handler/hook-plugin-editor :input-selection-end (bean/->js e))
-                                              (vreset! *mouse-point nil)))))
-                    (.addEventListener "mouseup" #(vreset! *mouse-point {:x (.-x %) :y (.-y %)}))))
-                state)
-   :will-unmount (fn [state]
-                   (when-let [on-unmount (:on-unmount (first (:rum/args state)))]
-                     (on-unmount))
-                   state)}
   [{:keys [on-change] :as props}]
-  (let [skip-composition? (state/sub :editor/action)
+  (let [*el (hooks/use-ref nil)
+        skip-composition? (state/use-sub :editor/action)
         on-composition (fn [e]
                          (if skip-composition?
                            (on-change e)
@@ -149,26 +126,52 @@
                                                 (on-change e))
                              (state/set-editor-in-composition! true))))
         props (assoc props
+                     :ref *el
                      "data-testid" "block editor"
                      :on-change (fn [e] (when-not (state/editor-in-composition?)
                                           (on-change e)))
                      :on-composition-start on-composition
                      :on-composition-update on-composition
                      :on-composition-end on-composition)]
+    (hooks/use-effect!
+     (fn []
+       (let [^js el (hooks/deref *el)
+             *mouse-point (volatile! nil)
+             select-handler (fn []
+                              (let [start (util/get-selection-start el)
+                                    end (util/get-selection-end el)]
+                                (when (and start end)
+                                  (when-let [e (and (not= start end)
+                                                    (let [caret-pos (cursor/get-caret-pos el)]
+                                                      {:caret caret-pos
+                                                       :start start :end end
+                                                       :text  (. (.-value el) substring start end)
+                                                       :point (select-keys (or @*mouse-point caret-pos) [:x :y])}))]
+                                    (plugin-handler/hook-plugin-editor :input-selection-end (bean/->js e))
+                                    (vreset! *mouse-point nil)))))
+             mouseup-handler (fn [e] (vreset! *mouse-point {:x (.-x e) :y (.-y e)}))]
+         (when el
+           (.addEventListener el "select" select-handler)
+           (.addEventListener el "mouseup" mouseup-handler))
+         #(do
+            (when el
+              (.removeEventListener el "select" select-handler)
+              (.removeEventListener el "mouseup" mouseup-handler))
+            (when-let [on-unmount (:on-unmount props)]
+              (on-unmount)))))
+     [])
     (textarea props)))
 
 (rum/defc dropdown-content-wrapper
-  < {:did-mount    (fn [state]
-                     (let [k (inc (count (state/sub :modal/dropdowns)))
-                           args (:rum/args state)]
-                       (state/set-state! [:modal/dropdowns k] (second args))
-                       (assoc state ::k k)))
-     :will-unmount (fn [state]
-                     (state/update-state! :modal/dropdowns #(dissoc % (::k state)))
-                     state)}
-  [dropdown-state _close-fn content class style-opts]
+  [dropdown-state close-fn content class style-opts]
   (let [class (or class
-                  (util/hiccup->class "origin-top-right.absolute.right-0.mt-2"))]
+                  (util/hiccup->class "origin-top-right.absolute.right-0.mt-2"))
+        k (hooks/use-memo #(inc (count (state/sub :modal/dropdowns))) [])]
+    (hooks/use-effect!
+     (fn []
+      (state/set-state! [:modal/dropdowns k] close-fn)
+       #(state/update-state! :modal/dropdowns dissoc k))
+     [])
     [:div.dropdown-wrapper.max-h-screen.overflow-y-auto
      {:style style-opts
       :class (str class " "
@@ -180,39 +183,38 @@
      content]))
 
 ;; public exports
-(rum/defcs dropdown < (mixins/modal :open?)
-  {:init (fn [state]
-           (let [opts (if (map? (last (:rum/args state)))
-                        (last (:rum/args state))
-                        (->> (drop 2 (:rum/args state))
-                             (partition 2)
-                             (map vec)
-                             (into {})))]
-             (when (:initial-open? opts)
-               (reset! (:open? state) true))
-             (let [on-toggle (:on-toggle opts)]
-               (when (fn? on-toggle)
-                 (add-watch (:open? state) ::listen-open-value
-                            (fn [_ _ _ _]
-                              (on-toggle @(:open? state)))))))
-           state)}
-  [state content-fn modal-content-fn
-   & [{:keys [modal-class z-index trigger-class _initial-open? *toggle-fn
-              _on-toggle]
+(rum/defc dropdown
+  [content-fn modal-content-fn
+   & [{:keys [modal-class z-index trigger-class initial-open? *toggle-fn
+              on-toggle]
        :or   {z-index 999}}]]
-  (let [{:keys [open?]} state
+  (let [{:keys [open? open-atom close-fn open-fn toggle-fn]} (hooks/use-modal-state initial-open?)
+        *root (hooks/use-ref nil)
+        dropdown-state {:open? open-atom
+                        :close-fn close-fn
+                        :open-fn open-fn
+                        :toggle-fn toggle-fn}
         _ (when (and (util/atom? *toggle-fn)
                      (nil? @*toggle-fn)
-                     (:toggle-fn state))
-            (reset! *toggle-fn (:toggle-fn state)))
-        modal-content (modal-content-fn state)
-        close-fn (:close-fn state)]
-    [:div.relative.ui__dropdown-trigger {:class trigger-class}
-     (content-fn state)
+                     toggle-fn)
+            (reset! *toggle-fn toggle-fn))
+        modal-content (modal-content-fn dropdown-state)]
+    (hooks/use-effect!
+     (fn []
+       (when (fn? on-toggle)
+         (on-toggle open?)))
+     [open?])
+    (hooks/use-hide-on-esc-or-outside
+     {:active? open?
+      :root-ref *root
+      :on-hide close-fn})
+    [:div.relative.ui__dropdown-trigger {:class trigger-class
+                                         :ref *root}
+     (content-fn dropdown-state)
      (css-transition
-      {:in @open? :timeout 0}
+      {:in open? :timeout 0}
       (fn [dropdown-state]
-        (when @open?
+        (when open?
           (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class {:z-index z-index}))))]))
 
 ;; `sequence` can be a list of symbols, a list of strings, or a string
@@ -316,9 +318,9 @@
             :on-click (fn []
                         (notification/clear-all!)))]])
 
-(rum/defc notification < rum/reactive
+(rum/defc notification
   []
-  (let [contents (state/sub :notification/contents)]
+  (let [contents (state/use-sub :notification/contents)]
     (transition-group
      {:class-name "notifications ui__notifications"}
      (let [notifications (map (fn [el]
@@ -462,11 +464,8 @@
       (handler)
       #(.removeEventListener js/window.visualViewport "resize" handler))))
 
-(rum/defcs auto-complete <
-  (rum/local 0 ::current-idx)
-  (shortcut/mixin* :shortcut.handler/auto-complete)
-  [state
-   matched
+(rum/defc auto-complete
+  [matched
    {:keys [on-chosen
            on-shift-chosen
            get-group-name
@@ -474,8 +473,14 @@
            item-render
            class
            header
-           grouped?]}]
-  (let [*current-idx (get state ::current-idx)
+           grouped?]
+    :as opts}]
+  (let [*current-idx (hooks/use-memo #(atom 0) [])
+        [current-idx] (hooks/use-atom *current-idx)
+        shortcut-state {:matched matched
+                        :opts opts
+                        ::current-idx *current-idx}
+        _ (shortcut/use-shortcut-handler! :shortcut.handler/auto-complete shortcut-state)
         *groups (atom #{})
         render-f (fn [matched]
                    (for [[idx item] matched]
@@ -485,7 +490,7 @@
                             {:key react-key
                              ;; mouse-move event to indicate that cursor moved by user
                              :on-mouse-move  #(reset! *current-idx idx)}
-                            (let [chosen? (= @*current-idx idx)]
+                            (let [chosen? (= current-idx idx)]
                               (menu-link
                                {:id (str "ac-" react-key)
                                 :tab-index "0"
@@ -576,17 +581,16 @@
    {:class (if collapsed? "rotating-arrow collapsed" "rotating-arrow not-collapsed")}
    (svg/caret-right)])
 
-(rum/defcs foldable-title <
-  (rum/local false ::control?)
-  [state {:keys [on-pointer-down header title-trigger? collapsed?]}]
-  (let [control? (get state ::control?)]
+(rum/defc foldable-title
+  [{:keys [on-pointer-down header title-trigger? collapsed?]}]
+  (let [[control? set-control!] (hooks/use-state false)]
     [:div.ls-foldable-title.content
-     [:div.flex-1.flex-row.foldable-title (cond->
-                                           {:on-mouse-over #(reset! control? true)
-                                            :on-mouse-out  #(reset! control? false)}
-                                            title-trigger?
-                                            (assoc :on-pointer-down on-pointer-down
-                                                   :class "cursor"))
+     [:div.flex-1.flex-row.foldable-title
+      (cond-> {:on-mouse-over #(set-control! true)
+               :on-mouse-out  #(set-control! false)}
+        title-trigger?
+        (assoc :on-pointer-down on-pointer-down
+               :class "cursor"))
       [:div.flex.flex-row.items-center.ls-foldable-header.gap-1
        {:on-click (fn [^js e]
                     (let [^js target (.-target e)]
@@ -598,7 +602,7 @@
            {:style style}
             (not title-trigger?)
             (assoc :on-pointer-down on-pointer-down))
-          [:span {:class (if (or @control? @collapsed? (util/mobile?))
+          [:span {:class (if (or control? @collapsed? (util/mobile?))
                            "control-show cursor-pointer"
                            "control-hide")}
            (rotating-arrow @collapsed?)]])
@@ -606,63 +610,58 @@
          (header @collapsed?)
          header)]]]))
 
-(rum/defcs foldable < db-mixins/query rum/reactive
-  (rum/local false ::collapsed?)
-  (rum/local true ::render-content?)
-  (rum/local nil ::collapse-timeout)
-  {:will-mount (fn [state]
-                 (let [args (:rum/args state)]
-                   (when (true? (:default-collapsed? (last args)))
-                     (reset! (get state ::collapsed?) true)
-                     (reset! (get state ::render-content?) false)))
-                 state)
-   :will-unmount (fn [state]
-                   (when-let [timeout-id @(get state ::collapse-timeout)]
-                     (js/clearTimeout timeout-id))
-                   state)
-   :did-mount (fn [state]
-                (when-let [f (:init-collapsed (last (:rum/args state)))]
-                  (f (::collapsed? state)))
-                state)}
-  [state header content {:keys [title-trigger? on-pointer-down class
-                                _default-collapsed? _init-collapsed]}]
-  (let [collapsed? (get state ::collapsed?)
-        render-content? (get state ::render-content?)
-        collapse-timeout (get state ::collapse-timeout)
-        transition-ms 200
-        on-pointer-down (fn [e]
-                          (util/stop e)
-                          (let [next-collapsed? (not @collapsed?)]
-                            (when-let [timeout-id @collapse-timeout]
-                              (js/clearTimeout timeout-id)
-                              (reset! collapse-timeout nil))
-                            (when (false? next-collapsed?)
-                              (reset! render-content? true))
-                            (reset! collapsed? next-collapsed?)
-                            (when (true? next-collapsed?)
-                              (reset! collapse-timeout
-                                      (js/setTimeout
-                                       (fn []
-                                         (reset! render-content? false)
-                                         (reset! collapse-timeout nil))
-                                       transition-ms)))
-                            (when on-pointer-down
-                              (on-pointer-down next-collapsed?))))]
-    [:div.flex.flex-col
-     {:class class}
-     (foldable-title {:on-pointer-down on-pointer-down
-                      :header header
-                      :title-trigger? title-trigger?
-                      :collapsed? collapsed?})
-     ;; Don't stop propagation for the pointer down event to the high level content container.
-     ;; That may cause the drag function to not work.
-     [:div.ls-foldable-content
-      {:class (when @collapsed? "is-collapsed")
-       :aria-hidden (boolean @collapsed?)}
-      [:div.ls-foldable-content-inner
-       (if (fn? content)
-         (when @render-content? (content))
-         content)]]]))
+(rum/defc foldable
+  [header content {:keys [title-trigger? on-pointer-down class
+                          default-collapsed? init-collapsed]}]
+  (db-hooks/query-scope
+   (fn []
+     (let [collapsed? (hooks/use-memo #(atom (true? default-collapsed?)) [])
+           render-content? (hooks/use-memo #(atom (not (true? default-collapsed?))) [])
+           collapse-timeout (hooks/use-ref nil)
+           [collapsed-value] (hooks/use-atom collapsed?)
+           [render-content-value] (hooks/use-atom render-content?)
+           transition-ms 200
+           on-pointer-down (fn [e]
+                             (util/stop e)
+                             (let [next-collapsed? (not @collapsed?)]
+                               (when-let [timeout-id (hooks/deref collapse-timeout)]
+                                 (js/clearTimeout timeout-id)
+                                 (hooks/set-ref! collapse-timeout nil))
+                               (when (false? next-collapsed?)
+                                 (reset! render-content? true))
+                               (reset! collapsed? next-collapsed?)
+                               (when (true? next-collapsed?)
+                                 (hooks/set-ref!
+                                  collapse-timeout
+                                  (js/setTimeout
+                                   (fn []
+                                     (reset! render-content? false)
+                                     (hooks/set-ref! collapse-timeout nil))
+                                   transition-ms)))
+                               (when on-pointer-down
+                                 (on-pointer-down next-collapsed?))))]
+       (hooks/use-effect!
+        (fn []
+          (when-let [f init-collapsed]
+            (f collapsed?))
+          #(when-let [timeout-id (hooks/deref collapse-timeout)]
+             (js/clearTimeout timeout-id)))
+        [])
+       [:div.flex.flex-col
+        {:class class}
+        (foldable-title {:on-pointer-down on-pointer-down
+                         :header header
+                         :title-trigger? title-trigger?
+                         :collapsed? collapsed?})
+        ;; Don't stop propagation for the pointer down event to the high level content container.
+        ;; That may cause the drag function to not work.
+        [:div.ls-foldable-content
+         {:class (when collapsed-value "is-collapsed")
+          :aria-hidden (boolean collapsed-value)}
+         [:div.ls-foldable-content-inner
+          (if (fn? content)
+            (when render-content-value (content))
+            content)]]]))))
 
 (rum/defc admonition
   [type content]
@@ -681,29 +680,27 @@
        [:div.ml-4.text-lg
         content]])))
 
-(rum/defcs catch-error
-  < {:did-catch
-     (fn [state error _info]
-       (log/error :exception error)
-       (assoc state ::error error))}
-  [{error ::error, c :rum/react-component} error-view view]
-  (if (some? error)
-    (if (fn? error-view) (error-view error) error-view)
-    view))
+(rum/defc catch-error
+  [error-view view]
+  (error-boundary
+   {:fallback (fn [^js props]
+                (let [error (.-error props)]
+                  (if (fn? error-view) (error-view error) error-view)))
+    :onError (fn [error _component-stack _event-id]
+               (log/error :exception error))}
+   view))
 
-(rum/defcs catch-error-and-notify
-  < {:did-catch
-     (fn [state error _info]
-       (log/error :exception error)
-       (notification/show!
-        [:div.flex.flex-col.gap-2
-         [:div (t :ui/error-boundary-error error)]
-         (str (.-stack error))] `:error)
-       (assoc state ::error error))}
-  [{error ::error, c :rum/react-component} error-view view]
-  (if (some? error)
-    error-view
-    view))
+(rum/defc catch-error-and-notify
+  [error-view view]
+  (error-boundary
+   {:fallback (constantly error-view)
+    :onError (fn [error _component-stack _event-id]
+               (log/error :exception error)
+               (notification/show!
+                [:div.flex.flex-col.gap-2
+                 [:div (t :ui/error-boundary-error error)]
+                 (str (.-stack error))] `:error))}
+   view))
 
 (rum/defc block-error
   "Well styled error message for blocks"
@@ -789,17 +786,19 @@
           :checked selected}]
         label])]))
 
-(rum/defcs tweet-embed < rum/reactive
-  (rum/local true :loading?)
-  [state id]
-  (let [*loading? (:loading? state)]
-    [:div
-     (when @*loading? [:span.flex.items-center [svg/loading " loading"]])
-     (ReactTweetEmbed
-      {:id                    id
-       :class                 "contents"
-       :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
-       :on-tweet-load-success #(reset! *loading? false)})]))
+(rum/defc tweet-embed
+  [id]
+  (let [theme (state/use-sub :ui/theme)]
+    [:iframe
+     {:class "tweet-embed"
+      :src (str "https://platform.twitter.com/embed/Tweet.html?id=" id
+                (when (= theme "dark") "&theme=dark"))
+      :style {:width "100%"
+              :min-height 240
+              :border 0}
+      :loading "lazy"
+      :allow "encrypted-media; picture-in-picture"
+      :allow-full-screen true}]))
 
 (def icon shui.icon.v2/root)
 
@@ -851,11 +850,13 @@
             :style (merge {:width size :height size} style)}
            (dissoc opts :style :class))]))
 
-(rum/defc with-shortcut < rum/reactive
-  < {:key-fn (fn [key pos] (str "shortcut-" key pos))}
+(rum/defc with-shortcut
   [shortcut-key _position content & [title]]
-  (let [shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
-        enabled-tooltip?  (state/enable-tooltip?)
+  (let [shortcut-tooltip? (state/use-sub :ui/shortcut-tooltip?)
+        config            (state/use-sub-config)
+        enabled-tooltip?  (if (state/mobile?)
+                            false
+                            (get config :ui/enable-tooltip? true))
         binding           (when shortcut-key (shortcut-dh/shortcut-binding shortcut-key))
         first-binding     (when (and binding (not (false? binding))) (first binding))]
     (if (and enabled-tooltip? shortcut-tooltip?)

@@ -6,10 +6,10 @@
             [frontend.ui :as ui]
             [rum.core :as rum]))
 
-(rum/defc container < rum/reactive
+(rum/defc container
   []
-  (let [maximized?  (state/sub :electron/window-maximized?)
-        fullscreen? (state/sub :electron/window-fullscreen?)]
+  (let [maximized?  (state/use-sub :electron/window-maximized?)
+        fullscreen? (state/use-sub :electron/window-fullscreen?)]
     [:div.window-controls.flex
      (if fullscreen?
        (ui/tooltip

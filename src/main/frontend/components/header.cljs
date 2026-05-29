@@ -5,7 +5,6 @@
             [clojure.string :as string]
             [dommy.core :as d]
             [electron.ipc :as ipc]
-            [frontend.common.missionary :as c.m]
             [frontend.components.avatar :as avatar]
             [frontend.components.block :as component-block]
             [frontend.components.export :as export]
@@ -72,24 +71,10 @@
    (t :graph/use-sync-beta)
    {:trigger-props {:as-child true}}))
 
-(rum/defcs rtc-collaborators <
-  rum/reactive
-  (rum/local nil ::online-users)
-  (rum/local nil ::online-users-canceler)
-  {:will-mount (fn [state]
-                 (reset!
-                  (::online-users-canceler state)
-                  (c.m/run-task :fetch-online-users
-                    (m/reduce (fn [_ v] (reset! (::online-users state) v)) rtc-flows/rtc-online-users-flow)
-                    :succ (constantly nil)))
-                 state)
-   :will-unmount (fn [state]
-                   (when @(::online-users-canceler state) (@(::online-users-canceler state)))
-                   (reset! (::online-users state) nil)
-                   state)}
-  [state]
+(rum/defc rtc-collaborators
+  []
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
-        online-users @(::online-users state)]
+        online-users (hooks/use-flow-state nil rtc-flows/rtc-online-users-flow)]
     (when rtc-graph-id
       [:div.rtc-collaborators.flex.gap-1.text-sm.bg-gray-01.items-center
        (shui/button-ghost-icon :user-plus
@@ -113,8 +98,7 @@
                :uuid user-uuid
                :fallback-props {:style {:font-size 11}}}))))])))
 
-(rum/defc left-menu-button < rum/reactive
-  < {:key-fn #(identity "left-menu-toggle-button")}
+(rum/defc left-menu-button
   [{:keys [on-click]}]
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
     [:button.#left-menu.cp__header-left-menu.button.icon
@@ -139,11 +123,11 @@
          "platform="
          (js/encodeURIComponent platform))))
 
-(rum/defc ^:large-vars/cleanup-todo toolbar-dots-menu < rum/reactive
+(rum/defc ^:large-vars/cleanup-todo toolbar-dots-menu
   [{:keys [current-repo t]}]
   (let [page (some-> (sidebar/get-current-page) db/get-page)
         ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
-        working-page? (if config/publishing? (not (state/sub :db/restoring?)) true)
+        working-page? (if config/publishing? (not (state/use-sub :db/restoring?)) true)
         page-menu (if (and working-page? (ldb/page? page))
                     (page-menu/page-menu page)
                     (when-not config/publishing?
@@ -161,7 +145,7 @@
                           :options {:on-click #(shui/dialog-open! (fn [] (page-menu/publish-page-dialog page))
                                                                   {:class "w-auto max-w-md"})}}])))
         page-menu-and-hr (concat page-menu [{:hr true}])
-        login? (and (state/sub :auth/id-token) (user-handler/logged-in?))
+        login? (and (state/use-sub :auth/id-token) (user-handler/logged-in?))
         items (fn []
                 (->>
                  [(when (state/enable-editing?)
@@ -364,44 +348,47 @@
        :on-click (fn [] (state/toggle-highlight-recent-blocks!))}
       (ui/icon "x" {:size 16}))]))
 
-(rum/defc recent-slider < rum/reactive
-  {:will-update (fn [state]
-                  (when-not @(:ui/toggle-highlight-recent-blocks? @state/state)
-                    (clear-recent-highlight!))
-                  state)}
+(rum/defc recent-slider
   []
-  (when (state/sub :ui/toggle-highlight-recent-blocks?)
-    (recent-slider-inner)))
+  (let [highlight? (state/use-sub :ui/toggle-highlight-recent-blocks?)]
+    (hooks/use-effect!
+     (fn []
+       (when-not highlight?
+         (clear-recent-highlight!)))
+     [highlight?])
+    (when highlight?
+      (recent-slider-inner))))
 
 (rum/defc block-breadcrumb
   [page-name]
-  (when-let [page (when (and page-name (common-util/uuid-string? page-name))
-                    (db/entity [:block/uuid (uuid page-name)]))]
-    ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
-    (when (and (if config/publishing? (not (state/sub :db/restoring?)) true)
-               (ldb/page? page) (:block/parent page))
-      [:div.ls-block-breadcrumb
-       [:div.text-sm
-       (component-block/breadcrumb {}
-                                    (state/get-current-repo)
-                                    (:block/uuid page)
-                                    {:header? true})]])))
+  (let [db-restoring? (state/use-sub :db/restoring?)]
+    (when-let [page (when (and page-name (common-util/uuid-string? page-name))
+                      (db/entity [:block/uuid (uuid page-name)]))]
+      ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
+      (when (and (if config/publishing? (not db-restoring?) true)
+                 (ldb/page? page) (:block/parent page))
+        [:div.ls-block-breadcrumb
+         [:div.text-sm
+          (component-block/breadcrumb {}
+                                      (state/get-current-repo)
+                                      (:block/uuid page)
+                                      {:header? true})]]))))
 
-(rum/defc search-index-progress < rum/reactive
+(rum/defc search-index-progress
   []
   (let [current-repo (state/get-current-repo)
-        {:keys [visible? running? repo progress]} (or (state/sub :search/index-build) {})
+        {:keys [visible? running? repo progress]} (or (state/use-sub :search/index-build) {})
         progress' (-> (or progress 0)
                       (max 0)
                       (min 100))]
     (when (and (or visible? running?) (= repo current-repo))
       [:div.search-index-progress
-       [ui/loading ""]
+       (ui/loading "")
        [:span.search-index-progress__text (t :search/index-progress progress')]
        [:div.search-index-progress__bar
         [:div.search-index-progress__bar-fill {:style {:width (str progress' "%")}}]]])))
 
-(rum/defc ^:large-vars/cleanup-todo header-aux < rum/reactive
+(rum/defc ^:large-vars/cleanup-todo header-aux
   [{:keys [current-repo default-home new-block-mode]}]
   (let [electron-mac? (and util/mac? (util/electron?))
         left-menu (left-menu-button {:on-click (fn []
@@ -479,7 +466,7 @@
           (plugins/updates-notifications)])
 
        (when (state/feature-http-server-enabled?)
-         (server/server-indicator (state/sub :electron/server)))
+         (server/server-indicator (state/use-sub :electron/server)))
 
        (when (util/electron?)
          (back-and-forward))

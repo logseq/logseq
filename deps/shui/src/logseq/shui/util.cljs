@@ -6,8 +6,8 @@
    [clojure.walk :as w]
    [goog.dom :as gdom]
    [goog.object :refer [getValueByKeys] :as gobj]
-   [logseq.shui.rum :as shui-rum]
-   [rum.core :refer [use-state use-effect!] :as rum]))
+   [logseq.shui.hooks :as hooks]
+   [logseq.shui.rum :as shui-rum]))
 
 (goog-define NODETEST false)
 
@@ -86,41 +86,23 @@
            (bean/->js (map-keys->camel-case new-options :html-props true))
            new-children)))
 
-(defn use-atom-fn
-  [a getter-fn setter-fn]
-  (let [[val set-val] (use-state (getter-fn @a))]
-    (use-effect!
-     (fn []
-       (let [id (str (random-uuid))]
-         (add-watch a id (fn [_ _ prev-state next-state]
-                           (let [prev-value (getter-fn prev-state)
-                                 next-value (getter-fn next-state)]
-                             (when-not (= prev-value next-value)
-                               (set-val next-value)))))
-         #(remove-watch a id)))
-     [])
-    [val #(swap! a setter-fn %)]))
+(def use-atom hooks/use-atom)
+(def use-mounted hooks/use-mounted)
 
-(defn use-atom
-  "(use-atom my-atom)"
-  [a]
-  (use-atom-fn a identity (fn [_ v] v)))
-
-(defn use-mounted
-  []
-  (let [*mounted (rum/use-ref false)]
-    (use-effect!
-     (fn []
-       (rum/set-ref! *mounted true)
-       #(rum/set-ref! *mounted false))
-     [])
-    #(rum/deref *mounted)))
+(defn- same-args?
+  [^js prev-props ^js next-props]
+  (= (.-args prev-props)
+     (.-args next-props)))
 
 (defn react->rum [c static?]
   (if static?
-    (rum/defc react->rum' < rum/static
-      [& args]
-      (apply adapt-class c args))
+    (let [class (fn [^js props]
+                  (apply adapt-class c (.-args props)))
+          memo-class (if-some [memo (.-memo js/React)]
+                       (memo class same-args?)
+                       class)]
+      (fn [& args]
+        (js/React.createElement memo-class #js {:args args})))
     (partial adapt-class c)))
 
 (defn component-wrap

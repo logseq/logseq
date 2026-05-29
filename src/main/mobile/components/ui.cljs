@@ -71,9 +71,9 @@
              [:span {:slot "icon-only"}
               (shui/tabler-icon "x")])]]]]]])))
 
-(rum/defc install-notifications < rum/reactive
+(rum/defc install-notifications
   []
-  (let [contents (state/sub :notification/contents)]
+  (let [contents (state/use-sub :notification/contents)]
     (transition-group
      {:class-name "notifications ui__notifications"}
      (let [notifications

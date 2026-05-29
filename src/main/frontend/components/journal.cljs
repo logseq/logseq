@@ -2,8 +2,9 @@
   (:require [frontend.components.page :as page]
             [frontend.db :as db]
             [frontend.components.views :as views]
-            [frontend.db-mixins :as db-mixins]
+            [frontend.db.hooks :as db-hooks]
             [frontend.db.react :as react]
+            [frontend.rum :as r]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -11,7 +12,7 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(rum/defc journal-cp < rum/static
+(rum/defc journal-cp
   [id last? selection-block-ids]
   [:div.journal-item.content
    (when last?
@@ -39,22 +40,24 @@
                                   (p/let [{:keys [data]} (views/<load-view-data nil {:journals? true})]
                                     (remove nil? data)))}
                      nil)
-            util/react)))
+            r/use-value)))
 
-(rum/defc all-journals < rum/reactive db-mixins/query
+(rum/defc all-journals
   []
-  (let [data (sub-journals)]
-    (when (seq data)
-      (let [selection-block-ids (journal-block-ids data)]
-        [:div#journals
-         (ui/virtualized-list
-          {:custom-scroll-parent (util/app-scroll-container-node)
-           :increase-viewport-by {:top 100 :bottom 100}
-           :compute-item-key (fn [idx]
-                               (let [id (util/nth-safe data idx)]
-                                 (str "journal-" id)))
-           :total-count (count data)
-           :item-content (fn [idx]
-                           (let [id (util/nth-safe data idx)
-                                 last? (= (inc idx) (count data))]
-                             (journal-cp id last? selection-block-ids)))})]))))
+  (db-hooks/query-scope
+   (fn []
+     (let [data (sub-journals)]
+       (when (seq data)
+         (let [selection-block-ids (journal-block-ids data)]
+           [:div#journals
+            (ui/virtualized-list
+             {:custom-scroll-parent (util/app-scroll-container-node)
+              :increase-viewport-by {:top 100 :bottom 100}
+              :compute-item-key (fn [idx]
+                                  (let [id (util/nth-safe data idx)]
+                                    (str "journal-" id)))
+              :total-count (count data)
+              :item-content (fn [idx]
+                              (let [id (util/nth-safe data idx)
+                                    last? (= (inc idx) (count data))]
+                                (journal-cp id last? selection-block-ids)))})]))))))

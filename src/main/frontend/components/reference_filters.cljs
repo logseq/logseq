@@ -4,7 +4,7 @@
             [datascript.impl.entity :as de]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
+            [frontend.db.hooks :as db-hooks]
             [frontend.handler.page :as page-handler]
             [frontend.search :as search]
             [frontend.ui :as ui]
@@ -112,7 +112,9 @@
          [:div.mt-4
           (filtered-refs page-entity filters refs true)]))]))
 
-(rum/defc filter-dialog < rum/reactive db-mixins/query
+(rum/defc filter-dialog
   [page references]
-  (let [page-entity (db/sub-block (:db/id page))]
-    (filter-dialog-aux page-entity references)))
+  (db-hooks/query-scope
+   (fn []
+     (let [page-entity (db/sub-block (:db/id page))]
+       (filter-dialog-aux page-entity references)))))

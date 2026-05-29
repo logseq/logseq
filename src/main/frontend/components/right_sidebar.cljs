@@ -38,7 +38,7 @@
                                :on-click ui-handler/toggle-right-sidebar!})
       (t :sidebar.right/toggle))))
 
-(rum/defc block-cp < rum/reactive
+(rum/defc block-cp
   [repo idx block]
   (let [id (:block/uuid block)]
     [:div.mt-2
@@ -51,7 +51,7 @@
   []
   (js/document.querySelector ".sidebar-item-list"))
 
-(rum/defc page-cp < rum/reactive
+(rum/defc page-cp
   [repo page-name]
   (page/page-cp {:parameters {:path {:name page-name}}
                  :sidebar?   true
@@ -72,9 +72,9 @@
                          :sidebar-key sidebar-key} repo block-id {:indent? false})]
      (block-cp repo idx block)]))
 
-(rum/defc search-title < rum/reactive
+(rum/defc search-title
   [*input]
-  (let [input (rum/react *input)
+  (let [input (first (hooks/use-atom *input))
         input' (if (string/blank? input) (t :search/blank-input) input)]
     [:span.overflow-hidden.text-ellipsis input']))
 
@@ -224,8 +224,7 @@
    [:.sidebar-item-drop-area-overlay.bottom
     {:on-drag-enter #(reset! *drag-to idx)}]])
 
-(rum/defc inner-component <
-  {:should-update (fn [_prev-state state] (last (:rum/args state)))}
+(rum/defc inner-component
   [component _should-update?]
   component)
 
@@ -309,14 +308,13 @@
            (when drag-from (drop-area idx))])]
        (drop-indicator idx drag-to)])))
 
-(rum/defcs sidebar-item < rum/reactive
-  {:init (fn [state] (assoc state
-                            ::db-id (atom (nth (:rum/args state) 2))
-                            ::init-key (random-uuid)))}
-  [state repo idx db-id block-type block-count]
-  (let [drag-from (rum/react *drag-from)
-        drag-to (rum/react *drag-to)
-        collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
+(rum/defc sidebar-item
+  [repo idx db-id block-type block-count]
+  (let [*db-id (hooks/use-memo #(atom db-id) [])
+        init-key (hooks/use-memo #(random-uuid) [])
+        drag-from (first (hooks/use-atom *drag-from))
+        drag-to (first (hooks/use-atom *drag-to))
+        collapsed? (state/use-sub [:ui/sidebar-collapsed-blocks db-id])]
     (sidebar-item-inner db-id {:repo repo
                                :idx idx
                                :block-type block-type
@@ -324,8 +322,8 @@
                                :drag-from drag-from
                                :drag-to drag-to
                                :block-count block-count
-                               :*db-id (::db-id state)
-                               :init-key (::init-key state)})))
+                               :*db-id *db-id
+                               :init-key init-key})))
 
 (defn- get-page
   [match]
@@ -447,15 +445,16 @@
        [:span.pr-1.flex.items-center (shui/tabler-icon "puzzle")]
        [:strong (:title r)]])))
 
-(rum/defcs sidebar-inner <
-  (rum/local false ::anim-finished?)
-  {:will-mount (fn [state]
-                 (js/setTimeout (fn [] (reset! (get state ::anim-finished?) true)) 300)
-                 state)}
-  [state repo t blocks]
-  (let [*anim-finished? (get state ::anim-finished?)
+(rum/defc sidebar-inner
+  [repo t blocks]
+  (let [[anim-finished? set-anim-finished!] (hooks/use-state false)
         block-count (count blocks)
-        developer-mode? (state/sub [:ui/developer-mode?])]
+        developer-mode? (state/use-sub [:ui/developer-mode?])]
+    (hooks/use-effect!
+     (fn []
+       (let [timeout (js/setTimeout #(set-anim-finished! true) 300)]
+         #(js/clearTimeout timeout)))
+     [])
     [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
 
      [:div.cp__right-sidebar-scrollable
@@ -503,7 +502,7 @@
             label]])]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.px-2
-       (if @*anim-finished?
+       (if anim-finished?
          (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
            (rum/with-key
              (sidebar-item repo idx db-id block-type block-count)
@@ -511,15 +510,15 @@
          [:div.p-4
           [:span.font-medium.opacity-50 (t :ui/loading)]])]]]))
 
-(rum/defcs sidebar < rum/reactive
-  [state]
+(rum/defc sidebar
+  []
   (let [blocks (state/sub-right-sidebar-blocks)
         blocks (if (empty? blocks)
                  [[(state/get-current-repo) "contents" :contents nil]]
                  blocks)
-        sidebar-open? (state/sub :ui/sidebar-open?)
-        width (state/sub :ui/sidebar-width)
-        repo (state/sub :git/current-repo)]
+        sidebar-open? (state/use-sub :ui/sidebar-open?)
+        width (state/use-sub :ui/sidebar-width)
+        repo (state/use-sub :git/current-repo)]
     [:div#right-sidebar.cp__right-sidebar.h-screen
      {:class (if sidebar-open? "open" "closed")
       :style {:width width}}

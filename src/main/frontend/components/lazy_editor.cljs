@@ -2,8 +2,10 @@
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.handler.plugin :refer [hook-extensions-enhancers-by-key]]
+            [frontend.rum :as r]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
             [rum.core :as rum]
             [shadow.lazy :as lazy]))
@@ -27,10 +29,10 @@
        (@lazy-editor config id attr code theme options)
        placeholder)]))
 
-(rum/defc editor <
-  rum/reactive
-  {:will-mount
-   (fn [state]
+(rum/defc editor
+  [config id attr code options]
+  (hooks/use-effect!
+   (fn []
      (when-not @loaded?
        (lazy/load lazy-editor
                   (fn []
@@ -42,11 +44,10 @@
                                    (when (fn? f) (f (. js/window -CodeMirror))))))
                         (fn []
                           (reset! loaded? true)))
-                      (reset! loaded? true)))))
-     state)}
-  [config id attr code options]
-  (let [loaded?' (rum/react loaded?)
-        theme   (state/sub :ui/theme)
+                      (reset! loaded? true))))))
+   [])
+  (let [loaded?' (r/use-value loaded?)
+        theme   (state/use-sub :ui/theme)
         code    (or code "")
         code    (string/replace-first code #"\n$" "")]      ;; See-also: #3410
     (editor-aux config id attr code theme options loaded?')))

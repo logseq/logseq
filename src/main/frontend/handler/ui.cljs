@@ -86,7 +86,8 @@
    (when clear-query-state?
      (react/clear-query-state!))
    (doseq [component (keys @react/component->query-key)]
-     (rum/request-render component))
+     (when (fn? component)
+       (component)))
    (when-let [component (state/get-root-component)]
      (rum/request-render component))
    nil))
@@ -167,7 +168,8 @@
 (defn- reorder-matched
   "Reorder matched if grouped"
   [state]
-  (let [[matched {:keys [grouped?]}] (:rum/args state)]
+  (let [matched (:matched state)
+        grouped? (get-in state [:opts :grouped?])]
     (if grouped?
       (let [*idx (atom -1)
             inc-idx #(swap! *idx inc)]
@@ -211,7 +213,7 @@
 
 (defn auto-complete-complete
   [state e]
-  (let [[_matched {:keys [on-chosen on-enter]}] (:rum/args state)
+  (let [{:keys [on-chosen on-enter]} (:opts state)
         matched (reorder-matched state)
         current-idx (get state :frontend.ui/current-idx)]
     (util/stop e)
@@ -223,7 +225,7 @@
 
 (defn auto-complete-shift-complete
   [state e]
-  (let [[_matched {:keys [on-chosen on-shift-chosen on-enter]}] (:rum/args state)
+  (let [{:keys [on-chosen on-shift-chosen on-enter]} (:opts state)
         matched (reorder-matched state)
         current-idx (get state :frontend.ui/current-idx)]
     (util/stop e)

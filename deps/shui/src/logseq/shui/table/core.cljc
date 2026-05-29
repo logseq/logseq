@@ -138,7 +138,7 @@
       [prop (rest prop-and-children)]
       [{} prop-and-children])))
 
-(rum/defc table < rum/static
+(rum/defc table
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
     [:div (merge {:class "ls-table w-full caption-bottom text-sm table-fixed"}
@@ -220,7 +220,7 @@
   (when-let [user-agent js/navigator.userAgent]
     (re-find #"Mobi" user-agent)))
 
-(rum/defc table-header < rum/static
+(rum/defc table-header
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)
         el-ref (rum/use-ref nil)
@@ -237,7 +237,7 @@
   [:div.ls-table-footer.fade-in.faster
    children])
 
-(rum/defc table-row < rum/static
+(rum/defc table-row
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
     [:div.ls-table-row.ls-block.flex.flex-row.items-center
@@ -245,7 +245,7 @@
             prop)
      children]))
 
-(rum/defc table-cell < rum/static
+(rum/defc table-cell
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
     [:div.ls-table-cell.flex.relative.h-full (dissoc prop :select? :add-property?)
@@ -259,7 +259,7 @@
                           " border-r px-2"))}
       children]]))
 
-(rum/defc table-actions < rum/static
+(rum/defc table-actions
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)
         el-ref (rum/use-ref nil)]

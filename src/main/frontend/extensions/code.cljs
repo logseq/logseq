@@ -139,6 +139,7 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [logseq.shui.hooks :as hooks]
             [malli.core :as m]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -148,7 +149,6 @@
 (def from-textarea (gobj/get CodeMirror "fromTextArea"))
 (def Pos (gobj/get CodeMirror "Pos"))
 
-(def textarea-ref-name "textarea")
 (def codemirror-ref-name "codemirror-instance")
 
 ;; export CodeMirror to global scope
@@ -397,7 +397,8 @@
 
 (defn ^:large-vars/cleanup-todo render!
   [state]
-  (let [[config id attr _code theme user-options] (:rum/args state)
+  (let [{:keys [config id attr theme options]} state
+        user-options options
         edit-block (:block config)
         code-block (:code-block config)
         config-file? (= (:file-path config) "logseq/config.edn")
@@ -444,8 +445,7 @@
         _ (when (and editor *editor-ref)
             (reset! *editor-ref editor))]
     (when editor
-      (let [textarea-ref (rum/ref-node state textarea-ref-name)
-            element (.getWrapperElement editor)
+      (let [element (.getWrapperElement editor)
             *cursor-prev (volatile! nil)
             *cursor-curr (volatile! nil)
             update-cursor-state! (fn []
@@ -459,11 +459,11 @@
                                        (vreset! *cursor-prev range)
                                        (vreset! *cursor-prev @*cursor-curr))
                                      (vreset! *cursor-curr range)))]
-        (gobj/set textarea-ref codemirror-ref-name editor)
+        (gobj/set textarea codemirror-ref-name editor)
         (when (= mode "calc")
           (.on editor "change" (fn [_cm _e]
                                  (let [new-code (.getValue editor)]
-                                   (reset! (:calc-atom state) (calc/eval-lines new-code))))))
+                                   ((:set-calc-lines! state) (calc/eval-lines new-code))))))
         (.on editor "blur" (fn [cm e]
                              (when e (util/stop e))
                              (let [esc? (gobj/get cm "escPressed")]
@@ -569,27 +569,44 @@
     (str "lsradix " (state/sub :ui/theme))
     (str "solarized " (state/sub :ui/theme))))
 
-(rum/defcs editor < rum/reactive
-  {:init (fn [state]
-           (let [[_ _ _ code _ options] (:rum/args state)]
-             (assoc state
-                    :editor-atom (atom nil)
-                    :calc-atom (atom (calc/eval-lines code))
-                    :code-options (atom options)
-                    :last-theme (atom (get-theme!)))))
-   :did-mount (fn [state]
-                (load-and-render! state)
-                state)
-   :did-update (fn [state]
-                 (let [next-theme (get-theme!)
-                       last-theme @(:last-theme state)
-                       editor' (some-> state :editor-atom deref)]
-                   (when (and editor' (not= next-theme last-theme))
-                     (reset! (:last-theme state) next-theme)
-                     (.setOption editor' "theme" next-theme)))
-                 (reset! (:code-options state) (last (:rum/args state)))
-                 state)}
-  [state _config id attr code _theme _options]
+(rum/defc editor
+  [config id attr code theme options]
+  (let [editor-atom (hooks/use-memo #(atom nil) [id])
+        [calc-lines set-calc-lines!] (hooks/use-state (calc/eval-lines code))
+        code-options (hooks/use-memo #(atom options) [id])
+        last-theme (hooks/use-memo #(atom (get-theme!)) [id])
+        component-state {:config config
+                         :id id
+                         :attr attr
+                         :code code
+                         :theme theme
+                         :options options
+                         :editor-atom editor-atom
+                         :set-calc-lines! set-calc-lines!
+                         :code-options code-options
+                         :last-theme last-theme}
+        current-theme (state/use-sub :ui/theme)
+        radix-color? (state/use-sub :ui/radix-color)]
+    (hooks/use-effect!
+     (fn []
+       (load-and-render! component-state))
+     [id])
+    (hooks/use-effect!
+     (fn []
+       (set-calc-lines! (calc/eval-lines code)))
+     [id code])
+    (hooks/use-effect!
+     (fn []
+       (let [next-theme (if radix-color?
+                          (str "lsradix " current-theme)
+                          (str "solarized " current-theme))
+             previous-theme @last-theme
+             editor' @editor-atom]
+         (when (and editor' (not= next-theme previous-theme))
+           (reset! last-theme next-theme)
+           (.setOption editor' "theme" next-theme)))
+       (reset! code-options options))
+     [options current-theme radix-color?])
   [:div.extensions__code.flex.flex-1
    (cond-> {}
      (= (:data-lang attr) "calc")
@@ -600,12 +617,9 @@
         (string/lower-case mode)]))
    [:div.code-editor.flex.flex-1.flex-row.w-full
     [:textarea (merge {:id id
-                       ;; Expose the textarea associated with the CodeMirror instance via
-                       ;; ref so that we can autofocus into the CodeMirror instance later.
-                       :ref textarea-ref-name
                        :default-value code} attr)]
     (when (= (:data-lang attr) "calc")
-      (calc/results (:calc-atom state)))]])
+      (calc/results calc-lines))]]))
 
 ;; Focus into the CodeMirror editor rather than the normal "raw" editor
 (defmethod commands/handle-step :codemirror/focus [[_]]

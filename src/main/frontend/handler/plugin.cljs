@@ -1189,9 +1189,9 @@
       url)))
 
 ;; components
-(rum/defc lsp-indicator < rum/reactive
+(rum/defc lsp-indicator
   []
-  (let [text (or (state/sub :plugin/indicator-text) (when (not (util/electron?)) (t :plugin/loading-indicator)))]
+  (let [text (or (state/use-sub :plugin/indicator-text) (when (not (util/electron?)) (t :plugin/loading-indicator)))]
     (when-not (true? text)
       [:div.flex.align-items.justify-center.h-screen.w-full.preboot-loading
        [:span.flex.items-center.justify-center.flex-col

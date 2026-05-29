@@ -193,7 +193,10 @@
      :warning false (.-id o))))
 
 (defn- editor-new-property [block target {:keys [selected-blocks popup-id] :as opts}]
-  (let [editing-block (state/get-edit-block)
+  (let [editing-block (some-> (state/get-edit-block)
+                              :block/uuid
+                              (->> (vector :block/uuid))
+                              db/entity)
         pos (state/get-edit-pos)
         edit-block-or-selected (cond
                                  editing-block

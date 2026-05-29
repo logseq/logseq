@@ -19,7 +19,8 @@
 (def routes
   [["/"
     {:name :home
-     :view home/home}]
+     :view (fn [_route-match]
+             (home/home))}]
 
    ["/graphs"
     {:name :graphs

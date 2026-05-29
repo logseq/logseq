@@ -435,7 +435,7 @@
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
 ;; blocks were already selected.
-(rum/defc hiccup-content < rum/static
+(rum/defc hiccup-content
   [id {:keys [hiccup]}]
   [:div {:id id}
    (if hiccup
@@ -444,7 +444,7 @@
 
 (rum/defc non-hiccup-content
   [id content on-click on-hide config format]
-  (let [edit? (state/sub-editing? id)]
+  (let [edit? (state/use-sub-editing? id)]
     (if edit?
       (editor/box {:on-hide on-hide
                    :format format}
@@ -464,14 +464,13 @@
            [:div.cursor (t :editor/click-to-edit)]
            content)]))))
 
-(rum/defcs content < rum/reactive
-  {}
-  [state id {:keys [format
-                    config
-                    hiccup
-                    on-click
-                    on-hide]
-             :as option}]
+(rum/defc content
+  [id {:keys [format
+              config
+              hiccup
+              on-click
+              on-hide]
+       :as option}]
   (if hiccup
     [:div
      (hiccup-content id option)]

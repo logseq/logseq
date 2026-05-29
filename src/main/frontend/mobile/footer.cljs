@@ -15,11 +15,13 @@
                        (command-handler))}
    (ui/icon icon {:size 24})])
 
-(rum/defc footer < rum/reactive
+(rum/defc footer
   []
-  (when (and (#{:page :home} (state/sub [:route-match :data :name]))
+  (let [route-name (state/use-sub [:route-match :data :name])
+        show-tabbar? (state/use-sub :mobile/show-tabbar?)]
+    (when (and (#{:page :home} route-name)
              (not (state/editing?))
-             (state/sub :mobile/show-tabbar?)
+             show-tabbar?
              (state/get-current-repo))
     [:div.cp__footer.w-full.bottom-0.justify-between
      (mobile-bar-command
@@ -36,4 +38,4 @@
           {:page page
            :edit-block? true
            :replace-empty-target? true}))
-      "edit")]))
+      "edit")])))

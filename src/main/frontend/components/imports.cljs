@@ -151,14 +151,12 @@
       (notification/show! (t :import/select-edn-or-json)
                           :error))))
 
-(rum/defcs set-graph-name-dialog
-  < rum/reactive
-  (rum/local "" ::input)
-  [state input-e opts]
-  (let [*input (::input state)
-        on-submit #(if (repo/invalid-graph-name? @*input)
+(rum/defc set-graph-name-dialog
+  [input-e opts]
+  (let [[input set-input!] (hooks/use-state "")
+        on-submit #(if (repo/invalid-graph-name? input)
                      (repo/invalid-graph-name-warning)
-                     (lsq-import-handler input-e (assoc opts :graph-name @*input)))]
+                     (lsq-import-handler input-e (assoc opts :graph-name input)))]
     [:div.container
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -166,9 +164,9 @@
         (t :import/new-graph-name)]]]
 
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
-      {:auto-focus true
+       {:auto-focus true
        :on-change (fn [e]
-                    (reset! *input (util/evalue e)))
+                    (set-input! (util/evalue e)))
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
                         (on-submit)))}]
@@ -440,9 +438,9 @@
                                     :else
                                     (import-graph-fn user-inputs)))))))
 
-(rum/defc indicator-progress < rum/reactive
+(rum/defc indicator-progress
   []
-  (let [{:keys [total current-idx current-page label]} (state/sub :graph/importing-state)
+  (let [{:keys [total current-idx current-page label]} (state/use-sub :graph/importing-state)
         label (or label (t :import/loading))
         left-label (if (and current-idx total (= current-idx total))
                      [:div.flex.flex-row.font-bold (t :ui/loading)]
@@ -473,9 +471,9 @@
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
-(rum/defc ^:large-vars/cleanup-todo importer < rum/reactive
+(rum/defc ^:large-vars/cleanup-todo importer
   [{:keys [query-params]}]
-  (let [importing? (state/sub :graph/importing)]
+  (let [importing? (state/use-sub :graph/importing)]
     [:<>
      (import-indicator importing?)
      (when-not importing?

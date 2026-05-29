@@ -8,17 +8,19 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.shui.hooks :as hooks]
             [rum.core :as rum]))
 
-(rum/defc date-picker < rum/reactive
-  {:init (fn [state]
-           (when-not (:date-picker/date @state/state)
-             (state/set-state! :date-picker/date (t/today)))
-           state)}
+(rum/defc date-picker
   [dom-id format]
-  (let [selected-date (state/sub :date-picker/date)
+  (hooks/use-effect!
+   (fn []
+     (when-not (:date-picker/date @state/state)
+       (state/set-state! :date-picker/date (t/today))))
+   [])
+  (let [selected-date (state/use-sub :date-picker/date)
         select-handler! (fn [^js d]
-                          (when-let [d (or d (state/sub :date-picker/date))]
+                          (when-let [d (or d selected-date)]
                             (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
                                   journal (date/js-date->journal-title gd)]
                               ;; similar to page reference

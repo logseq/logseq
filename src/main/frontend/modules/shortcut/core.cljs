@@ -14,6 +14,7 @@
             [goog.object :as gobj]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
             [lambdaisland.glogi :as log]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui])
   (:import [goog.events KeyCodes KeyNames]
            [goog.ui KeyboardShortcutHandler]))
@@ -195,54 +196,27 @@
        (map #(install-shortcut-handler! % {}))
        doall))
 
-(defn mixin
-  ([handler-id] (mixin handler-id true))
-  ([handler-id remount-reinstall?]
-   (cond->
-    {:did-mount
-     (fn [state]
-       (let [install-id (install-shortcut-handler! handler-id {:state state})]
-         (assoc state ::install-id install-id)))
+(defn use-shortcut-handler!
+  "Install a shortcut handler for the lifetime of the current component.
 
-     :will-unmount
-     (fn [state]
-       (when-let [install-id (::install-id state)]
-         (uninstall-shortcut-handler! install-id))
-       state)}
-
-     remount-reinstall?
-     (assoc
-      :will-remount
-      (fn [old-state new-state]
-        (util/profile "[shortcuts] reinstalled:"
-          (uninstall-shortcut-handler! (::install-id old-state))
-          (when-let [install-id (install-shortcut-handler! handler-id {:state new-state})]
-            (assoc new-state ::install-id install-id))))))))
-
-(defn mixin*
-  "This is an optimized version compared to (mixin).
-   And the shortcuts will not be frequently loaded and unloaded.
-   As well as ensuring unnecessary updates of components."
-  [handler-id]
-  {:did-mount
-   (fn [state]
-     (let [*state (volatile! state)
-           install-id (install-shortcut-handler! handler-id {:state *state})]
-       (assoc state ::install-id install-id
-              ::*state *state)))
-
-   :will-remount
-   (fn [old-state new-state]
-     (when-let [*state (::*state old-state)]
-       (vreset! *state new-state))
-     new-state)
-
-   :will-unmount
-   (fn [state]
-     (when-let [install-id (::install-id state)]
-       (uninstall-shortcut-handler! install-id)
-       (some-> (::*state state) (vreset! nil)))
-     state)})
+  `component-state` is optional and is kept current through a volatile so
+  shortcut handlers can read the latest render state without reinstalling the
+  keyboard handler on every render."
+  ([handler-id] (use-shortcut-handler! handler-id nil))
+  ([handler-id component-state]
+   (let [*state-ref (hooks/use-ref nil)]
+     (when-not (hooks/deref *state-ref)
+       (hooks/set-ref! *state-ref (volatile! component-state)))
+     (vreset! (hooks/deref *state-ref) component-state)
+     (hooks/use-effect!
+      (fn []
+        (let [install-id (install-shortcut-handler!
+                          handler-id
+                          {:state (hooks/deref *state-ref)})]
+          #(do
+             (uninstall-shortcut-handler! install-id)
+             (some-> (hooks/deref *state-ref) (vreset! nil)))))
+      [handler-id]))))
 
 (defn unlisten-all!
   ([] (unlisten-all! false))
@@ -260,16 +234,13 @@
       (install-shortcut-handler! group {})
       (events/listen handler EventType/SHORTCUT_TRIGGERED dispatch-fn))))
 
-(def disable-all-shortcuts
-  {:will-mount
-   (fn [state]
+(defn use-disable-all-shortcuts!
+  []
+  (hooks/use-effect!
+   (fn []
      (unlisten-all!)
-     state)
-
-   :will-unmount
-   (fn [state]
-     (listen-all!)
-     state)})
+     #(listen-all!))
+   []))
 
 (defn refresh!
   "Always use this function to refresh shortcuts"

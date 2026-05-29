@@ -7,7 +7,7 @@
             [frontend.handler.search :as search-handler :refer [debounced-search, stop-debounced-search!]]
             [goog.object :as gobj]
             [goog.dom :as gdom]
-            [frontend.mixins :as mixins]
+            [logseq.shui.hooks :as hooks]
             [clojure.string :as string]))
 
 (rum/defc search-input
@@ -42,15 +42,28 @@
           total]))
      [:div#search-in-page-placeholder.absolute.top-2.left-0.p-2.sm:text-sm]]))
 
-(rum/defc search-inner < rum/static
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/hide-when-esc-or-outside
-      state
-      :node (gdom/getElement "search-in-page")
-      :on-hide (fn []
-                 (search-handler/electron-exit-find-in-page!)))))
+(rum/defc search-inner
   [{:keys [matches match-case? q]}]
+  (hooks/use-effect!
+   (fn []
+     (let [hide! (fn [_e] (search-handler/electron-exit-find-in-page!))
+           key-handler (fn [e]
+                         (when (= 27 (.-keyCode e))
+                           (hide! e)))
+           mouse-handler (fn [e]
+                           (let [node (gdom/getElement "search-in-page")
+                                 target (.-target e)]
+                             (when (and node
+                                        (not (gdom/contains node target))
+                                        (not (.contains (.-classList target)
+                                                        "ignore-outside-event")))
+                               (hide! e))))]
+       (.addEventListener js/window "keydown" key-handler)
+       (.addEventListener js/window "mousedown" mouse-handler)
+       #(do
+          (.removeEventListener js/window "keydown" key-handler)
+          (.removeEventListener js/window "mousedown" mouse-handler))))
+   [])
   [:div#search-in-page.flex.flex-row.absolute.top-10.right-4.shadow-lg.px-2.py-1.faster.fade-in.items-center
 
    (search-input q matches)
@@ -94,8 +107,8 @@
     :class "text-lg"
     :title (t :ui/close))])
 
-(rum/defc search < rum/reactive
+(rum/defc search
   []
-  (let [{:keys [active?] :as opt} (state/sub :ui/find-in-page)]
+  (let [{:keys [active?] :as opt} (state/use-sub :ui/find-in-page)]
     (when active?
       (search-inner opt))))

@@ -84,6 +84,16 @@
         (remove-q! query))))
   (vswap! component->query-key dissoc component))
 
+(defn- request-query-component-render!
+  [component]
+  (when (fn? component)
+    (component)))
+
+(defn- refresh-query-components!
+  [k]
+  (doseq [component (get @query-key->components k)]
+    (request-query-component-render! component)))
+
 ;; Reactive query
 
 (defn get-query-cached-result
@@ -168,7 +178,8 @@
   (p/let [p-or-value (<q-aux graph db query-fn inputs-fn k query inputs built-in-query?)
           result' (transform-fn p-or-value)]
     (when-not (= result' result)
-      (set-new-result! k result'))))
+      (set-new-result! k result'))
+    (refresh-query-components! k)))
 
 (defn refresh-affected-queries!
   [repo-url affected-keys & {:keys [skip-kv-custom-keys?]

@@ -19,7 +19,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
+            [frontend.db.hooks :as db-hooks]
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.extensions.graph :as graph]
@@ -29,7 +29,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -46,43 +45,38 @@
             [rum.core :as rum]))
 
 (defn- get-page-name
-  [state]
-  (let [route-match (first (:rum/args state))]
-    (get-in route-match [:parameters :path :name])))
+  [route-match]
+  (get-in route-match [:parameters :path :name]))
 
 ;; Named block links only works on web (and publishing)
 (if util/web-platform?
   (defn- get-block-uuid-by-block-route-name
     "Return string block uuid for matching :name and :block-route-name params or
     nil if not found"
-    [state]
+    [route-match]
     ;; Only query if block name is in the route
-    (when-let [route-name (get-in (first (:rum/args state))
-                                  [:parameters :path :block-route-name])]
+    (when-let [route-name (get-in route-match [:parameters :path :block-route-name])]
       (->> (model/get-block-by-page-name-and-block-route-name
             (state/get-current-repo)
-            (get-page-name state)
+            (get-page-name route-match)
             route-name)
            :block/uuid
            str)))
   (def get-block-uuid-by-block-route-name (constantly nil)))
 
 (defn- open-root-block!
-  [state]
-  (let [[_ block _ sidebar? preview?] (:rum/args state)]
-    (when (and
-           (or preview?
-               (not (contains? #{:home :all-journals} (state/get-current-route))))
-           (not sidebar?))
-      (when (and (string/blank? (:block/title block))
-                 (not preview?))
-        (editor-handler/edit-block! block :max)))))
+  [block sidebar? preview?]
+  (when (and
+         (or preview?
+             (not (contains? #{:home :all-journals} (state/get-current-route))))
+         (not sidebar?))
+    (when (and (string/blank? (:block/title block))
+               (not preview?))
+      (editor-handler/edit-block! block :max))))
 
-(rum/defc page-blocks-inner <
-  {:did-mount (fn [state]
-                (open-root-block! state)
-                state)}
+(rum/defc page-blocks-inner
   [page-e blocks config sidebar? _preview? _block-uuid]
+  (hooks/use-effect! #(open-root-block! page-e sidebar? _preview?) [])
   (when page-e
     (let [hiccup (component-block/->hiccup blocks config {})]
       [:div.page-blocks-inner {:style {:min-height 29}}
@@ -149,82 +143,78 @@
          [:span.bullet-container
           [:span.bullet]]]]])))
 
-(rum/defc add-button < rum/reactive
+(rum/defc add-button
   [block config]
-  (let [editing? (state/sub :editor/editing?)]
+  (let [editing? (state/use-sub :editor/editing?)]
     (add-button-inner block (assoc config :editing? editing?))))
 
-(rum/defcs page-blocks-cp < rum/reactive db-mixins/query
-  {:did-mount (fn [state]
-                (when-let [on-page-blocks-rendered (some-> (last (:rum/args state))
-                                                           :on-page-blocks-rendered)]
-                  (on-page-blocks-rendered))
-                state)
-   :did-update (fn [state]
-                 (when-let [on-page-blocks-rendered (some-> (last (:rum/args state))
-                                                            :on-page-blocks-rendered)]
-                  (on-page-blocks-rendered))
-                state)}
-  [state block* {:keys [sidebar? hide-add-button? journals?] :as config}]
-  (when-let [id (:db/id block*)]
-    (let [block (db/sub-block id)
-          block-id (:block/uuid block)
-          block? (not (db/page? block))
-          full-children (->> (:block/_parent block)
-                             ldb/sort-by-order)
-          mobile-length-limit 50
-          [children more?] (if (and (> (count full-children) mobile-length-limit) (util/mobile?) journals?)
-                             [(take mobile-length-limit full-children) true]
-                             [full-children false])
-          quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) common-config/quick-add-page-name))
-          children (cond
-                     (and (= id quick-add-page-id)
-                          (user-handler/user-uuid)
-                          (ldb/get-graph-rtc-uuid (db/get-db)))
-                     (editor-handler/get-user-quick-add-blocks)
+(rum/defc page-blocks-cp
+  [block* {:keys [sidebar? hide-add-button? journals? on-page-blocks-rendered] :as config}]
+  (db-hooks/query-scope
+   (fn []
+     (hooks/use-effect!
+      (fn []
+        (when on-page-blocks-rendered
+          (on-page-blocks-rendered))))
+     (when-let [id (:db/id block*)]
+       (let [block (db/sub-block id)
+             block-id (:block/uuid block)
+             block? (not (db/page? block))
+             full-children (->> (:block/_parent block)
+                                ldb/sort-by-order)
+             mobile-length-limit 50
+             [children more?] (if (and (> (count full-children) mobile-length-limit) (util/mobile?) journals?)
+                                [(take mobile-length-limit full-children) true]
+                                [full-children false])
+             quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) common-config/quick-add-page-name))
+             children (cond
+                        (and (= id quick-add-page-id)
+                             (user-handler/user-uuid)
+                             (ldb/get-graph-rtc-uuid (db/get-db)))
+                        (editor-handler/get-user-quick-add-blocks)
 
-                     (ldb/class? block)
-                     (remove (fn [b] (contains? (set (map :db/id (:block/tags b))) (:db/id block))) children)
+                        (ldb/class? block)
+                        (remove (fn [b] (contains? (set (map :db/id (:block/tags b))) (:db/id block))) children)
 
-                     (ldb/property? block)
-                     (remove (fn [b] (some? (get b (:db/ident block)))) children)
+                        (ldb/property? block)
+                        (remove (fn [b] (some? (get b (:db/ident block)))) children)
 
-                     :else
-                     children)
-          config (assoc config :library? (ldb/library? block))]
-      (cond
-        (and
-         (not block?)
-         (not config/publishing?)
-         (empty? children) block)
-        (add-button block config)
+                        :else
+                        children)
+             config (assoc config :library? (ldb/library? block))
+             document-mode? (state/use-sub :document/mode?)]
+         (cond
+           (and
+            (not block?)
+            (not config/publishing?)
+            (empty? children) block)
+           (add-button block config)
 
-        :else
-        (let [document-mode? (state/sub :document/mode?)
-              hiccup-config (merge
-                             {:id (str (:block/uuid block))
-                              :db/id (:db/id block)
-                              :block? block?
-                              :editor-box editor/box
-                              :document/mode? document-mode?}
-                             config)
-              config (common-handler/config-with-document-mode hiccup-config)
-              blocks (if block? [block] (db/sort-by-order children block))]
-          [:div.relative
-           (page-blocks-inner block blocks config sidebar? false block-id)
-           (when more?
-             (shui/button {:variant :ghost
-                           :class "text-muted-foreground w-full"
-                           :on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
-                          (t :ui/load-more)))
-           (when-not more?
-             (when-not hide-add-button?
-               (add-button block config)))])))))
+           :else
+           (let [hiccup-config (merge
+                                {:id (str (:block/uuid block))
+                                 :db/id (:db/id block)
+                                 :block? block?
+                                 :editor-box editor/box
+                                 :document/mode? document-mode?}
+                                config)
+                 config (common-handler/config-with-document-mode hiccup-config)
+                 blocks (if block? [block] (db/sort-by-order children block))]
+             [:div.relative
+              (page-blocks-inner block blocks config sidebar? false block-id)
+              (when more?
+                (shui/button {:variant :ghost
+                              :class "text-muted-foreground w-full"
+                              :on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
+                             (t :ui/load-more)))
+              (when-not more?
+                (when-not hide-add-button?
+                  (add-button block config)))])))))))
 
-(rum/defc today-queries < rum/reactive
+(rum/defc today-queries
   [repo today? sidebar?]
   (when (and today? (not sidebar?))
-    (let [queries (get-in (state/sub-config repo) [:default-queries :journals])]
+    (let [queries (get-in (state/use-sub-config repo) [:default-queries :journals])]
       (when (seq queries)
         [:div#today-queries
          (for [query queries]
@@ -322,11 +312,11 @@
        page)]]))
 
 (defn- get-path-page-name
-  [state page-name]
+  [route-match page-name]
   (or page-name
-      (get-block-uuid-by-block-route-name state)
+      (get-block-uuid-by-block-route-name route-match)
       ;; is page name or uuid
-      (get-page-name state)
+      (get-page-name route-match)
       (state/get-current-page)))
 
 (defn get-page-entity
@@ -342,24 +332,19 @@
     (db/get-page page-name)))
 
 (defn- get-sanity-page-name
-  [state page-name]
-  (when-let [path-page-name (get-path-page-name state page-name)]
+  [route-match page-name]
+  (when-let [path-page-name (get-path-page-name route-match page-name)]
     (util/page-name-sanity-lc path-page-name)))
 
-(rum/defcs on-mounted <
-  {:did-mount (fn [state]
-                (when-let [f (last (:rum/args state))]
-                  (f))
-                state)
-   :did-update (fn [state]
-                 (when-let [f (last (:rum/args state))]
-                  (f))
-                state)}
-  [state child _on-mounted]
+(rum/defc on-mounted
+  [child on-mounted-fn]
+  (hooks/use-effect!
+   (fn []
+     (when on-mounted-fn
+       (on-mounted-fn))))
   child)
 
-(rum/defc lsp-pagebar-slot <
-  rum/static
+(rum/defc lsp-pagebar-slot
   []
   (when (not config/publishing?)
     (when config/lsp-enabled?
@@ -367,7 +352,7 @@
        (plugins/hook-ui-slot :page-head-actions-slotted nil)
        (plugins/hook-ui-items :pagebar)])))
 
-(rum/defc tabs < rum/static
+(rum/defc tabs
   [page opts]
   (let [class? (ldb/class? page)
         property? (ldb/property? page)
@@ -429,15 +414,18 @@
         [:hr.my-4]])]))
 
 ;; A page is just a logical block
-(rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query mixins/container-id
-  (rum/local nil   ::current-page)
-  (rum/local nil   ::linked-refs-blocks-ready-page-id)
-  (rum/local nil   ::linked-refs-tagged-ready-page-id)
-  [state {:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals?] :as option}]
-  (let [current-repo (state/sub :git/current-repo)
-        linked-refs-blocks-ready-page-id (get state ::linked-refs-blocks-ready-page-id)
-        linked-refs-tagged-ready-page-id (get state ::linked-refs-tagged-ready-page-id)
-        page (or page (some-> (:db/id option) db/entity))
+(rum/defc ^:large-vars/cleanup-todo page-inner
+  [{:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals?] :as option}]
+  (db-hooks/query-scope
+   (fn []
+     (let [current-repo (state/use-sub :git/current-repo)
+           linked-refs-blocks-ready-page-id* (hooks/use-memo #(atom nil) [])
+           linked-refs-tagged-ready-page-id* (hooks/use-memo #(atom nil) [])
+           [linked-refs-blocks-ready-page-id] (hooks/use-atom linked-refs-blocks-ready-page-id*)
+           [linked-refs-tagged-ready-page-id] (hooks/use-atom linked-refs-tagged-ready-page-id*)
+           container-key (select-keys option [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
+           container-id (or (:container-id option) (state/get-container-id container-key))
+           page (or page (some-> (:db/id option) db/entity))
         page-id (:db/id page)
         config (assoc config
                       :id (str (:block/uuid page)))
@@ -457,11 +445,11 @@
                              (route-handler/built-in-page-title (:block/title page)))
         show-tabs? (and (or class-page? (ldb/property? page)) (not tag-dialog?))
         blocks-ready? (or journals?
-                          (= page-id @linked-refs-blocks-ready-page-id))
+                          (= page-id linked-refs-blocks-ready-page-id))
         tagged-ready? (or (not show-tabs?)
-                          (= page-id @linked-refs-tagged-ready-page-id)
+                          (= page-id linked-refs-tagged-ready-page-id)
                           ;; Fallback to avoid blocking refs forever when tab content is reused.
-                          (= page-id @linked-refs-blocks-ready-page-id))
+                          (= page-id linked-refs-blocks-ready-page-id))
         linked-refs-ready? (and blocks-ready? tagged-ready?)]
     (if page
       (when (or title block?)
@@ -488,7 +476,7 @@
                  (db-page-title page
                                 {:sidebar? sidebar?
                                  :journals? journals?
-                                 :container-id (:container-id state)
+                                 :container-id container-id
                                  :display-title page-display-title
                                  :tag-dialog? tag-dialog?}))
                (lsp-pagebar-slot)])
@@ -506,8 +494,8 @@
             (when show-tabs?
               (tabs page {:current-page? option
                           :sidebar? sidebar?
-                          :on-tagged-nodes-rendered #(when-not (= @linked-refs-tagged-ready-page-id page-id)
-                                                       (reset! linked-refs-tagged-ready-page-id page-id))}))
+                          :on-tagged-nodes-rendered #(when-not (= linked-refs-tagged-ready-page-id page-id)
+                                                       (reset! linked-refs-tagged-ready-page-id* page-id))}))
 
             (when (not tag-dialog?)
               (if recycle-page?
@@ -517,9 +505,9 @@
                   :class (when-not (or sidebar? (util/capacitor?))
                            "mt-4")}
                  (page-blocks-cp page (merge option {:sidebar? sidebar?
-                                                     :on-page-blocks-rendered #(when-not (= @linked-refs-blocks-ready-page-id page-id)
-                                                                                 (reset! linked-refs-blocks-ready-page-id page-id))
-                                                     :container-id (:container-id state)}))]))]
+                                                     :on-page-blocks-rendered #(when-not (= linked-refs-blocks-ready-page-id page-id)
+                                                                                 (reset! linked-refs-blocks-ready-page-id* page-id))
+                                                     :container-id container-id}))]))]
 
            (when-not (or preview? recycle-page?)
              [:div.flex.flex-col.gap-8
@@ -552,57 +540,54 @@
                             class-page? property-page?)
                 [:div.fade-in.delay {:key "page-unlinked-references"}
                  (reference/unlinked-references page {:sidebar? sidebar?})])])]))
-      [:div.opacity-75 (t :page/not-found)])))
+         [:div.opacity-75 (t :page/not-found)])))))
 
-(rum/defcs page-aux < rum/reactive
-  {:init (fn [state]
-           (let [page* (first (:rum/args state))
-                 page-name (:page-name page*)
-                 page-id-uuid-or-name (or (:db/id page*) (:block/uuid page*)
-                                          (get-sanity-page-name state page-name))
-                 option (last (:rum/args state))
-                 preview-or-sidebar? (or (:preview? option) (:sidebar? option))
-                 page-uuid? (when page-name (util/uuid-string? page-name))
-                 *loading? (atom true)
-                 page (db/get-page page-id-uuid-or-name)
-                 *page (atom page)
-                 *refs-count (atom nil)
-                 repo (state/get-current-repo)]
-             (when (:block.temp/load-status page) (reset! *loading? false))
-             (p/let [page-block (db-async/<get-block repo page-id-uuid-or-name)
-                     page-id (:db/id page-block)
-                     refs-count (when-not (or (ldb/class? page-block) (ldb/property? page-block))
-                                  (db-async/<get-block-refs-count repo page-id))]
-               (reset! *loading? false)
-               (reset! *page (db/entity (:db/id page-block)))
-               (reset! *refs-count refs-count)
-               (when page-block
-                 (when-not (or preview-or-sidebar? (:tag-dialog? option))
-                   (if-let [page-uuid (and (not (:db/id page*))
-                                           page-name
-                                           (not page-uuid?)
-                                           (:block/uuid page-block))]
-                     (route-handler/redirect-to-page! (str page-uuid) {:push false})
-                     (route-handler/update-page-title-and-label! (state/get-route-match))))))
-             (assoc state
-                    ::loading? *loading?
-                    ::*page *page
-                    ::*refs-count *refs-count)))
-   :will-unmount (fn [state]
-                   (state/set-state! :editor/virtualized-scroll-fn nil)
-                   state)}
-  [state option]
-  (let [loading? (rum/react (::loading? state))
-        page (rum/react (::*page state))
-        refs-count (rum/react (::*refs-count state))]
+(rum/defc page-aux
+  [option]
+  (let [route-match (state/use-sub :route-match)
+        page-name (:page-name option)
+        page-id-uuid-or-name (or (:db/id option) (:block/uuid option)
+                                 (get-sanity-page-name route-match page-name))
+        preview-or-sidebar? (or (:preview? option) (:sidebar? option))
+        page-uuid? (when page-name (util/uuid-string? page-name))
+        *loading? (hooks/use-memo #(atom true) [])
+        page-in-db (db/get-page page-id-uuid-or-name)
+        *page (hooks/use-memo #(atom page-in-db) [])
+        *refs-count (hooks/use-memo #(atom nil) [])
+        [loading?] (hooks/use-atom *loading?)
+        [page] (hooks/use-atom *page)
+        [refs-count] (hooks/use-atom *refs-count)]
+    (hooks/use-effect!
+     (fn []
+       (when (:block.temp/load-status page-in-db)
+         (reset! *loading? false))
+       (p/let [repo (state/get-current-repo)
+               page-block (db-async/<get-block repo page-id-uuid-or-name)
+               page-id (:db/id page-block)
+               refs-count (when-not (or (ldb/class? page-block) (ldb/property? page-block))
+                            (db-async/<get-block-refs-count repo page-id))]
+         (reset! *loading? false)
+         (reset! *page (db/entity (:db/id page-block)))
+         (reset! *refs-count refs-count)
+         (when page-block
+           (when-not (or preview-or-sidebar? (:tag-dialog? option))
+             (if-let [page-uuid (and (not (:db/id option))
+                                     page-name
+                                     (not page-uuid?)
+                                     (:block/uuid page-block))]
+               (route-handler/redirect-to-page! (str page-uuid) {:push false})
+               (route-handler/update-page-title-and-label! (state/get-route-match))))))
+       #(state/set-state! :editor/virtualized-scroll-fn nil))
+     [])
     (when (and page (not loading?))
       (page-inner (assoc option
                          :page page
                          :refs-count refs-count)))))
 
-(rum/defcs page-cp
-  [state option]
-  (let [page-name (or (:page-name option) (get-page-name state))]
+(rum/defc page-cp
+  [option]
+  (let [route-match (state/use-sub :route-match)
+        page-name (or (:page-name option) (get-page-name route-match))]
     (rum/with-key
       (page-aux (assoc option :page-name page-name))
       (str
@@ -614,7 +599,7 @@
   [page-m option]
   (page-cp (merge option page-m)))
 
-(rum/defc page-graph-inner < rum/reactive
+(rum/defc page-graph-inner
   [_page graph dark?]
   [:div.page-graph-panel.flex.flex-col.w-full
    {:style {:height "min(72vh, 860px)"
@@ -641,19 +626,23 @@
     (when (seq (:nodes graph))
       (page-graph-inner page graph dark?))))
 
-(rum/defc page-graph < db-mixins/query rum/reactive
+(rum/defc page-graph
   []
-  (let [current-page (or
-                      (and (= :page (state/sub [:route-match :data :name]))
-                           (state/sub [:route-match :path-params :name]))
-                      (model/get-today-journal-title))
-        theme (:ui/theme @state/state)
-        page-entity (db/get-page current-page)]
-    (page-graph-aux current-page
-                    {:type (if (ldb/page? page-entity) :page :block)
-                     :block/uuid (:block/uuid page-entity)
-                     :theme theme
-                     :show-journal? false})))
+  (db-hooks/query-scope
+   (fn []
+     (let [route-name (state/use-sub [:route-match :data :name])
+           route-path-name (state/use-sub [:route-match :path-params :name])
+           theme (state/use-sub :ui/theme)
+           current-page (or
+                         (and (= :page route-name)
+                              route-path-name)
+                         (model/get-today-journal-title))
+           page-entity (db/get-page current-page)]
+       (page-graph-aux current-page
+                       {:type (if (ldb/page? page-entity) :page :block)
+                        :block/uuid (:block/uuid page-entity)
+                        :theme theme
+                        :show-journal? false})))))
 
 (defn batch-delete-dialog
   [pages refresh-fn]

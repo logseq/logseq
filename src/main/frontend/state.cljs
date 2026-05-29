@@ -562,6 +562,27 @@ Similar to re-frame subscriptions"
       ks-coll? (util/react (rum/cursor-in state ks))
       :else    (util/react (rum/cursor state ks)))))
 
+(defn use-sub
+  "Hook equivalent of `sub` for function components.
+
+  Use this when converting Rum reactive components to hooks."
+  [ks & {:keys [path-in-sub-atom]}]
+  (let [ks-coll?               (coll? ks)
+        get-fn                 (if ks-coll? get-in get)
+        s                      (get-fn @state ks)
+        s-atom?                (util/atom? s)
+        path-coll?-in-sub-atom (coll? path-in-sub-atom)]
+    (cond
+      (and s-atom? path-in-sub-atom path-coll?-in-sub-atom)
+      (first (hooks/use-atom (rum/cursor-in s path-in-sub-atom)))
+
+      (and s-atom? path-in-sub-atom)
+      (first (hooks/use-atom (rum/cursor s path-in-sub-atom)))
+
+      s-atom?  (first (hooks/use-atom s))
+      ks-coll? (first (hooks/use-atom (rum/cursor-in state ks)))
+      :else    (first (hooks/use-atom (rum/cursor state ks))))))
+
 (defn set-editing-block-id!
   [container-block]
   (reset! (:editor/editing? @state) {container-block true}))
@@ -589,11 +610,22 @@ Similar to re-frame subscriptions"
                   (fn [s] (boolean (get s container-block)))
                   [container-block]))
 
+(def use-sub-editing? sub-editing?)
+
 (defn sub-config
   "Sub equivalent to get-config which should handle all sub user-config access"
   ([] (sub-config (get-current-repo)))
   ([repo]
    (let [config (sub :config)]
+     (merge-configs db-default-config
+                    (get config ::global-config)
+                    (get config repo)))))
+
+(defn use-sub-config
+  "Hook equivalent of `sub-config`."
+  ([] (use-sub-config (get-current-repo)))
+  ([repo]
+   (let [config (use-sub :config)]
      (merge-configs db-default-config
                     (get config ::global-config)
                     (get config repo)))))
@@ -886,13 +918,6 @@ Similar to re-frame subscriptions"
   []
   (when-let [id (:block/uuid (get-edit-block))]
     (get @(:editor/content @state) id)))
-
-(defn sub-edit-content
-  ([]
-   (sub-edit-content (:block/uuid (get-edit-block))))
-  ([block-id]
-   (when block-id
-     (sub :editor/content {:path-in-sub-atom block-id}))))
 
 (defn set-selection-start-block!
   [start-block]
@@ -1244,7 +1269,8 @@ Similar to re-frame subscriptions"
   (set-state! :editor/start-pos nil)
   (clear-editor-last-pos!)
   (clear-cursor-range!)
-  (set-state! :editor/content {})
+  (when clear-editing-block?
+    (set-state! :editor/content {}))
   (set-state! :ui/select-query-cache {})
   (set-state! :editor/block-refs #{})
   (set-state! :editor/action-data nil)
@@ -1325,10 +1351,6 @@ Similar to re-frame subscriptions"
         (util/set-theme-light)
         (util/set-theme-dark)))))
 
-(defn set-root-component!
-  [component]
-  (set-state! :ui/root-component component))
-
 (defn get-root-component
   []
   (get @state :ui/root-component))
@@ -1353,10 +1375,6 @@ Similar to re-frame subscriptions"
          (set-state! :electron/updater-pending? pending?)
          (when pending? (set-state! :electron/updater data))
          nil)))))
-
-(defn set-file-component!
-  [component]
-  (set-state! :ui/file-component component))
 
 (defn clear-file-component!
   []
@@ -1983,9 +2001,6 @@ Similar to re-frame subscriptions"
       (when (seq groups)
         (storage/set :user-groups groups)))))
 
-(defn get-user-info []
-  (sub :user/info))
-
 (defn clear-user-info!
   []
   (storage/remove :user-groups))
@@ -2032,6 +2047,13 @@ Similar to re-frame subscriptions"
           (swap! (:ui/cached-key->container-id @state) assoc key id)
           id))
     (get-next-container-id)))
+
+(defn use-container-id
+  "Return a stable container id for the component lifetime."
+  ([]
+   (use-container-id nil))
+  ([key]
+   (hooks/use-memo #(get-container-id key) [key])))
 
 (comment
   (defn remove-container-key!

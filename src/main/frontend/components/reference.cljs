@@ -4,8 +4,8 @@
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.db.common.reference :as db-reference]
@@ -54,10 +54,12 @@
                                    (zero? open-blocks-level))
                           {:default-collapsed? true})})))
 
-(rum/defc references-cp < rum/reactive db-mixins/query
+(rum/defc references-cp
   [entity config]
-  (let [block (db/sub-block (:db/id entity))]
-    (references-aux block config)))
+  (db-hooks/query-scope
+   (fn []
+     (let [block (db/sub-block (:db/id entity))]
+       (references-aux block config)))))
 
 (rum/defc references
   [entity config]

@@ -19,6 +19,7 @@
             [frontend.util.ref :as ref]
             [logseq.common.config :as common-config]
             [logseq.graph-parser.exporter :as gp-exporter]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -274,15 +275,16 @@
     (when (seq images)
       (lightbox/preview-images! images))))
 
-(rum/defcs area-display <
-  (rum/local nil ::src)
-  [state block]
-  (let [*src (::src state)]
+(rum/defc area-display
+  [block]
+  (let [[src set-src!] (hooks/use-state nil)]
     (when-let [asset-path' (and block (assets-handler/get-area-block-asset-url block))]
-      (when (nil? @*src)
-        (p/let [asset-path (assets-handler/<make-asset-url asset-path')]
-          (reset! *src asset-path)))
-      (when @*src
+      (hooks/use-effect!
+       (fn []
+         (p/let [asset-path (assets-handler/<make-asset-url asset-path')]
+           (set-src! asset-path)))
+       [asset-path'])
+      (when src
         (let [asset-block (some-> block (:logseq.property.pdf/hl-image))
               resize-metadata (some-> asset-block :logseq.property.asset/resize-metadata)
               style (when-let [w (:width resize-metadata)] {:style {:width w}})]
@@ -305,7 +307,7 @@
                  :on-pointer-down util/stop
                  :on-click (fn [e]
                              (util/stop e)
-                             (-> (util/copy-image-to-clipboard (common-config/remove-asset-protocol @*src))
+                             (-> (util/copy-image-to-clipboard (common-config/remove-asset-protocol src))
                                  (p/then #(notification/show! (t :notification/copied) :success))))}
                 (ui/icon "copy")])
 
@@ -316,4 +318,4 @@
                :on-click open-lightbox!}
 
               (ui/icon "maximize")]]
-            [:img.w-full {:src @*src}]]])))))
+            [:img.w-full {:src src}]]])))))

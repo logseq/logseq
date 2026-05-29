@@ -12,6 +12,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -124,20 +125,18 @@
                  :variant :outline}
                 (shui/tabler-icon "home") (t :page/go-back-home))])
 
-(rum/defc current-page < rum/reactive
-  {:did-mount    (fn [state]
-                   (state/set-root-component! (:rum/react-component state))
-                   (state/setup-electron-updater!)
-                   (state/load-app-user-cfgs)
-                   (ui/inject-document-devices-envs!)
-                   (ui/inject-dynamic-style-node!)
-                   (plugin-handler/host-mounted!)
-                   (assoc state ::teardown (setup-fns!)))
-   :will-unmount (fn [state]
-                   (when-let [teardown (::teardown state)]
-                     (teardown)))}
+(rum/defc current-page
   []
-  (if-let [route-match (state/sub :route-match)]
+  (hooks/use-effect!
+   (fn []
+     (state/setup-electron-updater!)
+     (state/load-app-user-cfgs)
+     (ui/inject-document-devices-envs!)
+     (ui/inject-dynamic-style-node!)
+     (plugin-handler/host-mounted!)
+     (setup-fns!))
+   [])
+  (if-let [route-match (state/use-sub :route-match)]
     (when-let [view (:view (:data route-match))]
       (rum/with-key
         (ui/catch-error-and-notify

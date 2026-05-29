@@ -4,30 +4,27 @@
             [frontend.db :as db]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
+            [logseq.shui.hooks :as hooks]
             [rum.core :as rum]))
 
-(rum/defcs dialog <
-  shortcut/disable-all-shortcuts
-  (rum/local nil ::property-value)
-  {:init (fn [state]
-           (let [opts (last (:rum/args state))
-                 k (:property-key opts)]
-             (when-let [view-selected-blocks (:selected-blocks opts)]
-               (state/set-state! :view/selected-blocks view-selected-blocks))
-             (state/set-state! :ui/show-property-dialog? true)
-             (assoc state
-                    ::property-key (atom k)
-                    ::property (atom (when k (db/get-case-page k))))))
-   :will-unmount (fn [state]
-                   (when-let [close-fn (:on-dialog-close (last (:rum/args state)))]
-                     (close-fn))
-                   (state/set-state! :view/selected-blocks nil)
-                   (state/set-state! :ui/show-property-dialog? false)
-                   state)}
-  [state blocks opts]
+(rum/defc dialog
+  [blocks opts]
+  (shortcut/use-disable-all-shortcuts!)
   (when (seq blocks)
-    (let [*property-key (::property-key state)
-          *property (::property state)
+    (let [k (:property-key opts)
+          *property-key (hooks/use-memo #(atom k) [])
+          *property (hooks/use-memo #(atom (when k (db/get-case-page k))) [])
           block (first blocks)]
+      (hooks/use-effect!
+       (fn []
+         (when-let [view-selected-blocks (:selected-blocks opts)]
+           (state/set-state! :view/selected-blocks view-selected-blocks))
+         (state/set-state! :ui/show-property-dialog? true)
+         #(do
+            (when-let [close-fn (:on-dialog-close opts)]
+              (close-fn))
+            (state/set-state! :view/selected-blocks nil)
+            (state/set-state! :ui/show-property-dialog? false)))
+       [])
       [:div.ls-property-dialog
        (property-component/property-input block *property-key (assoc opts :*property *property))])))

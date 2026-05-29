@@ -5,7 +5,7 @@
             [frontend.util :as util]
             [frontend.handler.shell :as shell-handler]
             [clojure.string :as string]
-            [frontend.mixins :as mixins]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]))
 
 (defonce *command (atom ""))
@@ -20,14 +20,13 @@
      (reset! *loading? false))
    (p/finally (fn [] (reset! *loading? false)))))
 
-(rum/defcs shell < rum/reactive
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/on-enter state
-                      :on-enter (fn [_state] (run-command)))))
-  [state]
-  (let [loading? (rum/react *loading?)]
+(rum/defc shell
+  []
+  (let [[loading?] (hooks/use-atom *loading?)]
     [:div.flex.flex-col
+     {:on-key-up (fn [^js e]
+                   (when (= 13 (.-keyCode e))
+                     (run-command)))}
      [:div
       [:div
        [:div

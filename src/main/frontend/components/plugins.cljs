@@ -75,51 +75,49 @@
              [:span.flex.items-center.gap-1.w-full
               icon [:div title]]))))))
 
-(rum/defcs installed-themes
-  <
-  (rum/local [] ::themes)
-  (rum/local 0 ::cursor)
-  (rum/local 0 ::total)
-  {:did-mount (fn [state]
-                 (let [*themes        (::themes state)
-                      *cursor        (::cursor state)
-                      *total         (::total state)
-                      mode           (state/sub :ui/theme)
-                      mode-title     (t (case mode
-                                          "dark" :settings.general/theme-dark
-                                          :settings.general/theme-light))
-                      all-themes     (state/sub :plugin/installed-themes)
-                      themes         (->> all-themes
-                                          (filter #(= (:mode %) mode))
-                                          (sort-by #(:name %)))
-                      no-mode-themes (->> all-themes
-                                          (filter #(= (:mode %) nil))
-                                          (sort-by #(:name %))
-                                          (map-indexed (fn [idx opt] (assoc opt :group-first (zero? idx) :group-desc (if (zero? idx) (t :plugin.themes/light-and-dark) nil)))))
-                      selected       (state/sub :plugin/selected-theme)
-                      themes         (map-indexed (fn [idx opt]
-                                                    (let [selected? (= (:url opt) selected)]
-                                                      (when selected? (reset! *cursor (+ idx 1)))
-                                                      (assoc opt :mode mode :selected selected?))) (concat themes no-mode-themes))
-                      themes         (cons {:name        (t :plugin.themes/default-name (string/capitalize mode-title))
-                                            :url         nil
-                                            :description (t :plugin.themes/default-desc mode-title)
-                                            :mode        mode
-                                            :selected    (nil? selected)
-                                            :group-first true
-                                            :group-desc  (t :plugin.themes/group mode-title)} themes)]
-                  (reset! *themes themes)
-                  (reset! *total (count themes))
-                  state))}
-  {:did-mount (fn [state]
-                (some-> (rum/dom-node state) (.focus))
-                state)}
-  [state]
-  (let [*cursor (::cursor state)
-        *themes (::themes state)
-        *total (::total state)]
+(rum/defc installed-themes
+  []
+  (let [*root (hooks/use-ref nil)
+        [themes set-themes!] (hooks/use-state [])
+        *cursor (hooks/use-memo #(atom 0) [])
+        *total (hooks/use-memo #(atom 0) [])
+        [cursor] (hooks/use-atom *cursor)
+        mode (state/use-sub :ui/theme)
+        all-themes (state/use-sub :plugin/installed-themes)
+        selected (state/use-sub :plugin/selected-theme)]
+    (hooks/use-effect!
+     (fn []
+       (let [mode-title (t (case mode
+                             "dark" :settings.general/theme-dark
+                             :settings.general/theme-light))
+             themes (->> all-themes
+                         (filter #(= (:mode %) mode))
+                         (sort-by #(:name %)))
+             no-mode-themes (->> all-themes
+                                 (filter #(= (:mode %) nil))
+                                 (sort-by #(:name %))
+                                 (map-indexed (fn [idx opt] (assoc opt :group-first (zero? idx) :group-desc (if (zero? idx) (t :plugin.themes/light-and-dark) nil)))))
+             themes (map-indexed (fn [idx opt]
+                                    (let [selected? (= (:url opt) selected)]
+                                      (when selected? (reset! *cursor (+ idx 1)))
+                                      (assoc opt :mode mode :selected selected?))) (concat themes no-mode-themes))
+             themes (cons {:name        (t :plugin.themes/default-name (string/capitalize mode-title))
+                           :url         nil
+                           :description (t :plugin.themes/default-desc mode-title)
+                           :mode        mode
+                           :selected    (nil? selected)
+                           :group-first true
+                           :group-desc  (t :plugin.themes/group mode-title)} themes)]
+         (set-themes! themes)
+         (reset! *total (count themes))))
+     [mode all-themes selected])
+    (hooks/use-effect!
+     (fn []
+       (some-> (hooks/deref *root) (.focus)))
+     [])
     [:div.cp__themes-installed
      {:tab-index -1
+      :ref *root
       :on-key-down #(handle-installed-themes-key-down *cursor *total (.-currentTarget %) %)}
      [:h1.mb-4.text-2xl.p-1 (t :nav/themes)]
      (map-indexed
@@ -134,7 +132,7 @@
             {:title    (:description opt)
              :class    (util/classnames
                         [{:is-selected current-selected?
-                          :is-active   (= idx @*cursor)}])
+                          :is-active   (= idx cursor)}])
              :on-click #(do (js/LSPluginCore.selectTheme (bean/->js opt))
                             (shui/dialog-close!))}
             [:div.flex.items-center.text-xs
@@ -144,7 +142,7 @@
               [:div.flex.items-center
                (when group-first? [:small.opacity-60 (:group-desc opt)])
                (when current-selected? [:small.inline-flex.ml-1.opacity-60 (ui/icon "check")])])]]))
-      @*themes)]))
+      themes)]))
 
 (rum/defc unpacked-plugin-loader
   [unpacked-pkg-path]
@@ -193,9 +191,8 @@
     :class (if (= category :themes) "active" ""))])
 
 (rum/defc local-markdown-display
-  < rum/reactive
   []
-  (let [[content item] (state/sub :plugin/active-readme)]
+  (let [[content item] (state/use-sub :plugin/active-readme)]
     [:div.cp__plugins-details
      {:on-click (fn [^js/MouseEvent e]
                   (when-let [target (.-target e)]
@@ -230,7 +227,7 @@
     (< num 1000) (str num)
     (>= num 1000) (str (.toFixed (/ num 1000) precision) "k")))
 
-(rum/defc card-ctls-of-market < rum/static
+(rum/defc card-ctls-of-market <
   [item stat installed? installing-or-updating?]
   [:div.ctl
    [:ul.l.flex.items-center
@@ -266,7 +263,7 @@
                   (.set settings "disabled-since" (js/Date.now)))))
       (p/catch #(js/console.error %))))
 
-(rum/defc card-ctls-of-installed < rum/static
+(rum/defc card-ctls-of-installed <
   [id name url sponsors unpacked? disabled?
    installing-or-updating? has-other-pending?
    new-version item]
@@ -348,16 +345,15 @@
                 :on-error on-error}]
     svg/folder))
 
-(rum/defcs plugin-thumb-icon <
-  (rum/local false ::load-failed?)
-  [state id icon market?]
-  (let [*load-failed? (::load-failed? state)
-        src            (plugin-thumb-icon-src id icon market?)]
-    (plugin-thumb-icon-view src @*load-failed?
+(rum/defc plugin-thumb-icon
+  [id icon market?]
+  (let [[load-failed? set-load-failed!] (hooks/use-state false)
+        src (plugin-thumb-icon-src id icon market?)]
+    (plugin-thumb-icon-view src load-failed?
                             (fn [_]
-                              (reset! *load-failed? true)))))
+                              (set-load-failed! true)))))
 
-(rum/defc plugin-item-card < rum/static
+(rum/defc plugin-item-card <
   [t {:keys [id name title version url description author icon iir repo sponsors webPkg] :as item}
    disabled? market? *search-key has-other-pending?
    installing-or-updating? installed? stat coming-update]
@@ -428,7 +424,7 @@
          id name url sponsors unpacked? disabled?
          installing-or-updating? has-other-pending? new-version item))]]))
 
-(rum/defc panel-tab-search < rum/static
+(rum/defc panel-tab-search <
   [search-key *search-key *search-ref]
   [:div.search-ctls
    [:small.absolute.s1
@@ -789,7 +785,7 @@
        false
        DISABLED-PLUGINS-CLEANUP-NOTIFICATION-ID))))
 
-(rum/defc ^:large-vars/cleanup-todo panel-control-tabs < rum/static
+(rum/defc ^:large-vars/cleanup-todo panel-control-tabs <
   [search-key *search-key category *category
    sort-by *sort-by filter-by *filter-by total-nums
    selected-unpacked-pkg market? develop-mode?
@@ -961,18 +957,19 @@
       ;; developer
       (panel-tab-developer)]]))
 
-(def plugin-items-list-mixins
-  {:did-mount
-   (fn [s]
-     (when-let [^js el (rum/dom-node s)]
+(defn- use-plugin-items-list-scroll!
+  [root-ref]
+  (hooks/use-effect!
+   (fn []
+     (when-let [^js el (hooks/deref root-ref)]
        (when-let [^js el-list (.querySelector el ".cp__plugins-item-lists")]
          (when-let [^js cls (.-classList (.querySelector el ".control-tabs"))]
-           (.addEventListener
-            el-list "scroll"
-            #(if (> (.-scrollTop el-list) 1)
-               (.add cls "scrolled")
-               (.remove cls "scrolled"))))))
-     s)})
+           (let [on-scroll #(if (> (.-scrollTop el-list) 1)
+                              (.add cls "scrolled")
+                              (.remove cls "scrolled"))]
+             (.addEventListener el-list "scroll" on-scroll)
+             #(.removeEventListener el-list "scroll" on-scroll))))))
+   []))
 
 (rum/defc lazy-items-loader
   [load-more!]
@@ -1037,66 +1034,65 @@
                  pkgs))
          (concat pinned-pkgs))))
 
-(rum/defcs ^:large-vars/data-var marketplace-plugins
-  < rum/static rum/reactive
-  plugin-items-list-mixins
-  (rum/local false ::fetching)
-  (rum/local "" ::search-key)
-  (rum/local :plugins ::category)
-  (rum/local :default ::sort-by)        ;; default (weighted) / downloads / stars / letters / updates / date-added
-  (rum/local :default ::filter-by)
-  (rum/local nil ::error)
-  (rum/local nil ::cached-query-flag)
-  (rum/local 1 ::current-page)
-  {:did-mount
-   (fn [s]
-     (let [reload-fn (fn [force-refresh?]
-                       (when-not @(::fetching s)
-                         (reset! (::fetching s) true)
-                         (reset! (::error s) nil)
-                         (-> (plugin-handler/load-marketplace-plugins force-refresh?)
-                             (p/then #(plugin-handler/load-marketplace-stats false))
-                             (p/catch #(do (js/console.error %) (reset! (::error s) %)))
-                             (p/finally #(reset! (::fetching s) false)))))]
-       (reload-fn false)
-       (assoc s ::reload (partial reload-fn true))))}
-  [state]
-  (let [*list-node-ref     (rum/create-ref)
-        pkgs               (state/sub :plugin/marketplace-pkgs)
-        stats              (state/sub :plugin/marketplace-stats)
-        installed-plugins  (state/sub :plugin/installed-plugins)
-        installing         (state/sub :plugin/installing)
-        online?            (state/sub :network/online?)
-        develop-mode?      (state/sub :ui/developer-mode?)
-        agent-opts         (state/sub [:electron/user-cfgs :settings/agent])
-        *search-key        (::search-key state)
-        *category          (::category state)
-        *sort-by           (::sort-by state)
-        *filter-by         (::filter-by state)
-        *cached-query-flag (::cached-query-flag state)
-        *current-page      (::current-page state)
-        *fetching          (::fetching state)
-        *error             (::error state)
+(rum/defc ^:large-vars/data-var marketplace-plugins
+  []
+  (let [*root-ref          (hooks/use-ref nil)
+        *list-node-ref     (hooks/use-ref nil)
+        pkgs               (state/use-sub :plugin/marketplace-pkgs)
+        stats              (state/use-sub :plugin/marketplace-stats)
+        installed-plugins  (state/use-sub :plugin/installed-plugins)
+        installing         (state/use-sub :plugin/installing)
+        online?            (state/use-sub :network/online?)
+        develop-mode?      (state/use-sub :ui/developer-mode?)
+        agent-opts         (state/use-sub [:electron/user-cfgs :settings/agent])
+        *search-key        (hooks/use-memo #(atom "") [])
+        *category          (hooks/use-memo #(atom :plugins) [])
+        *sort-by           (hooks/use-memo #(atom :default) []) ;; default (weighted) / downloads / stars / letters / updates / date-added
+        *filter-by         (hooks/use-memo #(atom :default) [])
+        *cached-query-flag (hooks/use-memo #(atom nil) [])
+        *current-page      (hooks/use-memo #(atom 1) [])
+        *fetching          (hooks/use-memo #(atom false) [])
+        *error             (hooks/use-memo #(atom nil) [])
+        [search-key]       (hooks/use-atom *search-key)
+        [category]         (hooks/use-atom *category)
+        [sort-by]          (hooks/use-atom *sort-by)
+        [filter-by]        (hooks/use-atom *filter-by)
+        [cached-query-flag] (hooks/use-atom *cached-query-flag)
+        [current-page]     (hooks/use-atom *current-page)
+        [fetching]         (hooks/use-atom *fetching)
+        [error]            (hooks/use-atom *error)
+        reload-fn          (hooks/use-callback
+                            (fn [force-refresh?]
+                              (when-not @*fetching
+                                (reset! *fetching true)
+                                (reset! *error nil)
+                                (-> (plugin-handler/load-marketplace-plugins force-refresh?)
+                                    (p/then #(plugin-handler/load-marketplace-stats false))
+                                    (p/catch #(do (js/console.error %) (reset! *error %)))
+                                    (p/finally #(reset! *fetching false)))))
+                            [])
+        _                  (use-plugin-items-list-scroll! *root-ref)
+        _                  (hooks/use-effect! #(reload-fn false) [])
         theme-plugins      (filter #(:theme %) pkgs)
         normal-plugins     (filter #(not (:theme %)) pkgs)
         filtered-pkgs      (when (seq pkgs)
-                             (if (= @*category :themes) theme-plugins normal-plugins))
+                             (if (= category :themes) theme-plugins normal-plugins))
         total-nums         [(count normal-plugins) (count theme-plugins)]
-        filtered-pkgs      (if (and (seq filtered-pkgs) (not= :default @*filter-by))
+        filtered-pkgs      (if (and (seq filtered-pkgs) (not= :default filter-by))
                              (filter #(apply
-                                       (if (= :installed @*filter-by) identity not)
+                                       (if (= :installed filter-by) identity not)
                                        [(contains? installed-plugins (keyword (:id %)))])
                                      filtered-pkgs)
                              filtered-pkgs)
-        filtered-pkgs      (if-not (string/blank? @*search-key)
-                             (if-let [author (and (string/starts-with? @*search-key "@")
-                                                  (subs @*search-key 1))]
+        filtered-pkgs      (if-not (string/blank? search-key)
+                             (if-let [author (and (string/starts-with? search-key "@")
+                                                  (subs search-key 1))]
                                (filter #(= author (:author %)) filtered-pkgs)
-                               (let [low-case-search (string/lower-case @*search-key)
+                               (let [low-case-search (string/lower-case search-key)
                                      min-description-search-length 3
                                      max-description-matches 30
                                      fuzzy-title-matches (search/fuzzy-search
-                                                    filtered-pkgs @*search-key
+                                                    filtered-pkgs search-key
                                                     :limit 30
                                                     :extract-fn :title)
                                      precise-description-matches (if (>= (count low-case-search) min-description-search-length)
@@ -1119,41 +1115,42 @@
                                             :latestAt latest-at
                                             :downloads downloads))
                                    %) filtered-pkgs)
-        sorted-plugins     (weighted-sort-by @*sort-by filtered-pkgs)
+        sorted-plugins     (weighted-sort-by sort-by filtered-pkgs)
 
-        fn-query-flag      (fn [] (string/join "_" (map #(str @%) [*filter-by *sort-by *search-key *category])))
+        fn-query-flag      (fn [] (string/join "_" [filter-by sort-by search-key category]))
         str-query-flag     (fn-query-flag)
-        _                  (when (not= str-query-flag @*cached-query-flag)
-                             (when-let [^js list-cnt (rum/deref *list-node-ref)]
+        _                  (when (not= str-query-flag cached-query-flag)
+                             (when-let [^js list-cnt (hooks/deref *list-node-ref)]
                                (set! (.-scrollTop list-cnt) 0))
                              (reset! *current-page 1))
         _                  (reset! *cached-query-flag str-query-flag)
 
         page-total-items   (count sorted-plugins)
         sorted-plugins     (if-not (> page-total-items PER-PAGE-SIZE)
-                             sorted-plugins (take (* @*current-page PER-PAGE-SIZE) sorted-plugins))
+                             sorted-plugins (take (* current-page PER-PAGE-SIZE) sorted-plugins))
         load-more-pages!   #(when (> page-total-items PER-PAGE-SIZE)
                               (when (< (* PER-PAGE-SIZE @*current-page) page-total-items)
                                 (reset! *current-page (inc @*current-page))))]
 
     [:div.cp__plugins-marketplace
+     {:ref *root-ref}
 
      (panel-control-tabs
-      @*search-key *search-key
-      @*category *category
-      @*sort-by *sort-by @*filter-by *filter-by
-      total-nums nil true develop-mode? (::reload state)
+      search-key *search-key
+      category *category
+      sort-by *sort-by filter-by *filter-by
+      total-nums nil true develop-mode? reload-fn
       agent-opts)
 
      (cond
        (not online?)
        [:p.flex.justify-center.pt-20.opacity-50 (svg/offline 30)]
 
-       @*fetching
+       fetching
        [:p.flex.justify-center.py-20 svg/loading]
 
-       @*error
-       [:p.flex.justify-center.pt-20.opacity-50 (t :plugin/remote-error (.-message @*error))]
+       error
+       [:p.flex.justify-center.pt-20.opacity-50 (t :plugin/remote-error (.-message error))]
 
        :else
        [:div.cp__plugins-marketplace-cnt
@@ -1176,51 +1173,51 @@
          (when (seq sorted-plugins)
            (lazy-items-loader load-more-pages!))]])]))
 
-(rum/defcs ^:large-vars/data-var installed-plugins
-  < rum/static rum/reactive
-  plugin-items-list-mixins
-  (rum/local "" ::search-key)
-  (rum/local :default ::filter-by)                        ;; default / enabled / disabled / unpacked / update-available
-  (rum/local :default ::sort-by)
-  (rum/local :plugins ::category)
-  (rum/local nil ::cached-query-flag)
-  (rum/local 1 ::current-page)
-  [state]
-  (let [*list-node-ref        (rum/create-ref)
-        installed-plugins'    (vals (state/sub [:plugin/installed-plugins]))
-        updating              (state/sub :plugin/installing)
-        develop-mode?         (state/sub :ui/developer-mode?)
-        selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)
-        coming-updates        (state/sub :plugin/updates-coming)
-        agent-opts            (state/sub [:electron/user-cfgs :settings/agent])
-        *filter-by            (::filter-by state)
-        *sort-by              (::sort-by state)
-        *search-key           (::search-key state)
-        *category             (::category state)
-        *cached-query-flag    (::cached-query-flag state)
-        *current-page         (::current-page state)
-        default-filter-by?    (= :default @*filter-by)
+(rum/defc ^:large-vars/data-var installed-plugins
+  []
+  (let [*root-ref             (hooks/use-ref nil)
+        *list-node-ref        (hooks/use-ref nil)
+        installed-plugins'    (vals (state/use-sub [:plugin/installed-plugins]))
+        updating              (state/use-sub :plugin/installing)
+        develop-mode?         (state/use-sub :ui/developer-mode?)
+        selected-unpacked-pkg (state/use-sub :plugin/selected-unpacked-pkg)
+        coming-updates        (state/use-sub :plugin/updates-coming)
+        agent-opts            (state/use-sub [:electron/user-cfgs :settings/agent])
+        *filter-by            (hooks/use-memo #(atom :default) [])
+        *sort-by              (hooks/use-memo #(atom :default) [])
+        *search-key           (hooks/use-memo #(atom "") [])
+        *category             (hooks/use-memo #(atom :plugins) [])
+        *cached-query-flag    (hooks/use-memo #(atom nil) [])
+        *current-page         (hooks/use-memo #(atom 1) [])
+        [filter-by]           (hooks/use-atom *filter-by)
+        [sort-by]             (hooks/use-atom *sort-by)
+        [search-key]          (hooks/use-atom *search-key)
+        [category]            (hooks/use-atom *category)
+        [cached-query-flag]   (hooks/use-atom *cached-query-flag)
+        [current-page]        (hooks/use-atom *current-page)
+        _                     (use-plugin-items-list-scroll! *root-ref)
+        default-filter-by?    (= :default filter-by)
         theme-plugins         (filter #(:theme %) installed-plugins')
         normal-plugins        (filter #(not (:theme %)) installed-plugins')
         filtered-plugins      (when (seq installed-plugins')
-                                (if (= @*category :themes) theme-plugins normal-plugins))
+                                (if (= category :themes) theme-plugins normal-plugins))
         total-nums            [(count normal-plugins) (count theme-plugins)]
         filtered-plugins      (if-not default-filter-by?
                                 (filter (fn [it]
                                           (let [disabled (get-in it [:settings :disabled])]
-                                            (case @*filter-by
+                                            (case filter-by
                                               :enabled (not disabled)
                                               :disabled disabled
                                               :unpacked (not (:iir it))
                                               :update-available (state/plugin-update-available? (:id it))
                                               true))) filtered-plugins)
                                 filtered-plugins)
-        filtered-plugins      (if-not (string/blank? @*search-key)
-                                (if-let [author (and (string/starts-with? @*search-key "@")
-                                                     (subs @*search-key 1))]
+        filtered-plugins      (if-not (string/blank? search-key)
+                                (if-let [author (and (string/starts-with? search-key "@")
+                                                     (subs search-key 1))]
                                   (filter #(= author (:author %)) filtered-plugins)
                                   (search/fuzzy-search
-                                   filtered-plugins @*search-key
+                                   filtered-plugins search-key
                                    :limit 30
                                    :extract-fn :name))
                                 filtered-plugins)
@@ -1236,27 +1233,28 @@
                                   (clear-dirties-states!)
                                   filtered-plugins))
 
-        fn-query-flag         (fn [] (string/join "_" (map #(str @%) [*filter-by *sort-by *search-key *category])))
+        fn-query-flag         (fn [] (string/join "_" [filter-by sort-by search-key category]))
         str-query-flag        (fn-query-flag)
-        _                     (when (not= str-query-flag @*cached-query-flag)
-                                (when-let [^js list-cnt (rum/deref *list-node-ref)]
+        _                     (when (not= str-query-flag cached-query-flag)
+                                (when-let [^js list-cnt (hooks/deref *list-node-ref)]
                                   (set! (.-scrollTop list-cnt) 0))
                                 (reset! *current-page 1))
         _                     (reset! *cached-query-flag str-query-flag)
 
         page-total-items      (count sorted-plugins)
         sorted-plugins        (if-not (> page-total-items PER-PAGE-SIZE)
-                                sorted-plugins (take (* @*current-page PER-PAGE-SIZE) sorted-plugins))
+                                sorted-plugins (take (* current-page PER-PAGE-SIZE) sorted-plugins))
         load-more-pages!      #(when (> page-total-items PER-PAGE-SIZE)
                                  (when (< (* PER-PAGE-SIZE @*current-page) page-total-items)
                                    (reset! *current-page (inc @*current-page))))]
 
     [:div.cp__plugins-installed
+     {:ref *root-ref}
      (panel-control-tabs
-      @*search-key *search-key
-      @*category *category
-      @*sort-by *sort-by
-      @*filter-by *filter-by
+      search-key *search-key
+      category *category
+      sort-by *sort-by
+      filter-by *filter-by
       total-nums selected-unpacked-pkg
       false develop-mode? nil
       agent-opts)
@@ -1279,13 +1277,12 @@
          (shui/tabler-icon "list-search" {:size 40})
          [:span.text-sm (t :plugin/empty)]])]]))
 
-(rum/defcs waiting-coming-updates
-  < rum/reactive
-  {:will-mount (fn [s] (state/reset-unchecked-update) s)}
-  [_s]
-  (let [_            (state/sub :plugin/updates-coming)
-        downloading? (state/sub :plugin/updates-downloading?)
-        unchecked    (state/sub :plugin/updates-unchecked)
+(rum/defc waiting-coming-updates
+  []
+  (hooks/use-effect! #(state/reset-unchecked-update) [])
+  (let [_            (state/use-sub :plugin/updates-coming)
+        downloading? (state/use-sub :plugin/updates-downloading?)
+        unchecked    (state/use-sub :plugin/updates-unchecked)
         updates      (state/all-available-coming-updates)]
 
     [:div.cp__plugins-waiting-updates
@@ -1344,7 +1341,6 @@
                   (= (count unchecked) (count updates)))))])]))
 
 (rum/defc plugins-from-file
-  < rum/reactive
   [plugins]
   [:div.cp__plugins-fom-file
    [:h1.mb-4.text-2xl.p-1 (t :plugin.install-from-file/title)]
@@ -1375,7 +1371,7 @@
   (shui/dialog-open! installed-themes
                      {:align :top}))
 
-(rum/defc hook-ui-slot < rum/static
+(rum/defc hook-ui-slot <
   ([type payload] (hook-ui-slot type payload nil #(plugin-handler/hook-plugin-app type % nil)))
   ([type payload opts callback]
    (let [rs      (util/rand-str 8)
@@ -1402,7 +1398,7 @@
                    :ref           *el-ref
                    :on-pointer-down (fn [e] (util/stop-propagation e))})])))
 
-(rum/defc hook-block-slot < rum/static
+(rum/defc hook-block-slot <
   [type block]
   (hook-ui-slot type {} nil #(plugin-handler/hook-plugin-block-slot block %)))
 
@@ -1494,13 +1490,12 @@
   (let [*wrap-el (rum/use-ref nil)]
     [:div.list-wrap {:ref *wrap-el} children]))
 
-(rum/defcs hook-ui-items < rum/reactive
-  < {:key-fn #(identity "plugin-hook-items")}
+(rum/defc hook-ui-items
   "type of :toolbar, :pagebar"
-  [_state type]
-  (when (state/sub [:plugin/installed-ui-items])
+  [type]
+  (when (state/use-sub [:plugin/installed-ui-items])
     (let [toolbar?     (= :toolbar type)
-          pinned-items (state/sub [:plugin/preferences :pinnedToolbarItems])
+          pinned-items (state/use-sub [:plugin/preferences :pinnedToolbarItems])
           pinned-items (and (sequential? pinned-items) (into #{} pinned-items))
           items        (state/get-plugins-ui-items-with-type type)
           items        (sort-by #(:key (second %)) items)]
@@ -1526,7 +1521,7 @@
 
           ;; manage plugin buttons
           (when toolbar?
-            (let [updates-coming (state/sub :plugin/updates-coming)]
+            (let [updates-coming (state/use-sub :plugin/updates-coming)]
               (toolbar-plugins-manager-list updates-coming items)))]]))))
 
 (rum/defc hook-ui-fenced-code
@@ -1707,23 +1702,25 @@
 
     [:<>]))
 
-(rum/defcs updates-notifications < rum/reactive
-  [_]
-  (let [updates-pending (state/sub :plugin/updates-pending)
-        online?         (state/sub :network/online?)
-        auto-checking?  (state/sub :plugin/updates-auto-checking?)
+(rum/defc updates-notifications
+  []
+  (let [updates-pending (state/use-sub :plugin/updates-pending)
+        online?         (state/use-sub :network/online?)
+        auto-checking?  (state/use-sub :plugin/updates-auto-checking?)
         check-pending?  (boolean (seq updates-pending))]
     (updates-notifications-impl check-pending? auto-checking? online?)))
 
-(rum/defcs focused-settings-content
-  < rum/reactive
-  (rum/local (state/sub :plugin/focused-settings) ::cache)
-  [_state title]
-  (let [*cache  (::cache _state)
-        focused (state/sub :plugin/focused-settings)
-        nav?    (state/sub :plugin/navs-settings?)
-        _       (state/sub :plugin/installed-plugins)
-        _       (js/setTimeout #(reset! *cache focused) 100)]
+(rum/defc focused-settings-content
+  [title]
+  (let [focused (state/use-sub :plugin/focused-settings)
+        [cache set-cache!] (hooks/use-state focused)
+        nav?    (state/use-sub :plugin/navs-settings?)
+        _       (state/use-sub :plugin/installed-plugins)]
+    (hooks/use-effect!
+     (fn []
+       (let [timeout-id (js/setTimeout #(set-cache! focused) 100)]
+         #(js/clearTimeout timeout-id)))
+     [focused])
 
     [:div.cp__plugins-settings.cp__settings-main
      [:div.cp__settings-inner.md:flex
@@ -1748,7 +1745,7 @@
       [:article
        [:div.panel-wrap
         {:data-id focused}
-        (when-let [^js pl (and focused (= @*cache focused)
+        (when-let [^js pl (and focused (= cache focused)
                                (plugin-handler/get-plugin-inst focused))]
           (ui/catch-error
             [:p.warning.text-lg.mt-5 (t :plugin/settings-schema-error)]
@@ -1831,7 +1828,7 @@
      (render opts)]
     [:pre (pr-str opts)]))
 
-(rum/defc renderer-resolver < rum/static
+(rum/defc renderer-resolver <
   [nskey']
   (when-let [pid (some-> nskey' (namespace))]
     (let [key (name nskey')
