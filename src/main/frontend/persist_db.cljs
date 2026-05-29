@@ -108,12 +108,12 @@
   [repo remote-client session-id]
   (log/warn :event :db-worker-runtime-recovering :repo repo)
   (-> (p/do!
-        (when remote-client
-          (-> (remote/stop! remote-client)
-              (p/catch (fn [error]
-                         (log/warn :event :db-worker-runtime-stop-error
-                                   :repo repo
-                                   :error error))))))
+       (when remote-client
+         (-> (remote/stop! remote-client)
+             (p/catch (fn [error]
+                        (log/warn :event :db-worker-runtime-stop-error
+                                  :repo repo
+                                  :error error))))))
       (p/then (fn [_]
                 (<release-active-runtime! repo remote-client session-id)))
       (p/then (fn [released?]
@@ -228,52 +228,57 @@
        :else
        (let [session-id (str (random-uuid))]
          (p/let [_ (when @remote-db
-                     (remote/stop! @remote-db))
-                 runtime (ipc/ipc "db-worker-runtime" repo)
-                 client (remote/start! (assoc runtime
-                                              :repo repo
-                                              :event-handler worker-handler/handle
-                                              :on-invoke-success (fn [_method _args _result]
-                                                                   (reset-active-request-failures! repo session-id))
-                                              :on-invoke-failure (fn [_method _args error]
-                                                                   (record-active-request-failure! repo session-id error))
-                                              :on-event-error (fn [error]
-                                                                (log/warn :event :db-worker-event-stream-error
-                                                                          :repo repo
-                                                                          :error error))))]
+                     (remote/stop! @remote-db))]
            (if (and only-if-current? (not (current-for-repo?)))
              (do
                (log/warn :event :db-worker-ensure-remote-stale
-                         :repo repo :phase :after-start)
-               (-> (remote/stop! client)
-                   (p/catch (fn [e]
-                              (log/warn :event :db-worker-stale-client-stop-error
-                                        :repo repo :error e)))
-                   (p/then (fn [_]
-                             (if (same-remote-repo? repo @remote-repo)
-                               (log/info :event :db-worker-stale-release-skipped
-                                         :repo repo
-                                         :reason :runtime-changed)
-                               (ipc/ipc "releaseDbWorkerRuntime" repo))))
-                   (p/catch (fn [e]
-                              (log/warn :event :db-worker-stale-release-error
-                                        :repo repo :error e)))
-                   (p/then (fn [_] nil))))
-             (do
-               (set-remote-runtime! repo client session-id)
-               (p/let [_ (state/<invoke-db-worker :thread-api/set-db-sync-config
-                                                  (current-db-sync-config))
-                       _ (<sync-markdown-mirror-setting! repo)]
-                 (sync-markdown-mirror-setting-watch!)
-                 nil)
-               (ldb/register-transact-fn!
-                (fn remote-transact!
-                  [repo tx-data tx-meta]
-                  (db-transact/transact browser/transact!
-                                        (if (string? repo) repo (state/get-current-repo))
-                                        tx-data
-                                        (assoc tx-meta :client-id (:client-id @state/state)))))
-               client))))))))
+                         :repo repo :phase :before-runtime)
+               nil)
+             (p/let [runtime (ipc/ipc "db-worker-runtime" repo)
+                     client (remote/start! (assoc runtime
+                                                  :repo repo
+                                                  :event-handler worker-handler/handle
+                                                  :on-invoke-success (fn [_method _args _result]
+                                                                       (reset-active-request-failures! repo session-id))
+                                                  :on-invoke-failure (fn [_method _args error]
+                                                                       (record-active-request-failure! repo session-id error))
+                                                  :on-event-error (fn [error]
+                                                                    (log/warn :event :db-worker-event-stream-error
+                                                                              :repo repo
+                                                                              :error error))))]
+               (if (and only-if-current? (not (current-for-repo?)))
+                 (do
+                   (log/warn :event :db-worker-ensure-remote-stale
+                             :repo repo :phase :after-start)
+                   (-> (remote/stop! client)
+                       (p/catch (fn [e]
+                                  (log/warn :event :db-worker-stale-client-stop-error
+                                            :repo repo :error e)))
+                       (p/then (fn [_]
+                                 (if (same-remote-repo? repo @remote-repo)
+                                   (log/info :event :db-worker-stale-release-skipped
+                                             :repo repo
+                                             :reason :runtime-changed)
+                                   (ipc/ipc "releaseDbWorkerRuntime" repo))))
+                       (p/catch (fn [e]
+                                  (log/warn :event :db-worker-stale-release-error
+                                            :repo repo :error e)))
+                       (p/then (fn [_] nil))))
+                 (do
+                   (set-remote-runtime! repo client session-id)
+                   (p/let [_ (state/<invoke-db-worker :thread-api/set-db-sync-config
+                                                      (current-db-sync-config))
+                           _ (<sync-markdown-mirror-setting! repo)]
+                     (sync-markdown-mirror-setting-watch!)
+                     nil)
+                   (ldb/register-transact-fn!
+                    (fn remote-transact!
+                      [repo tx-data tx-meta]
+                      (db-transact/transact browser/transact!
+                                            (if (string? repo) repo (state/get-current-repo))
+                                            tx-data
+                                            (assoc tx-meta :client-id (:client-id @state/state)))))
+                   client))))))))))
 
 (defn <start-runtime!
   []

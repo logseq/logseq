@@ -461,6 +461,57 @@
                        (set! remote/stop! original-stop!)
                        (done)))))))
 
+(deftest electron-ensure-remote-only-if-current-skips-stale-after-stop-before-runtime-ipc
+  (async done
+    (let [ipc-calls (atom [])
+          start-calls (atom [])
+          stop-calls (atom [])
+          ensure-remote! #'persist-db/<ensure-remote!
+          wrapped-worker-a (fn [& _] nil)
+          wrapped-worker-b (fn [& _] nil)
+          graph-a-client (->FakeRemote "logseq_db_graph_a" wrapped-worker-a)
+          graph-b-client (->FakeRemote "logseq_db_graph_b" wrapped-worker-b)
+          original-state @state/state
+          original-ipc ipc/ipc
+          original-start! remote/start!
+          original-stop! remote/stop!]
+      (reset-runtime-state!)
+      (reset! state/state (assoc original-state :git/current-repo "logseq_db_graph_a"))
+      (reset! persist-db/remote-db graph-a-client)
+      (reset! persist-db/remote-repo nil)
+      (reset! state/*db-worker wrapped-worker-a)
+      (set! ipc/ipc (fn [channel repo]
+                      (swap! ipc-calls conj [channel repo])
+                      (p/resolved {:base-url "http://127.0.0.1:9101"
+                                   :auth-token nil
+                                   :repo repo})))
+      (set! remote/start! (fn [{:keys [repo]}]
+                            (swap! start-calls conj repo)
+                            (->FakeRemote repo (fn [& _] nil))))
+      (set! remote/stop! (fn [client]
+                           (swap! stop-calls conj (:repo client))
+                           (swap! state/state assoc :git/current-repo "logseq_db_graph_b")
+                           (reset! persist-db/remote-db graph-b-client)
+                           (reset! persist-db/remote-repo "logseq_db_graph_b")
+                           (reset! state/*db-worker wrapped-worker-b)
+                           (p/resolved true)))
+      (-> (p/let [result (ensure-remote! "logseq_db_graph_a" {:only-if-current? true})]
+            (is (nil? result))
+            (is (= [] @ipc-calls))
+            (is (= [] @start-calls))
+            (is (= ["logseq_db_graph_a"] @stop-calls))
+            (is (= graph-b-client @persist-db/remote-db))
+            (is (= "logseq_db_graph_b" @persist-db/remote-repo))
+            (is (= wrapped-worker-b @state/*db-worker)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (reset! state/state original-state)
+                       (set! ipc/ipc original-ipc)
+                       (set! remote/start! original-start!)
+                       (set! remote/stop! original-stop!)
+                       (done)))))))
+
 (deftest electron-ensure-remote-only-if-current-does-not-release-fresh-same-repo-runtime
   (async done
     (let [ipc-calls (atom [])
@@ -874,15 +925,13 @@
                events (atom [])
                current-repo-updates (atom [])
                notifications (atom [])
-               ipc-calls (atom [])
                originals (install-electron-failover-test-env!
                           {:current-repo "logseq_db_graph_a"
                            :repos (graph-repos "logseq_db_graph_a" "logseq_db_graph_b")
                            :results results
                            :events events
                            :current-repo-updates current-repo-updates
-                           :notifications notifications
-                           :ipc-calls ipc-calls})]
+                           :notifications notifications})]
            (-> (p/let [first-result (<capture-result (persist-db/<list-db))
                        _ (is (= :rejected (:status first-result)))
                        _ (is (= [] @events))
@@ -894,9 +943,7 @@
                  (is (= :rejected (:status third-result)))
                  (is (= [] @current-repo-updates))
                  (is (= [] @events))
-                 (is (= [] @notifications))
-                 (is (= [["db-worker-runtime" "logseq_db_graph_a"]]
-                        @ipc-calls)))
+                 (is (= [] @notifications)))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []
