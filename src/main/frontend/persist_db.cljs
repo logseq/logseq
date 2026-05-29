@@ -91,6 +91,14 @@
         (= :network-error code)
         (= 0 status))))
 
+(defn- event-stream-error-loggable?
+  [failure-count]
+  (and (pos-int? failure-count)
+       (or (and (<= failure-count 64)
+                (zero? (bit-and failure-count (dec failure-count))))
+           (and (> failure-count 64)
+                (zero? (mod failure-count 64))))))
+
 (defn- <release-active-runtime!
   [repo remote-client session-id]
   (if (active-runtime-client? @remote-runtime-state repo session-id remote-client)
@@ -226,7 +234,8 @@
        (p/resolved @remote-db)
 
        :else
-       (let [session-id (str (random-uuid))]
+       (let [session-id (str (random-uuid))
+             event-stream-failures (atom 0)]
          (p/let [_ (when @remote-db
                      (remote/stop! @remote-db))]
            (if (and only-if-current? (not (current-for-repo?)))
@@ -243,9 +252,12 @@
                                                   :on-invoke-failure (fn [_method _args error]
                                                                        (record-active-request-failure! repo session-id error))
                                                   :on-event-error (fn [error]
-                                                                    (log/warn :event :db-worker-event-stream-error
-                                                                              :repo repo
-                                                                              :error error))))]
+                                                                    (let [failure-count (swap! event-stream-failures inc)]
+                                                                      (when (event-stream-error-loggable? failure-count)
+                                                                        (log/warn :event :db-worker-event-stream-error
+                                                                                  :repo repo
+                                                                                  :failures failure-count
+                                                                                  :error error))))))]
                (if (and only-if-current? (not (current-for-repo?)))
                  (do
                    (log/warn :event :db-worker-ensure-remote-stale
@@ -255,15 +267,15 @@
                                   (log/warn :event :db-worker-stale-client-stop-error
                                             :repo repo :error e)))
                        (p/then (fn [_]
-                                 (if (same-remote-repo? repo @remote-repo)
-                                   (log/info :event :db-worker-stale-release-skipped
-                                             :repo repo
-                                             :reason :runtime-changed)
-                                   (ipc/ipc "releaseDbWorkerRuntime" repo))))
+                                 (p/let [_ (if (same-remote-repo? repo @remote-repo)
+                                             (log/info :event :db-worker-stale-release-skipped
+                                                       :repo repo
+                                                       :reason :runtime-changed)
+                                             (ipc/ipc "releaseDbWorkerRuntime" repo))]
+                                   nil)))
                        (p/catch (fn [e]
                                   (log/warn :event :db-worker-stale-release-error
-                                            :repo repo :error e)))
-                       (p/then (fn [_] nil))))
+                                            :repo repo :error e)))))
                  (do
                    (set-remote-runtime! repo client session-id)
                    (p/let [_ (state/<invoke-db-worker :thread-api/set-db-sync-config

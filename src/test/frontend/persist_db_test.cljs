@@ -260,6 +260,12 @@
                          :status :running})
         (reset! state/state original-state)))))
 
+(deftest event-stream-error-loggable-throttles-after-powers-of-two
+  (let [loggable? #'persist-db/event-stream-error-loggable?]
+    (is (false? (loggable? 0)))
+    (is (= #{1 2 4 8 16 32 64 128}
+           (set (filter loggable? (range 1 130)))))))
+
 (deftest electron-fetch-init-data-starts-remote-runtime
   (async done
     (let [ipc-calls (atom [])
