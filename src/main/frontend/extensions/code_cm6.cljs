@@ -2,7 +2,10 @@
   (:require ["@codemirror/state" :refer [EditorState]]
             ["@codemirror/view" :refer [EditorView]]
             [frontend.extensions.code-cm6.api :as api]
-            [frontend.extensions.code-language-registry :as language-registry]))
+            [frontend.extensions.code-language-registry :as language-registry]
+            [goog.object :as gobj]))
+
+(def context-property "__logseqCodeEditorContext")
 
 (defn- assert-parent!
   [parent]
@@ -31,6 +34,15 @@
 (defn get-value
   [context]
   (.toString (editor-doc (:view context))))
+
+(defn default-value
+  [context]
+  (:default-value @(:*state context)))
+
+(defn set-default-value!
+  [context value]
+  (swap! (:*state context) assoc :default-value value)
+  context)
 
 (defn set-value!
   [context value]
@@ -69,6 +81,30 @@
         line-start (.-from line')
         line-end (.-to line')]
     (+ line-start (max 0 (min (or ch 0) (- line-end line-start))))))
+
+(defn offset->line-ch
+  [context offset]
+  (let [^js view (:view context)
+        text-doc (editor-doc view)
+        offset' (clamp-offset view offset)
+        line' (.lineAt text-doc offset')]
+    {:line (dec (.-number line'))
+     :ch (- offset' (.-from line'))}))
+
+(defn selection-range
+  [context]
+  (let [^js view (:view context)
+        main (.. view -state -selection -main)]
+    {:start (offset->line-ch context (.-from main))
+     :end (offset->line-ch context (.-to main))}))
+
+(defn line-text
+  [context line]
+  (let [^js view (:view context)
+        text-doc (editor-doc view)
+        line-number (inc (max 0 (or line 0)))
+        line' (.line text-doc (min line-number (.-lines text-doc)))]
+    (.-text line')))
 
 (defn set-selection-by-offset!
   [context offset]
@@ -116,23 +152,32 @@
 
 (defn destroy!
   [context]
-  (let [^js view (:view context)]
+  (let [^js view (:view context)
+        ^js parent (:parent context)]
+    (when parent
+      (gobj/remove parent context-property))
+    (some-> view .-dom (gobj/remove context-property))
     (.destroy view))
   context)
 
 (defn create-context!
-  [{:keys [parent initial-doc editor-id language-name on-change editable? block-uuid]
+  [{:keys [parent initial-doc editor-id language-name on-change on-selection-change editable? block-uuid]
     :or {initial-doc ""
          editable? true}}]
   (assert-parent! parent)
-  (let [language (resolve-language! (or language-name "plain-text"))
-        *state (atom {:language language
+  (let [language (or (language-registry/language-by-name language-name)
+                     (language-registry/language-by-extension language-name)
+                     (language-registry/plain-text-language))
+        *state (atom {:default-value initial-doc
+                      :language language
                       :plugin-extensions {}
                       :plugin-languages {}})
         update-listener (.of (.-updateListener EditorView)
                              (fn [^js view-update]
                                (when (and (.-docChanged view-update) on-change)
-                                 (on-change (.toString (.. view-update -state -doc))))))
+                                 (on-change (.toString (.. view-update -state -doc))))
+                               (when (and (.-selectionSet view-update) on-selection-change)
+                                 (on-selection-change))))
         editable-extension (.of (.-editable EditorView) editable?)
         read-only-extension (.of (.-readOnly EditorState) (not editable?))
         state (EditorState.create
@@ -142,6 +187,9 @@
                                :parent parent})
         context {:block-uuid block-uuid
                  :editor-id editor-id
+                 :parent parent
                  :*state *state
                  :view view}]
+    (gobj/set parent context-property context)
+    (gobj/set (.-dom view) context-property context)
     context))

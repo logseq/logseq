@@ -17,6 +17,7 @@
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.extensions.fsrs :as fsrs]
+            [frontend.extensions.code-cm6 :as code-editor]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.code :as code-handler]
             [frontend.handler.common.page :as page-common-handler]
@@ -301,20 +302,19 @@
   (code-handler/save-code-editor!))
 
 (defmethod handle :editor/focus-code-editor [[_ editing-block container]]
-  (when-let [^js cm (util/get-cm-instance container)]
-    (when-not (.hasFocus cm)
+  (when-let [editor (util/get-code-editor-context container)]
+    (when-not (code-editor/has-focus? editor)
       (let [cursor-pos (some-> (:editor/cursor-range @state/state) (deref) (count))
             direction (:block.editing/direction editing-block)
             pos (:block.editing/pos editing-block)
             to-line (case direction
-                      :up (.lastLine cm)
+                      :up (code-editor/last-line editor)
                       (case pos
-                        :max (.lastLine cm)
+                        :max (code-editor/last-line editor)
                         0))]
                  ;; move to friendly cursor
-        (doto cm
-          (.focus)
-          (.setCursor to-line (or cursor-pos 0)))))))
+        (code-editor/focus! editor)
+        (code-editor/set-cursor! editor {:line to-line :ch (or cursor-pos 0)})))))
 
 (defmethod handle :editor/toggle-children-number-list [[_ block]]
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]

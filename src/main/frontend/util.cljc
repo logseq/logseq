@@ -1368,6 +1368,21 @@
        (some-> target (.querySelector ".CodeMirror") (.-CodeMirror)))))
 
 #?(:cljs
+   (defn get-code-editor-context
+     [^js target]
+     (when target
+       (or (gobj/get target "__logseqCodeEditorContext")
+           (some-> target
+                   (.closest "[data-logseq-code-editor-root]")
+                   (gobj/get "__logseqCodeEditorContext"))
+           (some-> target
+                   (.querySelector "[data-logseq-code-editor-root]")
+                   (gobj/get "__logseqCodeEditorContext"))
+           (some-> target
+                   (.querySelector ".cm-editor")
+                   (gobj/get "__logseqCodeEditorContext"))))))
+
+#?(:cljs
    (defn rtc-test?
      []
      (string/includes? js/window.location.search "?rtc-test=true")))

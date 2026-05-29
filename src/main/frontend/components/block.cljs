@@ -40,6 +40,8 @@
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.lightbox :as lightbox]
+            [frontend.extensions.code-cm6 :as code-editor]
+            [frontend.extensions.code-language-registry :as code-language-registry]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.sci :as sci]
             [frontend.extensions.video.youtube :as youtube]
@@ -4628,13 +4630,15 @@
               (gp-mldoc/inline->edn title
                                     (mldoc/get-default-config :markdown))))
 
-(defn- get-code-mode-by-lang
-  [lang]
-  (some (fn [m] (when (= (.-name m) lang) (.-mode m))) js/window.CodeMirror.modeInfo))
+(defn- supported-code-languages
+  []
+  (->> (code-language-registry/supported-languages)
+       (map (comp name :id))
+       sort))
 
 (rum/defc src-lang-picker
   [block on-select!]
-  (when-let [langs (map (fn [m] (.-name m)) js/window.CodeMirror.modeInfo)]
+  (when-let [langs (seq (supported-code-languages))]
     (let [options (map (fn [lang] {:label lang :value lang}) langs)]
       (select/select {:items options
                       :input-default-placeholder (t :editor/code-language-placeholder)
@@ -4686,11 +4690,8 @@
                                (shui/popup-show! target
                                                  #(src-lang-picker block
                                                                    (fn [lang ^js _e]
-                                                                     (when-let [^js cm (util/get-cm-instance (util/rec-get-node target "ls-block"))]
-                                                                       (if-let [mode (get-code-mode-by-lang lang)]
-                                                                         (.setOption cm "mode" mode)
-                                                                         (throw (ex-info "code mode not found"
-                                                                                         {:lang lang})))
+                                                                     (when-let [editor (util/get-code-editor-context (util/rec-get-node target "ls-block"))]
+                                                                       (code-editor/set-language! editor lang)
                                                                        (db/transact! [(ldb/kv :logseq.kv/latest-code-lang lang)])
                                                                        (db-property-handler/set-block-property!
                                                                         (:db/id block) :logseq.property.code/lang lang))))
@@ -4702,8 +4703,9 @@
                  :size :sm
                  :on-click (fn [^js e]
                              (util/stop-propagation e)
-                             (when-let [^js cm (util/get-cm-instance (util/rec-get-node (.-target e) "ls-block"))]
-                               (util/copy-to-clipboard! (.getValue cm))
+                             (let [editor (util/get-code-editor-context (util/rec-get-node (.-target e) "ls-block"))
+                                   value (if editor (code-editor/get-value editor) code)]
+                               (util/copy-to-clipboard! value)
                                (notification/show! (t :notification/copied) :success)))}
                 (ui/icon "copy")
                 (t :ui/copy))]

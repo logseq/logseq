@@ -9,7 +9,7 @@
     :extensions #{"txt"}
     :source :plain-text}
    {:id :clojure
-    :names #{"clj" "cljc" "cljs" "clojure" "edn"}
+    :names #{"clj" "cljc" "cljs" "clojure" "clojurescript" "edn"}
     :extensions #{"clj" "cljc" "cljs" "edn"}
     :source :nextjournal
     :package "@nextjournal/lang-clojure"
@@ -150,6 +150,10 @@
 (defn language-by-extension
   [extension]
   (get @extension-index (normalize-key extension)))
+
+(defn plain-text-language
+  []
+  (language-by-name "plain-text"))
 
 (defn legacy-language?
   [language-name]

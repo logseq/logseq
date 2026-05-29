@@ -1,16 +1,13 @@
 (ns frontend.components.lazy-editor
   (:require [clojure.string :as string]
-            [frontend.config :as config]
-            [frontend.handler.plugin :refer [hook-extensions-enhancers-by-key]]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [promesa.core :as p]
             [rum.core :as rum]
             [shadow.lazy :as lazy]))
 
 ;; TODO: Why does shadow fail when code is required
 #_:clj-kondo/ignore
-(def lazy-editor (lazy/loadable frontend.extensions.code/editor))
+(def lazy-editor (lazy/loadable frontend.extensions.code-cm6.editor/editor))
 
 (defonce loaded? (atom false))
 
@@ -34,15 +31,7 @@
      (when-not @loaded?
        (lazy/load lazy-editor
                   (fn []
-                    (if-not @loaded?
-                      (p/finally
-                        (p/all (when-let [enhancers (and config/lsp-enabled?
-                                                         (seq (hook-extensions-enhancers-by-key :codemirror)))]
-                                 (for [{f :enhancer} enhancers]
-                                   (when (fn? f) (f (. js/window -CodeMirror))))))
-                        (fn []
-                          (reset! loaded? true)))
-                      (reset! loaded? true)))))
+                    (reset! loaded? true))))
      state)}
   [config id attr code options]
   (let [loaded?' (rum/react loaded?)

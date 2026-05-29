@@ -2,13 +2,13 @@
   "Codemirror editor related."
   (:require [clojure.string :as string]
             [frontend.db :as db]
+            [frontend.extensions.code-cm6 :as code-editor]
             [frontend.fs :as fs]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [goog.object :as gobj]
             [logseq.common.path :as path]
             [logseq.graph-parser.utf8 :as utf8]))
 
@@ -31,15 +31,11 @@
   (let [{:keys [config state editor]} (get @state/state :editor/code-block-context)]
     (when editor
       (state/set-block-component-editing-mode! false)
-      (.save editor)
-      (let [textarea (.getTextArea editor)
-            ds (.-dataset textarea)
-            value (gobj/get textarea "value")
-            default-value (or (.-v ds) (gobj/get textarea "defaultValue"))
+      (let [value (code-editor/get-value editor)
+            default-value (code-editor/default-value editor)
             block (or (:code-block config) (:block config))]
         (when (not= value default-value)
-          ;; update default value for the editor initial state
-          (set! ds -v value)
+          (code-editor/set-default-value! editor value)
           (cond
             (= :code (:logseq.property.node/display-type block))
             (editor-handler/save-block-if-changed! block value)

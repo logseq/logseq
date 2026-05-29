@@ -89,3 +89,37 @@
 .cm-s-solarized.CodeMirror {
     box-shadow: none;
 }
+
+.logseq-code-editor {
+  width: 100%;
+
+  .cm-editor {
+    height: auto;
+    max-height: 1024px;
+    width: 100%;
+    font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
+    border-radius: 2px;
+    line-height: 1.45em;
+    background: transparent;
+  }
+
+  .cm-scroller {
+    font-family: inherit;
+  }
+
+  .cm-focused {
+    outline: none;
+  }
+}
+
+.cp__fenced-code-block[data-lang="calc"],
+.extensions__code[data-lang="calc"] {
+  .logseq-code-editor .cm-editor,
+  .logseq-code-editor .cm-scroller {
+    max-height: none;
+  }
+
+  .logseq-code-editor .cm-scroller {
+    overflow: visible !important;
+  }
+}
