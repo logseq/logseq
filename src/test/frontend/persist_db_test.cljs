@@ -461,6 +461,55 @@
                        (set! remote/stop! original-stop!)
                        (done)))))))
 
+(deftest electron-ensure-remote-only-if-current-does-not-release-fresh-same-repo-runtime
+  (async done
+    (let [ipc-calls (atom [])
+          start-calls (atom [])
+          stop-calls (atom [])
+          ensure-remote! #'persist-db/<ensure-remote!
+          stale-worker (fn [& _] nil)
+          fresh-worker (fn [& _] nil)
+          fresh-client (->FakeRemote "logseq_db_graph_a" fresh-worker)
+          original-state @state/state
+          original-ipc ipc/ipc
+          original-start! remote/start!
+          original-stop! remote/stop!]
+      (reset-runtime-state!)
+      (reset! state/state (assoc original-state :git/current-repo "logseq_db_graph_a"))
+      (set! ipc/ipc (fn [channel repo]
+                      (swap! ipc-calls conj [channel repo])
+                      (p/resolved {:base-url "http://127.0.0.1:9101"
+                                   :auth-token nil
+                                   :repo repo})))
+      (set! remote/start! (fn [{:keys [repo]}]
+                            (swap! start-calls conj repo)
+                            (swap! state/state assoc :git/current-repo "logseq_db_graph_b")
+                            (->FakeRemote repo stale-worker)))
+      (set! remote/stop! (fn [client]
+                           (swap! stop-calls conj (:repo client))
+                           (swap! state/state assoc :git/current-repo "logseq_db_graph_a")
+                           (reset! persist-db/remote-db fresh-client)
+                           (reset! persist-db/remote-repo "logseq_db_graph_a")
+                           (reset! state/*db-worker fresh-worker)
+                           (p/resolved true)))
+      (-> (p/let [result (ensure-remote! "logseq_db_graph_a" {:only-if-current? true})]
+            (is (nil? result))
+            (is (= [["db-worker-runtime" "logseq_db_graph_a"]]
+                   @ipc-calls))
+            (is (= ["logseq_db_graph_a"] @start-calls))
+            (is (= ["logseq_db_graph_a"] @stop-calls))
+            (is (= fresh-client @persist-db/remote-db))
+            (is (= "logseq_db_graph_a" @persist-db/remote-repo))
+            (is (= fresh-worker @state/*db-worker)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (reset! state/state original-state)
+                       (set! ipc/ipc original-ipc)
+                       (set! remote/start! original-start!)
+                       (set! remote/stop! original-stop!)
+                       (done)))))))
+
 (deftest electron-graph-switch-fetch-init-data-reuses-prefix-equivalent-runtime
   (async done
     (let [ipc-calls (atom [])
@@ -1021,6 +1070,7 @@
                events (atom [])
                current-repo-updates (atom [])
                notifications (atom [])
+               session-id "session-a"
                remote-client (->FakeRemote "logseq_db_graph_a" (fn [& _] nil))
                original-state @state/state
                original-ipc ipc/ipc
@@ -1032,6 +1082,11 @@
            (reset! state/state (assoc original-state :git/current-repo "logseq_db_graph_a"))
            (reset! persist-db/remote-db remote-client)
            (reset! persist-db/remote-repo "logseq_db_graph_a")
+           (reset! persist-db/remote-runtime-state {:repo "logseq_db_graph_a"
+                                                    :client remote-client
+                                                    :session-id session-id
+                                                    :request-failures 3
+                                                    :recovery-triggered? true})
            (set! ipc/ipc (fn [channel repo]
                            (swap! ipc-calls conj [channel repo])
                            (case channel
@@ -1053,7 +1108,7 @@
            (set! notification/show! (fn [content status]
                                       (swap! notifications conj [content status])
                                       nil))
-           (-> (p/let [_ (recovery! "logseq_db_graph_a" remote-client)
+           (-> (p/let [_ (recovery! "logseq_db_graph_a" remote-client session-id)
                        _ (p/delay 0)]
                  (is (= [] @current-repo-updates))
                  (is (= [] @events))
@@ -1085,6 +1140,7 @@
                events (atom [])
                current-repo-updates (atom [])
                notifications (atom [])
+               session-id "session-a"
                wrapped-worker (fn [& _] nil)
                old-client (->FakeRemote "logseq_db_graph_a" (fn [& _] nil))
                new-client (->FakeRemote "logseq_db_graph_a" wrapped-worker)
@@ -1099,6 +1155,11 @@
            (reset! state/state (assoc original-state :git/current-repo "logseq_db_graph_a"))
            (reset! persist-db/remote-db old-client)
            (reset! persist-db/remote-repo "logseq_db_graph_a")
+           (reset! persist-db/remote-runtime-state {:repo "logseq_db_graph_a"
+                                                    :client old-client
+                                                    :session-id session-id
+                                                    :request-failures 3
+                                                    :recovery-triggered? true})
            (set! ipc/ipc (fn [channel repo]
                            (swap! ipc-calls conj [channel repo])
                            (case channel
@@ -1124,7 +1185,7 @@
            (set! notification/show! (fn [content status]
                                       (swap! notifications conj [content status])
                                       nil))
-           (-> (p/let [_ (recovery! "logseq_db_graph_a" old-client)
+           (-> (p/let [_ (recovery! "logseq_db_graph_a" old-client session-id)
                        _ (p/delay 0)]
                  (is (= [["releaseDbWorkerRuntime" "logseq_db_graph_a"]
                          ["db-worker-runtime" "logseq_db_graph_a"]]
@@ -1144,6 +1205,81 @@
                             (reset! state/state original-state)
                             (set! ipc/ipc original-ipc)
                             (set! remote/start! original-start!)
+                            (set! remote/stop! original-stop!)
+                            (set! state/pub-event! original-pub-event!)
+                            (set! state/set-current-repo! original-set-current-repo!)
+                            (set! notification/show! original-notification-show!)
+                            (reset-runtime-state!)
+                            (done)))))))
+
+(deftest electron-list-db-runtime-recovery-does-not-release-fresh-same-repo-runtime
+  (async done
+         (let [recovery! #'persist-db/<trigger-db-worker-runtime-recovery!
+               ipc-calls (atom [])
+               stop-calls (atom [])
+               events (atom [])
+               current-repo-updates (atom [])
+               notifications (atom [])
+               old-session-id "session-a"
+               fresh-session-id "session-b"
+               fresh-worker (fn [& _] nil)
+               old-client (->FakeRemote "logseq_db_graph_a" (fn [& _] nil))
+               fresh-client (->FakeRemote "logseq_db_graph_a" fresh-worker)
+               original-state @state/state
+               original-ipc ipc/ipc
+               original-stop! remote/stop!
+               original-pub-event! state/pub-event!
+               original-set-current-repo! state/set-current-repo!
+               original-notification-show! notification/show!]
+           (reset-runtime-state!)
+           (reset! state/state (assoc original-state :git/current-repo "logseq_db_graph_a"))
+           (reset! persist-db/remote-db old-client)
+           (reset! persist-db/remote-repo "logseq_db_graph_a")
+           (reset! persist-db/remote-runtime-state {:repo "logseq_db_graph_a"
+                                                    :client old-client
+                                                    :session-id old-session-id
+                                                    :request-failures 3
+                                                    :recovery-triggered? true})
+           (set! ipc/ipc (fn [channel repo]
+                           (swap! ipc-calls conj [channel repo])
+                           (p/resolved nil)))
+           (set! remote/stop! (fn [client]
+                                (swap! stop-calls conj (:repo client))
+                                (reset! persist-db/remote-db fresh-client)
+                                (reset! persist-db/remote-repo "logseq_db_graph_a")
+                                (reset! persist-db/remote-runtime-state {:repo "logseq_db_graph_a"
+                                                                         :client fresh-client
+                                                                         :session-id fresh-session-id
+                                                                         :request-failures 0
+                                                                         :recovery-triggered? false})
+                                (reset! state/*db-worker fresh-worker)
+                                (p/resolved true)))
+           (set! state/pub-event! (fn [event]
+                                    (swap! events conj event)
+                                    (p/resolved true)))
+           (set! state/set-current-repo! (fn [repo]
+                                           (swap! current-repo-updates conj repo)
+                                           (swap! state/state assoc :git/current-repo repo)
+                                           nil))
+           (set! notification/show! (fn [content status]
+                                      (swap! notifications conj [content status])
+                                      nil))
+           (-> (p/let [_ (recovery! "logseq_db_graph_a" old-client old-session-id)
+                       _ (p/delay 0)]
+                 (is (= [] @ipc-calls))
+                 (is (= ["logseq_db_graph_a"] @stop-calls))
+                 (is (= [] @current-repo-updates))
+                 (is (= [] @events))
+                 (is (= [] @notifications))
+                 (is (= "logseq_db_graph_a" (state/get-current-repo)))
+                 (is (= fresh-client @persist-db/remote-db))
+                 (is (= "logseq_db_graph_a" @persist-db/remote-repo))
+                 (is (= fresh-worker @state/*db-worker)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (reset! state/state original-state)
+                            (set! ipc/ipc original-ipc)
                             (set! remote/stop! original-stop!)
                             (set! state/pub-event! original-pub-event!)
                             (set! state/set-current-repo! original-set-current-repo!)

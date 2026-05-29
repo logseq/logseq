@@ -67,6 +67,11 @@
   (and (same-remote-repo? repo (:repo state))
        (= session-id (:session-id state))))
 
+(defn- active-runtime-client?
+  [state repo session-id client]
+  (and (active-runtime-session? state repo session-id)
+       (identical? client (:client state))))
+
 (defn- reset-active-request-failures!
   [repo session-id]
   (swap! remote-runtime-state
@@ -86,27 +91,39 @@
         (= :network-error code)
         (= 0 status))))
 
+(defn- <release-active-runtime!
+  [repo remote-client session-id]
+  (if (active-runtime-client? @remote-runtime-state repo session-id remote-client)
+    (p/let [_ (do
+                (clear-remote-runtime!)
+                (ipc/ipc "releaseDbWorkerRuntime" repo))]
+      true)
+    (do
+      (log/info :event :db-worker-runtime-recovery-skipped
+                :repo repo
+                :reason :runtime-changed)
+      (p/resolved false))))
+
 (defn- <trigger-db-worker-runtime-recovery!
-  [repo remote-client]
+  [repo remote-client session-id]
   (log/warn :event :db-worker-runtime-recovering :repo repo)
   (-> (p/do!
-       (when remote-client
-         (-> (remote/stop! remote-client)
-             (p/catch (fn [error]
-                        (log/warn :event :db-worker-runtime-stop-error
-                                  :repo repo
-                                  :error error)))))
-       (when (same-remote-repo? repo @remote-repo)
-         (clear-remote-runtime!))
-       (ipc/ipc "releaseDbWorkerRuntime" repo))
+        (when remote-client
+          (-> (remote/stop! remote-client)
+              (p/catch (fn [error]
+                         (log/warn :event :db-worker-runtime-stop-error
+                                   :repo repo
+                                   :error error))))))
       (p/then (fn [_]
-                (if (same-remote-repo? repo (state/get-current-repo))
+                (<release-active-runtime! repo remote-client session-id)))
+      (p/then (fn [released?]
+                (if (and released?
+                         (same-remote-repo? repo (state/get-current-repo)))
                   (<ensure-remote! repo {:only-if-current? true})
-                  (do
+                  (when-not released?
                     (log/info :event :db-worker-runtime-recovery-skipped
                               :repo repo
-                              :reason :repo-changed)
-                    nil))))
+                              :reason :release-skipped)))))
       (p/then (fn [client]
                 (when client
                   (log/info :event :db-worker-runtime-recovered :repo repo))))
@@ -139,7 +156,7 @@
                      (assoc state :request-failures failures)))
                  state)))
       (when @triggered?
-        (<trigger-db-worker-runtime-recovery! repo @remote-client))
+        (<trigger-db-worker-runtime-recovery! repo @remote-client session-id))
       nil)))
 
 (defn- node-runtime?
@@ -232,7 +249,12 @@
                    (p/catch (fn [e]
                               (log/warn :event :db-worker-stale-client-stop-error
                                         :repo repo :error e)))
-                   (p/then (fn [_] (ipc/ipc "releaseDbWorkerRuntime" repo)))
+                   (p/then (fn [_]
+                             (if (same-remote-repo? repo @remote-repo)
+                               (log/info :event :db-worker-stale-release-skipped
+                                         :repo repo
+                                         :reason :runtime-changed)
+                               (ipc/ipc "releaseDbWorkerRuntime" repo))))
                    (p/catch (fn [e]
                               (log/warn :event :db-worker-stale-release-error
                                         :repo repo :error e)))
