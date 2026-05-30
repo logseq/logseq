@@ -11,6 +11,7 @@ files:
   - "!mobile/**"
   - "!android/**"
   - "!ios/**"
+  - "!js/publishing/**"
   - "!**/node_modules/**/*.map"
   - "!**/node_modules/**/*.d.ts"
   - "!**/node_modules/**/*.d.cts"
