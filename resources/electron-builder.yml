@@ -22,6 +22,8 @@ files:
   - "!**/node_modules/**/*.d.ts"
   - "!**/node_modules/**/*.d.cts"
   - "!**/node_modules/**/*.d.mts"
+  - "!**/node_modules/**/*.{ts,cts,mts}"
+  - "!**/node_modules/**/*.{c,cc,cpp,h,hpp,gyp}"
   - "!**/node_modules/**/*.test-d.ts"
   - "!**/node_modules/**/*.test-d.cts"
   - "!**/node_modules/**/*.test-d.mts"
