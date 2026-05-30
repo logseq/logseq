@@ -12,7 +12,14 @@
 
 (def ^:api static-dirs
   "dirs under static dir to copy over"
-  ["css" "fonts" "icons" "img" "js"])
+  ["css" "icons" "img" "js"])
+
+(defn- remove-js-source-maps
+  [output-static-dir]
+  (let [js-dir (node-path/join output-static-dir "js")]
+    (doseq [file (fs/readdirSync js-dir)]
+      (when (.endsWith file ".map")
+        (fs/rmSync (node-path/join js-dir file) #js {:force true})))))
 
 (defn- default-notification
   [msg]
@@ -24,7 +31,8 @@
   "Moves used js files to the correct dir and removes unused js files"
   [output-static-dir source-static-dir {:keys [dev?]}]
   (let [publishing-dir (node-path/join output-static-dir "js" "publishing")]
-    (p/let [_ (p/all (map (fn [file]
+    (p/let [_ (when-not dev? (remove-js-source-maps output-static-dir))
+            _ (p/all (map (fn [file]
                             (fs/rmSync (node-path/join output-static-dir "js" file) #js {:force true}))
                           js-files))
             _ (when dev?
