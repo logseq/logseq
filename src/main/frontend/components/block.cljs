@@ -4373,6 +4373,38 @@
                                                                          :editing? editing?
                                                                          :selected? selected?))))
 
+(def ^:private block-render-config-keys
+  [:show-cloze?
+   :hide-children?
+   :own-order-list-type
+   :own-order-list-index
+   :original-block
+   :edit?
+   :hide-bullet?
+   :hide-block-control?
+   :ref-matched-children-ids])
+
+(defn- block-changed?
+  [old-block new-block]
+  (not= (:block/tx-id old-block) (:block/tx-id new-block)))
+
+(defn- same-block-render-input?
+  [[old-config old-block] [new-config new-block]]
+  (not (or (block-changed? old-block new-block)
+           (not= (select-keys old-config block-render-config-keys)
+                 (select-keys new-config block-render-config-keys))))))
+
+(defn- memo-rum-component
+  [component same-args?]
+  (let [memo-class (js/React.memo
+                    (fn [^js props]
+                      (apply component (.-args props)))
+                    (fn [^js prev-props ^js next-props]
+                      (same-args? (.-args prev-props)
+                                  (.-args next-props))))]
+    (fn [& args]
+      (js/React.createElement memo-class #js {:args args}))))
+
 (defn- set-collapsed-block!
   [block-id v container-id]
   (if (false? v)
@@ -4381,7 +4413,7 @@
       (state/set-collapsed-block! block-id v container-id))
     (state/set-collapsed-block! block-id v container-id)))
 
-(rum/defc loaded-block-container
+(rum/defc loaded-block-container-inner
   [config block & {:as opts}]
   (db-hooks/query-scope
    (fn []
@@ -4434,6 +4466,9 @@
              (:container-id config)
              "-"
 	             (:block/uuid block))))))))
+
+(def loaded-block-container
+  (memo-rum-component loaded-block-container-inner same-block-render-input?))
 
 (rum/defc block-container
   [config block* & {:as opts}]
@@ -4843,7 +4878,7 @@
   [config col]
   (map #(markup-element-cp config %) col))
 
-(rum/defc block-item
+(rum/defc block-item-inner
   [config item {:keys [top? bottom?]}]
   (let [original-block item
         linked-block (:block/link item)
@@ -4867,6 +4902,9 @@
          (:block/uuid item)
          (when linked-block
            (str "-" (:block/uuid original-block))))))))
+
+(def block-item
+  (memo-rum-component block-item-inner same-block-render-input?))
 
 (rum/defc ^:large-vars/cleanup-todo block-list
   [config blocks]
