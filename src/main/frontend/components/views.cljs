@@ -73,7 +73,7 @@
   (let [container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])]
     (or (:container-id config) (state/get-container-id container-key))))
 
-(rum/defc header-checkbox <
+(rum/defc header-checkbox
   [{:keys [selected-all? selected-some? toggle-selected-all!] :as table}]
   (let [[show? set-show!] (rum/use-state false)]
     [:label.h-8.w-8.flex.items-center.justify-center.cursor-pointer
@@ -92,14 +92,14 @@
        :class (str "flex transition-opacity "
                    (if (or show? selected-all? selected-some?) "opacity-100" "opacity-0"))})]))
 
-(rum/defc header-index <
+(rum/defc header-index
   []
   [:label.h-8.w-6.flex.items-center.justify-center
    {:html-for "header-index"
     :title (t :view.table/row-number)}
    "#"])
 
-(rum/defc row-checkbox <
+(rum/defc row-checkbox
   [{:keys [row-selected? row-toggle-selected! data state data-fns]} row _column]
   (let [id (str (:db/id row) "-" "checkbox")
         [show? set-show!] (rum/use-state false)
@@ -137,7 +137,7 @@
        :class (str "flex transition-opacity "
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
 
-(rum/defc gallery-card-checkbox <
+(rum/defc gallery-card-checkbox
   [{:keys [row-selected? row-toggle-selected! data state data-fns]} row]
   (let [id (str (:db/id row) "-gallery-checkbox")
         checked? (row-selected? row)
@@ -307,7 +307,7 @@
   [opacity]
   (str "h-6 w-6 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 opacity-" opacity))
 
-(rum/defc ^:large-vars/cleanup-todo block-title <
+(rum/defc ^:large-vars/cleanup-todo block-title
   "Used on table view"
   [block* {:keys [create-new-block width row property]}]
   (let [*ref (hooks/use-ref nil)
@@ -903,7 +903,7 @@
         (:block/created-at :block/updated-at) 160
         180))))
 
-(rum/defc add-property-button <
+(rum/defc add-property-button
   []
   [:div.ls-table-header-cell.!border-0
    (shui/button
@@ -912,7 +912,7 @@
     (ui/icon "plus")
     (t :view/new-property))])
 
-(rum/defc action-bar <
+(rum/defc action-bar
   [table selected-rows {:keys [on-delete-rows]}]
   (shui/table-actions
    {}
@@ -1225,7 +1225,7 @@
                                nil))))
      body)))
 
-(rum/defc table-row-inner <
+(rum/defc table-row-inner
   [{:keys [row-selected?] :as table} row props {:keys [show-add-property? scrolling?]}]
   (let [*ref (hooks/use-ref nil)
         pinned-columns (get-in table [:state :pinned-columns])
@@ -1379,7 +1379,7 @@
    {:value :custom-date
     :label (t :view.filter/custom-date)}])
 
-(rum/defc ^:large-vars/cleanup-todo filter-property <
+(rum/defc ^:large-vars/cleanup-todo filter-property
   [view-entity columns {:keys [data-fns] :as table} opts]
   (let [[property set-property!] (rum/use-state nil)
         [values set-values!] (rum/use-state nil)
@@ -1494,7 +1494,7 @@
                        (t :view.filter/is-not-empty)])]
         (select/select option)))))
 
-(rum/defc filter-properties <
+(rum/defc filter-properties
   [view-entity columns table opts]
   (shui/button
    {:variant "ghost"
@@ -1563,7 +1563,7 @@
     ;; FIXME: should be a valid date number
     (when (number? value) value)))
 
-(rum/defc filter-operator <
+(rum/defc filter-operator
   [property operator filters set-filters! idx]
   (shui/dropdown-menu
    (shui/dropdown-menu-trigger
@@ -1590,7 +1590,7 @@
                                                [property operator]))))))))}
          (operator->text operator)))))))
 
-(rum/defc between <
+(rum/defc between
   [_property [start end] filters set-filters! idx]
   (let [set-filter-range! (fn [value]
                             (set-filters!
@@ -1626,7 +1626,7 @@
                      (set-filter-range! value)))
        :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})]))
 
-(rum/defc ^:large-vars/cleanup-todo filter-value-select <
+(rum/defc ^:large-vars/cleanup-todo filter-value-select
   [view-entity {:keys [data-fns] :as table} property value operator idx opts]
   (let [type (:logseq.property/type property)
         property-ident (:db/ident property)]
@@ -1745,7 +1745,7 @@
            :else
            (t :view/all))])))))
 
-(rum/defc filter-value <
+(rum/defc filter-value
   [view-entity table property operator value filters set-filters! idx opts]
   (let [number-operator? (string/starts-with? (name operator) "number-")
         set-filter-value! (fn [input-value number-value]
@@ -1774,7 +1774,7 @@
 
       (filter-value-select view-entity table property value operator idx opts))))
 
-(rum/defc filters-row <      ;
+(rum/defc filters-row
   [view-entity {:keys [data-fns columns] :as table} opts]
   (let [filters (get-in table [:state :filters])
         {:keys [set-filters!]} data-fns]
@@ -1824,7 +1824,7 @@
              (shui/select-item {:value "and"} (t :view.filter/match-all-filters))
              (shui/select-item {:value "or"} (t :view.filter/match-any-filter)))))])])))
 
-(rum/defc new-record-button <
+(rum/defc new-record-button
   [table view-entity]
   (let [asset? (and (:logseq.property/built-in? view-entity)
                     (= (:block/name view-entity) "asset"))]
@@ -1839,7 +1839,7 @@
       (ui/icon (if asset? "upload" "plus")))
      [:div (t :node/new)])))
 
-(rum/defc add-new-row <
+(rum/defc add-new-row
   [view-entity table]
   [:div.py-1.px-2.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm.border-b
    {:on-click (fn [_]
@@ -1931,7 +1931,7 @@
     (let [item' (cond (map? item) item (number? item) {:db/id item})]
       (item-render item'))))
 
-(rum/defc table-body <
+(rum/defc table-body
   [table option rows *scroller-ref set-items-rendered!]
   (let [[scrolling? set-scrolling!] (hooks/use-state false)]
     (when (seq rows)
@@ -2211,7 +2211,7 @@
                    row-selection
                    *scroller-ref)]))
 
-(rum/defc grouped-gallery-view <
+(rum/defc grouped-gallery-view
   [table-map table option view-entity groups row-selection group-by-property group-by-property-ident *scroller-ref]
   (let [gallery-rows (grouped-gallery-row-ids groups)
         gallery-action-table (shui/table-option
@@ -2490,7 +2490,7 @@
                      (set-views! (concat views [view]))))}
       (ui/icon "plus" {:size 15}))]))))
 
-(rum/defc view-head <
+(rum/defc view-head
   [view-parent view-entity table columns input sorting
    set-input! add-new-object!
    {:keys [view-feature-type title-key additional-actions]
@@ -2581,7 +2581,7 @@
       [:div.flex.flex-1.flex-col  title (body-fn)]
       (ui/foldable title body-fn {:title-trigger? false}))))
 
-(rum/defc ^:large-vars/cleanup-todo view-inner <
+(rum/defc ^:large-vars/cleanup-todo view-inner
   [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! display-type group-by-property-ident config] :as option*}
    *scroller-ref]
   (let [journals? (:journals? config)
@@ -2892,7 +2892,7 @@
            [data-changes-version] (hooks/use-atom data-changes-version*)]
        (view-aux view (assoc option :data-changes-version data-changes-version))))))
 
-(rum/defc view <
+(rum/defc view
   [{:keys [view-parent view-feature-type view-entity] :as option}]
   (let [[views set-views!] (hooks/use-state nil)
         [view-entity set-view-entity!] (hooks/use-state view-entity)

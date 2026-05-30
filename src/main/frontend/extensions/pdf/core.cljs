@@ -61,7 +61,7 @@
      [viewer ref-hl])
     nil))
 
-(rum/defc pdf-page-finder <
+(rum/defc pdf-page-finder
   [^js viewer]
   (hooks/use-effect!
    (fn []

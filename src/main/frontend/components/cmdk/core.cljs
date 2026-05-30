@@ -825,7 +825,7 @@
     (when-let [row-el (.closest item-el "[data-item-index]")]
       (scroll-to-highlight! state row-el))))
 
-(rum/defc render-result-list-item <
+(rum/defc render-result-list-item
   [state group highlighted? mouse-mode? item hls-page? text input]
   (let [item-idx (:item-index item)
         scroll-root @(::scroll-container-ref state)

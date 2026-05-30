@@ -58,7 +58,7 @@
               full-data (:full-data table)]
           (set-data! (vec (concat full-data ids))))))))
 
-(rum/defc class-objects-inner <
+(rum/defc class-objects-inner
   [config class properties]
   (let [*ref (hooks/use-ref nil)
         ;; Properties can be nil for published private graphs
@@ -135,7 +135,7 @@
     (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 {:container-id :unknown-container})
     block))
 
-(rum/defc property-related-objects-inner <
+(rum/defc property-related-objects-inner
   [config property properties]
   (let [tags? (= :block/tags (:db/ident property))
         columns (views/build-columns config properties

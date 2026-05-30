@@ -3142,7 +3142,7 @@
 
       (block-content-inner config block ast-body plugin-slotted? collapsed? block-ref-with-title?)]]))
 
-(rum/defc block-refs-count <
+(rum/defc block-refs-count
   [block block-refs-count' *hide-block-refs?]
   (when (> block-refs-count' 0)
     [:div.h-6
@@ -4660,7 +4660,7 @@
                             (on-select! lang e)))
                         (shui/popup-hide!))}))))
 
-(rum/defc src-cp <
+(rum/defc src-cp
   [config options]
   (let [block (or (:code-block config) (:block config))
         container-id (:container-id config)

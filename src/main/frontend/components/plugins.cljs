@@ -227,7 +227,7 @@
     (< num 1000) (str num)
     (>= num 1000) (str (.toFixed (/ num 1000) precision) "k")))
 
-(rum/defc card-ctls-of-market <
+(rum/defc card-ctls-of-market
   [item stat installed? installing-or-updating?]
   [:div.ctl
    [:ul.l.flex.items-center
@@ -263,7 +263,7 @@
                   (.set settings "disabled-since" (js/Date.now)))))
       (p/catch #(js/console.error %))))
 
-(rum/defc card-ctls-of-installed <
+(rum/defc card-ctls-of-installed
   [id name url sponsors unpacked? disabled?
    installing-or-updating? has-other-pending?
    new-version item]
@@ -353,7 +353,7 @@
                             (fn [_]
                               (set-load-failed! true)))))
 
-(rum/defc plugin-item-card <
+(rum/defc plugin-item-card
   [t {:keys [id name title version url description author icon iir repo sponsors webPkg] :as item}
    disabled? market? *search-key has-other-pending?
    installing-or-updating? installed? stat coming-update]
@@ -424,7 +424,7 @@
          id name url sponsors unpacked? disabled?
          installing-or-updating? has-other-pending? new-version item))]]))
 
-(rum/defc panel-tab-search <
+(rum/defc panel-tab-search
   [search-key *search-key *search-ref]
   [:div.search-ctls
    [:small.absolute.s1
@@ -785,7 +785,7 @@
        false
        DISABLED-PLUGINS-CLEANUP-NOTIFICATION-ID))))
 
-(rum/defc ^:large-vars/cleanup-todo panel-control-tabs <
+(rum/defc ^:large-vars/cleanup-todo panel-control-tabs
   [search-key *search-key category *category
    sort-by *sort-by filter-by *filter-by total-nums
    selected-unpacked-pkg market? develop-mode?
@@ -1371,7 +1371,7 @@
   (shui/dialog-open! installed-themes
                      {:align :top}))
 
-(rum/defc hook-ui-slot <
+(rum/defc hook-ui-slot
   ([type payload] (hook-ui-slot type payload nil #(plugin-handler/hook-plugin-app type % nil)))
   ([type payload opts callback]
    (let [rs      (util/rand-str 8)
@@ -1398,7 +1398,7 @@
                    :ref           *el-ref
                    :on-pointer-down (fn [e] (util/stop-propagation e))})])))
 
-(rum/defc hook-block-slot <
+(rum/defc hook-block-slot
   [type block]
   (hook-ui-slot type {} nil #(plugin-handler/hook-plugin-block-slot block %)))
 
@@ -1828,7 +1828,7 @@
      (render opts)]
     [:pre (pr-str opts)]))
 
-(rum/defc renderer-resolver <
+(rum/defc renderer-resolver
   [nskey']
   (when-let [pid (some-> nskey' (namespace))]
     (let [key (name nskey')

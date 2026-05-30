@@ -753,7 +753,7 @@
         (distinct (apply concat result))))
     (db-async/<get-property-values (:db/ident property))))
 
-(rum/defc ^:large-vars/cleanup-todo select-node <
+(rum/defc ^:large-vars/cleanup-todo select-node
   [property
    {:keys [block multiple-choices? dropdown? input-opts on-input add-new-choice! target] :as opts}
    result]
@@ -975,7 +975,7 @@
                                    results))))]
     (select-aux block property opts')))
 
-(rum/defc property-value-select-node <
+(rum/defc property-value-select-node
   [block property opts
    {:keys [*show-new-property-config?]}]
   (let [[initial-choices set-initial-choices-state!] (hooks/use-state nil)
