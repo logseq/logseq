@@ -559,6 +559,7 @@
         [refs-count] (hooks/use-atom *refs-count)]
     (hooks/use-effect!
      (fn []
+       (reset! *loading? true)
        (when (:block.temp/load-status page-in-db)
          (reset! *loading? false))
        (p/let [repo (state/get-current-repo)
@@ -578,7 +579,7 @@
                (route-handler/redirect-to-page! (str page-uuid) {:push false})
                (route-handler/update-page-title-and-label! (state/get-route-match))))))
        #(state/set-state! :editor/virtualized-scroll-fn nil))
-     [])
+     [page-id-uuid-or-name preview-or-sidebar? (:tag-dialog? option)])
     (when (and page (not loading?))
       (page-inner (assoc option
                          :page page
@@ -587,7 +588,9 @@
 (rum/defc page-cp
   [option]
   (let [route-match (state/use-sub :route-match)
-        page-name (or (:page-name option) (get-page-name route-match))]
+        page-name (or (:page-name option)
+                      (get-page-name option)
+                      (get-page-name route-match))]
     (rum/with-key
       (page-aux (assoc option :page-name page-name))
       (str

@@ -53,7 +53,7 @@
 
 (rum/defc page-cp
   [repo page-name]
-  (page/page-cp {:parameters {:path {:name page-name}}
+  (page/page-cp {:page-name page-name
                  :sidebar?   true
                  :scroll-container (get-scrollable-container)
                  :repo repo}))
