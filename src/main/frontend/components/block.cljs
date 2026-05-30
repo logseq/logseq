@@ -4470,16 +4470,33 @@
 (def loaded-block-container
   (memo-rum-component loaded-block-container-inner same-block-render-input?))
 
+(defn- block-state-key
+  [block]
+  [(or (:db/id block) (:block/uuid block))
+   (:block/tx-id block)])
+
 (rum/defc block-container
   [config block* & {:as opts}]
-  (let [[block set-block!] (hooks/use-state block*)
+  (let [[loaded-block set-block!] (hooks/use-state block*)
         id (or (:db/id block*) (:block/uuid block*))
+        input-block-state-key (block-state-key block*)
+        last-input-block-state-key-ref (hooks/use-ref input-block-state-key)
+        input-block-changed? (not= input-block-state-key
+                                   (hooks/deref last-input-block-state-key-ref))
+        block (if input-block-changed? block* loaded-block)
         temporary-collapsed-state (state/get-block-collapsed (:block/uuid block)
                                                              (:container-id config))
         ignore-block-collapsed? (:ignore-block-collapsed? config)
         load-children? (editor-handler/load-children? block
                                                       temporary-collapsed-state
                                                       ignore-block-collapsed?)]
+    (hooks/use-effect!
+     (fn []
+       (when input-block-changed?
+         (hooks/set-ref! last-input-block-state-key-ref input-block-state-key)
+         (set-block! block*))
+       nil)
+     input-block-state-key)
     (hooks/use-effect!
      (fn []
        (when-not (or (:page-title? config) (:view? config))
