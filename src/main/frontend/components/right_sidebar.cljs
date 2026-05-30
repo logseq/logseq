@@ -512,7 +512,7 @@
 
 (rum/defc sidebar
   []
-  (let [blocks (state/sub-right-sidebar-blocks)
+  (let [blocks (state/use-right-sidebar-blocks)
         blocks (if (empty? blocks)
                  [[(state/get-current-repo) "contents" :contents nil]]
                  blocks)

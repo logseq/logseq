@@ -1920,6 +1920,13 @@ Similar to re-frame subscriptions"
     (->> (sub :sidebar/blocks)
          (filter #(= (first %) current-repo)))))
 
+(defn use-right-sidebar-blocks
+  []
+  (let [current-repo (use-sub :git/current-repo)
+        blocks (use-sub :sidebar/blocks)]
+    (when current-repo
+      (filter #(= (first %) current-repo) blocks))))
+
 (defn get-current-editor-container-id
   []
   @(:editor/container-id @state))

@@ -412,7 +412,7 @@
         left-sidebar-open? (state/use-sub :ui/left-sidebar-open?)
         wide-mode? (state/use-sub :ui/wide-mode?)
         ls-block-hl-colored? (state/use-sub :pdf/block-highlight-colored?)
-        right-sidebar-blocks (state/sub-right-sidebar-blocks)
+        right-sidebar-blocks (state/use-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
         margin-less-pages? (boolean (#{:graph} route-name))
         db-restoring? (state/use-sub :db/restoring?)

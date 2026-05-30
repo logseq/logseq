@@ -569,7 +569,7 @@
           util/web-platform?
           (let [file-name (block-asset/link-file-name asset-block ext)]
             [:a.asset-ref
-	             {:href src
+                     {:href src
               :download file-name}
              file-name])
 
@@ -2709,7 +2709,7 @@
     [:div.block-tag
      {:key (str "tag-" (:db/id tag))
       :class (str (when private-tag? "private-tag ")
-	                  (when hover?
+                          (when hover?
                     (if private-tag? "!px-1" "!pl-0")))
       :on-mouse-over #(reset! *hover-container? true)
       :on-mouse-out #(reset! *hover-container? false)}
@@ -2743,7 +2743,7 @@
                                     :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
                                    (t :block/remove-tag)))])
                              popup-opts))}
-	        (if (and hover? (not private-tag?) (not config/publishing?))
+                (if (and hover? (not private-tag?) (not config/publishing?))
           [:a.inline-flex.text-muted-foreground
              {:title (t :block/remove-this-tag)
             :style {:margin-top 1
@@ -2913,7 +2913,7 @@
            :on-click open-picker!
            :on-pointer-down (fn [e]
                               (util/stop e))}
-	         (ui/icon "plus" {:size 14})))])))))
+                 (ui/icon "plus" {:size 14})))])))))
 
 (rum/defc status-history-cp
   [status-history]
@@ -4392,7 +4392,7 @@
   [[old-config old-block] [new-config new-block]]
   (not (or (block-changed? old-block new-block)
            (not= (select-keys old-config block-render-config-keys)
-                 (select-keys new-config block-render-config-keys))))))
+                 (select-keys new-config block-render-config-keys)))))
 
 (defn- memo-rum-component
   [component same-args?]
@@ -4465,7 +4465,7 @@
         (str "block-inner-"
              (:container-id config)
              "-"
-	             (:block/uuid block))))))))
+                     (:block/uuid block))))))))
 
 (def loaded-block-container
   (memo-rum-component loaded-block-container-inner same-block-render-input?))
@@ -5085,7 +5085,7 @@
                           :blocks-node-id id
                           :defer-children-ready-index* *defer-children-ready-index
                           :defer-children-render-complete-by-root* *defer-children-render-complete-by-root
-	                          :container-id container-id)
+                                  :container-id container-id)
                    blocks)])))
 
 (rum/defc breadcrumb-with-container
@@ -5110,11 +5110,11 @@
                    {:show-page? false
                     :navigating-block *navigating-block
                     :indent? true}))
-	     (let [config' (assoc config
-	                          :breadcrumb-show? false
-	                          :navigating-block *navigating-block
-	                          :navigated? navigated?)]
-		       (blocks-container config' blocks))]))))
+             (let [config' (assoc config
+                                  :breadcrumb-show? false
+                                  :navigating-block *navigating-block
+                                  :navigated? navigated?)]
+                       (blocks-container config' blocks))]))))
 
 (rum/defc ref-block-container
   [config [page page-blocks]]
