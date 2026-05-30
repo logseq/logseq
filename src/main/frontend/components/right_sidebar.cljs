@@ -90,82 +90,85 @@
                                                                      [repo new-value block-type]))})
     (str init-key)))
 
+(defn- build-sidebar-item
+  [repo idx db-id block-type *db-id init-key]
+  (let [lookup (cond
+                 (integer? db-id) db-id
+                 (uuid? db-id) [:block/uuid db-id]
+                 :else nil)
+        entity (when lookup (db/entity repo lookup))
+        page? (ldb/page? entity)
+        block-render (fn []
+                       (when entity
+                         (if page?
+                           [[:.flex.items-center.page-title.gap-1
+                             (icon/get-node-icon-cp entity {:class "text-md"})
+                             [:span.overflow-hidden.text-ellipsis (:block/title entity)]]
+                            (page-cp repo (str (:block/uuid entity)))]
+                           (block-with-breadcrumb repo entity idx [repo db-id block-type] false))))]
+    (case (keyword block-type)
+      :contents
+      (when-let [page (db/get-page "Contents")]
+        [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :page/contents)]
+         (page-cp repo (str (:block/uuid page)))])
+
+      :help
+      [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :nav/help)] (onboarding/help)]
+
+      :page-graph
+      [[:.flex.items-center (ui/icon "hierarchy" {:class "text-md mr-2"}) (t :graph.page/title)]
+       (page/page-graph)]
+
+      :block-ref
+      (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
+        (when-let [block (db/entity repo lookup)]
+          [(t :reference/blocks)
+           (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
+
+      :block
+      (block-render)
+
+      :page
+      (block-render)
+
+      :plugin
+      [[:.flex.items-center.page-title
+        (ui/icon "puzzle" {:class "text-md mr-2"})
+        [:h3 {:id db-id} (str db-id)]]
+       (plugins/renderer-resolver db-id)]
+
+      :search
+      [[:.flex.items-center.page-title
+        (ui/icon "search" {:class "text-md mr-2"})
+        (search-title *db-id)]
+       (sidebar-search repo block-type init-key db-id *db-id)]
+
+      :shortcut-settings
+      [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help.shortcuts/label)]
+       (shortcut-settings)]
+
+      :rtc
+      [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) RTC"]
+       (rtc-debug-ui/rtc-debug-ui)]
+
+      :undo-redo
+      [[:.flex.items-center (ui/icon "rotate-clockwise" {:class "text-md mr-2"}) "(Dev) Undo/Redo"]
+       (undo-redo-debug-ui/undo-redo-debug-ui)]
+
+      :profiler
+      [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) Profiler"]
+       (profiler/profiler)]
+
+      ["" [:span]])))
+
 (defn- <build-sidebar-item
   [repo idx db-id block-type *db-id init-key]
-  (->
-   (p/do!
-    (when-not (contains? #{:contents :search} block-type)
-      (db-async/<get-block repo db-id))
-    (let [lookup (cond
-                   (integer? db-id) db-id
-                   (uuid? db-id) [:block/uuid db-id]
-                   :else nil)
-          entity (when lookup (db/entity repo lookup))
-          page? (ldb/page? entity)
-          block-render (fn []
-                         (when entity
-                           (if page?
-                             [[:.flex.items-center.page-title.gap-1
-                               (icon/get-node-icon-cp entity {:class "text-md"})
-                               [:span.overflow-hidden.text-ellipsis (:block/title entity)]]
-                              (page-cp repo (str (:block/uuid entity)))]
-                             (block-with-breadcrumb repo entity idx [repo db-id block-type] false))))]
-      (case (keyword block-type)
-        :contents
-        (when-let [page (db/get-page "Contents")]
-          [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :page/contents)]
-           (page-cp repo (str (:block/uuid page)))])
-
-        :help
-        [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :nav/help)] (onboarding/help)]
-
-        :page-graph
-        [[:.flex.items-center (ui/icon "hierarchy" {:class "text-md mr-2"}) (t :graph.page/title)]
-         (page/page-graph)]
-
-        :block-ref
-        (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
-          (when-let [block (db/entity repo lookup)]
-            [(t :reference/blocks)
-             (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
-
-        :block
-        (block-render)
-
-        :page
-        (block-render)
-
-        :plugin
-        [[:.flex.items-center.page-title
-          (ui/icon "puzzle" {:class "text-md mr-2"})
-          [:h3 {:id db-id} (str db-id)]]
-         (plugins/renderer-resolver db-id)]
-
-        :search
-        [[:.flex.items-center.page-title
-          (ui/icon "search" {:class "text-md mr-2"})
-          (search-title *db-id)]
-         (sidebar-search repo block-type init-key db-id *db-id)]
-
-        :shortcut-settings
-        [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help.shortcuts/label)]
-         (shortcut-settings)]
-
-        :rtc
-        [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) RTC"]
-         (rtc-debug-ui/rtc-debug-ui)]
-
-        :undo-redo
-        [[:.flex.items-center (ui/icon "rotate-clockwise" {:class "text-md mr-2"}) "(Dev) Undo/Redo"]
-         (undo-redo-debug-ui/undo-redo-debug-ui)]
-
-        :profiler
-        [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) Profiler"]
-         (profiler/profiler)]
-
-        ["" [:span]])))
-   (p/catch (fn [error]
-              (js/console.error error)))))
+  (-> (p/do!
+       (when-not (contains? #{:contents :search} block-type)
+         (db-async/<get-block repo db-id))
+       (build-sidebar-item repo idx db-id block-type *db-id init-key))
+      (p/catch (fn [error]
+                 (js/console.error error)))))
 
 (defonce *drag-to
   (atom nil))
@@ -239,7 +242,7 @@
 
 (rum/defc sidebar-item-inner
   [db-id {:keys [repo idx block-type collapsed? drag-from drag-to block-count *db-id init-key]}]
-  (let [[item set-item!] (hooks/use-state nil)]
+  (let [[item set-item!] (hooks/use-state #(build-sidebar-item repo idx db-id block-type *db-id init-key))]
     (hooks/use-effect!
      (fn []
        (p/let [item (<build-sidebar-item repo idx db-id block-type *db-id init-key)]
