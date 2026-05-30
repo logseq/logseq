@@ -619,15 +619,14 @@
 
 (rum/defc page-graph-aux
   [page opts]
-  (let [[graph set-graph!] (hooks/use-state nil)
+  (let [[graph set-graph!] (hooks/use-state {:nodes [] :links []})
         dark? (contains? #{"dark" :dark} (:theme opts))]
     (hooks/use-effect!
      (fn []
        (p/let [result (state/<invoke-db-worker :thread-api/build-graph (state/get-current-repo) opts)]
          (set-graph! result)))
      [opts])
-    (when (seq (:nodes graph))
-      (page-graph-inner page graph dark?))))
+    (page-graph-inner page graph dark?)))
 
 (rum/defc page-graph
   []

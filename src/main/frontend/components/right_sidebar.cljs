@@ -224,9 +224,18 @@
    [:.sidebar-item-drop-area-overlay.bottom
     {:on-drag-enter #(reset! *drag-to idx)}]])
 
-(rum/defc inner-component
+(rum/defc inner-component-inner
   [component _should-update?]
   component)
+
+(def inner-component
+  (let [memo-class (js/React.memo
+                    (fn [^js props]
+                      (apply inner-component-inner (.-args props)))
+                    (fn [_prev-props ^js next-props]
+                      (not (last (.-args next-props)))))]
+    (fn [& args]
+      (js/React.createElement memo-class #js {:args args}))))
 
 (rum/defc sidebar-item-inner
   [db-id {:keys [repo idx block-type collapsed? drag-from drag-to block-count *db-id init-key]}]
@@ -447,14 +456,8 @@
 
 (rum/defc sidebar-inner
   [repo t blocks]
-  (let [[anim-finished? set-anim-finished!] (hooks/use-state false)
-        block-count (count blocks)
+  (let [block-count (count blocks)
         developer-mode? (state/use-sub [:ui/developer-mode?])]
-    (hooks/use-effect!
-     (fn []
-       (let [timeout (js/setTimeout #(set-anim-finished! true) 300)]
-         #(js/clearTimeout timeout)))
-     [])
     [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
 
      [:div.cp__right-sidebar-scrollable
@@ -502,13 +505,10 @@
             label]])]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.px-2
-       (if anim-finished?
-         (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
-           (rum/with-key
-             (sidebar-item repo idx db-id block-type block-count)
-             (str "sidebar-block-" db-id)))
-         [:div.p-4
-          [:span.font-medium.opacity-50 (t :ui/loading)]])]]]))
+       (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
+         (rum/with-key
+           (sidebar-item repo idx db-id block-type block-count)
+           (str "sidebar-block-" db-id)))]]]))
 
 (rum/defc sidebar
   []
