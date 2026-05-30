@@ -12,6 +12,7 @@ files:
   - "!android/**"
   - "!ios/**"
   - "!js/publishing/**"
+  - "!js/sqlite3.wasm"
   - "!**/node_modules/**/*.map"
   - "!**/node_modules/**/*.d.ts"
   - "!**/node_modules/**/*.d.cts"
