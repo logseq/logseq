@@ -30,9 +30,11 @@
 (defonce FILE_LSP_SCHEME "lsp")
 (defonce FILE_ASSETS_SCHEME "assets")
 (defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
-(defonce STATIC_URL (str LSP_PROTOCOL "logseq.io/"))
-(defonce PLUGIN_URL (str STATIC_URL "plugins/"))
-(defonce EXTERNAL_PLUGIN_URL (str STATIC_URL "external/"))
+(defonce STATIC_URL (str LSP_PROTOCOL "logseq.com/"))
+(defonce PLUGIN_URL (str LSP_PROTOCOL "logseq.io/plugins/"))
+(defonce EXTERNAL_PLUGIN_URL (str LSP_PROTOCOL "logseq.io/external/"))
+(defonce HOST_PLUGIN_URL (str STATIC_URL "plugins/"))
+(defonce HOST_EXTERNAL_PLUGIN_URL (str STATIC_URL "external/"))
 (defonce PLUGINS_ROOT (.join node-path (.homedir os) ".logseq/plugins"))
 
 (defonce *setup-fn (volatile! nil))
@@ -98,8 +100,10 @@
    (fn [^js request callback]
      (let [url (.-url request)
            url' ^js (js/URL. url)
-           plugin-url? (string/starts-with? url PLUGIN_URL)
-           external-plugin-url? (string/starts-with? url EXTERNAL_PLUGIN_URL)
+           plugin-url? (or (string/starts-with? url PLUGIN_URL)
+                           (string/starts-with? url HOST_PLUGIN_URL))
+           external-plugin-url? (or (string/starts-with? url EXTERNAL_PLUGIN_URL)
+                                    (string/starts-with? url HOST_EXTERNAL_PLUGIN_URL))
            path' (.-pathname url')
            path' (cond
                    plugin-url?

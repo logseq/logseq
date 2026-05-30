@@ -26,7 +26,7 @@
   (server-list/path root-dir))
 
 (def ^:private cors-headers
-  #js {"Access-Control-Allow-Origin" "lsp://logseq.io"
+  #js {"Access-Control-Allow-Origin" "lsp://logseq.com"
        "Access-Control-Allow-Methods" "GET,POST,OPTIONS"
        "Access-Control-Allow-Headers" "Content-Type,Authorization"})
 

@@ -12,6 +12,8 @@ import {
   PROTOCOL_FILE,
   URL_LSP,
   URL_LSP_EXTERNAL,
+  URL_LSP_HOST,
+  URL_LSP_HOST_EXTERNAL,
   safetyPathJoin,
   path,
   safetyPathNormalize,
@@ -466,11 +468,26 @@ function convertToLSPResource(
   return fullUrl
 }
 
-function convertToExternalLSPResource(fullUrl: string, localRoot: string) {
+function getPluginLSPRoot(effect?: boolean) {
+  return effect ? URL_LSP_HOST : URL_LSP
+}
+
+function getExternalLSPRoot(localRoot: string, effect?: boolean) {
+  return safetyPathJoin(
+    effect ? URL_LSP_HOST_EXTERNAL : URL_LSP_EXTERNAL,
+    encodeURIComponent(localRoot)
+  )
+}
+
+function convertToExternalLSPResource(
+  fullUrl: string,
+  localRoot: string,
+  effect?: boolean
+) {
   return convertToLSPResource(
     fullUrl,
     localRoot,
-    safetyPathJoin(URL_LSP_EXTERNAL, encodeURIComponent(localRoot))
+    getExternalLSPRoot(localRoot, effect)
   )
 }
 
@@ -624,10 +641,18 @@ class PluginLocal extends EventEmitter<
       filePath = reg.test(url) ? url : PROTOCOL_FILE + url
     }
     if (this.isInstalledInLocalDotRoot) {
-      return convertToLSPResource(filePath, this.dotPluginsRoot)
+      return convertToLSPResource(
+        filePath,
+        this.dotPluginsRoot,
+        getPluginLSPRoot(this.options.effect)
+      )
     }
 
-    return convertToExternalLSPResource(filePath, localRoot)
+    return convertToExternalLSPResource(
+      filePath,
+      localRoot,
+      this.options.effect
+    )
   }
 
   async _preparePackageConfigs() {
@@ -808,12 +833,14 @@ class PluginLocal extends EventEmitter<
     if (this.isInstalledInLocalDotRoot) {
       entry = convertToLSPResource(
         entry,
-        this.dotPluginsRoot
+        this.dotPluginsRoot,
+        getPluginLSPRoot(this.options.effect)
       )
     } else {
       entry = convertToExternalLSPResource(
         entry,
-        path.dirname(entryPath)
+        path.dirname(entryPath),
+        this.options.effect
       )
     }
 

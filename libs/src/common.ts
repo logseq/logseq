@@ -21,6 +21,8 @@ export const PROTOCOL_FILE = 'file://'
 export const PROTOCOL_LSP = 'lsp://'
 export const URL_LSP = PROTOCOL_LSP + 'logseq.io/plugins/'
 export const URL_LSP_EXTERNAL = PROTOCOL_LSP + 'logseq.io/external/'
+export const URL_LSP_HOST = PROTOCOL_LSP + 'logseq.com/plugins/'
+export const URL_LSP_HOST_EXTERNAL = PROTOCOL_LSP + 'logseq.com/external/'
 
 let _appPathRoot: string
 

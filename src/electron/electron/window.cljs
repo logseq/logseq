@@ -22,7 +22,7 @@
                          ;; Loading the renderer through Logseq's privileged
                          ;; scheme keeps the parent origin non-opaque for
                          ;; plugin iframe postMessage handshakes.
-                         "lsp://logseq.io/index.html"))
+                         "lsp://logseq.com/index.html"))
 
 (defn create-main-window!
   ([]
