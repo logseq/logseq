@@ -221,25 +221,31 @@
 (defn unlisten-all!
   ([] (unlisten-all! false))
   ([dispose?]
-   (doseq [{:keys [handler group dispatch-fn]} (vals @*installed-handlers)
-           :when (not= group :shortcut.handler/misc)]
-     (if dispose?
-       (.dispose ^js handler)
-       (events/unlisten handler EventType/SHORTCUT_TRIGGERED dispatch-fn)))))
+   (unlisten-all! dispose? #{}))
+  ([dispose? excluded-groups]
+   (let [excluded-groups (conj (set excluded-groups) :shortcut.handler/misc)]
+     (doseq [{:keys [handler group dispatch-fn]} (vals @*installed-handlers)
+             :when (not (contains? excluded-groups group))]
+       (if dispose?
+         (.dispose ^js handler)
+         (events/unlisten handler EventType/SHORTCUT_TRIGGERED dispatch-fn))))))
 
-(defn listen-all! []
-  (doseq [{:keys [handler group dispatch-fn]} (vals @*installed-handlers)
-          :when (not= group :shortcut.handler/misc)]
-    (if (.isDisposed ^js handler)
-      (install-shortcut-handler! group {})
-      (events/listen handler EventType/SHORTCUT_TRIGGERED dispatch-fn))))
+(defn listen-all!
+  ([] (listen-all! #{}))
+  ([excluded-groups]
+   (let [excluded-groups (conj (set excluded-groups) :shortcut.handler/misc)]
+     (doseq [{:keys [handler group dispatch-fn]} (vals @*installed-handlers)
+             :when (not (contains? excluded-groups group))]
+       (if (.isDisposed ^js handler)
+         (install-shortcut-handler! group {})
+         (events/listen handler EventType/SHORTCUT_TRIGGERED dispatch-fn))))))
 
 (defn use-disable-all-shortcuts!
   []
-  (hooks/use-effect!
+  (hooks/use-layout-effect!
    (fn []
-     (unlisten-all!)
-     #(listen-all!))
+     (unlisten-all! false #{:shortcut.handler/auto-complete})
+     #(listen-all! #{:shortcut.handler/auto-complete}))
    []))
 
 (defn refresh!

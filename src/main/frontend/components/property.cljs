@@ -432,6 +432,9 @@
         latest-args-ref (hooks/use-ref nil)
         [property] (hooks/use-atom *property)
         [property-key] (hooks/use-atom *property-key)
+        [show-new-property-config?] (hooks/use-atom *show-new-property-config?)
+        [show-class-select?] (hooks/use-atom *show-class-select?)
+        [property-schema] (hooks/use-atom *property-schema)
         batch? (pv/batch-operation?)
         hide-property-key? (or (pv/direct-value-picker-type? (:logseq.property/type property))
                                (= (:db/ident property) :logseq.property/icon)
@@ -467,14 +470,14 @@
        [:div.ls-property-add.gap-1.flex.flex-1.flex-row.items-center
         (when-not hide-property-key?
           [:div.flex.flex-row.items-center.property-key.gap-1
-           (when-not (:db/id property) (property-icon property (:logseq.property/type @*property-schema)))
+           (when-not (:db/id property) (property-icon property (:logseq.property/type property-schema)))
            (if (:db/id property)                              ; property exists already
              (property-key-cp block property opts)
              [:div property-key])])
         [:div.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
-         (when (not= @*show-new-property-config? :adding-property)
+         (when (not= show-new-property-config? :adding-property)
            (cond
-             (or (nil? property) @*show-new-property-config?)
+             (or (nil? property) show-new-property-config?)
              (property-type-select property (merge opts
                                                    {:*property *property
                                                     :*property-name *property-key
@@ -484,7 +487,7 @@
                                                     :*show-new-property-config? *show-new-property-config?
                                                     :*show-class-select? *show-class-select?}))
 
-             (and property @*show-class-select?)
+             (and property show-class-select?)
              (property-config/class-select property (assoc opts
                                                            :on-hide #(reset! *show-class-select? false)
                                                            :multiple-choices? false
