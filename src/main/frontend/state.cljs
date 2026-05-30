@@ -1914,12 +1914,6 @@ Similar to re-frame subscriptions"
          :plugin/updates-coming                 {}
          :plugin/updates-downloading?           false))
 
-(defn sub-right-sidebar-blocks
-  []
-  (when-let [current-repo (get-current-repo)]
-    (->> (sub :sidebar/blocks)
-         (filter #(= (first %) current-repo)))))
-
 (defn use-right-sidebar-blocks
   []
   (let [current-repo (use-sub :git/current-repo)

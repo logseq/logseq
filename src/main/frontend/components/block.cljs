@@ -2649,6 +2649,9 @@
                   (mobile-util/mobile-focus-hidden-input)
                   (editor-handler/clear-selection!)
                   (editor-handler/unhighlight-blocks!)
+                  (when-let [editing-block (state/get-edit-block)]
+                    (when-not (= (:block/uuid editing-block) (:block/uuid block))
+                      (editor-handler/save-current-block!)))
                   (p/do!
                    (state/pub-event! [:editor/save-code-editor])
 
