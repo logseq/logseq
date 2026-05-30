@@ -544,10 +544,9 @@
 
 (rum/defc page-aux
   [option]
-  (let [route-match (state/use-sub :route-match)
-        page-name (:page-name option)
+  (let [page-name (:page-name option)
         page-id-uuid-or-name (or (:db/id option) (:block/uuid option)
-                                 (get-sanity-page-name route-match page-name))
+                                 (get-sanity-page-name option page-name))
         preview-or-sidebar? (or (:preview? option) (:sidebar? option))
         page-uuid? (when page-name (util/uuid-string? page-name))
         *loading? (hooks/use-memo #(atom true) [])
@@ -587,10 +586,8 @@
 
 (rum/defc page-cp
   [option]
-  (let [route-match (state/use-sub :route-match)
-        page-name (or (:page-name option)
-                      (get-page-name option)
-                      (get-page-name route-match))]
+  (let [page-name (or (:page-name option)
+                      (get-page-name option))]
     (rum/with-key
       (page-aux (assoc option :page-name page-name))
       (str

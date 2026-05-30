@@ -138,14 +138,14 @@
    [])
   (if-let [route-match (state/use-sub :route-match)]
     (when-let [view (:view (:data route-match))]
-      (rum/with-key
-        (ui/catch-error-and-notify
-         (helpful-default-error-screen)
-         [:<>
-          (container/root-container
-           route-match
-           (view route-match))
-          (when config/lsp-enabled?
-            (plugin/hook-daemon-renderers))])
-        (:path route-match)))
+      (ui/catch-error-and-notify
+       (helpful-default-error-screen)
+       [:<>
+        (container/root-container
+         route-match
+         (rum/with-key
+           (view route-match)
+           (:path route-match)))
+        (when config/lsp-enabled?
+          (plugin/hook-daemon-renderers))]))
     (not-found)))

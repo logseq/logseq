@@ -977,20 +977,31 @@
   [{:keys [label children preview? disable-preview? show-non-exists-page? tag? _skip-async-load?] :as config} page]
   (db-hooks/query-scope
    (fn []
-     (let [*entity (hooks/use-memo #(atom nil) [(:db/id page) (:block/uuid page) (:block/name page)])
-           [entity'] (hooks/use-atom *entity)
-           page-id-or-name (or (:db/id page)
+     (let [page-id-or-name (or (:db/id page)
                                (:block/uuid page)
                                (when-let [s (:block/name page)]
                                  (string/trim s)))
-           page-entity (if (e/entity? page) page (db/get-page page-id-or-name))]
+           page-entity (if (e/entity? page) page (db/get-page page-id-or-name))
+           initial-entity (cond
+                            page-entity
+                            page-entity
+
+                            (or (:skip-async-load? config) (:table-view? config))
+                            page
+
+                            :else
+                            nil)
+           *entity (hooks/use-memo #(atom initial-entity) [page-id-or-name])
+           [entity'] (hooks/use-atom *entity)]
        (hooks/use-effect!
         (fn []
           (cond
             page-entity
-            (reset! *entity page-entity)
+            nil
+
             (or (:skip-async-load? config) (:table-view? config))
-            (reset! *entity page)
+            nil
+
             :else
             (p/let [result (<get-block page-id-or-name)]
               (reset! *entity result))))

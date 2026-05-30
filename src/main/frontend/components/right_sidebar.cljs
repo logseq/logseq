@@ -238,7 +238,7 @@
                     (fn [_prev-props ^js next-props]
                       (not (last (.-args next-props)))))]
     (fn [& args]
-      (js/React.createElement memo-class #js {:args args}))))
+      (js/React.createElement memo-class #js {:args (vec args)}))))
 
 (rum/defc sidebar-item-inner
   [db-id {:keys [repo idx block-type collapsed? drag-from drag-to block-count *db-id init-key]}]
@@ -320,7 +320,7 @@
            (when drag-from (drop-area idx))])]
        (drop-indicator idx drag-to)])))
 
-(rum/defc sidebar-item
+(rum/defc sidebar-item-component
   [repo idx db-id block-type block-count]
   (let [*db-id (hooks/use-memo #(atom db-id) [])
         init-key (hooks/use-memo #(random-uuid) [])
@@ -336,6 +336,15 @@
                                :block-count block-count
                                :*db-id *db-id
                                :init-key init-key})))
+
+(def sidebar-item
+  (let [memo-class (js/React.memo
+                    (fn [^js props]
+                      (apply sidebar-item-component (.-args props)))
+                    (fn [^js prev-props ^js next-props]
+                      (= (.-args prev-props) (.-args next-props))))]
+    (fn [& args]
+      (js/React.createElement memo-class #js {:args (vec args)}))))
 
 (defn- get-page
   [match]
@@ -513,7 +522,7 @@
            (sidebar-item repo idx db-id block-type block-count)
            (str "sidebar-block-" db-id)))]]]))
 
-(rum/defc sidebar
+(rum/defc sidebar-component
   []
   (let [blocks (state/use-right-sidebar-blocks)
         blocks (if (empty? blocks)
@@ -528,3 +537,10 @@
      (sidebar-resizer sidebar-open? "right-sidebar" :west)
      (when sidebar-open?
        (sidebar-inner repo t blocks))]))
+
+(def sidebar
+  (let [memo-class (js/React.memo
+                    (fn [_props]
+                      (sidebar-component)))]
+    (fn []
+      (js/React.createElement memo-class #js {}))))
