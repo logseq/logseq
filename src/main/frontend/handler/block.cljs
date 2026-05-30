@@ -7,7 +7,6 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
-            [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property.util :as pu]
             [frontend.mobile.haptics :as haptics]
@@ -110,26 +109,6 @@
      title]
     (or title (:block/title block))))
 
-(defn- <flush-editor-content-cache!
-  []
-  (let [content-cache @(:editor/content @state/state)
-        saves (keep (fn [[block-id value]]
-                      (when (string? value)
-                        (when-let [block (db/entity [:block/uuid block-id])]
-                          (when (and (:db/id block)
-                                     (not (ldb/built-in? block))
-                                     (not= (string/trim (or (:block/title block) ""))
-                                           (string/trim value)))
-                            (let [block' (-> (db-editor-handler/wrap-parse-block {:block/uuid block-id
-                                                                                   :block/title value})
-                                             (assoc :block/uuid block-id))]
-                              (ui-outliner-tx/transact!
-                               {:outliner-op :save-block}
-                               (outliner-op/save-block! block')))))))
-                    content-cache)]
-    (when (seq saves)
-      (p/all saves))))
-
 (defn edit-block!
   [block pos & {:keys [_container-id custom-content tail-len save-code-editor?]
                 :or {tail-len 0
@@ -145,7 +124,6 @@
              (db-async/<get-block repo (:db/id block) {:children? false})
              (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))
              (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
-               (<flush-editor-content-cache!)
                (state/clear-edit! {:clear-editing-block? false}))
              (let [content (or custom-content (:block/title block) "")
                    content-length (count content)
