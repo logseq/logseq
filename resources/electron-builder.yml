@@ -34,7 +34,7 @@ files:
   - "!**/node_modules/**/{tsconfig.json,eslint.config.js,.editorconfig}"
 
 toolsets:
-  appimage: "1.0.3"
+  appimage: "1.0.2"
 
 protocols:
   - name: logseq
