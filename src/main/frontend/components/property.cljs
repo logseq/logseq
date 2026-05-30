@@ -34,7 +34,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- <add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context."
@@ -82,7 +82,7 @@
       (sort-by (fn [item] (if (exact-title? item) 0 1)) results))))
 
 ;; TODO: This component should be cleaned up as it's only used for new properties and used to be used for existing properties
-(rum/defc property-type-select
+(hsx/defc property-type-select
   [property {:keys [*property *property-name *property-schema built-in? disabled?
                     show-type-change-hints? block *show-new-property-config?
                     *show-class-select?
@@ -163,7 +163,7 @@
        (ui/tooltip (svg/info)
                    [:span (t :property/type-change-warning)]))]))
 
-(rum/defc property-select
+(hsx/defc property-select
   [select-opts]
   (let [[properties set-properties!] (hooks/use-state nil)
         [q set-q!] (hooks/use-state "")]
@@ -239,7 +239,7 @@
                          :transform-fn property-transform-fn}
                         select-opts))]])))
 
-(rum/defc property-icon
+(hsx/defc property-icon
   [property property-type]
   (let [type (or (:logseq.property/type property) property-type :default)
         ident (:db/ident property)
@@ -313,7 +313,7 @@
                         (and (= :default type) (seq (:property/closed-values property'))))
                     (reset! *show-new-property-config? false)))))))))))
 
-(rum/defc property-key-title
+(hsx/defc property-key-title
   [block property class-schema?]
   (shui/trigger-as
    :a
@@ -344,7 +344,7 @@
 
    (db-property/built-in-display-title property t)))
 
-(rum/defc property-key-cp
+(hsx/defc property-key-cp
   [block property {:keys [other-position? class-schema?]}]
   (let [icon (:logseq.property/icon property)]
     [:div.property-key-inner.jtrigger-view
@@ -388,7 +388,7 @@
     (icon-component/icon icon {:size 15 :color? true})
     (ui/icon "letter-b" {:class "opacity-50" :size 15})))
 
-(rum/defc bidirectional-values-cp
+(hsx/defc bidirectional-values-cp
   [entities]
   (let [blocks-container (state/get-component :block/blocks-container)
         container-id (state/use-container-id)
@@ -402,7 +402,7 @@
        (blocks-container config entities)]
       [:span.opacity-60 (t :view.filter/empty)])))
 
-(rum/defc bidirectional-properties-section
+(hsx/defc bidirectional-properties-section
   [bidirectional-properties]
   (when (seq bidirectional-properties)
     (for [{:keys [class title entities]} bidirectional-properties]
@@ -422,7 +422,7 @@
         [:div.property-value.flex.flex-1
          (bidirectional-values-cp entities)]]])))
 
-(rum/defc ^:large-vars/cleanup-todo property-input
+(hsx/defc ^:large-vars/cleanup-todo property-input
   [block *property-key {:keys [class-schema?]
                         :as opts}]
   (let [*property (hooks/use-memo #(or (:*property opts) (atom nil)) [(:*property opts)])
@@ -511,7 +511,7 @@
                                                       :block block
                                                       :class-schema? class-schema?}))))]))
 
-(rum/defc new-property
+(hsx/defc new-property
   [block opts]
   (when-not config/publishing?
     (let [add-new-property! (fn [e]
@@ -544,7 +544,7 @@
     (db/sub-block (:db/id linked-block))
     (db/sub-block (:db/id block))))
 
-(rum/defc property-cp
+(hsx/defc property-cp
   [block k v {:keys [inline-text page-cp sortable-opts] :as opts}]
   (db-hooks/query-scope
    (fn []
@@ -658,7 +658,7 @@
     :recycled-only-property-ids #{}}
    properties))
 
-(rum/defc ordered-properties
+(hsx/defc ordered-properties
   [block properties* sorted-property-entities opts]
   (let [[properties set-properties!] (hooks/use-state properties*)
         [properties-order set-properties-order!] (hooks/use-state (mapv first properties))
@@ -705,7 +705,7 @@
                                                  {:db/id (:db/id block)})]
                                                {:outliner-op :save-block})))})))
 
-(rum/defc properties-section
+(hsx/defc properties-section
   [block properties opts]
   (when (seq properties)
     (let [sorted-prop-entities (db-property/sort-properties (map (comp db/entity first) properties))
@@ -713,7 +713,7 @@
           properties' (keep (fn [ent] (find prop-kv-map (:db/ident ent))) sorted-prop-entities)]
       (ordered-properties block properties' sorted-prop-entities opts))))
 
-(rum/defc hidden-properties-cp
+(hsx/defc hidden-properties-cp
   [block hidden-properties {:keys [root-block? sidebar-properties?] :as opts}]
   (when (and (seq hidden-properties) (or root-block? sidebar-properties?))
     [:details.my-1
@@ -723,7 +723,7 @@
      [:div.mt-1
       (properties-section block hidden-properties opts)]]))
 
-(rum/defc load-bidirectional-properties
+(hsx/defc load-bidirectional-properties
   [block root-block? set-bidirectional-properties!]
   (hooks/use-effect!
    (fn []
@@ -733,7 +733,7 @@
      (fn []))
    [root-block? (:db/id block)]))
 
-(rum/defc ^:large-vars/cleanup-todo properties-area
+(hsx/defc ^:large-vars/cleanup-todo properties-area
   [target-block {:keys [page-title? journal-page? sidebar-properties? tag-dialog?] :as opts}]
   (db-hooks/query-scope
    (fn []
@@ -849,7 +849,8 @@
 
          (and (empty? full-properties) (empty? hidden-properties) (not has-bidirectional-properties?))
          (when show-properties?
-           (rum/with-key (new-property block opts) (str id "-add-property")))
+           ^{:key (str id "-add-property")}
+           [new-property block opts])
 
          :else
          (let [remove-properties #{:logseq.property/icon :logseq.property/query}
@@ -883,16 +884,14 @@
             [:<>
              (mapv (fn [r]
                      (when (fn? (:render r))
-                       (rum/with-key
-                         (js/React.createElement (:render r) props-for-plugin)
-                         (str "plugin-prepend-" (:key r)))))
+                       ^{:key (str "plugin-prepend-" (:key r))}
+                       [:> (:render r) props-for-plugin]))
                prepend-renderers)
 
              (if replace-renderer
                (when (fn? (:render replace-renderer))
-                 (rum/with-key
-                   (js/React.createElement (:render replace-renderer) props-for-plugin)
-                   (str "plugin-replace-" (:key replace-renderer))))
+                 ^{:key (str "plugin-replace-" (:key replace-renderer))}
+                 [:> (:render replace-renderer) props-for-plugin])
                [:<>
                 (properties-section block properties' opts)
                 (bidirectional-properties-section bidirectional-properties)])
@@ -902,13 +901,13 @@
                  (assoc opts :root-block? root-block?)))
 
              (when (and page? (not class?))
-               (rum/with-key (new-property block opts) (str id "-add-property")))
+               ^{:key (str id "-add-property")}
+               [new-property block opts])
 
              (mapv (fn [r]
                      (when (fn? (:render r))
-                       (rum/with-key
-                         (js/React.createElement (:render r) props-for-plugin)
-                         (str "plugin-append-" (:key r)))))
+                       ^{:key (str "plugin-append-" (:key r))}
+                       [:> (:render r) props-for-plugin]))
                append-renderers)
 
              (when class?
@@ -926,4 +925,5 @@
                       (properties-section block properties opts')
                       (hidden-properties-cp block hidden-properties
                         (assoc opts :root-block? root-block?))
-                      (rum/with-key (new-property block opts') (str id "-class-add-property"))]]))]])))]))))
+                      ^{:key (str id "-class-add-property")}
+                      [new-property block opts']]]))]])))]))))

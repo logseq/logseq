@@ -142,7 +142,7 @@
             [logseq.shui.hooks :as hooks]
             [malli.core :as m]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 ;; codemirror
 
@@ -569,7 +569,7 @@
     (str "lsradix " (state/sub :ui/theme))
     (str "solarized " (state/sub :ui/theme))))
 
-(rum/defc editor
+(hsx/defc editor
   [config id attr code theme options]
   (let [editor-atom (hooks/use-memo #(atom nil) [id])
         [calc-lines set-calc-lines!] (hooks/use-state (calc/eval-lines code))

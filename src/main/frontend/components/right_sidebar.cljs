@@ -27,9 +27,9 @@
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc toggle
+(hsx/defc toggle
   []
   (when-not (util/sm-breakpoint?)
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
@@ -38,7 +38,7 @@
                                :on-click ui-handler/toggle-right-sidebar!})
       (t :sidebar.right/toggle))))
 
-(rum/defc block-cp
+(hsx/defc block-cp
   [repo idx block]
   (let [id (:block/uuid block)]
     [:div.mt-2
@@ -51,14 +51,14 @@
   []
   (js/document.querySelector ".sidebar-item-list"))
 
-(rum/defc page-cp
+(hsx/defc page-cp
   [repo page-name]
   (page/page-cp {:page-name page-name
                  :sidebar?   true
                  :scroll-container (get-scrollable-container)
                  :repo repo}))
 
-(rum/defc shortcut-settings
+(hsx/defc shortcut-settings
   []
   [:div.contents.flex-col.flex.ml-3
    (shortcut-help/shortcut-page {:show-title? false})])
@@ -72,23 +72,22 @@
                          :sidebar-key sidebar-key} repo block-id {:indent? false})]
      (block-cp repo idx block)]))
 
-(rum/defc search-title
+(hsx/defc search-title
   [*input]
   (let [input (first (hooks/use-atom *input))
         input' (if (string/blank? input) (t :search/blank-input) input)]
     [:span.overflow-hidden.text-ellipsis input']))
 
-(rum/defc sidebar-search
+(hsx/defc sidebar-search
   [repo block-type init-key input *input]
-  (rum/with-key
-    (cmdk/cmdk-block {:initial-input input
-                      :sidebar? true
-                      :on-input-change (fn [new-value]
-                                         (reset! *input new-value))
-                      :on-input-blur (fn [new-value]
-                                       (state/sidebar-replace-block! [repo input block-type]
-                                                                     [repo new-value block-type]))})
-    (str init-key)))
+  ^{:key (str init-key)}
+  [cmdk/cmdk-block {:initial-input input
+                    :sidebar? true
+                    :on-input-change (fn [new-value]
+                                       (reset! *input new-value))
+                    :on-input-blur (fn [new-value]
+                                     (state/sidebar-replace-block! [repo input block-type]
+                                                                   [repo new-value block-type]))}])
 
 (defn- build-sidebar-item
   [repo idx db-id block-type *db-id init-key]
@@ -188,7 +187,7 @@
     developer-mode?
     (conj {:db-id "profiler" :block-type :profiler :label "(Dev) Profiler"})))
 
-(rum/defc actions-menu-content
+(hsx/defc actions-menu-content
   [db-id idx type collapsed? block-count]
   (let [multi-items? (> block-count 1)
         menu-item shui/dropdown-menu-item
@@ -212,13 +211,13 @@
        (menu-item {:on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
                   (t :sidebar.right/open-as-page)))]))
 
-(rum/defc drop-indicator
+(hsx/defc drop-indicator
   [idx drag-to]
   [:.sidebar-drop-indicator {:on-drag-enter #(when drag-to (reset! *drag-to idx))
                              :on-drag-over util/stop
                              :class (when (= idx drag-to) "drag-over")}])
 
-(rum/defc drop-area
+(hsx/defc drop-area
   [idx]
   [:.sidebar-item-drop-area
    {:on-drag-over util/stop}
@@ -227,7 +226,7 @@
    [:.sidebar-item-drop-area-overlay.bottom
     {:on-drag-enter #(reset! *drag-to idx)}]])
 
-(rum/defc inner-component-inner
+(hsx/defc inner-component-inner
   [component _should-update?]
   component)
 
@@ -240,7 +239,7 @@
     (fn [& args]
       (js/React.createElement memo-class #js {:args (vec args)}))))
 
-(rum/defc sidebar-item-inner
+(hsx/defc sidebar-item-inner
   [db-id {:keys [repo idx block-type collapsed? drag-from drag-to block-count *db-id init-key]}]
   (let [[item set-item!] (hooks/use-state #(build-sidebar-item repo idx db-id block-type *db-id init-key))]
     (hooks/use-effect!
@@ -320,7 +319,7 @@
            (when drag-from (drop-area idx))])]
        (drop-indicator idx drag-to)])))
 
-(rum/defc sidebar-item-component
+(hsx/defc sidebar-item-component
   [repo idx db-id block-type block-count]
   (let [*db-id (hooks/use-memo #(atom db-id) [])
         init-key (hooks/use-memo #(random-uuid) [])
@@ -365,9 +364,9 @@
   (let [match (:route-match @state/state)]
     (get-page match)))
 
-(rum/defc sidebar-resizer
+(hsx/defc sidebar-resizer
   [sidebar-open? sidebar-id handler-position]
-  (let [el-ref (rum/use-ref nil)
+  (let [el-ref (hooks/use-ref nil)
         min-px-width 320 ; Custom window controls width
         min-ratio 0.1
         max-ratio 0.7
@@ -380,11 +379,11 @@
                      (when el-ref
                        (let [value (* ratio 100)
                              width (str value "%")]
-                         (.setAttribute (rum/deref el-ref) "aria-valuenow" value)
+                         (.setAttribute (hooks/deref el-ref) "aria-valuenow" value)
                          (ui-handler/persist-right-sidebar-width! width))))]
     (hooks/use-effect!
      (fn []
-       (when-let [el (and (fn? js/window.interact) (rum/deref el-ref))]
+       (when-let [el (and (fn? js/window.interact) (hooks/deref el-ref))]
          (-> (js/interact el)
              (.draggable
               (bean/->js
@@ -452,7 +451,7 @@
       :tabIndex         "0"
       :data-expanded    sidebar-open?}]))
 
-(rum/defc plugin-renderer-menu-items
+(hsx/defc plugin-renderer-menu-items
   [renderers]
   (for [r renderers]
     (shui/dropdown-menu-item
@@ -466,7 +465,7 @@
        [:span.pr-1.flex.items-center (shui/tabler-icon "puzzle")]
        [:strong (:title r)]])))
 
-(rum/defc sidebar-inner
+(hsx/defc sidebar-inner
   [repo t blocks]
   (let [block-count (count blocks)
         developer-mode? (state/use-sub [:ui/developer-mode?])]
@@ -518,11 +517,10 @@
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.px-2
        (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
-         (rum/with-key
-           (sidebar-item repo idx db-id block-type block-count)
-           (str "sidebar-block-" db-id)))]]]))
+         ^{:key (str "sidebar-block-" db-id)}
+         [:<> (sidebar-item repo idx db-id block-type block-count)])]]]))
 
-(rum/defc sidebar-component
+(hsx/defc sidebar-component
   []
   (let [blocks (state/use-right-sidebar-blocks)
         blocks (if (empty? blocks)

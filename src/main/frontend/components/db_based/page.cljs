@@ -6,9 +6,9 @@
             [frontend.db.hooks :as db-hooks]
             [frontend.util :as util]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc configure-property
+(hsx/defc configure-property
   [page]
   (db-hooks/query-scope
    (fn []

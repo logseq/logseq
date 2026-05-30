@@ -17,9 +17,9 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc render-item
+(hsx/defc render-item
   [result chosen? multiple-choices? *selected-choices]
   (let [value (if (map? result) (or (:label result)
                                     (:value result)) result)
@@ -44,7 +44,7 @@
        row]
       row)))
 
-(rum/defc search-input
+(hsx/defc search-input
   [*input {:keys [prompt-key input-default-placeholder input-opts on-input]}]
   (let [[input set-input!] (hooks/use-state @*input)]
     (hooks/use-effect!
@@ -71,7 +71,7 @@
                              (set-input! v)))}
              input-opts)]]))
 
-(rum/defc ^:large-vars/cleanup-todo select
+(hsx/defc ^:large-vars/cleanup-todo select
   "Provides a select dropdown powered by a fuzzy search. Takes the following options:
    * :items - Vec of things to select from. Assumes a vec of maps with :value key by default. Required option
    * :limit - Limit number of items to search. Default is 100

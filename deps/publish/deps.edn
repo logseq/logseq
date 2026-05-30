@@ -1,8 +1,8 @@
 {:paths ["src" "test" "../../resources"]
  :deps
  {org.clojure/clojure                   {:mvn/version "1.12.4"}
-  rum/rum                               {:git/url "https://github.com/logseq/rum" ;; fork
-                                         :sha     "5d672bf84ed944414b9f61eeb83808ead7be9127"}
+  io.factorhouse/hsx                    {:git/url "https://github.com/tiensonqin/hsx"
+                                         :sha     "7a4756b5e4ed52bbd2d8a1d3facf32107492c1ea"}
 
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
                                          :sha     "3f141af97b70e1f14c65eaa119acd822ebece37e"}

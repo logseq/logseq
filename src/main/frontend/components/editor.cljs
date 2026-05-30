@@ -32,7 +32,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defonce no-matched-commands [["No matched commands" [[:editor/move-cursor-to-end]]]])
 
@@ -93,7 +93,7 @@
                                                  (search-handler/highlight-exact-query title q)
                                                  icon-component/icon)))]])))
 
-(rum/defc commands
+(hsx/defc commands
   [id format]
   (let [[matched'] (hooks/use-atom *matched-commands)
         page? (db/page? (db/entity (:db/id (state/get-edit-block))))
@@ -216,10 +216,10 @@
                                                             :page-only? false}))]
       (set-matched-pages! result))))
 
-(rum/defc page-search-aux
+(hsx/defc page-search-aux
   [id format embed? db-tag? q input pos]
   (let [q (string/trim q)
-        [matched-pages set-matched-pages!] (rum/use-state nil)
+        [matched-pages set-matched-pages!] (hooks/use-state nil)
         search-f #(search-pages q db-tag? set-matched-pages!)]
     (hooks/use-effect! search-f [(hooks/use-debounced-value q 150)])
 
@@ -254,7 +254,7 @@
           (shui/shortcut "mod+enter")
           [:span (t :editor/display-tag-inline-hint)]])])))
 
-(rum/defc page-search
+(hsx/defc page-search
   "Page or tag searching popup"
   [id format]
   (let [pos (hooks/use-memo state/get-editor-last-pos [])
@@ -307,7 +307,7 @@
            (state/clear-edit!)))))
     (editor-handler/block-on-chosen-handler id q format selected-text)))
 
-(rum/defc block-search-auto-complete
+(hsx/defc block-search-auto-complete
   [_edit-block input id q format selected-text]
   (let [result* (hooks/use-memo #(atom nil) [])
         [debounced-search stop-search!] (hooks/use-memo #(util/cancelable-debounce search-blocks! 150) [])
@@ -336,7 +336,7 @@
                      (node-render block q {:db-tag? false}))
       :class       "ac-block-search"}))))
 
-(rum/defc block-search
+(hsx/defc block-search
   [id _format]
   (hooks/use-effect!
    (fn []
@@ -368,9 +368,9 @@
             nil)
           (block-search-auto-complete edit-block input id q format selected-text))))))
 
-(rum/defc template-search-aux
+(hsx/defc template-search-aux
   [id q]
-  (let [[matched-templates set-matched-templates!] (rum/use-state nil)]
+  (let [[matched-templates set-matched-templates!] (hooks/use-state nil)]
     (hooks/use-effect! (fn []
                          (p/let [result (editor-handler/<get-matched-templates q)]
                            (set-matched-templates!
@@ -385,7 +385,7 @@
                      (:block/title template))
       :class       "black"})))
 
-(rum/defc template-search
+(hsx/defc template-search
   [id _format]
   (let [pos (hooks/use-memo state/get-editor-last-pos [])
         input (gdom/getElement id)]
@@ -398,7 +398,7 @@
                "")]
         (template-search-aux id q)))))
 
-(rum/defc code-block-mode-keyup-listener
+(hsx/defc code-block-mode-keyup-listener
   [_q _edit-content last-pos current-pos]
   (hooks/use-effect!
    (fn []
@@ -407,7 +407,7 @@
    [last-pos current-pos])
   [:<>])
 
-(rum/defc code-block-mode-picker
+(hsx/defc code-block-mode-picker
   [id format]
   (when-let [modes (some->> js/window.CodeMirror (.-modes) (js/Object.keys) (js->clj) (remove #(= "null" %)))]
     (when-let [^js input (gdom/getElement id)]
@@ -440,7 +440,7 @@
                                            [:strong mode])
                             :class "code-block-mode-picker"})]))))
 
-(rum/defc editor-input
+(hsx/defc editor-input
   [_id on-submit _on-cancel]
   (let [input-value (hooks/use-memo #(atom {}) [])
         latest-args-ref (hooks/use-ref nil)]
@@ -489,7 +489,7 @@
               (util/stop e)
               (on-submit command @input-value pos)))]))))))
 
-(rum/defc image-uploader
+(hsx/defc image-uploader
   [id format]
   [:div.image-uploader
    [:input
@@ -560,7 +560,7 @@
     (and (not= keycode/enter (:key-code last-key))
          (not= keycode/enter-code (:code last-key)))))
 
-(rum/defc mock-textarea
+(hsx/defc mock-textarea
   [content]
   (hooks/use-effect!
    (fn []
@@ -609,7 +609,7 @@
        :force-popover? true}
       (dissoc opts :root-props :content-props)))))
 
-(rum/defc shui-editor-popups
+(hsx/defc shui-editor-popups
   [id format action _data]
   (hooks/use-effect!
    (fn []
@@ -661,7 +661,7 @@
    [action])
   [:<>])
 
-(rum/defc command-popups
+(hsx/defc command-popups
   "React to atom changes, find and render the correct popup"
   [id format]
   (let [action (state/use-sub :editor/action)]
@@ -705,7 +705,7 @@
   [block]
   (boolean (:block/journal-day block)))
 
-(rum/defc box
+(hsx/defc box
   [{:keys [format block parent-block] :as opts} id config]
   (let [*ref (hooks/use-memo #(atom nil) [])
         component-state {:opts opts

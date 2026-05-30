@@ -11,9 +11,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.extensions.fsrs :as fsrs]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.rum :as frum]
-            [frontend.state :as state]
+            [frontend.mobile.util :as mobile-util]            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
@@ -32,9 +30,9 @@
             [mobile.components.ui :as ui-component]
             [mobile.state :as mobile-state]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc component-with-restoring
+(hsx/defc component-with-restoring
   [component]
   (let [db-restoring? (state/use-sub :db/restoring?)]
     (if db-restoring?
@@ -44,7 +42,7 @@
        (shui/skeleton {:class "h-6 w-full"})]
       component)))
 
-(rum/defc home
+(hsx/defc home
   []
   (hooks/use-effect!
    (fn []
@@ -201,14 +199,14 @@
 
 (defn- use-native-graphs-effects!
   []
-  (let [[id-token] (frum/use-atom-in state/state :auth/id-token)
-        [repos] (frum/use-atom-in state/state [:me :repos])
-        [remotes] (frum/use-atom-in state/state :rtc/graphs)
-        [downloading-graph-id] (frum/use-atom-in state/state :rtc/downloading-graph-uuid)
-        [loading-graphs?] (frum/use-atom-in state/state :rtc/loading-graphs?)
-        [route-match] (frum/use-atom-in state/state :route-match)
-        [_preferred-language] (frum/use-atom-in state/state :preferred-language)
-        [tab] (frum/use-atom mobile-state/*tab)
+  (let [[id-token] (hooks/use-atom-in state/state :auth/id-token)
+        [repos] (hooks/use-atom-in state/state [:me :repos])
+        [remotes] (hooks/use-atom-in state/state :rtc/graphs)
+        [downloading-graph-id] (hooks/use-atom-in state/state :rtc/downloading-graph-uuid)
+        [loading-graphs?] (hooks/use-atom-in state/state :rtc/loading-graphs?)
+        [route-match] (hooks/use-atom-in state/state :route-match)
+        [_preferred-language] (hooks/use-atom-in state/state :preferred-language)
+        [tab] (hooks/use-atom mobile-state/*tab)
         login? (boolean id-token)
         route-name (get-in route-match [:data :name])
         visible? (and (= tab "graphs")
@@ -234,12 +232,12 @@
        nil)
      [labels sections visible? loading-graphs?])))
 
-(rum/defc native-graphs-bridge
+(hsx/defc native-graphs-bridge
   []
   (use-native-graphs-effects!)
   [:<>])
 
-(rum/defc capture
+(hsx/defc capture
   []
   (hooks/use-effect!
    (fn []
@@ -251,7 +249,7 @@
    [])
   (quick-add/quick-add))
 
-(rum/defc flashcards
+(hsx/defc flashcards
   []
   (hooks/use-effect!
    (fn []
@@ -262,7 +260,7 @@
                          :on-header-change mobile-state/set-flashcards-header!
                          :on-selector-change mobile-state/set-flashcards-selector!})])
 
-(rum/defc other-page
+(hsx/defc other-page
   [route-view tab route-match]
   (let [page-view? (= (get-in route-match [:data :name]) :page)]
     [:div#main-content-container.pl-3.ls-layer
@@ -278,7 +276,7 @@
          (= tab "flashcards") (component-with-restoring (flashcards))
          (= tab "capture") (component-with-restoring (capture))))]))
 
-(rum/defc main-content
+(hsx/defc main-content
   [tab route-match]
   (let [view (get-in route-match [:data :view])
         home? (and (= tab "home") (nil? view))
@@ -305,11 +303,11 @@
      (when-not home?
        (other-page view tab route-match))]))
 
-(rum/defc app
+(hsx/defc app
   [current-repo route-match]
   (let [[tab] (mobile-state/use-tab)
         preferred-language (state/sub :preferred-language)
-        [theme] (frum/use-atom-in state/state :ui/theme)]
+        [theme] (hooks/use-atom-in state/state :ui/theme)]
     (use-screen-size-effects!)
     (use-theme-effects! current-repo theme)
     (hooks/use-effect!
@@ -343,11 +341,11 @@
    {:id mobile-util/mobile-keyboard-anchor-id
     :type "text"}])
 
-(rum/defc main
+(hsx/defc main
   []
   (let [current-repo (state/use-sub :git/current-repo)
         show-action-bar? (state/use-sub :mobile/show-action-bar?)
-        {:keys [open? content-fn opts]} (frum/use-value mobile-state/*popup-data)
+        {:keys [open? content-fn opts]} (hooks/use-value mobile-state/*popup-data)
         show-popup? (and open? content-fn)
         route-match (state/use-sub :route-match)]
     [:main#app-container-wrapper.ls-fold-button-on-right

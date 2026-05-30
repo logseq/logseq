@@ -9,7 +9,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn show-comment-action?
   [outliner? comment-targets]
@@ -17,7 +17,7 @@
    (and outliner?
         (seq comment-targets))))
 
-(rum/defc action-bar
+(hsx/defc action-bar
   [& {:keys [on-cut on-copy selected-blocks hide-dots? button-border? view-parent outliner?]
       :or {on-cut #(editor-handler/cut-selection-blocks true)
            outliner? true}}]

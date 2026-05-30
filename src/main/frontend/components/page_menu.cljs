@@ -18,9 +18,9 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc publish-page-dialog
+(hsx/defc publish-page-dialog
   [page]
   (let [[password set-password!] (hooks/use-state "")
         [publishing? set-publishing!] (hooks/use-state false)

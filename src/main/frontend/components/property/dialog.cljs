@@ -5,9 +5,9 @@
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [logseq.shui.hooks :as hooks]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc dialog
+(hsx/defc dialog
   [blocks opts]
   (shortcut/use-disable-all-shortcuts!)
   (when (seq blocks)

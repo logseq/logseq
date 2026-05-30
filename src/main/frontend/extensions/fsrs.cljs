@@ -26,7 +26,7 @@
             [missionary.core :as m]
             [open-spaced-repetition.cljc-fsrs.core :as fsrs.core]
             [promesa.core :as p]
-            [rum.core :as rum]
+            [io.factorhouse.hsx.core :as hsx]
             [tick.core :as tick]))
 
 (commands/register-slash-command
@@ -245,7 +245,7 @@
                                        {:align "start"}))}
         (ui/icon "info-circle")))]))
 
-(rum/defc ^:private card-view
+(hsx/defc ^:private card-view
   [repo block-id *card-index *phase opts]
   (db-hooks/query-scope
    (fn []
@@ -295,7 +295,7 @@
                  [:div.flex.justify-center (rating-btns repo block-entity *card-index *phase opts)])]])))))))
 
 (declare update-due-cards-count)
-(rum/defc ^:large-vars/cleanup-todo cards-view
+(hsx/defc ^:large-vars/cleanup-todo cards-view
   [initial-cards-id opts*]
   (let [repo (state/get-current-repo)
         opts (or opts* {})
@@ -397,9 +397,8 @@
          (cond
            block-id
            [:div.flex.flex-col.flex-1.min-h-0
-            (rum/with-key
-              (card-view repo block-id *card-index *phase opts)
-              (str "card-" block-id))]
+            ^{:key (str "card-" block-id)}
+            [card-view repo block-id *card-index *phase opts]]
 
            (empty? block-ids)
            [:div.ls-card.content.ml-2
@@ -465,7 +464,7 @@
         ;; If there are more than one separator, only the last component is considered the cue.
         [(string/trimr (string/join cloze-cue-separator (drop-last parts))) cue]))))
 
-(rum/defc cloze-macro-show
+(hsx/defc cloze-macro-show
   [config options]
   (let [shown?* (hooks/use-memo #(atom (:show-cloze? config)) [])
         [shown?] (hooks/use-atom shown?*)

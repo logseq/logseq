@@ -5,9 +5,9 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.undo-redo :as undo-redo]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]
-            [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [logseq.shui.ui :as shui]))
 
 (defn- strip-tx-data
   [x]
@@ -68,7 +68,7 @@
   (and (vector? entry)
        (empty? entry)))
 
-(rum/defc payload-entry
+(hsx/defc payload-entry
   [expanded?* id entry]
   (let [expanded? (contains? @expanded?* id)]
     [:div.rounded-md.border.p-2
@@ -88,18 +88,17 @@
             (fipp/pprint {:width 60})
             with-out-str)])]))
 
-(rum/defc payload-stack
+(hsx/defc payload-stack
   [expanded?* label entries]
   [:div.flex.flex-col.gap-2
    [:div.text-sm.font-medium label]
    (if (seq entries)
      (for [[idx entry] (map-indexed vector (reverse entries))]
-       (rum/with-key
-         (payload-entry expanded?* (str label "-" idx) entry)
-         (str label "-" idx)))
+       ^{:key (str label "-" idx)}
+       [payload-entry expanded?* (str label "-" idx) entry])
      [:div.text-sm.opacity-50 "Empty"])])
 
-(rum/defc undo-redo-debug-ui
+(hsx/defc undo-redo-debug-ui
   []
   (let [repo (state/use-sub :git/current-repo)
         expanded?* (hooks/use-memo #(atom #{}) [])

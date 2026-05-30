@@ -17,7 +17,7 @@
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defonce emojis (vals (bean/->clj (gobj/get emoji-data "emojis"))))
 
@@ -113,11 +113,11 @@
     {:icons icons
      :emojis emojis'}))
 
-(rum/defc icons-row
+(hsx/defc icons-row
   [items]
   [:div.its.icons-row items])
 
-(rum/defc icon-cp
+(hsx/defc icon-cp
   [icon' {:keys [on-chosen hover]}]
   [:button.w-9.h-9.transition-opacity
    (when-let [icon' (cond-> icon' (string? icon') (string/replace " " ""))]
@@ -136,7 +136,7 @@
       :on-mouse-out #()})
    (ui/icon icon' {:size 24})])
 
-(rum/defc emoji-cp
+(hsx/defc emoji-cp
   [{:keys [id name] :as emoji} {:keys [on-chosen hover]}]
   [:button.text-2xl.w-9.h-9.transition-opacity
    (cond->
@@ -159,11 +159,11 @@
     (icon-cp (if (string? item) item (:id item)) opts)
     (emoji-cp item opts)))
 
-(rum/defc pane-section
+(hsx/defc pane-section
   [label items & {:keys [searching? virtual-list?]
                   :or {virtual-list? true}
                   :as opts}]
-  (let [*el-ref (rum/use-ref nil)]
+  (let [*el-ref (hooks/use-ref nil)]
     [:div.pane-section
      {:ref *el-ref
       :class (util/classnames
@@ -192,7 +192,7 @@
                                       (mapv #(item-render % opts) icons))))}
 
             searching?
-            (assoc :custom-scroll-parent (some-> (rum/deref *el-ref) (.closest ".bd-scroll"))))))
+            (assoc :custom-scroll-parent (some-> (hooks/deref *el-ref) (.closest ".bd-scroll"))))))
        [:div.its
         (map #(item-render % opts) items)])]))
 
@@ -236,21 +236,21 @@
                    (cons m))]
     (storage/set :ui/ls-icons-used s)))
 
-(rum/defc emojis-cp
+(hsx/defc emojis-cp
   [emojis* opts]
   (let [sections (emoji-sections emojis* (get-used-items) (:show-used? opts))]
     [:div.flex.flex-1.flex-col.gap-1
      (for [{:keys [title items virtual-list?]} sections]
        (pane-section title items (assoc opts :virtual-list? virtual-list?)))]))
 
-(rum/defc icons-cp
+(hsx/defc icons-cp
   [icons opts]
   (pane-section
    (t :icon/icons-count (count icons))
    icons
    opts))
 
-(rum/defc all-cp
+(hsx/defc all-cp
   [opts]
   (let [used-items (get-used-items)
         emoji-items (take 32 emojis)
@@ -266,22 +266,22 @@
                    icon-items
                    opts)]))
 
-(rum/defc tab-observer
+(hsx/defc tab-observer
   [tab {:keys [reset-q!]}]
   (hooks/use-effect!
    #(reset-q!)
    [tab])
   nil)
 
-(rum/defc select-observer
+(hsx/defc select-observer
   [*input-ref]
-  (let [*el-ref (rum/use-ref nil)
-        *items-ref (rum/use-ref [])
-        *current-ref (rum/use-ref [-1])
+  (let [*el-ref (hooks/use-ref nil)
+        *items-ref (hooks/use-ref [])
+        *current-ref (hooks/use-ref [-1])
         set-current! (fn [idx node] (set! (. *current-ref -current) [idx node]))
-        get-cnt #(some-> (rum/deref *el-ref) (.closest ".cp__emoji-icon-picker"))
+        get-cnt #(some-> (hooks/deref *el-ref) (.closest ".cp__emoji-icon-picker"))
         focus! (fn [idx dir]
-                 (let [items (rum/deref *items-ref)
+                 (let [items (hooks/deref *items-ref)
                        ^js popup (some-> (get-cnt) (.-parentNode))
                        idx (loop [n idx]
                              (if (false? (nth items n nil))
@@ -291,14 +291,14 @@
                          (.scrollIntoView node #js {:block "center"})
                          (when popup (set! (. popup -scrollTop) 0))
                          (set-current! idx node))
-                     (do (.focus (rum/deref *input-ref)) (set-current! -1 nil)))))
+                     (do (.focus (hooks/deref *input-ref)) (set-current! -1 nil)))))
         down-handler!
         (hooks/use-callback
          (fn [^js e]
            (if (= 13 (.-keyCode e))
                 ;; enter
-             (some-> (second (rum/deref *current-ref)) (.click))
-             (let [[idx _node] (rum/deref *current-ref)]
+             (some-> (second (hooks/deref *current-ref)) (.click))
+             (let [[idx _node] (hooks/deref *current-ref)]
                (case (.-keyCode e)
                     ;;left
                  37 (focus! (dec idx) :prev)
@@ -329,10 +329,10 @@
      [])
     [:span.absolute.hidden {:ref *el-ref}]))
 
-(rum/defc color-picker
+(hsx/defc color-picker
   [*color on-select!]
-  (let [[color, set-color!] (rum/use-state @*color)
-        *el (rum/use-ref nil)
+  (let [[color, set-color!] (hooks/use-state @*color)
+        *el (hooks/use-ref nil)
         content-fn (fn []
                      (let [colors ["#6e7b8b" "#5e69d2" "#00b5ed" "#00b55b"
                                    "#f2be00" "#e47a00" "#f38e81" "#fb434c" nil]]
@@ -347,7 +347,7 @@
                            (if c "" (shui/tabler-icon "minus" {:class "scale-75 opacity-70"}))))]))]
     (hooks/use-effect!
      (fn []
-       (when-let [^js picker (some-> (rum/deref *el) (.closest ".cp__emoji-icon-picker"))]
+       (when-let [^js picker (some-> (hooks/deref *el) (.closest ".cp__emoji-icon-picker"))]
          (let [color (if (string/blank? color) "inherit" color)]
            (.setProperty (.-style picker) "--ls-color-icon-preset" color)
            (storage/set :ls-icon-color-preset color)))
@@ -366,7 +366,7 @@
                  [:strong {:style {:color (or color "inherit")}}
                   (shui/tabler-icon "palette")])))
 
-(rum/defc ^:large-vars/cleanup-todo icon-search
+(hsx/defc ^:large-vars/cleanup-todo icon-search
   [{:keys [on-chosen del-btn? color-auto-chosen? icon-value] :as opts}]
   (let [[q set-q!] (hooks/use-state "")
         [result set-result!] (hooks/use-state nil)
@@ -413,38 +413,38 @@
         (select-observer *input-ref))
       [:div.search-input
        (shui/tabler-icon "search" {:size 16})
-       [(shui/input
-         {:auto-focus true
-          :ref *input-ref
-          :placeholder (case tab
-                         :emoji (t :icon/search-emojis)
-                         :icon (t :icon/search-icons)
-                         (t :icon/search-all))
-          :default-value ""
-          :on-focus #(set-select-mode?! false)
-          :on-key-down (fn [^js e]
-                         (case (.-keyCode e)
-                            ;; esc
-                           27 (do (util/stop e)
-                                  (if (string/blank? q)
-                                   ;(some-> (rum/deref *input-ref) (.blur))
-                                    (shui/popup-hide!)
-                                    (reset-q!)))
-                           38 (util/stop e)
-                           (9 40) (do
-                                    (set-select-mode?! true)
-                                    (util/stop e))
-                           :dune))
-          :on-change (debounce
-                      (fn [e]
-                        (let [q' (util/evalue e)]
-                          (set-q! q')
-                          (set-select-mode?! false)
-                          (if (string/blank? q')
-                            (set-result! {})
-                            (p/let [result (search q' tab)]
-                              (set-result! result)))))
-                      200)})]
+       (shui/input
+        {:auto-focus true
+         :ref *input-ref
+         :placeholder (case tab
+                        :emoji (t :icon/search-emojis)
+                        :icon (t :icon/search-icons)
+                        (t :icon/search-all))
+         :default-value ""
+         :on-focus #(set-select-mode?! false)
+         :on-key-down (fn [^js e]
+                        (case (.-keyCode e)
+                           ;; esc
+                          27 (do (util/stop e)
+                                 (if (string/blank? q)
+                                  ;(some-> (hooks/deref *input-ref) (.blur))
+                                   (shui/popup-hide!)
+                                   (reset-q!)))
+                          38 (util/stop e)
+                          (9 40) (do
+                                   (set-select-mode?! true)
+                                   (util/stop e))
+                          :dune))
+         :on-change (debounce
+                     (fn [e]
+                       (let [q' (util/evalue e)]
+                         (set-q! q')
+                         (set-select-mode?! false)
+                         (if (string/blank? q')
+                           (set-result! {})
+                           (p/let [result (search q' tab)]
+                             (set-result! result)))))
+                     200)})
        (when-not (string/blank? q)
          [:a.x {:on-click reset-q!} (shui/tabler-icon "x" {:size 14})])]]
      ;; body
@@ -496,9 +496,9 @@
                          :on-click #(on-chosen nil)}
                         (shui/tabler-icon "trash" {:size 17})))]])]))
 
-(rum/defc icon-picker
+(hsx/defc icon-picker
   [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts button-opts]}]
-  (let [*trigger-ref (rum/use-ref nil)
+  (let [*trigger-ref (hooks/use-ref nil)
         content-fn
         (if config/publishing?
           (constantly [])
@@ -512,7 +512,7 @@
     (hooks/use-effect!
      (fn []
        (when initial-open?
-         (js/setTimeout #(some-> (rum/deref *trigger-ref) (.click)) 32)))
+         (js/setTimeout #(some-> (hooks/deref *trigger-ref) (.click)) 32)))
      [initial-open?])
 
     ;; trigger

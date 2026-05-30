@@ -1,13 +1,11 @@
 (ns frontend.components.lazy-editor
   (:require [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.handler.plugin :refer [hook-extensions-enhancers-by-key]]
-            [frontend.rum :as r]
-            [frontend.state :as state]
+            [frontend.handler.plugin :refer [hook-extensions-enhancers-by-key]]            [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
-            [rum.core :as rum]
+            [io.factorhouse.hsx.core :as hsx]
             [shadow.lazy :as lazy]))
 
 ;; TODO: Why does shadow fail when code is required
@@ -16,7 +14,7 @@
 
 (defonce loaded? (atom false))
 
-(rum/defc editor-aux
+(hsx/defc editor-aux
   [config id attr code theme options codemirror-loaded?]
   (let [^js state (ui/useInView #js {:rootMargin "0px"})
         in-view? (.-inView state)
@@ -29,7 +27,7 @@
        (@lazy-editor config id attr code theme options)
        placeholder)]))
 
-(rum/defc editor
+(hsx/defc editor
   [config id attr code options]
   (hooks/use-effect!
    (fn []
@@ -46,7 +44,7 @@
                           (reset! loaded? true)))
                       (reset! loaded? true))))))
    [])
-  (let [loaded?' (r/use-value loaded?)
+  (let [loaded?' (hooks/use-value loaded?)
         theme   (state/use-sub :ui/theme)
         code    (or code "")
         code    (string/replace-first code #"\n$" "")]      ;; See-also: #3410

@@ -12,10 +12,11 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            ))
 
 (defn- setup-fns!
   []
@@ -26,7 +27,7 @@
     (catch :default _e
       nil)))
 
-(rum/defc helpful-default-error-screen
+(hsx/defc helpful-default-error-screen
   "This screen is displayed when the UI has crashed hard. It provides the user
   with basic troubleshooting steps to get them back to a working state. This
   component is purposefully stupid simple as it needs to render under any number
@@ -115,7 +116,7 @@
                  [{:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"}])]]]]]]]]]]
      (ui/notification)]))
 
-(rum/defc not-found
+(hsx/defc not-found
   []
   [:div {:class "flex flex-col items-center justify-center min-h-screen bg-background"}
    [:h1 {:class "text-6xl font-bold text-gray-12 mb-4"} "404"]
@@ -125,7 +126,7 @@
                  :variant :outline}
                 (shui/tabler-icon "home") (t :page/go-back-home))])
 
-(rum/defc current-page
+(hsx/defc current-page
   []
   (hooks/use-effect!
    (fn []
@@ -143,9 +144,8 @@
        [:<>
         (container/root-container
          route-match
-         (rum/with-key
-           (view route-match)
-           (:path route-match)))
+         ^{:key (:path route-match)}
+         [view route-match])
         (when config/lsp-enabled?
           (plugin/hook-daemon-renderers))]))
     (not-found)))

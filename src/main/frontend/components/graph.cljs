@@ -10,7 +10,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (def ^:private default-open-groups #{:view-mode :displayed-tags :layout})
 (def ^:private default-depth 1)
@@ -888,7 +888,7 @@
          {:repo repo
           :settings next-settings})))))
 
-(rum/defc global-graph
+(hsx/defc global-graph
   []
   (let [repo (state/get-current-repo)
         theme (state/sub :ui/theme)

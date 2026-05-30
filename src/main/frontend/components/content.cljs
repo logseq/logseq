@@ -32,14 +32,15 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [logseq.shui.popup.core :as shui-popup]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc ^:large-vars/cleanup-todo custom-context-menu-content
+(hsx/defc ^:large-vars/cleanup-todo custom-context-menu-content
   []
-  (let [[set-icon-sub-menu-open? set-icon-sub-menu-open] (rum/use-state false)
+  (let [[set-icon-sub-menu-open? set-icon-sub-menu-open] (hooks/use-state false)
         comment-targets (comments-model/comment-target-blocks
                          (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids)))]
     [:<>
@@ -166,12 +167,12 @@
       (t :editor/collapse-block-children)
       (ui/dropdown-shortcut :editor/collapse-block-children))]))
 
-(rum/defc ^:large-vars/cleanup-todo block-context-menu-content
+(hsx/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id property-default-value?]
   (let [block (db/entity [:block/uuid block-id])
-        [set-icon-sub-menu-open? set-icon-sub-menu-open] (rum/use-state false)
-        [heading set-heading!] (rum/use-state (or (pu/lookup block :logseq.property/heading) false))
-        [current-color set-current-color!] (rum/use-state (pu/lookup block :logseq.property/background-color))]
+        [set-icon-sub-menu-open? set-icon-sub-menu-open] (hooks/use-state false)
+        [heading set-heading!] (hooks/use-state (or (pu/lookup block :logseq.property/heading) false))
+        [current-color set-current-color!] (hooks/use-state (pu/lookup block :logseq.property/background-color))]
     (when block
       [:<>
        (ui/menu-background-color current-color
@@ -388,7 +389,7 @@
                                              versions))))))}
                "(Dev) Show block content history")))])])))
 
-(rum/defc block-ref-custom-context-menu-content
+(hsx/defc block-ref-custom-context-menu-content
   [block block-ref-id]
   (when (and block block-ref-id)
     [:<>
@@ -418,7 +419,7 @@
        :on-click (fn [] (editor-handler/replace-ref-with-embed! block block-ref-id))}
       (t :reference/replace-with-embed))]))
 
-(rum/defc page-title-custom-context-menu-content
+(hsx/defc page-title-custom-context-menu-content
   [page popup-id]
   (when page
     (let [page-menu-options (page-menu/page-menu page)]
@@ -435,14 +436,14 @@
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
 ;; blocks were already selected.
-(rum/defc hiccup-content
+(hsx/defc hiccup-content
   [id {:keys [hiccup]}]
   [:div {:id id}
    (if hiccup
      hiccup
      [:div.cursor (t :editor/click-to-edit)])])
 
-(rum/defc non-hiccup-content
+(hsx/defc non-hiccup-content
   [id content on-click on-hide config format]
   (let [edit? (state/use-sub-editing? id)]
     (if edit?
@@ -464,7 +465,7 @@
            [:div.cursor (t :editor/click-to-edit)]
            content)]))))
 
-(rum/defc content
+(hsx/defc content
   [id {:keys [format
               config
               hiccup

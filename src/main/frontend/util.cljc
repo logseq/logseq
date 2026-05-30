@@ -1329,7 +1329,7 @@
           ret)
         @last-mem))))
 
-;; from rum
+;; requestAnimationFrame fallback
 #?(:cljs
    (def schedule
      (or (and (exists? js/window)

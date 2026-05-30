@@ -46,7 +46,7 @@
             [medley.core :as medley]
             [missionary.core :as m]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (def ^:private yyyy-MM-dd-formatter (tf/formatter "yyyy-MM-dd"))
 
@@ -56,8 +56,8 @@
   (if disable-virtualized?
     [:div.content
      (for [i (range 0 total-count)]
-       (rum/with-key (item-content i)
-         (compute-item-key i)))]
+       ^{:key (compute-item-key i)}
+       [:<> (item-content i)])]
     (ui/virtualized-list option)))
 
 (defn- get-scroll-parent
@@ -73,9 +73,9 @@
   (let [container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])]
     (or (:container-id config) (state/get-container-id container-key))))
 
-(rum/defc header-checkbox
+(hsx/defc header-checkbox
   [{:keys [selected-all? selected-some? toggle-selected-all!] :as table}]
-  (let [[show? set-show!] (rum/use-state false)]
+  (let [[show? set-show!] (hooks/use-state false)]
     [:label.h-8.w-8.flex.items-center.justify-center.cursor-pointer
      {:html-for "header-checkbox"
       :on-mouse-over #(set-show! true)
@@ -92,17 +92,17 @@
        :class (str "flex transition-opacity "
                    (if (or show? selected-all? selected-some?) "opacity-100" "opacity-0"))})]))
 
-(rum/defc header-index
+(hsx/defc header-index
   []
   [:label.h-8.w-6.flex.items-center.justify-center
    {:html-for "header-index"
     :title (t :view.table/row-number)}
    "#"])
 
-(rum/defc row-checkbox
+(hsx/defc row-checkbox
   [{:keys [row-selected? row-toggle-selected! data state data-fns]} row _column]
   (let [id (str (:db/id row) "-" "checkbox")
-        [show? set-show!] (rum/use-state false)
+        [show? set-show!] (hooks/use-state false)
         checked? (row-selected? row)
         {:keys [last-selected-idx row-selection]} state
         {:keys [set-last-selected-idx! set-row-selection!]} data-fns]
@@ -137,7 +137,7 @@
        :class (str "flex transition-opacity "
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
 
-(rum/defc gallery-card-checkbox
+(hsx/defc gallery-card-checkbox
   [{:keys [row-selected? row-toggle-selected! data state data-fns]} row]
   (let [id (str (:db/id row) "-gallery-checkbox")
         checked? (row-selected? row)
@@ -280,7 +280,7 @@
   [entity]
   (db-view/get-property-value-content (db/get-db) entity))
 
-(rum/defc block-container
+(hsx/defc block-container
   [config row]
   (let [container (state/get-component :block/container)
         config' (cond-> config
@@ -293,7 +293,7 @@
 
 (defn- save-block-and-focus
   [*ref set-focus-timeout! hide-popup?]
-  (let [node (rum/deref *ref)
+  (let [node (hooks/deref *ref)
         cell (util/rec-get-node node "ls-table-cell")]
     (p/do!
      (editor-handler/save-current-block!)
@@ -307,7 +307,7 @@
   [opacity]
   (str "h-6 w-6 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 opacity-" opacity))
 
-(rum/defc ^:large-vars/cleanup-todo block-title
+(hsx/defc ^:large-vars/cleanup-todo block-title
   "Used on table view"
   [block* {:keys [create-new-block width row property]}]
   (let [*ref (hooks/use-ref nil)
@@ -699,7 +699,7 @@
       (max gallery-min-card-dimension)
       (min gallery-max-card-dimension)))
 
-(rum/defc gallery-card-size-slider
+(hsx/defc gallery-card-size-slider
   [label value on-change on-commit]
   [:div.flex.flex-col.gap-2
    [:div.flex.flex-row.items-center.justify-between.gap-3.text-sm.leading-none
@@ -722,7 +722,7 @@
     (shui/slider-thumb
      {:class "block h-4 w-4 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none"}))])
 
-(rum/defc gallery-custom-card-size-inputs
+(hsx/defc gallery-custom-card-size-inputs
   [view-entity dimensions set-size!]
   (let [[width set-width!] (hooks/use-state (:width dimensions))
         [height set-height!] (hooks/use-state (:height dimensions))
@@ -770,7 +770,7 @@
          label))
       (gallery-custom-card-size-inputs view-entity dimensions set-size!)))))
 
-(rum/defc groups-sort
+(hsx/defc groups-sort
   [view-entity sort-by-value]
   (let [property-ident (or (:db/ident sort-by-value) :block/journal-day)]
     (shui/dropdown-menu-sub
@@ -790,7 +790,7 @@
           :onSelect (fn [e] (.preventDefault e))}
          (t option-key)))))))
 
-(rum/defc groups-sort-order
+(hsx/defc groups-sort-order
   [view-entity desc?]
   (let [descending-label (t :view.table/descending)
         ascending-label (t :view.table/ascending)]
@@ -809,7 +809,7 @@
           :onSelect (fn [e] (.preventDefault e))}
          option))))))
 
-(rum/defc more-actions
+(hsx/defc more-actions
   [view-entity columns {:keys [column-visible? rows column-toggle-visibility]} {:keys [group-by-property-ident]}]
   (let [display-type (:db/ident (:logseq.property.view/type view-entity))
         table? (= display-type :logseq.property.view/type.table)
@@ -903,7 +903,7 @@
         (:block/created-at :block/updated-at) 160
         180))))
 
-(rum/defc add-property-button
+(hsx/defc add-property-button
   []
   [:div.ls-table-header-cell.!border-0
    (shui/button
@@ -912,7 +912,7 @@
     (ui/icon "plus")
     (t :view/new-property))])
 
-(rum/defc action-bar
+(hsx/defc action-bar
   [table selected-rows {:keys [on-delete-rows]}]
   (shui/table-actions
    {}
@@ -925,24 +925,24 @@
      :outliner? false
      :view-parent (:logseq.property/view-for (:view-entity table))})))
 
-(rum/defc column-resizer
+(hsx/defc column-resizer
   [_column on-sized!]
-  (let [*el (rum/use-ref nil)
-        [dx set-dx!] (rum/use-state nil)
-        [width set-width!] (rum/use-state nil)
+  (let [*el (hooks/use-ref nil)
+        [dx set-dx!] (hooks/use-state nil)
+        [width set-width!] (hooks/use-state nil)
         add-resizing-class #(dom/add-class! js/document.documentElement "is-resizing-buf")
         remove-resizing-class #(dom/remove-class! js/document.documentElement "is-resizing-buf")]
 
     (hooks/use-effect!
      (fn []
        (when (number? dx)
-         (some-> (rum/deref *el)
+         (some-> (hooks/deref *el)
                  (dom/set-style! :transform (str "translate3D(" dx "px , 0, 0)")))))
      [dx])
 
     (hooks/use-effect!
      (fn []
-       (when-let [el (and (fn? js/window.interact) (rum/deref *el))]
+       (when-let [el (and (fn? js/window.interact) (hooks/deref *el))]
          (let [*field-rect (atom nil)
                min-width 40
                max-width 500]
@@ -1121,7 +1121,7 @@
                            :on-delete-rows (fn [table selected-ids]
                                              (on-delete-rows view-parent view-feature-type table selected-ids))))]))))
 
-(rum/defc lazy-table-cell
+(hsx/defc lazy-table-cell
   [cell-render-f cell-placeholder]
   (let [^js state (ui/useInView #js {:rootMargin "0px"})
         in-view? (.-inView state)]
@@ -1182,7 +1182,7 @@
           (.scrollIntoView next-cell #js {:inline "center"
                                           :block "nearest"}))))))
 
-(rum/defc table-cell-container
+(hsx/defc table-cell-container
   [cell-opts body]
   (let [*ref (hooks/use-ref nil)]
     (shui/table-cell
@@ -1191,9 +1191,9 @@
             :ref *ref
             :on-click (fn [e]
                         (when-not (dom/has-class? (.-target e) "jtrigger")
-                          (click-cell (rum/deref *ref))))
+                          (click-cell (hooks/deref *ref))))
             :on-key-down (fn [e]
-                           (let [container (rum/deref *ref)]
+                           (let [container (hooks/deref *ref)]
                              (case (util/ekey e)
                                "Escape"
                                (do
@@ -1225,7 +1225,7 @@
                                nil))))
      body)))
 
-(rum/defc table-row-inner
+(hsx/defc table-row-inner
   [{:keys [row-selected?] :as table} row props {:keys [show-add-property? scrolling?]}]
   (let [*ref (hooks/use-ref nil)
         pinned-columns (get-in table [:state :pinned-columns])
@@ -1266,7 +1266,7 @@
        :blockid (str (:block/uuid row))
        :on-pointer-down (fn [_e] (db-async/<get-block (state/get-current-repo) (:db/id row) {:children? false}))
        :on-key-down (fn [e]
-                      (let [container (rum/deref *ref)]
+                      (let [container (hooks/deref *ref)]
                         (when (dom/has-class? container "selected")
                           (case (util/ekey e)
                             "Enter"
@@ -1307,7 +1307,7 @@
        [:div.flex.flex-row
         (map #(row-cell-f % {:lazy? true}) unpinned-columns)]))))
 
-(rum/defc table-row
+(hsx/defc table-row
   [table row props option]
   (db-hooks/query-scope
    (fn []
@@ -1323,9 +1323,9 @@
                       (assoc :block.temp/refs-count (:block.temp/refs-count row))))]
        (table-row-inner table row' props option)))))
 
-(rum/defc search
+(hsx/defc search
   [input {:keys [on-change set-input!]}]
-  (let [[show-input? set-show-input!] (rum/use-state false)]
+  (let [[show-input? set-show-input!] (hooks/use-state false)]
     (if show-input?
       [:div.flex.flex-row.items-center
        (shui/input
@@ -1379,10 +1379,10 @@
    {:value :custom-date
     :label (t :view.filter/custom-date)}])
 
-(rum/defc ^:large-vars/cleanup-todo filter-property
+(hsx/defc ^:large-vars/cleanup-todo filter-property
   [view-entity columns {:keys [data-fns] :as table} opts]
-  (let [[property set-property!] (rum/use-state nil)
-        [values set-values!] (rum/use-state nil)
+  (let [[property set-property!] (hooks/use-state nil)
+        [values set-values!] (hooks/use-state nil)
         schema (:schema (db/get-db))
         timestamp? (datetime-property? property)
         set-filters! (:set-filters! data-fns)
@@ -1494,7 +1494,7 @@
                        (t :view.filter/is-not-empty)])]
         (select/select option)))))
 
-(rum/defc filter-properties
+(hsx/defc filter-properties
   [view-entity columns table opts]
   (shui/button
    {:variant "ghost"
@@ -1563,7 +1563,7 @@
     ;; FIXME: should be a valid date number
     (when (number? value) value)))
 
-(rum/defc filter-operator
+(hsx/defc filter-operator
   [property operator filters set-filters! idx]
   (shui/dropdown-menu
    (shui/dropdown-menu-trigger
@@ -1590,7 +1590,7 @@
                                                [property operator]))))))))}
          (operator->text operator)))))))
 
-(rum/defc between
+(hsx/defc between
   [_property [start end] filters set-filters! idx]
   (let [set-filter-range! (fn [value]
                             (set-filters!
@@ -1626,7 +1626,7 @@
                      (set-filter-range! value)))
        :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})]))
 
-(rum/defc ^:large-vars/cleanup-todo filter-value-select
+(hsx/defc ^:large-vars/cleanup-todo filter-value-select
   [view-entity {:keys [data-fns] :as table} property value operator idx opts]
   (let [type (:logseq.property/type property)
         property-ident (:db/ident property)]
@@ -1745,7 +1745,7 @@
            :else
            (t :view/all))])))))
 
-(rum/defc filter-value
+(hsx/defc filter-value
   [view-entity table property operator value filters set-filters! idx opts]
   (let [number-operator? (string/starts-with? (name operator) "number-")
         set-filter-value! (fn [input-value number-value]
@@ -1774,7 +1774,7 @@
 
       (filter-value-select view-entity table property value operator idx opts))))
 
-(rum/defc filters-row
+(hsx/defc filters-row
   [view-entity {:keys [data-fns columns] :as table} opts]
   (let [filters (get-in table [:state :filters])
         {:keys [set-filters!]} data-fns]
@@ -1824,7 +1824,7 @@
              (shui/select-item {:value "and"} (t :view.filter/match-all-filters))
              (shui/select-item {:value "or"} (t :view.filter/match-any-filter)))))])])))
 
-(rum/defc new-record-button
+(hsx/defc new-record-button
   [table view-entity]
   (let [asset? (and (:logseq.property/built-in? view-entity)
                     (= (:block/name view-entity) "asset"))]
@@ -1839,7 +1839,7 @@
       (ui/icon (if asset? "upload" "plus")))
      [:div (t :node/new)])))
 
-(rum/defc add-new-row
+(hsx/defc add-new-row
   [view-entity table]
   [:div.py-1.px-2.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm.border-b
    {:on-click (fn [_]
@@ -1901,7 +1901,7 @@
       (property-handler/set-block-property! (:db/id entity) :logseq.property.table/sized-columns sized-columns)
       (set-sized-columns! sized-columns)))})
 
-(rum/defc lazy-item
+(hsx/defc lazy-item
   [data idx {:keys [properties list-view? gallery-view? scrolling?]} item-render]
   (let [item (util/nth-safe data idx)
         db-id (cond (map? item) (:db/id item)
@@ -1931,7 +1931,7 @@
     (let [item' (cond (map? item) item (number? item) {:db/id item})]
       (item-render item'))))
 
-(rum/defc table-body
+(hsx/defc table-body
   [table option rows *scroller-ref set-items-rendered!]
   (let [[scrolling? set-scrolling!] (hooks/use-state false)]
     (when (seq rows)
@@ -1960,7 +1960,7 @@
                             (set-items-rendered! true)))}
        (:disable-virtualized? option)))))
 
-(rum/defc table-view
+(hsx/defc table-view
   [table option row-selection *scroller-ref]
   (let [selected-rows (shui/table-get-selection-rows row-selection (:rows table))
         [items-rendered? set-items-rendered!] (hooks/use-state false)]
@@ -1975,7 +1975,7 @@
          (when (and (get-in table [:data-fns :add-new-object!]) (or (empty? rows) items-rendered?))
            (shui/table-footer (add-new-row (:view-entity option) table)))]]))))
 
-(rum/defc list-view
+(hsx/defc list-view
   [{:keys [config ref-matched-children-ids disable-virtualized?] :as option} view-entity {:keys [rows]} *scroller-ref]
   (let [config (assoc config :container-id (view-container-id config))
         lazy-item-render (fn [rows idx]
@@ -2016,11 +2016,10 @@
                           (state/get-current-repo) first-block-id
                           {:show-page? false})]
              (list-cp blocks)])
-          (rum/with-key
-            (lazy-item-render rows idx)
-            (str "partition-" idx)))))))
+          ^{:key (str "partition-" idx)}
+          [:<> (lazy-item-render rows idx)])))))
 
-(rum/defc gallery-property-value
+(hsx/defc gallery-property-value
   [block property-ident]
   (if (= :block/title property-ident)
     [:div.ls-gallery-card-title
@@ -2056,7 +2055,7 @@
       :else
       (->entity asset-value))))
 
-(rum/defc gallery-card-item
+(hsx/defc gallery-card-item
   [table view-entity block config {:keys [asset-property-ident display-property-idents]}]
   (let [asset-block (gallery-card-asset-block block asset-property-ident)
         asset-cp (state/get-component :block/asset-cp)
@@ -2080,9 +2079,8 @@
        (for [property-ident display-property-idents
              :let [property-value (gallery-property-value block property-ident)]
              :when property-value]
-          (rum/with-key
-            property-value
-            (str "gallery-property-" (:db/id block) "-" property-ident)))]]]))
+         ^{:key (str "gallery-property-" (:db/id block) "-" property-ident)}
+         [:<> property-value])]]]))
 
 (defn gallery-lazy-item-opts
   [option]
@@ -2123,7 +2121,7 @@
     :else
     (str value)))
 
-(rum/defc gallery-action-bar
+(hsx/defc gallery-action-bar
   [table option view-parent view-feature-type selected-rows]
   (when (seq selected-rows)
     (let [checkbox-id (str (:db/id (:view-entity table)) "-gallery-select-all")
@@ -2149,7 +2147,7 @@
                            :on-delete-rows (fn [table selected-ids]
                                              (on-delete-rows view-parent view-feature-type table selected-ids))))]])))
 
-(rum/defc gallery-view
+(hsx/defc gallery-view
   [{:keys [config view-parent view-feature-type] :as option} table view-entity blocks row-selection *scroller-ref]
   (let [config' (assoc config :container-id (view-container-id config))
         columns (:columns table)
@@ -2186,7 +2184,7 @@
      (when-not (:hide-action-bar? option)
        (gallery-action-bar table option view-parent view-feature-type selected-rows))]))
 
-(rum/defc gallery-group
+(hsx/defc gallery-group
   [view-entity option row-selection *scroller-ref groups idx table-map group-by-page? group-by-property]
   (let [[value group] (nth groups idx)
         table' (shui/table-option (assoc table-map :data group))
@@ -2211,7 +2209,7 @@
                    row-selection
                    *scroller-ref)]))
 
-(rum/defc grouped-gallery-view
+(hsx/defc grouped-gallery-view
   [table-map table option view-entity groups row-selection group-by-property group-by-property-ident *scroller-ref]
   (let [gallery-rows (grouped-gallery-row-ids groups)
         gallery-action-table (shui/table-option
@@ -2245,7 +2243,7 @@
      (util/schedule #(set-ready? true)))
    []))
 
-(rum/defc view-sorting-item
+(hsx/defc view-sorting-item
   [table sorting id name asc? set-sorting!]
   [:div.flex.flex-row.gap-2.items-center.justify-between.px-2
    [:div:div.flex.flex-row.gap-1.items-center
@@ -2287,9 +2285,9 @@
                       (shui/popup-hide!))))}
      (ui/icon "x"))]])
 
-(rum/defc view-sorting-config
+(hsx/defc view-sorting-config
   [table sorting columns]
-  (let [[sorting set-sorting!] (rum/use-state sorting)]
+  (let [[sorting set-sorting!] (hooks/use-state sorting)]
     [:div.ls-view-order-setting.flex.flex-col.gap-2.py-2.text-sm
      (let [items (for [{:keys [id asc?]} sorting]
                    (when-let [name (some (fn [column] (when (= id (:id column))
@@ -2313,7 +2311,7 @@
       (ui/icon "trash" {:size 15})
       [:span.ml-1 (t :view.table/delete-sort)])]))
 
-(rum/defc view-sorting
+(hsx/defc view-sorting
   [table columns sorting]
   (shui/button
    {:variant "ghost"
@@ -2328,7 +2326,7 @@
                                    :content-props {:onCloseAutoFocus #(.preventDefault %)}}))}
    (ui/icon "arrows-up-down")))
 
-(rum/defc view-cp
+(hsx/defc view-cp
   [view-entity table option* {:keys [*scroller-ref display-type row-selection]}]
   (let [[viewid] (hooks/use-state #(random-uuid))
         option (assoc option*
@@ -2418,7 +2416,7 @@
       :else
       title)))
 
-(rum/defc views-tab
+(hsx/defc views-tab
   [view-parent current-view {:keys [views data items-count set-view-entity! set-data! set-views! view-feature-type show-items-count? config references? opacity]}]
   (db-hooks/query-scope
    (fn []
@@ -2490,7 +2488,7 @@
                      (set-views! (concat views [view]))))}
       (ui/icon "plus" {:size 15}))]))))
 
-(rum/defc view-head
+(hsx/defc view-head
   [view-parent view-entity table columns input sorting
    set-input! add-new-object!
    {:keys [view-feature-type title-key additional-actions]
@@ -2543,17 +2541,20 @@
 
       (when add-new-object! (new-record-button table view-entity))]]))
 
-(rum/defc group-item
+(hsx/defc group-item
   [view-entity table' group group-by-property value option view-opts {:keys [list-view? gallery? group-by-page? readable-property-value]}]
   (let [title [:div
                {:class (when-not list-view? "my-2")}
                (cond
                          group-by-page?
                          (if value
-                           (let [c (state/get-component :block/page-cp)]
+                           (let [c (state/get-component :block/page-cp)
+                                 page (if (de/entity? value)
+                                        (select-keys value [:db/id :block/uuid :block/title :block/name])
+                                        value)]
                              (if (fn? c)
-                               (c {:disable-preview? true} value)
-                               (readable-property-value value)))
+                               (c {:disable-preview? true} page)
+                               (readable-property-value page)))
                            [:div.text-muted-foreground.text-sm
                             (t :view.table/pages)])
 
@@ -2581,7 +2582,7 @@
       [:div.flex.flex-1.flex-col  title (body-fn)]
       (ui/foldable title body-fn {:title-trigger? false}))))
 
-(rum/defc ^:large-vars/cleanup-todo view-inner
+(hsx/defc ^:large-vars/cleanup-todo view-inner
   [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! display-type group-by-property-ident config] :as option*}
    *scroller-ref]
   (let [journals? (:journals? config)
@@ -2598,19 +2599,19 @@
                                                             #{:select :block/created-at :block/updated-at})
                                             (repeat false))
                                     {}))
-        [visible-columns set-visible-columns!] (rum/use-state default-visible-columns)
+        [visible-columns set-visible-columns!] (hooks/use-state default-visible-columns)
         ordered-columns (vec (concat [:select] (:logseq.property.table/ordered-columns view-entity)))
         sized-columns (:logseq.property.table/sized-columns view-entity)
-        [ordered-columns set-ordered-columns!] (rum/use-state ordered-columns)
-        [sized-columns set-sized-columns!] (rum/use-state sized-columns)
+        [ordered-columns set-ordered-columns!] (hooks/use-state ordered-columns)
+        [sized-columns set-sized-columns!] (hooks/use-state sized-columns)
         {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns! set-sized-columns!]}
         (db-set-table-state! view-entity {:set-sorting! set-sorting!
                                           :set-filters! set-filters!
                                           :set-visible-columns! set-visible-columns!
                                           :set-sized-columns! set-sized-columns!
                                           :set-ordered-columns! set-ordered-columns!})
-        [row-selection set-row-selection!] (rum/use-state {})
-        [last-selected-idx set-last-selected-idx!] (rum/use-state nil)
+        [row-selection set-row-selection!] (hooks/use-state {})
+        [last-selected-idx set-last-selected-idx!] (hooks/use-state nil)
         columns (sort-columns columns ordered-columns)
         select? (first (filter (fn [item] (= (:id item) :select)) columns))
         id? (first (filter (fn [item] (= (:id item) :id)) columns))
@@ -2651,7 +2652,7 @@
                               :add-new-object! add-new-object!
                               :set-last-selected-idx! set-last-selected-idx!}}
         table (shui/table-option table-map)
-        *view-ref (rum/use-ref nil)
+        *view-ref (hooks/use-ref nil)
         gallery? (= display-type :logseq.property.view/type.gallery)
         list-view? (= display-type :logseq.property.view/type.list)
         disable-virtualized? journals?
@@ -2679,7 +2680,7 @@
                  [:div.flex.flex-col.border-t.pt-2.gap-2
                   (virtualized-list
                    {:class (when list-view? "group-list-view")
-                    :custom-scroll-parent (util/app-scroll-container-node (rum/deref *view-ref))
+                    :custom-scroll-parent (util/app-scroll-container-node (hooks/deref *view-ref))
                     :increase-viewport-by {:top 300 :bottom 300}
                     :compute-item-key (fn [idx]
                                         (str "table-group" idx))
@@ -2693,14 +2694,11 @@
                                                                                {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
                                           table' (shui/table-option (-> table-map
                                                                         (assoc-in [:data-fns :add-new-object!] add-new-object!)
-                                                                        (assoc :data group)))
-                                          key (str (:db/id view-entity) "-group-idx-" idx)]
-                                      (rum/with-key
-                                        (group-item view-entity table' group group-by-property value option view-opts
-                                                    {:list-view? list-view?
-                                                     :group-by-page? (= :block/page group-by-property-ident)
-                                                     :readable-property-value group-readable-property-value})
-                                        key)))}
+                                                                        (assoc :data group)))]
+                                      (group-item view-entity table' group group-by-property value option view-opts
+                                                  {:list-view? list-view?
+                                                   :group-by-page? (= :block/page group-by-property-ident)
+                                                   :readable-property-value group-readable-property-value})))}
                    disable-virtualized?)]))
              (view-cp view-entity table
                       (assoc option
@@ -2709,7 +2707,7 @@
                       view-opts)))])
       (merge {:title-trigger? false} foldable-options))]))
 
-(rum/defc view-container
+(hsx/defc view-container
   "Provides a view for data like query results and tagged objects, multiple
    layouts such as table and list are supported. Args:
    * view-entity: a db Entity
@@ -2723,12 +2721,12 @@
      * add-property!: `fn` to add a new property (or column)"
   [view-entity option]
   (let [*scroller-ref (hooks/use-memo #(atom nil) [])]
-  (rum/with-key (view-inner view-entity
-                            (cond-> option
-                              (or config/publishing? (:logseq.property.view/group-by-property view-entity))
-                              (dissoc :add-new-object!))
-                            *scroller-ref)
-    (str "view-" (:db/id view-entity)))))
+    ^{:key (str "view-" (:db/id view-entity))}
+    [view-inner view-entity
+     (cond-> option
+       (or config/publishing? (:logseq.property.view/group-by-property view-entity))
+       (dissoc :add-new-object!))
+     *scroller-ref]))
 
 (defn <load-view-data
   [view opts]
@@ -2781,7 +2779,7 @@
              (finally
                (set-loading! false)))))))))
 
-(rum/defc view-aux
+(hsx/defc view-aux
   [view-entity {:keys [config view-parent view-feature-type data query-entity-ids query set-view-entity!] :as option}]
   (let [[input set-input!] (hooks/use-state "")
         [properties set-properties!] (hooks/use-state nil)
@@ -2798,9 +2796,9 @@
         sorting (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
                   [{:id :block/updated-at, :asc? false}]
                   sorting*)
-        [sorting set-sorting!] (rum/use-state sorting)
+        [sorting set-sorting!] (hooks/use-state sorting)
         view-filters (:logseq.property.table/filters view-entity)
-        [filters set-filters!] (rum/use-state (or view-filters {}))
+        [filters set-filters!] (hooks/use-state (or view-filters {}))
         query? (= view-feature-type :query-result)
         option (if query? (assoc option :columns (get-query-columns config view-entity properties)) option)
         [loading? set-loading!] (hooks/use-state (not query?))
@@ -2881,7 +2879,7 @@
                    {:query-fn (fn [_] (swap! *version inc))}
                    nil))))))
 
-(rum/defc sub-view
+(hsx/defc sub-view
   [view-entity option]
   (db-hooks/query-scope
    (fn []
@@ -2892,28 +2890,30 @@
            [data-changes-version] (hooks/use-atom data-changes-version*)]
        (view-aux view (assoc option :data-changes-version data-changes-version))))))
 
-(rum/defc view
-  [{:keys [view-parent view-feature-type view-entity] :as option}]
+(hsx/defc view
+  [{:keys [view-parent view-feature-type] view-entity* :view-entity :as option}]
   (let [[views set-views!] (hooks/use-state nil)
-        [view-entity set-view-entity!] (hooks/use-state view-entity)
+        [view-entity set-view-entity!] (hooks/use-state view-entity*)
         query? (= view-feature-type :query-result)]
     (hooks/use-effect!
      #(c.m/run-task*
        (m/sp
          (when-not query?
            (let [repo (state/get-current-repo)]
-             (when-not view-entity
+             (set-views! nil)
+             (set-view-entity! view-entity*)
+             (when-not view-entity*
                (c.m/<? (db-async/<get-views repo (:db/id view-parent) view-feature-type))
                (let [views (get-views view-parent view-feature-type)]
                  (if-let [v (first views)]
                    (do
                      (set-views! views)
-                     (when-not view-entity (set-view-entity! v)))
-                   (when (and view-parent view-feature-type (not view-entity))
+                     (when-not view-entity* (set-view-entity! v)))
+                   (when (and view-parent view-feature-type (not view-entity*))
                      (let [new-view (c.m/<? (create-view! view-parent view-feature-type {:auto-triggered? true}))]
                        (set-views! (concat views [new-view]))
                        (set-view-entity! new-view))))))))))
-     [])
+     [(:db/id view-parent) view-feature-type (:db/id view-entity*) query?])
     (when view-entity
       (let [option' (assoc option
                            :view-feature-type (or view-feature-type
@@ -2921,6 +2921,5 @@
                            :views views
                            :set-views! set-views!
                            :set-view-entity! set-view-entity!)]
-        (rum/with-key
-          (sub-view view-entity option')
-          (str "view-" (:db/id view-entity)))))))
+        ^{:key (str "view-" (:db/id view-entity))}
+        [sub-view view-entity option']))))

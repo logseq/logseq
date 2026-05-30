@@ -4,15 +4,15 @@
             [frontend.components.views :as views]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.react :as react]
-            [frontend.rum :as r]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.db :as ldb]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc journal-cp
+(hsx/defc journal-cp
   [id last? selection-block-ids]
   [:div.journal-item.content
    (when last?
@@ -40,9 +40,9 @@
                                   (p/let [{:keys [data]} (views/<load-view-data nil {:journals? true})]
                                     (remove nil? data)))}
                      nil)
-            r/use-value)))
+            hooks/use-value)))
 
-(rum/defc all-journals
+(hsx/defc all-journals
   []
   (db-hooks/query-scope
    (fn []

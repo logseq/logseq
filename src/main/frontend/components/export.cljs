@@ -22,9 +22,9 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc auto-backup
+(hsx/defc auto-backup
   []
   (let [*backup-folder (hooks/use-memo #(atom (ldb/get-key-value (db/get-db) :logseq.kv/graph-backup-folder)) [])
         [backup-folder] (hooks/use-atom *backup-folder)
@@ -81,7 +81,7 @@
           :links [{:href "https://developer.chrome.com/docs/capabilities/web-apis/file-system-access"
                    :target "_blank"}])]])]))
 
-(rum/defc export
+(hsx/defc export
   []
   (when-let [current-repo (state/get-current-repo)]
     [:div.export
@@ -218,7 +218,7 @@
   (->> (block-handler/get-top-level-blocks (map #(db/entity [:block/uuid %]) selection-ids))
        (map :block/uuid)))
 
-(rum/defc ^:large-vars/cleanup-todo export-blocks
+(hsx/defc ^:large-vars/cleanup-todo export-blocks
   [_selection-ids {:keys [export-type] :as options}]
   (let [top-level-uuids (hooks/use-memo #(get-top-level-uuids _selection-ids) [_selection-ids])
         *text-other-options (hooks/use-memo #(atom nil) [])

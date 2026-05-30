@@ -14,7 +14,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- add-new-class-object!
   [class properties]
@@ -58,7 +58,7 @@
               full-data (:full-data table)]
           (set-data! (vec (concat full-data ids))))))))
 
-(rum/defc class-objects-inner
+(hsx/defc class-objects-inner
   [config class properties]
   (let [*ref (hooks/use-ref nil)
         ;; Properties can be nil for published private graphs
@@ -109,7 +109,7 @@
                                                                             :class-schema? true
                                                                             :target (.-target e)}]))})]))
 
-(rum/defc class-objects
+(hsx/defc class-objects
   [class config]
   (db-hooks/query-scope
    (fn []
@@ -135,7 +135,7 @@
     (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 {:container-id :unknown-container})
     block))
 
-(rum/defc property-related-objects-inner
+(hsx/defc property-related-objects-inner
   [config property properties]
   (let [tags? (= :block/tags (:db/ident property))
         columns (views/build-columns config properties
@@ -153,7 +153,7 @@
                  :show-add-property? false})))
 
 ;; Show all nodes containing the given property
-(rum/defc property-related-objects
+(hsx/defc property-related-objects
   [property config]
   (db-hooks/query-scope
    (fn []

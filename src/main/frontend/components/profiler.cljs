@@ -7,9 +7,9 @@
             [frontend.util :as util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc profiler
+(hsx/defc profiler
   []
   (let [profiling-fns (keys (first (hooks/use-atom profiler-handler/*fn-symbol->origin-fn)))
         [reports set-reports!] (hooks/use-state nil)

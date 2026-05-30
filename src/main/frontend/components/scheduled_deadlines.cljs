@@ -11,7 +11,7 @@
             [frontend.ui :as ui]
             [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- scheduled-or-deadlines?
   [page-name]
@@ -19,7 +19,7 @@
        (not (true? (state/scheduled-deadlines-disabled?)))
        (db/today-journal-page? page-name)))
 
-(rum/defc scheduled-and-deadlines
+(hsx/defc scheduled-and-deadlines
   [page-name]
   (let [[scheduled-or-deadlines set-scheduled-or-deadlines!] (hooks/use-state nil)]
     (hooks/use-effect!

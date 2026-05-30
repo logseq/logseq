@@ -7,9 +7,9 @@
             [goog.dom :as gdom]
             [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-;; TODO: extracted to a rum mixin
+;; TODO: extract this loading lifecycle
 (defn loaded? []
   js/window.katex)
 
@@ -48,7 +48,7 @@
                                                      (reset! *loading? false)
                                                      (render! id s display?)))))))))))
 
-(rum/defc latex
+(hsx/defc latex
   [s block? display?]
   (let [id (hooks/use-memo #(str (random-uuid)) [])
         loading? (first (hooks/use-atom *loading?))]

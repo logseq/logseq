@@ -29,7 +29,7 @@
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- re-init-commands!
   "Update commands after task status and priority's closed values has been changed"
@@ -121,10 +121,10 @@
         (p/let [page (db-page-handler/<create-class! page-name {:redirect? false})]
           (:block/uuid page))))))
 
-(rum/defc class-select
+(hsx/defc class-select
   [property {:keys [multiple-choices? disabled? default-open? no-class? on-hide]
              :or {multiple-choices? true}}]
-  (let [*ref (rum/use-ref nil)
+  (let [*ref (hooks/use-ref nil)
         schema-classes (:logseq.property/classes property)]
     [:div.flex.flex-1.col-span-3
      (let [content-fn
@@ -189,26 +189,26 @@
               (shui/tabler-icon "edit")]]
             (pv/property-empty-btn-value property))]))]))
 
-(rum/defc name-edit-pane
+(hsx/defc name-edit-pane
   [property {:keys [set-sub-open! disabled?]}]
-  (let [*form-data (rum/use-ref {:icon (:logseq.property/icon property)
+  (let [*form-data (hooks/use-ref {:icon (:logseq.property/icon property)
                                  :title (or (:block/title property) "")
                                  :description (or (db-property/property-value-content (:logseq.property/description property)) "")})
-        [form-data, set-form-data!] (rum/use-state (rum/deref *form-data))
-        [saving?, set-saving!] (rum/use-state false)
-        *el (rum/use-ref nil)
-        *input-ref (rum/use-ref nil)
+        [form-data, set-form-data!] (hooks/use-state (hooks/deref *form-data))
+        [saving?, set-saving!] (hooks/use-state false)
+        *el (hooks/use-ref nil)
+        *input-ref (hooks/use-ref nil)
         title (util/trim-safe (:title form-data))
         description (util/trim-safe (:description form-data))]
 
     (hooks/use-effect!
      (fn []
-       (js/setTimeout #(some-> (rum/deref *el) (.focus)) 32))
+       (js/setTimeout #(some-> (hooks/deref *el) (.focus)) 32))
      [])
 
     [:div.ls-property-name-edit-pane.outline-none
      {:on-key-down (fn [^js e] (when (= "Tab" (.-key e))
-                                 (loop-focusable-elements! (rum/deref *el))))
+                                 (loop-focusable-elements! (hooks/deref *el))))
       :tab-index -1
       :ref *el}
      [:div.flex.items-center.input-wrap
@@ -229,7 +229,7 @@
      [:div.pt-2 (shui/textarea {:placeholder (t :property/description-placeholder) :default-value description
                                 :disabled disabled? :on-change (fn [^js e] (set-form-data! (assoc form-data :description (util/trim-safe (util/evalue e)))))})]
 
-     (let [dirty? (not= (rum/deref *form-data) form-data)]
+     (let [dirty? (not= (hooks/deref *form-data) form-data)]
        [:div.pt-2.flex.justify-end
         (shui/button {:size "sm" :disabled (or saving? (not dirty?))
                       :variant (if dirty? :default :secondary)
@@ -240,7 +240,7 @@
                                         {}
                                         {:property-name title
                                          :properties {:logseq.property/icon (:icon form-data)}})
-                                       (when (not= description (:description (rum/deref *form-data)))
+                                       (when (not= description (:description (hooks/deref *form-data)))
                                          (set-property-description! property description))]
                                       (p/all)
                                       (p/then #(set-sub-open! false))
@@ -248,22 +248,22 @@
                                       (p/finally #(set-saving! false))))}
                      (t :ui/save))])]))
 
-(rum/defc choice-base-edit-form
+(hsx/defc choice-base-edit-form
   [own-property block owner-block]
   (let [create? (:create? block)
         uuid (:block/uuid block)
-        *form-data (rum/use-ref
+        *form-data (hooks/use-ref
                     {:value (or (str (db-property/closed-value-content block)) "")
                      :icon (:logseq.property/icon block)
                      :description (or (db-property/property-value-content (:logseq.property/description block)) "")})
-        [form-data, set-form-data!] (rum/use-state (rum/deref *form-data))
-        [scoped-to-owner?, set-scoped-to-owner!] (rum/use-state false)
-        *input-ref (rum/use-ref nil)]
+        [form-data, set-form-data!] (hooks/use-state (hooks/deref *form-data))
+        [scoped-to-owner?, set-scoped-to-owner!] (hooks/use-state false)
+        *input-ref (hooks/use-ref nil)]
 
     (hooks/use-effect!
      (fn []
        (when create?
-         (js/setTimeout #(some-> (rum/deref *input-ref) (.focus)) 60)))
+         (js/setTimeout #(some-> (hooks/deref *input-ref) (.focus)) 60)))
      [])
 
     [:div.ls-base-edit-form
@@ -293,7 +293,7 @@
                    :class "cursor-pointer text-sm"}
            (t :property/scope-choice-to-tag tag-title)]]))
      [:div.pt-2.flex.justify-end
-      (let [dirty? (not= (rum/deref *form-data) form-data)]
+      (let [dirty? (not= (hooks/deref *form-data) form-data)]
         (shui/button {:size "sm"
                       :disabled (not dirty?)
                       :on-click (fn []
@@ -315,13 +315,13 @@
   (js/setTimeout
    #(some-> (gdom/getElement id) (.focus)) 32))
 
-(rum/defc dropdown-editor-menuitem
+(hsx/defc dropdown-editor-menuitem
   [{:keys [id icon title desc submenu-content item-props sub-content-props disabled? toggle-checked? on-toggle-checked-change checkbox?]}]
   (let [submenu-content (when-not disabled? submenu-content)
         item-props' (if (and disabled? (:on-select item-props))
                       (assoc item-props :on-select (fn [] nil))
                       item-props)
-        [sub-open? set-sub-open!] (rum/use-state false)
+        [sub-open? set-sub-open!] (hooks/use-state false)
         toggle? (boolean? toggle-checked?)
         id1 (str (or id (random-uuid)))
         id2 (str "d2-" id1)
@@ -445,7 +445,7 @@
      [:span.w-full.text-red-rx-09.opacity-90.flex.items-center.hover:opacity-100
       (ui/icon "x" {:class "scale-90 pr-1"}) (t :ui/delete)])))
 
-(rum/defc choice-item-content
+(hsx/defc choice-item-content
   [property block {:keys [disabled? owner-block]}]
   (db-hooks/query-scope
    (fn []
@@ -515,7 +515,7 @@
 
           (choice-delete-menu-item owner-class? global-choice? scoped-choice-from-other-tags? delete-choice!)))]))))
 
-(rum/defc add-existing-values
+(hsx/defc add-existing-values
   [property values {:keys [toggle-fn]}]
   [:div.flex.flex-col.gap-1.w-64.p-4.overflow-y-auto
    {:class "max-h-[50dvh]"}
@@ -608,7 +608,7 @@
      :value id
      :content (choice-item-content property block (assoc opts :owner-block owner-block))}))
 
-(rum/defc choices-sub-pane
+(hsx/defc choices-sub-pane
   [property {:keys [disabled? owner-block] :as opts}]
   (db-hooks/query-scope
    (fn []
@@ -653,7 +653,7 @@
         (when-not disabled?
           (add-choice-menuitem property owner-block))]))))
 
-(rum/defc checkbox-state-mapping
+(hsx/defc checkbox-state-mapping
   [choices]
   (let [select-cp (fn [opts]
                     (shui/select
@@ -700,7 +700,7 @@
    :block-right {:icon :layout-align-left :title (t :property/ui-position-block-right)}
    :block-below {:icon :layout-align-top :title (t :property/ui-position-block-below)}})
 
-(rum/defc ui-position-sub-pane
+(hsx/defc ui-position-sub-pane
   [property {:keys [id set-sub-open! _ui-position]}]
   (let [handle-select! (fn [^js e]
                          (when-let [v (some-> (.-target e) (.-dataset) (.-value))]
@@ -754,7 +754,7 @@
             :ok-label (t :ui/confirm)})
           (p/then remove!)))))
 
-(rum/defc property-type-sub-pane
+(hsx/defc property-type-sub-pane
   [property {:keys [id set-sub-open! _position]}]
   (let [handle-select! (fn [^js e]
                          (when-let [v (some-> (.-target e) (.-dataset) (.-value))]
@@ -778,7 +778,7 @@
                      :item-props (assoc item-props :data-value value)}]
          (dropdown-editor-menuitem option)))]))
 
-(rum/defc default-value-subitem
+(hsx/defc default-value-subitem
   [property]
   (let [property-type (:logseq.property/type property)
         option (if (= :checkbox property-type)
@@ -981,7 +981,7 @@
      (concat more-options)
      vec)))
 
-(rum/defc property-dropdown
+(hsx/defc property-dropdown
   [property* owner-block opts]
   (db-hooks/query-scope
    (fn []

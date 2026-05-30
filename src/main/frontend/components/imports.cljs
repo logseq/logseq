@@ -36,7 +36,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- ignored-path?
   "Ignore path for ls-dir-files-with-handler! and reload-dir!"
@@ -151,7 +151,7 @@
       (notification/show! (t :import/select-edn-or-json)
                           :error))))
 
-(rum/defc set-graph-name-dialog
+(hsx/defc set-graph-name-dialog
   [input-e opts]
   (let [[input set-input!] (hooks/use-state "")
         on-submit #(if (repo/invalid-graph-name? input)
@@ -175,7 +175,7 @@
       (ui/button (t :ui/submit)
                  {:on-click on-submit})]]))
 
-(rum/defc import-file-graph-dialog
+(hsx/defc import-file-graph-dialog
   [initial-name on-submit-fn]
   [:div.border.p-6.rounded.bg-gray-01.mt-4
    (let [form-ctx (form-core/use-form
@@ -195,7 +195,7 @@
                             ;; (js/console.log "[form] submit: " e (js->clj e))
                             (on-submit-fn (js->clj e :keywordize-keys true))
                             (shui/dialog-close!)))
-         [convert-all-tags-input set-convert-all-tags-input!] (rum/use-state true)]
+         [convert-all-tags-input set-convert-all-tags-input!] (hooks/use-state true)]
 
      (shui/form-provider form-ctx
                          [:form
@@ -438,7 +438,7 @@
                                     :else
                                     (import-graph-fn user-inputs)))))))
 
-(rum/defc indicator-progress
+(hsx/defc indicator-progress
   []
   (let [{:keys [total current-idx current-page label]} (state/use-sub :graph/importing-state)
         label (or label (t :import/loading))
@@ -456,7 +456,7 @@
     [:div.p-5
      (ui/progress-bar-with-label width left-label process)]))
 
-(rum/defc import-indicator
+(hsx/defc import-indicator
   [importing?]
   (hooks/use-effect!
    (fn []
@@ -471,7 +471,7 @@
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
-(rum/defc ^:large-vars/cleanup-todo importer
+(hsx/defc ^:large-vars/cleanup-todo importer
   [{:keys [query-params]}]
   (let [importing? (state/use-sub :graph/importing)]
     [:<>

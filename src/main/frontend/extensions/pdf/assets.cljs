@@ -22,7 +22,7 @@
             [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn get-in-repo-assets-full-filename
   [url]
@@ -275,7 +275,7 @@
     (when (seq images)
       (lightbox/preview-images! images))))
 
-(rum/defc area-display
+(hsx/defc area-display
   [block]
   (let [[src set-src!] (hooks/use-state nil)]
     (when-let [asset-path' (and block (assets-handler/get-area-block-asset-url block))]

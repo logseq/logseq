@@ -14,7 +14,7 @@
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- built-in-custom-query?
   [{:keys [title-key]}]
@@ -45,7 +45,7 @@
               (:db/id first-page))
           (:block/uuid first-block)))))
 
-(rum/defc custom-query-inner
+(hsx/defc custom-query-inner
   [{:keys [dsl-query?] :as config} {:keys [query breadcrumb-show?]}
    {:keys [query-error-atom
            current-block
@@ -115,7 +115,7 @@
          :else
          [:div.text-sm.mt-2.opacity-90 (t :search/no-result)])])))
 
-(rum/defc query-title
+(hsx/defc query-title
   [config {:keys [title title-key title-icon]} {:keys [result-count]}]
   (let [inline-text (:inline-text config)]
     [:div.custom-query-title.flex.justify-between.w-full
@@ -150,7 +150,7 @@
                           (:block/collapsed? current-block)))]
     collapsed?'))
 
-(rum/defc custom-query*
+(hsx/defc custom-query*
   [{:keys [*query-error dsl-query? built-in-query? table? current-block] :as config}
    {:keys [builder query view _collapsed?] :as q}]
   (db-hooks/query-scope
@@ -207,7 +207,7 @@
                (when-not collapsed?
                  (custom-query-inner config q opts))])]))))))
 
-(rum/defc custom-query
+(hsx/defc custom-query
   [{:keys [built-in-query?] :as config}
    {:keys [collapsed?] :as q}]
   (ui/catch-error

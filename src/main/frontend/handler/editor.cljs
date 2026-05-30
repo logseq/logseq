@@ -65,8 +65,7 @@
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+            [promesa.core :as p]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -2257,7 +2256,7 @@
         target (when e (.-target e))]
     (when (or (nil? target)
               (inside-of-editor-block target))
-      (if (or (state/doc-mode-enter-for-new-line?) (inside-of-single-block (rum/dom-node state)))
+      (if (or (state/doc-mode-enter-for-new-line?) (inside-of-single-block (:node state)))
         (keydown-new-line)
         (do
           (when e (.preventDefault e))
@@ -2266,7 +2265,7 @@
 (defn keydown-new-line-handler [e]
   (let [state (get-state)]
     (when (or (nil? (.-target e)) (inside-of-editor-block (.-target e)))
-      (if (and (state/doc-mode-enter-for-new-line?) (not (inside-of-single-block (rum/dom-node state))))
+      (if (and (state/doc-mode-enter-for-new-line?) (not (inside-of-single-block (:node state))))
         (keydown-new-block state)
         (do
           (.preventDefault e)

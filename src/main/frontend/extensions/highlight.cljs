@@ -1,6 +1,6 @@
 (ns frontend.extensions.highlight
   (:require [logseq.shui.hooks :as hooks]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- highlight!
   [id attr]
@@ -8,7 +8,7 @@
     (when-let [element (js/document.getElementById id)]
       (js/hljs.highlightElement element))))
 
-(rum/defc highlight
+(hsx/defc highlight
   [id attr code]
   (hooks/use-effect!
    (fn []

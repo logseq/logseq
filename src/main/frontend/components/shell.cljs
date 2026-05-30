@@ -1,5 +1,5 @@
 (ns frontend.components.shell
-  (:require [rum.core :as rum]
+  (:require [io.factorhouse.hsx.core :as hsx]
             [frontend.context.i18n :refer [t]]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -20,7 +20,7 @@
      (reset! *loading? false))
    (p/finally (fn [] (reset! *loading? false)))))
 
-(rum/defc shell
+(hsx/defc shell
   []
   (let [[loading?] (hooks/use-atom *loading?)]
     [:div.flex.flex-col

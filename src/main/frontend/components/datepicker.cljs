@@ -9,9 +9,9 @@
             [frontend.util :as util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.shui.hooks :as hooks]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc date-picker
+(hsx/defc date-picker
   [dom-id format]
   (hooks/use-effect!
    (fn []

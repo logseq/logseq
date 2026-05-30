@@ -13,7 +13,7 @@
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defonce debug-state (:rtc/state @state/state))
 
@@ -23,7 +23,7 @@
    (state/<invoke-db-worker :thread-api/rtc-stop)
    (reset! debug-state nil)))
 
-(rum/defc ^:large-vars/cleanup-todo rtc-debug-ui
+(hsx/defc ^:large-vars/cleanup-todo rtc-debug-ui
   []
   (let [[debug-state*] (hooks/use-atom debug-state)
         [rtc-logs set-rtc-logs!] (hooks/use-state nil)

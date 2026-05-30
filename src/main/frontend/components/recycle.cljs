@@ -9,12 +9,12 @@
             [frontend.db.react :as react]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.rum :as r]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.db :as ldb]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- resolve-entity
   [db value]
@@ -45,7 +45,7 @@
                                             db)
                                        vec))}
                      nil)
-            r/use-value)))
+            hooks/use-value)))
 
 (defn- group-title
   [db root]
@@ -112,7 +112,7 @@
     :id (str (:block/uuid root))}
    root))
 
-(rum/defc recycle-page
+(hsx/defc recycle-page
   [_page {:keys [class]}]
   (db-hooks/query-scope
    (fn []

@@ -9,16 +9,16 @@
             [frontend.search :as search]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.db.common.reference :as db-reference]
             [logseq.shui.hooks :as hooks]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+            [promesa.core :as p]))
 
 (defn- frequencies-sort
   [references]
   (sort-by second #(> %1 %2) references))
 
-(rum/defc ref-button
+(hsx/defc ref-button
   [page filters ref-name ref-count]
   (let [lc-reference (string/lower-case ref-name)]
     (ui/button
@@ -58,10 +58,10 @@
        {:style {:width 500
                 :max-width 500}}
        (for [[ref-name ref-count] filtered-references]
-         (rum/with-key (ref-button page filters ref-name ref-count)
-           (str "ref-" ref-name)))])))
+         ^{:key (str "ref-" ref-name)}
+         [ref-button page filters ref-name ref-count])])))
 
-(rum/defc filter-dialog-aux
+(hsx/defc filter-dialog-aux
   [page-entity references]
   (let [[filter-search set-filter-search!] (hooks/use-state "")
         [filtered-references set-filtered-references!] (hooks/use-state references)
@@ -112,7 +112,7 @@
          [:div.mt-4
           (filtered-refs page-entity filters refs true)]))]))
 
-(rum/defc filter-dialog
+(hsx/defc filter-dialog
   [page references]
   (db-hooks/query-scope
    (fn []

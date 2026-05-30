@@ -1,8 +1,8 @@
 (ns frontend.extensions.pdf.windows
-  (:require [cljs-bean.core :as bean]
+  (:require ["react-dom/client" :as rdc]
+            [cljs-bean.core :as bean]
             [frontend.state :as state]
-            [frontend.storage :as storage]
-            [rum.core :as rum]))
+            [frontend.storage :as storage]))
 
 (def *active-win (atom nil))
 (def *exit-pending? (atom false))
@@ -97,7 +97,7 @@
                   (resolve-classes! doc)
                   (resolve-styles! doc)
                   (.appendChild (.-body doc) main)
-                  (rum/mount (pdf-playground pdf-current) main)
+                  (.render (rdc/createRoot main) (pdf-playground pdf-current))
 
                   ;; events
                   (.addEventListener win "beforeunload" #(close-pdf-in-new-window!))

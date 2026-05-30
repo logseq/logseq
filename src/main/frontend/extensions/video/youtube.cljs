@@ -9,7 +9,7 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [logseq.shui.hooks :as hooks]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- load-yt-script []
   (js/console.log "load yt script")
@@ -50,7 +50,7 @@
     (catch :default _e
       nil)))
 
-(rum/defc youtube-video
+(hsx/defc youtube-video
   [id {:keys [width height start] :as _opts}]
   (let [width  (or width (min (- (util/get-width) 96)
                               560))
@@ -136,7 +136,7 @@
   (let [f (gobj/get player method)]
     (when (fn? f) f)))
 
-(rum/defc timestamp
+(hsx/defc timestamp
   [seconds]
   [:a.svg-small.youtube-timestamp
    {:on-click (fn [e]

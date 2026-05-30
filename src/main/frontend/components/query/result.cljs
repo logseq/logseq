@@ -6,7 +6,6 @@
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.query-react :as query-react]
             [frontend.db.utils :as db-utils]
-            [frontend.rum :as r]
             [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -14,6 +13,7 @@
             [frontend.util :as util]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]))
 
 (defn run-custom-query
@@ -54,7 +54,7 @@
                                  (do
                                    (vreset! direct-result result)
                                    nil)))))
-              result (r/use-value result-ref)]
+              result (hooks/use-value result-ref)]
           [nil (if (= ::none @direct-result)
                  result
                  @direct-result)])
@@ -63,7 +63,7 @@
         (let [[k result] (query-custom/custom-query query {:current-block-uuid current-block-uuid
                                                            :built-in-query? (:built-in-query? config)
                                                            :today-query? (:today-query? config)})]
-          [k (r/use-value result)]))
+          [k (hooks/use-value result)]))
       (catch :default e
         (js/console.error e)
         (reset! *query-error e)

@@ -1,7 +1,8 @@
 (ns frontend.extensions.graph
   (:require [frontend.extensions.graph.pixi :as pixi]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]
-            [rum.core :as rum]))
+            ))
 
 (defn canvas-style
   [{:keys [width height]}]
@@ -47,7 +48,7 @@
       (when-let [timeout-id @timeout-id*]
         (js/clearTimeout timeout-id)))))
 
-(rum/defc graph-2d
+(hsx/defc graph-2d
   [opts]
   (let [container-ref (hooks/use-ref nil)
         render-pending-ref (hooks/use-ref false)

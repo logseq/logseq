@@ -7,7 +7,7 @@
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn open-button [full-path]
   (if (string/ends-with? (string/lower-case full-path) "pdf")
@@ -73,7 +73,7 @@
         item-key
         filename)))
 
-(rum/defc zotero-imported-file
+(hsx/defc zotero-imported-file
   [item-key filename]
   (if (string/blank? (setting :zotero-data-directory))
     [:p.warning (t :zotero/imported-file-warning)]
@@ -81,7 +81,7 @@
           full-path (zotero-full-path item-key filename)]
       (open-button full-path))))
 
-(rum/defc zotero-linked-file
+(hsx/defc zotero-linked-file
   [path]
   (if (string/blank? (setting :zotero-linked-attachment-base-directory))
     [:p.warning (t :zotero/linked-file-warning)]

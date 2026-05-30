@@ -23,7 +23,7 @@
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn graph-sync-icon-name
   [{:keys [remote? graph-e2ee?]}]
@@ -79,7 +79,7 @@
               (-> (rtc-handler/<rtc-upload-graph! url graph-e2ee?)
                   (p/finally hide-upload-log!)))))))))
 
-(rum/defc normalized-graph-label
+(hsx/defc normalized-graph-label
   [{:keys [url remote?] :as graph} on-click]
   (when graph
     [:span.flex.items-center
@@ -158,7 +158,7 @@
       (when target
         (state/pub-event! [:graph/open-new-window target])))))
 
-(rum/defc ^:large-vars/cleanup-todo repos-inner
+(hsx/defc ^:large-vars/cleanup-todo repos-inner
   "Graph list in `All graphs` page"
   [repos]
   (for [{:keys [root url remote? graph-e2ee? GraphUUID GraphSchemaVersion GraphName created-at last-seen-at] :as repo}
@@ -280,7 +280,7 @@
                                                      (state/set-state! :rtc/loading-graphs? false)))))))))}
               (t :graph/leave-action))))))]]]))
 
-(rum/defc repos-cp
+(hsx/defc repos-cp
   []
   (let [login? (boolean (state/use-sub :auth/id-token))
         repos (state/use-sub [:me :repos])
@@ -424,7 +424,7 @@
                                  (route-handler/redirect-to-all-graphs)))}
                   (shui/tabler-icon "layout-2") [:span (t :graph/all-graphs)]))])
 
-(rum/defc repos-dropdown-content
+(hsx/defc repos-dropdown-content
   [& {:keys [contentid footer?] :as opts
       :or {footer? true}}]
   (let [current-repo (state/use-sub :git/current-repo)
@@ -509,7 +509,7 @@
        (ui/icon "trash")
        (t :graph/delete-local-action)])]))
 
-(rum/defc graphs-selector
+(hsx/defc graphs-selector
   []
   (let [current-repo (state/get-current-repo)
         user-repos (state/get-repos)
@@ -602,7 +602,7 @@
                    e)))
     (p/resolved nil)))
 
-(rum/defc new-db-graph-inner
+(hsx/defc new-db-graph-inner
   [rtc-group?]
   (let [[creating-db? set-creating-db?] (hooks/use-state false)
         [cloud? set-cloud?] (hooks/use-state false)
@@ -631,7 +631,7 @@
         submit! (fn submit!
                   [^js e click?]
                   (when-let [value (and (or click? (= (gobj/get e "key") "Enter"))
-                                        (util/trim-safe (.-value (rum/deref input-ref))))]
+                                        (util/trim-safe (.-value (hooks/deref input-ref))))]
                     (new-db-f value)))]
     (hooks/use-effect!
      (fn []
@@ -693,7 +693,7 @@
         (ui/loading (t :graph/creating))
         (t :ui/submit)))]))
 
-(rum/defc new-db-graph
+(hsx/defc new-db-graph
   []
   (let [rtc-group? (user-handler/rtc-group?)]
     (new-db-graph-inner rtc-group?)))

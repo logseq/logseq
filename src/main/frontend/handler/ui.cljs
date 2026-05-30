@@ -15,8 +15,7 @@
             [goog.object :as gobj]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+            [promesa.core :as p]))
 
 ;; sidebars
 (def *left-sidebar-resized-at (atom (js/Date.now)))
@@ -88,8 +87,6 @@
    (doseq [component (keys @react/component->query-key)]
      (when (fn? component)
        (component)))
-   (when-let [component (state/get-root-component)]
-     (rum/request-render component))
    nil))
 
 (defn highlight-element!

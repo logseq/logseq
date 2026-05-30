@@ -6,9 +6,9 @@
             [frontend.ui :as ui]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc indicator-progress
+(hsx/defc indicator-progress
   []
   (let [{:keys [total current-idx current-page label]} (state/use-sub :graph/exporting-state)
         label (or label (t :export/exporting))

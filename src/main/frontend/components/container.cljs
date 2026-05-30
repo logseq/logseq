@@ -39,7 +39,7 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- focus-main-content-container-if-body!
   []
@@ -54,7 +54,7 @@
 (defn- schedule-main-content-focus! []
   (util/schedule focus-main-content-container-if-body!))
 
-(rum/defc main
+(hsx/defc main
   [{:keys [route-match margin-less-pages? route-name db-restoring? main-content]}]
   (let [left-sidebar-open? (state/use-sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
@@ -122,7 +122,7 @@
 
 (defonce sidebar-inited? (atom false))
 
-(rum/defc main-content
+(hsx/defc main-content
   []
   (db-hooks/query-scope
    (fn []
@@ -181,11 +181,11 @@
       (state/pub-event! [:editor/hide-action-bar])
       (editor-handler/clear-selection!))))
 
-(rum/defc render-custom-context-menu
+(hsx/defc render-custom-context-menu
   [links position]
-  (let [ref (rum/use-ref nil)]
+  (let [ref (hooks/use-ref nil)]
     (hooks/use-effect!
-     #(let [el (rum/deref ref)
+     #(let [el (hooks/deref ref)
             {:keys [x y]} (util/calc-delta-rect-offset el js/document.documentElement)]
         (set! (.. el -style -transform)
               (str "translate3d(" (if (neg? x) x 0) "px," (if (neg? y) (- y 10) 0) "px" ",0)"))))
@@ -197,7 +197,7 @@
                :left (str (first position) "px")
                :top (str (second position) "px")}} links]]))
 
-(rum/defc custom-context-menu
+(hsx/defc custom-context-menu
   []
   (let [show? (state/use-sub :custom-context-menu/show?)
         links (state/use-sub :custom-context-menu/links)
@@ -205,7 +205,7 @@
     (when (and show? links position)
       (render-custom-context-menu links position))))
 
-(rum/defc new-block-mode
+(hsx/defc new-block-mode
   []
   (when (state/use-sub [:document/mode?])
     (ui/tooltip
@@ -243,7 +243,7 @@
    :hr
    {:title (t :help/release-notes) :icon "asterisk" :href "https://docs.logseq.com/#/page/changelog"}])
 
-(rum/defc help-menu-popup
+(hsx/defc help-menu-popup
   []
   (hooks/use-effect!
    (fn []
@@ -277,7 +277,7 @@
    [:div.ft.pl-11.pb-3
     [:span.opacity.text-xs.opacity-30 "Logseq " version]]])
 
-(rum/defc help-button
+(hsx/defc help-button
   []
   (let [help-open? (state/use-sub :ui/help-open?)
         handbooks-open? (state/use-sub :ui/handbooks-open?)]
@@ -309,7 +309,7 @@
           menu-item
           (not submenu-trigger?)))))
 
-(rum/defc app-context-menu-observer
+(hsx/defc app-context-menu-observer
   []
   (hooks/use-effect!
    (fn []
@@ -399,7 +399,7 @@
                 (.closest (.-target e) "a"))
     (editor-handler/show-action-bar!)))
 
-(rum/defc ^:large-vars/cleanup-todo root-container
+(hsx/defc ^:large-vars/cleanup-todo root-container
   [route-match main-content']
   (let [current-repo (state/use-sub :git/current-repo)
         theme (state/use-sub :ui/theme)

@@ -37,7 +37,7 @@
             [missionary.core :as m]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
@@ -50,7 +50,7 @@
      (ui/toggle state on-toggle true)
      detail-text]]])
 
-(rum/defc app-updater
+(hsx/defc app-updater
   [version]
   (let [update-pending? (state/use-sub :electron/updater-pending?)
         {:keys [type payload]} (state/use-sub :electron/updater)]
@@ -147,7 +147,7 @@
               [release-channel-link]
               true)]))])]))
 
-(rum/defc outdenting-hint
+(hsx/defc outdenting-hint
   []
   [:div.ui__modal-panel
    {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
@@ -161,7 +161,7 @@
            :width  500
            :height 500}]]])
 
-(rum/defc auto-expand-hint
+(hsx/defc auto-expand-hint
   []
   [:div.ui__modal-panel
    {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
@@ -286,7 +286,7 @@
                       :on-checked-change #(state/set-editor-font! {:global %})})
       [:span.pl-1.text-sm.opacity-70 (t :settings.general/editor-font-set-global)]]]]])
 
-(rum/defc switch-spell-check-row
+(hsx/defc switch-spell-check-row
   [t]
   (let [enabled? (state/use-sub [:electron/user-cfgs :spell-check])]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
@@ -303,7 +303,7 @@
                      (js/logseq.api.relaunch))))
         true)]]]))
 
-(rum/defc app-auto-update-row [t]
+(hsx/defc app-auto-update-row [t]
   (let [enabled? (state/use-sub [:electron/user-cfgs :auto-update])
         enabled? (if (nil? enabled?) true enabled?)]
     (toggle "usage-diagnostics"
@@ -328,7 +328,7 @@
                              :-for       "preferred_language"
                              :action     action})))
 
-(rum/defc theme-modes-row
+(hsx/defc theme-modes-row
   [t]
   (let [theme (state/use-sub :ui/theme)
         dark? (= "dark" theme)
@@ -353,7 +353,7 @@
                                           (shortcut-helper/gen-shortcut-seq :ui/toggle-theme)
                                           :shortcut-id :ui/toggle-theme)})))
 
-(rum/defc accent-color-row
+(hsx/defc accent-color-row
   [_in-modal?]
   (let [color-accent (state/use-sub :ui/radix-color)
         color-label (fn [color]
@@ -413,7 +413,7 @@
      [:div.text-sm.opacity-50.mt-1
       (t :settings.general/accent-color-alert)]]))
 
-(rum/defc appearance
+(hsx/defc appearance
   []
   (let [_config (state/use-sub :config)
         editor-font (state/use-sub :ui/editor-font)
@@ -556,10 +556,10 @@
               (state/set-developer-mode! mode)))
           [:div.text-sm.opacity-50 (t :settings.advanced/developer-mode-desc)]))
 
-(rum/defc plugin-enabled-switcher
+(hsx/defc plugin-enabled-switcher
   [t]
   (let [value (state/lsp-enabled?-or-theme)
-        [on? set-on?] (rum/use-state value)
+        [on? set-on?] (hooks/use-state value)
         on-toggle #(let [v (not on?)]
                      (set-on? v)
                      (storage/set ::storage-spec/lsp-core-enabled v))]
@@ -572,10 +572,10 @@
                     :on-click #(js/logseq.api.relaunch)
                     :small? true :intent "logseq")))]))
 
-(rum/defc http-server-enabled-switcher
+(hsx/defc http-server-enabled-switcher
   [t]
-  (let [[value _] (rum/use-state (boolean (storage/get ::storage-spec/http-server-enabled)))
-        [on? set-on?] (rum/use-state value)
+  (let [[value _] (hooks/use-state (boolean (storage/get ::storage-spec/http-server-enabled)))
+        [on? set-on?] (hooks/use-state value)
         on-toggle #(let [v (not on?)]
                      (set-on? v)
                      (storage/set ::storage-spec/http-server-enabled v))]
@@ -586,7 +586,7 @@
                   :on-click #(js/logseq.api.relaunch)
                   :small? true :intent "logseq"))]))
 
-(rum/defc flashcards-enabled-switcher
+(hsx/defc flashcards-enabled-switcher
   [enable-flashcards?]
   (ui/toggle enable-flashcards?
              (fn []
@@ -603,10 +603,10 @@
                             :ws-url (config/db-sync-ws-url)
                             :http-base (config/db-sync-http-base)}))
 
-(rum/defc sync-server-url-settings-container
+(hsx/defc sync-server-url-settings-container
   []
   (let [current-url (config/get-custom-sync-server-url)
-        [url set-url!] (rum/use-state (or current-url ""))
+        [url set-url!] (hooks/use-state (or current-url ""))
         reset-url! (fn []
                      (config/set-custom-sync-server-url! nil)
                      (set-url! "")
@@ -647,7 +647,7 @@
            :on-click (fn [] (reset-url!))}
           (t :settings.sync-server/reset)))]]]))
 
-(rum/defc sync-server-url-button
+(hsx/defc sync-server-url-button
   []
   (let [current-url (config/get-custom-sync-server-url)]
     (ui/button [:span.flex.items-center
@@ -664,10 +664,10 @@
    {:left-label (t :settings.sync-server/url)
     :action (sync-server-url-button)}))
 
-(rum/defc publish-server-url-settings-container
+(hsx/defc publish-server-url-settings-container
   []
   (let [current-url (config/get-custom-publish-server-url)
-        [url set-url!] (rum/use-state (or current-url ""))
+        [url set-url!] (hooks/use-state (or current-url ""))
         reset-url! (fn []
                      (config/set-custom-publish-server-url! nil)
                      (set-url! "")
@@ -704,7 +704,7 @@
            :on-click (fn [] (reset-url!))}
           (t :settings-page/publish-server-url-reset)))]]]))
 
-(rum/defc publish-server-url-button
+(hsx/defc publish-server-url-button
   []
   (let [current-url (config/get-custom-publish-server-url)]
     (ui/button [:span.flex.items-center
@@ -721,7 +721,7 @@
    {:left-label (t :settings-page/publish-server-url)
     :action (publish-server-url-button)}))
 
-(rum/defc user-proxy-settings
+(hsx/defc user-proxy-settings
   [{:keys [type protocol host port] :as agent-opts}]
   (ui/button [:span.flex.items-center
               [:span.pr-1
@@ -748,7 +748,7 @@
    {:left-label (t :settings.features/enable-flashcards)
     :action (flashcards-enabled-switcher enable-flashcards?)}))
 
-(rum/defc markdown-mirror-row
+(hsx/defc markdown-mirror-row
   [t]
   (let [repo (state/get-current-repo)
         repo-config (when repo (state/use-sub [:config repo]))
@@ -798,7 +798,7 @@
    {:left-label (t :settings.advanced/network-proxy)
     :action (user-proxy-settings agent-opts)}))
 
-(rum/defc auto-chmod-row
+(hsx/defc auto-chmod-row
   [t]
   (let [enabled? (if (= nil (state/use-sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))
                    true
@@ -812,7 +812,7 @@
         (ipc/ipc :userAppCfgs :feature/enable-automatic-chmod? (not enabled?)))
      [:span.text-sm.opacity-50 (t :settings.advanced/auto-chmod-desc)])))
 
-(rum/defc native-titlebar-row
+(hsx/defc native-titlebar-row
   [t]
   (let [enabled? (state/use-sub [:electron/user-cfgs :window/native-titlebar?])]
     (toggle
@@ -825,7 +825,7 @@
         (js/logseq.api.relaunch))
      [:span.text-sm.opacity-50 (t :settings.general/native-titlebar-desc)])))
 
-(rum/defc settings-general
+(hsx/defc settings-general
   [current-repo]
   (let [preferred-language (state/use-sub [:preferred-language])
         show-radix-themes? true
@@ -842,7 +842,7 @@
      (when current-repo (edit-custom-css))
      (when (and current-repo (util/electron?)) (edit-export-css))]))
 
-(rum/defc settings-editor
+(hsx/defc settings-editor
   []
   (let [_config (state/use-sub :config)
         preferred-date-format (state/get-date-formatter)
@@ -872,7 +872,7 @@
        (tooltip-row t enable-tooltip?))
      (enable-all-pages-public-row t enable-all-pages-public?)]))
 
-(rum/defc settings-advanced
+(hsx/defc settings-advanced
   []
   (let [instrument-disabled? (state/use-sub :instrument/disabled?)
         developer-mode? (state/use-sub [:ui/developer-mode?])
@@ -892,7 +892,7 @@
      ;;  [:p "Clearing the cache will discard open graphs. You will lose unsaved changes."])
      ]))
 
-(rum/defc settings-account-usage-description [pro-account? graph-usage]
+(hsx/defc settings-account-usage-description [pro-account? graph-usage]
   (let [count-usage (count graph-usage)
         count-limit (if pro-account? 10 1)
         count-percent (js/Math.round (/ count-usage count-limit 0.01))
@@ -926,7 +926,7 @@
      ; storage-usage-formatted "GB of " storage-limit "GB total storage"
      ; [:strong.text-white " (" storage-percent-formatted "%)"]]))
 
-(rum/defc settings-account-usage-graphs [_pro-account? graph-usage]
+(hsx/defc settings-account-usage-graphs [_pro-account? graph-usage]
   (when (< 0 (count graph-usage))
     [:div.grid.gap-3 {:style {:grid-template-columns (str "repeat(" (count graph-usage) ", 1fr)")}}
      (for [{:keys [name used-percent]} graph-usage
@@ -938,7 +938,7 @@
                                         :min-width "0.5rem"
                                         :max-width "100%"}}]])]))
 
-(rum/defc ^:large-vars/cleanup-todo settings-account
+(hsx/defc ^:large-vars/cleanup-todo settings-account
   []
   (let [graph-usage []
         auth-refresh-token (state/use-sub :auth/refresh-token)
@@ -1082,7 +1082,7 @@
              [:li (t :account/early-access-alpha-beta)]
              [:li (t :account/upcoming-cloud-features)]]]]]])]]))
 
-(rum/defc settings-features
+(hsx/defc settings-features
   []
   (let [_config (state/use-sub :config)
         current-repo (state/get-current-repo)
@@ -1130,8 +1130,7 @@
 
 (def DEFAULT-ACTIVE-TAB-STATE (if config/ENABLE-SETTINGS-ACCOUNT-TAB [:account :account] [:general :general]))
 
-(rum/defc settings-effect
-  <
+(hsx/defc settings-effect
   [active]
 
   (hooks/use-effect!
@@ -1146,7 +1145,7 @@
 
   [:<>])
 
-(rum/defc settings-rtc-members
+(hsx/defc settings-rtc-members
   []
   (let [[invite-email set-invite-email!] (hooks/use-state "")
         [loading? set-loading!] (hooks/use-state true)
@@ -1222,12 +1221,12 @@
        {:on-click invite-user!}
        (t :collaboration/invite))]]))
 
-(rum/defc settings-collaboration
+(hsx/defc settings-collaboration
   []
   [:div.panel-wrap.is-collaboration.mb-8
    (settings-rtc-members)])
 
-(rum/defc forgot-password
+(hsx/defc forgot-password
   [token refresh-token user-uuid]
   (let [[new-password set-new-password!] (hooks/use-state "")
         [force-reset-status set-force-reset-status!] (hooks/use-state nil)
@@ -1255,7 +1254,7 @@
        :disabled (string/blank? new-password)}
       (t :encryption/force-reset-password))]))
 
-(rum/defc reset-encryption-password
+(hsx/defc reset-encryption-password
   [current-password new-password {:keys [set-new-password!
                                          set-current-password!
                                          reset-password-status
@@ -1288,7 +1287,7 @@
       [:a.opacity-70.hover:opacity-100 {:on-click #(set-reset! true)}
        (t :encryption/reset-password)])))
 
-(rum/defc encryption
+(hsx/defc encryption
   []
   (let [user-uuid (user-handler/user-uuid)
         token (state/get-auth-id-token)
@@ -1359,7 +1358,7 @@
                                          :refresh-token refresh-token
                                          :user-uuid user-uuid})])))]]))
 
-(rum/defc mcp-server-row
+(hsx/defc mcp-server-row
   [t]
   (let [[checked set-checked!] (hooks/use-state false)]
 
@@ -1388,13 +1387,13 @@
               [:span.text-sm.opacity-50
                (t :settings.ai/enable-mcp-server-desc)]))))
 
-(rum/defc settings-ai
+(hsx/defc settings-ai
   []
   [:div.panel-wrap
    (when (util/electron?)
      (mcp-server-row t))])
 
-(rum/defc ^:large-vars/cleanup-todo settings
+(hsx/defc ^:large-vars/cleanup-todo settings
   [_active-tab]
   (let [current-repo (state/use-sub :git/current-repo)
         _installed-plugins (state/use-sub :plugin/installed-plugins)

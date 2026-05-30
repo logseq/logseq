@@ -11,9 +11,9 @@
    [logseq.shui.ui :as shui]
    [medley.core :as medley]
    [promesa.core :as p]
-   [rum.core :as rum]))
+   [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc panel-of-tokens
+(hsx/defc panel-of-tokens
   [close-panel]
   (let [server-state (state/use-sub :electron/server)
         [tokens set-tokens!] (hooks/use-state (get-in @state/state [:electron/server :tokens]))
@@ -60,7 +60,7 @@
                                       (p/finally #(close-panel))))
                  :disabled (not changed?))]]))
 
-(rum/defc panel-of-configs
+(hsx/defc panel-of-configs
   [close-panel]
   (let [server-state (state/use-sub :electron/server)
         [configs set-configs!] (hooks/use-state (:electron/server @state/state))
@@ -131,7 +131,7 @@
         (t :server.status/stopped))
       string/upper-case))
 
-(rum/defc server-indicator
+(hsx/defc server-indicator
   [server-state]
 
   (hooks/use-effect!

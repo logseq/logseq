@@ -6,16 +6,16 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc mobile-bar-command [command-handler icon]
+(hsx/defc mobile-bar-command [command-handler icon]
   [:button.bottom-action
    {:on-pointer-down (fn [e]
                        (util/stop e)
                        (command-handler))}
    (ui/icon icon {:size 24})])
 
-(rum/defc footer
+(hsx/defc footer
   []
   (let [route-name (state/use-sub [:route-match :data :name])
         show-tabbar? (state/use-sub :mobile/show-tabbar?)]

@@ -42,7 +42,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defonce string-value-on-click
   {:logseq.property.asset/external-url
@@ -72,7 +72,7 @@
     (keep value->db-id value)
     (some-> value value->db-id vector)))
 
-(rum/defc property-empty-btn-value
+(hsx/defc property-empty-btn-value
   [property & opts]
   (let [text (if (= (:db/ident property) :logseq.property/description)
                (t :property/add-description)
@@ -80,7 +80,7 @@
     (shui/button (merge {:class "empty-btn" :variant :text} opts)
                  text)))
 
-(rum/defc property-empty-text-value
+(hsx/defc property-empty-text-value
   [property {:keys [property-position table-view?]}]
   [:span.inline-flex.items-center.cursor-pointer.w-full
    (merge {:class "empty-text-btn" :variant :text})
@@ -114,7 +114,7 @@
     (or (> (count selected-blocks) 1)
         (seq view-selected-blocks))))
 
-(rum/defc icon-row
+(hsx/defc icon-row
   [block editing?]
   (hooks/use-effect!
    (fn []
@@ -265,7 +265,7 @@
      (when (fn? refresh-result-f) (refresh-result-f)))))
 
 (declare property-value)
-(rum/defc repeat-setting
+(hsx/defc repeat-setting
   [block property]
   (db-hooks/query-scope
    (fn []
@@ -357,11 +357,11 @@
   (when (pos? remaining)
     (if-let [selected-day (some-> id
                                   (js/document.getElementById)
-                                  (.querySelector "[aria-selected=true]"))]
+                                  (.querySelector "[aria-selected=true] .rdp-day_button, .rdp-day_button[tabindex='0']"))]
       (.focus selected-day)
       (js/setTimeout #(focus-selected-day! id (dec remaining)) 16))))
 
-(rum/defc calendar-inner
+(hsx/defc calendar-inner
   [id {:keys [block property datetime? on-change del-btn? on-delete]}]
   (db-hooks/query-scope
    (fn []
@@ -420,7 +420,7 @@
        (shui/separator {:orientation "vertical"})]
       (repeat-setting block property)]))))
 
-(rum/defc overdue
+(hsx/defc overdue
   [date content]
   (let [[current-time set-current-time!] (hooks/use-state (t/now))]
     (hooks/use-effect!
@@ -452,18 +452,17 @@
       (= (.getTime given-date) (.getTime tomorrow))  (t :date.nlp/tomorrow)
       :else nil)))
 
-(rum/defc datetime-value
+(hsx/defc datetime-value
   [value property-id repeated-task?]
   (when-let [date (t/to-default-time-zone (tc/from-long value))]
     (let [content [:div.ls-datetime.flex.flex-row.gap-1.items-center
                    (when-let [page-cp (state/get-component :block/page-cp)]
                      (let [page-title (date/journal-name date)]
-                       (rum/with-key
-                         (page-cp {:disable-preview? true
-                                   :show-non-exists-page? true
-                                   :label (human-date-label value)}
-                                  {:block/name page-title})
-                         page-title)))
+                       ^{:key page-title}
+                       [:<> (page-cp {:disable-preview? true
+                                      :show-non-exists-page? true
+                                      :label (human-date-label value)}
+                                     {:block/name page-title})]))
                    (let [date (js/Date. value)
                          hours (.getHours date)
                          minutes (.getMinutes date)]
@@ -483,7 +482,7 @@
   (property-handler/remove-block-property! (:db/id block)
                                            (:db/ident property)))
 
-(rum/defc date-picker
+(hsx/defc date-picker
   [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?]}]
   (let [*el (hooks/use-ref nil)
         content-fn (fn [{:keys [id]}] (calendar-inner id
@@ -525,7 +524,7 @@
                            ("Backspace" "Delete")
                            (delete-block-property! block property)
                            (" " "Enter")
-                           (do (some-> (rum/deref *el) (.click))
+                           (do (some-> (hooks/deref *el) (.click))
                                (util/stop e))
                            nil))}
          [:div.flex.flex-row.gap-1.items-center
@@ -538,11 +537,10 @@
                                         (t/plus (t/days 1))
                                         (t/minus (t/seconds 1)))
                   content (when-let [page-cp (state/get-component :block/page-cp)]
-                            (rum/with-key
-                              (page-cp {:disable-preview? true
-                                        :meta-click? other-position?
-                                        :label (human-date-label value)} value)
-                              (:db/id value)))]
+                            ^{:key (:db/id value)}
+                            [:<> (page-cp {:disable-preview? true
+                                           :meta-click? other-position?
+                                           :label (human-date-label value)} value)])]
               (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} (:db/id property)))
                 (overdue compare-value content)
                 content))
@@ -553,7 +551,7 @@
             :else
             (property-empty-btn-value nil))])))))
 
-(rum/defc property-value-date-picker
+(hsx/defc property-value-date-picker
   [block property value opts]
   (let [multiple-values? (db-property/many? property)
         datetime? (= :datetime (:logseq.property/type property))]
@@ -643,7 +641,7 @@
            db-property/property-value-content)
      items)))
 
-(rum/defc select-aux
+(hsx/defc select-aux
   [block property {:keys [items selected-choices multiple-choices?] :as opts}]
   (let [selected-choices (->> selected-choices
                               (remove nil?)
@@ -753,7 +751,7 @@
         (distinct (apply concat result))))
     (db-async/<get-property-values (:db/ident property))))
 
-(rum/defc ^:large-vars/cleanup-todo select-node
+(hsx/defc ^:large-vars/cleanup-todo select-node
   [property
    {:keys [block multiple-choices? dropdown? input-opts on-input add-new-choice! target] :as opts}
    result]
@@ -975,16 +973,16 @@
                                    results))))]
     (select-aux block property opts')))
 
-(rum/defc property-value-select-node
+(hsx/defc property-value-select-node
   [block property opts
    {:keys [*show-new-property-config?]}]
   (let [[initial-choices set-initial-choices-state!] (hooks/use-state nil)
         [result set-result!] (hooks/use-state nil)
-        *initial-choices (rum/use-ref nil)
+        *initial-choices (hooks/use-ref nil)
         current-initial-choices (fn []
-                                  (or (rum/deref *initial-choices) initial-choices))
+                                  (or (hooks/deref *initial-choices) initial-choices))
         set-initial-choices! (fn [value]
-                               (rum/set-ref! *initial-choices value)
+                               (hooks/set-ref! *initial-choices value)
                                (set-initial-choices-state! value))
         set-result-and-initial-choices! (fn [value]
                                           (set-initial-choices! value)
@@ -1047,7 +1045,7 @@
 
     (select-node property opts' result)))
 
-(rum/defc select
+(hsx/defc select
   [block property
    {:keys [multiple-choices? dropdown? content-props] :as select-opts}
    {:keys [*show-new-property-config? exit-edit?] :as opts}]
@@ -1143,7 +1141,7 @@
                                          (when-let [f (:on-chosen select-opts)] (f))
                                          nil))})})))))))
 
-(rum/defc property-normal-block-value
+(hsx/defc property-normal-block-value
   [block property value-block opts]
   (let [container-id (state/use-container-id)
         multiple-values? (db-property/many? property)
@@ -1183,11 +1181,10 @@
                        :view? (:view? opts)}]
            (if (set? value-block)
              (blocks-container config (ldb/sort-by-order value-block))
-             (rum/with-key
-               (block-container (assoc config
-                                       :block/uuid (:block/uuid value-block)
-                                       :property-default-value? default-value?) value-block)
-               (str (:db/id block) "-" (:db/id property) "-" (:db/id value-block)))))]
+             ^{:key (str (:db/id block) "-" (:db/id property) "-" (:db/id value-block))}
+             [:<> (block-container (assoc config
+                                          :block/uuid (:block/uuid value-block)
+                                          :property-default-value? default-value?) value-block)]))]
 
         :else
         [:div.w-full.h-full.jtrigger.ls-empty-text-property.text-muted-foreground
@@ -1198,22 +1195,21 @@
          (when (:class-schema? opts)
            (t :property/add-description))]))))
 
-(rum/defc property-block-value
+(hsx/defc property-block-value
   [value block property page-cp opts]
   (let [v-block value
         class? (ldb/class? v-block)]
     (cond
       (entity-util/page? v-block)
-      (rum/with-key
-        (page-cp {:disable-preview? true
-                  :tag? class?
-                  :with-tags? false} v-block)
-        (:db/id v-block))
+      ^{:key (:db/id v-block)}
+      [:<> (page-cp {:disable-preview? true
+                     :tag? class?
+                     :with-tags? false} v-block)]
 
       :else
       (property-normal-block-value block property v-block opts))))
 
-(rum/defc single-string-input
+(hsx/defc single-string-input
   [block property value table-view?]
   (let [[editing? set-editing!] (hooks/use-state false)
         *ref (hooks/use-ref nil)
@@ -1270,13 +1266,13 @@
                             (util/stop e)
                             (set-value! string-value)
                             (set-editing! false)
-                            (some-> (rum/deref *ref) (.focus)))
+                            (some-> (hooks/deref *ref) (.focus)))
                           nil))})
        (if (string/blank? string-value)
          (property-empty-text-value property {:table-view? table-view?})
          string-value))]))
 
-(rum/defc closed-value-item
+(hsx/defc closed-value-item
   [value {:keys [inline-text icon?]}]
   (db-hooks/query-scope
    (fn []
@@ -1310,7 +1306,7 @@
                            value')]
               (inline-text {} :markdown value'))]))))))
 
-(rum/defc select-item
+(hsx/defc select-item
   [property type value {:keys [page-cp inline-text other-position? property-position table-view? _icon?] :as opts}]
   (let [closed-values? (seq (:property/closed-values property))
         tag? (or (:tag? opts) (= (:db/ident property) :block/tags))
@@ -1353,7 +1349,8 @@
                                          {:as-dropdown? true
                                           :content-props {:on-click (fn [] (shui/popup-hide!))}
                                           :align "start"}))}]
-           (rum/with-key (page-cp opts value) (:db/id value))))
+           ^{:key (:db/id value)}
+           [:<> (page-cp opts value)]))
 
        (contains? #{:node :class :property :page :asset} type)
        (when-let [reference (state/get-component :block/reference)]
@@ -1366,7 +1363,7 @@
        :else
        (inline-text-cp (str value)))]))
 
-(rum/defc single-value-select
+(hsx/defc single-value-select
   [block property value select-opts {:keys [value-render popup-focus-trigger? popup-auto-focus-trigger?] :as opts}]
   (let [*el (hooks/use-ref nil)
         editing? (:editing? opts)
@@ -1415,7 +1412,7 @@
                            ("Backspace" "Delete")
                            (delete-block-property! block property)
                            (" " "Enter")
-                           (do (some-> (rum/deref *el) (.click))
+                           (do (some-> (hooks/deref *el) (.click))
                                (util/stop e))
                            nil))}
          (if (string/blank? value)
@@ -1478,7 +1475,7 @@
            :else
            content)))]))
 
-(rum/defc single-number-input
+(hsx/defc single-number-input
   [block property value-block table-view?]
   (let [[editing? set-editing!] (hooks/use-state false)
         *ref (hooks/use-ref nil)
@@ -1534,7 +1531,7 @@
                     (p/do!
                      (set-property-value! value)))
          :on-key-down (fn [e]
-                        (let [input (rum/deref *input-ref)
+                        (let [input (hooks/deref *input-ref)
                               pos (cursor/pos input)
                               k (util/ekey e)]
                           (when-not (util/input-text-selected? input)
@@ -1555,7 +1552,7 @@
                               ("Escape" "Enter")
                               (p/do!
                                (set-property-value! value)
-                               (.focus (rum/deref *ref)))
+                               (.focus (hooks/deref *ref)))
 
                               nil))))})
        value)]))
@@ -1651,7 +1648,7 @@
    (t :asset/picker-set-failed)
    :error))
 
-(rum/defc asset-value-content
+(hsx/defc asset-value-content
   [value]
   (let [asset-type (:logseq.property.asset/type value)
         image? (asset-image? asset-type)
@@ -1682,16 +1679,16 @@
             :data-asset-preview-trigger true
             :onClickCapture preview!
             :on-key-down preview-key!}
-           (rum/with-key (asset-cp {:disable-resize? true} value)
-             (str "asset-cp-" (:block/uuid value)))]
+           ^{:key (str "asset-cp-" (:block/uuid value))}
+           [:<> (asset-cp {:disable-resize? true} value)]]
           [:div.asset-value-thumb.flex-shrink-0.flex.items-center
            {:role "button"
             :tabIndex 0
             :data-asset-preview-trigger true
             :onClickCapture preview!
             :on-key-down preview-key!}
-           (rum/with-key (asset-cp {:disable-resize? true} value)
-             (str "asset-cp-" (:block/uuid value)))])))))
+           ^{:key (str "asset-cp-" (:block/uuid value))}
+           [:<> (asset-cp {:disable-resize? true} value)]])))))
 
 (defn- <select-assets!
   [block property many? selected-ids set-selected-ids! on-chosen assets]
@@ -1747,7 +1744,7 @@
     (.appendChild js/document.body input)
     (.click input)))
 
-(rum/defc asset-grid-upload-button
+(hsx/defc asset-grid-upload-button
   [saving? open-file-picker!]
   [:div.flex.items-center.justify-end.mb-2.min-w-0
    (shui/button
@@ -1761,7 +1758,7 @@
     (ui/icon "upload" {:size 14})
     (t :asset/add-assets))])
 
-(rum/defc asset-grid-cell
+(hsx/defc asset-grid-cell
   [asset selected? toggle-asset!]
   (let [asset-type (:logseq.property.asset/type asset)
         image? (asset-image? asset-type)]
@@ -1795,18 +1792,17 @@
                       :tabIndex -1
                       :aria-hidden true})]]))
 
-(rum/defc asset-grid-assets
+(hsx/defc asset-grid-assets
   [assets selected-ids toggle-asset!]
   [:div.grid.gap-2
    {:style asset-picker-items-grid-style}
    (for [asset (assets-selected-first assets selected-ids)]
-     (rum/with-key
-       (asset-grid-cell asset
-                        (contains? selected-ids (:db/id asset))
-                        toggle-asset!)
-       (str (:block/uuid asset))))])
+     ^{:key (str (:block/uuid asset))}
+     [asset-grid-cell asset
+      (contains? selected-ids (:db/id asset))
+      toggle-asset!])])
 
-(rum/defc asset-grid-popup-content
+(hsx/defc asset-grid-popup-content
   [block property {:keys [on-chosen]}]
   (let [[assets set-assets!] (hooks/use-state nil)
         [selected-ids set-selected-ids!] (hooks/use-state (asset-selected-ids block property))
@@ -1854,7 +1850,7 @@
        :else
        (asset-grid-assets assets selected-ids toggle-asset!))]))
 
-(rum/defc asset-value-picker
+(hsx/defc asset-value-picker
   [block property value opts]
   (let [*el (hooks/use-ref nil)
         editing? (:editing? opts)
@@ -1869,7 +1865,7 @@
                                                   (.closest (str "[data-asset-preview-trigger], "
                                                                  asset-embedded-control-selector)))
                                   (util/stop e)
-                                  (show-grid! (or (.-currentTarget e) (rum/deref *el)))))]
+                                  (show-grid! (or (.-currentTarget e) (hooks/deref *el)))))]
     (if editing?
       [:div.property-select.w-full
        (asset-grid-popup-content block property opts)]
@@ -1886,7 +1882,7 @@
                          (when-not config/publishing?
                            (delete-block-property! block property))
                          (" " "Enter")
-                         (do (show-grid! (or (.-currentTarget e) (rum/deref *el)))
+                         (do (show-grid! (or (.-currentTarget e) (hooks/deref *el)))
                              (util/stop e))
                          nil))}
        (if (and value (:db/id value))
@@ -1896,7 +1892,7 @@
           {:on-click show-grid-from-click!}
           (property-empty-text-value property opts)])))))
 
-(rum/defc property-scalar-value-aux
+(hsx/defc property-scalar-value-aux
   [block property value* {:keys [editing? on-chosen]
                           :as opts}]
   (let [property (model/sub-block (:db/id property))
@@ -1973,7 +1969,7 @@
           [:div.flex.flex-1
            (property-value-inner block property value opts)])))))
 
-(rum/defc property-scalar-value
+(hsx/defc property-scalar-value
   [block property value* {:keys [container-id editing?]
                           :as opts}]
   (let [block-editing? (state/use-sub-editing? [container-id (:block/uuid block)])
@@ -1982,7 +1978,7 @@
                          (= (:db/id property) (:db/id (:property (state/get-editor-action-data))))))]
     (property-scalar-value-aux block property value* (assoc opts :editing? editing))))
 
-(rum/defc multiple-values-inner
+(hsx/defc multiple-values-inner
   [block property v {:keys [on-chosen editing?] :as opts}]
   (let [type (:logseq.property/type property)
         date? (= type :date)
@@ -2016,7 +2012,7 @@
             show-popup! (fn [^js e]
                           (let [target (.-target e)]
                             (when-not (or (util/link? target) (.closest target "a") config/publishing?)
-                              (shui/popup-show! (rum/deref *el)
+                              (shui/popup-show! (hooks/deref *el)
                                                 (fn [opts]
                                                   (content-fn opts target))
                                                 {:as-dropdown? true :as-content? false
@@ -2028,7 +2024,7 @@
           :on-key-down (fn [^js e]
                          (case (.-key e)
                            (" " "Enter")
-                           (do (some-> (rum/deref *el) (.click))
+                           (do (some-> (hooks/deref *el) (.click))
                                (util/stop e))
                            ("Backspace" "Delete")
                            (delete-block-property! block property)
@@ -2038,14 +2034,12 @@
            (if (and (seq items) not-empty-value?)
              (if (= type :asset)
                (for [item items]
-                 (rum/with-key
-                   (asset-value-content item)
-                   (or (:block/uuid item) (str item))))
+                 ^{:key (or (:block/uuid item) (str item))}
+                 [asset-value-content item])
                (concat
                 (->> (for [item items]
-                       (rum/with-key
-                         (select-item property type item (assoc opts :show-popup! show-popup!))
-                         (or (:block/uuid item) (str item))))
+                       ^{:key (or (:block/uuid item) (str item))}
+                       [select-item property type item (assoc opts :show-popup! show-popup!)])
                      (interpose [:span.opacity-50.-ml-1 ","]))
                 (when date?
                   [(property-value-date-picker block property nil {:toggle-fn toggle-fn})])))
@@ -2057,7 +2051,7 @@
                   (property-empty-text-value property opts)]
                  (property-empty-text-value property opts)))))]))))
 
-(rum/defc multiple-values
+(hsx/defc multiple-values
   [block property opts]
   (db-hooks/query-scope
    (fn []
@@ -2083,7 +2077,7 @@
      (when block-loaded?
        (:logseq.property/default-value property)))))
 
-(rum/defc ^:large-vars/cleanup-todo property-value
+(hsx/defc ^:large-vars/cleanup-todo property-value
   [block property {:keys [show-tooltip? p-block p-property editing?]
                    :as opts}]
   (ui/catch-error

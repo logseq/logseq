@@ -22,7 +22,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- select
   ([items on-chosen]
@@ -59,7 +59,7 @@
     "not" (t :query.builder/operator-not-label)
     value))
 
-(rum/defc search
+(hsx/defc search
   [on-submit on-cancel]
   (let [*input-value (hooks/use-memo #(atom nil) [])]
     [:input#query-builder-search.form-input.block.sm:text-sm.sm:leading-5
@@ -77,7 +77,7 @@
       :on-change #(reset! *input-value (util/evalue %))}]))
 
 (defonce *between-dates (atom {}))
-(rum/defc datepicker
+(hsx/defc datepicker
   [id placeholder {:keys [on-select]}]
   (let [*input-value (hooks/use-memo #(atom nil) [])
         [input-value] (hooks/use-atom *input-value)]
@@ -106,7 +106,7 @@
                                      :align :start}))}
      (or (first input-value) placeholder))))
 
-(rum/defc between
+(hsx/defc between
   [{:keys [tree loc] :as opts}]
   [:div.between-date.p-4 {:on-pointer-down (fn [e] (util/stop-propagation e))}
    [:div.flex.flex-row.items-center.gap-2
@@ -126,9 +126,9 @@
                                  (append-tree! tree opts loc clause)
                                  (reset! *between-dates {}))))))]])
 
-(rum/defc property-select
+(hsx/defc property-select
   [*mode *property *private-property?]
-  (let [[properties set-properties!] (rum/use-state nil)
+  (let [[properties set-properties!] (hooks/use-state nil)
         properties (cond->> properties
                      (not @*private-property?)
                      (remove ldb/built-in?))]
@@ -154,7 +154,7 @@
                (reset! *mode "property-value")
                (reset! *property db-ident)))]))
 
-(rum/defc property-value-select-inner
+(hsx/defc property-value-select-inner
   [*property *private-property? *tree opts loc values]
   (db-hooks/query-scope
    (fn []
@@ -174,9 +174,9 @@
                    (reset! *property nil)
                    (append-tree! *tree opts loc x))))))))
 
-(rum/defc property-value-select
+(hsx/defc property-value-select
   [*property *private-property? *tree opts loc]
-  (let [[values set-values!] (rum/use-state nil)]
+  (let [[values set-values!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn [_property]
        (p/let [result (p/let [result (db-async/<get-property-values @*property)]
@@ -188,9 +188,9 @@
      [@*property])
     (property-value-select-inner *property *private-property? *tree opts loc values)))
 
-(rum/defc tags
+(hsx/defc tags
   [repo *tree opts loc]
-  (let [[values set-values!] (rum/use-state nil)]
+  (let [[values set-values!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
        (let [result (db-model/get-all-readable-classes repo {:except-root-class? true})]
@@ -205,7 +205,7 @@
                 (append-tree! *tree opts loc [:tags (str value)]))
               {:extract-fn :label}))))
 
-(rum/defc page-search
+(hsx/defc page-search
   [on-chosen]
   (let [[result set-result!] (hooks/use-state nil)
         [loading? set-loading!] (hooks/use-state nil)]
@@ -288,7 +288,7 @@
 
        nil)]))
 
-(rum/defc picker
+(hsx/defc picker
   [*tree loc clause opts]
   (let [*mode (hooks/use-memo #(atom nil) []) ; pick mode
         *property (hooks/use-memo #(atom nil) [])
@@ -325,7 +325,7 @@
                           value))
           :input-default-placeholder (t :query.builder/add-filter-or-operator-placeholder)})])]))
 
-(rum/defc add-filter
+(hsx/defc add-filter
   [*tree loc clause]
   (shui/button
    {:class "jtrigger !px-1 h-6 add-filter text-muted-foreground"
@@ -436,7 +436,7 @@
       :else
       (str (query-builder/->dsl clause)))))
 
-(rum/defc clause-inner
+(hsx/defc clause-inner
   [*tree loc clause & {:keys [operator?]}]
   (let [popup [:div.p-4.flex.flex-col.gap-2
                [:a {:title (t :ui/delete)
@@ -488,7 +488,7 @@
        [:a.flex.query-clause {:on-click #(shui/popup-show! (.-target %) popup {:align :start})}
         (dsl-human-output clause)]])))
 
-(rum/defc clause
+(hsx/defc clause
   [*tree *find loc clauses]
   (when (seq clauses)
     [:div.query-builder-clause
@@ -501,7 +501,7 @@
           [:div.clause-bracket ")"]]
          (clause-inner *tree loc clauses)))]))
 
-(rum/defc clauses-group
+(hsx/defc clauses-group
   [*tree *find loc kind clauses]
   (let [parens? (and (= loc [0]) (or (not= kind :and) (> (count clauses) 1)))]
     [:div.clauses-group
@@ -522,7 +522,7 @@
      (when (not= loc [0])
        (add-filter *tree loc []))]))
 
-(rum/defc clause-tree
+(hsx/defc clause-tree
   [*tree *find]
   (let [[tree] (hooks/use-atom *tree)
         kind ((set query-builder/operators) (first tree))
@@ -548,7 +548,7 @@
                   (:block/title block)
                   "")))
 
-(rum/defc builder
+(hsx/defc builder
   [_block _option]
   (let [*find (hooks/use-memo #(atom nil) [])
         *tree (hooks/use-memo

@@ -1,65 +1,65 @@
 (ns logseq.shui.hooks
   "React custom hooks."
-  (:refer-clojure :exclude [ref deref])
-  (:require [frontend.common.missionary :as c.m]
+  (:refer-clojure :exclude [deref])
+  (:require ["react" :as react]
+            [frontend.common.missionary :as c.m]
             [goog.functions :as gfun]
-            [missionary.core :as m]
-            [rum.core :as rum]))
+            [missionary.core :as m]))
 
 (defn- memo-deps
   [equal-fn deps]
   (let [equal-fn (or equal-fn =)
-        ^js deps-ref (rum/use-ref deps)]
+        ^js deps-ref (react/useRef deps)]
     (when-not (equal-fn (.-current deps-ref) deps)
       (set! (.-current deps-ref) deps))
     (.-current deps-ref)))
 
-#_{:clj-kondo/ignore [:discouraged-var]}
+(defn- deps-array
+  [deps equal-fn]
+  (if (empty? deps)
+    #js[]
+    #js[(memo-deps equal-fn deps)]))
+
+(defn- effect-result
+  [result]
+  (if (fn? result)
+    result
+    js/undefined))
+
 (defn use-memo
   [f deps & {:keys [equal-fn]}]
-  (rum/use-memo f (if (empty? deps)
-                    deps
-                    #js[(memo-deps equal-fn deps)])))
+  (react/useMemo f (deps-array deps equal-fn)))
 
-#_{:clj-kondo/ignore [:discouraged-var]}
 (defn use-effect!
   "setup-fn will be invoked every render of component when no deps arg provided"
   ([setup-fn]
    (assert (fn? setup-fn) "use-effect! setup-fn should be a function")
-   (rum/use-effect! (fn []
+   (react/useEffect (fn []
                       (let [result (setup-fn)]
-                        (when (fn? result) result)))))
+                        (effect-result result)))))
   ([setup-fn deps & {:keys [equal-fn]}]
    (assert (fn? setup-fn) "use-effect! setup-fn should be a function")
-   (rum/use-effect! (fn [& deps]
+   (react/useEffect (fn []
                       (let [result (apply setup-fn deps)]
-                        (when (fn? result) result)))
-                    (if (empty? deps)
-                      deps
-                      #js[(memo-deps equal-fn deps)]))))
+                        (effect-result result)))
+                    (deps-array deps equal-fn))))
 
-#_{:clj-kondo/ignore [:discouraged-var]}
 (defn use-layout-effect!
   ([setup-fn]
    (assert (fn? setup-fn) "use-layout-effect! setup-fn should be a function")
-   (rum/use-layout-effect! (fn []
-                             (let [result (setup-fn)]
-                               (when (fn? result) result)))))
+   (react/useLayoutEffect (fn []
+                            (let [result (setup-fn)]
+                              (effect-result result)))))
   ([setup-fn deps & {:keys [equal-fn]}]
    (assert (fn? setup-fn) "use-layout-effect! setup-fn should be a function")
-   (rum/use-layout-effect! (fn [& deps]
-                             (let [result (apply setup-fn deps)]
-                               (when (fn? result) result)))
-                           (if (empty? deps)
-                             deps
-                             #js[(memo-deps equal-fn deps)]))))
+   (react/useLayoutEffect (fn []
+                            (let [result (apply setup-fn deps)]
+                              (effect-result result)))
+                          (deps-array deps equal-fn))))
 
-#_{:clj-kondo/ignore [:discouraged-var]}
 (defn use-callback
   [callback deps & {:keys [equal-fn]}]
-  (rum/use-callback callback (if (empty? deps)
-                               deps
-                               #js[(memo-deps equal-fn deps)])))
+  (react/useCallback callback (deps-array deps equal-fn)))
 
 (defn- event-target
   [target]
@@ -116,14 +116,13 @@
     (use-event-listener js/window outside-event outside-handler [outside-handler] outside-options)
     (use-window-keydown keydown-handler [keydown-handler])))
 
-;;; unchanged hooks, link to rum/use-xxx directly
-(def use-ref rum/use-ref)
-(def create-ref rum/create-ref)
-(def deref rum/deref)
-(def set-ref! rum/set-ref!)
-(def use-state rum/use-state)
-(comment
-  (def use-reducer rum/use-reducer))
+;;; React hooks
+(def use-ref react/useRef)
+(def create-ref react/createRef)
+(defn deref [ref] (.-current ref))
+(defn set-ref! [ref value] (set! (.-current ref) value))
+(def use-state react/useState)
+(def use-reducer react/useReducer)
 
 ;;; other custom hooks
 
@@ -265,3 +264,24 @@
        #(set-ref! mounted-ref false))
      [])
     #(deref mounted-ref)))
+
+(defn use-bounding-client-rect
+  "Return a callback ref and the current bounding client rect for that node."
+  ([] (use-bounding-client-rect nil))
+  ([tick]
+   (let [[ref set-ref] (use-state nil)
+         [rect set-rect] (use-state nil)]
+     (use-effect!
+      (if ref
+        (fn []
+          (let [update-rect #(set-rect (.getBoundingClientRect ref))
+                update-from-observer! (fn [entries]
+                                        (when (.-contentRect (first (js->clj entries)))
+                                          (update-rect)))
+                observer (js/ResizeObserver. update-from-observer!)]
+            (update-rect)
+            (.observe observer ref)
+            #(.disconnect observer)))
+        #())
+      [ref tick])
+     [set-ref rect])))

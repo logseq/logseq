@@ -1,6 +1,7 @@
 (ns frontend.handler.plugin
   "System-component-like ns that provides all high level plugin functionality"
-  (:require [camel-snake-kebab.core :as csk]
+  (:require ["react-dom/client" :as rdc]
+            [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -24,7 +25,7 @@
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- normalize-keyword-for-json
   [input]
@@ -1189,7 +1190,7 @@
       url)))
 
 ;; components
-(rum/defc lsp-indicator
+(hsx/defc lsp-indicator
   []
   (let [text (or (state/use-sub :plugin/indicator-text) (when (not (util/electron?)) (t :plugin/loading-indicator)))]
     (when-not (true? text)
@@ -1204,8 +1205,7 @@
 
   (let [el (js/document.createElement "div")]
     (.appendChild js/document.body el)
-    (rum/mount
-      (lsp-indicator) el))
+    (.render (rdc/createRoot el) (lsp-indicator)))
 
   (-> (p/let [root (init-ls-dotdir-root)
               _ (.setupPluginCore js/LSPlugin (bean/->js {:localUserConfigRoot root :dotConfigRoot root}))

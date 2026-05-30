@@ -19,7 +19,7 @@
    [logseq.shui.ui :as shui]
    [medley.core :as medley]
    [promesa.core :as p]
-   [rum.core :as rum]))
+   [io.factorhouse.hsx.core :as hsx]))
 
 (defn -get-all-formats
   []
@@ -30,12 +30,12 @@
                config/markup-formats)
        (map #(hash-map :id % :value (name %)))))
 
-(rum/defc input-auto-complete
+(hsx/defc input-auto-complete
   [{:keys [items item-cp class
            on-chosen on-keydown input-opts]}]
 
-  (let [[*input-val, set-*input-val] (rum/use-state (atom nil))
-        [input-empty?, set-input-empty?] (rum/use-state true)]
+  (let [[*input-val, set-*input-val] (hooks/use-state (atom nil))
+        [input-empty?, set-input-empty?] (hooks/use-state true)]
 
     (hooks/use-effect!
      #(set-input-empty? (string/blank? @*input-val))
@@ -59,10 +59,10 @@
                         (fn? on-keydown)
                         (assoc :on-key-down #(on-keydown % *input-val)))})))
 
-(rum/defc confirm-dir-with-alias-name
+(hsx/defc confirm-dir-with-alias-name
   [dir set-dir!]
 
-  (let [[val set-val!] (rum/use-state "")
+  (let [[val set-val!] (hooks/use-state "")
         on-submit (fn []
                     (when-not (string/blank? val)
                       (if-not (assets-handler/get-alias-by-name val)
@@ -94,13 +94,13 @@
        :disabled (string/blank? val)
        :on-click on-submit)]]))
 
-(rum/defc restart-button
+(hsx/defc restart-button
   []
   (ui/button (t :plugin/restart)
              :on-click #(js/logseq.api.relaunch)
              :small? true :intent "logseq"))
 
-(rum/defc ^:large-vars/data-var alias-directories
+(hsx/defc ^:large-vars/data-var alias-directories
   []
   (let [[ext-editing-dir set-ext-editing-dir!] (hooks/use-state nil)
         directories      (into [] (state/use-sub :assets/alias-dirs))
@@ -199,7 +199,7 @@
                       (confirm-dir path set-dir!)))
        :small? true)]]))
 
-(rum/defc settings-content
+(hsx/defc settings-content
   []
   (let [[pre-alias-enabled?]   (hooks/use-state (state/sub :assets/alias-enabled?))
         alias-enabled?         (state/use-sub :assets/alias-enabled?)
@@ -221,9 +221,9 @@
         [:h2.font-bold.opacity-80 (t :asset/selected-directories)]
         (alias-directories)])]))
 
-(rum/defc edit-external-url-form
+(hsx/defc edit-external-url-form
   [asset-block {:keys [url title on-saved]}]
-  (let [[saving? set-saving?] (rum/use-state false)
+  (let [[saving? set-saving?] (hooks/use-state false)
         create? (nil? asset-block)]
     [:form.pt-3.flex.flex-col.gap-2
      {:on-submit (fn [^js e]
@@ -276,7 +276,7 @@
      [:div.flex.justify-end.pt-3
       (ui/button (if create? (t :ui/create) (t :ui/save)) {:disabled saving?})]]))
 
-(rum/defc edit-external-url-content
+(hsx/defc edit-external-url-content
   [asset-block pdf-current]
   [:div.edit-external-url-content
    (let [on-saved! (fn [asset-block update?]

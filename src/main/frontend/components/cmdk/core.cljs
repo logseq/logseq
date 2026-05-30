@@ -35,7 +35,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- get-action
   []
@@ -199,7 +199,7 @@
 
 (defn state->highlighted-item
   ([state]
-   (state->highlighted-item state nil))
+   (state->highlighted-item state (::fallback-item state)))
   ([state fallback-item]
    (or (some-> state ::highlighted-item deref)
        fallback-item
@@ -825,7 +825,7 @@
     (when-let [row-el (.closest item-el "[data-item-index]")]
       (scroll-to-highlight! state row-el))))
 
-(rum/defc render-result-list-item
+(hsx/defc render-result-list-item
   [state group highlighted? mouse-mode? item hls-page? text input]
   (let [item-idx (:item-index item)
         scroll-root @(::scroll-container-ref state)
@@ -844,7 +844,7 @@
                      :on-click (fn [e]
                                  (util/stop-propagation e)
                                  (reset! (::highlighted-item state) item)
-                                 (handle-action :default state e)
+                                 (handle-action :default (assoc state ::fallback-item item) e)
                                  (when-let [on-click (:on-click item)]
                                    (on-click e)))
                      :on-mouse-move (fn [e]
@@ -870,7 +870,7 @@
   (when (contains? #{:nodes :current-page} group)
     (load-results group (assoc state ::expanded? true))))
 
-(rum/defc result-group
+(hsx/defc result-group
   [state title group visible-items first-item sidebar?]
   (let [[results] (hooks/use-atom (::results state))
         [focus-source] (hooks/use-atom (::focus-source state))
@@ -932,9 +932,8 @@
                   text (some-> item :text)
                   source-block (some-> item :source-block)
                   hls-page? (and page? (pdf-utils/hls-file? (:block/title source-block)))]]
-        (rum/with-key
-          (render-result-list-item state group highlighted? mouse-mode? item hls-page? text input)
-          (:item-index item)))]]))
+        ^{:key (:item-index item)}
+        [render-result-list-item state group highlighted? mouse-mode? item hls-page? text input])]]))
 
 (defn move-highlight
   [state n]
@@ -1129,7 +1128,7 @@
       :else
       (t :cmdk.input/default-placeholder))))
 
-(rum/defc input-row
+(hsx/defc input-row
   [state all-items opts]
   (let [highlighted-item @(::highlighted-item state)
         input @(::input state)
@@ -1205,7 +1204,7 @@
     :open-sidebar (tip-with-shortcut (t :cmdk.tip/open-sidebar) ["mod" "enter"] {:style :combo})
     (tip-with-shortcut (t :cmdk.tip/filter-results) "/")))
 
-(rum/defc tip
+(hsx/defc tip
   [state]
   (let [[filter'] (hooks/use-atom (::filter state))
         tip-id (hooks/use-memo rand-tip [])]
@@ -1216,27 +1215,26 @@
       :else
       (tip-content tip-id))))
 
-(rum/defc hint-button
+(hsx/defc hint-button
   [text shortcut opts]
-  (shui/button
-   (merge {:class "hint-button [&>span:first-child]:hover:opacity-100 opacity-40 hover:opacity-80"
-           :variant :ghost
-           :size  :sm}
-          opts)
-   [[:span.opacity-60 text]
-     ;; shortcut
-    (when (not-empty shortcut)
-      (let [has-modifier? (and (coll? shortcut)
-                               (some #(#{"shift" "ctrl" "alt" "cmd" "mod" "⌘" "⌥" "⌃"}
-                                       (string/lower-case (str %)))
-                                     shortcut))
-            style (if (and (> (count shortcut) 1) has-modifier?)
-                    :combo
-                    :auto)]
-        (shui/shortcut shortcut {:style style
-                                 :aria-hidden? true})))]))
+  (let [props (merge {:class "hint-button [&>span:first-child]:hover:opacity-100 opacity-40 hover:opacity-80"
+                      :variant :ghost
+                      :size  :sm}
+                     opts)
+        children (cond-> [[:span.opacity-60 text]]
+                   (not-empty shortcut)
+                   (conj (let [has-modifier? (and (coll? shortcut)
+                                                  (some #(#{"shift" "ctrl" "alt" "cmd" "mod" "⌘" "⌥" "⌃"}
+                                                          (string/lower-case (str %)))
+                                                        shortcut))
+                               style (if (and (> (count shortcut) 1) has-modifier?)
+                                       :combo
+                                       :auto)]
+                           (shui/shortcut shortcut {:style style
+                                                    :aria-hidden? true}))))]
+    (apply shui/button props children)))
 
-(rum/defc hints
+(hsx/defc hints
   [state fallback-item]
   (let [action (state->action state fallback-item)
         button-fn (fn [text shortcut & {:as opts}]
@@ -1280,7 +1278,7 @@
 
         nil)]]))
 
-(rum/defc search-only
+(hsx/defc search-only
   [state group-name]
   [:div.flex.flex-row.gap-1.items-center
    [:div (t :cmdk.filter/only-label)]
@@ -1330,11 +1328,12 @@
   (state/set-state! :search/args nil)
   state)
 
-(rum/defc cmdk
+(hsx/defc cmdk
   [{:keys [sidebar?] :as opts}]
   (let [state (hooks/use-memo #(cmdk-init-state opts) [])
         *input (::input state)
         search-mode (state/use-sub :search/mode)
+        search-args (state/use-sub :search/args)
         [filter'] (hooks/use-atom (::filter state))
         [_results] (hooks/use-atom (::results state))
         [_highlighted-item] (hooks/use-atom (::highlighted-item state))
@@ -1345,6 +1344,22 @@
         results-ordered (state->results-ordered state)
         all-items (mapcat last results-ordered)
         first-item (first all-items)]
+    (hooks/use-effect!
+     (fn []
+       (let [{input :input filter-group :filter} (cmdk-state/build-initial-cmdk-search
+                                                  opts
+                                                  (or search-mode :global)
+                                                  search-args
+                                                  (state/get-current-repo))]
+         (reset! (::input state) input)
+         (reset! (::filter state) filter-group)
+         (reset! (::highlighted-item state) nil)
+         (reset! (::focus-source state) :keyboard)
+         (reset! (::results state) default-results)
+         (when-let [input-ref @(::input-ref state)]
+           (set! (.-value input-ref) input))
+         (refresh-results! state)))
+     [search-mode search-args])
     (hooks/use-effect!
      (fn []
        (when-not sidebar?
@@ -1399,11 +1414,11 @@
              (t :search/no-result))]))]
      (when-not sidebar? (hints state first-item))]))
 
-(rum/defc cmdk-modal [props]
+(hsx/defc cmdk-modal [props]
   [:div {:class "cp__cmdk__modal rounded-lg w-[90dvw] max-w-4xl relative"
          :data-keep-selection true}
    (cmdk props)])
 
-(rum/defc cmdk-block [props]
+(hsx/defc cmdk-block [props]
   [:div {:class "cp__cmdk__block rounded-md"}
    (cmdk props)])

@@ -22,9 +22,9 @@
             [mobile.state :as mobile-state]
             [mobile.tabs :as mobile-tabs]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc user-profile
+(hsx/defc user-profile
   [login?]
   (let [username (user-handler/username)
         email (user-handler/email)
@@ -80,7 +80,7 @@
   (state/pub-event! [:init/commands])
   (ui-handler/re-render-root!))
 
-(rum/defc log
+(hsx/defc log
   []
   (let [[error-only? set-error-only!]       (hooks/use-state false)
         [reversed? set-reversed!]           (hooks/use-state false)
@@ -167,7 +167,7 @@
      :disabled disabled?
      :on-checked-change #(toggle-tab! id %)})])
 
-(rum/defc mobile-tabs-picker
+(hsx/defc mobile-tabs-picker
   []
   (let [[custom-tab-ids set-custom-tab-ids!] (hooks/use-state
                                               (storage/get :ls-mobile-tabs))
@@ -223,7 +223,7 @@
           :sortable? false
           :toggle-tab! toggle-tab!}))]]))
 
-(rum/defc page
+(hsx/defc page
   []
   (let [login? (and (state/use-sub :auth/id-token)
                     (user-handler/logged-in?))

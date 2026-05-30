@@ -13,20 +13,20 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.string :as gstring]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
-            [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [reitit.frontend.easy :as rfe]))
 
 (defn- get-path
   [route-match]
   (get-in route-match [:parameters :path :path]))
 
-(rum/defc files-all
+(hsx/defc files-all
   []
   (let [[files set-files!] (hooks/use-state nil)
         _ (hooks/use-effect!
@@ -59,7 +59,7 @@
                      (date/get-date-time-string
                       (t/to-default-time-zone (tc/to-date-time modified-at))))]])]))]]))
 
-(rum/defc files
+(hsx/defc files
   []
   [:div.flex-1.overflow-hidden
    [:h1.title
@@ -67,7 +67,7 @@
    (files-all)])
 
 ;; FIXME: misuse of rpath and fpath
-(rum/defc file-inner
+(hsx/defc file-inner
   [path format]
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))
         rel-path (when (string/starts-with? path repo-dir)
@@ -123,8 +123,9 @@
        :else
        [:div (t :file/format-not-supported (name format))])]))
 
-(rum/defc file
+(hsx/defc file
   [route-match]
   (let [path (get-path route-match)
         format (common-util/get-format path)]
-    (rum/with-key (file-inner path format) path)))
+    ^{:key path}
+    [file-inner path format]))

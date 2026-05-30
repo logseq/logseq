@@ -5,9 +5,9 @@
             [goog.dom :as gdom]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc picker
+(hsx/defc picker
   [{:keys [on-change]}]
   (assert (fn? on-change))
   (let [*input (hooks/use-ref nil)]

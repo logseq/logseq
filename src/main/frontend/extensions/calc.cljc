@@ -3,7 +3,7 @@
   (:require #?(:clj [clojure.java.io :as io])
             #?(:clj [instaparse.core :as insta]
                :cljs [instaparse.core :as insta :refer-macros [defparser]])
-            #?(:cljs [rum.core :as rum])
+            #?(:cljs [io.factorhouse.hsx.core :as hsx])
             #?(:cljs [shadow.resource :as rc])
             [bignumber.js :as bn]
             [clojure.string :as string]
@@ -218,7 +218,7 @@
 ;; UI
 
 #?(:cljs
-   (rum/defc results
+   (hsx/defc results
      [output-lines]
      (when output-lines
        ;; the editor's parent will go into edit mode if any elements are clicked

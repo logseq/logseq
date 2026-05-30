@@ -42,7 +42,7 @@
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- get-page-name
   [route-match]
@@ -74,23 +74,22 @@
                (not preview?))
       (editor-handler/edit-block! block :max))))
 
-(rum/defc page-blocks-inner
+(hsx/defc page-blocks-inner
   [page-e blocks config sidebar? _preview? _block-uuid]
   (hooks/use-effect! #(open-root-block! page-e sidebar? _preview?) [])
   (when page-e
     (let [hiccup (component-block/->hiccup blocks config {})]
       [:div.page-blocks-inner {:style {:min-height 29}}
-       (rum/with-key
-         (content/content (str (:block/uuid page-e))
-                          {:hiccup   hiccup
-                           :sidebar? sidebar?})
-         (str (:block/uuid page-e) "-hiccup"))])))
+       ^{:key (str (:block/uuid page-e) "-hiccup")}
+       [content/content (str (:block/uuid page-e))
+        {:hiccup   hiccup
+         :sidebar? sidebar?}]])))
 
 (declare page-cp)
 
-(rum/defc add-button-inner
+(hsx/defc add-button-inner
   [block {:keys [container-id editing? block?] :as config*}]
-  (let [*ref (rum/use-ref nil)
+  (let [*ref (hooks/use-ref nil)
         has-children? (:block/_parent block)
         page? (ldb/page? block)
         opacity-class (cond
@@ -117,8 +116,8 @@
                                                                       {:block-uuid (:block/uuid block)}))))
         :on-mouse-over (fn []
                          (when-not (and (util/mobile?) editing?)
-                           (let [ref (rum/deref *ref)
-                                 prev-block (util/get-prev-block-non-collapsed (rum/deref *ref) {:up-down? true})]
+                           (let [ref (hooks/deref *ref)
+                                 prev-block (util/get-prev-block-non-collapsed (hooks/deref *ref) {:up-down? true})]
                              (cond
                                (and prev-block (dom/has-class? prev-block "is-blank"))
                                (dom/add-class! ref "opacity-0")
@@ -127,8 +126,8 @@
                                :else
                                (dom/add-class! ref "opacity-100")))))
         :on-mouse-leave #(do
-                           (dom/remove-class! (rum/deref *ref) "opacity-50")
-                           (dom/remove-class! (rum/deref *ref) "opacity-100"))
+                           (dom/remove-class! (hooks/deref *ref) "opacity-50")
+                           (dom/remove-class! (hooks/deref *ref) "opacity-100"))
         :on-key-down (fn [^js e]
                        (util/stop e)
                        (when (= "Enter" (util/ekey e))
@@ -143,12 +142,12 @@
          [:span.bullet-container
           [:span.bullet]]]]])))
 
-(rum/defc add-button
+(hsx/defc add-button
   [block config]
   (let [editing? (state/use-sub :editor/editing?)]
     (add-button-inner block (assoc config :editing? editing?))))
 
-(rum/defc page-blocks-cp
+(hsx/defc page-blocks-cp
   [block* {:keys [sidebar? hide-add-button? journals? on-page-blocks-rendered] :as config}]
   (db-hooks/query-scope
    (fn []
@@ -211,7 +210,7 @@
                 (when-not hide-add-button?
                   (add-button block config)))])))))))
 
-(rum/defc today-queries
+(hsx/defc today-queries
   [repo today? sidebar?]
   (when (and today? (not sidebar?))
     (let [queries (get-in (state/use-sub-config repo) [:default-queries :journals])]
@@ -219,18 +218,19 @@
         [:div#today-queries
          (for [query queries]
            (let [query' (assoc query :collapsed? true)]
-             (rum/with-key
-               (ui/catch-error
-                (ui/component-error (t :page/default-query-error) {:content (pr-str query')})
-                (query/custom-query (component-block/wrap-query-components
-                                     {:editor-box editor/box
-                                      :page page-cp
-                                      :built-in-query? true
-                                      :today-query? true})
-                                    query'))
-               (str repo "-custom-query-" (:query query')))))]))))
+             (with-meta
+               [:<>
+                (ui/catch-error
+                 (ui/component-error (t :page/default-query-error) {:content (pr-str query')})
+                 (query/custom-query (component-block/wrap-query-components
+                                      {:editor-box editor/box
+                                       :page page-cp
+                                       :built-in-query? true
+                                       :today-query? true})
+                                     query'))]
+               {:key (str repo "-custom-query-" (:query query'))})))]))))
 
-(rum/defc db-page-title-actions
+(hsx/defc db-page-title-actions
   [page]
   [:div.ls-page-title-actions
    [:div.flex.flex-row.items-center.gap-2
@@ -271,7 +271,7 @@
        :else
        (t :property/set-property)))]])
 
-(rum/defc db-page-title
+(hsx/defc db-page-title
   [page {:keys [sidebar? journals? container-id tag-dialog? display-title]}]
   (let [with-actions? (not config/publishing?)]
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
@@ -336,7 +336,7 @@
   (when-let [path-page-name (get-path-page-name route-match page-name)]
     (util/page-name-sanity-lc path-page-name)))
 
-(rum/defc on-mounted
+(hsx/defc on-mounted
   [child on-mounted-fn]
   (hooks/use-effect!
    (fn []
@@ -344,7 +344,7 @@
        (on-mounted-fn))))
   child)
 
-(rum/defc lsp-pagebar-slot
+(hsx/defc lsp-pagebar-slot
   []
   (when (not config/publishing?)
     (when config/lsp-enabled?
@@ -352,7 +352,7 @@
        (plugins/hook-ui-slot :page-head-actions-slotted nil)
        (plugins/hook-ui-items :pagebar)])))
 
-(rum/defc tabs
+(hsx/defc tabs
   [page opts]
   (let [class? (ldb/class? page)
         property? (ldb/property? page)
@@ -396,9 +396,9 @@
          (on-mounted (objects/property-related-objects page opts)
                      (:on-tagged-nodes-rendered opts)))))]))
 
-(rum/defc sidebar-page-properties
+(hsx/defc sidebar-page-properties
   [config page]
-  (let [[collapsed? set-collapsed!] (rum/use-state (not (ldb/class? page)))]
+  (let [[collapsed? set-collapsed!] (hooks/use-state (not (ldb/class? page)))]
     [:div.ls-sidebar-page-properties.flex.flex-col.gap-2.mt-2
      [:div
       (shui/button
@@ -414,7 +414,7 @@
         [:hr.my-4]])]))
 
 ;; A page is just a logical block
-(rum/defc ^:large-vars/cleanup-todo page-inner
+(hsx/defc ^:large-vars/cleanup-todo page-inner
   [{:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals?] :as option}]
   (db-hooks/query-scope
    (fn []
@@ -526,12 +526,11 @@
                          (not tag-dialog?)
                          (not linked-refs?))
                 [:div.fade-in.delay {:key "page-references"}
-                 (rum/with-key
-                   (reference/references page {:sidebar? sidebar?
-                                               :journals? journals?
-                                               :refs-count (:refs-count option)
-                                               :linked-refs-section? true})
-                   (str title "-refs"))])
+                 ^{:key (str title "-refs")}
+                 [reference/references page {:sidebar? sidebar?
+                                             :journals? journals?
+                                             :refs-count (:refs-count option)
+                                             :linked-refs-section? true}]])
 
               (when-not (or unlinked-refs?
                             sidebar?
@@ -542,7 +541,7 @@
                  (reference/unlinked-references page {:sidebar? sidebar?})])])]))
          [:div.opacity-75 (t :page/not-found)])))))
 
-(rum/defc page-aux
+(hsx/defc page-aux
   [option]
   (let [page-name (:page-name option)
         page-id-uuid-or-name (or (:db/id option) (:block/uuid option)
@@ -584,22 +583,21 @@
                          :page page
                          :refs-count refs-count)))))
 
-(rum/defc page-cp
+(hsx/defc page-cp
   [option]
   (let [page-name (or (:page-name option)
                       (get-page-name option))]
-    (rum/with-key
-      (page-aux (assoc option :page-name page-name))
-      (str
-       (state/get-current-repo)
-       "-"
-       (or (:db/id option) page-name)))))
+    ^{:key (str
+            (state/get-current-repo)
+            "-"
+            (or (:db/id option) page-name))}
+    [page-aux (assoc option :page-name page-name)]))
 
-(rum/defc page-container
+(hsx/defc page-container
   [page-m option]
   (page-cp (merge option page-m)))
 
-(rum/defc page-graph-inner
+(hsx/defc page-graph-inner
   [_page graph dark?]
   [:div.page-graph-panel.flex.flex-col.w-full
    {:style {:height "min(72vh, 860px)"
@@ -614,7 +612,7 @@
                     :on-node-activate graph-actions/activate-node!
                     :on-node-preview graph-actions/preview-node!})])
 
-(rum/defc page-graph-aux
+(hsx/defc page-graph-aux
   [page opts]
   (let [[graph set-graph!] (hooks/use-state {:nodes [] :links []})
         dark? (contains? #{"dark" :dark} (:theme opts))]
@@ -625,7 +623,7 @@
      [opts])
     (page-graph-inner page graph dark?)))
 
-(rum/defc page-graph
+(hsx/defc page-graph
   []
   (db-hooks/query-scope
    (fn []

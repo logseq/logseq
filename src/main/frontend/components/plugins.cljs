@@ -13,16 +13,15 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.rum :as rum-utils]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+            [promesa.core :as p]))
 
 (declare open-waiting-updates-modal!)
 (defonce PER-PAGE-SIZE 15)
@@ -75,7 +74,7 @@
              [:span.flex.items-center.gap-1.w-full
               icon [:div title]]))))))
 
-(rum/defc installed-themes
+(hsx/defc installed-themes
   []
   (let [*root (hooks/use-ref nil)
         [themes set-themes!] (hooks/use-state [])
@@ -144,7 +143,7 @@
                (when current-selected? [:small.inline-flex.ml-1.opacity-60 (ui/icon "check")])])]]))
       themes)]))
 
-(rum/defc unpacked-plugin-loader
+(hsx/defc unpacked-plugin-loader
   [unpacked-pkg-path]
   (hooks/use-effect!
    (fn []
@@ -171,7 +170,7 @@
   (when unpacked-pkg-path
     [:strong.inline-flex.px-3 (t :ui/loading)]))
 
-(rum/defc category-tabs
+(hsx/defc category-tabs
   [t total-nums category on-action]
 
   [:div.secondary-tabs.categories.flex
@@ -190,7 +189,7 @@
     :on-click #(on-action :themes)
     :class (if (= category :themes) "active" ""))])
 
-(rum/defc local-markdown-display
+(hsx/defc local-markdown-display
   []
   (let [[content item] (state/use-sub :plugin/active-readme)]
     [:div.cp__plugins-details
@@ -210,7 +209,7 @@
                                  :max-width  900}
        :dangerouslySetInnerHTML {:__html content}}]]))
 
-(rum/defc remote-readme-display
+(hsx/defc remote-readme-display
   [{:keys [repo]} _content]
   (let [src (str "./marketplace.html?repo=" repo)]
     [:iframe.lsp-frame-readme {:src src}]))
@@ -227,7 +226,7 @@
     (< num 1000) (str num)
     (>= num 1000) (str (.toFixed (/ num 1000) precision) "k")))
 
-(rum/defc card-ctls-of-market
+(hsx/defc card-ctls-of-market
   [item stat installed? installing-or-updating?]
   [:div.ctl
    [:ul.l.flex.items-center
@@ -263,7 +262,7 @@
                   (.set settings "disabled-since" (js/Date.now)))))
       (p/catch #(js/console.error %))))
 
-(rum/defc card-ctls-of-installed
+(hsx/defc card-ctls-of-installed
   [id name url sponsors unpacked? disabled?
    installing-or-updating? has-other-pending?
    new-version item]
@@ -345,7 +344,7 @@
                 :on-error on-error}]
     svg/folder))
 
-(rum/defc plugin-thumb-icon
+(hsx/defc plugin-thumb-icon
   [id icon market?]
   (let [[load-failed? set-load-failed!] (hooks/use-state false)
         src (plugin-thumb-icon-src id icon market?)]
@@ -353,7 +352,7 @@
                             (fn [_]
                               (set-load-failed! true)))))
 
-(rum/defc plugin-item-card
+(hsx/defc plugin-item-card
   [t {:keys [id name title version url description author icon iir repo sponsors webPkg] :as item}
    disabled? market? *search-key has-other-pending?
    installing-or-updating? installed? stat coming-update]
@@ -424,14 +423,14 @@
          id name url sponsors unpacked? disabled?
          installing-or-updating? has-other-pending? new-version item))]]))
 
-(rum/defc panel-tab-search
+(hsx/defc panel-tab-search
   [search-key *search-key *search-ref]
   [:div.search-ctls
    [:small.absolute.s1
     (ui/icon "search")]
    (when-not (string/blank? search-key)
      [:small.absolute.s2
-      {:on-click #(when-let [^js target (rum/deref *search-ref)]
+      {:on-click #(when-let [^js target (hooks/deref *search-ref)]
                     (reset! *search-key nil)
                     (.focus target))}
       (ui/icon "x")])
@@ -449,7 +448,7 @@
                    (reset! *search-key (some-> (.-value target) (string/triml))))
      :value (or search-key "")})])
 
-(rum/defc panel-tab-developer
+(hsx/defc panel-tab-developer
   []
   (ui/button
    (t :plugin/contribute)
@@ -458,12 +457,12 @@
    :intent "link"
    :target "_blank"))
 
-(rum/defc user-proxy-settings-container
+(hsx/defc user-proxy-settings-container
   [{:keys [protocol type] :as agent-opts}]
   (let [type        (or (not-empty type) (not-empty protocol) "system")
-        [opts set-opts!] (rum/use-state agent-opts)
-        [testing? set-testing?!] (rum/use-state false)
-        *test-input (rum/create-ref)
+        [opts set-opts!] (hooks/use-state agent-opts)
+        [testing? set-testing?!] (hooks/use-state false)
+        *test-input (hooks/create-ref)
         disabled?   (or (= (:type opts) "system") (= (:type opts) "direct"))]
     [:div.cp__settings-network-proxy-cnt
      [:h1.mb-2.text-2xl.font-bold (t :settings.advanced/network-proxy)]
@@ -514,7 +513,7 @@
 
        (ui/button (if testing? (ui/loading (t :plugin.proxy/testing)) (t :plugin.proxy/test-url))
                   :intent "logseq"
-                  :on-click #(let [val (util/trim-safe (.-value (rum/deref *test-input)))]
+                  :on-click #(let [val (util/trim-safe (.-value (hooks/deref *test-input)))]
                                (when (and (not testing?) (not (string/blank? val)))
                                  (set-testing?! true)
                                  (-> (p/let [result (ipc/ipc :testProxyUrl val opts)]
@@ -532,10 +531,10 @@
                               (p/let [_ (ipc/ipc :setProxy opts)]
                                 (state/set-state! [:electron/user-cfgs :settings/agent] opts))))]]]))
 
-(rum/defc load-from-web-url-container
+(hsx/defc load-from-web-url-container
   []
-  (let [[url set-url!] (rum/use-state "http://127.0.0.1:8080/")
-        [pending? set-pending?] (rum/use-state false)
+  (let [[url set-url!] (hooks/use-state "http://127.0.0.1:8080/")
+        [pending? set-pending?] (hooks/use-state false)
         handle-submit! (fn []
                          (set-pending? true)
                          (-> (plugin-handler/load-plugin-from-web-url! url)
@@ -561,12 +560,12 @@
                     :on-click handle-submit!}
                    (if pending? (ui/loading) (t :plugin/install)))]]))
 
-(rum/defc install-from-github-release-container
+(hsx/defc install-from-github-release-container
   []
-  (let [[url set-url!] (rum/use-state "")
-        [opts set-opts!] (rum/use-state {:theme? false :effect? false})
-        [pending set-pending!] (rum/use-state false)
-        *input (rum/use-ref nil)]
+  (let [[url set-url!] (hooks/use-state "")
+        [opts set-opts!] (hooks/use-state {:theme? false :effect? false})
+        [pending set-pending!] (hooks/use-state false)
+        *input (hooks/use-ref nil)]
     [:div.p-4.flex.flex-col.pb-0
      (shui/input {:placeholder (t :plugin.install-from-web-url/repo-url-placeholder)
                   :value url
@@ -587,7 +586,7 @@
        {:on-click (fn []
                     (if (or (string/blank? (util/trim-safe url))
                             (not (string/starts-with? url "https://")))
-                      (.focus (rum/deref *input))
+                      (.focus (hooks/deref *input))
                       (let [url (string/replace-first url "https://github.com/" "")
                             matched (re-find #"([^\/]+)/([^\/]+)" url)]
                         (if-let [id (some-> matched (nth 2))]
@@ -604,9 +603,9 @@
         :disabled pending}
         (if pending (ui/loading (t :plugin/installing)) (t :plugin/install)))]]))
 
-(rum/defc auto-check-for-updates-control
+(hsx/defc auto-check-for-updates-control
   []
-  (let [[enabled, set-enabled!] (rum/use-state (plugin-handler/get-enabled-auto-check-for-updates?))
+  (let [[enabled, set-enabled!] (hooks/use-state (plugin-handler/get-enabled-auto-check-for-updates?))
         text (t :plugin/auto-update-check)]
 
     [:div.flex.items-center.justify-between.px-3.py-2
@@ -658,12 +657,12 @@
    (.resolve js/Promise nil)
    plugin-ids))
 
-(rum/defc bulk-remove-disabled-plugins-container
+(hsx/defc bulk-remove-disabled-plugins-container
   [category]
   (let [plugins (get-disabled-plugins-for-removal category)
         plugin-ids (mapv :id plugins)
-        [selected-ids set-selected-ids!] (rum/use-state (set (take 20 plugin-ids)))
-        [pending? set-pending!] (rum/use-state false)
+        [selected-ids set-selected-ids!] (hooks/use-state (set (take 20 plugin-ids)))
+        [pending? set-pending!] (hooks/use-state false)
         selected-plugin-ids (->> plugins
                                  (map :id)
                                  (filter selected-ids)
@@ -785,13 +784,13 @@
        false
        DISABLED-PLUGINS-CLEANUP-NOTIFICATION-ID))))
 
-(rum/defc ^:large-vars/cleanup-todo panel-control-tabs
+(hsx/defc ^:large-vars/cleanup-todo panel-control-tabs
   [search-key *search-key category *category
    sort-by *sort-by filter-by *filter-by total-nums
    selected-unpacked-pkg market? develop-mode?
    reload-market-fn agent-opts]
 
-  (let [*search-ref (rum/create-ref)]
+  (let [*search-ref (hooks/create-ref)]
     [:div.pb-3.flex.justify-between.control-tabs.relative
      [:div.flex.items-center.l
       (category-tabs t total-nums category #(reset! *category %))
@@ -971,7 +970,7 @@
              #(.removeEventListener el-list "scroll" on-scroll))))))
    []))
 
-(rum/defc lazy-items-loader
+(hsx/defc lazy-items-loader
   [load-more!]
   (let [^js inViewState (ui/useInView #js {:threshold 0})
         in-view?        (.-inView inViewState)]
@@ -1034,7 +1033,7 @@
                  pkgs))
          (concat pinned-pkgs))))
 
-(rum/defc ^:large-vars/data-var marketplace-plugins
+(hsx/defc ^:large-vars/data-var marketplace-plugins
   []
   (let [*root-ref          (hooks/use-ref nil)
         *list-node-ref     (hooks/use-ref nil)
@@ -1160,20 +1159,19 @@
          [:div.cp__plugins-item-lists-inner
           ;; items list
           (for [item sorted-plugins]
-            (rum/with-key
-              (let [pid  (keyword (:id item))
-                    stat (:stat item)]
-                (plugin-item-card t item
-                                  (get-in item [:settings :disabled]) true *search-key installing
-                                  (and installing (= (keyword (:id installing)) pid))
-                                  (contains? installed-plugins pid) stat nil))
-              (:id item)))]
+            (let [pid  (keyword (:id item))
+                  stat (:stat item)]
+              ^{:key (:id item)}
+              [plugin-item-card t item
+               (get-in item [:settings :disabled]) true *search-key installing
+               (and installing (= (keyword (:id installing)) pid))
+               (contains? installed-plugins pid) stat nil]))]
 
          ;; items loader
          (when (seq sorted-plugins)
            (lazy-items-loader load-more-pages!))]])]))
 
-(rum/defc ^:large-vars/data-var installed-plugins
+(hsx/defc ^:large-vars/data-var installed-plugins
   []
   (let [*root-ref             (hooks/use-ref nil)
         *list-node-ref        (hooks/use-ref nil)
@@ -1263,13 +1261,12 @@
       {:ref *list-node-ref}
       [:div.cp__plugins-item-lists-inner
        (for [item sorted-plugins]
-         (rum/with-key
-           (let [pid (keyword (:id item))]
-             (plugin-item-card t item
-                               (get-in item [:settings :disabled]) false *search-key updating
-                               (and updating (= (keyword (:id updating)) pid))
-                               true nil (get coming-updates pid)))
-           (:id item)))]
+         (let [pid (keyword (:id item))]
+           ^{:key (:id item)}
+           [plugin-item-card t item
+            (get-in item [:settings :disabled]) false *search-key updating
+            (and updating (= (keyword (:id updating)) pid))
+            true nil (get coming-updates pid)]))]
 
       (if (seq sorted-plugins)
         (lazy-items-loader load-more-pages!)
@@ -1277,7 +1274,7 @@
          (shui/tabler-icon "list-search" {:size 40})
          [:span.text-sm (t :plugin/empty)]])]]))
 
-(rum/defc waiting-coming-updates
+(hsx/defc waiting-coming-updates
   []
   (hooks/use-effect! #(state/reset-unchecked-update) [])
   (let [_            (state/use-sub :plugin/updates-coming)
@@ -1340,7 +1337,7 @@
              (and (seq unchecked)
                   (= (count unchecked) (count updates)))))])]))
 
-(rum/defc plugins-from-file
+(hsx/defc plugins-from-file
   [plugins]
   [:div.cp__plugins-fom-file
    [:h1.mb-4.text-2xl.p-1 (t :plugin.install-from-file/title)]
@@ -1371,12 +1368,12 @@
   (shui/dialog-open! installed-themes
                      {:align :top}))
 
-(rum/defc hook-ui-slot
+(hsx/defc hook-ui-slot
   ([type payload] (hook-ui-slot type payload nil #(plugin-handler/hook-plugin-app type % nil)))
   ([type payload opts callback]
    (let [rs      (util/rand-str 8)
          id      (str "slot__" rs)
-         *el-ref (rum/use-ref nil)]
+         *el-ref (hooks/use-ref nil)]
 
      (hooks/use-effect!
       (fn []
@@ -1386,7 +1383,7 @@
 
      (hooks/use-effect!
       (fn []
-        (let [el (rum/deref *el-ref)]
+        (let [el (hooks/deref *el-ref)]
           #(when-let [uis (seq (.querySelectorAll el "[data-injected-ui]"))]
              (doseq [^js el uis]
                (when-let [id (.-injectedUi (.-dataset el))]
@@ -1398,19 +1395,19 @@
                    :ref           *el-ref
                    :on-pointer-down (fn [e] (util/stop-propagation e))})])))
 
-(rum/defc hook-block-slot
+(hsx/defc hook-block-slot
   [type block]
   (hook-ui-slot type {} nil #(plugin-handler/hook-plugin-block-slot block %)))
 
-(rum/defc ui-item-renderer
+(hsx/defc ui-item-renderer
   [pid type {:keys [key template prefix]}]
-  (let [*el    (rum/use-ref nil)
+  (let [*el    (hooks/use-ref nil)
         uni    #(str prefix "injected-ui-item-" %)
         ^js pl (js/LSPluginCore.registeredPlugins.get (name pid))]
 
     (hooks/use-effect!
      (fn []
-       (when-let [^js el (rum/deref *el)]
+       (when-let [^js el (hooks/deref *el)]
          (js/LSPlugin.pluginHelpers.setupInjectedUI.call
           pl #js {:slot (.-id el) :key key :template template} #js {})))
      [template])
@@ -1423,7 +1420,7 @@
         :ref   *el}]
       [:<>])))
 
-(rum/defc toolbar-plugins-manager-list
+(hsx/defc toolbar-plugins-manager-list
   [updates-coming items]
   (let [badge-updates? (and (not (plugin-handler/get-auto-checking?))
                             (seq (state/all-available-coming-updates updates-coming)))
@@ -1485,12 +1482,12 @@
                              (when badge-updates?
                                (ui/point "bg-red-600.top-1.right-1.absolute" 4 {:style {:margin-right 2 :margin-top 2}})))]))
 
-(rum/defc header-ui-items-list-wrap
+(hsx/defc header-ui-items-list-wrap
   [children]
-  (let [*wrap-el (rum/use-ref nil)]
+  (let [*wrap-el (hooks/use-ref nil)]
     [:div.list-wrap {:ref *wrap-el} children]))
 
-(rum/defc hook-ui-items
+(hsx/defc hook-ui-items
   "type of :toolbar, :pagebar"
   [type]
   (when (state/use-sub [:plugin/installed-ui-items])
@@ -1517,20 +1514,21 @@
            (for [[_ {:keys [key pinned?] :as opts} pid] items]
              (when (or (not toolbar?)
                        (not (set? pinned-items)) pinned?)
-               (rum/with-key (ui-item-renderer pid type opts) key))))
+               ^{:key key}
+               [ui-item-renderer pid type opts])))
 
           ;; manage plugin buttons
           (when toolbar?
             (let [updates-coming (state/use-sub :plugin/updates-coming)]
               (toolbar-plugins-manager-list updates-coming items)))]]))))
 
-(rum/defc hook-ui-fenced-code
+(hsx/defc hook-ui-fenced-code
   [block content {:keys [render edit] :as _opts}]
 
-  (let [[content1 set-content1!] (rum/use-state content)
-        [editor-active? set-editor-active!] (rum/use-state (string/blank? content))
-        *cm (rum/use-ref nil)
-        *el (rum/use-ref nil)]
+  (let [[content1 set-content1!] (hooks/use-state content)
+        [editor-active? set-editor-active!] (hooks/use-state (string/blank? content))
+        *cm (hooks/use-ref nil)
+        *el (hooks/use-ref nil)]
 
     (hooks/use-effect!
      #(set-content1! content)
@@ -1538,13 +1536,13 @@
 
     (hooks/use-effect!
      (fn []
-       (some-> (rum/deref *el)
+       (some-> (hooks/deref *el)
                (.closest ".ui-fenced-code-wrap")
                (.-classList)
                (#(if editor-active?
                    (.add % "is-active")
                    (.remove % "is-active"))))
-       (when-let [cm (rum/deref *cm)]
+       (when-let [cm (hooks/deref *cm)]
          (.refresh cm)
          (.focus cm)
          (.setCursor cm (.lineCount cm) (count (.getLine cm (.lastLine cm))))))
@@ -1553,11 +1551,11 @@
     (hooks/use-effect!
      (fn []
        (let [t (js/setTimeout
-                #(when-let [^js cm (some-> (rum/deref *el)
+                #(when-let [^js cm (some-> (hooks/deref *el)
                                            (.closest ".ui-fenced-code-wrap")
                                            (.querySelector ".CodeMirror")
                                            (.-CodeMirror))]
-                   (rum/set-ref! *cm cm)
+                   (hooks/set-ref! *cm cm)
                    (doto cm
                      (.on "change" (fn []
                                      (some-> cm (.getDoc) (.getValue) (set-content1!))))))
@@ -1580,12 +1578,12 @@
       (when (fn? render)
         (js/React.createElement render #js {:content content1}))]]))
 
-(rum/defc plugins-page
+(hsx/defc plugins-page
   []
 
-  (let [[active set-active!] (rum/use-state :installed)
+  (let [[active set-active!] (hooks/use-state :installed)
         market? (= active :marketplace)
-        *el-ref (rum/create-ref)]
+        *el-ref (hooks/create-ref)]
 
     (hooks/use-effect!
      (fn []
@@ -1641,11 +1639,11 @@
     (->> (js/setTimeout #(reset! *updates-sub-content nil) duration)
          (reset! *updates-sub-content-timer))))
 
-(rum/defc updates-notifications-impl
+(hsx/defc updates-notifications-impl
   [check-pending? auto-checking? online?]
-  (let [[uid, set-uid] (rum/use-state nil)
-        [cleanup-warning-pending? set-cleanup-warning-pending?!] (rum/use-state false)
-        [sub-content, _set-sub-content!] (rum-utils/use-atom *updates-sub-content)
+  (let [[uid, set-uid] (hooks/use-state nil)
+        [cleanup-warning-pending? set-cleanup-warning-pending?!] (hooks/use-state false)
+        [sub-content, _set-sub-content!] (hooks/use-atom *updates-sub-content)
         notify! (fn [content status]
                   (if auto-checking?
                     (println (t :plugin/list-of-updates) content)
@@ -1702,7 +1700,7 @@
 
     [:<>]))
 
-(rum/defc updates-notifications
+(hsx/defc updates-notifications
   []
   (let [updates-pending (state/use-sub :plugin/updates-pending)
         online?         (state/use-sub :network/online?)
@@ -1710,7 +1708,7 @@
         check-pending?  (boolean (seq updates-pending))]
     (updates-notifications-impl check-pending? auto-checking? online?)))
 
-(rum/defc focused-settings-content
+(hsx/defc focused-settings-content
   [title]
   (let [focused (state/use-sub :plugin/focused-settings)
         [cache set-cache!] (hooks/use-state focused)
@@ -1752,7 +1750,7 @@
            (plugins-settings/settings-container
             (bean/->clj (.-settingsSchema pl)) pl)))]]]]))
 
-(rum/defc custom-js-installer
+(hsx/defc custom-js-installer
   [{:keys [t current-repo db-restoring?]}]
   (hooks/use-effect!
    (fn []
@@ -1762,7 +1760,7 @@
    [current-repo db-restoring?])
   nil)
 
-(rum/defc perf-tip-content
+(hsx/defc perf-tip-content
   [pid name url]
   [:div
    [:span.block.whitespace-normal
@@ -1821,18 +1819,18 @@
     :id      "ls-focused-settings-modal"}))
 
 ;; tools for user registered host renderers
-(rum/defc renderer-container
+(hsx/defc renderer-container
   [{:keys [_pid render] :as opts}]
   (if (fn? render)
     [:div.lsp-host-renderer-container
      (render opts)]
     [:pre (pr-str opts)]))
 
-(rum/defc renderer-resolver
+(hsx/defc renderer-resolver
   [nskey']
   (when-let [pid (some-> nskey' (namespace))]
     (let [key (name nskey')
-          [renderer set-renderer!] (rum/use-state nil)]
+          [renderer set-renderer!] (hooks/use-state nil)]
 
       (hooks/use-effect!
        (fn []

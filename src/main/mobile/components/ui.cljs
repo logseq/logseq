@@ -2,17 +2,21 @@
   "Mobile ui"
   (:require [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]
-            [frontend.rum :as r]
             [frontend.state :as state]
             [logseq.shui.ui :as shui]
             [mobile.components.popup :as popup]
             [react-transition-group :refer [CSSTransition TransitionGroup]]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(defonce transition-group (r/adapt-class TransitionGroup))
-(defonce css-transition (r/adapt-class CSSTransition))
+(hsx/defc transition-group
+  [opts & children]
+  (into [:> TransitionGroup opts] children))
 
-(rum/defc notification-clear-all
+(hsx/defc css-transition
+  [opts child]
+  [:> CSSTransition opts child])
+
+(hsx/defc notification-clear-all
   []
   [:div.ui__notifications-content
    [:div.pointer-events-auto.notification-clear
@@ -22,7 +26,7 @@
                   (notification/clear-all!))}
       (t :notification/clear-all))]])
 
-(rum/defc notification-content
+(hsx/defc notification-content
   [state content status uid]
   (when (and content status)
     (let [svg
@@ -71,7 +75,7 @@
              [:span {:slot "icon-only"}
               (shui/tabler-icon "x")])]]]]]])))
 
-(rum/defc install-notifications
+(hsx/defc install-notifications
   []
   (let [contents (state/use-sub :notification/contents)]
     (transition-group

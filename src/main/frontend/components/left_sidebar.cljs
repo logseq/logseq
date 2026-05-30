@@ -15,9 +15,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.rum :as r]
-            [frontend.state :as state]
+            [frontend.handler.ui :as ui-handler]            [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -25,7 +23,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn get-default-home-if-valid
   []
@@ -38,12 +36,12 @@
         default-home
         (dissoc default-home :page)))))
 
-(rum/defc page-title-content
+(hsx/defc page-title-content
   [page-id display-title tooltip-title untitled? left-sidebar-resized-at]
-  (let [*title-ref (rum/use-ref nil)
-        [truncated? set-truncated?!] (rum/use-state false)
+  (let [*title-ref (hooks/use-ref nil)
+        [truncated? set-truncated?!] (hooks/use-state false)
         sync-truncated! (fn []
-                          (if-let [^js el (rum/deref *title-ref)]
+                          (if-let [^js el (hooks/deref *title-ref)]
                             (set-truncated?! (> (.-scrollWidth el)
                                                 (+ (.-clientWidth el) 1)))
                             (set-truncated?! false)))
@@ -52,7 +50,7 @@
                   display-title]]
     (hooks/use-effect!
      (fn []
-       (if-let [^js el (rum/deref *title-ref)]
+       (if-let [^js el (hooks/deref *title-ref)]
          (let [observer (js/ResizeObserver. (fn [_] (sync-truncated!)))]
            (.observe observer el)
            (sync-truncated!)
@@ -70,11 +68,11 @@
       (ui/tooltip title-el tooltip-title)
       title-el)))
 
-(rum/defc ^:large-vars/cleanup-todo page-name
+(hsx/defc ^:large-vars/cleanup-todo page-name
   [page recent?]
   (db-hooks/query-scope
    (fn []
-     (let [left-sidebar-resized-at (r/use-value ui-handler/*left-sidebar-resized-at)]
+     (let [left-sidebar-resized-at (hooks/use-value ui-handler/*left-sidebar-resized-at)]
        (when-let [id (:db/id page)]
          (let [page (db/sub-block id)
              icon (icon/get-node-icon-cp page {:size 16})
@@ -157,7 +155,7 @@
         :shortcut-id shortcut)])
     more]])
 
-(rum/defc sidebar-graphs
+(hsx/defc sidebar-graphs
   []
   [:div.sidebar-graphs
    (repo/graphs-selector)])
@@ -171,9 +169,9 @@
     :tag/tasks :nav/tasks
     :tag/assets :nav/assets))
 
-(rum/defc sidebar-navigations-edit-content
+(hsx/defc sidebar-navigations-edit-content
   [{:keys [_id navs checked-navs set-checked-navs!]}]
-  (let [[local-navs set-local-navs!] (rum/use-state checked-navs)]
+  (let [[local-navs set-local-navs!] (hooks/use-state checked-navs)]
 
     (hooks/use-effect!
      (fn []
@@ -190,11 +188,11 @@
                                       (filterv #(not= nav %) local-navs)))))}
        (t (navigation-label-key nav))))))
 
-(rum/defc sidebar-content-group-body
+(hsx/defc sidebar-content-group-body
   [child]
   [:div.bd child])
 
-(rum/defc sidebar-content-group
+(hsx/defc sidebar-content-group
   [name {:keys [class count more header-props enter-show-more? collapsable?]} child]
   (let [collapsed? (state/use-sub [:ui/navigation-item-collapsed? class])]
     [:div.sidebar-content-group
@@ -210,17 +208,16 @@
          (not (false? collapsable?))
          (assoc :on-click (fn [^js/MouseEvent _e]
                             (state/toggle-navigation-item-collapsed! class))))
-       [:span.a name]
-       [:span.b (or more (ui/icon "chevron-right" {:class "more" :size 15}))]]
+      [:span.a name]
+      [:span.b (or more (ui/icon "chevron-right" {:class "more" :size 15}))]]
       (when child
-        (rum/with-key
-          (sidebar-content-group-body child)
-          (str (or class "group") "-body")))]]))
+        ^{:key (str (or class "group") "-body")}
+        [sidebar-content-group-body child])]]))
 
-(rum/defc ^:large-vars/cleanup-todo sidebar-navigations
+(hsx/defc ^:large-vars/cleanup-todo sidebar-navigations
   [{:keys [default-home route-match route-name srs-open?]}]
   (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
-        [checked-navs set-checked-navs!] (rum/use-state (or (storage/get :ls-sidebar-navigations)
+        [checked-navs set-checked-navs!] (hooks/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:flashcards :all-pages :graph-view]))]
 
     (hooks/use-effect!
@@ -314,7 +311,7 @@
                 :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
                 :icon "hash"})))))])))
 
-(rum/defc sidebar-favorites
+(hsx/defc sidebar-favorites
   []
   (let [_favorites-updated? (state/use-sub :favorites/updated?)
         favorite-entities (page-handler/get-favorites)]
@@ -340,7 +337,7 @@
                                               (page-handler/<reorder-favorites! favorites'))
                                :parent-node :ul.favorites.text-sm}))))))
 
-(rum/defc sidebar-recent-pages
+(hsx/defc sidebar-recent-pages
   []
   (db-hooks/query-scope
    (fn []
@@ -357,13 +354,13 @@
             {:key (str "recent-" (:db/id page))}
             (page-name page true)])])))))
 
-(rum/defc ^:large-vars/cleanup-todo sidebar-container
+(hsx/defc ^:large-vars/cleanup-todo sidebar-container
   [route-match close-modal-fn left-sidebar-open? srs-open?
    *closing? close-signal touching-x-offset]
-  (let [[local-closing? set-local-closing?] (rum/use-state false)
-        [el-rect set-el-rect!] (rum/use-state nil)
-        ref-el (rum/use-ref nil)
-        ref-open? (rum/use-ref left-sidebar-open?)
+  (let [[local-closing? set-local-closing?] (hooks/use-state false)
+        [el-rect set-el-rect!] (hooks/use-state nil)
+        ref-el (hooks/use-ref nil)
+        ref-open? (hooks/use-ref left-sidebar-open?)
         default-home (get-default-home-if-valid)
         route-name (get-in route-match [:data :name])
         on-contents-scroll #(when-let [^js el (.-target %)]
@@ -386,7 +383,7 @@
 
     (hooks/use-effect!
      #(js/setTimeout
-       (fn [] (some-> (rum/deref ref-el)
+       (fn [] (some-> (hooks/deref ref-el)
                       (.getBoundingClientRect)
                       (.toJSON)
                       (js->clj :keywordize-keys true)
@@ -396,9 +393,9 @@
 
     (hooks/use-layout-effect!
      (fn []
-       (when (and (rum/deref ref-open?) local-closing?)
+       (when (and (hooks/deref ref-open?) local-closing?)
          (reset! *closing? true))
-       (rum/set-ref! ref-open? left-sidebar-open?)
+       (hooks/set-ref! ref-open? left-sidebar-open?)
        #())
      [local-closing? left-sidebar-open?])
 
@@ -458,9 +455,9 @@
                                   (neg? offset-ratio)
                                   (+ 1))}))]]))
 
-(rum/defc sidebar-resizer
+(hsx/defc sidebar-resizer
   []
-  (let [*el-ref (rum/use-ref nil)
+  (let [*el-ref (hooks/use-ref nil)
         ^js el-doc js/document.documentElement
         adjust-size! (fn [width]
                        (.setProperty (.-style el-doc) "--ls-left-sidebar-width" width)
@@ -475,7 +472,7 @@
     ;; draggable handler
     (hooks/use-effect!
      (fn []
-       (when-let [el (and (fn? js/window.interact) (rum/deref *el-ref))]
+       (when-let [el (and (fn? js/window.interact) (hooks/deref *el-ref))]
          (let [^js sidebar-el (.querySelector el-doc "#left-sidebar")]
            (-> (js/interact el)
                (.draggable
@@ -496,7 +493,7 @@
      [])
     [:span.left-sidebar-resizer {:ref *el-ref}]))
 
-(rum/defc left-sidebar
+(hsx/defc left-sidebar
   [{:keys [left-sidebar-open? route-match]}]
   (let [close-fn #(state/set-left-sidebar-open! false)
         *closing? (hooks/use-memo #(atom false) [])
