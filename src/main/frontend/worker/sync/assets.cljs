@@ -380,12 +380,6 @@
                                                    :asset-uuid asset-uuid
                                                    :asset-type asset-type}))]
                              (when downloaded?
-                               (when (d/entity @conn [:block/uuid asset-uuid])
-                                 (ldb/transact!
-                                  conn
-                                  [{:block/uuid asset-uuid
-                                    :logseq.property.asset/remote-metadata nil}]
-                                  {:persist-op? true}))
                                (client-op/remove-asset-op repo asset-uuid)
                                (when client
                                  (broadcast-rtc-state!-f client))))
