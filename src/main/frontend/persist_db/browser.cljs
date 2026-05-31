@@ -27,7 +27,7 @@
 (defn- get-worker-state-context
   [state]
   (let [config (:config state)]
-    {:state (select-keys state [:git/current-repo config])
+    {:state (select-keys state [:git/current-repo :config])
      :context {:dev? config/dev?
                :node-test? util/node-test?
                :validate-db-options (:dev/validate-db-options config)
