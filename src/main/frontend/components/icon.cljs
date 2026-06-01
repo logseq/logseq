@@ -81,7 +81,7 @@
       [:div.icon-cp-container.flex.items-center
        (merge {:style {:color (or (:color node-icon) "inherit")}}
               (select-keys opts [:class]))
-       (icon node-icon (dissoc opts' :not-text-or-page?))])))
+       (icon node-icon (dissoc opts' :not-text-or-page? :link?))])))
 
 (defn- search-emojis
   [q]

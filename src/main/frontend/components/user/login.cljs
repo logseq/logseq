@@ -1,7 +1,7 @@
 (ns frontend.components.user.login
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [dommy.core :refer-macros [sel by-id]]
+            [dommy.core :refer-macros [sel]]
             [frontend.config :as config]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user]
@@ -56,16 +56,12 @@
 
 (hsx/defc page-impl
   []
-  (let [*ref-el (hooks/use-ref nil)
-        [tab set-tab!] (hooks/use-state nil)]
-    [:div.cp__user-login
-     {:ref *ref-el
-      :id (str "user-auth-" tab)}
+  [:div.cp__user-login
      (authenticator
       {:titleRender (fn [key title]
-                      (set-tab! key)
                       (shui/card-header
-                       {:class "px-0"}
+                       {:class "px-0"
+                        :data-auth-title-key (str key)}
                        (shui/card-title
                         {:class "capitalize"}
                         (string/replace title "-" " "))))
@@ -73,7 +69,7 @@
       (fn [^js op]
         (let [sign-out!' (.-signOut op)
               user' (bean/->clj (.-sessionUser op))]
-          (user-pane sign-out!' user'))))]))
+          (user-pane sign-out!' user'))))])
 
 (hsx/defc modal-inner
   []
@@ -89,7 +85,7 @@
   (shui/dialog-open!
    (fn [_close] (modal-inner))
    {:label :user-login
-    :content-props {:onPointerDownOutside #(if (by-id "#user-auth-login")
+    :content-props {:onPointerDownOutside #(if (seq (sel "[data-auth-title-key='login']"))
                                              (let [inputs (sel ".ls-authenticator-content form input:not([type=checkbox])")
                                                    inputs (some->> inputs (map (fn [^js e] (.-value e))) (remove string/blank?))]
                                                (when (seq inputs)

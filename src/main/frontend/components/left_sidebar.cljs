@@ -8,14 +8,14 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db.hooks :as db-hooks]
             [frontend.db.model :as db-model]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.block :as block-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.ui :as ui-handler]            [frontend.state :as state]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -70,9 +70,7 @@
 
 (hsx/defc ^:large-vars/cleanup-todo page-name
   [page recent?]
-  (db-hooks/query-scope
-   (fn []
-     (let [left-sidebar-resized-at (hooks/use-value ui-handler/*left-sidebar-resized-at)]
+  (let [[left-sidebar-resized-at] (hooks/use-atom ui-handler/*left-sidebar-resized-at)]
        (when-let [id (:db/id page)]
          (let [page (db/sub-block id)
              icon (icon/get-node-icon-cp page {:size 16})
@@ -135,7 +133,7 @@
                                             :content-props {:on-click (fn [] (shui/popup-hide!))
                                                             :class "w-60"}})
                          (util/stop %))}
-           [:i.relative {:style {:top "4px"}} (shui/tabler-icon "dots")])]))))))
+           [:i.relative {:style {:top "4px"}} (shui/tabler-icon "dots")])]))))
 
 (defn sidebar-item
   [{:keys [on-click-handler class title icon icon-extension? active href shortcut more]}]
@@ -339,9 +337,7 @@
 
 (hsx/defc sidebar-recent-pages
   []
-  (db-hooks/query-scope
-   (fn []
-     (let [pages (recent-handler/get-recent-pages)]
+  (let [pages (recent-handler/get-recent-pages)]
        (sidebar-content-group
         [:a.wrap-th [:strong.flex-1 (t :sidebar.left/recent-pages)]]
 
@@ -352,7 +348,7 @@
          (for [page pages]
            [:li.recent-item.select-none.font-medium
             {:key (str "recent-" (:db/id page))}
-            (page-name page true)])])))))
+            (page-name page true)])])))
 
 (hsx/defc ^:large-vars/cleanup-todo sidebar-container
   [route-match close-modal-fn left-sidebar-open? srs-open?

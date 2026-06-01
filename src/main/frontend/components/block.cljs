@@ -976,9 +976,7 @@
                             Keys for `config`:
                             - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [{:keys [label children preview? disable-preview? show-non-exists-page? tag? _skip-async-load?] :as config} page]
-  (db-hooks/query-scope
-   (fn []
-     (let [page-id-or-name (or (:db/id page)
+  (let [page-id-or-name (or (:db/id page)
                                (:block/uuid page)
                                (when-let [s (:block/name page)]
                                  (string/trim s)))
@@ -1039,7 +1037,7 @@
          [:span.text-gray-500.bracket page-ref/right-brackets])]
 
            :else
-           nil))))))
+           nil))))
 
 (hsx/defc page-cp
   [config page]
@@ -1183,9 +1181,7 @@
 (hsx/defc page-reference
   "Component for page reference"
   [{:keys [html-export? nested-link? show-brackets? id] :as config*} uuid-or-title* label]
-  (db-hooks/query-scope
-   (fn []
-     (when uuid-or-title*
+  (when uuid-or-title*
        (let [uuid-or-title (if (string? uuid-or-title*)
                           (let [str-id (string/trim uuid-or-title*)]
                             (if (util/uuid-string? str-id)
@@ -1243,7 +1239,7 @@
                                     {:block/uuid uuid-or-title}
                                     {:block/name uuid-or-title}))
                  (when (and brackets? (not blank-title?))
-                   [:span.text-gray-500.bracket page-ref/right-brackets])]))))))))))
+                   [:span.text-gray-500.bracket page-ref/right-brackets])]))))))))
 
 (defn- latex-environment-content
   [name option content]
@@ -2503,9 +2499,7 @@
 
 (hsx/defc block-title
   [config block {:keys [*show-query?]}]
-  (db-hooks/query-scope
-   (fn []
-     (let [block' (db/entity (:db/id block))
+  (let [block' (db/entity (:db/id block))
            node-display-type (:logseq.property.node/display-type block')
            display-title (:display-title config)
            db (db/get-db)
@@ -2541,7 +2535,7 @@
 
       :else
       (block-title-aux config block {:query? query?
-                                     :*show-query? *show-query?}))))))
+                                     :*show-query? *show-query?}))))
 
 (hsx/defc db-properties-cp
   [config block opts]
@@ -2860,18 +2854,16 @@
 
 (hsx/defc block-reactions
   [block]
-  (db-hooks/query-scope
-   (fn []
-     (let [repo (state/get-current-repo)
-           target-id (:db/id block)
-           reactions-ref (react/q repo [:frontend.worker.react/block-reactions target-id]
-                                  {}
-                                  '[:find (pull ?r [*])
-                                    :in $ ?target
-                                    :where
-                                    [?r :logseq.property.reaction/target ?target]]
-                                  target-id)
-        [reactions-result] (hooks/use-atom reactions-ref)
+  (let [repo (state/get-current-repo)
+        target-id (:db/id block)
+        reactions-result (db-hooks/use-query
+                          (react/q repo [:frontend.worker.react/block-reactions target-id]
+                                   {}
+                                   '[:find (pull ?r [*])
+                                     :in $ ?target
+                                     :where
+                                     [?r :logseq.property.reaction/target ?target]]
+                                   target-id))
         reactions (->> (or reactions-result [])
                        (map first))
         user-db-id (when-let [id-str (user-handler/user-uuid)]
@@ -2926,7 +2918,7 @@
            :on-click open-picker!
            :on-pointer-down (fn [e]
                               (util/stop e))}
-                 (ui/icon "plus" {:size 14})))])))))
+                 (ui/icon "plus" {:size 14})))])))
 
 (hsx/defc status-history-cp
   [status-history]
@@ -3968,9 +3960,7 @@
 
 (hsx/defc ^:large-vars/cleanup-todo block-container-inner-aux
   [container-state repo config* block {:keys [navigating-block navigated? editing? selected?] :as opts}]
-  (db-hooks/query-scope
-   (fn []
-     (let [current-block-page? (= (str (:block/uuid block)) (state/get-current-page))
+  (let [current-block-page? (= (str (:block/uuid block)) (state/get-current-page))
            embed-self? (and (:embed? config*)
                             (= (:block/uuid block) (:block/uuid (:block config*))))
            default-hide? (or (not (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)))
@@ -4370,7 +4360,7 @@
        (dnd-separator-wrapper block block-id false))
 
      (when config/lsp-enabled?
-       (setup-plugin-renderer-effects! editing? switch-to-plugin-renderer!))]))))
+       (setup-plugin-renderer-effects! editing? switch-to-plugin-renderer!))]))
 
 (hsx/defc block-container-inner
   [container-state repo config* block opts]
@@ -4426,9 +4416,7 @@
 
 (hsx/defc loaded-block-container-inner
   [config block & {:as opts}]
-  (db-hooks/query-scope
-   (fn []
-     (let [repo (state/get-current-repo)
+  (let [repo (state/get-current-repo)
            linked-block? (or (:block/link block)
                              (:original-block config))
            container-id (hooks/use-memo
@@ -4472,7 +4460,7 @@
        repo config' block
        (merge
         opts
-        {:navigating-block navigating-block :navigated? navigated?})])))))
+        {:navigating-block navigating-block :navigated? navigated?})])))
 
 (def loaded-block-container
   (memo-react-component loaded-block-container-inner same-block-render-input?))
@@ -4657,6 +4645,7 @@
   [config options]
   (let [block (or (:code-block config) (:block config))
         container-id (:container-id config)
+        editor-id (hooks/use-memo #(str (d/squuid)) [(:block/uuid block)])
         *mode-ref (hooks/use-ref nil)
         *actions-ref (hooks/use-ref nil)]
 
@@ -4714,7 +4703,7 @@
                                (notification/show! (t :notification/copied) :success)))}
                 (ui/icon "copy")
                 (t :ui/copy))]
-              (lazy-editor/editor config (str (d/squuid)) attr code options)
+              (lazy-editor/editor config editor-id attr code options)
               (let [options (:options options) block (:block config)]
                 (when (and (= language "clojure") (contains? (set options) ":results"))
                   (sci/eval-result code block)))]]))))))
@@ -5098,9 +5087,7 @@
 
 (hsx/defc breadcrumb-with-container
   [blocks config]
-  (db-hooks/query-scope
-   (fn []
-     (let [initial-block (hooks/use-memo #(first blocks) [])
+  (let [initial-block (hooks/use-memo #(first blocks) [])
            *navigating-block (hooks/use-memo #(atom (:block/uuid initial-block)) [])
            [navigating-block] (hooks/use-atom *navigating-block)
         navigating-block-entity (db/entity [:block/uuid navigating-block])
@@ -5122,7 +5109,7 @@
                                   :breadcrumb-show? false
                                   :navigating-block *navigating-block
                                   :navigated? navigated?)]
-                       (blocks-container config' blocks))]))))
+                       (blocks-container config' blocks))]))
 
 (hsx/defc ref-block-container
   [config [page page-blocks]]

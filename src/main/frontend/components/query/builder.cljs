@@ -4,7 +4,6 @@
             [frontend.components.select :as component-select]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.hooks :as db-hooks]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
@@ -156,9 +155,7 @@
 
 (hsx/defc property-value-select-inner
   [*property *private-property? *tree opts loc values]
-  (db-hooks/query-scope
-   (fn []
-     (let [select-all-label (t :view.table/select-all)
+  (let [select-all-label (t :view.table/select-all)
            values' (cons {:label select-all-label
                           :value select-all-label}
                          (map #(hash-map :value (str (:value %))
@@ -172,7 +169,7 @@
                            [k @*property]
                            [k @*property original-value])]
                    (reset! *property nil)
-                   (append-tree! *tree opts loc x))))))))
+                   (append-tree! *tree opts loc x))))))
 
 (hsx/defc property-value-select
   [*property *private-property? *tree opts loc]

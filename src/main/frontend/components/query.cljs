@@ -4,7 +4,6 @@
             [frontend.components.query.view :as query-view]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db.hooks :as db-hooks]
             [frontend.db.react :as react]
             [frontend.extensions.sci :as sci]
             [frontend.state :as state]
@@ -153,9 +152,7 @@
 (hsx/defc custom-query*
   [{:keys [*query-error dsl-query? built-in-query? table? current-block] :as config}
    {:keys [builder query view _collapsed?] :as q}]
-  (db-hooks/query-scope
-   (fn []
-     (let [*result (hooks/use-memo #(atom nil) [])
+  (let [*result (hooks/use-memo #(atom nil) [])
            *collapsed? (hooks/use-memo #(atom (or (:collapsed? q) (:collapsed? config))) [])
            [collapsed?] (hooks/use-atom *collapsed?)
            [k result] (query-result/run-custom-query config q *result *query-error)
@@ -205,7 +202,7 @@
                  :on-pointer-down #(reset! *collapsed? %)})]
               [:div.bd
                (when-not collapsed?
-                 (custom-query-inner config q opts))])]))))))
+                 (custom-query-inner config q opts))])]))))
 
 (hsx/defc custom-query
   [{:keys [built-in-query?] :as config}

@@ -8,7 +8,6 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.db :as ldb]
-            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
@@ -40,13 +39,11 @@
                                   (p/let [{:keys [data]} (views/<load-view-data nil {:journals? true})]
                                     (remove nil? data)))}
                      nil)
-            hooks/use-value)))
+            db-hooks/use-query)))
 
 (hsx/defc all-journals
   []
-  (db-hooks/query-scope
-   (fn []
-     (let [data (sub-journals)]
+  (let [data (sub-journals)]
        (when (seq data)
          (let [selection-block-ids (journal-block-ids data)]
            [:div#journals
@@ -60,4 +57,4 @@
               :item-content (fn [idx]
                               (let [id (util/nth-safe data idx)
                                     last? (= (inc idx) (count data))]
-                                (journal-cp id last? selection-block-ids)))})]))))))
+                                (journal-cp id last? selection-block-ids)))})]))))

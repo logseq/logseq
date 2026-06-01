@@ -16,7 +16,6 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [interpolate-rich-text-node t]]
             [frontend.db :as db]
-            [frontend.db.hooks :as db-hooks]
             [frontend.db.async :as db-async]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
@@ -124,9 +123,7 @@
 
 (hsx/defc main-content
   []
-  (db-hooks/query-scope
-   (fn []
-     (let [default-home (app-left-sidebar/get-default-home-if-valid)
+  (let [default-home (app-left-sidebar/get-default-home-if-valid)
            current-repo (state/use-sub :git/current-repo)
            redirect-target (cond
                              (and default-home
@@ -165,7 +162,7 @@
         [redirect-target])
        [:div
         (when-not redirect-target
-          (journal/all-journals))]))))
+          (journal/all-journals))]))
 
 (defn- hide-context-menu-and-clear-selection
   [e & {:keys [esc?]}]

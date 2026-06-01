@@ -488,8 +488,8 @@
           [:label.action-input.flex.items-center.mx-2.my-2
            [:span.as-flex-center [:i (svg/logo 28)]]
            [:span.flex.flex-col
-              [[:strong "SQLite"]
-             [:small (t :onboarding.import/sqlite-desc)]]]
+            [:strong "SQLite"]
+            [:small (t :onboarding.import/sqlite-desc)]]
            [:input.absolute.hidden
             {:id "import-sqlite-db"
              :type "file"
@@ -500,8 +500,8 @@
           [:label.action-input.flex.items-center.mx-2.my-2
            [:span.as-flex-center [:i (svg/logo 28)]]
            [:span.flex.flex-col
-              [[:strong (t :import/sqlite-and-assets-title)]
-               [:small (t :import/sqlite-and-assets-desc)]]]
+            [:strong (t :import/sqlite-and-assets-title)]
+            [:small (t :import/sqlite-and-assets-desc)]]
            [:input.absolute.hidden
             {:id "import-sqlite-zip"
              :type "file"
@@ -514,8 +514,8 @@
             [:label.action-input.flex.items-center.mx-2.my-2
              [:span.as-flex-center [:i (svg/logo 28)]]
              [:span.flex.flex-col
-              [[:strong (t :import/file-to-db-title)]
-               [:small (t :import/file-to-db-desc)]]]
+              [:strong (t :import/file-to-db-title)]
+              [:small (t :import/file-to-db-desc)]]
              ;; Test form style changes
              #_[:a.button {:on-click #(import-file-to-db-handler nil {:import-graph-fn js/alert})} "Open"]
              [:input.absolute.hidden
@@ -529,8 +529,8 @@
           [:label.action-input.flex.items-center.mx-2.my-2
            [:span.as-flex-center [:i (svg/logo 28)]]
            [:span.flex.flex-col
-              [[:strong (t :import/debug-transit-title)]
-               [:small (t :import/debug-transit-desc)]]]
+            [:strong (t :import/debug-transit-title)]
+            [:small (t :import/debug-transit-desc)]]
            [:input.absolute.hidden
             {:id "import-debug-transit"
              :type "file"
@@ -541,8 +541,8 @@
           [:label.action-input.flex.items-center.mx-2.my-2
            [:span.as-flex-center [:i (svg/logo 28)]]
            [:span.flex.flex-col
-              [[:strong (t :import/db-edn-title)]
-               [:small (t :import/db-edn-desc)]]]
+            [:strong (t :import/db-edn-title)]
+            [:small (t :import/db-edn-desc)]]
            [:input.absolute.hidden
             {:id "import-db-edn"
              :type "file"

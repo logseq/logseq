@@ -1301,17 +1301,17 @@
                               (util/stop e))
                             nil))))})
      (when (seq pinned-columns)
-       [:div.sticky-columns.flex.flex-row
-        (map #(row-cell-f % {}) pinned-columns)])
+       (into
+        [:div.sticky-columns.flex.flex-row]
+        (map #(row-cell-f % {}) pinned-columns)))
      (when (seq unpinned-columns)
-       [:div.flex.flex-row
-        (map #(row-cell-f % {:lazy? true}) unpinned-columns)]))))
+       (into
+        [:div.flex.flex-row]
+        (map #(row-cell-f % {:lazy? true}) unpinned-columns))))))
 
 (hsx/defc table-row
   [table row props option]
-  (db-hooks/query-scope
-   (fn []
-     (let [block (db/sub-block (:db/id row))
+  (let [block (db/sub-block (:db/id row))
            block' (if (contains? #{:self :full} (:block.temp/load-status block)) block row)
            row' (when block'
                   (-> block'
@@ -1321,7 +1321,7 @@
                                                       (db/entity id)))
                                                   tags)))
                       (assoc :block.temp/refs-count (:block.temp/refs-count row))))]
-       (table-row-inner table row' props option)))))
+       (table-row-inner table row' props option)))
 
 (hsx/defc search
   [input {:keys [on-change set-input!]}]
@@ -2418,15 +2418,14 @@
 
 (hsx/defc views-tab
   [view-parent current-view {:keys [views data items-count set-view-entity! set-data! set-views! view-feature-type show-items-count? config references? opacity]}]
-  (db-hooks/query-scope
-   (fn []
-     (let [refs-total-count (:refs-total-count config)]
+  (let [refs-total-count (:refs-total-count config)]
        [:div.views
         (for [view* views]
           (let [view (db/sub-block (:db/id view*))
                 current-view? (= (:db/id current-view) (:db/id view))]
             (shui/button
-             {:variant :text
+             {:key (:db/id view)
+              :variant :text
               :size :sm
               :class (str "text-sm px-0 py-0 h-6 " (when-not current-view? "text-muted-foreground"))
               :on-click (fn [e]
@@ -2486,7 +2485,7 @@
        :on-click (fn []
                    (p/let [view (create-view! view-parent view-feature-type {:auto-triggered? false})]
                      (set-views! (concat views [view]))))}
-      (ui/icon "plus" {:size 15}))]))))
+      (ui/icon "plus" {:size 15}))]))
 
 (hsx/defc view-head
   [view-parent view-entity table columns input sorting
@@ -2831,7 +2830,8 @@
         (:data-changes-version option)]))
     (if loading?
       [:div.flex.flex-col.space-2.gap-2.my-2
-       (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
+       (for [idx (range 3)]
+         (shui/skeleton {:key idx :class "h-6 w-full"}))]
       [:div.flex.flex-col.gap-2
        (view-container view-entity (assoc option
                                           :data data
@@ -2867,28 +2867,24 @@
 
 (defn sub-view-data-changes
   [view-parent view-feature-type]
-  (when view-parent
-    (when-let [repo (state/get-current-repo)]
-      (when-let [k (case view-feature-type
-                     :class-objects :frontend.worker.react/objects
-                     :property-objects :frontend.worker.react/objects
-                     :linked-references :frontend.worker.react/refs
-                     nil)]
-        (let [*version (atom 0)]
-          (react/q repo [k (:db/id view-parent)]
-                   {:query-fn (fn [_] (swap! *version inc))}
-                   nil))))))
+  (let [repo (state/get-current-repo)
+        k (case view-feature-type
+            :class-objects :frontend.worker.react/objects
+            :property-objects :frontend.worker.react/objects
+            :linked-references :frontend.worker.react/refs
+            nil)
+        *version (hooks/use-memo #(atom 0) [repo k (:db/id view-parent)])
+        query-ref (when (and repo view-parent k)
+                    (react/q repo [k (:db/id view-parent)]
+                             {:query-fn (fn [_] (swap! *version inc))}
+                             nil))]
+    (db-hooks/use-query query-ref)))
 
 (hsx/defc sub-view
   [view-entity option]
-  (db-hooks/query-scope
-   (fn []
-     (let [view (or (some-> (:db/id view-entity) db/sub-block) view-entity)
-           fallback-version* (hooks/use-memo #(atom nil) [])
-           data-changes-version* (or (sub-view-data-changes (:view-parent option) (:view-feature-type option))
-                                     fallback-version*)
-           [data-changes-version] (hooks/use-atom data-changes-version*)]
-       (view-aux view (assoc option :data-changes-version data-changes-version))))))
+  (let [view (or (some-> (:db/id view-entity) db/sub-block) view-entity)
+        data-changes-version (sub-view-data-changes (:view-parent option) (:view-feature-type option))]
+    (view-aux view (assoc option :data-changes-version data-changes-version))))
 
 (hsx/defc view
   [{:keys [view-parent view-feature-type] view-entity* :view-entity :as option}]

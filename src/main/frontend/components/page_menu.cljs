@@ -90,10 +90,8 @@
           block? (and page (util/uuid-string? page-name))
           contents? (= page-name "contents")
           public? (:logseq.property/publishing-public? page)
-          _favorites-updated? (state/sub :favorites/updated?)
           favorited? (page-handler/favorited? page-title)
-          developer-mode? (state/sub [:ui/developer-mode?])
-          _ (state/sub :auth/id-token)]
+          developer-mode? (state/developer-mode?)]
       (when (not block?)
         (->>
          [(when-not config/publishing?

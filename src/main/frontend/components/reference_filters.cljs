@@ -4,7 +4,6 @@
             [datascript.impl.entity :as de]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db.hooks :as db-hooks]
             [frontend.handler.page :as page-handler]
             [frontend.search :as search]
             [frontend.ui :as ui]
@@ -114,7 +113,5 @@
 
 (hsx/defc filter-dialog
   [page references]
-  (db-hooks/query-scope
-   (fn []
-     (let [page-entity (db/sub-block (:db/id page))]
-       (filter-dialog-aux page-entity references)))))
+  (let [page-entity (db/sub-block (:db/id page))]
+       (filter-dialog-aux page-entity references)))

@@ -11,7 +11,6 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.hooks :as db-hooks]
             [frontend.db.model :as model]
             [frontend.handler.block :as block-handler]
             [frontend.handler.db-based.page :as db-page-handler]
@@ -267,9 +266,7 @@
 (declare property-value)
 (hsx/defc repeat-setting
   [block property]
-  (db-hooks/query-scope
-   (fn []
-     (let [opts {:exit-edit? false}
+  (let [opts {:exit-edit? false}
            block (db/sub-block (:db/id block))]
        [:div.p-4.hidden.sm:flex.flex-col.gap-4.w-64
         [:div.mb-4
@@ -334,7 +331,7 @@
             [:div.text-muted-foreground
              (t :property.repeat/is-label)]
             (when done-choice
-              (db-property/built-in-display-title done-choice t))]])]))))
+              (db-property/built-in-display-title done-choice t))]])]))
 
 (defn- <resolve-journal-page-for-date
   ([^js d]
@@ -370,9 +367,7 @@
 
 (hsx/defc calendar-inner
   [id {:keys [block property datetime? on-change del-btn? on-delete]}]
-  (db-hooks/query-scope
-   (fn []
-     (let [block (db/sub-block (:db/id block))
+  (let [block (db/sub-block (:db/id block))
            value (get block (:db/ident property))
            value (cond
                    (map? value)
@@ -423,7 +418,7 @@
          (assoc :default-month initial-month)))]
       [:div.hidden.sm:initial
        (shui/separator {:orientation "vertical"})]
-      (repeat-setting block property)]))))
+      (repeat-setting block property)]))
 
 (hsx/defc overdue
   [date content]
@@ -1054,9 +1049,7 @@
   [block property
    {:keys [multiple-choices? dropdown? content-props] :as select-opts}
    {:keys [*show-new-property-config? exit-edit?] :as opts}]
-  (db-hooks/query-scope
-   (fn []
-     (let [*values (hooks/use-memo #(atom :loading) [(:db/ident block) (:db/ident property)])
+  (let [*values (hooks/use-memo #(atom :loading) [(:db/ident block) (:db/ident property)])
            [values] (hooks/use-atom *values)
            refresh-result-f (hooks/use-callback
                              (fn []
@@ -1144,7 +1137,7 @@
                                        (case (util/ekey e)
                                          "Escape"
                                          (when-let [f (:on-chosen select-opts)] (f))
-                                         nil))})})))))))
+                                         nil))})})))))
 
 (hsx/defc property-normal-block-value
   [block property value-block opts]
@@ -1279,9 +1272,7 @@
 
 (hsx/defc closed-value-item
   [value {:keys [inline-text icon?]}]
-  (db-hooks/query-scope
-   (fn []
-     (when value
+  (when value
        (let [eid (if (entity-map? value) (:db/id value) [:block/uuid value])
              block (or (db/sub-block (:db/id (db/entity eid))) value)
              property-block? (db-property/property-created-block? block)
@@ -1309,7 +1300,7 @@
                   value' (if (string/blank? value')
                            (t :ui/empty)
                            value')]
-              (inline-text {} :markdown value'))]))))))
+              (inline-text {} :markdown value'))]))))
 
 (hsx/defc select-item
   [property type value {:keys [page-cp inline-text other-position? property-position table-view? _icon?] :as opts}]
@@ -2058,12 +2049,10 @@
 
 (hsx/defc multiple-values
   [block property opts]
-  (db-hooks/query-scope
-   (fn []
-     (let [value (get block (:db/ident property))
+  (let [value (get block (:db/ident property))
            value' (if (coll? value) value
                       (when (some? value) #{value}))]
-       (multiple-values-inner block property value' opts)))))
+       (multiple-values-inner block property value' opts)))
 
 (defn- resolved-property-value-for-render
   [block property multiple-values?]
@@ -2087,9 +2076,7 @@
                    :as opts}]
   (ui/catch-error
    (ui/block-error (t :sync/something-wrong) {})
-   (db-hooks/query-scope
-    (fn []
-      (let [block-cp (state/get-component :block/blocks-container)
+   (let [block-cp (state/get-component :block/blocks-container)
             opts (merge opts
                         {:page-cp (state/get-component :block/page-cp)
                          :inline-text (state/get-component :block/inline-text)
@@ -2156,4 +2143,4 @@
                value-cp)
               (shui/tooltip-content
                (t :property/change-tooltip (db-property/built-in-display-title property t)))))
-            value-cp))))))))
+            value-cp))))))

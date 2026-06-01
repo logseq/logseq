@@ -9,7 +9,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.hooks :as db-hooks]
             [frontend.db.model :as model]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
@@ -447,9 +446,7 @@
 
 (hsx/defc choice-item-content
   [property block {:keys [disabled? owner-block]}]
-  (db-hooks/query-scope
-   (fn []
-     (let [{:keys [owner-class? owner-block' owner-id]} (resolve-owner-class-block owner-block)
+  (let [{:keys [owner-class? owner-block' owner-id]} (resolve-owner-class-block owner-block)
            scope-ids (set (keep :db/id (:logseq.property/choice-classes block)))
            scoped-choice-from-other-tags? (choice-scoped-from-other-tags?
                                            {:choice block :owner-block owner-block'})
@@ -513,7 +510,7 @@
               :on-click use-in-current-tag!}
              (t :property/use-choice-in-tag (:block/title owner-block'))))
 
-          (choice-delete-menu-item owner-class? global-choice? scoped-choice-from-other-tags? delete-choice!)))]))))
+          (choice-delete-menu-item owner-class? global-choice? scoped-choice-from-other-tags? delete-choice!)))]))
 
 (hsx/defc add-existing-values
   [property values {:keys [toggle-fn]}]
@@ -610,9 +607,7 @@
 
 (hsx/defc choices-sub-pane
   [property {:keys [disabled? owner-block] :as opts}]
-  (db-hooks/query-scope
-   (fn []
-     (let [*show-hidden? (hooks/use-memo #(atom false) [])
+  (let [*show-hidden? (hooks/use-memo #(atom false) [])
            [show-hidden?] (hooks/use-atom *show-hidden?)
            {:keys [owner-class? owner-id]} (resolve-owner-class-block owner-block)
            values (:property/closed-values property)
@@ -651,7 +646,7 @@
 
         ;; add choice
         (when-not disabled?
-          (add-choice-menuitem property owner-block))]))))
+          (add-choice-menuitem property owner-block))]))
 
 (hsx/defc checkbox-state-mapping
   [choices]
@@ -983,9 +978,7 @@
 
 (hsx/defc property-dropdown
   [property* owner-block opts]
-  (db-hooks/query-scope
-   (fn []
-     (let [*values (hooks/use-memo #(atom :loading) [(:db/ident property*)])
+  (let [*values (hooks/use-memo #(atom :loading) [(:db/ident property*)])
            [values] (hooks/use-atom *values)
            property (db/sub-block (:db/id property*))
            owner-block (when (:db/id owner-block) (db/sub-block (:db/id owner-block)))]
@@ -996,4 +989,4 @@
             (reset! *values result)))
         [(:db/ident property*)])
        (when-not (= :loading values)
-         (vec (cons :<> (property-dropdown-options property owner-block values opts))))))))
+         (vec (cons :<> (property-dropdown-options property owner-block values opts))))))

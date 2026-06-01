@@ -5,7 +5,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.hooks :as db-hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.db.common.reference :as db-reference]
@@ -56,10 +55,8 @@
 
 (hsx/defc references-cp
   [entity config]
-  (db-hooks/query-scope
-   (fn []
-     (let [block (db/sub-block (:db/id entity))]
-       (references-aux block config)))))
+  (let [block (db/sub-block (:db/id entity))]
+       (references-aux block config)))
 
 (hsx/defc references
   [entity config]

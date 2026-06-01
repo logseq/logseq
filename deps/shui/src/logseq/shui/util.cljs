@@ -60,17 +60,7 @@
                           [(first args) (rest args)]
                           [{} args])
         children (some->> children (remove nil?))
-        type# (first children)
-        children# (hsx/create-element children)
-        children# (if (= 1 (count children#)) (first children#) children#)
-        ;; we have to make sure to check if the children is sequential
-        ;; as a list can be returned, eg: from a (for)
-        new-children (if (and (not (nil? children#))
-                              (not (empty? children))
-                              (or (not (array? children#))
-                             ;; maybe list children
-                                  (not (vector? type#))))
-                       [children#] children#)
+        children (map hsx/create-element children)
 
         ;; convert any options key value to a React element, if
         ;; a valid html element tag is used.
@@ -83,7 +73,7 @@
     (apply js/React.createElement react-class
       ;; sablono html-to-dom-attrs does not work for nested hash-maps
            (bean/->js (map-keys->camel-case new-options :html-props true))
-           new-children)))
+           children)))
 
 (def use-atom hooks/use-atom)
 (def use-mounted hooks/use-mounted)

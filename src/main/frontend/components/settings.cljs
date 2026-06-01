@@ -41,14 +41,16 @@
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for label-for}
-    name]
-   [:div.rounded-md.sm:max-w-tss.sm:col-span-2
-    [:div.rounded-md {:style {:display "flex" :gap "1rem" :align-items "center"}}
-     (ui/toggle state on-toggle true)
-     detail-text]]])
+  (let [label (cond-> [:label.block.text-sm.font-medium.leading-5.opacity-70
+                       {:for label-for}]
+                (sequential? name) (into name)
+                (not (sequential? name)) (conj name))]
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+     label
+     [:div.rounded-md.sm:max-w-tss.sm:col-span-2
+      [:div.rounded-md {:style {:display "flex" :gap "1rem" :align-items "center"}}
+       (ui/toggle state on-toggle true)
+       detail-text]]]))
 
 (hsx/defc app-updater
   [version]
@@ -272,7 +274,8 @@
                  tt (string/capitalize t)
                  active? (= (or type "default") t)]]
        (shui/button
-        {:variant :secondary
+        {:key t
+         :variant :secondary
          :class (when active? " border-primary border-[2px]")
          :style {:width "4.4rem"}
          :on-click #(state/set-editor-font! {:type t})}
@@ -381,6 +384,7 @@
                           :let [active? (= color color-accent)
                                 none? (= color :none)]]
                       [:div.flex.items-center
+                       {:key (name color)}
                        (ui/tooltip
                         (shui/button
                          {:class "w-5 h-5 px-1 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"

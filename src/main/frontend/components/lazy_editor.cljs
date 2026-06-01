@@ -44,7 +44,7 @@
                           (reset! loaded? true)))
                       (reset! loaded? true))))))
    [])
-  (let [loaded?' (hooks/use-value loaded?)
+  (let [[loaded?'] (hooks/use-atom loaded?)
         theme   (state/use-sub :ui/theme)
         code    (or code "")
         code    (string/replace-first code #"\n$" "")]      ;; See-also: #3410

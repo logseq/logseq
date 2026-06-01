@@ -12,7 +12,6 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.db :as ldb]
-            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [io.factorhouse.hsx.core :as hsx]))
 
@@ -45,7 +44,7 @@
                                             db)
                                        vec))}
                      nil)
-            hooks/use-value)))
+            db-hooks/use-query)))
 
 (defn- group-title
   [db root]
@@ -114,9 +113,7 @@
 
 (hsx/defc recycle-page
   [_page {:keys [class]}]
-  (db-hooks/query-scope
-   (fn []
-     (let [db* (db/get-db)
+  (let [db* (db/get-db)
            root-ids (or (sub-deleted-root-ids)
                         [])
            roots (if (seq root-ids)
@@ -142,4 +139,4 @@
                 [:div {:key (str (:block/uuid root))}
                  (deleted-root-header db* root)
                  (deleted-root-outliner root)])]])
-          [:div.text-sm.text-muted-foreground (t :storage.recycle/empty)])]))))
+          [:div.text-sm.text-muted-foreground (t :storage.recycle/empty)])]))

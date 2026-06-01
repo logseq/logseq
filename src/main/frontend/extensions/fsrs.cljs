@@ -7,7 +7,6 @@
             [frontend.components.macro :as component-macro]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db.hooks :as db-hooks]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
@@ -247,9 +246,7 @@
 
 (hsx/defc ^:private card-view
   [repo block-id *card-index *phase opts]
-  (db-hooks/query-scope
-   (fn []
-     (let [*block (hooks/use-memo #(atom nil) [repo block-id])
+  (let [*block (hooks/use-memo #(atom nil) [repo block-id])
            [block] (hooks/use-atom *block)
            [phase] (hooks/use-atom *phase)
            [_card-index] (hooks/use-atom *card-index)]
@@ -292,7 +289,7 @@
                                      :on-click #(swap! *phase
                                                        (fn [phase]
                                                          (phase->next-phase block-entity phase)))})
-                 [:div.flex.justify-center (rating-btns repo block-entity *card-index *phase opts)])]])))))))
+                 [:div.flex.justify-center (rating-btns repo block-entity *card-index *phase opts)])]])))))
 
 (declare update-due-cards-count)
 (hsx/defc ^:large-vars/cleanup-todo cards-view

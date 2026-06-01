@@ -11,7 +11,6 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db.hooks :as db-hooks]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -546,9 +545,7 @@
 
 (hsx/defc property-cp
   [block k v {:keys [inline-text page-cp sortable-opts] :as opts}]
-  (db-hooks/query-scope
-   (fn []
-     (when (keyword? k)
+  (when (keyword? k)
        (when-let [property (db/sub-block (:db/id (db/entity k)))]
          (let [type (get property :logseq.property/type :default)
                closed-values? (seq (:property/closed-values property))
@@ -596,7 +593,7 @@
                 [:div.property-value.flex.flex-1
                  (if (:class-schema? opts)
                    (pv/property-value property (db/entity :logseq.property/description) opts)
-                   (pv/property-value block' property opts))]]])]))))))
+                   (pv/property-value block' property opts))]]])]))))
 
 (defn- entity-ref-value?
   [value]
@@ -735,14 +732,12 @@
 
 (hsx/defc ^:large-vars/cleanup-todo properties-area
   [target-block {:keys [page-title? journal-page? sidebar-properties? tag-dialog?] :as opts}]
-  (db-hooks/query-scope
-   (fn []
-     (let [*bidirectional-properties (hooks/use-memo #(atom nil) [])
+  (let [*bidirectional-properties (hooks/use-memo #(atom nil) [])
            [bidirectional-properties] (hooks/use-atom *bidirectional-properties)
            id (hooks/use-memo #(str (random-uuid)) [])
            block (resolve-linked-block-if-exists target-block)
         show-properties? (or sidebar-properties? tag-dialog?)
-        show-empty-and-hidden-properties? (let [{:keys [mode show? ids]} (state/sub :ui/show-empty-and-hidden-properties?)]
+        show-empty-and-hidden-properties? (let [{:keys [mode show? ids]} (state/use-sub :ui/show-empty-and-hidden-properties?)]
                                             (and show?
                                                  (or (= mode :global)
                                                      (and (set? ids) (contains? ids (:block/uuid block))))))
@@ -926,4 +921,4 @@
                       (hidden-properties-cp block hidden-properties
                         (assoc opts :root-block? root-block?))
                       ^{:key (str id "-class-add-property")}
-                      [new-property block opts']]]))]])))]))))
+                      [new-property block opts']]]))]])))]))

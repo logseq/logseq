@@ -19,7 +19,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.hooks :as db-hooks]
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.extensions.graph :as graph]
@@ -148,14 +147,12 @@
 
 (hsx/defc page-blocks-cp
   [block* {:keys [sidebar? hide-add-button? journals? on-page-blocks-rendered] :as config}]
-  (db-hooks/query-scope
+  (hooks/use-effect!
    (fn []
-     (hooks/use-effect!
-      (fn []
-        (when on-page-blocks-rendered
-          (on-page-blocks-rendered))))
-     (when-let [id (:db/id block*)]
-       (let [block (db/sub-block id)
+     (when on-page-blocks-rendered
+       (on-page-blocks-rendered))))
+  (when-let [id (:db/id block*)]
+    (let [block (db/sub-block id)
              block-id (:block/uuid block)
              block? (not (db/page? block))
              full-children (->> (:block/_parent block)
@@ -207,7 +204,7 @@
                              (t :ui/load-more)))
               (when-not more?
                 (when-not hide-add-button?
-                  (add-button block config)))])))))))
+                  (add-button block config)))])))))
 
 (hsx/defc today-queries
   [repo today? sidebar?]
@@ -415,9 +412,7 @@
 ;; A page is just a logical block
 (hsx/defc ^:large-vars/cleanup-todo page-inner
   [{:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals?] :as option}]
-  (db-hooks/query-scope
-   (fn []
-     (let [current-repo (state/use-sub :git/current-repo)
+  (let [current-repo (state/use-sub :git/current-repo)
            linked-refs-blocks-ready-page-id* (hooks/use-memo #(atom nil) [])
            linked-refs-tagged-ready-page-id* (hooks/use-memo #(atom nil) [])
            [linked-refs-blocks-ready-page-id] (hooks/use-atom linked-refs-blocks-ready-page-id*)
@@ -538,7 +533,7 @@
                             class-page? property-page?)
                 [:div.fade-in.delay {:key "page-unlinked-references"}
                  (reference/unlinked-references page {:sidebar? sidebar?})])])]))
-         [:div.opacity-75 (t :page/not-found)])))))
+         [:div.opacity-75 (t :page/not-found)])))
 
 (hsx/defc page-aux
   [option]
@@ -624,9 +619,7 @@
 
 (hsx/defc page-graph
   []
-  (db-hooks/query-scope
-   (fn []
-     (let [route-name (state/use-sub [:route-match :data :name])
+  (let [route-name (state/use-sub [:route-match :data :name])
            route-path-name (state/use-sub [:route-match :path-params :name])
            theme (state/use-sub :ui/theme)
            current-page (or
@@ -638,7 +631,7 @@
                        {:type (if (ldb/page? page-entity) :page :block)
                         :block/uuid (:block/uuid page-entity)
                         :theme theme
-                        :show-journal? false})))))
+                        :show-journal? false})))
 
 (defn batch-delete-dialog
   [pages refresh-fn]

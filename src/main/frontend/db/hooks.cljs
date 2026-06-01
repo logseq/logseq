@@ -3,27 +3,39 @@
   (:require [frontend.db.react :as react]
             [logseq.shui.hooks :as hooks]))
 
-(defn query-scope
-  "Run `render-fn` with DB reactive query tracking bound to this component.
-
-  This replaces the legacy DB query mixin."
-  [render-fn]
-  (let [[_render-token set-render-token!] (hooks/use-state 0)
+(defn use-query
+  "Subscribe to a DB reactive query atom returned by `frontend.db.react/q`."
+  [query-ref]
+  (let [[value set-value!] (hooks/use-state (when query-ref @query-ref))
+        [_render-token set-render-token!] (hooks/use-state 0)
         render-token-ref (hooks/use-ref 0)
         component-ref (hooks/use-ref nil)
-        queries-ref (hooks/use-ref nil)]
+        query-key (react/query-key query-ref)]
     (when-not (hooks/deref component-ref)
       (hooks/set-ref! component-ref
                       (fn []
                         (let [next-token (inc (hooks/deref render-token-ref))]
                           (hooks/set-ref! render-token-ref next-token)
                           (set-render-token! next-token)))))
-    (when-not (hooks/deref queries-ref)
-      (hooks/set-ref! queries-ref (atom #{})))
     (hooks/use-effect!
      (fn []
+       (when query-key
+         (react/add-query-component! query-key (hooks/deref component-ref)))
        #(react/remove-query-component! (hooks/deref component-ref)))
-     [])
-    (binding [react/*query-component* (hooks/deref component-ref)
-              react/*reactive-queries* (hooks/deref queries-ref)]
-      (render-fn))))
+     [query-key])
+    (hooks/use-effect!
+     (fn []
+       (if query-ref
+         (let [current-value @query-ref
+               id (str (random-uuid))]
+           (when-not (= value current-value)
+             (set-value! current-value))
+           (add-watch query-ref id (fn [_ _ prev-state next-state]
+                                     (when-not (= prev-state next-state)
+                                       (set-value! next-state))))
+           #(remove-watch query-ref id))
+         (do
+           (set-value! nil)
+           nil)))
+     [query-ref])
+    value))

@@ -14,7 +14,6 @@
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.date :as date]
-            [frontend.db.hooks :as db-hooks]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.mobile.util :as mobile-util]
@@ -625,9 +624,7 @@
 (hsx/defc foldable
   [header content {:keys [title-trigger? on-pointer-down class
                           default-collapsed? init-collapsed]}]
-  (db-hooks/query-scope
-   (fn []
-     (let [collapsed? (hooks/use-memo #(atom (true? default-collapsed?)) [])
+  (let [collapsed? (hooks/use-memo #(atom (true? default-collapsed?)) [])
            render-content? (hooks/use-memo #(atom (not (true? default-collapsed?))) [])
            collapse-timeout (hooks/use-ref nil)
            [collapsed-value] (hooks/use-atom collapsed?)
@@ -673,7 +670,7 @@
          [:div.ls-foldable-content-inner
           (if (fn? content)
             (when render-content-value (content))
-            content)]]]))))
+            content)]]]))
 
 (hsx/defc admonition
   [type content]
@@ -977,7 +974,7 @@
 (hsx/defc tooltip
   [trigger tooltip-content & {:keys [portal? root-props trigger-props content-props]}]
   (shui/tooltip-provider
-   (shui/tooltip root-props
+   (shui/tooltip (assoc root-props :key "tooltip")
                  (shui/tooltip-trigger (merge {:as-child true} trigger-props) trigger)
                  (if (not (false? portal?))
                    (shui/tooltip-portal

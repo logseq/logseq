@@ -724,27 +724,20 @@
            (fn []
              #(state/set-state! :editor/raw-mode-block nil))
            [])
-        _ (hooks/use-effect!
-           (fn []
-             (let [on-mousedown (fn [e]
-                                  (when-let [node @*ref]
-                                    (let [target (.-target e)]
-                                      (when (and (not (gdom/contains node target))
-                                                 (not (.contains (.-classList target) "ignore-outside-event")))
-                                        (let [block-container (.closest target ".ls-block")
-                                              editing-another-block? (and block-container
-                                                                          (not (dom/has-class? block-container "block-add-button"))
-                                                                          (gdom/contains block-container target))]
-                                          (editor-on-hide component-state :click e editing-another-block?))))))
-                   on-keydown (fn [e]
-                                (when (= 27 (.-keyCode e))
-                                  (editor-on-hide component-state :esc e false)))]
-               (.addEventListener js/window "mousedown" on-mousedown)
-               (.addEventListener js/window "keydown" on-keydown)
-               #(do
-                  (.removeEventListener js/window "mousedown" on-mousedown)
-                  (.removeEventListener js/window "keydown" on-keydown))))
-           [])
+        _ (hooks/use-hide-on-esc-or-outside
+           {:active? true
+            :root-ref #(or @*ref (gdom/getElement id))
+            :on-hide (fn [e]
+                       (let [esc? (= "keydown" (.-type e))
+                             target (.-target e)
+                             block-container (when-not esc? (.closest target ".ls-block"))
+                             editing-another-block? (and block-container
+                                                         (not (dom/has-class? block-container "block-add-button"))
+                                                         (gdom/contains block-container target))]
+                         (editor-on-hide component-state
+                                         (if esc? :esc :click)
+                                         e
+                                         editing-another-block?)))})
         opts (cond->
               {:id                id
                :ref               #(reset! *ref %)

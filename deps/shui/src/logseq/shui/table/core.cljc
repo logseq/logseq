@@ -141,9 +141,10 @@
 (hsx/defc table
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div (merge {:class "ls-table w-full caption-bottom text-sm table-fixed"}
-                 prop)
-     children]))
+    (into
+     [:div (merge {:class "ls-table w-full caption-bottom text-sm table-fixed"}
+                  prop)]
+     children)))
 
 (defn- remove-sticky-header
   []
@@ -225,46 +226,49 @@
   (let [[prop children] (get-prop-and-children prop-and-children)
         el-ref (hooks/use-ref nil)
         _ (when-not (mobile?) (use-sticky-element! el-ref (:main-container prop)))]
-    [:div.ls-table-header
-     (merge {:class "border-y transition-colors bg-gray-01"
-             :ref el-ref
-             :style {:z-index 9}}
-            (dissoc prop :main-container))
-     children]))
+    (into
+     [:div.ls-table-header
+      (merge {:class "border-y transition-colors bg-gray-01"
+              :ref el-ref
+              :style {:z-index 9}}
+             (dissoc prop :main-container))]
+     children)))
 
 (hsx/defc table-footer
-  [children]
-  [:div.ls-table-footer.fade-in.faster
-   children])
+  [& children]
+  (into [:div.ls-table-footer.fade-in.faster] children))
 
 (hsx/defc table-row
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div.ls-table-row.ls-block.flex.flex-row.items-center
-     (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted bg-gray-01 items-stretch"}
-            prop)
-     children]))
+    (into
+     [:div.ls-table-row.ls-block.flex.flex-row.items-center
+      (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted bg-gray-01 items-stretch"}
+             prop)]
+     children)))
 
 (hsx/defc table-cell
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
     [:div.ls-table-cell.flex.relative.h-full (dissoc prop :select? :add-property?)
-     [:div {:class (str "flex align-middle w-full overflow-x-clip items-center"
-                        (cond
-                          (:select? prop)
-                          " px-0"
-                          (:add-property? prop)
-                          ""
-                          :else
-                          " border-r px-2"))}
-      children]]))
+     (into
+      [:div {:class (str "flex align-middle w-full overflow-x-clip items-center"
+                         (cond
+                           (:select? prop)
+                           " px-0"
+                           (:add-property? prop)
+                           ""
+                           :else
+                           " border-r px-2"))}]
+      children)]))
 
 (hsx/defc table-actions
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)
         el-ref (hooks/use-ref nil)]
-    [:div.ls-table-actions.flex.flex-row.items-center.gap-1.bg-gray-01
-     (merge {:ref el-ref
-             :style {:z-index 101}}
-            prop)
-     children]))
+    (into
+     [:div.ls-table-actions.flex.flex-row.items-center.gap-1.bg-gray-01
+      (merge {:ref el-ref
+              :style {:z-index 101}}
+             prop)]
+     children)))

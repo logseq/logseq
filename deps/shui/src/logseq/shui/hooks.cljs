@@ -40,7 +40,7 @@
   ([setup-fn deps & {:keys [equal-fn]}]
    (assert (fn? setup-fn) "use-effect! setup-fn should be a function")
    (react/useEffect (fn []
-                      (let [result (apply setup-fn deps)]
+                      (let [result (setup-fn)]
                         (effect-result result)))
                     (deps-array deps equal-fn))))
 
@@ -53,7 +53,7 @@
   ([setup-fn deps & {:keys [equal-fn]}]
    (assert (fn? setup-fn) "use-layout-effect! setup-fn should be a function")
    (react/useLayoutEffect (fn []
-                            (let [result (apply setup-fn deps)]
+                            (let [result (setup-fn)]
                               (effect-result result)))
                           (deps-array deps equal-fn))))
 
@@ -106,12 +106,12 @@
                                       (not (some-> (event-target root-ref)
                                                    (.contains (.-target e))))
                                       (not (some-> e .-target .-classList (.contains ignore-class))))
-                             (on-hide)))
+                             (on-hide e)))
                          [active? root-ref on-hide ignore-class])
         keydown-handler (use-callback
                          (fn [e]
                            (when (and active? (= 27 (.-keyCode e)))
-                             (on-hide)))
+                             (on-hide e)))
                          [active? on-hide])]
     (use-event-listener js/window outside-event outside-handler [outside-handler] outside-options)
     (use-window-keydown keydown-handler [keydown-handler])))
@@ -236,25 +236,6 @@
      :open-fn open-fn
      :toggle-fn toggle-fn}))
 
-(defn use-value
-  "Subscribe to an optional atom-like ref and return its current value."
-  [a]
-  (let [[value set-value!] (use-state (when a @a))]
-    (use-effect!
-     (fn []
-       (if a
-         (let [current-value @a
-               id (str (random-uuid))]
-           (when-not (= value current-value)
-             (set-value! current-value))
-           (add-watch a id (fn [_ _ prev-state next-state]
-                             (when-not (= prev-state next-state)
-                               (set-value! next-state))))
-           #(remove-watch a id))
-         (set-value! nil)))
-     [a])
-    value))
-
 (defn use-mounted
   []
   (let [mounted-ref (use-ref false)]
@@ -276,7 +257,7 @@
         (fn []
           (let [update-rect #(set-rect (.getBoundingClientRect ref))
                 update-from-observer! (fn [entries]
-                                        (when (.-contentRect (first (js->clj entries)))
+                                        (when (some-> entries (aget 0) .-contentRect)
                                           (update-rect)))
                 observer (js/ResizeObserver. update-from-observer!)]
             (update-rect)

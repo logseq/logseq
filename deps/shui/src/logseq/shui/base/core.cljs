@@ -21,7 +21,7 @@
                   (map? props)
                   (merge props))
          children (if (map? props) children (cons props children))]
-     [as props' children])))
+     (into [as props'] children))))
 
 ;; Note: fix the custom trigger content
 ;; for the {:as-child true} menu trigger
