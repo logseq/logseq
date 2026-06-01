@@ -14,15 +14,17 @@ function Calendar({
   classNames,
   components,
   showOutsideDays = true,
+  style,
   ...props
 }: CalendarProps) {
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
       className={cn('ui__calendar p-3', className)}
+      style={{ width: 560, maxWidth: '100%', ...style }}
       classNames={{
-        months: 'relative flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0',
-        month: 'w-full space-y-4',
+        months: 'relative flex flex-col sm:flex-row space-y-4 sm:space-y-0',
+        month: 'rdp-month w-full space-y-4',
         month_caption: 'flex justify-start pt-1 pr-24 relative items-center',
         caption_label: 'text-sm font-medium',
         dropdowns: 'flex items-center justify-start gap-3',
@@ -40,7 +42,7 @@ function Calendar({
           'h-8 w-8 bg-transparent p-0 opacity-80 hover:opacity-100'
         ),
         month_grid: 'w-full border-collapse space-y-1',
-        weekdays: 'flex justify-between',
+        weekdays: 'hidden',
         weekday:
           'text-muted-foreground rounded-md w-9 text-center font-normal text-[0.8rem]',
         week: 'flex w-full mt-2 justify-between',

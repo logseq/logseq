@@ -24,7 +24,12 @@
    (w/eval-js
     "(() => {
        const query = (name, selectors) => {
-         const node = selectors.map((selector) => document.querySelector(selector)).find(Boolean);
+         const nodes = selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)));
+         const visibleNodes = nodes.filter((node) => {
+           const bounds = node.getBoundingClientRect();
+           return bounds.width > 0 && bounds.height > 0;
+         });
+         const node = visibleNodes[visibleNodes.length - 1];
          if (!node) {
            throw new Error(`Missing date picker node: ${name}`);
          }
@@ -33,10 +38,11 @@
        const rect = (name, selectors) => {
          const node = query(name, selectors);
          const bounds = node.getBoundingClientRect();
-         return {width: bounds.width, height: bounds.height};
+         return {x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height};
        };
        return JSON.stringify({
          calendar: rect('calendar', ['.ui__calendar']),
+         monthPanel: rect('month panel', ['.ui__calendar .rdp-month']),
          month: rect('month selector', ['.ui__calendar .rdp-dropdown_month button']),
          year: rect('year selector', ['.ui__calendar .rdp-dropdown_year input']),
          selectedDay: rect('selected day', ['.ui__calendar [role=\"gridcell\"][aria-selected=\"true\"]']),
@@ -58,6 +64,27 @@
 (defn- date-picker-month-label
   []
   (w/eval-js "document.querySelector('.ui__calendar .rdp-dropdown_month button')?.textContent"))
+
+(defn- date-picker-frame-metrics
+  []
+  (json/read-value
+   (w/eval-js
+    "(() => {
+       const rect = (selector) => {
+         const nodes = Array.from(document.querySelectorAll(selector));
+         const node = nodes.filter((node) => {
+           const bounds = node.getBoundingClientRect();
+           return bounds.width > 0 && bounds.height > 0;
+         }).at(-1);
+         const bounds = node.getBoundingClientRect();
+         return {x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height};
+       };
+       return JSON.stringify({
+         calendar: rect('.ui__calendar'),
+         next: rect('.ui__calendar button[aria-label*=\"Next\"]')
+       });
+     })()")
+   json/keyword-keys-object-mapper))
 
 (deftest command-trigger-test
   (testing "/command trigger popup"
@@ -232,9 +259,11 @@
     (b/new-block "scheduled layout test")
     (util/input-command "Scheduled")
     (w/wait-for ".ui__calendar")
-    (let [{:keys [calendar month year selectedDay selectedDayButton previous next]} (date-picker-metrics)
+    (let [{:keys [calendar monthPanel month year selectedDay selectedDayButton previous next]} (date-picker-metrics)
           nav-height (:height previous)]
       (is (pos? (:width calendar)))
+      (is (<= (abs (- (:width monthPanel) (- (:width calendar) 24))) 2)
+          "Month panel should not have extra horizontal margin inside the calendar.")
       (is (<= (abs (- (:width selectedDay) (:width selectedDayButton))) 1)
           "Selected day background should be only as wide as the inner day button.")
       (is (<= (abs (- (:height month) nav-height)) 1)
@@ -243,11 +272,19 @@
           "Year selector should match the chevron button height.")
       (is (<= (abs (- (:height next) nav-height)) 1)
           "Chevron buttons should match each other."))
-    (let [initial-month (date-picker-month-label)]
+    (let [initial-month (date-picker-month-label)
+          initial-metrics (date-picker-frame-metrics)]
       (w/click ".ui__calendar button[aria-label*='Next']")
       (util/wait-timeout 100)
       (is (not= initial-month (date-picker-month-label))
           "Next month button should update the visible month.")
+      (let [next-metrics (date-picker-frame-metrics)]
+        (is (<= (abs (- (get-in initial-metrics [:calendar :width])
+                        (get-in next-metrics [:calendar :width]))) 1)
+            "Date picker width should not change when switching months.")
+        (is (<= (abs (- (get-in initial-metrics [:next :x])
+                        (get-in next-metrics [:next :x]))) 1)
+            "Date picker navigation should not shift when switching months."))
       (w/click ".ui__calendar button[aria-label*='Previous']")
       (util/wait-timeout 100)
       (is (= initial-month (date-picker-month-label))
