@@ -149,13 +149,20 @@
                                    (on-open-change {:value v :set-open! set-open!})
                                    (set-open! v))))})
      (let [onPointerDownOutside (:onPointerDownOutside content-props)
+           onEscapeKeyDown (:onEscapeKeyDown content-props)
+           handle-key-escape! (fn [^js e]
+                                (if (fn? onEscapeKeyDown)
+                                  (onEscapeKeyDown e)
+                                  ;; default handled by global Escape listener
+                                  (.preventDefault e)))
+           handle-pointer-down-outside! (fn [^js e]
+                                          (when (fn? onPointerDownOutside)
+                                            (onPointerDownOutside e))
+                                          (when-not (some-> (.-target e) (.closest ".ui__dialog-overlay"))
+                                            (.preventDefault e)))
            content-props (assoc content-props
-                                :onPointerDownOutside
-                                (fn [^js e]
-                                  (when (fn? onPointerDownOutside)
-                                    (onPointerDownOutside e))
-                                  (when-not (some-> (.-target e) (.closest ".ui__dialog-overlay"))
-                                    (.preventDefault e))))]
+                           :onEscapeKeyDown handle-key-escape!
+                           :onPointerDownOutside handle-pointer-down-outside!)]
        (dialog-content
         (cond-> (merge props content-props)
           auto-width? (assoc :data-auto-width true)
@@ -279,8 +286,8 @@
       (let [id (:id config)
             alert? (:alert? config)
             config (interpret-vals config
-                                   [:title :description :content :footer]
-                                   {:id id})]
+                     [:title :description :content :footer]
+                     {:id id})]
         (case alert?
           :default
           (alert-inner config)

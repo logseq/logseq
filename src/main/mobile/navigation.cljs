@@ -158,6 +158,17 @@
                          (conj (vec (butlast history)) entry)
                          (conj history entry))
 
+                "pop" (if-let [idx (->> history
+                                         (map-indexed vector)
+                                         (keep (fn [[idx history-entry]]
+                                                 (when (= path (:path history-entry))
+                                                   idx)))
+                                         last)]
+                        (subvec history 0 (inc idx))
+                        (if (seq history)
+                          (conj (vec (butlast history)) entry)
+                          [entry]))
+
                 history)))]
       (swap! stack-history update stack
              (fn [{:keys [history]}]

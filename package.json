@@ -194,15 +194,22 @@
     "url": "^0.11.4",
     "util": "^0.12.5"
   },
+  "optionalDependencies": {
+    "@zvec/bindings-darwin-arm64": "0.4.0",
+    "@zvec/bindings-linux-arm64": "0.4.0",
+    "@zvec/bindings-linux-x64": "0.4.0",
+    "@zvec/bindings-win32-x64": "0.4.0",
+    "@zvec/zvec": "0.4.0"
+  },
   "pnpm": {
     "ignoredBuiltDependencies": [
       "canvas",
       "core-js",
-      "onnxruntime-node",
       "protobufjs",
       "sharp"
     ],
     "onlyBuiltDependencies": [
+      "@zvec/zvec",
       "better-sqlite3",
       "electron",
       "keytar"

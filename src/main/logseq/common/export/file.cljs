@@ -1,5 +1,5 @@
-(ns logseq.cli.common.file
-  "Convert blocks to file content. Used for frontend exports and CLI"
+(ns logseq.common.export.file
+  "Converts blocks to file content for frontend exports."
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [clojure.string :as string]
@@ -316,7 +316,6 @@
               (if-let [children (seq (:block/children f))]
                 (cons content (tree->file-content-aux db children {:init-level (inc level)} context))
                 [content])]
-          #_:clj-kondo/ignore
           (conj! block-contents new-content)
           (recur r level))))))
 

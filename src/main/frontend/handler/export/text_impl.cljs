@@ -1,9 +1,9 @@
-(ns logseq.cli.common.export.text
-  "Common fns between frontend and CLI for exporting as markdown"
+(ns frontend.handler.export.text-impl
+  "Markdown export implementation for frontend exports."
   (:require [clojure.string :as string]
-            [logseq.cli.common.export.common :as cli-export-common :refer
+            [frontend.handler.export.common-impl :as common-impl :refer
              [*state* newline* indent raw-text space simple-asts->string]]
-            [logseq.cli.common.util :refer-macros [removev concatv mapcatv]]
+            [frontend.handler.export.util :refer-macros [removev concatv mapcatv]]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.schema.mldoc :as mldoc-schema]))
 
@@ -24,7 +24,7 @@
 (defn- block-heading-prefix
   [{:keys [marker level priority size]}]
   (let [indent-style (get-in *state* [:export-options :indent-style])
-        priority* (and priority (raw-text (cli-export-common/priority->string priority)))
+        priority* (and priority (raw-text (common-impl/priority->string priority)))
         heading* (if (= indent-style "dashes")
                    [(indent (dec level) 0) (raw-text "-")]
                    [(indent (dec level) 0)])
@@ -373,13 +373,13 @@
   [ast-content]
   (let [[type timestamp-content] ast-content]
     (-> (case type
-          "Scheduled" ["SCHEDULED: " (cli-export-common/timestamp-to-string timestamp-content)]
-          "Deadline" ["DEADLINE: " (cli-export-common/timestamp-to-string timestamp-content)]
-          "Date" [(cli-export-common/timestamp-to-string timestamp-content)]
-          "Closed" ["CLOSED: " (cli-export-common/timestamp-to-string timestamp-content)]
-          "Clock" ["CLOCK: " (cli-export-common/timestamp-to-string (second timestamp-content))]
+          "Scheduled" ["SCHEDULED: " (common-impl/timestamp-to-string timestamp-content)]
+          "Deadline" ["DEADLINE: " (common-impl/timestamp-to-string timestamp-content)]
+          "Date" [(common-impl/timestamp-to-string timestamp-content)]
+          "Closed" ["CLOSED: " (common-impl/timestamp-to-string timestamp-content)]
+          "Clock" ["CLOCK: " (common-impl/timestamp-to-string (second timestamp-content))]
           "Range" (let [{:keys [start stop]} timestamp-content]
-                    [(str (cli-export-common/timestamp-to-string start) "--" (cli-export-common/timestamp-to-string stop))]))
+                    [(str (common-impl/timestamp-to-string start) "--" (common-impl/timestamp-to-string stop))]))
         string/join
         raw-text
         vector)))
@@ -426,7 +426,7 @@
 
 ;; {:malli/schema ...} only works on public vars so make this public
 (defn ^:large-vars/cleanup-todo ^:api block-ast->simple-ast
-  {:malli/schema [:=> [:cat mldoc-schema/block-ast-schema] [:sequential cli-export-common/simple-ast-malli-schema]]}
+  {:malli/schema [:=> [:cat mldoc-schema/block-ast-schema] [:sequential common-impl/simple-ast-malli-schema]]}
   [block]
   (let [newline-after-block? (get-in *state* [:export-options :newline-after-block])]
     (removev
@@ -499,7 +499,7 @@
       "Code"
       [(raw-text "`" ast-content "`")]
       "Tag"
-      [(raw-text (str "#" (cli-export-common/hashtag-value->string ast-content)))]
+      [(raw-text (str "#" (common-impl/hashtag-value->string ast-content)))]
       "Spaces"                          ; what's this ast-type for ?
       nil
       "Plain"
@@ -554,30 +554,30 @@
                                :keep-only-level<=N (:keep-only-level<=N other-options)
                                :newline-after-block (:newline-after-block other-options)}})]
       (let [ast (gp-mldoc/->db-edn content format)
-            ast (mapv cli-export-common/remove-block-ast-pos ast)
-            ast (removev cli-export-common/Properties-block-ast? ast)
-            ast* (cli-export-common/replace-block&page-reference&embed ast)
+            ast (mapv common-impl/remove-block-ast-pos ast)
+            ast (removev common-impl/Properties-block-ast? ast)
+            ast* (common-impl/replace-block&page-reference&embed ast)
             keep-level<=n (get-in *state* [:export-options :keep-only-level<=N])
             ast* (if (pos? keep-level<=n)
-                   (cli-export-common/keep-only-level<=n ast* keep-level<=n)
+                   (common-impl/keep-only-level<=n ast* keep-level<=n)
                    ast*)
             ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
-                    (mapv cli-export-common/replace-Heading-with-Paragraph ast*)
+                    (mapv common-impl/replace-Heading-with-Paragraph ast*)
                     ast*)
             config-for-walk-block-ast (cond-> {}
                                         (get-in *state* [:export-options :remove-emphasis?])
-                                        (update :mapcat-fns-on-inline-ast conj cli-export-common/remove-emphasis)
+                                        (update :mapcat-fns-on-inline-ast conj common-impl/remove-emphasis)
 
                                         (get-in *state* [:export-options :remove-page-ref-brackets?])
-                                        (update :map-fns-on-inline-ast conj cli-export-common/remove-page-ref-brackets)
+                                        (update :map-fns-on-inline-ast conj common-impl/remove-page-ref-brackets)
 
                                         (get-in *state* [:export-options :remove-tags?])
-                                        (update :mapcat-fns-on-inline-ast conj cli-export-common/remove-tags)
+                                        (update :mapcat-fns-on-inline-ast conj common-impl/remove-tags)
 
                                         (= "no-indent" (get-in *state* [:export-options :indent-style]))
-                                        (update :fns-on-inline-coll conj cli-export-common/remove-prefix-spaces-in-Plain))
+                                        (update :fns-on-inline-coll conj common-impl/remove-prefix-spaces-in-Plain))
             ast*** (if-not (empty? config-for-walk-block-ast)
-                     (mapv (partial cli-export-common/walk-block-ast config-for-walk-block-ast) ast**)
+                     (mapv (partial common-impl/walk-block-ast config-for-walk-block-ast) ast**)
                      ast**)
             ast**** (loop [remaining ast***
                            result []]

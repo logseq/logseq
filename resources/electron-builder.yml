@@ -5,6 +5,9 @@ directories:
   buildResources: .
   output: dist
 
+toolsets:
+  appimage: "1.0.3"
+
 protocols:
   - name: logseq
     schemes:
@@ -18,6 +21,8 @@ publish:
 extraResources:
   - from: .agents/skills/logseq-cli/SKILL.md
     to: .agents/skills/logseq-cli/SKILL.md
+  - from: ../sidecar
+    to: sidecar
 
 mac:
   artifactName: ${productName}-darwin-${arch}-${version}.${ext}
