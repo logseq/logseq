@@ -298,7 +298,7 @@ exports.electron = () => {
   })
 }
 
-exports.electronMaker = async () => {
+const prepareElectronMaker = async () => {
   cp.execSync('pnpm cljs:release-electron', {
     stdio: 'inherit',
   })
@@ -328,11 +328,23 @@ exports.electronMaker = async () => {
       stdio: 'inherit',
     })
   }
+}
 
-  cp.execSync('pnpm electron:make', {
+const runStaticScript = (script) => {
+  cp.execSync(`pnpm ${script}`, {
     cwd: outputPath,
     stdio: 'inherit',
   })
+}
+
+exports.electronMaker = async () => {
+  await prepareElectronMaker()
+  runStaticScript('electron:make')
+}
+
+exports.electronMakerUnsigned = async () => {
+  await prepareElectronMaker()
+  runStaticScript('electron:make-unsigned')
 }
 
 exports.cap = common.runCapWithLocalDevServerEntry
