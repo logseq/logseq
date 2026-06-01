@@ -202,3 +202,13 @@ html[data-font='mono'] .ls-block, .ls-font-mono {
 html[data-font='mono'][data-font-global='true'] {
   --ls-font-family: iawriter-mono, Nitti, Menlo, Courier, monospace;
 }
+
+html {
+  &[data-theme=dark] {
+    &[data-color=logseq] {
+      .ls-table {
+        --ls-table-edge-divider-color: var(--rx-logseq-01);
+      }
+    }
+  }
+}
