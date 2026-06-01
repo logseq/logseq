@@ -4009,11 +4009,12 @@
               #(schedule-comment-thread-presence-check! *comment-thread-present? block))
            _ (hooks/use-effect!
               (fn []
-                ;; React doesn't let us directly control passive via onTouchMove,
-                ;; so listen to touchmove on the block node.
-                (when-let [node @*ref]
-                  (.addEventListener node "touchmove" block-handler/on-touch-move)
-                  #(.removeEventListener node "touchmove" block-handler/on-touch-move)))
+                ;; Mobile swipe handling calls preventDefault, so avoid registering
+                ;; the active touchmove listener on desktop blocks.
+                (when (or (util/mobile?) (mobile-util/native-platform?))
+                  (when-let [node @*ref]
+                    (.addEventListener node "touchmove" block-handler/on-touch-move)
+                    #(.removeEventListener node "touchmove" block-handler/on-touch-move))))
               [])
         switch-to-plugin-renderer! (fn []
                                      (reset! *plugin-renderer-error? false)

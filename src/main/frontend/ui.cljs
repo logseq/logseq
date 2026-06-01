@@ -950,25 +950,25 @@
         ""
         :icon (str "h-" i)
         :title (t :editor/heading i)
-        :class (str "to-heading-button" (when (= heading i) " is-active"))
+        :class (util/classnames ["to-heading-button" {:is-active (= heading i)}])
         :on-click #(add-heading-fn i)
-        :intent (when-not (= heading i) "link")
+        :variant (when-not (= heading i) :ghost)
         :small? true])
      (button
       ""
       :icon "h-auto"
-      :class (str "to-heading-button" (when (true? heading) " is-active"))
+      :class (util/classnames ["to-heading-button" {:is-active (true? heading)}])
       :title (t :editor/auto-heading)
       :on-click auto-heading-fn
-      :intent (when-not (true? heading) "link")
+      :variant (when-not (true? heading) :ghost)
       :small? true)
      (button
       ""
       :icon "heading-off"
-      :class (str "to-heading-button" (when (false? heading) " is-active"))
+      :class (util/classnames ["to-heading-button" {:is-active (false? heading)}])
       :title (t :editor/remove-heading)
       :on-click rm-heading-fn
-      :intent (when-not (false? heading) "link")
+      :variant (when-not (false? heading) :ghost)
       :small? true)]]))
 
 (hsx/defc tooltip
