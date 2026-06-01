@@ -170,7 +170,7 @@
       [:span.flex.items-center.gap-1
        (normalized-graph-label repo
                                (fn []
-                                 (when-not (state/sub :rtc/downloading-graph-uuid)
+                                 (when-not (state/get-state :rtc/downloading-graph-uuid)
                                    (cond
                                      root ; exists locally
                                      (state/pub-event! [:graph/switch url])

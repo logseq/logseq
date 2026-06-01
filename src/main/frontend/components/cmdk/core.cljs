@@ -456,15 +456,15 @@
 (defmethod load-results :themes [group state]
   (let [!input (::input state)
         !results (::results state)
-        themes (state/sub :plugin/installed-themes)
+        themes (state/get-state :plugin/installed-themes)
         themes (if (string/blank? @!input)
                  themes
                  (search/fuzzy-search themes @!input :limit 100 :extract-fn :name))
         themes (cons {:name (t :theme/logseq-default)
                       :pid "logseq-classic-theme"
-                      :mode (state/sub :ui/theme)
+                      :mode (state/get-state :ui/theme)
                       :url nil} themes)
-        selected (state/sub :plugin/selected-theme)]
+        selected (state/get-state :plugin/selected-theme)]
     (swap! !results assoc-in [group :status] :loading)
     (let [items (for [t themes
                       :let [selected? (= (:url t) selected)]]

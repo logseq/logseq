@@ -1089,6 +1089,7 @@
 (hsx/defc settings-features
   []
   (let [_config (state/use-sub :config)
+        default-home-page (state/use-sub-default-home-page)
         current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
@@ -1103,7 +1104,7 @@
         [:div.mt-1.sm:mt-0.sm:col-span-2
          [:div.max-w-lg.rounded-md.sm:max-w-xs
           [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
-           {:default-value (state/sub-default-home-page)
+           {:default-value default-home-page
             :on-blur       update-home-page
             :on-key-press  (fn [e]
                              (when (= "Enter" (util/ekey e))
@@ -1380,7 +1381,7 @@
                           (storage/set ::storage-spec/http-server-enabled true))
                         (-> (ipc/ipc :server/set-config {:mcp-enabled? new-val})
                             ;; Don't start server if it's not running
-                            (p/then #(when (= "running" (state/sub [:electron/server :status]))
+                            (p/then #(when (= "running" (state/get-state [:electron/server :status]))
                                        (p/let [_ (p/delay 1000)]
                                          (ipc/ipc :server/do :restart))))
                             (p/catch #(notification/show! (str %) :error)))))]

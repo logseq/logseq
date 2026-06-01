@@ -315,8 +315,8 @@
              (let [target (gobj/get e "target")
                    block-el (.closest target ".bullet-container[blockid]")
                    block-id (some-> block-el (.getAttribute "blockid"))
-                   {:keys [block block-ref]} (state/sub :block-ref/context)
-                   {:keys [page page-entity]} (state/sub :page-title/context)
+                   {:keys [block block-ref]} (state/get-state :block-ref/context)
+                   {:keys [page page-entity]} (state/get-state :page-title/context)
                    show!
                    (fn [content & {:as option}]
                      (shui/popup-show! e
@@ -420,7 +420,7 @@
         edit? (state/editing?)
         default-home (app-left-sidebar/get-default-home-if-valid)
         logged? (user-handler/logged-in?)
-        fold-button-on-right? (state/enable-fold-button-right?)
+        fold-button-on-right? (state/use-enable-fold-button-right?)
         show-action-bar? (state/use-sub :mobile/show-action-bar?)
         preferred-language (state/use-sub [:preferred-language])
         uploading? (state/use-sub :rtc/uploading?)]

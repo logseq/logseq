@@ -16,8 +16,8 @@
             [io.factorhouse.hsx.core :as hsx]))
 
 (defn- built-in-custom-query?
-  [{:keys [title-key]}]
-  (let [queries (get-in (state/sub-config) [:default-queries :journals])]
+  [repo-config {:keys [title-key]}]
+  (let [queries (get-in repo-config [:default-queries :journals])]
     (when (seq queries)
       (boolean
        (some (fn [built-in-query]
@@ -26,10 +26,10 @@
              queries)))))
 
 (defn- resolve-built-in-query?
-  [built-in-query? q]
+  [repo-config built-in-query? q]
   (boolean
    (or built-in-query?
-       (built-in-custom-query? q))))
+       (built-in-custom-query? repo-config q))))
 
 (defn- grouped-by-page-result?
   [result group-by-page?]
@@ -141,9 +141,8 @@
         (t :search/result-count result-count)])]))
 
 (defn- calculate-collapsed?
-  [current-block current-block-uuid {:keys [collapsed? container-id]}]
-  (let [temp-collapsed? (state/sub-block-collapsed current-block-uuid container-id)
-        collapsed?' (if (some? temp-collapsed?)
+  [current-block {:keys [collapsed? temp-collapsed?]}]
+  (let [collapsed?' (if (some? temp-collapsed?)
                       temp-collapsed?
                       (or collapsed?
                           (:block/collapsed? current-block)))]
@@ -153,35 +152,36 @@
   [{:keys [*query-error dsl-query? built-in-query? table? current-block] :as config}
    {:keys [builder query view _collapsed?] :as q}]
   (let [*result (hooks/use-memo #(atom nil) [])
-           *collapsed? (hooks/use-memo #(atom (or (:collapsed? q) (:collapsed? config))) [])
-           [collapsed?] (hooks/use-atom *collapsed?)
-           [k result] (query-result/run-custom-query config q *result *query-error)
-           result (some->> result
-                           (query-result/transform-query-result config q))
-           _ (when k
-               (react/set-q-collapsed! k collapsed?))
-           ;; Remove hidden pages from result
-           result (if (and (coll? result) (not (map? result)))
-                    (->> result
-                         (remove (fn [b]
-                                   (when (and (map? b) (:block/title b))
-                                     (ldb/hidden? (or (when-let [id (:db/id b)]
-                                                        (db/entity id))
-                                                      (:block/title b))))))
-                         (remove (fn [b]
-                                   (when (and current-block (:db/id current-block)) (= (:db/id b) (:db/id current-block))))))
-                    result)
-           ;; Args for displaying query header and results
-           view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
-           view-f (and view-fn (sci/eval-string (pr-str view-fn)))
-           page-list? (and (seq result) (some? (:block/name (first result))))
-           opts {:query-error-atom *query-error
-                 :current-block current-block
-                 :table? table?
-                 :view-f view-f
-                 :page-list? page-list?
-                 :result result
-                 :group-by-page? (query-result/get-group-by-page q {:table? table?})}]
+        repo-config (state/use-sub-config)
+        *collapsed? (hooks/use-memo #(atom (or (:collapsed? q) (:collapsed? config))) [])
+        [collapsed?] (hooks/use-atom *collapsed?)
+        [k result] (query-result/run-custom-query config q *result *query-error)
+        result (some->> result
+                        (query-result/transform-query-result config q))
+        _ (when k
+            (react/set-q-collapsed! k collapsed?))
+        ;; Remove hidden pages from result
+        result (if (and (coll? result) (not (map? result)))
+                 (->> result
+                      (remove (fn [b]
+                                (when (and (map? b) (:block/title b))
+                                  (ldb/hidden? (or (when-let [id (:db/id b)]
+                                                     (db/entity id))
+                                                   (:block/title b))))))
+                      (remove (fn [b]
+                                (when (and current-block (:db/id current-block)) (= (:db/id b) (:db/id current-block))))))
+                 result)
+        ;; Args for displaying query header and results
+        view-fn (if (keyword? view) (get-in repo-config [:query/views view]) view)
+        view-f (and view-fn (sci/eval-string (pr-str view-fn)))
+        page-list? (and (seq result) (some? (:block/name (first result))))
+        opts {:query-error-atom *query-error
+              :current-block current-block
+              :table? table?
+              :view-f view-f
+              :page-list? page-list?
+              :result result
+              :group-by-page? (query-result/get-group-by-page q {:table? table?})}]
        (if (:custom-query? config)
          ;; Don't display recursive results when query blocks are a query result
          [:code (if dsl-query?
@@ -210,19 +210,21 @@
   (ui/catch-error
    (ui/block-error (t :query/error) {:content (:query q)})
    (let [*query-error (hooks/use-memo #(atom nil) [])
+         repo-config (state/use-sub-config)
          current-block-uuid (or (:block/uuid (:block config))
                                 (:block/uuid config))
          current-block (db/entity [:block/uuid current-block-uuid])
-        ;; Get query result
-         collapsed?' (calculate-collapsed? current-block current-block-uuid
+         temp-collapsed? (state/use-sub-block-collapsed current-block-uuid (:container-id config))
+         ;; Get query result
+         collapsed?' (calculate-collapsed? current-block
                                            {:collapsed? false
-                                            :container-id (:container-id config)})
+                                            :temp-collapsed? temp-collapsed?})
          built-in-collapsed? (and collapsed? built-in-query?)
          config' (assoc config
                         :current-block current-block
                         :current-block-uuid current-block-uuid
                         :collapsed? collapsed?'
-                        :built-in-query? (resolve-built-in-query? built-in-query? q)
+                        :built-in-query? (resolve-built-in-query? repo-config built-in-query? q)
                         :*query-error *query-error)]
      (when (or built-in-collapsed? (not collapsed?'))
        (custom-query* config' q)))))

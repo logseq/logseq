@@ -382,7 +382,7 @@
           :ui/hide-empty-properties? false}))
 
 ;; State that most user config is dependent on
-(declare get-current-repo sub set-state!)
+(declare get-current-repo set-state!)
 
 (defn merge-configs
   "Merges user configs in given orders. All values are overridden except for maps
@@ -604,8 +604,11 @@ should be done through this fn in order to get global config and config defaults
   [ref key]
   (path-cursor-in ref [key]))
 
-(defn sub
-  "Returns a reactive subscription value similar to re-frame subscriptions."
+(defn get-state
+  "Returns a plain state value.
+
+  Use this outside component rendering or when the caller does not need reactive
+  rendering. Components that render from state should use `use-sub`."
   [ks & {:keys [path-in-sub-atom]}]
   (let [ks-coll?               (coll? ks)
         get-fn                 (if ks-coll? get-in get)
@@ -614,19 +617,16 @@ should be done through this fn in order to get global config and config defaults
         path-coll?-in-sub-atom (coll? path-in-sub-atom)]
     (cond
       (and s-atom? path-in-sub-atom path-coll?-in-sub-atom)
-      (util/react (path-cursor-in s path-in-sub-atom))
+      (get-in @s path-in-sub-atom)
 
       (and s-atom? path-in-sub-atom)
-      (util/react (path-cursor s path-in-sub-atom))
+      (get @s path-in-sub-atom)
 
-      s-atom?  (util/react s)
-      ks-coll? (util/react (path-cursor-in state ks))
-      :else    (util/react (path-cursor state ks)))))
+      s-atom?  @s
+      :else    s)))
 
 (defn use-sub
-  "Hook equivalent of `sub` for function components.
-
-  Use this when converting Rum reactive components to hooks."
+  "Returns a state subscription value for function components."
   [ks & {:keys [path-in-sub-atom]}]
   (let [ks-coll?               (coll? ks)
         get-fn                 (if ks-coll? get-in get)
@@ -673,17 +673,8 @@ should be done through this fn in order to get global config and config defaults
 
 (def use-sub-editing? sub-editing?)
 
-(defn sub-config
-  "Sub equivalent to get-config which should handle all sub user-config access"
-  ([] (sub-config (get-current-repo)))
-  ([repo]
-   (let [config (sub :config)]
-     (merge-configs db-default-config
-                    (get config ::global-config)
-                    (get config repo)))))
-
 (defn use-sub-config
-  "Hook equivalent of `sub-config`."
+  "Returns reactive merged config for function components."
   ([] (use-sub-config (get-current-repo)))
   ([repo]
    (let [config (use-sub :config)]
@@ -693,17 +684,21 @@ should be done through this fn in order to get global config and config defaults
 
 (defn enable-grammarly?
   []
-  (true? (:feature/enable-grammarly? (sub-config))))
+  (true? (:feature/enable-grammarly? (get-config))))
 
 (defn scheduled-deadlines-disabled?
   []
-  (true? (:feature/disable-scheduled-and-deadline-query? (sub-config))))
+  (true? (:feature/disable-scheduled-and-deadline-query? (get-config))))
 
 (defn enable-fold-button-right?
   []
-  (let [_ (sub :ui/viewport)]
-    (and (util/mobile?)
-         (util/sm-breakpoint?))))
+  (and (util/mobile?)
+       (util/sm-breakpoint?)))
+
+(defn use-enable-fold-button-right?
+  []
+  (let [_ (use-sub :ui/viewport)]
+    (enable-fold-button-right?)))
 
 (defn enable-journals?
   ([]
@@ -715,16 +710,16 @@ should be done through this fn in order to get global config and config defaults
   ([]
    (enable-flashcards? (get-current-repo)))
   ([repo]
-   (not (false? (:feature/enable-flashcards? (sub-config repo))))))
+   (not (false? (:feature/enable-flashcards? (get-config repo))))))
 
 ;; Enable by default
 (defn show-brackets?
   []
-  (not (false? (:ui/show-brackets? (sub-config)))))
+  (not (false? (:ui/show-brackets? (get-config)))))
 
-(defn sub-default-home-page
+(defn use-sub-default-home-page
   []
-  (get-in (sub-config) [:default-home :page] ""))
+  (get-in (use-sub-config) [:default-home :page] ""))
 
 (defn- get-selected-block-ids
   [blocks]
@@ -736,9 +731,9 @@ should be done through this fn in order to get global config and config defaults
 
 (defn block-content-max-length
   [repo]
-  (or (:block/title-max-length (sub-config repo))
+  (or (:block/title-max-length (get-config repo))
       ;; backward compatible
-      (:block/content-max-length (sub-config repo))
+      (:block/content-max-length (get-config repo))
       10000))
 
 (defn mobile?
@@ -749,27 +744,27 @@ should be done through this fn in order to get global config and config defaults
   []
   (if (mobile?)
     false
-    (get (sub-config) :ui/enable-tooltip? true)))
+    (get (get-config) :ui/enable-tooltip? true)))
 
 (defn show-command-doc?
   []
-  (get (sub-config) :ui/show-command-doc? true))
+  (get (get-config) :ui/show-command-doc? true))
 
 (defn logical-outdenting?
   []
-  (:editor/logical-outdenting? (sub-config)))
+  (:editor/logical-outdenting? (get-config)))
 
 (defn show-full-blocks?
   []
-  (:ui/show-full-blocks? (sub-config)))
+  (:ui/show-full-blocks? (get-config)))
 
 (defn preferred-pasting-file?
   []
-  (:editor/preferred-pasting-file? (sub-config)))
+  (:editor/preferred-pasting-file? (get-config)))
 
 (defn auto-expand-block-refs?
   []
-  (:ui/auto-expand-block-refs? (sub-config)))
+  (:ui/auto-expand-block-refs? (get-config)))
 
 (defn doc-mode-enter-for-new-line?
   []
@@ -778,7 +773,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn user-groups
   []
-  (set (sub [:user/info :UserGroups])))
+  (set (get-state [:user/info :UserGroups])))
 
 ;; State mutation helpers
 ;; ======================
@@ -1093,6 +1088,8 @@ should be done through this fn in order to get global config and config defaults
                   (fn [blocks]
                     (some #{block-id} (get-selected-block-ids blocks)))
                   [block-id]))
+
+(def use-sub-block-selected? sub-block-selected?)
 
 (defn dom-clear-selection!
   []
@@ -1665,7 +1662,7 @@ should be done through this fn in order to get global config and config defaults
 (defn slot-hook-exist?
   [uuid]
   (when-let [type (and uuid (string/replace (str uuid) "-" "_"))]
-    (when-let [hooks (sub :plugin/installed-hooks)]
+    (when-let [hooks (get-state :plugin/installed-hooks)]
       (contains? hooks (str "hook:editor:slot_" type)))))
 
 (defn set-editor-in-composition!
@@ -2000,10 +1997,10 @@ should be done through this fn in order to get global config and config defaults
          container-id (resolve-container-id container-id)]
      (set-state! [:ui/collapsed-blocks current-repo container-id block-id] value))))
 
-(defn sub-block-collapsed
-  ([block-id] (sub-block-collapsed block-id nil))
+(defn use-sub-block-collapsed
+  ([block-id] (use-sub-block-collapsed block-id nil))
   ([block-id container-id]
-   (sub [:ui/collapsed-blocks (get-current-repo) (resolve-container-id container-id) block-id])))
+   (use-sub [:ui/collapsed-blocks (get-current-repo) (resolve-container-id container-id) block-id])))
 
 (defn get-block-collapsed
   ([block-id] (get-block-collapsed block-id nil))
@@ -2027,13 +2024,13 @@ should be done through this fn in order to get global config and config defaults
   (set-state! :auth/access-token access-token))
 
 (defn get-auth-id-token []
-  (sub :auth/id-token))
+  (get-state :auth/id-token))
 
 (defn get-auth-refresh-token []
   (:auth/refresh-token @state))
 
 (defn http-proxy-enabled-or-val? []
-  (when-let [{:keys [type protocol host port] :as agent-opts} (sub [:electron/user-cfgs :settings/agent])]
+  (when-let [{:keys [type protocol host port] :as agent-opts} (get-state [:electron/user-cfgs :settings/agent])]
     (when (and  (not (contains? #{"system"} type))
                 (every? not-empty (vals agent-opts)))
       (str protocol "://" host ":" port))))

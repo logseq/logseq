@@ -385,16 +385,26 @@
         *ident (hooks/use-memo #(atom (str "calendar-inner-" (js/Date.now))) [])
         initial-day value
         initial-month (when value (calendar-default-month value))
-        select-handler! (fn [^js d]
-                          (when d
-                            (p/let [journal-page (<resolve-journal-page-for-date d)]
-                              (p/do!
-                               (when (fn? on-change)
-                                 (let [value (if datetime? (tc/to-long d) journal-page)]
-                                   (on-change value)))
-                               (when-not datetime?
-                                 (shui/popup-hide! id)
-                                 (ui/hide-popups-until-preview-popup!))))))]
+        select-handler! (hooks/use-callback
+                         (fn [^js d]
+                           (when d
+                             (p/let [journal-page (<resolve-journal-page-for-date d)]
+                               (p/do!
+                                (when (fn? on-change)
+                                  (let [value (if datetime? (tc/to-long d) journal-page)]
+                                    (on-change value)))
+                                (when-not datetime?
+                                  (shui/popup-hide! id)
+                                  (ui/hide-popups-until-preview-popup!))))))
+                         [id datetime? on-change])]
+    (hooks/use-window-keydown
+     (fn [^js e]
+       (when (and (= "Enter" (util/ekey e))
+                  (not (some-> (.-target e)
+                               (.closest ".ls-nlp-calendar input"))))
+         (select-handler! initial-day)
+         (util/stop e)))
+     [initial-day select-handler!])
     (hooks/use-effect!
      (fn []
        (state/set-editor-action! :property-set-date)
@@ -403,7 +413,7 @@
           (shui/popup-hide!)
           (state/set-editor-action! nil)))
      [])
-    [:div.flex.flex-row.gap-2
+    [:div.ls-property-date-picker.flex.flex-row.gap-2
      [:div.flex.flex-1.items-center
       (ui/nlp-calendar
        (cond->
@@ -499,7 +509,9 @@
                         (editor-handler/save-current-block!)
                         (when-not config/publishing?
                           (shui/popup-show! (.-target e) content-fn
-                                            {:align "start" :auto-focus? true}))))
+                                            {:align "start"
+                                             :auto-focus? true
+                                             :content-props {:without-animation true}}))))
         repeated-task? (:logseq.property.repeat/repeated? block)]
     (if editing?
       (content-fn {:id :date-picker})

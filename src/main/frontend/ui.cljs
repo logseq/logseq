@@ -215,7 +215,7 @@
   [dropdown-state close-fn content class style-opts node-ref]
   (let [class (or class
                   (util/hiccup->class "origin-top-right.absolute.right-0.mt-2"))
-        k (hooks/use-memo #(inc (count (state/sub :modal/dropdowns))) [])]
+        k (hooks/use-memo #(inc (count (state/get-state :modal/dropdowns))) [])]
     (hooks/use-effect!
      (fn []
       (state/set-state! [:modal/dropdowns k] close-fn)
@@ -465,7 +465,7 @@
 
 (defn apply-custom-theme-effect! [theme]
   (when config/lsp-enabled?
-    (when-let [custom-theme (state/sub [:ui/custom-theme (keyword theme)])]
+    (when-let [custom-theme (state/get-state [:ui/custom-theme (keyword theme)])]
       ;; If the name is nil, the user has not set a custom theme (initially {:mode light/dark}).
       ;; The url is not used because the default theme does not have an url.
       (if (some? (:name custom-theme))
@@ -1067,7 +1067,7 @@
         (shui/dropdown-menu-trigger
          {:as-child true}
          (shui/button {:variant :ghost
-                       :class "!px-3 !py-0 h-8 border border-input rounded-md"
+                       :class "!px-3 !py-0 h-8 !w-32 justify-start border border-input rounded-md"
                        :size :sm}
                       (get-month-label value)))
         (shui/dropdown-menu-content

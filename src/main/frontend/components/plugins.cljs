@@ -640,7 +640,7 @@
 
 (defn- get-disabled-plugins-for-removal
   [category]
-  (->> (vals (state/sub [:plugin/installed-plugins]))
+  (->> (vals (state/get-state [:plugin/installed-plugins]))
        (filter #(and (plugin-in-category? category %)
                      (get-in % [:settings :disabled])))
        (sort-by disabled-plugin-sort-key)))

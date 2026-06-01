@@ -168,6 +168,8 @@
 (hsx/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id property-default-value?]
   (let [block (db/entity [:block/uuid block-id])
+        simple-commands (state/use-sub [:plugin/simple-commands])
+        developer-mode? (state/use-sub [:ui/developer-mode?])
         [set-icon-sub-menu-open? set-icon-sub-menu-open] (hooks/use-state false)
         [heading set-heading!] (hooks/use-state (or (pu/lookup block :logseq.property/heading) false))
         [current-color set-current-color!] (hooks/use-state (pu/lookup block :logseq.property/background-color))]
@@ -342,7 +344,7 @@
           (t :editor/collapse-block-children)
           (ui/dropdown-shortcut :editor/collapse-block-children))
 
-         (when (state/sub [:plugin/simple-commands])
+         (when simple-commands
            (when-let [cmds (state/get-plugins-commands-with-type :block-context-menu-item)]
              (for [[_ {:keys [key label] :as cmd} action pid] cmds]
                (shui/dropdown-menu-item
@@ -351,7 +353,7 @@
                              pid (assoc cmd :uuid block-id) action)}
                 label))))
 
-         (when (state/sub [:ui/developer-mode?])
+         (when developer-mode?
            [:<>
             (shui/dropdown-menu-separator)
             (shui/dropdown-menu-sub

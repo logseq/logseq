@@ -394,11 +394,12 @@
   [{:keys [current-repo default-home new-block-mode]}]
   (let [electron-mac? (and util/mac? (util/electron?))
         rtc-graphs (state/use-sub :rtc/graphs)
+        default-home-page (state/use-sub-default-home-page)
         left-menu (left-menu-button {:on-click (fn []
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
-                               (= (state/sub-default-home-page) (state/get-current-page)))]
+                               (= default-home-page (state/get-current-page)))]
     [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)

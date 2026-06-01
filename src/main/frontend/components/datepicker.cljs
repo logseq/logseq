@@ -19,19 +19,29 @@
        (state/set-state! :date-picker/date (t/today))))
    [])
   (let [selected-date (state/use-sub :date-picker/date)
-        select-handler! (fn [^js d]
-                          (when-let [d (or d selected-date)]
-                            (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
-                                  journal (date/js-date->journal-title gd)]
-                              ;; similar to page reference
-                              (editor-handler/insert-command! dom-id
-                                                              (page-ref/->page-ref journal)
-                                                              format
-                                                              {:command :page-ref})
-                              (state/clear-editor-action!)
-                              (reset! commands/*current-command nil)
-                              (state/set-state! :date-picker/date d))))]
-    [:div#date-time-picker.flex.flex-col.sm:flex-row
+        select-handler! (hooks/use-callback
+                         (fn [^js d]
+                           (when-let [d (or d selected-date)]
+                             (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
+                                   journal (date/js-date->journal-title gd)]
+                               ;; similar to page reference
+                               (editor-handler/insert-command! dom-id
+                                                               (page-ref/->page-ref journal)
+                                                               format
+                                                               {:command :page-ref})
+                               (state/clear-editor-action!)
+                               (reset! commands/*current-command nil)
+                               (state/set-state! :date-picker/date d))))
+                         [dom-id format selected-date])]
+    (hooks/use-window-keydown
+     (fn [^js e]
+       (when (and (= "Enter" (.-key e))
+                  (not (some-> (.-target e)
+                               (.closest ".ls-nlp-calendar input"))))
+         (select-handler! selected-date)
+         (util/stop e)))
+     [selected-date select-handler!])
+    [:div#date-time-picker.ls-editor-date-picker.flex.flex-col
      ;; inline container
      [:div.border-red-500
       (ui/nlp-calendar

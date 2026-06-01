@@ -138,7 +138,7 @@
    (fn []
      (p/let [_ (p/delay 1000)
              _ (ipc/ipc :server/load-state)]
-       (let [t (js/setTimeout #(when (state/sub [:electron/server :autostart])
+       (let [t (js/setTimeout #(when (state/get-state [:electron/server :autostart])
                                  (ipc/ipc :server/do :restart)) 1000)]
          #(js/clearTimeout t))))
    [])

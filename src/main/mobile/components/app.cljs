@@ -345,7 +345,7 @@
   []
   (let [current-repo (state/use-sub :git/current-repo)
         show-action-bar? (state/use-sub :mobile/show-action-bar?)
-        {:keys [open? content-fn opts]} (hooks/use-value mobile-state/*popup-data)
+        [{:keys [open? content-fn opts]}] (hooks/use-atom mobile-state/*popup-data)
         show-popup? (and open? content-fn)
         route-match (state/use-sub :route-match)]
     [:main#app-container-wrapper.ls-fold-button-on-right

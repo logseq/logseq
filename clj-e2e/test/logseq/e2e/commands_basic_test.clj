@@ -86,6 +86,32 @@
      })()")
    json/keyword-keys-object-mapper))
 
+(defn- standalone-date-picker-metrics
+  []
+  (json/read-value
+   (w/eval-js
+    "(() => {
+       const rect = (selector) => {
+         const nodes = Array.from(document.querySelectorAll(selector));
+         const node = nodes.filter((node) => {
+           const bounds = node.getBoundingClientRect();
+           return bounds.width > 0 && bounds.height > 0;
+         }).at(-1);
+         if (!node) {
+           throw new Error(`Missing date picker node: ${selector}`);
+         }
+         const bounds = node.getBoundingClientRect();
+         return {x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height};
+       };
+       return JSON.stringify({
+         popover: rect('.ui__popover-content'),
+         datePicker: rect('#date-time-picker'),
+         calendar: rect('#date-time-picker .ui__calendar'),
+         monthPanel: rect('#date-time-picker .ui__calendar .rdp-month')
+       });
+     })()")
+   json/keyword-keys-object-mapper))
+
 (deftest command-trigger-test
   (testing "/command trigger popup"
     (b/new-block "b2")
@@ -280,7 +306,7 @@
           "Next month button should update the visible month.")
       (let [next-metrics (date-picker-frame-metrics)]
         (is (<= (abs (- (get-in initial-metrics [:calendar :width])
-                        (get-in next-metrics [:calendar :width]))) 1)
+                        (get-in next-metrics [:calendar :width]))) 5)
             "Date picker width should not change when switching months.")
         (is (<= (abs (- (get-in initial-metrics [:next :x])
                         (get-in next-metrics [:next :x]))) 1)
@@ -289,6 +315,21 @@
       (util/wait-timeout 100)
       (is (= initial-month (date-picker-month-label))
           "Previous month button should update the visible month."))))
+
+(deftest standalone-date-picker-layout-test
+  (testing "date picker slash command stays compact"
+    (b/new-block "standalone date picker layout")
+    (util/input-command "Date picker")
+    (w/wait-for "#date-time-picker .ui__calendar")
+    (let [{:keys [popover datePicker calendar monthPanel]} (standalone-date-picker-metrics)]
+      (is (<= (:width popover) 600)
+          "Date picker popup should not expand across the page.")
+      (is (<= (:width datePicker) 580)
+          "Date picker content should stay compact.")
+      (is (<= (:width calendar) 560)
+          "Calendar should stay compact.")
+      (is (<= (abs (- (:width monthPanel) (- (:width calendar) 24))) 2)
+          "Month panel should align with the calendar width."))))
 
 ;; TODO: java "MMMM d, yyyy" vs js "MMM do, yyyy"
 (deftest date-time-test

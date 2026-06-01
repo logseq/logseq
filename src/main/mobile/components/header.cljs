@@ -391,7 +391,7 @@
 (hsx/defc header
   [current-repo tab]
   (let [route-match (state/use-sub :route-match)
-        flashcards-header (hooks/use-value mobile-state/*flashcards-header)]
+        [flashcards-header] (hooks/use-atom mobile-state/*flashcards-header)]
     (header-inner current-repo tab
                   route-match
                   flashcards-header)))

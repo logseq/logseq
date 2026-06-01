@@ -2235,7 +2235,7 @@
         ref? (:ref? config)
         container-id (:container-id config)
         empty-content? (block-content-empty? block)
-        fold-button-right? (state/enable-fold-button-right?)
+        fold-button-right? (state/use-enable-fold-button-right?)
         own-number-list? (:own-order-number-list? config)
         order-list? (boolean own-number-list?)
         order-list-idx (:own-order-list-index config)
@@ -4040,6 +4040,7 @@
         level (:level config)
         *control-show? (get container-state ::control-show?)
         db-collapsed? (util/collapsed? block)
+        temp-collapsed? (state/use-sub-block-collapsed uuid container-id)
         collapsed? (cond
                      (:ignore-block-collapsed? config)
                      false
@@ -4048,7 +4049,7 @@
                        (:view? config)
                        (root-block? config block)
                        (and (or (ldb/class? block) (ldb/property? block)) (:page-title? config)))
-                     (state/sub-block-collapsed uuid container-id)
+                     temp-collapsed?
 
                      :else
                      db-collapsed?)
@@ -4377,7 +4378,7 @@
         block-id (:block/uuid block)
         v1 (state/use-sub-editing? [container-id block-id])
         v2 (state/use-sub-editing? [:unknown-container block-id])
-        selected? (state/sub-block-selected? block-id)
+        selected? (state/use-sub-block-selected? block-id)
         editing? (or v1 v2)]
     (block-container-inner-aux container-state repo config* block (assoc opts
                                                                          :editing? editing?
