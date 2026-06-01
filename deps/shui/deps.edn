@@ -3,7 +3,7 @@
  {org.clojure/clojure                   {:mvn/version "1.12.4"}
   org.clojure/clojurescript             {:mvn/version "1.12.134"}
   funcool/promesa                       {:mvn/version "11.0.678"}
-  io.factorhouse/hsx                    {:git/url "https://github.com/tiensonqin/hsx"
+  io.factorhouse/hsx                    {:git/url "https://github.com/logseq/hsx"
                                          :sha     "7a7d22bc0b5feb72542bdfa2f6fdde67f48e0d93"}
 
   medley/medley                         {:mvn/version "1.4.0"}

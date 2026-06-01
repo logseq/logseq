@@ -1,7 +1,7 @@
 {:paths ["src" "test" "../../resources"]
  :deps
  {org.clojure/clojure                   {:mvn/version "1.12.4"}
-  io.factorhouse/hsx                    {:git/url "https://github.com/tiensonqin/hsx"
+  io.factorhouse/hsx                    {:git/url "https://github.com/logseq/hsx"
                                          :sha     "7a4756b5e4ed52bbd2d8a1d3facf32107492c1ea"}
 
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
