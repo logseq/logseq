@@ -19,10 +19,10 @@ function Calendar({
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      className={cn('ui__calendar w-[520px] max-w-full p-6', className)}
+      className={cn('ui__calendar w-[360px] max-w-full p-3', className)}
       classNames={{
         months: 'relative flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0',
-        month: 'w-full space-y-6',
+        month: 'w-full space-y-4',
         month_caption: 'flex justify-start pt-1 pr-24 relative items-center',
         caption_label: 'text-sm font-medium',
         dropdowns: 'flex items-center justify-start gap-3',
@@ -42,9 +42,9 @@ function Calendar({
         month_grid: 'w-full border-collapse space-y-2',
         weekdays: 'flex justify-between',
         weekday:
-          'text-muted-foreground rounded-md w-12 text-center font-normal text-[0.8rem]',
-        week: 'flex w-full mt-3 justify-between',
-        day: 'h-9 w-12 flex items-center justify-center text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md ' +
+          'text-muted-foreground rounded-md w-9 text-center font-normal text-[0.8rem]',
+        week: 'flex w-full mt-2 justify-between',
+        day: 'h-9 w-9 flex items-center justify-center text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md ' +
           '[&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-transparent ' +
           'first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md ' +
           'focus-within:relative focus-within:z-20',
@@ -54,8 +54,8 @@ function Calendar({
         ),
         range_end: 'day-range-end',
         selected:
-          'rounded-md bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground',
-        today: 'bg-accent text-accent-foreground',
+          '[&>button]:bg-primary [&>button]:text-primary-foreground [&>button:hover]:bg-primary [&>button:hover]:text-primary-foreground [&>button:focus]:bg-primary [&>button:focus]:text-primary-foreground',
+        today: '[&>button]:bg-accent [&>button]:text-accent-foreground',
         outside:
           'day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30',
         disabled: 'text-muted-foreground opacity-50',

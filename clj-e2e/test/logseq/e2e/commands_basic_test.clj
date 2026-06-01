@@ -39,6 +39,8 @@
          calendar: rect('calendar', ['.ui__calendar']),
          month: rect('month selector', ['.ui__calendar .rdp-dropdown_month button']),
          year: rect('year selector', ['.ui__calendar .rdp-dropdown_year input']),
+         selectedDay: rect('selected day', ['.ui__calendar [role=\"gridcell\"][aria-selected=\"true\"]']),
+         selectedDayButton: rect('selected day button', ['.ui__calendar [role=\"gridcell\"][aria-selected=\"true\"] button']),
          previous: rect('previous button', [
            '.ui__calendar .rdp-button_previous',
            '.ui__calendar button[aria-label*=\"Previous\"]',
@@ -226,10 +228,12 @@
     (b/new-block "scheduled layout test")
     (util/input-command "Scheduled")
     (w/wait-for ".ui__calendar")
-    (let [{:keys [calendar month year previous next]} (date-picker-metrics)
+    (let [{:keys [calendar month year selectedDay selectedDayButton previous next]} (date-picker-metrics)
           nav-height (:height previous)]
-      (is (<= (:width calendar) 600)
+      (is (<= (:width calendar) 420)
           "Calendar should not stretch to the repeat side panel width.")
+      (is (<= (abs (- (:width selectedDay) (:width selectedDayButton))) 1)
+          "Selected day background should be only as wide as the inner day button.")
       (is (<= (abs (- (:height month) nav-height)) 1)
           "Month selector should match the chevron button height.")
       (is (<= (abs (- (:height year) nav-height)) 1)
