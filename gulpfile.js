@@ -316,6 +316,19 @@ const common = {
       cb(err)
     }
   },
+
+  pruneDesktopPackageFiles () {
+    for (const entry of ['mobile', 'android', 'ios']) {
+      fs.rmSync(path.join(outputPath, entry), {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      })
+    }
+
+    return Promise.resolve()
+  },
 }
 
 exports.electron = () => {
@@ -351,6 +364,8 @@ exports.electronMaker = async () => {
 
   pkg.version = version
   fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2))
+
+  await common.pruneDesktopPackageFiles()
 
   if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
     cp.execSync('pnpm install --frozen-lockfile', {
