@@ -352,12 +352,19 @@
        journal-page
        (create-page-f journal {:redirect? false})))))
 
+(def ^:private selected-day-selector
+  "[aria-selected=true].rdp-day_button, [aria-selected=true] .rdp-day_button, .rdp-day_button[aria-selected=true], .rdp-day_button[tabindex='0']")
+
+(defn- calendar-default-month
+  [^js d]
+  (js/Date. (.getFullYear d) (.getMonth d) 1))
+
 (defn- focus-selected-day!
   [id remaining]
   (when (pos? remaining)
     (if-let [selected-day (some-> id
                                   (js/document.getElementById)
-                                  (.querySelector "[aria-selected=true] .rdp-day_button, .rdp-day_button[tabindex='0']"))]
+                                  (.querySelector selected-day-selector))]
       (.focus selected-day)
       (js/setTimeout #(focus-selected-day! id (dec remaining)) 16))))
 
@@ -382,9 +389,7 @@
                      d))
            *ident (hooks/use-memo #(atom (str "calendar-inner-" (js/Date.now))) [])
            initial-day value
-           initial-month (when value
-                           (let [d (tc/to-date-time value)]
-                             (js/Date. (t/last-day-of-the-month (t/date-time (t/year d) (t/month d))))))
+           initial-month (when value (calendar-default-month value))
            select-handler! (fn [^js d]
                              (when d
                                (p/let [journal-page (<resolve-journal-page-for-date d)]
