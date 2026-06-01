@@ -344,13 +344,6 @@ exports.electron = () => {
 }
 
 exports.electronMaker = async () => {
-  cp.execSync('pnpm cljs:release-electron', {
-    stdio: 'inherit',
-  })
-  cp.execSync('pnpm desktop:prepare-runtime-js', {
-    stdio: 'inherit',
-  })
-
   const pkgPath = path.join(outputPath, 'package.json')
   const pkg = require(pkgPath)
   const version = fs.readFileSync(
@@ -367,12 +360,10 @@ exports.electronMaker = async () => {
 
   await common.pruneDesktopPackageFiles()
 
-  if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
-    cp.execSync('pnpm install --frozen-lockfile', {
-      cwd: outputPath,
-      stdio: 'inherit',
-    })
-  }
+  cp.execSync('pnpm install --frozen-lockfile', {
+    cwd: outputPath,
+    stdio: 'inherit',
+  })
 
   cp.execSync('pnpm electron:make', {
     cwd: outputPath,
