@@ -474,7 +474,7 @@ function getPluginLSPRoot(effect?: boolean) {
 
 function getExternalLSPRoot(localRoot: string, effect?: boolean) {
   return safetyPathJoin(
-    effect ? URL_LSP_HOST_EXTERNAL : URL_LSP_EXTERNAL,
+    effect === false ? URL_LSP_EXTERNAL : URL_LSP_HOST_EXTERNAL,
     encodeURIComponent(localRoot)
   )
 }
