@@ -15,8 +15,8 @@
                   :language {:id :clojure
                              :names #{"clojure" "clj"}
                              :source :nextjournal
-                             :package "@nextjournal/lang-clojure"
-                             :entry :clojure}
+                             :package "@nextjournal/lezer-clojure"
+                             :entry :parser}
                   :register-extension! noop
                   :register-language! noop
                   :get-language (constantly nil)})

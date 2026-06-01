@@ -12,8 +12,8 @@
     :names #{"clj" "cljc" "cljs" "clojure" "clojurescript" "edn"}
     :extensions #{"clj" "cljc" "cljs" "edn"}
     :source :nextjournal
-    :package "@nextjournal/lang-clojure"
-    :entry :clojure}
+    :package "@nextjournal/lezer-clojure"
+    :entry :parser}
    {:id :javascript
     :names #{"javascript" "js"}
     :extensions #{"cjs" "js" "mjs"}

@@ -113,7 +113,9 @@
      (defn- electron*?
        []
        (when (and js/window (gobj/get js/window "navigator"))
-         (gstring/caseInsensitiveContains js/navigator.userAgent " electron")))
+         (and
+          (gstring/caseInsensitiveContains js/navigator.userAgent " electron")
+          (some? (gobj/get js/window "apis")))))
      (def electron? (memoize electron*?))))
 
 #?(:cljs

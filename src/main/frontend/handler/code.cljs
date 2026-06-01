@@ -26,6 +26,16 @@
           (fs/write-file! path content))
         (js/console.error "Saving relative file ignored" path content)))))
 
+(defn fenced-code-content
+  [content {:keys [start_pos end_pos]} value]
+  (let [offset 2
+        raw-content (utf8/encode content) ;; NOTE: :pos_meta is based on byte position
+        prefix (utf8/decode (.slice raw-content 0 (- start_pos offset)))
+        surfix (utf8/decode (.slice raw-content (- end_pos offset)))]
+    (if (string/blank? value)
+      (str prefix surfix)
+      (str prefix value "\n" surfix))))
+
 (defn save-code-editor!
   []
   (let [{:keys [config state editor]} (get @state/state :editor/code-block-context)]
@@ -41,17 +51,13 @@
             (editor-handler/save-block-if-changed! block value)
 
             ;; save block content
-            (:block/uuid config)
-            (let [block (db/entity [:block/uuid (:block/uuid config)])
-                  content (:block/raw-title block)
-                  {:keys [start_pos end_pos]} (:pos_meta @(:code-options state))
-                  offset 2
-                  raw-content (utf8/encode content) ;; NOTE: :pos_meta is based on byte position
-                  prefix (utf8/decode (.slice raw-content 0 (- start_pos offset)))
-                  surfix (utf8/decode (.slice raw-content (- end_pos offset)))
-                  new-content (if (string/blank? value)
-                                (str prefix surfix)
-                                (str prefix value "\n" surfix))]
+            (:block/uuid block)
+            (let [block (db/entity [:block/uuid (:block/uuid block)])
+                  content (or (:block/raw-title block)
+                              (:block/title block))
+                  new-content (fenced-code-content content
+                                                   (:pos_meta @(:code-options state))
+                                                   value)]
               (state/set-edit-content! (state/get-edit-input-id) new-content)
               (editor-handler/save-block-if-changed! block new-content))
 

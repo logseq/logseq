@@ -4655,28 +4655,26 @@
   (let [block (or (:code-block config) (:block config))
         container-id (:container-id config)
         *mode-ref (hooks/use-ref nil)
-        *actions-ref (hooks/use-ref nil)]
+        raw-language (:language options)
+        normalized-language (if (contains? #{"edn" "clj" "cljc" "cljs" "clojurescript"} raw-language)
+                              "clojure"
+                              raw-language)]
 
     (when options
       (let [html-export? (:html-export? config)
-            {:keys [lines language]} options
-            attr (when language
-                   {:data-lang language})
+            {:keys [lines]} options
+            attr (when raw-language
+                   {:data-lang raw-language})
             code (if lines (apply str lines) (:block/title block))]
         (cond
           html-export?
           (highlight/html-export attr code)
 
           :else
-          (let [language (if (contains? #{"edn" "clj" "cljc" "cljs" "clojurescript"} language) "clojure" language)]
-            [:div.ui-fenced-code-editor.flex.w-full
-             {:on-mouse-over #(dom/add-class! (hooks/deref *actions-ref) "!opacity-100")
-              :on-mouse-leave (fn [e]
-                                (when (dom/has-class? (.-target e) "code-editor")
-                                  (dom/remove-class! (hooks/deref *actions-ref) "!opacity-100")))}
+          (let [language normalized-language]
+            [:div.ui-fenced-code-editor.w-full
              [:div.ls-code-editor-wrap
               [:div.code-block-actions
-               {:ref *actions-ref}
                (shui/button
                 {:variant :text
                  :size :sm
@@ -4686,11 +4684,13 @@
                  :blockid (str (:block/uuid block))
                  :on-click (fn [^js e]
                              (util/stop-propagation e)
-                             (let [target (.-target e)]
+                             (let [target (.-currentTarget e)
+                                   editor-root (some-> (.-currentTarget e)
+                                                       (.closest ".ui-fenced-code-editor"))]
                                (shui/popup-show! target
                                                  #(src-lang-picker block
                                                                    (fn [lang ^js _e]
-                                                                     (when-let [editor (util/get-code-editor-context (util/rec-get-node target "ls-block"))]
+                                                                     (when-let [editor (util/get-code-editor-context editor-root)]
                                                                        (code-editor/set-language! editor lang)
                                                                        (db/transact! [(ldb/kv :logseq.kv/latest-code-lang lang)])
                                                                        (db-property-handler/set-block-property!
@@ -4703,7 +4703,9 @@
                  :size :sm
                  :on-click (fn [^js e]
                              (util/stop-propagation e)
-                             (let [editor (util/get-code-editor-context (util/rec-get-node (.-target e) "ls-block"))
+                             (let [editor-root (some-> (.-currentTarget e)
+                                                       (.closest ".ui-fenced-code-editor"))
+                                   editor (util/get-code-editor-context editor-root)
                                    value (if editor (code-editor/get-value editor) code)]
                                (util/copy-to-clipboard! value)
                                (notification/show! (t :notification/copied) :success)))}

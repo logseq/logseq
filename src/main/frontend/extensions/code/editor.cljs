@@ -14,8 +14,6 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(def editor-root-ref-name "code-editor-root")
-
 (defn- extra-codemirror-options []
   (get (state/get-config)
        :editor/extra-codemirror-options {}))
@@ -61,12 +59,31 @@
   [context config state edit-block code-block *update-cursor!]
   (let [^js view (:view context)
         ^js editor-dom (.-dom view)
+        ^js editor-root (or (.closest editor-dom ".ui-fenced-code-editor")
+                            editor-dom)
+        ^js owner-document (.-ownerDocument editor-dom)
         *esc-pressed? (volatile! false)
         *cursor-prev (volatile! nil)
         *cursor-curr (volatile! nil)
-        update-cursor! #(update-cursor-state! context *cursor-prev *cursor-curr)]
+        update-cursor! #(update-cursor-state! context *cursor-prev *cursor-curr)
+        current-context? #(identical? context (:editor (:editor/code-block-context @state/state)))
+        leave-editor! (fn [esc?]
+                        (when (current-context?)
+                          (when (or (= :file (state/get-current-route))
+                                    (not esc?))
+                            (code-handler/save-code-editor!))
+                          (state/set-block-component-editing-mode! false)
+                          (state/set-state! :editor/code-block-context nil)
+                          (when (and (not esc?)
+                                     (= (:db/id (state/get-edit-block))
+                                        (:db/id edit-block)))
+                            (state/clear-edit!))
+                          (some-> (.-contentDOM view) .blur)
+                          (vreset! *cursor-curr nil)
+                          (vreset! *cursor-prev nil)
+                          (vreset! *esc-pressed? false)))]
     (reset! *update-cursor! update-cursor!)
-    (.addEventListener editor-dom "focus"
+    (.addEventListener editor-dom "focusin"
                        (fn [_e]
                          (when (and
                                 (:block/uuid (state/get-edit-block))
@@ -79,22 +96,12 @@
                                             :config config
                                             :state state})
                          (update-cursor!)))
-    (.addEventListener editor-dom "blur"
+    (.addEventListener editor-dom "focusout"
                        (fn [e]
-                         (when e (util/stop e))
-                         (let [esc? @*esc-pressed?]
-                           (when (or (= :file (state/get-current-route))
-                                     (not esc?))
-                             (code-handler/save-code-editor!))
-                           (state/set-block-component-editing-mode! false)
-                           (state/set-state! :editor/code-block-context nil)
-                           (when (and (not esc?)
-                                      (= (:db/id (state/get-edit-block))
-                                         (:db/id edit-block)))
-                             (state/clear-edit!))
-                           (vreset! *cursor-curr nil)
-                           (vreset! *cursor-prev nil)
-                           (vreset! *esc-pressed? false))))
+                         (let [related-target (some-> e .-relatedTarget)]
+                           (when-not (and related-target
+                                          (.contains editor-root related-target))
+                             (leave-editor! @*esc-pressed?)))))
     (.addEventListener editor-dom "keydown"
                        (fn [e]
                          (let [key-code (.-code e)
@@ -147,6 +154,14 @@
     (.addEventListener editor-dom "touchstart"
                        (fn [e]
                          (.stopPropagation e)))
+    (let [on-document-pointerdown (fn [e]
+                                    (let [target (.-target e)]
+                                      (when-not (and target
+                                                     (.contains editor-root target))
+                                        (leave-editor! @*esc-pressed?))))]
+      (.addEventListener owner-document "pointerdown" on-document-pointerdown true)
+      (swap! (:*state context) update :dispose-fns conj
+             #(.removeEventListener owner-document "pointerdown" on-document-pointerdown true)))
     context))
 
 (defn render!
@@ -212,7 +227,7 @@
                      (code-editor/destroy! context))
                    state)}
   [state _config id attr _code _theme _options]
-  [:div.extensions__code.flex.flex-1
+  [:div.extensions__code
    (cond-> {}
      (= (:data-lang attr) "calc")
      (assoc :data-lang "calc"))
@@ -220,10 +235,9 @@
      (when-not (= mode "calc")
        [:div.extensions__code-lang
         (string/lower-case mode)]))
-   [:div.code-editor.flex.flex-1.flex-row.w-full
-    [:div (merge {:id id
-                  :ref editor-root-ref-name
-                  :class "logseq-code-editor flex-1 w-full"
+    [:div.code-editor
+     [:div (merge {:id id
+                  :class "logseq-code-editor"
                   :data-logseq-code-editor-root "true"}
                  (select-keys (or attr {}) [:data-lang]))]
     (when (= (:data-lang attr) "calc")

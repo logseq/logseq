@@ -18,8 +18,8 @@
   (testing "Logseq-specific Clojure-family blocks are first-class"
     (is (= {:id :clojure
             :source :nextjournal
-            :package "@nextjournal/lang-clojure"
-            :entry :clojure}
+            :package "@nextjournal/lezer-clojure"
+            :entry :parser}
            (select-keys (registry/language-by-name "clojure")
                         [:id :source :package :entry])))
     (is (= :clojure (:id (registry/language-by-name "edn"))))
