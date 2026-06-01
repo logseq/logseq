@@ -19,7 +19,7 @@ function Calendar({
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      className={cn('ui__calendar w-[360px] max-w-full p-3', className)}
+      className={cn('ui__calendar p-3', className)}
       classNames={{
         months: 'relative flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0',
         month: 'w-full space-y-4',
@@ -30,7 +30,7 @@ function Calendar({
         years_dropdown: 'rdp-dropdown_year',
         dropdown_root: 'relative',
         dropdown: 'absolute inset-0 z-[2] opacity-0 cursor-pointer',
-        nav: 'absolute right-0 top-1 flex items-center gap-2',
+        nav: 'absolute right-0 top-1 z-10 flex items-center gap-2',
         button_previous: cn(
           buttonVariants({ variant: 'outline' }),
           'h-8 w-8 bg-transparent p-0 opacity-80 hover:opacity-100'
@@ -39,7 +39,7 @@ function Calendar({
           buttonVariants({ variant: 'outline' }),
           'h-8 w-8 bg-transparent p-0 opacity-80 hover:opacity-100'
         ),
-        month_grid: 'w-full border-collapse space-y-2',
+        month_grid: 'w-full border-collapse space-y-1',
         weekdays: 'flex justify-between',
         weekday:
           'text-muted-foreground rounded-md w-9 text-center font-normal text-[0.8rem]',

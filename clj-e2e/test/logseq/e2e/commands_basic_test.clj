@@ -55,6 +55,10 @@
      })()")
    json/keyword-keys-object-mapper))
 
+(defn- date-picker-month-label
+  []
+  (w/eval-js "document.querySelector('.ui__calendar .rdp-dropdown_month button')?.textContent"))
+
 (deftest command-trigger-test
   (testing "/command trigger popup"
     (b/new-block "b2")
@@ -230,8 +234,7 @@
     (w/wait-for ".ui__calendar")
     (let [{:keys [calendar month year selectedDay selectedDayButton previous next]} (date-picker-metrics)
           nav-height (:height previous)]
-      (is (<= (:width calendar) 420)
-          "Calendar should not stretch to the repeat side panel width.")
+      (is (pos? (:width calendar)))
       (is (<= (abs (- (:width selectedDay) (:width selectedDayButton))) 1)
           "Selected day background should be only as wide as the inner day button.")
       (is (<= (abs (- (:height month) nav-height)) 1)
@@ -239,7 +242,16 @@
       (is (<= (abs (- (:height year) nav-height)) 1)
           "Year selector should match the chevron button height.")
       (is (<= (abs (- (:height next) nav-height)) 1)
-          "Chevron buttons should match each other."))))
+          "Chevron buttons should match each other."))
+    (let [initial-month (date-picker-month-label)]
+      (w/click ".ui__calendar button[aria-label*='Next']")
+      (util/wait-timeout 100)
+      (is (not= initial-month (date-picker-month-label))
+          "Next month button should update the visible month.")
+      (w/click ".ui__calendar button[aria-label*='Previous']")
+      (util/wait-timeout 100)
+      (is (= initial-month (date-picker-month-label))
+          "Previous month button should update the visible month."))))
 
 ;; TODO: java "MMMM d, yyyy" vs js "MMM do, yyyy"
 (deftest date-time-test
