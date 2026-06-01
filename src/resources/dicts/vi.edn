@@ -112,7 +112,7 @@
 
  :block.comments/add-comment "Thêm bình luận"
  :block.comments/add-comment-command-desc "Thêm bình luận vào khối này."
- :block.comments/collapsed-summary (fn [n author] (str n (if (= 1 n) " bình luận" " bình luận") " · mới nhất từ " author))
+ :block.comments/collapsed-summary "{1} bình luận · mới nhất từ {2}"
  :block.comments/date-at-time "{1} lúc {2}"
  :block.comments/label "Bình luận"
  :block.comments/on-those-blocks "Trên các khối đó"
@@ -463,7 +463,7 @@
  :editor/display-tag-inline-hint "để hiển thị thẻ này cùng dòng thay vì ở cuối nút này."
  :editor/expand-block-children "Mở rộng tất cả"
  :editor/heading "Tiêu đề {1}"
- :editor/moving-blocks-count (fn [n] (str "Đang di chuyển " n (if (> n 1) " khối" " khối")))
+ :editor/moving-blocks-count "Đang di chuyển {1} khối"
  :editor/new-page "Trang mới"
  :editor/new-tag "Thẻ mới"
  :editor/no-block-selected-warning "Không có khối nào được chọn, vui lòng chọn khối trước."
