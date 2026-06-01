@@ -8,7 +8,7 @@ const objectUrls = new Set()
 const keyedObjectUrls = new Map()
 
 const revokeObjectUrl = (url) => {
-  if (!url || typeof URL === 'undefined') return
+  if (!url || typeof URL === 'undefined' || typeof URL.revokeObjectURL !== 'function') return
   URL.revokeObjectURL(url)
   objectUrls.delete(url)
   for (const [key, value] of keyedObjectUrls.entries()) {
