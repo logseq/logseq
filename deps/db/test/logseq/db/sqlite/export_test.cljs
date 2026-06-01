@@ -16,6 +16,14 @@
             [logseq.db.test.helper :as db-test]
             [medley.core :as medley]))
 
+;; When LOGSEQ_EXPORT_HUMAN=1 is set, all generic :graph export tests run against the
+;; human-readable :graph-human export-type instead. Datom-specific tests still
+;; reference :graph directly since :graph-human does not produce a datom format.
+(def ^:private graph-export-type
+  (if (= "1" (some-> js/process .-env .-LOGSEQ_EXPORT_HUMAN))
+    :graph-human
+    :graph))
+
 ;; Test helpers
 ;; ============
 (defn- validate-db
@@ -91,12 +99,12 @@
    This is similar to create-conn-with-import-map but works with existing conn"
   [export-conn import-conn export-options]
   (let [{:keys [init-tx block-props-tx misc-tx] :as _txs}
-        (-> (sqlite-export/build-export @export-conn {:export-type :graph :graph-options export-options})
+        (-> (sqlite-export/build-export @export-conn {:export-type graph-export-type :graph-options export-options})
             (sqlite-export/build-import @import-conn {}))
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! import-conn (concat init-tx block-props-tx misc-tx))
         _ (validate-db @import-conn)
-        imported-graph (sqlite-export/build-export @import-conn {:export-type :graph :graph-options export-options})]
+        imported-graph (sqlite-export/build-export @import-conn {:export-type graph-export-type :graph-options export-options})]
     imported-graph))
 
 (defn- expand-properties
@@ -998,7 +1006,7 @@
         conn (db-test/create-conn-with-import-map original-data)
         ;; set to an unobtainable version to test this ident
         _ (d/transact! conn [{:db/ident :logseq.kv/schema-version :kv/value {:major 1 :minor 0}}])
-        export-map (sqlite-export/build-export @conn {:export-type :graph})
+        export-map (sqlite-export/build-export @conn {:export-type graph-export-type})
         conn2 (db-test/create-conn)
         imported-graph (export-graph-and-import-to-another-graph conn conn2 {})]
 
@@ -1007,9 +1015,11 @@
         "No diff between original datom export and export after importing into a new graph")
     (is (= 1 (count (d/datoms @conn2 :avet :block/title "page object")))
         "No duplicate pages for pvalue uuids used more than once")
-    (is (= (:kv/value (d/entity @conn :logseq.kv/schema-version))
-           (:kv/value (d/entity @conn2 :logseq.kv/schema-version)))
-        "Raw datom import preserves kv values exactly")))
+    ;; :graph-human intentionally strips :logseq.kv/schema-version from exports so the frontend can set it
+    (when (= :graph graph-export-type)
+      (is (= (:kv/value (d/entity @conn :logseq.kv/schema-version))
+             (:kv/value (d/entity @conn2 :logseq.kv/schema-version)))
+          "Raw datom import preserves kv values exactly"))))
 
 (deftest ^:long import-graph-with-timestamps
   (let [original-data* (build-original-graph-data)
@@ -1029,7 +1039,8 @@
                                              (merge % {:file/created-at now :file/last-modified-at now}))
                                           files))))
         conn (db-test/create-conn-with-import-map original-data)
-        export-map (sqlite-export/build-export @conn {:export-type :graph})
+        export-map (sqlite-export/build-export @conn {:export-type graph-export-type
+                                                      :graph-options {:include-timestamps? true}})
         conn2 (db-test/create-conn)
         imported-graph (export-graph-and-import-to-another-graph conn conn2 {:include-timestamps? true})]
 
@@ -1040,22 +1051,29 @@
 (deftest ^:long import-graph-with-exclude-namespaces
   (let [original-data (build-original-graph-data {:exclude-namespaces? true})
         conn (db-test/create-conn-with-import-map original-data)
-        export-map (sqlite-export/build-export @conn {:export-type :graph})
-        conn2 (db-test/create-conn)
+        export-map (sqlite-export/build-export @conn {:export-type graph-export-type
+                                                      :graph-options {:exclude-namespaces #{:user}}})
+        ;; :graph-human drops the excluded namespace from the export, so the import target
+        ;; must already define the user-namespace ontology that the pages-and-blocks reference
+        conn2 (if (= :graph-human graph-export-type)
+                (db-test/create-conn-with-blocks
+                 {:properties (update-vals (:properties original-data) #(dissoc % :build/properties))
+                  :classes (update-vals (:classes original-data) #(dissoc % :build/properties))})
+                (db-test/create-conn))
         imported-graph (export-graph-and-import-to-another-graph conn conn2 {:exclude-namespaces #{:user}})]
 
     (is (= nil
            (sqlite-export/diff-exports export-map imported-graph))
-        "Graph datom export ignores legacy graph-shaping options and roundtrips exactly")))
+        "Graph export with :exclude-namespaces roundtrips exactly")))
 
 (deftest ^:long graph-is-idempotent-across-import-and-export
   (let [original-data (build-original-graph-data)
         conn (db-test/create-conn-with-import-map original-data)
-        export-map (sqlite-export/build-export @conn {:export-type :graph})
+        export-map (sqlite-export/build-export @conn {:export-type graph-export-type})
         valid-result (sqlite-export/validate-export export-map)
         _ (assert (not (:error valid-result)) "No error when importing export-map into new graph")
         _ (validate-db (:db valid-result))
-        export-map2 (sqlite-export/build-export (:db valid-result) {:export-type :graph})]
+        export-map2 (sqlite-export/build-export (:db valid-result) {:export-type graph-export-type})]
     ;; (cljs.pprint/pprint (sqlite-export/diff-exports export-map export-map2))
     (is (= nil
            (sqlite-export/diff-exports export-map export-map2))
@@ -1074,11 +1092,11 @@
                   :build/keep-uuid? true}
            :blocks []}]}
         conn (db-test/create-conn-with-import-map original-data)
-        export-map (sqlite-export/build-export @conn {:export-type :graph})
+        export-map (sqlite-export/build-export @conn {:export-type graph-export-type})
         valid-result (sqlite-export/validate-export export-map)
         _ (assert (not (:error valid-result)) "No error when importing export-map into new graph")
         _ (validate-db (:db valid-result))
-        export-map2 (sqlite-export/build-export (:db valid-result) {:export-type :graph})]
+        export-map2 (sqlite-export/build-export (:db valid-result) {:export-type graph-export-type})]
     (is (some? (:block/alias (d/entity @conn :user.property/referrerURL)))
         "Property's :block/alias is preserved after import")
     (is (some? (:block/alias (d/entity (:db valid-result) :user.property/referrerURL)))
@@ -1137,11 +1155,11 @@
           :logseq.property.history/property :logseq.property/status
           :logseq.property.history/ref-value :logseq.property/status.doing}]
         _ (d/transact! conn original-property-history)
-        export-map (sqlite-export/build-export @conn {:export-type :graph})
+        export-map (sqlite-export/build-export @conn {:export-type graph-export-type})
         valid-result (sqlite-export/validate-export export-map)
         _ (assert (not (:error valid-result)) "No error when importing export-map into new graph")
         _ (validate-db (:db valid-result))
-        export-map2 (sqlite-export/build-export (:db valid-result) {:export-type :graph})]
+        export-map2 (sqlite-export/build-export (:db valid-result) {:export-type graph-export-type})]
     (is (= nil
            (sqlite-export/diff-exports export-map export-map2))
         "No diff between original export and export after importing into a new graph")
@@ -1161,10 +1179,10 @@
         ;; Simulate a UI-built graph where the user positioned :logseq.property/status
         ;; ahead of the user-defined properties referenced from the same classes.
         _ (d/transact! conn [{:db/ident :logseq.property/status :block/order "a0"}])
-        export-map (sqlite-export/build-export @conn {:export-type :graph})
+        export-map (sqlite-export/build-export @conn {:export-type graph-export-type})
         valid-result (sqlite-export/validate-export export-map)
         _ (assert (not (:error valid-result)) "No error when importing export-map into new graph")
-        export-map2 (sqlite-export/build-export (:db valid-result) {:export-type :graph})]
+        export-map2 (sqlite-export/build-export (:db valid-result) {:export-type graph-export-type})]
     (is (= nil
            (sqlite-export/diff-exports export-map export-map2))
         "No diff between original export and export after importing into a new graph")))
@@ -1179,10 +1197,10 @@
                         {:file/path "logseq/custom.js" :file/content "// hi"}
                         {:file/path "logseq/config.edn" :file/content "{:foo :bar}"}]]
             (d/transact! conn [file]))
-        export-map (sqlite-export/build-export @conn {:export-type :graph})
+        export-map (sqlite-export/build-export @conn {:export-type graph-export-type})
         valid-result (sqlite-export/validate-export export-map)
         _ (assert (not (:error valid-result)) "No error when importing export-map into new graph")
-        export-map2 (sqlite-export/build-export (:db valid-result) {:export-type :graph})]
+        export-map2 (sqlite-export/build-export (:db valid-result) {:export-type graph-export-type})]
     (is (= nil
            (sqlite-export/diff-exports export-map export-map2))
         "No diff between original export and export after importing into a new graph")))
@@ -1230,7 +1248,8 @@
                       :logseq.property/view-for
                       [:block/uuid pvalue-uuid1]}}]}]}
         conn (db-test/create-conn-with-blocks (assoc original-data :build-existing-tx? true))
-        export-map (sqlite-export/build-export @conn {:export-type :graph})
+        export-map (sqlite-export/build-export @conn {:export-type graph-export-type
+                                                      :graph-options {:exclude-built-in-pages? true}})
         conn2 (db-test/create-conn)
         imported-graph (export-graph-and-import-to-another-graph conn conn2 {:exclude-built-in-pages? true})]
 
@@ -1343,7 +1362,8 @@
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
         imported-graph (export-graph-and-import-to-another-graph conn conn2 {:exclude-built-in-pages? true})
-        export-map (sqlite-export/build-export @conn {:export-type :graph})
+        export-map (sqlite-export/build-export @conn {:export-type graph-export-type
+                                                      :graph-options {:exclude-built-in-pages? true}})
         annotation-block (db-test/find-block-by-content @conn2 "annotation block")
         annotation-image (db-test/find-block-by-content @conn2 "annotation with image")]
     (is (= nil
