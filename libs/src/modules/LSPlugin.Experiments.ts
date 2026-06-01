@@ -39,6 +39,56 @@ export type BlockRendererPredicate = (
   props: BlockRendererProps
 ) => boolean
 
+export type CodeMirror6LanguageSource =
+  | 'native'
+  | 'nextjournal'
+  | 'legacy'
+  | 'plain-text'
+
+export type CodeMirror6PluginCapability =
+  | 'code-editor/cm6'
+  | 'code-editor/extensions'
+  | 'code-editor/language-registry'
+
+export type CodeMirror6LanguageDescriptor = {
+  id: string
+  names: Array<string>
+  source: CodeMirror6LanguageSource
+  extensions?: Array<string>
+  package?: string
+  entry?: string
+  options?: Record<string, any>
+}
+
+export type CodeMirror6ExtensionFactoryContext = {
+  apiVersion: 1
+  blockUuid?: string
+  editorId?: string
+  view?: unknown
+  state?: unknown
+  language?: CodeMirror6LanguageDescriptor
+  dispatch?: (transactionSpec: unknown) => void
+}
+
+export type CodeMirror6ExtensionFactory = (
+  context: CodeMirror6ExtensionFactoryContext
+) => unknown
+
+export type CodeMirror6ExtensionValue =
+  | CodeMirror6ExtensionFactory
+  | ReadonlyArray<unknown>
+  | object
+  | null
+  | undefined
+
+export type CodeMirror6EnhancerAPI = CodeMirror6ExtensionFactoryContext & {
+  enhancerType: 'codemirror-6'
+  capabilities: Array<CodeMirror6PluginCapability>
+  registerExtension: (key: string, extension: CodeMirror6ExtensionValue) => void
+  registerLanguage: (descriptor: CodeMirror6LanguageDescriptor) => void
+  getLanguage: (languageName: string) => CodeMirror6LanguageDescriptor | null
+}
+
 /**
  * WARN: These are some experience features and might be adjusted at any time.
  * These unofficial plugins that use these APIs are temporarily
@@ -248,8 +298,18 @@ export class LSPluginExperiments {
     )
   }
 
+  registerExtensionsEnhancer(
+    type: 'codemirror-6',
+    enhancer: (v: CodeMirror6EnhancerAPI) => Promise<any>
+  ): any
+
   registerExtensionsEnhancer<T = any>(
     type: 'katex' | 'codemirror',
+    enhancer: (v: T) => Promise<any>
+  ): any
+
+  registerExtensionsEnhancer<T = any>(
+    type: 'katex' | 'codemirror' | 'codemirror-6',
     enhancer: (v: T) => Promise<any>
   ) {
     const host = this.ensureHostScope()

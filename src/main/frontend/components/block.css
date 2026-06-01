@@ -1747,24 +1747,97 @@ html.is-mac {
   }
 }
 
+.block-content-or-editor-wrap:has(.ui-fenced-code-editor),
+.block-content-or-editor-inner:has(.ui-fenced-code-editor),
+.block-row:has(.ui-fenced-code-editor),
+.block-content-wrapper:has(.ui-fenced-code-editor),
+.block-content.inline:has(.ui-fenced-code-editor),
+.block-content-inner:has(.ui-fenced-code-editor),
+.block-head-wrap:has(.ui-fenced-code-editor) {
+  min-width: 0;
+}
+
+.block-main-container:has(.ui-fenced-code-editor) > .flex.flex-col.w-full {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+.block-main-container:has(.ui-fenced-code-editor) .flex.flex-col.w-full,
+.block-main-content:has(.ui-fenced-code-editor) {
+  min-width: 0;
+}
+
+.block-content.inline:has(.ui-fenced-code-editor),
+.block-content-inner:has(.ui-fenced-code-editor),
+.block-head-wrap:has(.ui-fenced-code-editor) {
+  width: 100%;
+  max-width: 100%;
+}
+
 .ls-code-editor-wrap {
   @apply relative w-full overflow-hidden rounded;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  --logseq-code-actions-gap: 6px;
+  --logseq-code-scrollbar-space: 0px;
+  --logseq-code-actions-right: calc(var(--logseq-code-actions-gap) + var(--logseq-code-scrollbar-space));
+  --logseq-code-actions-reserved-right: var(--logseq-code-actions-right);
 
   .extensions__code-lang {
     @apply hidden;
   }
 
   > .code-block-actions {
-    @apply flex flex-row gap-1 opacity-0 transition-opacity ease-in duration-300 absolute right-1 top-1 select-none z-[1] text-xs bg-gray-01;
+    @apply flex flex-row items-center gap-1 opacity-0 transition-opacity ease-in absolute select-none z-[4] text-xs;
+    top: 6px;
+    right: var(--logseq-code-actions-right);
+    max-width: calc(100% - var(--logseq-code-actions-reserved-right) - var(--logseq-code-actions-gap));
+    min-height: 22px;
+    padding: 1px 3px;
+    pointer-events: none;
+    border: 1px solid color-mix(in srgb, var(--ls-border-color) 70%, transparent);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--ls-secondary-background-color) 94%, transparent);
+    box-shadow: 0 1px 2px color-mix(in srgb, #000 14%, transparent);
+    transition-duration: 120ms;
 
     button {
-      @apply !py-0 h-4 text-muted-foreground hover:text-foreground text-xs px-1;
+      @apply !py-0 h-5 text-muted-foreground hover:text-foreground text-xs px-1;
+      min-width: 20px;
+      flex: 0 0 auto;
+      white-space: nowrap;
     }
 
     svg {
       width: 14px;
       height: 14px;
+      flex: 0 0 auto;
     }
+
+    .select-language {
+      max-width: 9rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  &:hover,
+  &:has(> .code-block-actions .select-language[data-popup-active]) {
+    > .code-block-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  &:has(.logseq-code-editor-has-vertical-scroll) {
+    --logseq-code-scrollbar-space: 14px;
+  }
+
+  &:has(.extensions__code[data-lang="calc"]) {
+    --logseq-code-calc-result-gap: 0.5rem;
+    --logseq-code-actions-right: calc(var(--logseq-code-actions-gap) + var(--logseq-code-scrollbar-space) + var(--logseq-code-calc-result-gap) + var(--logseq-code-calc-result-width, 0px));
   }
 }
 

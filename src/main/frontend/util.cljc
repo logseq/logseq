@@ -113,7 +113,9 @@
      (defn- electron*?
        []
        (when (and js/window (gobj/get js/window "navigator"))
-         (gstring/caseInsensitiveContains js/navigator.userAgent " electron")))
+         (and
+          (gstring/caseInsensitiveContains js/navigator.userAgent " electron")
+          (some? (gobj/get js/window "apis")))))
      (def electron? (memoize electron*?))))
 
 #?(:cljs
@@ -1362,10 +1364,19 @@
                 (walk/keywordize-keys)))))))
 
 #?(:cljs
-   (defn get-cm-instance
+   (defn get-code-editor-context
      [^js target]
      (when target
-       (some-> target (.querySelector ".CodeMirror") (.-CodeMirror)))))
+       (or (gobj/get target "__logseqCodeEditorContext")
+           (some-> target
+                   (.closest "[data-logseq-code-editor-root]")
+                   (gobj/get "__logseqCodeEditorContext"))
+           (some-> target
+                   (.querySelector "[data-logseq-code-editor-root]")
+                   (gobj/get "__logseqCodeEditorContext"))
+           (some-> target
+                   (.querySelector ".cm-editor")
+                   (gobj/get "__logseqCodeEditorContext"))))))
 
 #?(:cljs
    (defn rtc-test?

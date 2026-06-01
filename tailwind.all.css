@@ -9,10 +9,6 @@
 @import "inter-ui/inter.css";
 @import "photoswipe/dist/photoswipe.css";
 @import "katex/dist/katex.min.css";
-@import "codemirror/lib/codemirror.css";
-@import "codemirror/theme/solarized.css";
-@import "codemirror/addon/hint/show-hint.css";
 @import "pdfjs-dist/web/pdf_viewer.css";
 @import "resources/css/tabler-extension.css";
-@import "resources/css/codemirror.lsradix.css";
 @import-glob "src/main/frontend/**/[!_]*.css";

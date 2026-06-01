@@ -17,6 +17,7 @@
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.search :as search-handler]
+            [frontend.extensions.code.language-registry :as language-registry]
             [frontend.mixins :as mixins]
             [frontend.search :refer [fuzzy-search]]
             [frontend.state :as state]
@@ -418,7 +419,11 @@
   {:init (fn [state]
            (assoc state ::pos (state/get-editor-last-pos)))}
   [state id format]
-  (when-let [modes (some->> js/window.CodeMirror (.-modes) (js/Object.keys) (js->clj) (remove #(= "null" %)))]
+  (when-let [modes (->> (language-registry/supported-languages)
+                        (mapcat :names)
+                        distinct
+                        sort
+                        seq)]
     (when-let [^js input (gdom/getElement id)]
       (let [pos          (::pos state)
             current-pos  (cursor/pos input)

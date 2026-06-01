@@ -7,6 +7,7 @@
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [interpolate-rich-text interpolate-rich-text-node t]]
+            [frontend.extensions.code :as code-editor]
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
@@ -1534,7 +1535,7 @@
 
   (let [[content1 set-content1!] (rum/use-state content)
         [editor-active? set-editor-active!] (rum/use-state (string/blank? content))
-        *cm (rum/use-ref nil)
+        *editor (rum/use-ref nil)
         *el (rum/use-ref nil)]
 
     (hooks/use-effect!
@@ -1549,26 +1550,27 @@
                (#(if editor-active?
                    (.add % "is-active")
                    (.remove % "is-active"))))
-       (when-let [cm (rum/deref *cm)]
-         (.refresh cm)
-         (.focus cm)
-         (.setCursor cm (.lineCount cm) (count (.getLine cm (.lastLine cm))))))
+       (when-let [editor (rum/deref *editor)]
+         (code-editor/focus! editor)
+         (let [last-line (code-editor/last-line editor)]
+           (code-editor/set-cursor! editor {:line last-line
+                                            :ch (count (code-editor/line-text editor last-line))}))))
      [editor-active?])
 
     (hooks/use-effect!
      (fn []
-       (let [t (js/setTimeout
-                #(when-let [^js cm (some-> (rum/deref *el)
+       (let [*dispose! (atom nil)
+             t (js/setTimeout
+                #(when-let [editor (some-> (rum/deref *el)
                                            (.closest ".ui-fenced-code-wrap")
-                                           (.querySelector ".CodeMirror")
-                                           (.-CodeMirror))]
-                   (rum/set-ref! *cm cm)
-                   (doto cm
-                     (.on "change" (fn []
-                                     (some-> cm (.getDoc) (.getValue) (set-content1!))))))
-                  ;; wait for the cm loaded
+                                           util/get-code-editor-context)]
+                   (rum/set-ref! *editor editor)
+                   (reset! *dispose! (code-editor/add-change-listener! editor set-content1!)))
                 1000)]
-         #(js/clearTimeout t)))
+         #(do
+            (js/clearTimeout t)
+            (when-let [dispose! @*dispose!]
+              (dispose!)))))
      [])
 
     [:div.ui-fenced-code-result

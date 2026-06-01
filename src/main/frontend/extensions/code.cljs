@@ -1,631 +1,603 @@
 (ns frontend.extensions.code
-  (:require ["codemirror" :as CodeMirror]
-            ["codemirror/addon/edit/closebrackets"]
-            ["codemirror/addon/edit/matchbrackets"]
-            ["codemirror/addon/hint/show-hint"]
-            ["codemirror/addon/selection/active-line"]
-            ["codemirror/mode/apl/apl"]
-            ["codemirror/mode/asciiarmor/asciiarmor"]
-            ["codemirror/mode/asn.1/asn.1"]
-            ["codemirror/mode/asterisk/asterisk"]
-            ["codemirror/mode/brainfuck/brainfuck"]
-            ["codemirror/mode/clike/clike"]
-            ["codemirror/mode/clojure/clojure"]
-            ["codemirror/mode/cmake/cmake"]
-            ["codemirror/mode/cobol/cobol"]
-            ["codemirror/mode/coffeescript/coffeescript"]
-            ["codemirror/mode/commonlisp/commonlisp"]
-            ["codemirror/mode/crystal/crystal"]
-            ["codemirror/mode/css/css"]
-            ["codemirror/mode/cypher/cypher"]
-            ["codemirror/mode/d/d"]
-            ["codemirror/mode/dart/dart"]
-            ["codemirror/mode/diff/diff"]
-            ["codemirror/mode/django/django"]
-            ["codemirror/mode/dockerfile/dockerfile"]
-            ["codemirror/mode/dtd/dtd"]
-            ["codemirror/mode/dylan/dylan"]
-            ["codemirror/mode/ebnf/ebnf"]
-            ["codemirror/mode/ecl/ecl"]
-            ["codemirror/mode/eiffel/eiffel"]
-            ["codemirror/mode/elm/elm"]
-            ["codemirror/mode/erlang/erlang"]
-            ["codemirror/mode/factor/factor"]
-            ["codemirror/mode/fcl/fcl"]
-            ["codemirror/mode/forth/forth"]
-            ["codemirror/mode/fortran/fortran"]
-            ["codemirror/mode/gas/gas"]
-            ["codemirror/mode/gfm/gfm"]
-            ["codemirror/mode/gherkin/gherkin"]
-            ["codemirror/mode/go/go"]
-            ["codemirror/mode/groovy/groovy"]
-            ["codemirror/mode/haml/haml"]
-            ["codemirror/mode/handlebars/handlebars"]
-            ["codemirror/mode/haskell-literate/haskell-literate"]
-            ["codemirror/mode/haskell/haskell"]
-            ["codemirror/mode/haxe/haxe"]
-            ["codemirror/mode/htmlembedded/htmlembedded"]
-            ["codemirror/mode/htmlmixed/htmlmixed"]
-            ["codemirror/mode/http/http"]
-            ["codemirror/mode/idl/idl"]
-            ["codemirror/mode/javascript/javascript"]
-            ["codemirror/mode/jinja2/jinja2"]
-            ["codemirror/mode/jsx/jsx"]
-            ["codemirror/mode/julia/julia"]
-            ["codemirror/mode/livescript/livescript"]
-            ["codemirror/mode/lua/lua"]
-            ["codemirror/mode/markdown/markdown"]
-            ["codemirror/mode/mathematica/mathematica"]
-            ["codemirror/mode/mbox/mbox"]
-            ["codemirror/mode/meta"]
-            ["codemirror/mode/mirc/mirc"]
-            ["codemirror/mode/mllike/mllike"]
-            ["codemirror/mode/modelica/modelica"]
-            ["codemirror/mode/mscgen/mscgen"]
-            ["codemirror/mode/mumps/mumps"]
-            ["codemirror/mode/nginx/nginx"]
-            ["codemirror/mode/nsis/nsis"]
-            ["codemirror/mode/ntriples/ntriples"]
-            ["codemirror/mode/octave/octave"]
-            ["codemirror/mode/oz/oz"]
-            ["codemirror/mode/pascal/pascal"]
-            ["codemirror/mode/pegjs/pegjs"]
-            ["codemirror/mode/perl/perl"]
-            ["codemirror/mode/php/php"]
-            ["codemirror/mode/pig/pig"]
-            ["codemirror/mode/powershell/powershell"]
-            ["codemirror/mode/properties/properties"]
-            ["codemirror/mode/protobuf/protobuf"]
-            ["codemirror/mode/pug/pug"]
-            ["codemirror/mode/puppet/puppet"]
-            ["codemirror/mode/python/python"]
-            ["codemirror/mode/q/q"]
-            ["codemirror/mode/r/r"]
-            ["codemirror/mode/rpm/rpm"]
-            ["codemirror/mode/rst/rst"]
-            ["codemirror/mode/ruby/ruby"]
-            ["codemirror/mode/rust/rust"]
-            ["codemirror/mode/sas/sas"]
-            ["codemirror/mode/sass/sass"]
-            ["codemirror/mode/scheme/scheme"]
-            ["codemirror/mode/shell/shell"]
-            ["codemirror/mode/sieve/sieve"]
-            ["codemirror/mode/slim/slim"]
-            ["codemirror/mode/smalltalk/smalltalk"]
-            ["codemirror/mode/smarty/smarty"]
-            ["codemirror/mode/solr/solr"]
-            ["codemirror/mode/soy/soy"]
-            ["codemirror/mode/sparql/sparql"]
-            ["codemirror/mode/spreadsheet/spreadsheet"]
-            ["codemirror/mode/sql/sql"]
-            ["codemirror/mode/stex/stex"]
-            ["codemirror/mode/stylus/stylus"]
-            ["codemirror/mode/swift/swift"]
-            ["codemirror/mode/tcl/tcl"]
-            ["codemirror/mode/textile/textile"]
-            ["codemirror/mode/tiddlywiki/tiddlywiki"]
-            ["codemirror/mode/tiki/tiki"]
-            ["codemirror/mode/toml/toml"]
-            ["codemirror/mode/tornado/tornado"]
-            ["codemirror/mode/troff/troff"]
-            ["codemirror/mode/ttcn-cfg/ttcn-cfg"]
-            ["codemirror/mode/ttcn/ttcn"]
-            ["codemirror/mode/turtle/turtle"]
-            ["codemirror/mode/twig/twig"]
-            ["codemirror/mode/vb/vb"]
-            ["codemirror/mode/vbscript/vbscript"]
-            ["codemirror/mode/velocity/velocity"]
-            ["codemirror/mode/verilog/verilog"]
-            ["codemirror/mode/vhdl/vhdl"]
-            ["codemirror/mode/vue/vue"]
-            ["codemirror/mode/wast/wast"]
-            ["codemirror/mode/webidl/webidl"]
-            ["codemirror/mode/xml/xml"]
-            ["codemirror/mode/xquery/xquery"]
-            ["codemirror/mode/yacas/yacas"]
-            ["codemirror/mode/yaml-frontmatter/yaml-frontmatter"]
-            ["codemirror/mode/yaml/yaml"]
-            ["codemirror/mode/z80/z80"]
-            [cljs-bean.core :as bean]
-            [clojure.string :as string]
-            [frontend.commands :as commands]
-            [frontend.config :as config]
-            [frontend.db :as db]
-            [frontend.extensions.calc :as calc]
-            [frontend.handler.code :as code-handler]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.schema.handler.common-config :refer [Config-edn]]
-            [frontend.state :as state]
-            [frontend.util :as util]
-            [goog.dom :as gdom]
+  (:require [clojure.string :as string]
+            ["@codemirror/autocomplete" :refer [closeBrackets closeBracketsKeymap completionKeymap]]
+            ["@codemirror/commands" :refer [defaultKeymap history historyKeymap indentWithTab]]
+            ["@codemirror/lang-css" :refer [css]]
+            ["@codemirror/lang-html" :refer [html]]
+            ["@codemirror/lang-javascript" :refer [javascript]]
+            ["@codemirror/lang-json" :refer [json]]
+            ["@codemirror/lang-markdown" :refer [markdown]]
+            ["@codemirror/lang-python" :refer [python]]
+            ["@codemirror/lang-sql" :refer [sql]]
+            ["@codemirror/language" :refer [HighlightStyle syntaxHighlighting StreamLanguage]]
+            ["@codemirror/legacy-modes/mode/shell" :refer [shell]]
+            ["@codemirror/legacy-modes/mode/yaml" :refer [yaml]]
+            ["@codemirror/lint" :refer [lintKeymap]]
+            ["@codemirror/search" :refer [highlightSelectionMatches searchKeymap]]
+            ["@codemirror/state" :refer [Compartment EditorState StateEffect]]
+            ["@codemirror/view" :refer [drawSelection dropCursor EditorView
+                                         highlightSpecialChars keymap lineNumbers]]
+            ["@lezer/highlight" :refer [tags]]
+            [frontend.extensions.code.api :as api]
+            [frontend.extensions.code.language.clojure :as clojure-language]
+            [frontend.extensions.code.language-registry :as language-registry]
             [goog.object :as gobj]
-            [malli.core :as m]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+            [lambdaisland.glogi :as log]))
 
-;; codemirror
+(def context-property "__logseqCodeEditorContext")
 
-(def from-textarea (gobj/get CodeMirror "fromTextArea"))
-(def Pos (gobj/get CodeMirror "Pos"))
+(defn- assert-parent!
+  [parent]
+  (when-not parent
+    (throw (ex-info "CodeMirror 6 parent element is required" {}))))
 
-(def textarea-ref-name "textarea")
-(def codemirror-ref-name "codemirror-instance")
+(defn- editor-doc
+  [^js view]
+  (.. view -state -doc))
 
-;; export CodeMirror to global scope
-(set! js/window -CodeMirror CodeMirror)
+(defn- doc-length
+  [^js view]
+  (.-length (editor-doc view)))
 
-(defn- all-tokens-by-cursor
-  "All tokens from the beginning of the document to the cursor(inclusive)."
-  [cm]
-  (let [cur (.getCursor cm)
-        line (.-line cur)
-        pos (.-ch cur)]
-    (concat (mapcat #(.getLineTokens cm %) (range line))
-            (filter #(<= (.-end %) pos) (.getLineTokens cm line)))))
+(defn- clamp-offset
+  [view offset]
+  (max 0 (min (or offset 0) (doc-length view))))
 
-(defn- tokens->doc-state
-  "Parse tokens into document state of the last token."
-  [tokens]
-  (let [init-state {:current-config-path []
-                    :state-stack (list :ok)}]
-    (loop [state init-state
-           tokens tokens]
-      (if (empty? tokens)
-        state
-        (let [token (first tokens)
-              token-type (.-type token)
-              token-string (.-string token)
-              current-state (first (:state-stack state))
-              next-state (cond
-                           (or (nil? token-type)
-                               (= token-type "comment")
-                               (= token-type "meta") ;; TODO: handle meta prefix
-                               (= current-state :error))
-                           state
+(defn- resolve-language!
+  [language-name]
+  (or (language-registry/language-by-name language-name)
+      (language-registry/language-by-extension language-name)
+      (throw (ex-info "Unsupported CodeMirror 6 language"
+                      {:language language-name}))))
 
-                           (= token-type "bracket")
-                           (cond
-                             ;; ignore map if it is inside a list or vector (query or function)
-                             (and (= "{" token-string)
-                                  (some #(contains? #{:list :vector} %)
-                                        (:state-stack state)))
-                             (assoc state :state-stack (conj (:state-stack state) :ignore-map))
-                             (= "{" token-string)
-                             (assoc state :state-stack (conj (:state-stack state) :map))
-                             (= "(" token-string)
-                             (assoc state :state-stack (conj (:state-stack state) :list))
-                             (= "[" token-string)
-                             (assoc state :state-stack (conj (:state-stack state) :vector))
+(defn- normalize-language-lookup
+  [language-name]
+  (some-> language-name str string/lower-case string/trim))
 
-                             (and (= :ignore-map current-state)
-                                  (contains? #{"}" ")" "]"} token-string))
-                             (assoc state :state-stack (pop (:state-stack state)))
+(defn- plugin-language-by-name
+  [context language-name]
+  (let [lookup-key (normalize-language-lookup language-name)]
+    (some
+     (fn [descriptor]
+       (when (or (= lookup-key (api/external-name (:id descriptor)))
+                 (contains? (:names descriptor) lookup-key))
+         descriptor))
+     (vals (:plugin-languages @(:*state context))))))
 
-                             (or (and (= "}" token-string) (= :map current-state))
-                                 (and (= ")" token-string) (= :list current-state))
-                                 (and (= "]" token-string) (= :vector current-state)))
-                             (let [new-state-stack (pop (:state-stack state))]
-                               (if (= (first new-state-stack) :key)
-                                 (assoc state
-                                        :state-stack (pop new-state-stack)
-                                        :current-config-path (pop (:current-config-path state)))
-                                 (assoc state :state-stack (pop (:state-stack state)))))
+(defn- language-by-name
+  [context language-name]
+  (or (plugin-language-by-name context language-name)
+      (language-registry/language-by-name language-name)))
 
-                             :else
-                             (assoc state :state-stack (conj (:state-stack state) :error)))
+(defn- js-array->seq
+  [value]
+  (if value
+    (array-seq value)
+    []))
 
-                           (and (= current-state :map) (= token-type "atom"))
-                           (assoc state
-                                  :state-stack (conj (:state-stack state) :key)
-                                  :current-config-path (conj (:current-config-path state) token-string))
+(defn- update-scroll-state!
+  [^js view]
+  (when-let [^js scroller (.querySelector (.-dom view) ".cm-scroller")]
+    (let [^js editor-dom (.-dom view)
+          ^js editor-host (or (.closest editor-dom ".logseq-code-editor")
+                              editor-dom)
+          has-vertical-scroll? (> (.-scrollHeight scroller) (inc (.-clientHeight scroller)))
+          has-horizontal-scroll? (> (.-scrollWidth scroller) (inc (.-clientWidth scroller)))]
+      (.toggle (.-classList editor-dom) "logseq-code-editor-has-vertical-scroll" has-vertical-scroll?)
+      (.toggle (.-classList editor-dom) "logseq-code-editor-has-horizontal-scroll" has-horizontal-scroll?)
+      (.toggle (.-classList editor-host) "logseq-code-editor-has-vertical-scroll" has-vertical-scroll?)
+      (.toggle (.-classList editor-host) "logseq-code-editor-has-horizontal-scroll" has-horizontal-scroll?))))
 
-                           (= current-state :key)
-                           (assoc state
-                                  :state-stack (pop (:state-stack state))
-                                  :current-config-path (pop (:current-config-path state)))
+(defn- schedule-scroll-state!
+  [^js view]
+  (js/requestAnimationFrame #(update-scroll-state! view)))
 
-                           (or (= current-state :list) (= current-state :vector) (= current-state :ignore-map))
-                           state
+(defn- keymap-extension
+  []
+  (.of keymap
+       (to-array
+        (concat
+         (js-array->seq defaultKeymap)
+         (js-array->seq historyKeymap)
+         (js-array->seq closeBracketsKeymap)
+         (js-array->seq completionKeymap)
+         (js-array->seq searchKeymap)
+         (js-array->seq lintKeymap)
+         [indentWithTab]))))
 
-                           :else
-                           (assoc state :state-stack (conj (:state-stack state) :error)))]
-          (recur next-state (rest tokens)))))))
+(def code-editor-theme
+  (.theme EditorView
+          (clj->js
+           {"&" {"backgroundColor" "var(--ls-secondary-background-color)"
+                 "color" "var(--ls-primary-text-color)"
+                 "border" "0"
+                 "borderRadius" "4px"
+                 "boxShadow" "none"}
+            ".cm-scroller" {"scrollbarGutter" "stable"
+                            "overscrollBehavior" "contain"}
+            ".cm-content" {"caretColor" "var(--ls-primary-text-color)"
+                           "padding" "6px 0"
+                           "minWidth" "max-content"}
+            ".cm-line" {"padding" "0 var(--logseq-code-editor-line-padding-right, 8.5rem) 0 12px"}
+            ".cm-gutters" {"backgroundColor" "var(--ls-secondary-background-color)"
+                           "border" "0"
+                           "borderRight" "1px solid var(--ls-border-color)"
+                           "color" "var(--ls-tertiary-text-color)"}
+            ".cm-activeLine" {"backgroundColor" "transparent"}
+            ".cm-activeLineGutter" {"backgroundColor" "transparent"
+                                    "color" "var(--ls-tertiary-text-color)"}
+            ".cm-selectionBackground, &.cm-focused .cm-selectionBackground, .cm-content ::selection"
+            {"backgroundColor" "var(--ls-selection-background-color, rgba(120, 160, 220, 0.28))"}
+            ".cm-cursor" {"borderLeftColor" "var(--ls-primary-text-color)"}})))
 
-(defn- doc-state-at-cursor
-  "Parse tokens into document state of last token."
-  [cm]
-  (let [tokens (all-tokens-by-cursor cm)
-        {:keys [current-config-path state-stack]} (tokens->doc-state tokens)
-        doc-state (first state-stack)]
-    [current-config-path doc-state]))
+(def code-highlight-style
+  (.define HighlightStyle
+           #js [#js {:tag (.-keyword tags)
+                     :color "var(--logseq-code-token-keyword)"}
+                #js {:tag (.-controlKeyword tags)
+                     :color "var(--logseq-code-token-control-keyword)"}
+                #js {:tag (.-definitionKeyword tags)
+                     :color "var(--logseq-code-token-definition-keyword)"}
+                #js {:tag (.-moduleKeyword tags)
+                     :color "var(--logseq-code-token-module-keyword)"}
+                #js {:tag (.-operatorKeyword tags)
+                     :color "var(--logseq-code-token-operator-keyword)"}
+                #js {:tag (.-modifier tags)
+                     :color "var(--logseq-code-token-modifier)"}
+                #js {:tag (.-self tags)
+                     :color "var(--logseq-code-token-self)"}
+                #js {:tag (.-atom tags)
+                     :color "var(--logseq-code-token-atom)"}
+                #js {:tag (.-bool tags)
+                     :color "var(--logseq-code-token-bool)"}
+                #js {:tag (.-null tags)
+                     :color "var(--logseq-code-token-null)"}
+                #js {:tag (.-unit tags)
+                     :color "var(--logseq-code-token-unit)"}
+                #js {:tag (.-literal tags)
+                     :color "var(--logseq-code-token-literal)"}
+                #js {:tag (.-number tags)
+                     :color "var(--logseq-code-token-number)"}
+                #js {:tag (.-integer tags)
+                     :color "var(--logseq-code-token-number)"}
+                #js {:tag (.-float tags)
+                     :color "var(--logseq-code-token-number)"}
+                #js {:tag (.-string tags)
+                     :color "var(--logseq-code-token-string)"}
+                #js {:tag (.-docString tags)
+                     :color "var(--logseq-code-token-doc-string)"}
+                #js {:tag (.-character tags)
+                     :color "var(--logseq-code-token-character)"}
+                #js {:tag (.-attributeValue tags)
+                     :color "var(--logseq-code-token-attribute-value)"}
+                #js {:tag (.-regexp tags)
+                     :color "var(--logseq-code-token-regexp)"}
+                #js {:tag (.-escape tags)
+                     :color "var(--logseq-code-token-escape)"}
+                #js {:tag (.-color tags)
+                     :color "var(--logseq-code-token-color)"}
+                #js {:tag (.-url tags)
+                     :color "var(--logseq-code-token-url)"
+                     :textDecoration "underline"}
+                #js {:tag (.-comment tags)
+                     :color "var(--logseq-code-token-comment)"
+                     :fontStyle "italic"}
+                #js {:tag (.-lineComment tags)
+                     :color "var(--logseq-code-token-comment)"
+                     :fontStyle "italic"}
+                #js {:tag (.-blockComment tags)
+                     :color "var(--logseq-code-token-comment)"
+                     :fontStyle "italic"}
+                #js {:tag (.-docComment tags)
+                     :color "var(--logseq-code-token-doc-comment)"
+                     :fontStyle "italic"}
+                #js {:tag (.-name tags)
+                     :color "var(--logseq-code-token-name)"}
+                #js {:tag (.-variableName tags)
+                     :color "var(--logseq-code-token-variable)"}
+                #js {:tag ((.-definition tags) (.-variableName tags))
+                     :color "var(--logseq-code-token-definition)"}
+                #js {:tag ((.-function tags) (.-variableName tags))
+                     :color "var(--logseq-code-token-function)"}
+                #js {:tag ((.-function tags) (.-propertyName tags))
+                     :color "var(--logseq-code-token-function)"}
+                #js {:tag ((.-constant tags) (.-variableName tags))
+                     :color "var(--logseq-code-token-constant)"}
+                #js {:tag ((.-standard tags) (.-name tags))
+                     :color "var(--logseq-code-token-standard)"}
+                #js {:tag ((.-standard tags) (.-variableName tags))
+                     :color "var(--logseq-code-token-standard)"}
+                #js {:tag ((.-local tags) (.-variableName tags))
+                     :color "var(--logseq-code-token-local)"}
+                #js {:tag ((.-special tags) (.-variableName tags))
+                     :color "var(--logseq-code-token-special-variable)"}
+                #js {:tag (.-propertyName tags)
+                     :color "var(--logseq-code-token-property)"}
+                #js {:tag ((.-definition tags) (.-propertyName tags))
+                     :color "var(--logseq-code-token-definition)"}
+                #js {:tag (.-attributeName tags)
+                     :color "var(--logseq-code-token-attribute)"}
+                #js {:tag (.-typeName tags)
+                     :color "var(--logseq-code-token-type)"}
+                #js {:tag (.-tagName tags)
+                     :color "var(--logseq-code-token-tag)"}
+                #js {:tag (.-className tags)
+                     :color "var(--logseq-code-token-class)"}
+                #js {:tag (.-labelName tags)
+                     :color "var(--logseq-code-token-label)"}
+                #js {:tag (.-namespace tags)
+                     :color "var(--logseq-code-token-namespace)"}
+                #js {:tag (.-macroName tags)
+                     :color "var(--logseq-code-token-macro)"}
+                #js {:tag (.-operator tags)
+                     :color "var(--logseq-code-token-operator)"}
+                #js {:tag (.-derefOperator tags)
+                     :color "var(--logseq-code-token-operator)"}
+                #js {:tag (.-arithmeticOperator tags)
+                     :color "var(--logseq-code-token-operator)"}
+                #js {:tag (.-logicOperator tags)
+                     :color "var(--logseq-code-token-operator)"}
+                #js {:tag (.-bitwiseOperator tags)
+                     :color "var(--logseq-code-token-operator)"}
+                #js {:tag (.-compareOperator tags)
+                     :color "var(--logseq-code-token-operator)"}
+                #js {:tag (.-updateOperator tags)
+                     :color "var(--logseq-code-token-operator)"}
+                #js {:tag (.-definitionOperator tags)
+                     :color "var(--logseq-code-token-definition-operator)"}
+                #js {:tag (.-typeOperator tags)
+                     :color "var(--logseq-code-token-type-operator)"}
+                #js {:tag (.-controlOperator tags)
+                     :color "var(--logseq-code-token-control-operator)"}
+                #js {:tag (.-punctuation tags)
+                     :color "var(--logseq-code-token-punctuation)"}
+                #js {:tag (.-separator tags)
+                     :color "var(--logseq-code-token-separator)"}
+                #js {:tag (.-bracket tags)
+                     :color "var(--logseq-code-token-bracket)"}
+                #js {:tag (.-angleBracket tags)
+                     :color "var(--logseq-code-token-bracket)"}
+                #js {:tag (.-squareBracket tags)
+                     :color "var(--logseq-code-token-bracket)"}
+                #js {:tag (.-paren tags)
+                     :color "var(--logseq-code-token-bracket)"}
+                #js {:tag (.-brace tags)
+                     :color "var(--logseq-code-token-bracket)"}
+                #js {:tag (.-content tags)
+                     :color "var(--logseq-code-token-content)"}
+                #js {:tag (.-heading tags)
+                     :color "var(--logseq-code-token-heading)"
+                     :fontWeight "600"}
+                #js {:tag #js [(.-heading1 tags) (.-heading2 tags) (.-heading3 tags)
+                               (.-heading4 tags) (.-heading5 tags) (.-heading6 tags)]
+                     :color "var(--logseq-code-token-heading)"
+                     :fontWeight "600"}
+                #js {:tag (.-contentSeparator tags)
+                     :color "var(--logseq-code-token-content-separator)"}
+                #js {:tag (.-list tags)
+                     :color "var(--logseq-code-token-list)"}
+                #js {:tag (.-quote tags)
+                     :color "var(--logseq-code-token-quote)"}
+                #js {:tag (.-emphasis tags)
+                     :color "var(--logseq-code-token-emphasis)"
+                     :fontStyle "italic"}
+                #js {:tag (.-strong tags)
+                     :color "var(--logseq-code-token-strong)"
+                     :fontWeight "600"}
+                #js {:tag (.-link tags)
+                     :color "var(--logseq-code-token-link)"
+                     :textDecoration "underline"}
+                #js {:tag (.-monospace tags)
+                     :color "var(--logseq-code-token-monospace)"}
+                #js {:tag (.-strikethrough tags)
+                     :color "var(--logseq-code-token-strikethrough)"
+                     :textDecoration "line-through"}
+                #js {:tag (.-inserted tags)
+                     :color "var(--logseq-code-token-inserted)"}
+                #js {:tag (.-deleted tags)
+                     :color "var(--logseq-code-token-deleted)"}
+                #js {:tag (.-changed tags)
+                     :color "var(--logseq-code-token-changed)"}
+                #js {:tag (.-meta tags)
+                     :color "var(--logseq-code-token-meta)"}
+                #js {:tag (.-documentMeta tags)
+                     :color "var(--logseq-code-token-document-meta)"}
+                #js {:tag (.-annotation tags)
+                     :color "var(--logseq-code-token-annotation)"}
+                #js {:tag (.-processingInstruction tags)
+                     :color "var(--logseq-code-token-processing-instruction)"}
+                #js {:tag ((.-special tags) (.-string tags))
+                     :color "var(--logseq-code-token-special-string)"}
+                #js {:tag (.-invalid tags)
+                     :color "var(--logseq-code-token-invalid)"
+                     :textDecoration "underline wavy"}]))
 
-(defn- malli-type->completion-postfix
-  [type]
-  (case type
-    :string "\"\""
-    :map-of "{}"
-    :map "{}"
-    :set "#{}"
-    :vector "[]"
+(defn- language-extension
+  [language]
+  (case (:id language)
+    :css (css)
+    :html (html)
+    :javascript (javascript)
+    :json (json)
+    :jsx (javascript #js {:jsx true})
+    :markdown (markdown)
+    :python (python)
+    :sql (sql)
+    :shell (.define StreamLanguage shell)
+    :typescript (javascript #js {:typescript true})
+    :tsx (javascript #js {:jsx true
+                          :typescript true})
+    :yaml (.define StreamLanguage yaml)
     nil))
 
-;; TODO: mu/to-map-syntax has been deprecated, consider removing usage
-(defn -map-syntax-walker [schema _ children _]
-  (let [properties (m/properties schema)
-        options (m/options schema)
-        r (when properties (properties :registry))
-        properties (if r (assoc properties :registry (m/-property-registry r options m/-form)) properties)]
-    (cond-> {:type (m/type schema)}
-      (seq properties) (assoc :properties properties)
-      (seq children) (assoc :children children))))
+(defn- language-extensions
+  [language]
+  (case (:id language)
+    :clojure (clojure-language/extensions code-highlight-style)
+    (if-let [extension (language-extension language)]
+      (to-array [extension])
+      #js [])))
 
-(defn- malli-to-map-syntax
-  ([?schema] (malli-to-map-syntax ?schema nil))
-  ([?schema options] (m/walk ?schema -map-syntax-walker options)))
+(defn- base-extensions
+  []
+  [code-editor-theme
+   (highlightSpecialChars)
+   (history)
+   (drawSelection)
+   (dropCursor)
+   (closeBrackets)
+   (highlightSelectionMatches)
+   (syntaxHighlighting code-highlight-style)
+   (keymap-extension)])
 
-(.registerHelper CodeMirror "hint" "clojure"
-                 (fn [cm _options]
-                   (let [cur (.getCursor cm)
-                         token (.getTokenAt cm cur)
-                         token-type (.-type token)
-                         token-string (.-string token)
-                         result (atom {})
-                         [config-path doc-state] (doc-state-at-cursor cm)]
-                     (cond
+(defn get-value
+  [context]
+  (.toString (editor-doc (:view context))))
 
-                       ;; completion of config keys, triggered by `:` or shortcut
-                       (and (= token-type "atom")
-                            (string/starts-with? token-string ":")
-                            (= doc-state :key))
-                       (do
-                         (m/walk Config-edn
-                                 (fn [schema properties _children _opts]
-                                   (let [schema-path (mapv str properties)]
-                                     (cond
-                                       (empty? schema-path)
-                                       nil
+(defn default-value
+  [context]
+  (:default-value @(:*state context)))
 
-                                       (empty? config-path)
-                                       (swap! result assoc (first schema-path) (m/type schema))
+(defn set-default-value!
+  [context value]
+  (swap! (:*state context) assoc :default-value value)
+  context)
 
-                                       (= (count config-path) 1)
-                                       (when (string/starts-with? (first schema-path) (first config-path))
-                                         (swap! result assoc (first schema-path) (m/type schema)))
+(defn add-change-listener!
+  [context f]
+  (when-not (fn? f)
+    (throw (ex-info "CodeMirror 6 change listener must be a function" {})))
+  (let [listener-id (random-uuid)]
+    (swap! (:*state context) assoc-in [:change-listeners listener-id] f)
+    #(swap! (:*state context) update :change-listeners dissoc listener-id)))
 
-                                       (= (count config-path) 2)
-                                       (when (and (= (count schema-path) 2)
-                                                  (= (first schema-path) (first config-path))
-                                                  (string/starts-with? (second schema-path) (second config-path)))
-                                         (swap! result assoc (second schema-path) (m/type schema)))))
-                                   nil))
-                         (when (not-empty @result)
-                           (let [from (Pos. (.-line cur) (.-start token))
-                                 ;; `(.-ch cur)` is the cursor position, not the end of token. When completion is at the middle of a token, this is wrong
-                                 to (Pos. (.-line cur) (.-end token))
-                                 add-postfix-after? (<= (.-end token) (.-ch cur))
-                                 doc (.getValue cm)
-                                 list (->> (keys @result)
-                                           (remove (fn [text]
-                                                     (re-find (re-pattern (str "[^;]*" text "\\s")) doc)))
-                                           sort
-                                           (map (fn [text]
-                                                  (let [type (get @result text)]
-                                                    {:text (str text (when add-postfix-after?
-                                                                       (str " " (malli-type->completion-postfix type))))
-                                                     :displayText (str text "   " type)}))))
+(defn set-value!
+  [context value]
+  (let [^js view (:view context)]
+    (.dispatch view
+               #js {:changes #js {:from 0
+                                   :to (doc-length view)
+                                   :insert (or value "")}})
+    context))
 
-                                 completion (clj->js {:list list
-                                                      :from from
-                                                      :to to})]
-                             completion)))
+(defn focus!
+  [context]
+  (let [^js view (:view context)]
+    (.focus view))
+  context)
 
-                       ;; completion of :boolean, :enum, :keyword[TODO]
-                       (and (nil? token-type)
-                            (string/blank? (string/trim token-string))
-                            (not-empty config-path)
-                            (= doc-state :key))
-                       (do
-                         (m/walk Config-edn
-                                 (fn [schema properties _children _opts]
-                                   (let [schema-path (mapv str properties)]
-                                     (when (= config-path schema-path)
-                                       (case (m/type schema)
-                                         :boolean
-                                         (swap! result assoc
-                                                "true" nil
-                                                "false" nil)
+(defn has-focus?
+  [context]
+  (let [^js view (:view context)]
+    (true? (.-hasFocus view))))
 
-                                         :enum
-                                         (let [{:keys [children]} (malli-to-map-syntax schema)]
-                                           (doseq [child children]
-                                             (swap! result assoc (str child) nil)))
+(defn line-count
+  [context]
+  (.-lines (editor-doc (:view context))))
 
-                                         nil))
-                                     nil)))
-                         (when (not-empty @result)
-                           (let [from (Pos. (.-line cur) (.-ch cur))
-                                 to (Pos. (.-line cur) (.-ch cur))
-                                 list (->> (keys @result)
-                                           sort
-                                           (map (fn [text]
-                                                  {:text text
-                                                   :displayText text})))
-                                 completion (clj->js {:list list
-                                                      :from from
-                                                      :to to})]
-                             completion)))))))
+(defn last-line
+  [context]
+  (dec (line-count context)))
 
-(defn- complete-after
-  [cm pred]
-  (when (or (not pred) (pred))
-    (js/setTimeout
-     (fn []
-       (when (not (.-completionActive (.-state cm)))
-         (.showHint cm #js {:completeSingle false})))
-     100))
-  (.-Pass CodeMirror))
+(defn line-ch->offset
+  [context {:keys [line ch]}]
+  (let [^js view (:view context)
+        text-doc (editor-doc view)
+        line-number (inc (max 0 (or line 0)))
+        line' (.line text-doc (min line-number (.-lines text-doc)))
+        line-start (.-from line')
+        line-end (.-to line')]
+    (+ line-start (max 0 (min (or ch 0) (- line-end line-start))))))
 
-(defn- extra-codemirror-options []
-  (get (state/get-config)
-       :editor/extra-codemirror-options {}))
+(defn offset->line-ch
+  [context offset]
+  (let [^js view (:view context)
+        text-doc (editor-doc view)
+        offset' (clamp-offset view offset)
+        line' (.lineAt text-doc offset')]
+    {:line (dec (.-number line'))
+     :ch (- offset' (.-from line'))}))
 
-(defn- text->cm-mode
-  ([text]
-   (text->cm-mode text :name))
-  ([text by]
-   (when text
-     (let [mode (string/lower-case text)
-           find-fn-name (case by
-                          :name "findModeByName"
-                          :ext "findModeByExtension"
-                          :file-name "findModeByFileName"
-                          "findModeByName")
-           find-fn (gobj/get CodeMirror find-fn-name)
-           cm-mode (find-fn mode)]
-       (if cm-mode
-         (.-mime cm-mode)
-         mode)))))
+(defn selection-range
+  [context]
+  (let [^js view (:view context)
+        main (.. view -state -selection -main)]
+    {:start (offset->line-ch context (.-from main))
+     :end (offset->line-ch context (.-to main))}))
 
-(defn- save-editor!
-  [config]
-  (p/do!
-   (code-handler/save-code-editor!)
-   (when-let [block (or (:code-block config) (:block config))]
-     (let [block (db/entity [:block/uuid (:block/uuid block)])]
-       (state/set-state! :editor/raw-mode-block block)
-       (editor-handler/edit-block! block :max {:save-code-editor? false})))))
+(defn line-text
+  [context line]
+  (let [^js view (:view context)
+        text-doc (editor-doc view)
+        line-number (inc (max 0 (or line 0)))
+        line' (.line text-doc (min line-number (.-lines text-doc)))]
+    (.-text line')))
 
-(defn ^:large-vars/cleanup-todo render!
-  [state]
-  (let [[config id attr _code theme user-options] (:rum/args state)
-        edit-block (:block config)
-        code-block (:code-block config)
-        config-file? (= (:file-path config) "logseq/config.edn")
-        _ (state/set-state! :editor/code-mode? false)
-        original-mode (get attr :data-lang)
-        *editor-ref (get attr :editor-ref)
-        mode (if (:file? config)
-               (text->cm-mode original-mode :ext) ;; ref: src/main/frontend/components/file.cljs
-               (text->cm-mode original-mode :name))
-        lisp-like? (contains? #{"scheme" "lisp" "clojure" "edn"} mode)
-        config-edit? (and (:file? config) (string/ends-with? (:file-path config) "config.edn"))
-        textarea (gdom/getElement id)
-        radix-color (state/sub :ui/radix-color)
-        default-cm-options {:theme (if radix-color
-                                     (str "lsradix " theme)
-                                     (str "solarized " theme))
-                            :autoCloseBrackets true
-                            :lineNumbers true
-                            :matchBrackets lisp-like?
-                            :styleActiveLine true}
-        cm-options (merge default-cm-options
-                          (cond-> (extra-codemirror-options)
-                            config-file?
-                            (dissoc :readOnly))
-                          {:mode mode
-                           :tabIndex -1 ;; do not accept TAB-in, since TAB is bind globally
-                           :extraKeys (merge {"Esc" (fn [cm]
-                                                      ;; Avoid reentrancy
-                                                      (gobj/set cm "escPressed" true)
-                                                      (save-editor! config))}
-                                             (when config-edit?
-                                               {"':'" complete-after
-                                                "Ctrl-Space" "autocomplete"}))}
-                          (when config/publishing?
-                            {:readOnly true
-                             :cursorBlinkRate -1})
-                          (when config-edit?
-                            {:hintOptions {}})
-                          user-options
-                          (when (= mode "calc")
-                            {:viewportMargin js/Infinity}))
-        editor (when textarea
-                 (from-textarea textarea (clj->js cm-options)))
-        _ (when (and editor *editor-ref)
-            (reset! *editor-ref editor))]
-    (when editor
-      (let [textarea-ref (rum/ref-node state textarea-ref-name)
-            element (.getWrapperElement editor)
-            *cursor-prev (volatile! nil)
-            *cursor-curr (volatile! nil)
-            update-cursor-state! (fn []
-                                   (let [start-pos (.getCursor editor true)
-                                         end-pos (.getCursor editor false)
-                                         start-pos' (bean/->clj (js/JSON.parse (js/JSON.stringify start-pos)))
-                                         end-pos' (bean/->clj (js/JSON.parse (js/JSON.stringify end-pos)))
-                                         range {:start (select-keys start-pos' [:line :ch])
-                                                :end (select-keys end-pos' [:line :ch])}]
-                                     (if (not @*cursor-prev)
-                                       (vreset! *cursor-prev range)
-                                       (vreset! *cursor-prev @*cursor-curr))
-                                     (vreset! *cursor-curr range)))]
-        (gobj/set textarea-ref codemirror-ref-name editor)
-        (when (= mode "calc")
-          (.on editor "change" (fn [_cm _e]
-                                 (let [new-code (.getValue editor)]
-                                   (reset! (:calc-atom state) (calc/eval-lines new-code))))))
-        (.on editor "blur" (fn [cm e]
-                             (when e (util/stop e))
-                             (let [esc? (gobj/get cm "escPressed")]
-                               (when (or (= :file (state/get-current-route))
-                                         (not esc?))
-                                 (code-handler/save-code-editor!))
-                               (state/set-block-component-editing-mode! false)
-                               (state/set-state! :editor/code-block-context nil)
-                               (when (and (not esc?)
-                                          (= (:db/id (state/get-edit-block))
-                                             (:db/id edit-block)))
-                                 (state/clear-edit!))
-                               (vreset! *cursor-curr nil)
-                               (vreset! *cursor-prev nil))))
-        (.on editor "focus" (fn [_e]
-                              (when (and
-                                     (:block/uuid (state/get-edit-block))
-                                     (contains? #{:code} (:logseq.property.node/display-type code-block))
-                                     (not= (:block/uuid edit-block) (:block/uuid (state/get-edit-block))))
-                                (editor-handler/edit-block! (or code-block edit-block) :max {:container-id (:container-id config)}))
-                              (state/set-block-component-editing-mode! true)
-                              (state/set-state! :editor/code-block-context
-                                                {:editor editor
-                                                 :config config
-                                                 :state state})))
-        (.on editor "cursorActivity" update-cursor-state!)
-        (.addEventListener element "keydown" (fn [e]
-                                               (let [key-code (.-code e)
-                                                     meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))
-                                                     shifted? (.-shiftKey e)]
-                                                 (cond
-                                                   (contains? #{"ArrowLeft" "ArrowRight"} key-code)
-                                                   (let [direction (if (= "ArrowLeft" key-code) :left :right)]
-                                                     (when (and (= @*cursor-prev @*cursor-curr)
-                                                                (or (and direction (nil? @*cursor-curr))
-                                                                    (case direction
-                                                                      :left (and (zero? (:line (:start @*cursor-curr)))
-                                                                                 (zero? (:ch  (:start @*cursor-curr))))
-                                                                      :right (let [line (when-let [line (:line (:end @*cursor-curr))]
-                                                                                          (.getLine (.-doc editor) line))]
-                                                                               (and (= (:line (:end @*cursor-curr)) (.lastLine editor))
-                                                                                    (= (:ch (:end @*cursor-curr)) (count line))))
-                                                                      false)))
-                                                       (editor-handler/move-to-block-when-cross-boundary direction {}))
-                                                     (update-cursor-state!))
+(defn set-selection-by-offset!
+  [context offset]
+  (let [^js view (:view context)
+        offset' (clamp-offset view offset)]
+    (.dispatch view #js {:selection #js {:anchor offset'}})
+    context))
 
-                                                   (contains? #{"ArrowUp" "ArrowDown"} key-code)
-                                                   (let [direction (if (= "ArrowUp" key-code) :up :down)]
-                                                     (when (and (= @*cursor-prev @*cursor-curr)
-                                                                (or (and direction (nil? @*cursor-curr))
-                                                                    (case direction
-                                                                      :up (and (zero? (:line (:start @*cursor-curr)))
-                                                                               (zero? (:ch  (:start @*cursor-curr))))
-                                                                      :down (let [line (when-let [line (:line (:end @*cursor-curr))]
-                                                                                         (.getLine (.-doc editor) line))]
-                                                                              (and (= (:line (:end @*cursor-curr)) (.lastLine editor))
-                                                                                   (= (:ch (:end @*cursor-curr)) (count line))))
-                                                                      false)))
-                                                       (editor-handler/move-cross-boundary-up-down
-                                                        direction {:input textarea
-                                                                   :pos [direction 0]}))
-                                                     (update-cursor-state!))
-                                                   meta-or-ctrl-pressed?
-                                                   ;; prevent default behavior of browser
-                                                   ;; Cmd + [ => Go back in browser, outdent in CodeMirror
-                                                   ;; Cmd + ] => Go forward in browser, indent in CodeMirror
-                                                   (case key-code
-                                                     "BracketLeft" (util/stop e)
-                                                     "BracketRight" (util/stop e)
-                                                     nil)
-                                                   shifted?
-                                                   (case key-code
-                                                     ;; create new block
-                                                     "Enter"
-                                                     (do
-                                                       (util/stop e)
-                                                       (when-let [blockid (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid"))]
-                                                         (code-handler/save-code-editor!)
-                                                         (util/schedule #(editor-handler/api-insert-new-block! ""
-                                                                                                               {:block-uuid (uuid blockid)
-                                                                                                                :sibling? true}))))
-                                                     nil)))))
-        (.addEventListener element "pointerdown"
-                           (fn [e]
-                             (.stopPropagation e)
-                             (state/clear-selection!)))
-        (.addEventListener element "touchstart"
-                           (fn [e]
-                             (.stopPropagation e)))
-        (.save editor)
-        (.refresh editor)))
-    editor))
+(defn set-cursor!
+  [context cursor]
+  (set-selection-by-offset! context (line-ch->offset context cursor)))
 
-(defn- load-and-render!
-  [state]
-  (let [editor-atom (:editor-atom state)]
-    (when-not @editor-atom
-      (let [editor (render! state)]
-        (reset! editor-atom editor)))))
+(defn set-language!
+  [context language-name]
+  (let [language (or (plugin-language-by-name context language-name)
+                     (resolve-language! language-name))]
+    (swap! (:*state context) assoc :language language)
+    (when-let [^js view (:view context)]
+      (when-let [^js compartment (:language-compartment context)]
+        (.dispatch view #js {:effects (.reconfigure compartment (language-extensions language))})))
+    language))
 
-(defn get-theme! []
-  (if (state/sub :ui/radix-color)
-    (str "lsradix " (state/sub :ui/theme))
-    (str "solarized " (state/sub :ui/theme))))
+(declare enhancer-payload)
 
-(rum/defcs editor < rum/reactive
-  {:init (fn [state]
-           (let [[_ _ _ code _ options] (:rum/args state)]
-             (assoc state
-                    :editor-atom (atom nil)
-                    :calc-atom (atom (calc/eval-lines code))
-                    :code-options (atom options)
-                    :last-theme (atom (get-theme!)))))
-   :did-mount (fn [state]
-                (load-and-render! state)
-                state)
-   :did-update (fn [state]
-                 (let [next-theme (get-theme!)
-                       last-theme @(:last-theme state)
-                       editor' (some-> state :editor-atom deref)]
-                   (when (and editor' (not= next-theme last-theme))
-                     (reset! (:last-theme state) next-theme)
-                     (.setOption editor' "theme" next-theme)))
-                 (reset! (:code-options state) (last (:rum/args state)))
-                 state)}
-  [state _config id attr code _theme _options]
-  [:div.extensions__code.flex.flex-1
-   (cond-> {}
-     (= (:data-lang attr) "calc")
-     (assoc :data-lang "calc"))
-   (when-let [mode (:data-lang attr)]
-     (when-not (= mode "calc")
-       [:div.extensions__code-lang
-        (string/lower-case mode)]))
-   [:div.code-editor.flex.flex-1.flex-row.w-full
-    [:textarea (merge {:id id
-                       ;; Expose the textarea associated with the CodeMirror instance via
-                       ;; ref so that we can autofocus into the CodeMirror instance later.
-                       :ref textarea-ref-name
-                       :default-value code} attr)]
-    (when (= (:data-lang attr) "calc")
-      (calc/results (:calc-atom state)))]])
+(defn- js-enhancer-payload
+  [context]
+  (api/enhancer-payload->js (enhancer-payload context)))
 
-;; Focus into the CodeMirror editor rather than the normal "raw" editor
-(defmethod commands/handle-step :codemirror/focus [[_]]
-  ;; This requestAnimationFrame is necessary because, for some reason, when you
-  ;; type /calculate and then click the "Calculate" command in the dropdown
-  ;; *with your mouse* (but not when you do so via your keyboard with the
-  ;; arrow + enter keys!), React doesn't re-render before the :codemirror/focus
-  ;; command kicks off. As a result, you get an error saying that the node
-  ;; you're trying to focus doesn't yet exist. Adding the requestAnimationFrame
-  ;; ensures that the React component re-renders before the :codemirror/focus
-  ;; command is run. It's not elegant... open to suggestions for how to fix it!
-  (let [block (state/get-edit-block)
-        block-uuid (:block/uuid block)]
-    (p/do!
-     (state/pub-event! [:editor/save-current-block])
-     (state/clear-edit!)
-     (js/setTimeout
-      (fn []
-        (let [block-node (util/get-first-block-by-id block-uuid)
-              textarea-ref (.querySelector block-node "textarea")]
-          (when-let [codemirror-ref (gobj/get textarea-ref codemirror-ref-name)]
-            (.focus codemirror-ref))))
-      256))))
+(defn- resolve-extension
+  [context extension]
+  (if (fn? extension)
+    (extension (js-enhancer-payload context))
+    extension))
+
+(defn register-extension!
+  [context key extension]
+  (when-not key
+    (throw (ex-info "CodeMirror 6 extension key is required" {})))
+  (let [extension (resolve-extension context extension)]
+    (swap! (:*state context) assoc-in [:plugin-extensions key] extension)
+    (when-let [^js view (:view context)]
+      (when (and extension (fn? (.-dispatch view)))
+        (.dispatch view #js {:effects (.of (.-appendConfig StateEffect) extension)}))))
+  context)
+
+(defn register-language!
+  [context descriptor]
+  (let [descriptor (api/normalize-language-descriptor descriptor)]
+    (when-not (language-registry/valid-language-descriptor? descriptor)
+      (throw (ex-info "Invalid CodeMirror 6 language descriptor"
+                      {:descriptor descriptor})))
+    (swap! (:*state context) assoc-in [:plugin-languages (:id descriptor)] descriptor))
+  context)
+
+(defn apply-enhancers!
+  [context enhancers]
+  (let [payload (js-enhancer-payload context)]
+    (doseq [{:keys [key type enhancer]} enhancers]
+      (cond
+        (= api/legacy-enhancer-type type)
+        (log/error :code-editor/legacy-codemirror-enhancer
+                   {:key key
+                    :message "Legacy CodeMirror enhancer is not supported by the CodeMirror 6 editor"})
+
+        (fn? enhancer)
+        (enhancer payload))))
+  context)
+
+(defn enhancer-payload
+  [context]
+  (when-let [^js view (:view context)]
+    (api/make-enhancer-payload
+     {:editor-id (:editor-id context)
+      :view view
+      :state (.-state view)
+      :dispatch! #(.dispatch view %)
+      :language (:language @(:*state context))
+      :get-language #(language-by-name context %)
+      :register-extension! #(register-extension! context %1 %2)
+      :register-language! #(register-language! context %)})))
+
+(defn destroy!
+  [context]
+  (let [^js view (:view context)
+        ^js parent (:parent context)]
+    (doseq [dispose! (:dispose-fns @(:*state context))]
+      (dispose!))
+    (swap! (:*state context) assoc :dispose-fns [])
+    (when parent
+      (gobj/remove parent context-property))
+    (some-> view .-dom (gobj/remove context-property))
+    (.destroy view))
+  context)
+
+(defn- user-option-extensions
+  [options]
+  (cond-> []
+    (:line-numbers? options)
+    (conj (lineNumbers))
+
+    (:line-wrapping? options)
+    (conj (.-lineWrapping EditorView))))
+
+(defn create-context!
+  [{:keys [parent initial-doc editor-id language-name on-change on-selection-change editable? block-uuid user-options]
+    :or {initial-doc ""
+         editable? true}}]
+  (assert-parent! parent)
+  (let [user-options (merge api/default-user-options
+                            (api/validate-user-options! user-options))
+        language (or (language-registry/language-by-name language-name)
+                     (language-registry/language-by-extension language-name)
+                     (language-registry/plain-text-language))
+        *state (atom {:default-value initial-doc
+                      :change-listeners {}
+                      :dispose-fns []
+                      :language language
+                      :plugin-extensions {}
+                      :plugin-languages {}})
+        update-listener (.of (.-updateListener EditorView)
+                             (fn [^js view-update]
+                               (when (.-docChanged view-update)
+                                 (let [new-value (.toString (.. view-update -state -doc))]
+                                   (schedule-scroll-state! (.-view view-update))
+                                   (when on-change
+                                     (on-change new-value))
+                                   (doseq [listener (vals (:change-listeners @*state))]
+                                     (listener new-value))))
+                               (when (and (.-selectionSet view-update) on-selection-change)
+                                 (on-selection-change))))
+        editable-extension (.of (.-editable EditorView) editable?)
+        read-only-extension (.of (.-readOnly EditorState) (not editable?))
+        user-extensions (user-option-extensions user-options)
+        language-compartment (Compartment.)
+        state (EditorState.create
+               #js {:doc initial-doc
+                    :extensions (to-array (into [update-listener editable-extension read-only-extension]
+                                                (concat (base-extensions)
+                                                        [(.of language-compartment
+                                                              (language-extensions language))]
+                                                        user-extensions)))})
+        view (EditorView. #js {:state state
+                               :parent parent})
+        context {:block-uuid block-uuid
+                 :editor-id editor-id
+                 :language-compartment language-compartment
+                 :parent parent
+                 :*state *state
+                 :view view}]
+    (when-let [^js scroller (.querySelector (.-dom view) ".cm-scroller")]
+      (let [on-scroll #(update-scroll-state! view)]
+        (.addEventListener scroller "scroll" on-scroll)
+        (swap! *state update :dispose-fns conj
+               #(.removeEventListener scroller "scroll" on-scroll))))
+    (let [on-resize #(schedule-scroll-state! view)]
+      (.addEventListener js/window "resize" on-resize)
+      (swap! *state update :dispose-fns conj
+             #(.removeEventListener js/window "resize" on-resize)))
+    (when (gobj/get js/window "ResizeObserver")
+      (let [^js observer (js/ResizeObserver. #(schedule-scroll-state! view))]
+        (.observe observer (.-dom view))
+        (when-let [^js editor-host (.closest (.-dom view) ".logseq-code-editor")]
+          (.observe observer editor-host))
+        (swap! *state update :dispose-fns conj #(.disconnect observer))))
+    (schedule-scroll-state! view)
+    (js/setTimeout #(update-scroll-state! view) 80)
+    (gobj/set parent context-property context)
+    (gobj/set (.-dom view) context-property context)
+    context))

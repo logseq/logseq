@@ -218,8 +218,46 @@
 ;; UI
 
 #?(:cljs
-   (rum/defc results < rum/reactive
-     [calc-atom]
+   (defn- result-content-width
+     [^js result]
+     (.removeProperty (.-style result) "width")
+     (let [lines (.querySelectorAll result ".extensions__code-calc-output-line")
+           line-width (loop [idx 0
+                             width 0]
+                        (if (< idx (.-length lines))
+                          (let [^js line (.item lines idx)
+                                span-width (if-let [^js span (.querySelector line "span")]
+                                             (.-width (.getBoundingClientRect span))
+                                             (.-scrollWidth line))]
+                            (recur (inc idx) (max width span-width)))
+                          width))]
+       (js/Math.ceil line-width))))
+
+#?(:cljs
+   (defn- sync-result-width!
+     [state]
+     (when-let [^js result (rum/dom-node state)]
+       (when-let [^js wrap (.closest result ".ls-code-editor-wrap")]
+         (let [width (result-content-width result)]
+           (.setProperty (.-style wrap) "--logseq-code-calc-result-width" (str width "px"))
+           (.setProperty (.-style result) "width" (str width "px")))))
+     state))
+
+#?(:cljs
+   (defn- clear-result-width!
+     [state]
+     (when-let [^js result (rum/dom-node state)]
+       (.removeProperty (.-style result) "width")
+       (when-let [^js wrap (.closest result ".ls-code-editor-wrap")]
+         (.removeProperty (.-style wrap) "--logseq-code-calc-result-width")))
+     state))
+
+#?(:cljs
+   (rum/defcs results < rum/reactive
+     {:did-mount sync-result-width!
+      :did-update sync-result-width!
+      :will-unmount clear-result-width!}
+     [state calc-atom]
      (when-let [output-lines (rum/react calc-atom)]
        ;; the editor's parent will go into edit mode if any elements are clicked
        ;; if we stop click propagation on this element, we allow the user to
@@ -228,7 +266,7 @@
                                                             (.stopPropagation e))}
         ;; TODO: add react keys
         (for [[i line] (map-indexed vector output-lines)]
-          [:div.extensions__code-calc-output-line.CodeMirror-line {:key i}
+          [:div.extensions__code-calc-output-line.cm-line {:key i}
            [:span (cond
                     (nil? line)           ""
                     (failure? line) "?"
