@@ -204,7 +204,7 @@
 
 (defn get-zotero-local-pdf-path
   [path & {:keys [id]}]
-  (let [zotero-config (get-in (state/sub-config) [:zotero/settings-v2 "default"])
+  (let [zotero-config (get-in (state/get-config) [:zotero/settings-v2 "default"])
         zotero-data-directory (:zotero-data-directory zotero-config)
         zotero-linked-attachment-base-directory (:zotero-linked-attachment-base-directory zotero-config)
         relative-path (subs path 14)]

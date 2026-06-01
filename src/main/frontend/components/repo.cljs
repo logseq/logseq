@@ -511,8 +511,8 @@
 
 (hsx/defc graphs-selector
   []
-  (let [current-repo (state/get-current-repo)
-        user-repos (state/get-repos)
+  (let [current-repo (state/use-sub :git/current-repo)
+        user-repos (state/use-sub [:me :repos])
         current-repo' (some->> user-repos (medley/find-first #(= current-repo (:url %))))
         repo-name (when current-repo (db/get-repo-name current-repo))
         remote? (:remote? current-repo')

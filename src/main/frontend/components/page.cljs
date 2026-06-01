@@ -23,7 +23,6 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.extensions.graph :as graph]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -197,7 +196,7 @@
                                  :editor-box editor/box
                                  :document/mode? document-mode?}
                                 config)
-                 config (common-handler/config-with-document-mode hiccup-config)
+                 config hiccup-config
                  blocks (if block? [block] (db/sort-by-order children block))]
              [:div.relative
               (page-blocks-inner block blocks config sidebar? false block-id)

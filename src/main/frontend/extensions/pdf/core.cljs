@@ -141,7 +141,7 @@
         new? (nil? id)
         new-&-highlight-mode? (and @*highlight-mode? new?)
         show-ctx-menu? (and (not new-&-highlight-mode?)
-                            (or (not selection) (and selection (or (state/sub :pdf/auto-open-ctx-menu?) key-alt?))))
+                            (or (not selection) (and selection (or (state/use-sub :pdf/auto-open-ctx-menu?) key-alt?))))
         content (:content highlight)
         area? (not (string/blank? (:image content)))
         action-fn! (fn [action clear?]

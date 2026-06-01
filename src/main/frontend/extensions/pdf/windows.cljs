@@ -93,7 +93,7 @@
                   (.appendChild (.-head doc) base)
                   (set! (.-title doc) (or (:filename pdf-current) "Logseq"))
                   (set! (.-dataset doc-el) -theme (str theme-mode))
-                  (set! (.-dataset doc-el) -color (or (some-> (state/sub :ui/radix-color) (name)) "logseq"))
+                  (set! (.-dataset doc-el) -color (or (some-> (:ui/radix-color @state/state) (name)) "logseq"))
                   (resolve-classes! doc)
                   (resolve-styles! doc)
                   (.appendChild (.-body doc) main)

@@ -306,7 +306,7 @@
 (hsx/defc app
   [current-repo route-match]
   (let [[tab] (mobile-state/use-tab)
-        preferred-language (state/sub :preferred-language)
+        preferred-language (state/use-sub :preferred-language)
         [theme] (hooks/use-atom-in state/state :ui/theme)]
     (use-screen-size-effects!)
     (use-theme-effects! current-repo theme)

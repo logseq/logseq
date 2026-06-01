@@ -1122,7 +1122,7 @@
 
 (defn op-pinned-toolbar-item!
   [key op]
-  (let [pinned (state/sub [:plugin/preferences :pinnedToolbarItems])
+  (let [pinned (get-in @state/state [:plugin/preferences :pinnedToolbarItems])
         pinned (into #{} pinned)]
     (when-let [op-fn (case op
                        :add conj
@@ -1132,7 +1132,7 @@
 (defn- remove-pinned-toolbar-items-of-plugin!
   [pid]
   (let [prefix (str (name pid) ":")
-        pinned (state/sub [:plugin/preferences :pinnedToolbarItems])
+        pinned (get-in @state/state [:plugin/preferences :pinnedToolbarItems])
         pinned (if (sequential? pinned) (vec pinned) [])
         updated-pinned (->> pinned
                             (remove #(and (string? %) (string/starts-with? % prefix)))
@@ -1274,7 +1274,7 @@
                                           (let [theme (bean/->clj theme)
                                                 theme (assets-theme-to-file theme)
                                                 url (:url theme)
-                                                mode (or (:mode theme) (state/sub :ui/theme))]
+                                                mode (or (:mode theme) (:ui/theme @state/state))]
                                             (when mode
                                               (state/set-custom-theme! mode theme)
                                               (state/set-theme-mode! mode))

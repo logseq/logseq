@@ -32,8 +32,8 @@
 
   (let [*el-popup (hooks/use-ref nil)
         [area-dashed? set-area-dashed?] (hooks/use-atom *area-dashed?)
-        [hl-block-colored? set-hl-block-colored?] (hooks/use-state (state/sub :pdf/block-highlight-colored?))
-        [auto-open-ctx-menu? set-auto-open-ctx-menu!] (hooks/use-state (state/sub :pdf/auto-open-ctx-menu?))]
+        hl-block-colored? (state/use-sub :pdf/block-highlight-colored?)
+        auto-open-ctx-menu? (state/use-sub :pdf/auto-open-ctx-menu?)]
 
     (hooks/use-effect!
      (fn []
@@ -94,11 +94,11 @@
 
       [:div.extensions__pdf-settings-item.toggle-input.is-between
        [:label (t :pdf/hl-block-colored)]
-       (ui/toggle hl-block-colored? #(set-hl-block-colored? (not hl-block-colored?)) true)]
+       (ui/toggle hl-block-colored? #(state/set-state! :pdf/block-highlight-colored? (not hl-block-colored?)) true)]
 
       [:div.extensions__pdf-settings-item.toggle-input.is-between
        [:label (t :pdf/auto-open-context-menu)]
-       (ui/toggle auto-open-ctx-menu? #(set-auto-open-ctx-menu! (not auto-open-ctx-menu?)) true)]
+       (ui/toggle auto-open-ctx-menu? #(state/set-state! :pdf/auto-open-ctx-menu? (not auto-open-ctx-menu?)) true)]
 
       [:div.extensions__pdf-settings-item.toggle-input
        [:a.is-info.w-full.text-gray-500

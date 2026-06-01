@@ -395,9 +395,16 @@
        (state/set-state! :editor/raw-mode-block block)
        (editor-handler/edit-block! block :max {:save-code-editor? false})))))
 
+(defn- theme-name
+  [theme radix-color?]
+  (if radix-color?
+    (str "lsradix " theme)
+    (str "solarized " theme)))
+
 (defn ^:large-vars/cleanup-todo render!
   [state]
   (let [{:keys [config id attr theme options]} state
+        radix-color? (:radix-color? state)
         user-options options
         edit-block (:block config)
         code-block (:code-block config)
@@ -411,10 +418,7 @@
         lisp-like? (contains? #{"scheme" "lisp" "clojure" "edn"} mode)
         config-edit? (and (:file? config) (string/ends-with? (:file-path config) "config.edn"))
         textarea (gdom/getElement id)
-        radix-color (state/sub :ui/radix-color)
-        default-cm-options {:theme (if radix-color
-                                     (str "lsradix " theme)
-                                     (str "solarized " theme))
+        default-cm-options {:theme (theme-name theme radix-color?)
                             :autoCloseBrackets true
                             :lineNumbers true
                             :matchBrackets lisp-like?
@@ -564,29 +568,25 @@
       (let [editor (render! state)]
         (reset! editor-atom editor)))))
 
-(defn get-theme! []
-  (if (state/sub :ui/radix-color)
-    (str "lsradix " (state/sub :ui/theme))
-    (str "solarized " (state/sub :ui/theme))))
-
 (hsx/defc editor
   [config id attr code theme options]
   (let [editor-atom (hooks/use-memo #(atom nil) [id])
         [calc-lines set-calc-lines!] (hooks/use-state (calc/eval-lines code))
+        current-theme (state/use-sub :ui/theme)
+        radix-color? (state/use-sub :ui/radix-color)
         code-options (hooks/use-memo #(atom options) [id])
-        last-theme (hooks/use-memo #(atom (get-theme!)) [id])
+        last-theme (hooks/use-memo #(atom (theme-name current-theme radix-color?)) [id])
         component-state {:config config
                          :id id
                          :attr attr
                          :code code
-                         :theme theme
+                         :theme current-theme
                          :options options
+                         :radix-color? radix-color?
                          :editor-atom editor-atom
                          :set-calc-lines! set-calc-lines!
                          :code-options code-options
-                         :last-theme last-theme}
-        current-theme (state/use-sub :ui/theme)
-        radix-color? (state/use-sub :ui/radix-color)]
+                         :last-theme last-theme}]
     (hooks/use-effect!
      (fn []
        (load-and-render! component-state))
@@ -597,9 +597,7 @@
      [id code])
     (hooks/use-effect!
      (fn []
-       (let [next-theme (if radix-color?
-                          (str "lsradix " current-theme)
-                          (str "solarized " current-theme))
+       (let [next-theme (theme-name current-theme radix-color?)
              previous-theme @last-theme
              editor' @editor-atom]
          (when (and editor' (not= next-theme previous-theme))

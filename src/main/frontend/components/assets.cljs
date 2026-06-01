@@ -201,8 +201,8 @@
 
 (hsx/defc settings-content
   []
-  (let [[pre-alias-enabled?]   (hooks/use-state (state/sub :assets/alias-enabled?))
-        alias-enabled?         (state/use-sub :assets/alias-enabled?)
+  (let [alias-enabled?         (state/use-sub :assets/alias-enabled?)
+        [pre-alias-enabled?]   (hooks/use-state alias-enabled?)
         alias-enabled-changed? (not= pre-alias-enabled? alias-enabled?)]
 
     [:div.cp__assets-settings.panel-wrap
