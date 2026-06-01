@@ -1,6 +1,7 @@
 (ns mobile.components.ui
   "Mobile ui"
-  (:require [frontend.context.i18n :refer [t]]
+  (:require [cljs-bean.core :as bean]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [logseq.shui.ui :as shui]
@@ -8,17 +9,57 @@
             [react-transition-group :refer [CSSTransition TransitionGroup]]
             [io.factorhouse.hsx.core :as hsx]))
 
-(hsx/defc transition-group
-  [opts & children]
-  (into [:> TransitionGroup opts] children))
+(defn- normalize-react-props
+  [opts]
+  (bean/->js
+   (cond-> (or opts {})
+     (:class-name opts)
+     (assoc :className (:class-name opts))
 
-(hsx/defc css-transition
-  [opts child]
-  [:> CSSTransition opts child])
+     true
+     (dissoc :class-name))))
+
+(defn- react-child
+  [child]
+  (cond
+    (vector? child) (hsx/create-element child)
+    :else child))
+
+(defn- react-children
+  [children]
+  (->> children
+       (mapcat (fn [child]
+                 (cond
+                   (nil? child) []
+                   (and (sequential? child) (not (vector? child))) child
+                   :else [child])))
+       (remove nil?)
+       (map react-child)))
+
+(defn- react-element
+  [component opts children]
+  (apply js/React.createElement component (normalize-react-props opts) (react-children children)))
+
+(defn transition-group
+  [opts & children]
+  (react-element TransitionGroup opts children))
+
+(defn css-transition
+  [opts & children]
+  (let [node-ref (or (:node-ref opts) (js/React.createRef))
+        opts (assoc opts :nodeRef node-ref)
+        children (map (fn [child]
+                        (if (fn? child)
+                          (fn [state]
+                            (child state node-ref))
+                          child))
+                      children)]
+    (react-element CSSTransition opts children)))
 
 (hsx/defc notification-clear-all
-  []
+  [node-ref]
   [:div.ui__notifications-content
+   {:ref node-ref}
    [:div.pointer-events-auto.notification-clear
     (shui/button
      {:size :sm
@@ -27,7 +68,7 @@
       (t :notification/clear-all))]])
 
 (hsx/defc notification-content
-  [state content status uid]
+  [state content status uid node-ref]
   (when (and content status)
     (let [svg
           (if (keyword? status)
@@ -44,7 +85,8 @@
               (shui/tabler-icon "info-circle" {:class "text-indigo-600" :size "20"}))
             status)]
       [:div.ui__notifications-content
-       {:style
+       {:ref node-ref
+        :style
         (when (or (= state "exiting")
                   (= state "exited"))
           {:z-index -1})}
@@ -87,15 +129,15 @@
                     (css-transition
                      {:timeout 100
                       :key (name k)}
-                     (fn [state]
-                       (notification-content state (:content v) (:status v) k)))))
+                     (fn [state node-ref]
+                       (notification-content state (:content v) (:status v) k node-ref)))))
                 contents)
            clear-all (when (> (count contents) 3)
                        (css-transition
                         {:timeout 100
-                         :k "clear-all"}
-                        (fn [_state]
-                          (notification-clear-all))))
+                         :key "clear-all"}
+                        (fn [_state node-ref]
+                          (notification-clear-all node-ref))))
            items (if clear-all (cons clear-all notifications) notifications)]
        (doall items)))))
 

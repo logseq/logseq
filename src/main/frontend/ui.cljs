@@ -38,11 +38,50 @@
 (declare icon)
 (declare tooltip)
 
-(hsx/defc transition-group [opts & children]
-  (into [:> TransitionGroup opts] children))
+(defn- normalize-react-props
+  [opts]
+  (bean/->js
+   (cond-> (or opts {})
+     (:class-name opts)
+     (assoc :className (:class-name opts))
 
-(hsx/defc css-transition [opts & children]
-  (into [:> CSSTransition opts] children))
+     true
+     (dissoc :class-name))))
+
+(defn- react-child
+  [child]
+  (cond
+    (vector? child) (hsx/create-element child)
+    :else child))
+
+(defn- react-children
+  [children]
+  (->> children
+       (mapcat (fn [child]
+                 (cond
+                   (nil? child) []
+                   (and (sequential? child) (not (vector? child))) child
+                   :else [child])))
+       (remove nil?)
+       (map react-child)))
+
+(defn- react-element
+  [component opts children]
+  (apply js/React.createElement component (normalize-react-props opts) (react-children children)))
+
+(defn transition-group [opts & children]
+  (react-element TransitionGroup opts children))
+
+(defn css-transition [opts & children]
+  (let [node-ref (or (:node-ref opts) (js/React.createRef))
+        opts (assoc opts :nodeRef node-ref)
+        children (map (fn [child]
+                        (if (fn? child)
+                          (fn [state]
+                            (child state node-ref))
+                          child))
+                      children)]
+    (react-element CSSTransition opts children)))
 
 (defonce textarea-autosize (gobj/get TextareaAutosize "default"))
 
@@ -173,7 +212,7 @@
     (textarea props)))
 
 (hsx/defc dropdown-content-wrapper
-  [dropdown-state close-fn content class style-opts]
+  [dropdown-state close-fn content class style-opts node-ref]
   (let [class (or class
                   (util/hiccup->class "origin-top-right.absolute.right-0.mt-2"))
         k (hooks/use-memo #(inc (count (state/sub :modal/dropdowns))) [])]
@@ -184,6 +223,7 @@
      [])
     [:div.dropdown-wrapper.max-h-screen.overflow-y-auto
      {:style style-opts
+      :ref node-ref
       :class (str class " "
                   (case dropdown-state
                     "entering" "transition ease-out duration-100 transform opacity-0 scale-95"
@@ -223,9 +263,9 @@
      (content-fn dropdown-state)
      (css-transition
       {:in open? :timeout 0}
-      (fn [dropdown-state]
+      (fn [dropdown-state node-ref]
         (when open?
-          (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class {:z-index z-index}))))]))
+          (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class {:z-index z-index} node-ref))))]))
 
 ;; `sequence` can be a list of symbols, a list of strings, or a string
 ;; If `shortcut-id` is provided, uses raw binding from shortcut system for data attribute matching
@@ -270,7 +310,7 @@
 
 (declare button)
 (hsx/defc notification-content
-  [state content status uid]
+  [state content status uid node-ref]
   (when (and content status)
     (let [svg
           (if (keyword? status)
@@ -288,6 +328,7 @@
             status)]
       [:div.ui__notifications-content
        {:class (str "notification-" (name (or (when (keyword? status) status) :info)))
+        :ref node-ref
         :style
         (when (or (= state "exiting")
                   (= state "exited"))
@@ -321,8 +362,9 @@
                 :icon "x"})])]]]]])))
 
 (hsx/defc notification-clear-all
-  []
+  [node-ref]
   [:div.ui__notifications-content
+   {:ref node-ref}
    [:div.pointer-events-auto.notification-clear
     (button (t :notification/clear-all)
             :intent "logseq"
@@ -340,15 +382,15 @@
                                   (css-transition
                                    {:timeout 100
                                     :key     (name k)}
-                                   (fn [state]
-                                     (notification-content state (:content v) (:status v) k)))))
+                                   (fn [state node-ref]
+                                     (notification-content state (:content v) (:status v) k node-ref)))))
                               contents)
            clear-all (when (> (count contents) 1)
                        (css-transition
                         {:timeout 100
-                         :k       "clear-all"}
-                        (fn [_state]
-                          (notification-clear-all))))
+                         :key     "clear-all"}
+                        (fn [_state node-ref]
+                          (notification-clear-all node-ref))))
            items (if clear-all (cons clear-all notifications) notifications)]
        (doall items)))))
 
@@ -996,36 +1038,46 @@
   (when (number? n)
     (i18n/locale-format-date (js/Date. 2000 n 1) {:month "long"})))
 
-(hsx/defc date-year-month-select
-  [{:keys [name value onChange _children]}]
-  [:div.months-years-nav
-   (if (= name "years")
-     (shui/input
-      {:on-change (fn [v] (when v (onChange v)))
-       :class "h-6 ml-2 !w-auto !px-2"
-       :value value
-       :type "number"
-       :min 1
-       :max 9999})
+(defn- day-picker-change-event
+  [value]
+  (let [^js e (js/Event. "change")]
+    (js/Object.defineProperty e "target"
+                              #js {:value #js {:value value}
+                                   :enumerable true})
+    e))
 
-     (shui/dropdown-menu
-      (shui/dropdown-menu-trigger
-       {:as-child true}
-       (shui/button {:variant :ghost
-                     :class "!px-2 !py-0 h-6 border border-input rounded-md"
-                     :size :sm}
-                    (get-month-label value)))
-      (shui/dropdown-menu-content
-       (for [[idx _month] (medley/indexed month-values)
-             :let [label (get-month-label idx)]]
-         (shui/dropdown-menu-checkbox-item
-          {:checked (= value idx)
-           :on-select (fn []
-                        (let [^js e (js/Event. "change")]
-                          (js/Object.defineProperty e "target"
-                                                    #js {:value #js {:value idx} :enumerable true})
-                          (onChange e)))}
-          label)))))])
+(hsx/defc date-year-month-select
+  [{:keys [name className value onChange _children]}]
+  (let [year? (or (= name "years")
+                  (and (string? className)
+                       (string/includes? className "year")))]
+    [:div.months-years-nav {:class className}
+     (if year?
+       (shui/input
+        {:on-change (fn [v]
+                      (when v
+                        (onChange (day-picker-change-event v))))
+         :class "h-6 ml-2 !w-auto !px-2"
+         :value value
+         :type "number"
+         :min 1
+         :max 9999})
+
+       (shui/dropdown-menu
+        (shui/dropdown-menu-trigger
+         {:as-child true}
+         (shui/button {:variant :ghost
+                       :class "!px-2 !py-0 h-6 border border-input rounded-md"
+                       :size :sm}
+                      (get-month-label value)))
+        (shui/dropdown-menu-content
+         (for [[idx _month] (medley/indexed month-values)
+               :let [label (get-month-label idx)]]
+           (shui/dropdown-menu-checkbox-item
+            {:checked (= value idx)
+             :on-select (fn []
+                          (onChange (day-picker-change-event idx)))}
+            label)))))]))
 
 (defn single-calendar
   [{:keys [del-btn? on-delete on-select on-day-click] :as opts}]
@@ -1033,14 +1085,14 @@
    (merge
     {:mode "single"
      :weekStartsOn (mod (inc (state/get-start-of-week)) 7)
-     :caption-layout "dropdown-buttons"
+     :caption-layout "dropdown"
      :fromYear 1000
      :toYear 3000
      :formatters {:formatWeekdayName (fn [weekday _]
                                        (i18n/locale-format-date weekday {:weekday "short"}))}
      :components (cond-> {:Dropdown #(date-year-month-select (bean/bean %))}
                    del-btn? (assoc :Head #(DelDateButton on-delete)))
-     :class-names {:months "" :root (when del-btn? "has-del-btn")}
+     :class-names {:root (when del-btn? "has-del-btn")}
      :on-day-key-down (fn [^js d _ ^js e]
                         (when (= "Enter" (.-key e))
                           (let [on-select' (or on-select on-day-click)]
