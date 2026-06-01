@@ -21,14 +21,15 @@
 (defonce *collapsed-queries (atom {}))
 
 (def ^:private max-query-state-size 128)
+(defonce ^:private *query-last-access (volatile! {}))
 
 (defn- now-ms
   []
   (.now js/Date))
 
 (defn- entry-last-access
-  [[_ entry]]
-  (or (:last-access entry) 0))
+  [[k _entry]]
+  (or (get @*query-last-access k) 0))
 
 (defn set-q-collapsed!
   [k collapsed?]
@@ -88,6 +89,7 @@
   []
   (reset! *query-state {})
   (reset! *collapsed-queries {})
+  (vreset! *query-last-access {})
   (vreset! component->query-key {})
   (vreset! query-key->components {}))
 
@@ -98,15 +100,16 @@
                                :result result-atom
                                :transform-fn transform-fn
                                :query-fn query-fn
-                               :inputs-fn inputs-fn
-                               :last-access (now-ms)})
+                               :inputs-fn inputs-fn})
+  (vswap! *query-last-access assoc k (now-ms))
   (evict-query-state!)
   result-atom)
 
 (defn remove-q!
   [k]
   (when-not (and (= (second k) :custom) (nth k 3))                   ; today query
-    (swap! *query-state dissoc k)))
+    (swap! *query-state dissoc k)
+    (vswap! *query-last-access dissoc k)))
 
 (defn add-query-component!
   [k component]
@@ -132,7 +135,7 @@
 (defn get-query-cached-result
   [k]
   (when-let [result (get @*query-state k)]
-    (swap! *query-state update k assoc :last-access (now-ms))
+    (vswap! *query-last-access assoc k (now-ms))
     (when (satisfies? IWithMeta @(:result result))
       (set! (.-state (:result result))
             @(:result result)))
