@@ -27,6 +27,8 @@ const copyPairs = [
   {
     from: path.join(distDir, "db-worker-node.js"),
     to: path.join(staticJsDir, "db-worker-node.js"),
+    generatedFrom: path.join(staticDir, "db-worker-node.js"),
+    refreshCommand: "pnpm db-worker-node:bundle",
   },
   {
     from: path.join(skillSourceDir, "SKILL.md"),
@@ -52,10 +54,26 @@ async function copyOne({ from, to, optional = false }) {
   await fs.copyFile(from, to);
 }
 
+async function assertFreshRuntime({ from, generatedFrom, refreshCommand }) {
+  if (!generatedFrom || !(await exists(generatedFrom)) || !(await exists(from))) return;
+
+  const [sourceStats, generatedStats] = await Promise.all([
+    fs.stat(from),
+    fs.stat(generatedFrom),
+  ]);
+
+  if (sourceStats.mtimeMs + 1000 < generatedStats.mtimeMs) {
+    throw new Error(
+      `${from} is older than ${generatedFrom}; run \`${refreshCommand}\` before preparing desktop runtime JS`
+    );
+  }
+}
+
 async function main() {
   await fs.mkdir(staticJsDir, { recursive: true });
 
   for (const pair of copyPairs) {
+    await assertFreshRuntime(pair);
     await copyOne(pair);
   }
 
