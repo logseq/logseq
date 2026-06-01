@@ -50,6 +50,17 @@
   (is (= [1 2 3]
          (keep shui-table/table-row-id [1 {:db/id 2} {:foo "ignored"} 3]))))
 
+(deftest asset-row-meta-should-only-include-asset-table-rows
+  (is (nil? (#'views/asset-row-meta
+             {:db/id 1
+              :block/parent #uuid "11111111-1111-1111-1111-111111111111"})))
+  (is (= {:asset-table/nested? true
+          :asset-table/annotation-id 20}
+         (#'views/asset-row-meta
+          {:db/id 2
+           :asset-table/nested? true
+           :asset-table/annotation-id 20}))))
+
 (deftest table-sorting-actions-should-replace-or-append-explicitly
   (let [*sorting (atom nil)
         table (shui-table/table-option

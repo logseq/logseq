@@ -596,6 +596,22 @@
                  :else nil)]
     (str prefix (or row-id idx))))
 
+(def ^:private asset-row-meta-keys
+  [:asset-table/nested?
+   :asset-table/annotation-id
+   :asset-table/expanded?])
+
+(defn- asset-row-meta
+  [row]
+  (when (map? row)
+    (not-empty (select-keys row asset-row-meta-keys))))
+
+(defn- merge-row-meta
+  [row row-meta]
+  (if (and row row-meta)
+    (merge row row-meta)
+    row))
+
 (defonce groups-sort-by-options
   [[:view.table/group-journal-date :block/journal-day]
    [:view.table/group-page-name :block/title]
@@ -1199,11 +1215,9 @@
   [table row props option]
   (let [block (db/sub-block (:db/id row))
         block' (if (contains? #{:self :full} (:block.temp/load-status block)) block row)
-        row-meta (select-keys row [:asset-table/nested?
-                                   :asset-table/annotation-id
-                                   :asset-table/expanded?])
+        row-meta (asset-row-meta row)
         row' (when block'
-               (-> (merge block' row-meta)
+               (-> (merge-row-meta block' row-meta)
                    (update :block/tags (fn [tags]
                                          (keep (fn [tag]
                                                  (when-let [id (:db/id tag)]
@@ -1835,19 +1849,14 @@
 (rum/defc lazy-item
   [data idx {:keys [properties list-view? gallery-view? scrolling?]} item-render]
   (let [source-item (util/nth-safe data idx)
-        source-item-meta (when (map? source-item)
-                           (select-keys source-item [:asset-table/nested?
-                                                     :asset-table/annotation-id
-                                                     :asset-table/expanded?]))
+        source-item-meta (asset-row-meta source-item)
         db-id (cond (map? source-item) (:db/id source-item)
                     (number? source-item) source-item
                     :else nil)
         entity (when db-id
                  (let [e (db/entity db-id)]
                    (when (= :full (:block.temp/load-status e))
-                     (if (map? source-item)
-                       (merge e source-item-meta)
-                       e))))
+                     (merge-row-meta e source-item-meta))))
         [item set-item!] (hooks/use-state entity)
         list-or-gallery? (or list-view? gallery-view?)
         opts (if list-or-gallery?
@@ -1863,15 +1872,13 @@
          (when (and db-id (not item) (not scrolling?))
            (let [block (c.m/<? (db-async/<get-block (state/get-current-repo) db-id opts))
                  block' (if list-or-gallery? (db/entity db-id) block)
-                 block' (if (map? source-item)
-                          (merge block' source-item-meta)
-                          block')]
+                 block' (merge-row-meta block' source-item-meta)]
              (set-item! block')))))
      [db-id scrolling?])
     (let [item' (cond
-                  (map? item) (merge item source-item-meta)
-                  (number? item) (merge {:db/id item} source-item-meta)
-                  (map? source-item) source-item)]
+                  (map? item) (merge-row-meta item source-item-meta)
+                  (number? item) (merge-row-meta {:db/id item} source-item-meta)
+                  (and source-item-meta (map? source-item)) source-item)]
       (item-render item'))))
 
 (rum/defc table-body < rum/static
