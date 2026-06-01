@@ -343,7 +343,14 @@ exports.electron = () => {
   })
 }
 
-exports.electronMaker = async () => {
+const prepareElectronMaker = async () => {
+  cp.execSync('pnpm cljs:release-electron', {
+    stdio: 'inherit',
+  })
+  cp.execSync('pnpm desktop:prepare-runtime-js', {
+    stdio: 'inherit',
+  })
+
   const pkgPath = path.join(outputPath, 'package.json')
   const pkg = require(pkgPath)
   const version = fs.readFileSync(
@@ -360,15 +367,29 @@ exports.electronMaker = async () => {
 
   await common.pruneDesktopPackageFiles()
 
-  cp.execSync('pnpm install --frozen-lockfile', {
-    cwd: outputPath,
-    stdio: 'inherit',
-  })
+  if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
+    cp.execSync('pnpm install --frozen-lockfile', {
+      cwd: outputPath,
+      stdio: 'inherit',
+    })
+  }
+}
 
-  cp.execSync('pnpm electron:make', {
+const runStaticScript = (script) => {
+  cp.execSync(`pnpm ${script}`, {
     cwd: outputPath,
     stdio: 'inherit',
   })
+}
+
+exports.electronMaker = async () => {
+  await prepareElectronMaker()
+  runStaticScript('electron:make')
+}
+
+exports.electronMakerUnsigned = async () => {
+  await prepareElectronMaker()
+  runStaticScript('electron:make-unsigned')
 }
 
 exports.cap = common.runCapWithLocalDevServerEntry
