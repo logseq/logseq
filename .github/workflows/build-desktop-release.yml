@@ -10,6 +10,8 @@ on:
         type: choice
         required: true
         options:
+          # NOTE: For now, we only have beta channel to be released on GitHub
+          # - stable
           - beta
           - nightly
           - non-release
@@ -56,9 +58,9 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Check build options
-        if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta') && github.event.inputs.git-ref != 'master' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') && github.event.inputs.git-ref != 'master' }}
         run: |
-          echo "::error title=CheckFail::Nightly and Beta Release MUST be built from master"
+          echo "::error title=CheckFail::Nightly, Beta and Stable Release MUST be built from master"
           exit 1
 
       - name: Check out Git repository
@@ -115,7 +117,7 @@ jobs:
           echo "version=$pkgver" >> $GITHUB_OUTPUT
 
       - name: Do Not Overwrite Existing Release
-        if: ${{ github.event.inputs.build-target == 'beta' }}
+        if: ${{ github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable' }}
         run: |
           if curl -f "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.ref.outputs.version }}" &>/dev/null; then
             echo "::error title=CheckFail::Release already exists"
@@ -718,10 +720,11 @@ jobs:
             ./*.apk
 
   release:
-    # NOTE: For now, we only have beta channel to be released on GitHub
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') }}
     needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64 ]
     runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.ref.outputs.version }}
     steps:
       - name: Download MacOS x64 Artifacts
         uses: actions/download-artifact@v4
@@ -789,7 +792,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.ref.outputs.version }}
-          name: Desktop APP ${{ steps.ref.outputs.version }} (Beta Testing)
+          name: ${{ github.event.inputs.build-target == 'beta' && format('Desktop APP {0} (Beta Testing)', steps.ref.outputs.version) || format('Desktop APP {0}', steps.ref.outputs.version) }}
           body: "TODO: Fill this changelog. Sorry for the inconvenience!"
           draft: ${{ github.event.inputs.is-draft }}
           prerelease: ${{ github.event.inputs.is-pre-release }}
@@ -803,3 +806,101 @@ jobs:
             ./*.blockmap
             ./*.AppImage
             ./*.apk
+
+  trigger-flathub-release:
+    runs-on: ubuntu-22.04
+    needs: [ release ]
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') }}
+    steps:
+      - name: Trigger Flathub release
+        run: |
+          if [ -z "${FLATHUB_WORKFLOW_TOKEN:-}" ]; then
+            echo "::error title=CheckFail::FLATHUB_WORKFLOW_TOKEN is required to trigger Flathub release"
+            exit 1
+          fi
+
+          if [ "${BUILD_TARGET}" = "stable" ]; then
+            flathub_ref=master
+          else
+            flathub_ref=beta
+          fi
+
+          payload=$(jq -n \
+            --arg ref "$flathub_ref" \
+            --arg version "$VERSION" \
+            '{ref: $ref, inputs: {force: true, version: $version}}')
+
+          response=$(mktemp)
+          status=$(curl -sS -o "$response" -w "%{http_code}" -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${FLATHUB_WORKFLOW_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/flathub/com.logseq.Logseq/actions/workflows/update.yml/dispatches \
+            -d "$payload") || status=000
+
+          echo "Flathub dispatch returned HTTP ${status}"
+          if [ -s "$response" ]; then
+            cat "$response"
+          fi
+
+          if [ "$status" != "204" ]; then
+            echo "::error title=FlathubDispatchFailed::Failed to trigger Flathub release workflow"
+            exit 1
+          fi
+        env:
+          BUILD_TARGET: ${{ github.event.inputs.build-target }}
+          VERSION: ${{ needs.release.outputs.version }}
+          FLATHUB_WORKFLOW_TOKEN: ${{ secrets.FLATHUB_WORKFLOW_TOKEN }}
+
+  publish-linux-snap:
+    runs-on: ubuntu-22.04
+    needs: [ release ]
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') }}
+    steps:
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v4
+        with:
+          name: static
+          path: static
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Publish Snap
+        run: |
+          if [ -z "${SNAPCRAFT_STORE_CREDENTIALS:-}" ]; then
+            echo "::error title=CheckFail::SNAPCRAFT_STORE_CREDENTIALS is required to publish snap"
+            exit 1
+          fi
+
+          if [ "${BUILD_TARGET}" = "stable" ]; then
+            snap_grade=stable
+            snap_channel=stable
+          else
+            snap_grade=devel
+            snap_channel=beta
+          fi
+
+          printf '%s\n' \
+            'extends: ./electron-builder.yml' \
+            'snap:' \
+            "  grade: ${snap_grade}" \
+            '  publish:' \
+            '    provider: snapStore' \
+            '    channels:' \
+            "      - ${snap_channel}" \
+            > electron-builder.snap.yml
+
+          pnpm install --frozen-lockfile
+          pnpm electron:publish-snap -- --config electron-builder.snap.yml
+        working-directory: ./static
+        env:
+          BUILD_TARGET: ${{ github.event.inputs.build-target }}
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
