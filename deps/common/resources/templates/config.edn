@@ -198,7 +198,7 @@
  ;; :mobile
  ;; {:gestures/disabled-in-block-with-tags ["kanban"]}
 
- ;; Extra CodeMirror options.
+ ;; Extra code editor options.
  ;; CodeMirror 5 options are no longer accepted. Supported keys are:
  ;; :line-numbers? and :line-wrapping?.
  ;; Example usage:

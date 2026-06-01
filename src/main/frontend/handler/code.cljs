@@ -2,7 +2,7 @@
   "Codemirror editor related."
   (:require [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.extensions.code-cm6 :as code-editor]
+            [frontend.extensions.code :as code-editor]
             [frontend.fs :as fs]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.editor :as editor-handler]

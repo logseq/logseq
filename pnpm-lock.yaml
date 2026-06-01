@@ -167,9 +167,6 @@ importers:
       chrono-node:
         specifier: 2.9.0
         version: 2.9.0
-      codemirror:
-        specifier: 5.65.18
-        version: 5.65.18
       comlink:
         specifier: ^4.4.2
         version: 4.4.2
@@ -1653,9 +1650,6 @@ packages:
   code-point-at@1.1.0:
     resolution: {integrity: sha512-RpAVKQA5T63xEj6/giIbUEtZwJ4UFIc3ZtvEkiaUERylqe8xb5IvqcgOurZLahv93CLKfxcw5YI+DZcUBRyLXA==}
     engines: {node: '>=0.10.0'}
-
-  codemirror@5.65.18:
-    resolution: {integrity: sha512-Gaz4gHnkbHMGgahNt3CA5HBk5lLQBqmD/pBgeB4kQU6OedZmqMBjlRF0LSrp2tJ4wlLNPm2FfaUd1pDy0mdlpA==}
 
   color-convert@1.9.3:
     resolution: {integrity: sha512-QfAUtd+vFdAtFQcC8CCyYt1fYWxSqAiK2cSD6zDB8N3cpsEBAvRxp9zOGg6G/SHHJYAT88/az/IuDGALsNVbGg==}
@@ -6556,8 +6550,6 @@ snapshots:
   clone@2.1.2: {}
 
   code-point-at@1.1.0: {}
-
-  codemirror@5.65.18: {}
 
   color-convert@1.9.3:
     dependencies:

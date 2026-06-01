@@ -1,4 +1,4 @@
-(ns frontend.extensions.code-language-registry
+(ns frontend.extensions.code.language-registry
   (:require [clojure.string :as string]))
 
 (def supported-sources #{:native :nextjournal :legacy :plain-text})

@@ -7,7 +7,7 @@
 
 ;; TODO: Why does shadow fail when code is required
 #_:clj-kondo/ignore
-(def lazy-editor (lazy/loadable frontend.extensions.code-cm6.editor/editor))
+(def lazy-editor (lazy/loadable frontend.extensions.code.editor/editor))
 
 (defonce loaded? (atom false))
 

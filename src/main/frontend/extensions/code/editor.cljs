@@ -1,10 +1,10 @@
-(ns frontend.extensions.code-cm6.editor
+(ns frontend.extensions.code.editor
   (:require [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.extensions.calc :as calc]
-            [frontend.extensions.code-cm6 :as cm6]
+            [frontend.extensions.code :as code-editor]
             [frontend.handler.code :as code-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.plugin :refer [hook-extensions-enhancers-by-key]]
@@ -14,7 +14,7 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(def editor-root-ref-name "cm6-editor-root")
+(def editor-root-ref-name "code-editor-root")
 
 (defn- extra-codemirror-options []
   (get (state/get-config)
@@ -31,7 +31,7 @@
 
 (defn- update-cursor-state!
   [context *cursor-prev *cursor-curr]
-  (let [range (cm6/selection-range context)]
+  (let [range (code-editor/selection-range context)]
     (if (not @*cursor-prev)
       (vreset! *cursor-prev range)
       (vreset! *cursor-prev @*cursor-curr))
@@ -45,8 +45,8 @@
 (defn- cursor-at-end?
   [context range]
   (let [{:keys [line ch]} (:end range)]
-    (and (= line (cm6/last-line context))
-         (= ch (count (cm6/line-text context line))))))
+    (and (= line (code-editor/last-line context))
+         (= ch (count (code-editor/line-text context line))))))
 
 (defn- boundary?
   [context range direction]
@@ -159,7 +159,7 @@
         *editor-ref (get attr :editor-ref)
         *update-cursor! (atom nil)
         context (when parent
-                  (cm6/create-context!
+                  (code-editor/create-context!
                    {:parent parent
                     :initial-doc (or code "")
                     :editor-id id
@@ -176,9 +176,9 @@
         (reset! *editor-ref context))
       (install-event-handlers! context config state edit-block code-block *update-cursor!)
       (when-let [legacy-enhancers (seq (hook-extensions-enhancers-by-key :codemirror))]
-        (cm6/apply-enhancers! context (map #(assoc % :type :codemirror) legacy-enhancers)))
+        (code-editor/apply-enhancers! context (map #(assoc % :type :codemirror) legacy-enhancers)))
       (when-let [enhancers (seq (hook-extensions-enhancers-by-key :codemirror-6))]
-        (cm6/apply-enhancers! context enhancers))
+        (code-editor/apply-enhancers! context enhancers))
       context)))
 
 (defn- load-and-render!
@@ -209,7 +209,7 @@
                  state)
    :will-unmount (fn [state]
                    (when-let [context (some-> state :editor-atom deref)]
-                     (cm6/destroy! context))
+                     (code-editor/destroy! context))
                    state)}
   [state _config id attr _code _theme _options]
   [:div.extensions__code.flex.flex-1
@@ -240,5 +240,5 @@
       (fn []
         (let [block-node (util/get-first-block-by-id block-uuid)]
           (when-let [context (util/get-code-editor-context block-node)]
-            (cm6/focus! context))))
+            (code-editor/focus! context))))
       256))))

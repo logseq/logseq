@@ -1,6 +1,6 @@
-(ns frontend.extensions.code-language-registry-test
+(ns frontend.extensions.code.language-registry-test
   (:require [cljs.test :refer [deftest is testing]]
-            [frontend.extensions.code-language-registry :as registry]))
+            [frontend.extensions.code.language-registry :as registry]))
 
 (deftest native-languages-resolve-without-legacy-fallback
   (testing "Common app languages use CM6 native language packages"

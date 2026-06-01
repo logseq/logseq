@@ -2,7 +2,7 @@
   (:require [cljs-bean.core :as bean]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.context.i18n :refer [t]]
-            [frontend.extensions.code-cm6 :as code-editor]
+            [frontend.extensions.code :as code-editor]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.security :as security]

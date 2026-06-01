@@ -17,7 +17,7 @@
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.search :as search-handler]
-            [frontend.extensions.code-language-registry :as code-language-registry]
+            [frontend.extensions.code.language-registry :as language-registry]
             [frontend.mixins :as mixins]
             [frontend.search :refer [fuzzy-search]]
             [frontend.state :as state]
@@ -419,7 +419,7 @@
   {:init (fn [state]
            (assoc state ::pos (state/get-editor-last-pos)))}
   [state id format]
-  (when-let [modes (->> (code-language-registry/supported-languages)
+  (when-let [modes (->> (language-registry/supported-languages)
                         (mapcat :names)
                         distinct
                         sort

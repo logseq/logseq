@@ -1,9 +1,9 @@
-(ns frontend.extensions.code-cm6-api-test
+(ns frontend.extensions.code.api-test
   (:require ["@codemirror/state" :refer [EditorState]]
             [cljs.test :refer [deftest is testing]]
-            [frontend.extensions.code-cm6 :as cm6]
-            [frontend.extensions.code-cm6.editor :as cm6-editor]
-            [frontend.extensions.code-cm6.api :as api]))
+            [frontend.extensions.code :as code-editor]
+            [frontend.extensions.code.editor :as code-editor-view]
+            [frontend.extensions.code.api :as api]))
 
 (defn- noop [& _])
 
@@ -65,29 +65,38 @@
              :theme}
            (api/cm5-option-keys options)))))
 
-(deftest cm6-context-namespace-exposes-controlled-entrypoints
+(deftest code-editor-context-exposes-controlled-entrypoints
   (testing "The CM6 context module loads without exposing a CM5 editor object"
-    (is (fn? cm6/create-context!))
-    (is (fn? cm6/get-value))
-    (is (fn? cm6/set-value!))
-    (is (fn? cm6/set-selection-by-offset!))
-    (is (fn? cm6/destroy!))
-    (is (fn? cm6-editor/render!))))
+    (is (fn? code-editor/create-context!))
+    (is (fn? code-editor/get-value))
+    (is (fn? code-editor/set-value!))
+    (is (fn? code-editor/set-selection-by-offset!))
+    (is (fn? code-editor/destroy!))
+    (is (fn? code-editor-view/render!))))
 
 (deftest line-ch-and-offset-conversions-use-cm6-document-offsets
   (let [state (EditorState.create #js {:doc "abc\nxy"})
         context {:view #js {:state state}}]
-    (is (= 0 (cm6/line-ch->offset context {:line 0 :ch 0})))
-    (is (= 2 (cm6/line-ch->offset context {:line 0 :ch 2})))
-    (is (= 4 (cm6/line-ch->offset context {:line 1 :ch 0})))
-    (is (= 6 (cm6/line-ch->offset context {:line 1 :ch 10})))
-    (is (= {:line 1 :ch 1} (cm6/offset->line-ch context 5)))))
+    (is (= 0 (code-editor/line-ch->offset context {:line 0 :ch 0})))
+    (is (= 2 (code-editor/line-ch->offset context {:line 0 :ch 2})))
+    (is (= 4 (code-editor/line-ch->offset context {:line 1 :ch 0})))
+    (is (= 6 (code-editor/line-ch->offset context {:line 1 :ch 10})))
+    (is (= {:line 1 :ch 1} (code-editor/offset->line-ch context 5)))))
 
 (deftest context-default-value-tracks-save-baseline-without-textarea
   (let [context {:*state (atom {:default-value "old"})}]
-    (is (= "old" (cm6/default-value context)))
-    (is (identical? context (cm6/set-default-value! context "new")))
-    (is (= "new" (cm6/default-value context)))))
+    (is (= "old" (code-editor/default-value context)))
+    (is (identical? context (code-editor/set-default-value! context "new")))
+    (is (= "new" (code-editor/default-value context)))))
+
+(deftest change-listeners-are-removable
+  (let [listener (fn [_value])
+        context {:*state (atom {:change-listeners {}})}
+        remove! (code-editor/add-change-listener! context listener)
+        listener-id (ffirst (:change-listeners @(:*state context)))]
+    (is (= listener (get-in @(:*state context) [:change-listeners listener-id])))
+    (remove!)
+    (is (empty? (:change-listeners @(:*state context))))))
 
 (deftest cm6-enhancers-can-register-extensions-through-versioned-payload
   (let [context {:editor-id "editor-1"
@@ -97,7 +106,7 @@
         calls (atom [])]
     (is (identical?
          context
-         (cm6/apply-enhancers!
+         (code-editor/apply-enhancers!
           context
           [{:key :plugin-a
             :enhancer (fn [^js payload]
@@ -118,7 +127,7 @@
                  :*state (atom {:plugin-extensions {}
                                 :plugin-languages {}})}
         calls (atom [])]
-    (cm6/apply-enhancers!
+    (code-editor/apply-enhancers!
      context
      [{:key :plugin-a
        :enhancer (fn [^js payload]
@@ -137,7 +146,7 @@
                  :*state (atom {:plugin-extensions {}
                                 :plugin-languages {}})}
         calls (atom [])]
-    (cm6/apply-enhancers!
+    (code-editor/apply-enhancers!
      context
      [{:key :plugin-a
        :enhancer (fn [^js payload]
@@ -167,7 +176,7 @@
                                 :plugin-languages {}})}]
     (is (identical?
          context
-         (cm6/apply-enhancers!
+         (code-editor/apply-enhancers!
           context
           [{:key :legacy-plugin
             :type api/legacy-enhancer-type

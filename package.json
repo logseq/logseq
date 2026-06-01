@@ -173,7 +173,6 @@
     "@tabler/icons-react": "2.47.0",
     "bignumber.js": "^9.3.1",
     "chrono-node": "2.9.0",
-    "codemirror": "5.65.18",
     "comlink": "^4.4.2",
     "d3-force": "3.0.0",
     "dompurify": "^3.4.2",

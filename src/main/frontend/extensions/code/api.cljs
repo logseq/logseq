@@ -1,4 +1,4 @@
-(ns frontend.extensions.code-cm6.api
+(ns frontend.extensions.code.api
   (:require [clojure.set :as set]))
 
 (def api-version 1)

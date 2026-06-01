@@ -40,8 +40,8 @@
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.lightbox :as lightbox]
-            [frontend.extensions.code-cm6 :as code-editor]
-            [frontend.extensions.code-language-registry :as code-language-registry]
+            [frontend.extensions.code :as code-editor]
+            [frontend.extensions.code.language-registry :as language-registry]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.sci :as sci]
             [frontend.extensions.video.youtube :as youtube]
@@ -4632,7 +4632,7 @@
 
 (defn- supported-code-languages
   []
-  (->> (code-language-registry/supported-languages)
+  (->> (language-registry/supported-languages)
        (map (comp name :id))
        sort))
 

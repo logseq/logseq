@@ -332,13 +332,13 @@
  ;; :mobile
  ;; {:gestures/disabled-in-block-with-tags ["kanban"]}
 
- ;; Extra CodeMirror options
- ;; See https://codemirror.net/5/doc/manual.html#config for possible options
+ ;; Extra code editor options.
+ ;; CodeMirror 5 options are no longer accepted. Supported keys are:
+ ;; :line-numbers? and :line-wrapping?.
  ;; Example usage:
  ;; :editor/extra-codemirror-options
- ;; {:lineWrapping  false  ; Default value: false
- ;;  :lineNumbers   true   ; Default value: true
- ;;  :readOnly      false} ; Default value: false
+ ;; {:line-wrapping? false  ; Default value: false
+ ;;  :line-numbers?  true}  ; Default value: true
 
  ;; Enable logical outdenting
  ;; Default value: false

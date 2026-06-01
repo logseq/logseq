@@ -7,15 +7,17 @@
     word-break: keep-all;
     position: absolute;
     width: fit-content;
+
     /* height:2rem; */
     order: 3;
     left: auto;
     right: 0;
+
     /* margin-top: 4px; */
     z-index: 9999;
     padding: 4px 6px;
     line-height: 1em;
-    opacity: .8;
+    opacity: 0.8;
 
     &:hover {
       cursor: pointer;
@@ -37,57 +39,6 @@
       font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
     }
   }
-}
-
-.cp__fenced-code-block[data-lang="calc"],
-.extensions__code[data-lang="calc"] {
-  .CodeMirror,
-  .CodeMirror-scroll {
-    max-height: none;
-  }
-
-  .CodeMirror {
-    overflow: visible;
-  }
-
-  .CodeMirror-scroll {
-    overflow: visible !important;
-    margin-right: 0;
-    margin-bottom: 0;
-    padding-bottom: 0;
-  }
-
-  .CodeMirror-vscrollbar,
-  .CodeMirror-hscrollbar {
-    display: none !important;
-  }
-}
-
-.CodeMirror {
-  height: auto;
-  max-height: 1024px;
-  width: 100%;
-  font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
-  border-radius: 2px;
-  line-height: 1.45em;
-
-  &:not(.CodeMirror-focused) {
-    .CodeMirror-activeline-background {
-      background: unset !important;
-    }
-  }
-
-  pre.CodeMirror-line {
-    box-shadow: none !important;
-  }
-
-  .CodeMirror-hscrollbar {
-    cursor: pointer;
-  }
-}
-
-.cm-s-solarized.CodeMirror {
-    box-shadow: none;
 }
 
 .logseq-code-editor {

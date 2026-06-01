@@ -17,7 +17,7 @@
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.extensions.fsrs :as fsrs]
-            [frontend.extensions.code-cm6 :as code-editor]
+            [frontend.extensions.code :as code-editor]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.code :as code-handler]
             [frontend.handler.common.page :as page-common-handler]
