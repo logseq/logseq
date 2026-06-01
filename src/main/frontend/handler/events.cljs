@@ -16,6 +16,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
+            [frontend.extensions.graph.pixi :as graph-pixi]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.code :as code-handler]
@@ -36,6 +37,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.shell :as shell-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.image :as image]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.outliner.pipeline :as pipeline]
@@ -88,9 +90,20 @@
 (defmethod handle :init/commands [_]
   (page-handler/init-commands!))
 
+(defn- clear-runtime-on-graph-switch!
+  []
+  (react/clear-query-state!)
+  (db-async/clear-query-cache! (:db/async-queries @state/state))
+  (image/revoke-all-object-urls!)
+  (graph-pixi/destroy-instance!)
+  (try
+    (-> (state/<invoke-db-worker :thread-api/clear-query-caches)
+        (p/catch (fn [_error] nil)))
+    (catch :default _error
+      nil)))
+
 (defn- graph-switch
   [graph]
-  (react/clear-query-state!)
   (state/set-current-repo! graph)
   (page-handler/init-commands!)
   ;; load config
@@ -123,7 +136,7 @@
   (let [t1 (t/now)]
     (p/do!
     (export/cancel-db-backup!)
-    (state/set-state! :db/async-queries {})
+    (clear-runtime-on-graph-switch!)
     (st/refresh!)
     (graph-switch-on-persisted graph opts)
     (export/backup-db-graph (state/get-current-repo))

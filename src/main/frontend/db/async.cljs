@@ -19,6 +19,7 @@
 (def ^:private yyyyMMdd-formatter (tf/formatter "yyyyMMdd"))
 
 (def <q db-async-util/<q)
+(def clear-query-cache! db-async-util/clear-query-cache!)
 
 (defn <get-files
   [graph]

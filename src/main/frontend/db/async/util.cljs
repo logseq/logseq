@@ -6,6 +6,27 @@
             [frontend.state :as state]
             [promesa.core :as p]))
 
+(def ^:private max-async-query-cache-size 512)
+(defonce ^:private *async-query-access (atom {}))
+
+(defn- remember-async-query!
+  [*async-queries k]
+  (swap! *async-queries assoc k true)
+  (swap! *async-query-access assoc k (.now js/Date))
+  (when (> (count @*async-query-access) max-async-query-cache-size)
+    (let [drop-keys (->> @*async-query-access
+                         (sort-by val)
+                         (take (- (count @*async-query-access) max-async-query-cache-size))
+                         (map key)
+                         vec)]
+      (swap! *async-queries #(apply dissoc % drop-keys))
+      (swap! *async-query-access #(apply dissoc % drop-keys)))))
+
+(defn clear-query-cache!
+  [*async-queries]
+  (reset! *async-queries {})
+  (reset! *async-query-access {}))
+
 (defn- transform-pull-query
   [query]
   (if (= :find (first query))
@@ -40,7 +61,7 @@
        (let [db (db-conn/get-db graph)]
          (apply d/q (first inputs') db (rest inputs'))))
       (p/let [result (state/<invoke-db-worker :thread-api/q graph inputs')]
-        (swap! *async-queries assoc [inputs' opts] true)
+        (remember-async-query! *async-queries [inputs' opts])
         (when result
           (when (and transact-db? (seq result) (coll? result))
             (when-let [conn (db-conn/get-db graph false)]

@@ -28,7 +28,8 @@
    (doseq [instance (vals @*graph-instances)]
      (destroy-instance-data! instance))
    (reset! *graph-instances {})
-   (reset! *render-tokens {}))
+   (reset! *render-tokens {})
+   (reset! *tabler-icon-codepoint-cache {}))
   ([container]
    (when container
      (swap! *render-tokens update container (fnil inc 0))
