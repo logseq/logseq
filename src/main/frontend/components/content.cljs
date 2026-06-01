@@ -358,8 +358,8 @@
              (shui/dropdown-menu-sub-trigger
               (t :context-menu/developer-tools))
 
-              (shui/dropdown-menu-sub-content
-               (shui/dropdown-menu-item
+             (shui/dropdown-menu-sub-content
+              (shui/dropdown-menu-item
                {:key :dev/show-block-data
                 :on-click (fn []
                             (dev-common-handler/show-entity-data [:block/uuid block-id]))}
@@ -370,7 +370,7 @@
                             (let [block (db/entity [:block/uuid block-id])]
                               (dev-common-handler/show-content-ast (:block/title block)
                                                                    (get block :block/format :markdown))))}
-               (shortcut-dh/shortcut-desc-by-id :dev/show-block-ast)))])])))
+               (shortcut-dh/shortcut-desc-by-id :dev/show-block-ast))))])])))
 
 (hsx/defc block-ref-custom-context-menu-content
   [block block-ref-id]
