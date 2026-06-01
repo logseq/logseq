@@ -1,7 +1,5 @@
 (ns frontend.components.content
-  (:require [cljs-time.coerce :as tc]
-            [cljs.pprint :as pp]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.components.block.comments-model :as comments-model]
@@ -372,22 +370,7 @@
                             (let [block (db/entity [:block/uuid block-id])]
                               (dev-common-handler/show-content-ast (:block/title block)
                                                                    (get block :block/format :markdown))))}
-               (shortcut-dh/shortcut-desc-by-id :dev/show-block-ast))
-              (shui/dropdown-menu-item
-               {:key :dev/show-block-content-history
-                :on-click
-                (fn []
-                  (let [token (state/get-auth-id-token)
-                        graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
-                    (p/let [blocks-versions (state/<invoke-db-worker :thread-api/rtc-get-block-content-versions token graph-uuid block-id)]
-                      (doseq [[block-uuid versions] blocks-versions]
-                        (prn :block-uuid block-uuid)
-                        (pp/print-table [:content :created-at]
-                                        (map (fn [version]
-                                               {:created-at (tc/from-long (* (:created-at version) 1000))
-                                                :content (:value version)})
-                                             versions))))))}
-               "(Dev) Show block content history")))])])))
+               (shortcut-dh/shortcut-desc-by-id :dev/show-block-ast)))])])))
 
 (hsx/defc block-ref-custom-context-menu-content
   [block block-ref-id]
