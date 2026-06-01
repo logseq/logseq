@@ -117,9 +117,7 @@ const common = {
         'packages/ui/dist/ui.js',
         'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm',
         'node_modules/react/umd/react.production.min.js',
-        'node_modules/react/umd/react.development.js',
         'node_modules/react-dom/umd/react-dom.production.min.js',
-        'node_modules/react-dom/umd/react-dom.development.js',
         'node_modules/prop-types/prop-types.min.js',
         'node_modules/dompurify/dist/purify.js',
       ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
@@ -157,9 +155,7 @@ const common = {
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
         'node_modules/react/umd/react.production.min.js',
-        'node_modules/react/umd/react.development.js',
         'node_modules/react-dom/umd/react-dom.production.min.js',
-        'node_modules/react-dom/umd/react-dom.development.js',
         'node_modules/prop-types/prop-types.min.js',
         'node_modules/interactjs/dist/interact.min.js',
         'node_modules/photoswipe/dist/umd/*.js',
@@ -257,21 +253,36 @@ const common = {
 
   switchReactDevelopmentMode (cb) {
     try {
-      const reactFrom = path.join(outputPath, 'js', 'react.development.js')
+      const reactFrom = path.join(__dirname, 'node_modules', 'react', 'umd',
+        'react.development.js')
       const reactTo = path.join(outputPath, 'js', 'react.production.min.js')
-      fs.renameSync(reactFrom, reactTo)
+      fs.copyFileSync(reactFrom, reactTo)
 
-      const reactDomFrom = path.join(outputPath, 'js',
+      const reactDomFrom = path.join(__dirname, 'node_modules', 'react-dom',
+        'umd',
         'react-dom.development.js')
       const reactDomTo = path.join(outputPath, 'js',
         'react-dom.production.min.js')
-      fs.renameSync(reactDomFrom, reactDomTo)
+      fs.copyFileSync(reactDomFrom, reactDomTo)
 
       cb()
     } catch (err) {
       console.error('Error during switchReactDevelopmentMode:', err)
       cb(err)
     }
+  },
+
+  pruneDesktopPackageFiles () {
+    for (const entry of ['mobile', 'android', 'ios']) {
+      fs.rmSync(path.join(outputPath, entry), {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      })
+    }
+
+    return Promise.resolve()
   },
 }
 
@@ -308,6 +319,8 @@ exports.electronMaker = async () => {
 
   pkg.version = version
   fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2))
+
+  await common.pruneDesktopPackageFiles()
 
   if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
     cp.execSync('pnpm install --frozen-lockfile', {
