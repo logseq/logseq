@@ -4160,7 +4160,7 @@
         :data-is-property (ldb/property? block)
         :data-comments-area comments-area?
         :ref #(when (nil? @*ref) (reset! *ref %))
-        :data-collapsed (and collapsed? has-child?)
+        :data-collapsed (and collapsed? (boolean has-child?))
         :class (str (when selected? "selected")
                  (when (ldb/recycled? block) " line-through opacity-70")
                  (when order-list? " is-order-list")

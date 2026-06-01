@@ -1,5 +1,6 @@
 (ns frontend.extensions.pdf.core
-  (:require ["react-dom/client" :as rdc]
+  (:require ["react-dom" :as rd]
+            ["react-dom/client" :as rdc]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [datascript.impl.entity :as de]
@@ -43,23 +44,29 @@
 (hsx/defc pdf-highlight-finder
   [^js viewer]
   (let [*mounted? (hooks/use-ref false)
-        ref-hl (state/use-sub :pdf/ref-highlight)]
+        ref-hl (state/use-sub :pdf/ref-highlight)
+        ref-hl-key (when ref-hl
+                     (str (:id ref-hl) ":" (:page ref-hl)))]
     (hooks/use-effect!
      (fn []
-       (when viewer
-         (when-let [ref-hl ref-hl]
-           ;; delay handle: aim to fix page blink
-           (js/setTimeout
-            (fn []
-              (if (:id ref-hl)
-                (pdf-utils/scroll-to-highlight viewer ref-hl)
-                (set! (.-currentPageNumber viewer) (or (:page ref-hl) 1))))
-            (if (hooks/deref *mounted?) 50 500))
-
-           (js/setTimeout
-            #(state/set-state! :pdf/ref-highlight nil) 1000)))
-       (hooks/set-ref! *mounted? true))
-     [viewer ref-hl])
+       (let [scroll-timer (when (and viewer ref-hl)
+                            ;; delay handle: aim to fix page blink
+                            (js/setTimeout
+                             (fn []
+                               (if (:id ref-hl)
+                                 (pdf-utils/scroll-to-highlight viewer ref-hl)
+                                 (set! (.-currentPageNumber viewer) (or (:page ref-hl) 1))))
+                             (if (hooks/deref *mounted?) 50 500)))
+             clear-timer (when (and viewer ref-hl)
+                           (js/setTimeout
+                            #(state/set-state! :pdf/ref-highlight nil) 1000))]
+         (hooks/set-ref! *mounted? true)
+         #(do
+            (when scroll-timer
+              (js/clearTimeout scroll-timer))
+            (when clear-timer
+              (js/clearTimeout clear-timer)))))
+     [viewer ref-hl-key])
     nil))
 
 (hsx/defc pdf-page-finder
@@ -134,6 +141,7 @@
         ^js cnt (.-container viewer)
         ^js body (some-> (.-ownerDocument cnt) (.-body))
         key-alt? (= (some-> body (.-dataset) (.-activeKeystroke)) "Alt")
+        auto-open-ctx-menu? (state/use-sub :pdf/auto-open-ctx-menu?)
         head-height 0                                       ;; 48 temp
         top (- (+ (:y point) (.-scrollTop cnt)) head-height)
         left (+ (:x point) (.-scrollLeft cnt))
@@ -141,7 +149,7 @@
         new? (nil? id)
         new-&-highlight-mode? (and @*highlight-mode? new?)
         show-ctx-menu? (and (not new-&-highlight-mode?)
-                            (or (not selection) (and selection (or (state/use-sub :pdf/auto-open-ctx-menu?) key-alt?))))
+                            (or (not selection) (and selection (or auto-open-ctx-menu? key-alt?))))
         content (:content highlight)
         area? (not (string/blank? (:image content)))
         action-fn! (fn [action clear?]
@@ -738,18 +746,26 @@
        #())
      [loaded-pages highlights])
 
+    ;; render context menu
+    (hooks/use-effect!
+     (fn []
+       (when-let [^js/HTMLDivElement holder (.querySelector el ".pp-holder")]
+         (let [^js mounted-root (.-mountedRoot holder)
+               root (or mounted-root
+                        (let [root (rdc/createRoot holder)]
+                          (set! (. holder -mountedRoot) root)
+                          root))]
+           (.render root
+                    (when (:highlight ctx-menu-state)
+                      (pdf-highlights-ctx-menu viewer ctx-menu-state
+                                               {:clear-ctx-menu! clear-ctx-menu!
+                                                :add-hl! add-hl!
+                                                :del-hl! del-hl!
+                                                :upd-hl! upd-hl!})))))
+       #())
+     [ctx-menu-state])
+
     [:div.extensions__pdf-highlights-cnt
-
-     ;; hl context tip menu
-     (when-let [_hl (:highlight ctx-menu-state)]
-       (js/ReactDOM.createPortal
-        (pdf-highlights-ctx-menu viewer ctx-menu-state
-                                 {:clear-ctx-menu! clear-ctx-menu!
-                                  :add-hl! add-hl!
-                                  :del-hl! del-hl!
-                                  :upd-hl! upd-hl!})
-
-        (.querySelector el ".pp-holder")))
 
      ;; debug highlights anchor
      ;;(if (seq highlights)
@@ -1090,7 +1106,7 @@
                               (not (nil? pdf-current))))
 
      (when (and (not system-win?) pdf-current)
-       (js/ReactDOM.createPortal
+       (rd/createPortal
         (pdf-container-outer
          (pdf-container pdf-current))
         (js/document.querySelector "#app-single-container")))]))
