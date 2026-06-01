@@ -1,6 +1,7 @@
 (ns frontend.image
   "Image related utility fns"
   (:require ["/frontend/exif" :as exif]
+            [clojure.string :as string]
             [goog.object :as gobj]))
 
 (defn reverse?
@@ -63,8 +64,62 @@
    (fn [orientation]
      (fix-orientation img orientation cb max-width max-height))))
 
+(defonce ^:private *object-urls (atom #{}))
+(defonce ^:private *keyed-object-urls (atom {}))
+
 (defn create-object-url
   [file]
-  (.createObjectURL (or (.-URL js/window)
-                        (.-webkitURL js/window))
-                    file))
+  (let [url (.createObjectURL (or (.-URL js/window)
+                                  (.-webkitURL js/window))
+                              file)]
+    (swap! *object-urls conj url)
+    url))
+
+(defn revoke-object-url
+  [url]
+  (when (and (string? url)
+             (string/starts-with? url "blob:"))
+    (.revokeObjectURL (or (.-URL js/window)
+                          (.-webkitURL js/window))
+                      url)
+    (swap! *object-urls disj url)
+    (swap! *keyed-object-urls
+           (fn [m]
+             (into {} (remove (fn [[_ url']]
+                                (= url url'))
+                              m))))))
+
+(defn create-replacing-object-url!
+  [k file]
+  (when-let [url (get @*keyed-object-urls k)]
+    (revoke-object-url url))
+  (let [url (create-object-url file)]
+    (swap! *keyed-object-urls assoc k url)
+    url))
+
+(defn revoke-all-object-urls!
+  []
+  (doseq [url @*object-urls]
+    (revoke-object-url url))
+  (reset! *keyed-object-urls {}))
+
+(defonce ^:private _cleanup-object-urls-on-pagehide
+  (when (and (exists? js/window)
+             (fn? (.-addEventListener js/window)))
+    (.addEventListener js/window "pagehide" revoke-all-object-urls!)))
+
+(defn set-img-src-object-url!
+  [^js img blob]
+  (when (and img blob)
+    (when-let [previous (some-> img .-dataset .-logseqObjectUrl)]
+      (revoke-object-url previous))
+    (let [url (create-object-url blob)
+          cleanup! (fn []
+                     (when (= url (some-> img .-dataset .-logseqObjectUrl))
+                       (js-delete (.-dataset img) "logseqObjectUrl"))
+                     (revoke-object-url url))]
+      (set! (.. img -dataset -logseqObjectUrl) url)
+      (set! (.-onload img) cleanup!)
+      (set! (.-onerror img) cleanup!)
+      (set! (.-src img) url)
+      url)))
