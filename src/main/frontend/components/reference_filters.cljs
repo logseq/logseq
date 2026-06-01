@@ -114,4 +114,4 @@
 (hsx/defc filter-dialog
   [page references]
   (let [page-entity (db/sub-block (:db/id page))]
-       (filter-dialog-aux page-entity references)))
+    (filter-dialog-aux page-entity references)))

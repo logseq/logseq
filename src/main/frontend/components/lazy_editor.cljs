@@ -1,7 +1,7 @@
 (ns frontend.components.lazy-editor
   (:require [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.handler.plugin :refer [hook-extensions-enhancers-by-key]]            [frontend.state :as state]
+            [frontend.handler.plugin :refer [hook-extensions-enhancers-by-key]]
             [frontend.ui :as ui]
             [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
@@ -15,16 +15,16 @@
 (defonce loaded? (atom false))
 
 (hsx/defc editor-aux
-  [config id attr code theme options codemirror-loaded?]
+  [config id attr code options codemirror-loaded?]
   (let [^js state (ui/useInView #js {:rootMargin "0px"})
         in-view? (.-inView state)
         placeholder [:div
                      {:style {:height (min
                                        (* 23.2 (count (string/split-lines code)))
-                                       600)}}]]
+                     600)}}]]
     [:div {:ref (.-ref state)}
      (if (and codemirror-loaded? in-view?)
-       (@lazy-editor config id attr code theme options)
+       (@lazy-editor config id attr code options)
        placeholder)]))
 
 (hsx/defc editor
@@ -45,7 +45,6 @@
                       (reset! loaded? true))))))
    [])
   (let [[loaded?'] (hooks/use-atom loaded?)
-        theme   (state/use-sub :ui/theme)
         code    (or code "")
         code    (string/replace-first code #"\n$" "")]      ;; See-also: #3410
-    (editor-aux config id attr code theme options loaded?')))
+    (editor-aux config id attr code options loaded?')))

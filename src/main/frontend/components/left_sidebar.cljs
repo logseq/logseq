@@ -70,59 +70,60 @@
 
 (hsx/defc ^:large-vars/cleanup-todo page-name
   [page recent?]
-  (let [[left-sidebar-resized-at] (hooks/use-atom ui-handler/*left-sidebar-resized-at)]
-       (when-let [id (:db/id page)]
-         (let [page (db/sub-block id)
-             icon (icon/get-node-icon-cp page {:size 16})
-             title (:block/title page)
-             untitled? (db-model/untitled-page? title)
-             display-title (cond
-                             (not (db/page? page))
-                             (block/inline-text :markdown (string/replace (apply str (take 64 (:block/title page))) "\n" " "))
-                             untitled? (t :ui/untitled)
-                             :else (block-handler/block-unique-title page))
-             tooltip-title (or (block-handler/block-unique-title page)
-                               (when untitled? (t :ui/untitled)))
-             ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})
-             open-in-sidebar #(state/sidebar-add-block!
-                               (state/get-current-repo)
-                               (:db/id page)
-                               :page)
-             x-menu-content (fn []
-                              (let [x-menu-item shui/dropdown-menu-item]
-                                [:<>
-                                 (when-not recent?
-                                   (x-menu-item
-                                    {:key "unfavorite"
-                                     :on-click #(page-handler/<unfavorite-page! (str (:block/uuid page)))}
-                                    (ctx-icon "star-off")
-                                    (t :page/unfavorite)
-                                    (ui/dropdown-shortcut :page/toggle-favorite)))
-                                 (x-menu-item
-                                  {:key "open in sidebar"
-                                   :on-click open-in-sidebar}
-                                  (ctx-icon "layout-sidebar-right")
-                                  (t :sidebar.right/open)
-                                  (ui/dropdown-shortcut "shift+click"))]))]
-         [:a.link-item.group
-          (if (util/mobile?)
-            {:on-pointer-down util/stop-propagation
-             :on-pointer-up (fn [_e]
-                              (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?}))}
-            {:on-click
-             (fn [e]
-               (if (gobj/get e "shiftKey")
-                 (open-in-sidebar)
-                 (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
-             :on-context-menu (fn [^js e]
-                                (shui/popup-show! e (x-menu-content)
-                                                  {:as-dropdown? true
-                                                   :content-props {:on-click (fn [] (shui/popup-hide!))
-                                                                   :class "w-60"}})
-                                (util/stop e))})
-          [:span.page-icon {:key "page-icon"} icon]
-          (page-title-content id display-title tooltip-title untitled? left-sidebar-resized-at)
-          (shui/button
+  (let [[left-sidebar-resized-at] (hooks/use-atom ui-handler/*left-sidebar-resized-at)
+        id (:db/id page)
+        page (db/sub-block id)]
+    (when id
+      (let [icon (icon/get-node-icon-cp page {:size 16})
+            title (:block/title page)
+            untitled? (db-model/untitled-page? title)
+            display-title (cond
+                            (not (db/page? page))
+                            (block/inline-text :markdown (string/replace (apply str (take 64 (:block/title page))) "\n" " "))
+                            untitled? (t :ui/untitled)
+                            :else (block-handler/block-unique-title page))
+            tooltip-title (or (block-handler/block-unique-title page)
+                              (when untitled? (t :ui/untitled)))
+            ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})
+            open-in-sidebar #(state/sidebar-add-block!
+                              (state/get-current-repo)
+                              (:db/id page)
+                              :page)
+            x-menu-content (fn []
+                             (let [x-menu-item shui/dropdown-menu-item]
+                               [:<>
+                                (when-not recent?
+                                  (x-menu-item
+                                   {:key "unfavorite"
+                                    :on-click #(page-handler/<unfavorite-page! (str (:block/uuid page)))}
+                                   (ctx-icon "star-off")
+                                   (t :page/unfavorite)
+                                   (ui/dropdown-shortcut :page/toggle-favorite)))
+                                (x-menu-item
+                                 {:key "open in sidebar"
+                                  :on-click open-in-sidebar}
+                                 (ctx-icon "layout-sidebar-right")
+                                 (t :sidebar.right/open)
+                                 (ui/dropdown-shortcut "shift+click"))]))]
+        [:a.link-item.group
+         (if (util/mobile?)
+           {:on-pointer-down util/stop-propagation
+            :on-pointer-up (fn [_e]
+                             (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?}))}
+           {:on-click
+            (fn [e]
+              (if (gobj/get e "shiftKey")
+                (open-in-sidebar)
+                (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
+            :on-context-menu (fn [^js e]
+                               (shui/popup-show! e (x-menu-content)
+                                                 {:as-dropdown? true
+                                                  :content-props {:on-click (fn [] (shui/popup-hide!))
+                                                                  :class "w-60"}})
+                               (util/stop e))})
+         [:span.page-icon {:key "page-icon"} icon]
+         (page-title-content id display-title tooltip-title untitled? left-sidebar-resized-at)
+         (shui/button
            {:key "more actions"
             :size :sm
             :variant :ghost

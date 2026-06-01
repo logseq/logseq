@@ -10,17 +10,17 @@
 (hsx/defc configure-property
   [page]
   (let [page (db/sub-block (:db/id page))]
-       (shui/tabs-trigger
-        {:value "configure"
-         :class "py-1 text-xs"
-         :on-pointer-down (fn [e]
-                            (util/stop e))
-         :on-click (fn [^js e]
-                     (shui/popup-show! (.-target e)
-                                       (fn []
-                                         (property-config/property-dropdown page nil {:debug? (.-altKey e)}))
-                                       {:content-props {:class "ls-property-dropdown as-root"}
-                                        :align "start"
-                                        :as-dropdown? true
-                                        :dropdown-menu? true}))}
-        (t :property/configure))))
+    (shui/tabs-trigger
+     {:value "configure"
+      :class "py-1 text-xs"
+      :on-pointer-down (fn [e]
+                         (util/stop e))
+      :on-click (fn [^js e]
+                  (shui/popup-show! (.-target e)
+                                    (fn []
+                                      (property-config/property-dropdown page nil {:debug? (.-altKey e)}))
+                                    {:content-props {:class "ls-property-dropdown as-root"}
+                                     :align "start"
+                                     :as-dropdown? true
+                                     :dropdown-menu? true}))}
+     (t :property/configure))))

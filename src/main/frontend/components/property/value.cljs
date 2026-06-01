@@ -267,71 +267,71 @@
 (hsx/defc repeat-setting
   [block property]
   (let [opts {:exit-edit? false}
-           block (db/sub-block (:db/id block))]
-       [:div.p-4.hidden.sm:flex.flex-col.gap-4.w-64
-        [:div.mb-4
-         [:div.flex.flex-row.items-center.gap-1
-          [:div.w-4
-           (property-value block (db/entity :logseq.property.repeat/repeated?)
-                           (assoc opts
-                                  :on-checked-change (fn [value]
-                                                       (if value
-                                                         (db-property-handler/set-block-property! (:db/id block)
-                                                                                                  :logseq.property.repeat/temporal-property
-                                                                                                  (:db/id property))
-                                                         (db-property-handler/remove-block-property! (:db/id block)
-                                                                                                     :logseq.property.repeat/temporal-property)))))]
-          (if (#{:logseq.property/deadline :logseq.property/scheduled} (:db/ident property))
-            [:div (t :property.repeat/task)]
-            [:div (t (if (= :date (:logseq.property/type property))
-                       :property.repeat/date
-                       :property.repeat/datetime))])]]
-        [:div.flex.flex-row.gap-2.ls-repeat-task-frequency
-         [:div.flex.text-muted-foreground
-          (t :property.repeat/every)]
-         [:div.w-10.mr-2
-          (property-value block (db/entity :logseq.property.repeat/recur-frequency) opts)]
-         [:div.w-20
-          (property-value block (db/entity :logseq.property.repeat/recur-unit) (assoc opts :property property))]]
-        [:div.flex.flex-col.gap-1.min-w-0.ls-repeat-type-setting
+        block (db/sub-block (:db/id block))]
+    [:div.p-4.hidden.sm:flex.flex-col.gap-4.w-64
+     [:div.mb-4
+      [:div.flex.flex-row.items-center.gap-1
+       [:div.w-4
+        (property-value block (db/entity :logseq.property.repeat/repeated?)
+                        (assoc opts
+                               :on-checked-change (fn [value]
+                                                    (if value
+                                                      (db-property-handler/set-block-property! (:db/id block)
+                                                                                               :logseq.property.repeat/temporal-property
+                                                                                               (:db/id property))
+                                                      (db-property-handler/remove-block-property! (:db/id block)
+                                                                                                  :logseq.property.repeat/temporal-property)))))]
+       (if (#{:logseq.property/deadline :logseq.property/scheduled} (:db/ident property))
+         [:div (t :property.repeat/task)]
+         [:div (t (if (= :date (:logseq.property/type property))
+                    :property.repeat/date
+                    :property.repeat/datetime))])]]
+     [:div.flex.flex-row.gap-2.ls-repeat-task-frequency
+      [:div.flex.text-muted-foreground
+       (t :property.repeat/every)]
+      [:div.w-10.mr-2
+       (property-value block (db/entity :logseq.property.repeat/recur-frequency) opts)]
+      [:div.w-20
+       (property-value block (db/entity :logseq.property.repeat/recur-unit) (assoc opts :property property))]]
+     [:div.flex.flex-col.gap-1.min-w-0.ls-repeat-type-setting
+      [:div.text-muted-foreground
+       (t :property.repeat/next-date)]
+      (property-value block (db/entity :logseq.property.repeat/repeat-type) opts)]
+     (let [properties (->>
+                       (outliner-property/get-block-full-properties (db/get-db) (:db/id block))
+                       (filter (fn [property]
+                                 (and (not (ldb/built-in? property))
+                                      (>= (count (:property/closed-values property)) 2))))
+                       (concat [(db/entity :logseq.property/status)])
+                       (util/distinct-by :db/id))
+           status-property (or (:logseq.property.repeat/checked-property block)
+                               (db/entity :logseq.property/status))
+           property-id (:db/id status-property)
+           done-choice (or
+                        (some (fn [choice] (when (true? (:logseq.property/choice-checkbox-state choice)) choice)) (:property/closed-values status-property))
+                        (db/entity :logseq.property/status.done))]
+       [:div.flex.flex-col.gap-2
+        [:div.text-muted-foreground
+         (t :property.repeat/when)]
+        (shui/select
+          (cond->
+            {:on-value-change (fn [v]
+                                (db-property-handler/set-block-property! (:db/id block)
+                                                                         :logseq.property.repeat/checked-property
+                                                                         v))}
+            property-id
+            (assoc :default-value property-id))
+          (shui/select-trigger
+           (shui/select-value {:placeholder (t :property/select-property-placeholder)}))
+          (shui/select-content
+           (map (fn [choice]
+                  (shui/select-item {:key (str (:db/id choice))
+                                     :value (:db/id choice)} (db-property/built-in-display-title choice t))) properties)))
+        [:div.flex.flex-row.gap-1
          [:div.text-muted-foreground
-          (t :property.repeat/next-date)]
-         (property-value block (db/entity :logseq.property.repeat/repeat-type) opts)]
-        (let [properties (->>
-                          (outliner-property/get-block-full-properties (db/get-db) (:db/id block))
-                          (filter (fn [property]
-                                    (and (not (ldb/built-in? property))
-                                         (>= (count (:property/closed-values property)) 2))))
-                          (concat [(db/entity :logseq.property/status)])
-                          (util/distinct-by :db/id))
-              status-property (or (:logseq.property.repeat/checked-property block)
-                                  (db/entity :logseq.property/status))
-              property-id (:db/id status-property)
-              done-choice (or
-                           (some (fn [choice] (when (true? (:logseq.property/choice-checkbox-state choice)) choice)) (:property/closed-values status-property))
-                           (db/entity :logseq.property/status.done))]
-          [:div.flex.flex-col.gap-2
-           [:div.text-muted-foreground
-            (t :property.repeat/when)]
-           (shui/select
-            (cond->
-             {:on-value-change (fn [v]
-                                 (db-property-handler/set-block-property! (:db/id block)
-                                                                          :logseq.property.repeat/checked-property
-                                                                          v))}
-              property-id
-              (assoc :default-value property-id))
-            (shui/select-trigger
-             (shui/select-value {:placeholder (t :property/select-property-placeholder)}))
-            (shui/select-content
-             (map (fn [choice]
-                    (shui/select-item {:key (str (:db/id choice))
-                                       :value (:db/id choice)} (db-property/built-in-display-title choice t))) properties)))
-           [:div.flex.flex-row.gap-1
-            [:div.text-muted-foreground
-             (t :property.repeat/is-label)]
-            (when done-choice
-              (db-property/built-in-display-title done-choice t))]])]))
+          (t :property.repeat/is-label)]
+         (when done-choice
+           (db-property/built-in-display-title done-choice t))]])]))
 
 (defn- <resolve-journal-page-for-date
   ([^js d]
@@ -368,45 +368,45 @@
 (hsx/defc calendar-inner
   [id {:keys [block property datetime? on-change del-btn? on-delete]}]
   (let [block (db/sub-block (:db/id block))
-           value (get block (:db/ident property))
-           value (cond
-                   (map? value)
-                   (when-let [day (:block/journal-day value)]
-                     (let [t (date/journal-day->utc-ms day)]
-                       (js/Date. t)))
+        value (get block (:db/ident property))
+        value (cond
+                (map? value)
+                (when-let [day (:block/journal-day value)]
+                  (let [t (date/journal-day->utc-ms day)]
+                    (js/Date. t)))
 
-                   (number? value)
-                   (js/Date. value)
+                (number? value)
+                (js/Date. value)
 
-                   :else
-                   (let [d (js/Date.)]
-                     (.setHours d 0 0 0)
-                     d))
-           *ident (hooks/use-memo #(atom (str "calendar-inner-" (js/Date.now))) [])
-           initial-day value
-           initial-month (when value (calendar-default-month value))
-           select-handler! (fn [^js d]
-                             (when d
-                               (p/let [journal-page (<resolve-journal-page-for-date d)]
-                                 (p/do!
-                                  (when (fn? on-change)
-                                    (let [value (if datetime? (tc/to-long d) journal-page)]
-                                      (on-change value)))
-                                  (when-not datetime?
-                                    (shui/popup-hide! id)
-                                    (ui/hide-popups-until-preview-popup!))))))]
-       (hooks/use-effect!
-        (fn []
-          (state/set-editor-action! :property-set-date)
-          (js/setTimeout #(focus-selected-day! @*ident 10) 16)
-          #(do
-             (shui/popup-hide!)
-             (state/set-editor-action! nil)))
-        [])
-     [:div.flex.flex-row.gap-2
-      [:div.flex.flex-1.items-center
-       (ui/nlp-calendar
-        (cond->
+                :else
+                (let [d (js/Date.)]
+                  (.setHours d 0 0 0)
+                  d))
+        *ident (hooks/use-memo #(atom (str "calendar-inner-" (js/Date.now))) [])
+        initial-day value
+        initial-month (when value (calendar-default-month value))
+        select-handler! (fn [^js d]
+                          (when d
+                            (p/let [journal-page (<resolve-journal-page-for-date d)]
+                              (p/do!
+                               (when (fn? on-change)
+                                 (let [value (if datetime? (tc/to-long d) journal-page)]
+                                   (on-change value)))
+                               (when-not datetime?
+                                 (shui/popup-hide! id)
+                                 (ui/hide-popups-until-preview-popup!))))))]
+    (hooks/use-effect!
+     (fn []
+       (state/set-editor-action! :property-set-date)
+       (js/setTimeout #(focus-selected-day! @*ident 10) 16)
+       #(do
+          (shui/popup-hide!)
+          (state/set-editor-action! nil)))
+     [])
+    [:div.flex.flex-row.gap-2
+     [:div.flex.flex-1.items-center
+      (ui/nlp-calendar
+       (cond->
          {:initial-focus true
           :datetime? datetime?
           :selected initial-day
@@ -416,9 +416,9 @@
           :on-day-click select-handler!}
          initial-month
          (assoc :default-month initial-month)))]
-      [:div.hidden.sm:initial
-       (shui/separator {:orientation "vertical"})]
-      (repeat-setting block property)]))
+     [:div.hidden.sm:initial
+      (shui/separator {:orientation "vertical"})]
+     (repeat-setting block property)]))
 
 (hsx/defc overdue
   [date content]

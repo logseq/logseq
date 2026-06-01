@@ -110,13 +110,12 @@
 
 (hsx/defc class-objects
   [class config]
-  (when class
-       (let [class (db/sub-block (:db/id class))
-             container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
-             config (assoc config :container-id (or (:container-id config) (state/get-container-id container-key)))
-             properties (outliner-property/get-class-properties class)]
-         [:div.ml-1
-          (class-objects-inner config class properties)])))
+  (let [class (db/sub-block (:db/id class))
+        container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
+        config (assoc config :container-id (or (:container-id config) (state/get-container-id container-key)))
+        properties (outliner-property/get-class-properties class)]
+    [:div.ml-1
+     (class-objects-inner config class properties)]))
 
 (defn- add-new-property-object!
   [property properties]
@@ -152,13 +151,12 @@
 ;; Show all nodes containing the given property
 (hsx/defc property-related-objects
   [property config]
-  (when property
-       (let [property' (db/sub-block (:db/id property))
-             container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
-             config (assoc config :container-id (or (:container-id config) (state/get-container-id container-key)))
-             ;; Show tags to help differentiate property rows
-             properties (if (= (:db/ident property) :block/tags)
-                          [property']
-                          [property' (db/entity :block/tags)])]
-         [:div.ml-1
-          (property-related-objects-inner config property' properties)])))
+  (let [property' (db/sub-block (:db/id property))
+        container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
+        config (assoc config :container-id (or (:container-id config) (state/get-container-id container-key)))
+        ;; Show tags to help differentiate property rows
+        properties (if (= (:db/ident property) :block/tags)
+                     [property']
+                     [property' (db/entity :block/tags)])]
+    [:div.ml-1
+     (property-related-objects-inner config property' properties)]))

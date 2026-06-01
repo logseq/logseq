@@ -103,7 +103,7 @@
     (when (or page? block? (util/mobile?))
       [:div.ls-block.block-add-button.flex-1.flex-col.rounded-sm.cursor-text.transition-opacity.ease-in.duration-100.!py-0
        {:class (util/classnames [opacity-class
-                                  {"ls-block-content-indent" block?}])
+                                 {"ls-block-content-indent" block?}])
         :parentblockid (:db/id block)
         :ref *ref
         :on-click (fn [e]
@@ -153,58 +153,58 @@
        (on-page-blocks-rendered))))
   (when-let [id (:db/id block*)]
     (let [block (db/sub-block id)
-             block-id (:block/uuid block)
-             block? (not (db/page? block))
-             full-children (->> (:block/_parent block)
-                                ldb/sort-by-order)
-             mobile-length-limit 50
-             [children more?] (if (and (> (count full-children) mobile-length-limit) (util/mobile?) journals?)
-                                [(take mobile-length-limit full-children) true]
-                                [full-children false])
-             quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) common-config/quick-add-page-name))
-             children (cond
-                        (and (= id quick-add-page-id)
-                             (user-handler/user-uuid)
-                             (ldb/get-graph-rtc-uuid (db/get-db)))
-                        (editor-handler/get-user-quick-add-blocks)
+          block-id (:block/uuid block)
+          block? (not (db/page? block))
+          full-children (->> (:block/_parent block)
+                             ldb/sort-by-order)
+          mobile-length-limit 50
+          [children more?] (if (and (> (count full-children) mobile-length-limit) (util/mobile?) journals?)
+                             [(take mobile-length-limit full-children) true]
+                             [full-children false])
+          quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) common-config/quick-add-page-name))
+          children (cond
+                     (and (= id quick-add-page-id)
+                          (user-handler/user-uuid)
+                          (ldb/get-graph-rtc-uuid (db/get-db)))
+                     (editor-handler/get-user-quick-add-blocks)
 
-                        (ldb/class? block)
-                        (remove (fn [b] (contains? (set (map :db/id (:block/tags b))) (:db/id block))) children)
+                     (ldb/class? block)
+                     (remove (fn [b] (contains? (set (map :db/id (:block/tags b))) (:db/id block))) children)
 
-                        (ldb/property? block)
-                        (remove (fn [b] (some? (get b (:db/ident block)))) children)
+                     (ldb/property? block)
+                     (remove (fn [b] (some? (get b (:db/ident block)))) children)
 
-                        :else
-                        children)
-             config (assoc config :library? (ldb/library? block))
-             document-mode? (state/use-sub :document/mode?)]
-         (cond
-           (and
-            (not block?)
-            (not config/publishing?)
-            (empty? children) block)
-           (add-button block config)
+                     :else
+                     children)
+          config (assoc config :library? (ldb/library? block))
+          document-mode? (state/use-sub :document/mode?)]
+      (cond
+        (and
+         (not block?)
+         (not config/publishing?)
+         (empty? children) block)
+        (add-button block config)
 
-           :else
-           (let [hiccup-config (merge
-                                {:id (str (:block/uuid block))
-                                 :db/id (:db/id block)
-                                 :block? block?
-                                 :editor-box editor/box
-                                 :document/mode? document-mode?}
-                                config)
-                 config hiccup-config
-                 blocks (if block? [block] (db/sort-by-order children block))]
-             [:div.relative
-              (page-blocks-inner block blocks config sidebar? false block-id)
-              (when more?
-                (shui/button {:variant :ghost
-                              :class "text-muted-foreground w-full"
-                              :on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
-                             (t :ui/load-more)))
-              (when-not more?
-                (when-not hide-add-button?
-                  (add-button block config)))])))))
+        :else
+        (let [hiccup-config (merge
+                             {:id (str (:block/uuid block))
+                              :db/id (:db/id block)
+                              :block? block?
+                              :editor-box editor/box
+                              :document/mode? document-mode?}
+                             config)
+              config hiccup-config
+              blocks (if block? [block] (db/sort-by-order children block))]
+          [:div.relative
+           (page-blocks-inner block blocks config sidebar? false block-id)
+           (when more?
+             (shui/button {:variant :ghost
+                           :class "text-muted-foreground w-full"
+                           :on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
+               (t :ui/load-more)))
+           (when-not more?
+             (when-not hide-add-button?
+               (add-button block config)))])))))
 
 (hsx/defc today-queries
   [repo today? sidebar?]
@@ -232,40 +232,40 @@
    [:div.flex.flex-row.items-center.gap-2
     (when-not (:logseq.property/icon (db/entity (:db/id page)))
       (shui/button
-       {:variant :ghost
-        :size :sm
-        :class "px-2 py-0 h-6 text-xs text-muted-foreground"
-        :on-click (fn [e]
-                    (state/pub-event! [:editor/new-property {:property-key "Icon"
-                                                             :block page
-                                                             :target (.-target e)}]))}
-       (t :command.editor/add-property-icon)))
+        {:variant :ghost
+         :size :sm
+         :class "px-2 py-0 h-6 text-xs text-muted-foreground"
+         :on-click (fn [e]
+                     (state/pub-event! [:editor/new-property {:property-key "Icon"
+                                                              :block page
+                                                              :target (.-target e)}]))}
+        (t :command.editor/add-property-icon)))
 
     (shui/button
-     {:variant :ghost
-      :size :sm
-      :class "px-2 py-0 h-6 text-xs text-muted-foreground"
-      :on-click (fn [e]
-                  (if (ldb/property? page)
-                    (shui/popup-show!
-                     (.-target e)
-                     (fn []
-                       [:div.ls-property-dropdown
-                        (property-config/property-dropdown page nil {})])
-                     {:align :center
-                      :as-dropdown? true
-                      :dropdown-menu? true})
-                    (let [opts (cond-> {:block page :target (.-target e)}
-                                 (ldb/class? page)
-                                 (assoc :class-schema? true))]
-                      (state/pub-event! [:editor/new-property opts]))))}
-     (cond
-       (ldb/class? page)
-       (t :class/add-property)
-       (ldb/property? page)
-       (t :ui/configure)
-       :else
-       (t :property/set-property)))]])
+      {:variant :ghost
+       :size :sm
+       :class "px-2 py-0 h-6 text-xs text-muted-foreground"
+       :on-click (fn [e]
+                   (if (ldb/property? page)
+                     (shui/popup-show!
+                      (.-target e)
+                      (fn []
+                        [:div.ls-property-dropdown
+                         (property-config/property-dropdown page nil {})])
+                      {:align :center
+                       :as-dropdown? true
+                       :dropdown-menu? true})
+                     (let [opts (cond-> {:block page :target (.-target e)}
+                                  (ldb/class? page)
+                                  (assoc :class-schema? true))]
+                       (state/pub-event! [:editor/new-property opts]))))}
+      (cond
+        (ldb/class? page)
+        (t :class/add-property)
+        (ldb/property? page)
+        (t :ui/configure)
+        :else
+        (t :property/set-property)))]])
 
 (hsx/defc db-page-title
   [page {:keys [sidebar? journals? container-id tag-dialog? display-title]}]
@@ -398,11 +398,11 @@
     [:div.ls-sidebar-page-properties.flex.flex-col.gap-2.mt-2
      [:div
       (shui/button
-       {:variant :ghost
-        :size :sm
-        :class "px-1 text-muted-foreground"
-        :on-click #(set-collapsed! (not collapsed?))}
-       [:span.text-xs (t (if collapsed? :page/open-properties :page/hide-properties))])]
+        {:variant :ghost
+         :size :sm
+         :class "px-1 text-muted-foreground"
+         :on-click #(set-collapsed! (not collapsed?))}
+        [:span.text-xs (t (if collapsed? :page/open-properties :page/hide-properties))])]
 
      (when-not collapsed?
        [:<>
@@ -413,13 +413,13 @@
 (hsx/defc ^:large-vars/cleanup-todo page-inner
   [{:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals?] :as option}]
   (let [current-repo (state/use-sub :git/current-repo)
-           linked-refs-blocks-ready-page-id* (hooks/use-memo #(atom nil) [])
-           linked-refs-tagged-ready-page-id* (hooks/use-memo #(atom nil) [])
-           [linked-refs-blocks-ready-page-id] (hooks/use-atom linked-refs-blocks-ready-page-id*)
-           [linked-refs-tagged-ready-page-id] (hooks/use-atom linked-refs-tagged-ready-page-id*)
-           container-key (select-keys option [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
-           container-id (or (:container-id option) (state/get-container-id container-key))
-           page (or page (some-> (:db/id option) db/entity))
+        linked-refs-blocks-ready-page-id* (hooks/use-memo #(atom nil) [])
+        linked-refs-tagged-ready-page-id* (hooks/use-memo #(atom nil) [])
+        [linked-refs-blocks-ready-page-id] (hooks/use-atom linked-refs-blocks-ready-page-id*)
+        [linked-refs-tagged-ready-page-id] (hooks/use-atom linked-refs-tagged-ready-page-id*)
+        container-key (select-keys option [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
+        container-id (or (:container-id option) (state/get-container-id container-key))
+        page (or page (some-> (:db/id option) db/entity))
         page-id (:db/id page)
         config (assoc config
                       :id (str (:block/uuid page)))
@@ -458,10 +458,10 @@
                         {:data-page-tags (text-util/build-data-value page-names)}))
                     {})
 
-                {:key title
-                 :class (util/classnames [{:is-journals (or journal? fmt-journal?)
-                                           :is-today-page (and (not home?) (boolean today?))
-                                           :is-node-page (or class-page? property-page?)}])})
+                  {:key title
+                   :class (util/classnames [{:is-journals (or journal? fmt-journal?)
+                                             :is-today-page (and (not home?) (boolean today?))
+                                             :is-node-page (or class-page? property-page?)}])})
 
            [:div.relative.grid.gap-4.sm:gap-8.page-inner.mb-16
             (when-not (or block? sidebar?)
@@ -515,7 +515,7 @@
               (when (and (ldb/page? page) (:logseq.property.class/_extends page))
                 (class-component/class-children page))
 
-            ;; referenced blocks
+              ;; referenced blocks
               (when (and linked-refs-ready?
                          (not tag-dialog?)
                          (not linked-refs?))
@@ -533,7 +533,7 @@
                             class-page? property-page?)
                 [:div.fade-in.delay {:key "page-unlinked-references"}
                  (reference/unlinked-references page {:sidebar? sidebar?})])])]))
-         [:div.opacity-75 (t :page/not-found)])))
+      [:div.opacity-75 (t :page/not-found)])))
 
 (hsx/defc page-aux
   [option]
@@ -620,18 +620,18 @@
 (hsx/defc page-graph
   []
   (let [route-name (state/use-sub [:route-match :data :name])
-           route-path-name (state/use-sub [:route-match :path-params :name])
-           theme (state/use-sub :ui/theme)
-           current-page (or
-                         (and (= :page route-name)
-                              route-path-name)
-                         (model/get-today-journal-title))
-           page-entity (db/get-page current-page)]
-       (page-graph-aux current-page
-                       {:type (if (ldb/page? page-entity) :page :block)
-                        :block/uuid (:block/uuid page-entity)
-                        :theme theme
-                        :show-journal? false})))
+        route-path-name (state/use-sub [:route-match :path-params :name])
+        theme (state/use-sub :ui/theme)
+        current-page (or
+                      (and (= :page route-name)
+                           route-path-name)
+                      (model/get-today-journal-title))
+        page-entity (db/get-page current-page)]
+    (page-graph-aux current-page
+                    {:type (if (ldb/page? page-entity) :page :block)
+                     :block/uuid (:block/uuid page-entity)
+                     :theme theme
+                     :show-journal? false})))
 
 (defn batch-delete-dialog
   [pages refresh-fn]
@@ -655,23 +655,23 @@
 
      [:div.pt-6.flex.justify-end.gap-4
       (ui/button
-       (t :ui/cancel)
-       :variant :outline
-       :on-click close)
+        (t :ui/cancel)
+        :variant :outline
+        :on-click close)
 
       (ui/button
-       (t :ui/yes)
-       :on-click (fn []
-                   (close)
-                   (let [failed-pages (atom [])]
-                     (p/let [_ (p/all (map (fn [page]
-                                             (page-handler/<delete! (:block/uuid page) nil
-                                                                    {:error-handler
-                                                                     (fn []
-                                                                       (swap! failed-pages conj (:block/name page)))}))
-                                           pages))]
-                       (if (seq @failed-pages)
-                         (notification/show! (t :page.delete/warning (string/join ", " (map pr-str @failed-pages)))
-                                             :warning false)
-                         (notification/show! (t :ui/all-done) :success))))
-                   (js/setTimeout #(refresh-fn) 200)))]]))
+        (t :ui/yes)
+        :on-click (fn []
+                    (close)
+                    (let [failed-pages (atom [])]
+                      (p/let [_ (p/all (map (fn [page]
+                                              (page-handler/<delete! (:block/uuid page) nil
+                                                                     {:error-handler
+                                                                      (fn []
+                                                                        (swap! failed-pages conj (:block/name page)))}))
+                                         pages))]
+                        (if (seq @failed-pages)
+                          (notification/show! (t :page.delete/warning (string/join ", " (map pr-str @failed-pages)))
+                                              :warning false)
+                          (notification/show! (t :ui/all-done) :success))))
+                    (js/setTimeout #(refresh-fn) 200)))]]))

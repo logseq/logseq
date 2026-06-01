@@ -977,67 +977,67 @@
                             - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [{:keys [label children preview? disable-preview? show-non-exists-page? tag? _skip-async-load?] :as config} page]
   (let [page-id-or-name (or (:db/id page)
-                               (:block/uuid page)
-                               (when-let [s (:block/name page)]
-                                 (string/trim s)))
-           page-entity (if (e/entity? page) page (db/get-page page-id-or-name))
-           initial-entity (cond
-                            page-entity
-                            page-entity
+                            (:block/uuid page)
+                            (when-let [s (:block/name page)]
+                              (string/trim s)))
+        page-entity (if (e/entity? page) page (db/get-page page-id-or-name))
+        initial-entity (cond
+                         page-entity
+                         page-entity
 
-                            (or (:skip-async-load? config) (:table-view? config))
-                            page
+                         (or (:skip-async-load? config) (:table-view? config))
+                         page
 
-                            :else
-                            nil)
-           *entity (hooks/use-memo #(atom initial-entity) [page-id-or-name])
-           [entity'] (hooks/use-atom *entity)]
-       (hooks/use-effect!
-        (fn []
-          (cond
-            page-entity
-            nil
+                         :else
+                         nil)
+        *entity (hooks/use-memo #(atom initial-entity) [page-id-or-name])
+        [entity'] (hooks/use-atom *entity)]
+    (hooks/use-effect!
+     (fn []
+       (cond
+         page-entity
+         nil
 
-            (or (:skip-async-load? config) (:table-view? config))
-            nil
+         (or (:skip-async-load? config) (:table-view? config))
+         nil
 
-            :else
-            (p/let [result (<get-block page-id-or-name)]
-              (reset! *entity result))))
-        [page-id-or-name])
-       (let [entity (or (db/sub-block (:db/id entity')) entity')
-             config (assoc config :block entity)]
-         (cond
-      entity
-      (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
-            inner (page-inner config entity children label)
-            modal? (shui-dialog/has-modal?)]
-        (if (and (not (util/mobile?))
-                 (not= page-name (:id config))
-                 (not (false? preview?))
-                 (not disable-preview?)
-                 (not modal?))
-          (page-preview-trigger (assoc config :children inner) entity)
-          inner))
+         :else
+         (p/let [result (<get-block page-id-or-name)]
+           (reset! *entity result))))
+     [page-id-or-name])
+    (let [entity (or (db/sub-block (:db/id entity')) entity')
+          config (assoc config :block entity)]
+      (cond
+        entity
+        (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
+              inner (page-inner config entity children label)
+              modal? (shui-dialog/has-modal?)]
+          (if (and (not (util/mobile?))
+                   (not= page-name (:id config))
+                   (not (false? preview?))
+                   (not disable-preview?)
+                   (not modal?))
+            (page-preview-trigger (assoc config :children inner) entity)
+            inner))
 
-      (and (:block/name page) show-non-exists-page?)
-      (page-inner config (merge
-                          {:block/title (or (:block/title page)
-                                            (:block/name page))
-                           :block/name (:block/name page)}
-                          page) children label)
+        (and (:block/name page) show-non-exists-page?)
+        (page-inner config (merge
+                            {:block/title (or (:block/title page)
+                                              (:block/name page))
+                             :block/name (:block/name page)}
+                            page) children label)
 
-      (:block/name page)
-      [:span
-       (when tag? "#")
-       (when-not tag?
-         [:span.text-gray-500.bracket page-ref/left-brackets])
-       (or label (:block/name page))
-       (when-not tag?
-         [:span.text-gray-500.bracket page-ref/right-brackets])]
+        (:block/name page)
+        [:span
+         (when tag? "#")
+         (when-not tag?
+           [:span.text-gray-500.bracket page-ref/left-brackets])
+         (or label (:block/name page))
+         (when-not tag?
+           [:span.text-gray-500.bracket page-ref/right-brackets])]
 
-           :else
-           nil))))
+        :else
+        nil))))
 
 (hsx/defc page-cp
   [config page]
@@ -1182,7 +1182,7 @@
   "Component for page reference"
   [{:keys [html-export? nested-link? show-brackets? id] :as config*} uuid-or-title* label]
   (when uuid-or-title*
-       (let [uuid-or-title (if (string? uuid-or-title*)
+    (let [uuid-or-title (if (string? uuid-or-title*)
                           (let [str-id (string/trim uuid-or-title*)]
                             (if (util/uuid-string? str-id)
                               (parse-uuid str-id)
@@ -3797,6 +3797,22 @@
     (nil? (:level config))
     (assoc :level 0)))
 
+(hsx/defc query-result
+  [config block query-block-id]
+  (let [query-block (db/sub-block query-block-id)
+        query (:block/title query-block)
+        result (common-util/safe-read-string {:log-error? false} query)
+        advanced-query? (map? result)]
+    (when query-block
+      [:div {:style {:padding-left 42}}
+       (query/custom-query (wrap-query-components (assoc config
+                                                    :dsl-query? (not advanced-query?)
+                                                    :cards? (ldb/class-instance? (entity-plus/entity-memoized
+                                                                                   (db/get-db)
+                                                                                   :logseq.class/Cards) block)))
+         (if advanced-query? result {:builder nil
+                                     :query (query-builder-component/sanitize-q query)}))])))
+
 (defn- build-block
   [config block* {:keys [navigating-block navigated?]}]
   (let [linked-block (:block/link (db/entity (:db/id block*)))
@@ -4330,20 +4346,10 @@
 
      (when (and (not collapsed?) (not (or table? property?))
              (ldb/class-instance? (entity-plus/entity-memoized (db/get-db) :logseq.class/Query) block))
-       (let [query-block (:logseq.property/query (db/entity (:db/id block)))
-             query-block (if query-block (db/sub-block (:db/id query-block)) query-block)
-             query (:block/title query-block)
-             result (common-util/safe-read-string {:log-error? false} query)
-             advanced-query? (map? result)]
+        (let [query-block (:logseq.property/query (db/entity (:db/id block)))
+              query-block-id (:db/id query-block)]
          (when query-block
-           [:div {:style {:padding-left 42}}
-            (query/custom-query (wrap-query-components (assoc config
-                                                         :dsl-query? (not advanced-query?)
-                                                         :cards? (ldb/class-instance? (entity-plus/entity-memoized
-                                                                                        (db/get-db)
-                                                                                        :logseq.class/Cards) block)))
-              (if advanced-query? result {:builder nil
-                                          :query (query-builder-component/sanitize-q query)}))])))
+           (query-result config block query-block-id))))
 
      (when-not (or (:hide-children? config)
                  table?

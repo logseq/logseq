@@ -569,7 +569,7 @@
         (reset! editor-atom editor)))))
 
 (hsx/defc editor
-  [config id attr code theme options]
+  [config id attr code options]
   (let [editor-atom (hooks/use-memo #(atom nil) [id])
         [calc-lines set-calc-lines!] (hooks/use-state (calc/eval-lines code))
         current-theme (state/use-sub :ui/theme)

@@ -249,15 +249,16 @@
   (let [*block (hooks/use-memo #(atom nil) [repo block-id])
            [block] (hooks/use-atom *block)
            [phase] (hooks/use-atom *phase)
-           [_card-index] (hooks/use-atom *card-index)]
+           [_card-index] (hooks/use-atom *card-index)
+           block-entity (db/sub-block (:db/id block))]
        (hooks/use-effect!
         (fn []
           (reset! *block nil)
           (p/let [result (db-async/<get-block repo block-id {:children? true})]
             (reset! *block result)))
         [repo block-id])
-       (when-let [block block]
-         (when-let [block-entity (db/sub-block (:db/id block))]
+       (when block
+         (when block-entity
            (let [next-phase (phase->next-phase block-entity phase)]
              [:div.ls-card.content.flex.flex-col.overflow-hidden
               {:class (when (:mobile? opts) "ls-mobile-card")}

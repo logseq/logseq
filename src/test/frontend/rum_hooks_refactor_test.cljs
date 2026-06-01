@@ -51,7 +51,7 @@
            "use-sub-editing?"
            "use-container-id"]}
    {:file "src/main/frontend/db/hooks.cljs"
-    :vars ["query-scope"]}])
+    :vars ["use-query"]}])
 
 (defn- repo-root
   []
