@@ -1057,7 +1057,7 @@
         {:on-change (fn [v]
                       (when v
                         (onChange (day-picker-change-event v))))
-         :class "h-6 ml-2 !w-auto !px-2"
+         :class "h-8 ml-2 !w-[5.75rem] !px-3 !py-0"
          :value value
          :type "number"
          :min 1
@@ -1067,7 +1067,7 @@
         (shui/dropdown-menu-trigger
          {:as-child true}
          (shui/button {:variant :ghost
-                       :class "!px-2 !py-0 h-6 border border-input rounded-md"
+                       :class "!px-3 !py-0 h-8 border border-input rounded-md"
                        :size :sm}
                       (get-month-label value)))
         (shui/dropdown-menu-content

@@ -19,7 +19,7 @@ function Calendar({
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      className={cn('ui__calendar p-3', className)}
+      className={cn('ui__calendar w-[520px] max-w-full p-6', className)}
       classNames={{
         months: 'relative flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0',
         month: 'w-full space-y-6',

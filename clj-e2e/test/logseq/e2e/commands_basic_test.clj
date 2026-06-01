@@ -2,6 +2,7 @@
   (:require
    [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
+   [jsonista.core :as json]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
@@ -16,6 +17,41 @@
 (use-fixtures :each
   fixtures/new-logseq-page
   fixtures/validate-graph)
+
+(defn- date-picker-metrics
+  []
+  (json/read-value
+   (w/eval-js
+    "(() => {
+       const query = (name, selectors) => {
+         const node = selectors.map((selector) => document.querySelector(selector)).find(Boolean);
+         if (!node) {
+           throw new Error(`Missing date picker node: ${name}`);
+         }
+         return node;
+       };
+       const rect = (name, selectors) => {
+         const node = query(name, selectors);
+         const bounds = node.getBoundingClientRect();
+         return {width: bounds.width, height: bounds.height};
+       };
+       return JSON.stringify({
+         calendar: rect('calendar', ['.ui__calendar']),
+         month: rect('month selector', ['.ui__calendar .rdp-dropdown_month button']),
+         year: rect('year selector', ['.ui__calendar .rdp-dropdown_year input']),
+         previous: rect('previous button', [
+           '.ui__calendar .rdp-button_previous',
+           '.ui__calendar button[aria-label*=\"Previous\"]',
+           '.ui__calendar .rdp-nav button:first-child'
+         ]),
+         next: rect('next button', [
+           '.ui__calendar .rdp-button_next',
+           '.ui__calendar button[aria-label*=\"Next\"]',
+           '.ui__calendar .rdp-nav button:last-child'
+         ])
+       });
+     })()")
+   json/keyword-keys-object-mapper))
 
 (deftest command-trigger-test
   (testing "/command trigger popup"
@@ -184,6 +220,22 @@
         (util/exit-edit)
         (is (= command (util/get-text ".property-k")))
         (is (= "Today" (util/get-text ".ls-datetime a.page-ref")))))))
+
+(deftest scheduled-date-picker-layout-test
+  (testing "scheduled date picker stays compact with aligned navigation controls"
+    (b/new-block "scheduled layout test")
+    (util/input-command "Scheduled")
+    (w/wait-for ".ui__calendar")
+    (let [{:keys [calendar month year previous next]} (date-picker-metrics)
+          nav-height (:height previous)]
+      (is (<= (:width calendar) 600)
+          "Calendar should not stretch to the repeat side panel width.")
+      (is (<= (abs (- (:height month) nav-height)) 1)
+          "Month selector should match the chevron button height.")
+      (is (<= (abs (- (:height year) nav-height)) 1)
+          "Year selector should match the chevron button height.")
+      (is (<= (abs (- (:height next) nav-height)) 1)
+          "Chevron buttons should match each other."))))
 
 ;; TODO: java "MMMM d, yyyy" vs js "MMM do, yyyy"
 (deftest date-time-test
