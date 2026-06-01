@@ -66,6 +66,7 @@
 
 (defonce ^:private *object-urls (atom #{}))
 (defonce ^:private *keyed-object-urls (atom {}))
+(defonce ^:private *object-url-cleanup-installed? (atom false))
 
 (defn create-object-url
   [file]
@@ -103,23 +104,9 @@
     (revoke-object-url url))
   (reset! *keyed-object-urls {}))
 
-(defonce ^:private _cleanup-object-urls-on-pagehide
+(defn init-object-url-cleanup!
+  []
   (when (and (exists? js/window)
-             (fn? (.-addEventListener js/window)))
+             (fn? (.-addEventListener js/window))
+             (compare-and-set! *object-url-cleanup-installed? false true))
     (.addEventListener js/window "pagehide" revoke-all-object-urls!)))
-
-(defn set-img-src-object-url!
-  [^js img blob]
-  (when (and img blob)
-    (when-let [previous (some-> img .-dataset .-logseqObjectUrl)]
-      (revoke-object-url previous))
-    (let [url (create-object-url blob)
-          cleanup! (fn []
-                     (when (= url (some-> img .-dataset .-logseqObjectUrl))
-                       (js-delete (.-dataset img) "logseqObjectUrl"))
-                     (revoke-object-url url))]
-      (set! (.. img -dataset -logseqObjectUrl) url)
-      (set! (.-onload img) cleanup!)
-      (set! (.-onerror img) cleanup!)
-      (set! (.-src img) url)
-      url)))

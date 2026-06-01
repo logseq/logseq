@@ -10,6 +10,7 @@
             [frontend.handler.db-based.rtc-background-tasks]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.image :as image]
             [frontend.log]
             [frontend.page :as page]
             [frontend.routes :as routes]
@@ -102,6 +103,7 @@
 
   ;; (setup-entity-profile!)
   (log/info ::init "App started")
+  (image/init-object-url-cleanup!)
   (handler/start! start))
 
 (defn ^:export stop []
