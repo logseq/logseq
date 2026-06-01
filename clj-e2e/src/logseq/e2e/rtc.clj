@@ -40,7 +40,7 @@
   [new-tx]
   (assert (int? new-tx))
   (loop [i 5]
-    (when (zero? i) (throw (ex-info "wait-tx-update-to" {:update-to new-tx})))
+    (when (zero? i) (throw (ex-info "wait-tx-update-to" {:update-to new-tx :current (get-rtc-tx)})))
     (util/wait-timeout 1000)
     (let [m (get-rtc-tx)
           local-tx (or (:local-tx m) 0)
@@ -49,6 +49,25 @@
       (if (>= local-tx new-tx)
         local-tx
         (recur (dec i))))))
+
+(defn wait-linked-reference-text
+  [block-title]
+  (let [selector ".references .ls-block .block-title-wrap"]
+    (loop [i 60
+           refs (w/all-text-contents selector)]
+      (cond
+        (some #{block-title} refs)
+        refs
+
+        (zero? i)
+        (throw (ex-info "wait-linked-reference-text failed"
+                        {:expected block-title
+                         :actual refs}))
+
+        :else
+        (do
+          (util/wait-timeout 1000)
+          (recur (dec i) (w/all-text-contents selector)))))))
 
 (defn rtc-start
   []
