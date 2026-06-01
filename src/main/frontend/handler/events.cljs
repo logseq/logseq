@@ -4,6 +4,7 @@
   one of these events using state/pub-event!"
   (:refer-clojure :exclude [run!])
   (:require ["@sentry/react" :as Sentry]
+            ["/frontend/utils" :as utils]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [clojure.string :as string]
@@ -95,6 +96,7 @@
   (react/clear-query-state!)
   (db-async/clear-query-cache! (:db/async-queries @state/state))
   (image/revoke-all-object-urls!)
+  (utils/clearObjectUrls)
   (graph-pixi/destroy-instance!)
   (try
     (-> (state/<invoke-db-worker :thread-api/clear-query-caches)

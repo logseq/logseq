@@ -24,10 +24,14 @@ const createReplacingObjectUrl = (key, data) => {
   return url
 }
 
+export const clearObjectUrls = () => {
+  for (const url of Array.from(objectUrls)) revokeObjectUrl(url)
+  keyedObjectUrls.clear()
+}
+
 if (typeof window.addEventListener === 'function') {
   window.addEventListener('pagehide', () => {
-    for (const url of Array.from(objectUrls)) revokeObjectUrl(url)
-    keyedObjectUrls.clear()
+    clearObjectUrls()
   })
 }
 
