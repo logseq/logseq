@@ -120,6 +120,53 @@
                 (asset-annotation-title annotation)
                 [:span.truncate.text-muted-foreground (:block/title row)])]))))
 
+(def ^:private file-size-units
+  ["B" "KB" "MB" "GB" "TB"])
+
+(defn- trim-fixed-number
+  [s]
+  (let [s' (string/replace s #"\.?0+$" "")]
+    (if (string/blank? s') "0" s')))
+
+(defn- format-file-size
+  "Formats a byte count with a unit suitable for the Asset table."
+  [size]
+  (if (and (number? size)
+           (js/Number.isFinite size))
+    (let [abs-size (js/Math.abs size)
+          unit-idx (loop [unit-idx 0
+                          value abs-size]
+                     (if (and (>= value 1024)
+                              (< unit-idx (dec (count file-size-units))))
+                       (recur (inc unit-idx) (/ value 1024))
+                       unit-idx))
+          value (/ size (js/Math.pow 1024 unit-idx))
+          precision (cond
+                      (zero? unit-idx) 0
+                      (>= (js/Math.abs value) 100) 0
+                      (>= (js/Math.abs value) 10) 1
+                      :else 2)]
+      (str (trim-fixed-number (.toFixed value precision))
+           " "
+           (nth file-size-units unit-idx)))
+    (str size)))
+
+(defn- asset-size-cell
+  [original-cell table row column style]
+  (let [value (get row (:id column))]
+    (if (number? value)
+      [:div.flex.flex-1.items-center.justify-end.text-right
+       (format-file-size value)]
+      (original-cell table row column style))))
+
+(defn- wrap-asset-size-column
+  "Formats Asset file sizes for display without changing the raw sort value."
+  [column]
+  (update column :cell
+          (fn [original-cell]
+            (fn [table row column style]
+              (asset-size-cell original-cell table row column style)))))
+
 (defn- wrap-asset-title-column
   "Wraps the title column with PDF expand and annotation title behavior."
   [column annotation-index set-expanded-pdf-ids!]
@@ -153,8 +200,14 @@
   (let [[before-cols after-cols] (split-with #(not (db-property/logseq-property? (:id %))) columns)
         columns' (concat before-cols [(build-asset-file-column config)] after-cols)]
     (mapv (fn [column]
-            (if (= :block/title (:id column))
+            (cond
+              (= :block/title (:id column))
               (wrap-asset-title-column column annotation-index
                                        set-expanded-pdf-ids!)
+
+              (= :logseq.property.asset/size (:id column))
+              (wrap-asset-size-column column)
+
+              :else
               column))
           columns')))

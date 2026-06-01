@@ -1,5 +1,5 @@
 (ns frontend.components.assets.table-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [are deftest is testing]]
             [frontend.components.assets.pdf-annotations :as pdf-annotations]
             [frontend.components.assets.table :as asset-table]
             [frontend.extensions.pdf.assets :as pdf-assets]
@@ -39,6 +39,35 @@
            (mapv :id result)))
     (is (= false (:column-list? file-column)))
     (is (fn? (:header file-column)))))
+
+(deftest format-file-size-uses-dynamic-units
+  (are [size expected] (= expected (#'asset-table/format-file-size size))
+    0 "0 B"
+    42 "42 B"
+    1024 "1 KB"
+    1536 "1.5 KB"
+    1048576 "1 MB"
+    1572864 "1.5 MB"
+    1073741824 "1 GB"
+    5368709120 "5 GB"))
+
+(deftest enhance-columns-formats-asset-size-without-changing-sort-value
+  (let [get-value (fn [row] (:logseq.property.asset/size row))
+        original-cell (fn [_table _row _column _style] [:span "raw"])
+        result (asset-table/enhance-columns
+                {:config {}
+                 :columns [{:id :block/title}
+                           {:id :logseq.property.asset/size
+                            :cell original-cell
+                            :get-value get-value}]
+                 :annotation-index annotation-index
+                 :set-expanded-pdf-ids! identity})
+        size-column (some #(when (= :logseq.property.asset/size (:id %)) %) result)]
+    (is (= 1536 ((:get-value size-column) {:logseq.property.asset/size 1536})))
+    (is (= [:div.flex.flex-1.items-center.justify-end.text-right "1.5 KB"]
+           ((:cell size-column) {} {:logseq.property.asset/size 1536} size-column {})))
+    (is (= [:span "raw"]
+           ((:cell size-column) {} {:logseq.property.asset/size nil} size-column {})))))
 
 (deftest build-pdf-annotation-table-data-groups-images-under-expanded-pdf
   (testing "collapsed PDFs hide their area highlight image assets from the top level"
