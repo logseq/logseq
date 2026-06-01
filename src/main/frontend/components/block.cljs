@@ -1181,15 +1181,18 @@
 (hsx/defc page-reference
   "Component for page reference"
   [{:keys [html-export? nested-link? show-brackets? id] :as config*} uuid-or-title* label]
-  (when uuid-or-title*
-    (let [uuid-or-title (if (string? uuid-or-title*)
+  (let [uuid-or-title (when uuid-or-title*
+                        (if (string? uuid-or-title*)
                           (let [str-id (string/trim uuid-or-title*)]
                             (if (util/uuid-string? str-id)
                               (parse-uuid str-id)
                               str-id))
-                          uuid-or-title*)
-          self-reference? (when (set? (:ref-set config*))
-                            (contains? (:ref-set config*) uuid-or-title))]
+                          uuid-or-title*))
+        block* (when uuid-or-title (db/get-page uuid-or-title))
+        reactive-block (db/sub-block (:db/id block*))
+        self-reference? (when (set? (:ref-set config*))
+                          (contains? (:ref-set config*) uuid-or-title))]
+    (when uuid-or-title*
       (when-not self-reference?
         (let [config (update config* :ref-set (fn [s]
                                                 (let [bid (:block/uuid (:block config*))]
@@ -1198,8 +1201,7 @@
                                                     (conj s bid uuid-or-title)))))
               show-brackets? (if (some? show-brackets?) show-brackets? (state/show-brackets?))
               contents-page? (= "contents" (string/lower-case (str id)))
-              block* (db/get-page uuid-or-title)
-              block (or (some-> (:db/id block*) db/sub-block) block*)
+              block (or reactive-block block*)
               config' (assoc config
                              :label (mldoc/plain->text label)
                              :contents-page? contents-page?
@@ -5101,9 +5103,9 @@
                     navigating-block
                     (not= (:db/id (:block/parent initial-block))
                           (:db/id (:block/parent navigating-block-entity))))
+        navigating-block-reactive (model/sub-block (:db/id navigating-block-entity))
         blocks (if navigated?
-                 (let [block navigating-block-entity]
-                   [(model/sub-block (:db/id block))])
+                 [navigating-block-reactive]
                  blocks)]
     [:div
      (when (:breadcrumb-show? config)

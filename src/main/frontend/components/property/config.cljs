@@ -9,7 +9,10 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.db.model :as model]
+            [frontend.db.react :as react]
+            [frontend.db.utils :as db-utils]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -520,6 +523,7 @@
    [:div (t :property/existing-values)]
    [:ol
     (for [value values]
+      ^{:key (str (:db/id (:value value)))}
       [:li (:label value)])]
    (shui/button
     {:on-click (fn []
@@ -543,6 +547,22 @@
   [excluded-ids block]
   (and (empty? (:logseq.property/choice-classes block))
        (contains? excluded-ids (:db/id block))))
+
+(defn- with-react-key
+  [prefix idx item]
+  (if (satisfies? IWithMeta item)
+    (vary-meta item assoc :key (str prefix "-" idx))
+    item))
+
+(defn- use-choice-blocks
+  [ids]
+  (let [repo (state/get-current-repo)
+        query-ref (when (and repo (seq ids))
+                    (react/q repo [:custom :property/choice-blocks ids]
+                             {:query-fn (fn [db _]
+                                          (keep #(db-utils/entity db %) ids))}
+                             nil))]
+    (or (db-hooks/use-query query-ref) [])))
 
 (defn- maybe-show-add-choice-popup!
   [^js e property owner-block values']
@@ -612,9 +632,8 @@
            [show-hidden?] (hooks/use-atom *show-hidden?)
            {:keys [owner-class? owner-id]} (resolve-owner-class-block owner-block)
            values (:property/closed-values property)
-           choices (->> values
-                        (keep (fn [value]
-                                (db/sub-block (:db/id value)))))
+           value-ids (vec (keep :db/id values))
+           choices (use-choice-blocks value-ids)
            scoped-choices (db-property/scoped-closed-values property owner-block {:values choices})
            scoped-from-other-tags (scoped-choices-from-other-tags choices owner-id)
            excluded-ids (set (keep :db/id (:logseq.property/choice-exclusions owner-block)))
@@ -982,7 +1001,7 @@
   (let [*values (hooks/use-memo #(atom :loading) [(:db/ident property*)])
         [values] (hooks/use-atom *values)
         property (db/sub-block (:db/id property*))
-        owner-block (when (:db/id owner-block) (db/sub-block (:db/id owner-block)))]
+        owner-block (db/sub-block (:db/id owner-block))]
     (hooks/use-effect!
      (fn []
        (reset! *values :loading)
@@ -990,4 +1009,6 @@
          (reset! *values result)))
      [(:db/ident property*)])
     (when-not (= :loading values)
-      (vec (cons :<> (property-dropdown-options property owner-block values opts))))))
+      (into [:<>]
+            (map-indexed (partial with-react-key "property-dropdown"))
+            (property-dropdown-options property owner-block values opts)))))

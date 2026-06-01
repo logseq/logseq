@@ -545,8 +545,9 @@
 
 (hsx/defc property-cp
   [block k v {:keys [inline-text page-cp sortable-opts] :as opts}]
-  (when (keyword? k)
-    (when-let [property (db/sub-block (:db/id (db/entity k)))]
+  (let [property-id (when (keyword? k) (:db/id (db/entity k)))
+        property (db/sub-block property-id)]
+    (when (and (keyword? k) property)
       (let [type (get property :logseq.property/type :default)
             closed-values? (seq (:property/closed-values property))
             block? (and v

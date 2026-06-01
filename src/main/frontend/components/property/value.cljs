@@ -1272,10 +1272,12 @@
 
 (hsx/defc closed-value-item
   [value {:keys [inline-text icon?]}]
-  (when value
-       (let [eid (if (entity-map? value) (:db/id value) [:block/uuid value])
-             block (or (db/sub-block (:db/id (db/entity eid))) value)
-             property-block? (db-property/property-created-block? block)
+  (let [eid (when value
+              (if (entity-map? value) (:db/id value) [:block/uuid value]))
+        block-id (:db/id (when eid (db/entity eid)))
+        block (or (db/sub-block block-id) value)]
+    (when value
+       (let [property-block? (db-property/property-created-block? block)
              value' (or (db-property/built-in-display-title block t)
                         (db-property/closed-value-content block))
              icon (pu/get-block-property-value block :logseq.property/icon)]
@@ -1300,7 +1302,7 @@
                   value' (if (string/blank? value')
                            (t :ui/empty)
                            value')]
-              (inline-text {} :markdown value'))]))))
+              (inline-text {} :markdown value'))])))))
 
 (hsx/defc select-item
   [property type value {:keys [page-cp inline-text other-position? property-position table-view? _icon?] :as opts}]
