@@ -55,7 +55,7 @@ async function copyOne({ from, to, optional = false }) {
 }
 
 async function assertFreshRuntime({ from, generatedFrom, refreshCommand }) {
-  if (!generatedFrom || !(await exists(generatedFrom))) return;
+  if (!generatedFrom || !(await exists(generatedFrom)) || !(await exists(from))) return;
 
   const [sourceStats, generatedStats] = await Promise.all([
     fs.stat(from),
