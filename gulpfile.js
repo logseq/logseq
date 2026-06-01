@@ -297,15 +297,18 @@ const common = {
 
   switchReactDevelopmentMode (cb) {
     try {
-      const reactFrom = path.join(outputPath, 'js', 'react.development.js')
-      const reactTo = path.join(outputPath, 'js', 'react.production.min.js')
-      fs.renameSync(reactFrom, reactTo)
-
-      const reactDomFrom = path.join(outputPath, 'js',
-        'react-dom.development.js')
-      const reactDomTo = path.join(outputPath, 'js',
-        'react-dom.production.min.js')
-      fs.renameSync(reactDomFrom, reactDomTo)
+      [
+        ['react.development.js', 'react.production.min.js'],
+        ['react-dom.development.js', 'react-dom.production.min.js'],
+        ['react-dom-client.development.js', 'react-dom-client.production.min.js'],
+        ['react-jsx-runtime.development.js', 'react-jsx-runtime.production.min.js'],
+        ['react-jsx-dev-runtime.development.js', 'react-jsx-dev-runtime.production.min.js'],
+      ].forEach(([from, to]) => {
+        fs.renameSync(
+          path.join(outputPath, 'js', from),
+          path.join(outputPath, 'js', to),
+        )
+      })
 
       cb()
     } catch (err) {
