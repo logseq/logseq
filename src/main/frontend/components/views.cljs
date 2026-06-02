@@ -241,7 +241,7 @@
                          (property-config/property-dropdown property tag option)]))]
     (shui/button
      {:variant "text"
-      :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
+      :class "h-8 !pl-2 !px-2 !py-0 hover:text-foreground w-full justify-start"
       :on-click (fn [^js e]
                   (let [popup-id (str "table-column-" (:id column))]
                     (when-let [^js el (some-> (.-target e) (.closest "[aria-roledescription=sortable]"))]
@@ -908,7 +908,7 @@
   [:div.ls-table-header-cell.!border-0
    (shui/button
     {:variant "text"
-     :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"}
+     :class "h-8 !pl-2 !px-2 !py-0 hover:text-foreground w-full justify-start"}
     (ui/icon "plus")
     (t :view/new-property))])
 
@@ -2254,7 +2254,7 @@
 (hsx/defc view-sorting-item
   [table sorting id name asc? set-sorting!]
   [:div.flex.flex-row.gap-2.items-center.justify-between.px-2
-   [:div:div.flex.flex-row.gap-1.items-center
+   [:div.flex.flex-row.gap-1.items-center
     (shui/button
      {:size :sm
       :class "!px-1"
@@ -2309,8 +2309,10 @@
                                         new-sorting (mapv (fn [column] (some #(when (= column (:id %)) %) sorting)) ordered-columns)]
                                     (set-sorting! new-sorting)
                                     (f new-sorting)))}))
-     (shui/dropdown-menu-item
-      {:class "text-muted-foreground pl-3"
+     (shui/button
+      {:variant :ghost
+       :size :sm
+       :class "text-muted-foreground justify-start pl-3"
        :on-click (fn []
                    (let [f (get-in table [:data-fns :set-sorting!])]
                      (set-sorting! nil)
@@ -2329,7 +2331,6 @@
                 (shui/popup-show! (.-target e)
                                   (fn [] (view-sorting-config table sorting columns))
                                   {:align :end
-                                   :dropdown-menu? true
                                    :focus-trigger? false
                                    :content-props {:onCloseAutoFocus #(.preventDefault %)}}))}
    (ui/icon "arrows-up-down")))
