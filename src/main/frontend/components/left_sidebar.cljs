@@ -127,7 +127,7 @@
            {:key "more actions"
             :size :sm
             :variant :ghost
-            :class "absolute !bg-transparent right-0 top-0 px-1.5 scale-75 opacity-40 hidden group-hover:block hover:opacity-80 active:opacity-100"
+            :class "sidebar-page-actions absolute !bg-transparent right-0 top-0 px-1.5 scale-75 opacity-40 hover:opacity-80 active:opacity-100"
             :on-click #(do
                          (shui/popup-show! (.-target %) (x-menu-content)
                                            {:as-dropdown? true

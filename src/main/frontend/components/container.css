@@ -221,6 +221,10 @@
               @apply flex items-center;
             }
 
+            .sidebar-page-actions {
+              display: none;
+            }
+
             &[data-popup-active] {
               @apply bg-gray-04 opacity-100;
             }
@@ -295,6 +299,10 @@
 
     .sidebar-content-group-inner > .bd ul li > a:first-of-type:hover {
       @apply bg-gray-04 opacity-100;
+
+      .sidebar-page-actions {
+        display: inline-flex;
+      }
     }
   }
 
