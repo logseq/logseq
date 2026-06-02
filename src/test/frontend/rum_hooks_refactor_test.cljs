@@ -110,6 +110,15 @@
 (defn- source-for [relative-file]
   (.toString (fs/readFileSync (node-path/join (repo-root) relative-file) "utf8")))
 
+(defn- form-source
+  [source marker]
+  (let [start (string/index-of source marker)
+        end (when start
+              (or (string/index-of source "\n(hsx/defc " (inc start))
+                  (count source)))]
+    (when (and start end)
+      (subs source start end))))
+
 (defn- hook-var-defined? [source var-name]
   (or (string/includes? source (str "(defn " var-name))
       (string/includes? source (str "(def " var-name))))
@@ -137,3 +146,12 @@
             var-name vars]
       (is (hook-var-defined? (source-for file) var-name)
           (str file " should define " var-name)))))
+
+(deftest plugin-toolbar-hooks-are-stable
+  (let [source (source-for "src/main/frontend/components/plugins.cljs")
+        hook-ui-items-source (form-source source "(hsx/defc hook-ui-items")]
+    (is (some? hook-ui-items-source)
+        "hook-ui-items component should exist")
+    (is (re-find #"(?s)\(let\s+\[[^\]]*installed-ui-items\s+\(state/use-sub \[:plugin/installed-ui-items\]\)[^\]]*pinned-items\s+\(state/use-sub \[:plugin/preferences :pinnedToolbarItems\]\)[^\]]*updates-coming\s+\(state/use-sub :plugin/updates-coming\)"
+                 hook-ui-items-source)
+        "hook-ui-items should call plugin state subscriptions unconditionally at the top of the component so plugin startup state changes do not alter React hook order")))

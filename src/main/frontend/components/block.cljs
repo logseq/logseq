@@ -1942,18 +1942,24 @@
   [config root-block blocks anchor]
   (let [has-anchor? (not (string/blank? anchor))
         page-blocks-count (count (:block/_page root-block))
-        children-blocks-count (count blocks)]
-    (and
-     (:current-page? config)
-     (zero? (or (:level config) 0))
-     (not (or has-anchor?
-              (:ref? config)
-              (:custom-query? config)
-              (:sidebar? config)
-              (:embed? config)
-              (:library? config)
-              (:document/mode? config)))
-     (>= (- page-blocks-count children-blocks-count) 30))))
+        children-blocks-count (count blocks)
+        root-surface? (or (:current-page? config) (:journals? config))
+        root-level? (zero? (or (:level config) 0))
+        excluded-context? (or has-anchor?
+                              (:ref? config)
+                              (:custom-query? config)
+                              (:sidebar? config)
+                              (:embed? config)
+                              (:library? config)
+                              (:document/mode? config))
+        heavy-journal-root? (and (:journals? config)
+                                 (>= children-blocks-count 50))
+        heavy-descendant-tree? (>= (- page-blocks-count children-blocks-count) 30)]
+    (and root-surface?
+         root-level?
+         (not excluded-context?)
+         (or heavy-journal-root?
+             heavy-descendant-tree?))))
 
 (defn- defer-placeholder-element
   []
@@ -4922,14 +4928,15 @@
   (let [blocks-count (count blocks)
         root-block (when-let [id (:db/id config)]
                      (db/entity id))
-        [virtualized? _] (hooks/use-state (not (or (util/rtc-test?)
-                                                   (and (util/mobile?) (:journals? config))
-                                                   (if (:journals? config)
-                                                     (< blocks-count 50)
-                                                     (< blocks-count 10))
-                                                   (and (:block-children? config)
-                                                        ;; zoom-in block's children
-                                                        (not (and (:id config) (= (:id config) (str (:block/uuid (:block/parent (first blocks)))))))))))
+        zoomed-child-blocks? (and (:block-children? config)
+                                  (not (and (:id config)
+                                            (= (:id config)
+                                               (str (:block/uuid (:block/parent (first blocks))))))))
+        disable-virtualized? (or (util/rtc-test?)
+                                 (:journals? config)
+                                 (< blocks-count 10)
+                                 zoomed-child-blocks?)
+        [virtualized? _] (hooks/use-state (not disable-virtualized?))
         root-level? (zero? (or (:level config) 0))
         anchor (get-in (state/get-route-match) [:query-params :anchor])
         fallback-ready-index* (hooks/use-memo #(atom -1) [])
