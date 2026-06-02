@@ -11,7 +11,7 @@ deadline sections, and linked references.
 
 Chrome verification showed the outer journals Virtuoso height and the main
 scroll height changing while scrolling long journals. The same journal item also
-changed height repeatedly after it was measured. Two concrete sources were
+changed height repeatedly after it was measured. Three concrete sources were
 confirmed:
 
 - `.journal-item` used bottom margin, which is outside the box measured by
