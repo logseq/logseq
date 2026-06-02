@@ -1,4 +1,6 @@
 #journals {
+  overflow-anchor: none;
+
   textarea {
     word-break: break-word;
     overflow: hidden;
@@ -6,7 +8,8 @@
   }
 
   .journal-item {
-    @apply border-b min-h-[250px] pb-[64px] mb-[38px];
+    @apply border-b min-h-[250px] pb-[102px];
+    overflow-anchor: none;
 
     &:first-child {
       @apply pt-0 min-h-[500px];
