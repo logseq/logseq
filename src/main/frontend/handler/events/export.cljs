@@ -33,7 +33,7 @@
                                             :current-idx 0
                                             :current-page label
                                             :label (t :export/exporting)})
-  (when-not (shui-dialog/get-modal :export-indicator)
+  (when-not (shui-dialog/get-dialog :export-indicator)
     (shui/dialog-open! indicator-progress
                        {:id :export-indicator
                         :content-props

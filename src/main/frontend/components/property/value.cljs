@@ -268,7 +268,7 @@
   [block property]
   (let [opts {:exit-edit? false}
         block (db/sub-block (:db/id block))]
-    [:div.p-4.hidden.sm:flex.flex-col.gap-4.w-64
+    [:div.p-4.hidden.sm:flex.flex-col.gap-4.w-64.text-sm
      [:div.mb-4
       [:div.flex.flex-row.items-center.gap-1
        [:div.w-4
@@ -286,36 +286,41 @@
          [:div (t (if (= :date (:logseq.property/type property))
                     :property.repeat/date
                     :property.repeat/datetime))])]]
-     [:div.flex.flex-row.gap-2.ls-repeat-task-frequency
+     [:div.flex.flex-row.gap-2.ls-repeat-task-frequency.text-sm
       [:div.flex.text-muted-foreground
        (t :property.repeat/every)]
       [:div.w-10.mr-2
        (property-value block (db/entity :logseq.property.repeat/recur-frequency) opts)]
       [:div.w-20
        (property-value block (db/entity :logseq.property.repeat/recur-unit) (assoc opts :property property))]]
-     [:div.flex.flex-col.gap-1.min-w-0.ls-repeat-type-setting
+     [:div.flex.flex-col.gap-1.min-w-0.ls-repeat-type-setting.text-sm
       [:div.text-muted-foreground
        (t :property.repeat/next-date)]
       (property-value block (db/entity :logseq.property.repeat/repeat-type) opts)]
      (let [properties (->>
                        (outliner-property/get-block-full-properties (db/get-db) (:db/id block))
-                       (filter (fn [property]
-                                 (and (not (ldb/built-in? property))
-                                      (>= (count (:property/closed-values property)) 2))))
+                       (filter (fn [property']
+                                 (and (not (ldb/built-in? property'))
+                                      (>= (count (:property/closed-values property')) 2))))
                        (concat [(db/entity :logseq.property/status)])
                        (util/distinct-by :db/id))
+           property-options (mapv (fn [property']
+                                    {:label (db-property/built-in-display-title property' t)
+                                     :value (:db/id property')})
+                                  properties)
            status-property (or (:logseq.property.repeat/checked-property block)
                                (db/entity :logseq.property/status))
            property-id (:db/id status-property)
            done-choice (or
                         (some (fn [choice] (when (true? (:logseq.property/choice-checkbox-state choice)) choice)) (:property/closed-values status-property))
                         (db/entity :logseq.property/status.done))]
-       [:div.flex.flex-col.gap-2
+       [:div.flex.flex-col.gap-2.text-sm
         [:div.text-muted-foreground
          (t :property.repeat/when)]
         (shui/select
           (cond->
-            {:on-value-change (fn [v]
+            {:items property-options
+             :on-value-change (fn [v]
                                 (db-property-handler/set-block-property! (:db/id block)
                                                                          :logseq.property.repeat/checked-property
                                                                          v))}
@@ -325,9 +330,10 @@
            (shui/select-value {:placeholder (t :property/select-property-placeholder)}))
           (shui/select-content
            (map (fn [choice]
-                  (shui/select-item {:key (str (:db/id choice))
-                                     :value (:db/id choice)} (db-property/built-in-display-title choice t))) properties)))
-        [:div.flex.flex-row.gap-1
+               (shui/select-item {:key (str (:db/id choice))
+                                  :value (:db/id choice)}
+                                 (db-property/built-in-display-title choice t))) properties)))
+        [:div.flex.flex-row.gap-1.text-sm
          [:div.text-muted-foreground
           (t :property.repeat/is-label)]
          (when done-choice
@@ -414,7 +420,7 @@
           (state/set-editor-action! nil)))
      [])
     [:div.ls-property-date-picker.flex.flex-row.gap-2
-     [:div.flex.flex-1.items-center
+     [:div.flex.items-center
       (ui/nlp-calendar
        (cond->
          {:initial-focus true
@@ -1530,7 +1536,7 @@
        (shui/input
         {:ref *input-ref
          :auto-focus true
-         :class (str "ls-number-input h-6 px-0 py-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
+         :class (str "ls-number-input !h-6 min-h-0 px-0 !py-0 border-none bg-transparent leading-6 focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
                      (when table-view? " text-sm"))
          :value value
          :type "number"

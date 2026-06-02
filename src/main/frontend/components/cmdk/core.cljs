@@ -1086,7 +1086,7 @@
                  move-blocks? (= :move-blocks action)]
              (cond
                (and move-blocks? (string/blank? input))
-               (state/close-modal!)
+               (state/close-dialog!)
 
                (and filter' (not move-blocks?))
                (do
