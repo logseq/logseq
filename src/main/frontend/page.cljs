@@ -14,6 +14,7 @@
             [frontend.util :as util]
             [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]
+            [logseq.shui.toaster.core :as shui-toaster]
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
             ))
@@ -114,7 +115,7 @@
                  (t :page/open-issue-desc)
                  :links
                  [{:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"}])]]]]]]]]]]
-     (ui/notification)]))
+     (shui-toaster/install-toaster)]))
 
 (hsx/defc not-found
   []

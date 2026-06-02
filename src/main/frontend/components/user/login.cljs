@@ -351,7 +351,7 @@
               user' (bean/->clj (.-sessionUser op))]
           (user-pane sign-out!' user'))))])
 
-(hsx/defc modal-inner
+(hsx/defc dialog-inner
   []
   (shortcut/use-disable-all-shortcuts!)
   (page-impl))
@@ -363,7 +363,7 @@
 (defn open-login-modal!
   []
   (shui/dialog-open!
-   (fn [_close] (modal-inner))
+   (fn [_close] (dialog-inner))
    {:label :user-login
     :content-props {:onPointerDownOutside #(if (seq (sel "[data-auth-title-key='login']"))
                                              (let [inputs (sel ".ls-authenticator-content form input:not([type=checkbox])")

@@ -309,92 +309,6 @@
      (when shortcut
        [:span.ml-1 (render-keyboard-shortcut shortcut)])]))
 
-(declare button)
-(hsx/defc notification-content
-  [state content status uid node-ref]
-  (when (and content status)
-    (let [svg
-          (if (keyword? status)
-            (case status
-              :success
-              (icon "circle-check" {:class "text-success" :size "20"})
-
-              :warning
-              (icon "alert-circle" {:class "text-warning" :size "20"})
-
-              :error
-              (icon "circle-x" {:class "text-error" :size "20"})
-
-              (icon "info-circle" {:class "text-indigo-500" :size "20"}))
-            status)]
-      [:div.ui__notifications-content
-       {:class (str "notification-" (name (or (when (keyword? status) status) :info)))
-        :ref node-ref
-        :style
-        (when (or (= state "exiting")
-                  (= state "exited"))
-          {:z-index -1})}
-       [:div.max-w-sm.w-full.shadow-lg.rounded-lg.pointer-events-none.notification-area
-        {:class (case state
-                  "entering" "transition ease-out duration-300 transform opacity-0 translate-y-2 sm:translate-x-0"
-                  "entered" "transition ease-out duration-300 transform translate-y-0 opacity-100 sm:translate-x-0"
-                  "exiting" "transition ease-in duration-100 opacity-100"
-                  "exited" "transition ease-in duration-100 opacity-0")}
-        [:div.rounded-lg.shadow-xs {:style {:max-height "calc(100vh - 200px)"
-                                            :overflow-y "auto"
-                                            :overflow-x "hidden"}}
-         [:div.p-4
-          [:div.flex.items-start
-           [:div.flex-shrink-0.pt-2
-            svg]
-           [:div.ml-3.w-0.flex-1.pt-2
-
-            [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}}
-             content]]
-           (when-not (contains? #{"exiting" "exited"} state)
-             [:div.flex-shrink-0.flex.pointer-events-auto {:style {:margin-top -9
-                                                                    :margin-right -18}}
-              (button
-               {:button-props {"aria-label" (t :ui/close)}
-                :variant :ghost
-                :class "hover:bg-transparent hover:text-foreground scale-90"
-                :on-click (fn []
-                            (notification/clear! uid))
-                :icon "x"})])]]]]])))
-
-(hsx/defc notification-clear-all
-  [node-ref]
-  [:div.ui__notifications-content
-   {:ref node-ref}
-   [:div.pointer-events-auto.notification-clear
-    (button (t :notification/clear-all)
-            :intent "logseq"
-            :on-click (fn []
-                        (notification/clear-all!)))]])
-
-(hsx/defc notification
-  []
-  (let [contents (state/use-sub :notification/contents)]
-    (transition-group
-     {:class-name "notifications ui__notifications"}
-     (let [notifications (map (fn [el]
-                                (let [k (first el)
-                                      v (second el)]
-                                  (css-transition
-                                   {:timeout 100
-                                    :key     (name k)}
-                                   (fn [state node-ref]
-                                     (notification-content state (:content v) (:status v) k node-ref)))))
-                              contents)
-           clear-all (when (> (count contents) 1)
-                       (css-transition
-                        {:timeout 100
-                         :key     "clear-all"}
-                        (fn [_state node-ref]
-                          (notification-clear-all node-ref))))
-           items (if clear-all (cons clear-all notifications) notifications)]
-       (doall items)))))
-
 (defn checkbox
   [option]
   (let [on-change' (:on-change option)
@@ -1059,23 +973,23 @@
                        (string/includes? className "year")))]
     [:div.months-years-nav {:class className}
      (if year?
-       (shui/input
-        {:on-change (fn [v]
-                      (when v
-                        (onChange (day-picker-change-event v))))
-         :class "h-8 ml-2 !w-[5.75rem] !px-3 !py-0"
-         :value value
-         :type "number"
-         :min 1
-         :max 9999})
+	       (shui/input
+	        {:on-change (fn [v]
+	                      (when v
+	                        (onChange (day-picker-change-event v))))
+	         :class "h-8 !w-20 !px-3 !py-0"
+	         :value value
+	         :type "number"
+	         :min 1
+	         :max 9999})
 
        (shui/dropdown-menu
-        (shui/dropdown-menu-trigger
-         {:as-child true}
-         (shui/button {:variant :ghost
-                       :class "!px-3 !py-0 h-8 !w-32 justify-start border border-input rounded-md"
-                       :size :sm}
-                      (get-month-label value)))
+	        (shui/dropdown-menu-trigger
+	         {:as-child true}
+	         (shui/button {:variant :ghost
+	                       :class "!px-3 !py-0 h-8 !w-24 justify-start border border-input rounded-md"
+	                       :size :sm}
+	                      (get-month-label value)))
         (shui/dropdown-menu-content
          (for [[idx _month] (medley/indexed month-values)
                :let [label (get-month-label idx)]]

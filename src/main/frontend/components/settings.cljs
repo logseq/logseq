@@ -151,7 +151,7 @@
 
 (hsx/defc outdenting-hint
   []
-  [:div.ui__modal-panel
+  [:div.rounded-lg.border.overflow-hidden.bg-card
    {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
    [:div {:style {:margin "12px" :max-width "500px"}}
     [:p.text-sm
@@ -165,7 +165,7 @@
 
 (hsx/defc auto-expand-hint
   []
-  [:div.ui__modal-panel
+  [:div.rounded-lg.border.overflow-hidden.bg-card
    {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
    [:div {:style {:margin "12px" :max-width "500px"}}
     [:p.text-sm
@@ -422,7 +422,7 @@
   (let [_config (state/use-sub :config)
         editor-font (state/use-sub :ui/editor-font)
         wide-mode? (state/use-sub :ui/wide-mode?)]
-    [:div#appearance_settings.cp__settings-appearance-modal-inner
+    [:div#appearance_settings.cp__settings-appearance-dialog-inner
      (theme-modes-row t)
      (editor-font-family-row t editor-font)
      (toggle-wide-mode-row t wide-mode?)

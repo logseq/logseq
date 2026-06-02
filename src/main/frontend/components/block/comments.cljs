@@ -221,13 +221,6 @@
                           (when comments-block
                             (comments-model/save-comment-draft! comments-block value))
                           (set-draft! value)))
-        _ (when (and active? focus-editor?)
-            (activate-comment-editor! input-id
-                                      (assoc editor-block :block/title draft)
-                                      draft
-                                      container-id
-                                      true
-                                      (comments-model/comment-edit-cursor-position draft)))
         content (comments-model/submittable-comment-content draft)
         create-sibling-block! (fn [e]
                                 (util/stop e)
@@ -251,6 +244,17 @@
      (fn []
        clear-comment-edit!)
      [(:block/uuid editor-block)])
+    (hooks/use-effect!
+     (fn []
+       (when (and active? focus-editor?)
+         (activate-comment-editor! input-id
+                                   (assoc editor-block :block/title draft)
+                                   draft
+                                   container-id
+                                   true
+                                   (comments-model/comment-edit-cursor-position draft)))
+       nil)
+     [active? focus-editor? input-id (:block/uuid editor-block) draft container-id])
     (use-comment-box-outside-click! active? editor-block exit-comment-editor!)
     [:div.ls-comment-box
      (comment-box-editor-view

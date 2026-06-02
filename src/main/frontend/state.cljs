@@ -87,8 +87,6 @@
       :today                                 nil
       :system/events                         (async/chan 1000)
       :reactive/custom-queries               (async/chan 1000)
-      :notification/show?                    false
-      :notification/content                  nil
       :instrument/disabled?                  (storage/get "instrument-disabled")
       ;; TODO: how to detect the network reliably?
       ;; NOTE: prefer to use flows/network-online-event-flow
@@ -265,9 +263,6 @@
       :pdf/ref-highlight                     nil
       :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
       :pdf/auto-open-ctx-menu?               (not= false (storage/get "ls-pdf-auto-open-ctx-menu"))
-
-      ;; all notification contents as k-v pairs
-      :notification/contents                 {}
 
       :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                  "dashes")
@@ -1463,11 +1458,11 @@ should be done through this fn in order to get global config and config defaults
   [value]
   (set-state! :db/restoring? value))
 
-(defn modal-opened?
+(defn dialog-opened?
   []
-  (shui-dialog/has-modal?))
+  (shui-dialog/has-dialog?))
 
-(defn close-modal! []
+(defn close-dialog! []
   (shui/dialog-close!))
 
 (defn get-reactive-custom-queries-chan
@@ -1496,10 +1491,6 @@ should be done through this fn in order to get global config and config defaults
 (defn developer-mode?
   []
   (:ui/developer-mode? @state))
-
-(defn get-notification-contents
-  []
-  (get @state :notification/contents))
 
 (defn document-mode?
   []
@@ -2007,9 +1998,9 @@ should be done through this fn in order to get global config and config defaults
   ([block-id container-id]
    (get-in @state [:ui/collapsed-blocks (get-current-repo) (resolve-container-id container-id) block-id])))
 
-(defn get-modal-id
+(defn get-dialog-id
   []
-  (shui-dialog/get-last-modal-id))
+  (shui-dialog/get-last-dialog-id))
 
 (defn set-auth-id-token
   [id-token]
