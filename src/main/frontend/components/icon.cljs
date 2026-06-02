@@ -173,24 +173,12 @@
      [:div.hd.px-1.pb-1.leading-none
       [:strong.text-xs.font-medium.text-gray-07.dark:opacity-80 label]]
      (if virtual-list?
-       (let [total (count items)
-             step 9
-             rows (quot total step)
-             mods (mod total step)
-             rows (if (zero? mods) rows (inc rows))
-             items (vec items)]
+       (let [items-per-row 9
+             rows (vec (partition-all items-per-row items))]
          (ui/virtualized-list
-          (cond-> {:total-count rows
+          (cond-> {:total-count (count rows)
                    :item-content (fn [idx]
-                                   (icons-row
-                                    (let [last? (= (dec rows) idx)
-                                          start (* idx step)
-                                          end (* (inc idx) (if (and last? (not (zero? mods))) mods step))
-                                          icons (try (subvec items start end)
-                                                     (catch js/Error e
-                                                       (js/console.error e)
-                                                       nil))]
-                                      (mapv #(item-render % opts) icons))))}
+                                   (icons-row (mapv #(item-render % opts) (nth rows idx []))))}
 
             searching?
             (assoc :custom-scroll-parent (some-> (hooks/deref *el-ref) (.closest ".bd-scroll"))))))

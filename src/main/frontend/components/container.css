@@ -760,16 +760,16 @@ li.dragging-target {
   height: calc(100vh - var(--ls-headbar-height) - 4rem);
 }
 
-a.ui__modal-close svg, a.close svg, span.rotating-arrow svg {
+a.close svg, span.rotating-arrow svg {
   color: var(--ls-primary-text-color);
 }
 
-a.ui__modal-close, a.close {
+a.close {
   color: var(--ls-primary-text-color);
   opacity: 0.6;
 }
 
-a.ui__modal-close:hover, a.close:hover {
+a.close:hover {
   opacity: 1;
 }
 

@@ -1,9 +1,12 @@
 (ns logseq.shui.components
   (:require
    ["@base-ui/react/alert-dialog" :refer [AlertDialog] :rename {AlertDialog AlertDialogPrimitive}]
+   ["@base-ui/react/avatar" :refer [Avatar] :rename {Avatar AvatarPrimitive}]
+   ["@base-ui/react/button" :refer [Button] :rename {Button ButtonPrimitive}]
    ["@base-ui/react/checkbox" :refer [Checkbox] :rename {Checkbox CheckboxPrimitive}]
    ["@base-ui/react/context-menu" :refer [ContextMenu] :rename {ContextMenu ContextMenuPrimitive}]
    ["@base-ui/react/dialog" :refer [Dialog] :rename {Dialog DialogPrimitive}]
+   ["@base-ui/react/input" :refer [Input] :rename {Input InputPrimitive}]
    ["@base-ui/react/menu" :refer [Menu] :rename {Menu MenuPrimitive}]
    ["@base-ui/react/popover" :refer [Popover] :rename {Popover PopoverPrimitive}]
    ["@base-ui/react/radio" :refer [Radio] :rename {Radio RadioPrimitive}]
@@ -14,11 +17,12 @@
    ["@base-ui/react/switch" :refer [Switch] :rename {Switch SwitchPrimitive}]
    ["@base-ui/react/tabs" :refer [Tabs] :rename {Tabs TabsPrimitive}]
    ["@base-ui/react/toast" :refer [Toast] :rename {Toast ToastPrimitive}]
+   ["@base-ui/react/toolbar" :refer [Toolbar] :rename {Toolbar ToolbarPrimitive}]
    ["@base-ui/react/toggle" :refer [Toggle] :rename {Toggle TogglePrimitive}]
    ["@base-ui/react/toggle-group" :refer [ToggleGroup] :rename {ToggleGroup ToggleGroupPrimitive}]
    ["@base-ui/react/tooltip" :refer [Tooltip] :rename {Tooltip TooltipPrimitive}]
    ["@hookform/resolvers/yup" :refer [yupResolver]]
-   ["lucide-react" :refer [Check ChevronDown ChevronRight ChevronUp Circle X]]
+   ["@tabler/icons-react" :refer [IconCheck IconChevronDown IconChevronLeft IconChevronRight IconChevronUp IconCircle IconX]]
    ["react" :as react]
    ["react-day-picker" :refer [DayPicker]]
    ["react-hook-form" :refer [Controller FormProvider useForm useFormContext]]
@@ -39,6 +43,9 @@
 (def AlertDialogRootPart (primitive-part AlertDialogPrimitive "Root"))
 (def AlertDialogTitlePart (primitive-part AlertDialogPrimitive "Title"))
 (def AlertDialogTriggerPart (primitive-part AlertDialogPrimitive "Trigger"))
+(def AvatarFallbackPart (primitive-part AvatarPrimitive "Fallback"))
+(def AvatarImagePart (primitive-part AvatarPrimitive "Image"))
+(def AvatarRootPart (primitive-part AvatarPrimitive "Root"))
 (def CheckboxIndicatorPart (primitive-part CheckboxPrimitive "Indicator"))
 (def CheckboxRootPart (primitive-part CheckboxPrimitive "Root"))
 (def ContextMenuCheckboxItemPart (primitive-part ContextMenuPrimitive "CheckboxItem"))
@@ -114,6 +121,12 @@
 (def TabsPanelPart (primitive-part TabsPrimitive "Panel"))
 (def TabsRootPart (primitive-part TabsPrimitive "Root"))
 (def TabsTabPart (primitive-part TabsPrimitive "Tab"))
+(def ToolbarButtonPart (primitive-part ToolbarPrimitive "Button"))
+(def ToolbarGroupPart (primitive-part ToolbarPrimitive "Group"))
+(def ToolbarInputPart (primitive-part ToolbarPrimitive "Input"))
+(def ToolbarLinkPart (primitive-part ToolbarPrimitive "Link"))
+(def ToolbarRootPart (primitive-part ToolbarPrimitive "Root"))
+(def ToolbarSeparatorPart (primitive-part ToolbarPrimitive "Separator"))
 (def TooltipArrowPart (primitive-part TooltipPrimitive "Arrow"))
 (def TooltipPopupPart (primitive-part TooltipPrimitive "Popup"))
 (def TooltipPortalPart (primitive-part TooltipPrimitive "Portal"))
@@ -126,6 +139,7 @@
 (def ToastPortal (gobj/get ToastPrimitive "Portal"))
 (def ToastViewport (gobj/get ToastPrimitive "Viewport"))
 (def ToastRoot (gobj/get ToastPrimitive "Root"))
+(def ToastContent (gobj/get ToastPrimitive "Content"))
 (def ToastTitle (gobj/get ToastPrimitive "Title"))
 (def ToastDescription (gobj/get ToastPrimitive "Description"))
 (def ToastClose (gobj/get ToastPrimitive "Close"))
@@ -164,6 +178,39 @@
 (defn- clean-radix-popup-props!
   [^js props]
   (clean-props! props "onEscapeKeyDown" "onPointerDownOutside"))
+
+(def ^:private portal-prop-names
+  ["container" "keepMounted"])
+
+(def ^:private positioner-prop-names
+  ["align"
+   "alignItemWithTrigger"
+   "alignOffset"
+   "anchor"
+   "collisionAvoidance"
+   "collisionBoundary"
+   "collisionPadding"
+   "disableAnchorTracking"
+   "positionMethod"
+   "side"
+   "sideOffset"
+   "sticky"])
+
+(defn- copy-named-props
+  [^js props prop-names]
+  (let [props' #js {}]
+    (doseq [k prop-names
+            :let [v (prop props k)]
+            :when (some? v)]
+      (set-prop! props' k v))
+    props'))
+
+(defn- merge-object-props!
+  [^js props & sources]
+  (doseq [source sources
+          :when source]
+    (js/Object.assign props source))
+  props)
 
 (defn- prop-name
   [v]
@@ -269,18 +316,23 @@
   [children]
   (first (array-seq (child-array children))))
 
+(defn- as-child?
+  [^js props]
+  (true? (or (prop props "asChild")
+             (prop props "as-child"))))
+
 (defn- forward-part
   ([component base-class]
    (forward-part component base-class nil))
   ([component base-class extra-class-fn]
    (react/forwardRef
     (fn [^js props ref]
-      (let [as-child? (true? (prop props "asChild"))
+      (let [as-child? (as-child? props)
             render-child (when as-child? (only-child (prop props "children")))
             props' (with-class-props props base-class (some-> extra-class-fn (apply [props])))]
         (when ref (set-prop! props' "ref" ref))
         (when as-child?
-          (clean-props! props' "asChild" "children")
+          (clean-props! props' "asChild" "as-child" "children")
           (set-prop! props' "render" render-child))
         (react/createElement component props'))))))
 
@@ -288,19 +340,24 @@
   [portal positioner popup base-class & {:keys [extra-class-fn]}]
   (react/forwardRef
    (fn [^js props ref]
-     (let [positioner-props (copy-props props)
+     (let [portal-props (merge-object-props! (copy-named-props props portal-prop-names)
+                                             (prop props "portalProps"))
+           positioner-props (merge-object-props! (copy-named-props props positioner-prop-names)
+                                                 (prop props "positionerProps"))
            popup-props (with-class-props props base-class (some-> extra-class-fn (apply [props])))
            children (prop props "children")]
+       (set-prop! positioner-props "style"
+                  (merge-object-props! #js {:zIndex 99999} (prop positioner-props "style")))
        (adapt-focus-props! popup-props)
-       (clean-radix-popup-props! positioner-props)
        (clean-radix-popup-props! popup-props)
        (when ref (set-prop! popup-props "ref" ref))
-       (doseq [k ["className" "children" "withoutAnimation" "position"]]
-         (js-delete positioner-props k))
-       (doseq [k ["side" "align" "sideOffset" "alignOffset" "collisionPadding" "anchor" "positionMethod"]]
+       (doseq [k (concat portal-prop-names
+                         positioner-prop-names
+                         ["portalProps" "positionerProps"
+                          "children" "withoutAnimation" "position"])]
          (js-delete popup-props k))
        (react/createElement
-        portal nil
+        portal portal-props
         (react/createElement
          positioner positioner-props
          (react/createElement popup popup-props children)))))))
@@ -318,7 +375,7 @@
        "secondary" "bg-secondary/70 text-secondary-foreground hover:bg-secondary/100 active:opacity-80 as-secondary"
        "ghost" "hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-ghost"
        "link" "text-primary underline-offset-4 hover:underline active:opacity-80 as-link"
-       "bg-primary/90 hover:bg-primary/100 active:opacity-90 text-primary-foreground hover:text-primary-foreground as-classic")
+       "")
      (case size
        "md" "h-9 px-4 rounded-md py-2"
        "lg" "h-11 text-base rounded-md px-8"
@@ -327,22 +384,34 @@
        "icon" "box-content h-6 w-6 p-1 overflow-hidden"
        "h-10 px-4 py-2"))))
 
+(defn- button-like
+  [component ^js props ref]
+  (let [as-child? (as-child? props)
+        props' (copy-props props)
+        class-name (cn (with-button-classes props) (prop props "className"))]
+    (clean-props! props' "variant" "size")
+    (set-prop! props' "className" class-name)
+    (when ref (set-prop! props' "ref" ref))
+    (if as-child?
+      (let [child (only-child (prop props "children"))]
+        (clean-props! props' "asChild" "as-child" "children")
+        (set-prop! props' "render" child)
+        (when (nil? (prop props "nativeButton"))
+          (set-prop! props' "nativeButton" false))
+        (react/createElement component props'))
+      (do
+        (clean-props! props' "asChild" "as-child")
+        (react/createElement component props')))))
+
 (def Button
   (react/forwardRef
    (fn [^js props ref]
-     (let [as-child? (true? (prop props "asChild"))
-           props' (copy-props props)
-           class-name (cn (with-button-classes props) (prop props "className"))]
-       (clean-props! props' "variant" "size")
-       (set-prop! props' "className" class-name)
-       (when ref (set-prop! props' "ref" ref))
-       (if as-child?
-         (let [child (only-child (prop props "children"))]
-           (clean-props! props' "asChild" "children")
-           (react/cloneElement child props'))
-         (do
-           (clean-props! props' "asChild")
-           (react/createElement "button" props')))))))
+     (button-like ButtonPrimitive props ref))))
+
+(def ToolbarButton
+  (react/forwardRef
+   (fn [^js props ref]
+     (button-like ToolbarButtonPart props ref))))
 
 (def Link (forward-dom "a" "ui__link"))
 (def ButtonGroup (forward-dom "div" "ui__button-group inline-flex items-center gap-1"))
@@ -358,14 +427,78 @@
 (def CardDescription (forward-dom "p" "ui__card-description text-sm text-muted-foreground"))
 (def CardContent (forward-dom "div" "ui__card-content p-6 pt-0"))
 (def CardFooter (forward-dom "div" "ui__card-footer flex items-center p-6 pt-0"))
-(def Input (forward-dom "input" "ui__input flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"))
+(def Input (forward-part InputPrimitive "ui__input flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"))
 (def Textarea (forward-dom "textarea" "ui__textarea flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"))
 (def Label (forward-dom "label" "ui__label text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"))
 (def Separator (forward-part SeparatorPrimitive "ui__separator shrink-0 bg-border data-[orientation=horizontal]:h-[1px] data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-[1px]"))
-(def Avatar (forward-dom "span" "ui__avatar relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full"))
-(def AvatarImage (forward-dom "img" "ui__avatar-image aspect-square h-full w-full"))
-(def AvatarFallback (forward-dom "span" "ui__avatar-fallback flex h-full w-full items-center justify-center rounded-full bg-muted"))
-(def Calendar (forward-part DayPicker "ui__calendar p-3"))
+(def Avatar (forward-part AvatarRootPart "ui__avatar relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full"))
+(def AvatarImage (forward-part AvatarImagePart "ui__avatar-image aspect-square h-full w-full"))
+(def AvatarFallback (forward-part AvatarFallbackPart "ui__avatar-fallback flex h-full w-full items-center justify-center rounded-full bg-muted"))
+(defn- CalendarChevron
+  [^js props]
+  (let [orientation (prop props "orientation")
+        class-name (cn "h-4 w-4 text-foreground" (prop props "className"))]
+    (react/createElement
+     (case orientation
+       "left" IconChevronLeft
+       "up" IconChevronUp
+       "down" IconChevronDown
+       IconChevronRight)
+     #js {:className class-name
+          :size 16
+          :style #js {:width 16
+                      :height 16}
+          :aria-hidden true})))
+
+(def Calendar
+  (react/forwardRef
+   (fn [^js props ref]
+     (let [props' (with-class-props props "ui__calendar p-3" nil)
+           class-names (merge-object-props!
+                        #js {:months "relative flex flex-col sm:flex-row space-y-4 sm:space-y-0"
+                             :month "rdp-month w-max space-y-3"
+                             :month_caption "flex justify-start pt-1 relative items-center w-[276px]"
+                             :caption_label "text-sm font-medium"
+                             :dropdowns "flex items-center justify-start gap-2"
+                             :months_dropdown "rdp-dropdown_month"
+                             :years_dropdown "rdp-dropdown_year"
+                             :dropdown_root "relative flex h-8 items-center rounded-md border border-input bg-background px-2"
+                             :dropdown "absolute inset-0 z-[2] w-full opacity-0 cursor-pointer"
+                             :nav "absolute left-[200px] top-1 z-10 flex items-center gap-1"
+                             :button_previous (cn (with-button-classes #js {:variant "outline"})
+                                                  "h-8 w-9 bg-transparent !p-0 !px-0 !py-0 opacity-80 hover:opacity-100")
+                             :button_next (cn (with-button-classes #js {:variant "outline"})
+                                              "h-8 w-9 bg-transparent !p-0 !px-0 !py-0 opacity-80 hover:opacity-100")
+                             :month_grid "w-max border-collapse space-y-1"
+                             :weekdays "hidden"
+                             :weekday "text-muted-foreground rounded-md w-9 text-center font-normal text-[0.8rem]"
+                             :week "flex w-max mt-1 gap-1"
+                             :day "h-9 w-9 flex shrink-0 items-center justify-center text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-transparent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20"
+                             :day_button (cn (with-button-classes #js {:variant "ghost"})
+                                             "h-9 w-9 p-0 font-normal aria-selected:opacity-100")
+                             :range_end "day-range-end"
+                             :selected "[&>button]:bg-primary [&>button]:text-primary-foreground [&>button:hover]:bg-primary [&>button:hover]:text-primary-foreground [&>button:focus]:bg-primary [&>button:focus]:text-primary-foreground"
+                             :today "[&>button]:bg-accent [&>button]:text-accent-foreground"
+                             :outside "day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30"
+                             :disabled "text-muted-foreground opacity-50"
+                             :range_middle "aria-selected:bg-accent aria-selected:text-accent-foreground"
+                             :hidden "invisible"}
+                        (prop props "classNames"))
+           components (merge-object-props! #js {:Chevron CalendarChevron}
+                                           (prop props "components"))
+           style (js/Object.assign #js {:maxWidth "100%"} (prop props "style"))]
+       (when ref (set-prop! props' "ref" ref))
+       (when (nil? (prop props' "showOutsideDays"))
+         (set-prop! props' "showOutsideDays" true))
+       (set-prop! props' "classNames" class-names)
+       (set-prop! props' "components" components)
+       (set-prop! props' "style" style)
+       (react/createElement DayPicker props')))))
+(def Toolbar (forward-part ToolbarRootPart "ui__toolbar flex items-center gap-1"))
+(def ToolbarGroup (forward-part ToolbarGroupPart "ui__toolbar-group inline-flex items-center gap-1"))
+(def ToolbarInput (forward-part ToolbarInputPart "ui__toolbar-input"))
+(def ToolbarLink (forward-part ToolbarLinkPart "ui__toolbar-link"))
+(def ToolbarSeparator (forward-part ToolbarSeparatorPart "ui__toolbar-separator shrink-0 bg-border data-[orientation=horizontal]:h-[1px] data-[orientation=horizontal]:w-5 data-[orientation=vertical]:h-5 data-[orientation=vertical]:w-[1px]"))
 
 (def Checkbox
   (react/forwardRef
@@ -385,11 +518,11 @@
            (react/createElement
             "span" props'
             (when checked?
-              (react/createElement Check #js {:className "h-4 w-4"}))))
+              (react/createElement IconCheck #js {:className "h-4 w-4"}))))
          (react/createElement
           CheckboxRootPart props'
           (react/createElement CheckboxIndicatorPart nil
-                               (react/createElement Check #js {:className "h-4 w-4"}))))))))
+                               (react/createElement IconCheck #js {:className "h-4 w-4"}))))))))
 
 (def Switch
   (react/forwardRef
@@ -409,7 +542,7 @@
        (react/createElement
         RadioRootPart props'
         (react/createElement RadioIndicatorPart #js {:className "flex items-center justify-center"}
-                             (react/createElement Circle #js {:className "h-2.5 w-2.5 fill-current text-current"})))))))
+                             (react/createElement IconCircle #js {:className "h-2.5 w-2.5 fill-current text-current"})))))))
 
 (def Slider (forward-part SliderRootPart "ui__slider relative flex w-full touch-none select-none items-center"))
 (def SliderTrack (forward-part SliderTrackPart "ui__slider-track relative h-2 w-full grow overflow-hidden rounded-full bg-secondary"))
@@ -429,11 +562,11 @@
 (def DropdownMenuSubContent
   (composed-popup MenuPortalPart MenuPositionerPart MenuPopupPart
                   "ui__dropdown-menu-sub-content z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg data-[open]:animate-in"))
-(def DropdownMenuItem (forward-part MenuItemPart "ui__dropdown-menu-item relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"))
+(def DropdownMenuItem (forward-part MenuItemPart "ui__dropdown-menu-item relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50"))
 (def DropdownMenuCheckboxItem
   (react/forwardRef
    (fn [^js props ref]
-     (let [props' (with-class-props props "ui__dropdown-menu-checkbox-item relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50" nil)
+     (let [props' (with-class-props props "ui__dropdown-menu-checkbox-item relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50" nil)
            children (prop props "children")]
        (when ref (set-prop! props' "ref" ref))
        (clean-props! props' "children")
@@ -441,12 +574,12 @@
         MenuCheckboxItemPart props'
         (react/createElement "span" #js {:className "absolute left-2 flex h-3.5 w-3.5 items-center justify-center"}
                              (react/createElement MenuCheckboxItemIndicatorPart nil
-                                                  (react/createElement Check #js {:className "h-4 w-4"})))
+                                                  (react/createElement IconCheck #js {:className "h-4 w-4"})))
         children)))))
 (def DropdownMenuRadioItem
   (react/forwardRef
    (fn [^js props ref]
-     (let [props' (with-class-props props "ui__dropdown-menu-radio-item relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50" nil)
+     (let [props' (with-class-props props "ui__dropdown-menu-radio-item relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50" nil)
            children (prop props "children")]
        (when ref (set-prop! props' "ref" ref))
        (clean-props! props' "children")
@@ -454,21 +587,22 @@
         MenuRadioItemPart props'
         (react/createElement "span" #js {:className "absolute left-2 flex h-3.5 w-3.5 items-center justify-center"}
                              (react/createElement MenuRadioItemIndicatorPart nil
-                                                  (react/createElement Circle #js {:className "h-2 w-2 fill-current"})))
+                                                  (react/createElement IconCircle #js {:className "h-2 w-2 fill-current"})))
         children)))))
-(def DropdownMenuLabel (forward-part MenuGroupLabelPart "ui__dropdown-menu-label px-2 py-1.5 text-sm font-semibold"))
+(def DropdownMenuLabel
+  (forward-dom "div" "ui__dropdown-menu-label px-2 py-1.5 text-sm font-semibold"))
 (def DropdownMenuSeparator (forward-part MenuSeparatorPart "ui__dropdown-menu-separator -mx-1 my-1 h-px bg-muted"))
 (def DropdownMenuShortcut (forward-dom "span" "ui__dropdown-menu-shortcut ml-auto text-xs opacity-60"))
 (def DropdownMenuSubTrigger
   (react/forwardRef
    (fn [^js props ref]
-     (let [props' (with-class-props props "ui__dropdown-menu-sub-trigger flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[open]:bg-accent" (when (prop props "inset") "pl-8"))
+     (let [props' (with-class-props props "ui__dropdown-menu-sub-trigger flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted data-[open]:bg-muted" (when (prop props "inset") "pl-8"))
            children (prop props "children")]
        (when ref (set-prop! props' "ref" ref))
        (clean-props! props' "inset" "children")
        (react/createElement MenuSubmenuTriggerPart props'
                             children
-                            (react/createElement ChevronRight #js {:className "ml-auto h-4 w-4"}))))))
+                            (react/createElement IconChevronRight #js {:className "ml-auto h-4 w-4"}))))))
 
 (def ContextMenu (forward-part ContextMenuRootPart nil))
 (def ContextMenuTrigger (forward-part ContextMenuTriggerPart nil))
@@ -482,10 +616,11 @@
 (def ContextMenuSubContent
   (composed-popup ContextMenuPortalPart ContextMenuPositionerPart ContextMenuPopupPart
                   "ui__context-menu-sub-content z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg"))
-(def ContextMenuItem (forward-part ContextMenuItemPart "ui__context-menu-item relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"))
-(def ContextMenuCheckboxItem (forward-part ContextMenuCheckboxItemPart "ui__context-menu-checkbox-item relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"))
-(def ContextMenuRadioItem (forward-part ContextMenuRadioItemPart "ui__context-menu-radio-item relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"))
-(def ContextMenuLabel (forward-part ContextMenuGroupLabelPart "ui__context-menu-label px-2 py-1.5 text-sm font-semibold"))
+(def ContextMenuItem (forward-part ContextMenuItemPart "ui__context-menu-item relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50"))
+(def ContextMenuCheckboxItem (forward-part ContextMenuCheckboxItemPart "ui__context-menu-checkbox-item relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50"))
+(def ContextMenuRadioItem (forward-part ContextMenuRadioItemPart "ui__context-menu-radio-item relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50"))
+(def ContextMenuLabel
+  (forward-dom "div" "ui__context-menu-label px-2 py-1.5 text-sm font-semibold"))
 (def ContextMenuSeparator (forward-part ContextMenuSeparatorPart "ui__context-menu-separator -mx-1 my-1 h-px bg-muted"))
 (def ContextMenuShortcut DropdownMenuShortcut)
 (def ContextMenuSubTrigger DropdownMenuSubTrigger)
@@ -496,7 +631,7 @@
 (def PopoverClose (forward-part PopoverClosePart nil))
 (def PopoverContent
   (composed-popup PopoverPortalPart PopoverPositionerPart PopoverPopupPart
-                  "ui__popover-content z-50 w-72 rounded-md border bg-popover p-4 text-popover-foreground shadow-md outline-none"))
+                  "ui__popover-content z-50 rounded-md border bg-popover text-popover-foreground shadow-md outline-none"))
 (def PopoverRemoveScroll (forward-dom "div" nil))
 
 (def Dialog (forward-part DialogRootPart nil))
@@ -508,11 +643,11 @@
   (react/forwardRef
    (fn [^js props ref]
       (let [overlay-props (or (prop props "overlayProps") #js {})
-           popup-props (with-class-props props "ui__dialog-content fixed left-[50%] top-[50%] z-50 grid w-full max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg bg-background p-6 shadow-lg duration-200" nil)
+           popup-props (with-class-props props "ui__dialog-content fixed left-[50%] top-[50%] z-50 grid w-full max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg bg-background p-6 shadow-lg transition-transform duration-200" nil)
            children (prop props "children")]
        (adapt-focus-props! popup-props)
        (clean-radix-popup-props! popup-props)
-       (set-prop! popup-props "style" (js/Object.assign #js {} (prop popup-props "style") #js {:transform "translate(-50%, -50%)"}))
+       (set-prop! popup-props "style" (js/Object.assign #js {} (prop popup-props "style") #js {:transform "translate(-50%, -50%) scale(calc(1 - var(--nested-dialogs, 0) * 0.03))"}))
        (when ref (set-prop! popup-props "ref" ref))
        (clean-props! popup-props "overlayProps" "children")
        (react/createElement
@@ -521,7 +656,7 @@
         (react/createElement DialogPopupPart popup-props
                              children
                              (react/createElement DialogClosePart #js {:className "ui__dialog-close absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"}
-                                                  (react/createElement X #js {:className "h-4 w-4"}))))))))
+                                                  (react/createElement IconX #js {:className "h-4 w-4"}))))))))
 (def DialogHeader (forward-dom "div" "ui__dialog-header flex flex-col space-y-1.5 text-center sm:text-left"))
 (def DialogFooter (forward-dom "div" "ui__dialog-footer flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2"))
 (def DialogTitle (forward-part DialogTitlePart "ui__dialog-title text-lg font-semibold leading-none tracking-tight"))
@@ -569,40 +704,46 @@
 (def SelectContent
   (react/forwardRef
    (fn [^js props ref]
-     (let [positioner-props (copy-props props)
+     (let [portal-props (merge-object-props! (copy-named-props props portal-prop-names)
+                                             (prop props "portalProps"))
+           positioner-props (merge-object-props! (copy-named-props props positioner-prop-names)
+                                                 (prop props "positionerProps"))
            popup-props (with-class-props props "ui__select-content relative z-[60] max-h-96 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md" nil)
            children (prop props "children")]
        (when ref (set-prop! popup-props "ref" ref))
-       (doseq [k ["className" "children" "position"]]
-         (js-delete positioner-props k))
-       (set-prop! positioner-props "className" "z-[60]")
-       (set-prop! positioner-props "style" (js/Object.assign #js {} (prop positioner-props "style") #js {:zIndex 60}))
+       (set-prop! positioner-props "className" (cn "z-[60]" (prop positioner-props "className")))
+       (set-prop! positioner-props "style" (js/Object.assign #js {} #js {:zIndex 60} (prop positioner-props "style")))
        (set-prop! popup-props "style" (js/Object.assign #js {} (prop popup-props "style") #js {:zIndex 60}))
-       (doseq [k ["side" "align" "sideOffset" "alignOffset" "collisionPadding" "positionMethod"]]
+       (doseq [k (concat portal-prop-names
+                         positioner-prop-names
+                         ["portalProps" "positionerProps"
+                          "children" "position"])]
          (js-delete popup-props k))
        (react/createElement
-        SelectPositionerPart positioner-props
+        SelectPortalPart portal-props
         (react/createElement
-         SelectPopupPart popup-props
-         (react/createElement SelectScrollUpArrowPart #js {:className "ui__select-up-button flex cursor-default items-center justify-center py-1"}
-                              (react/createElement ChevronUp #js {:className "h-4 w-4"}))
-         (react/createElement SelectListPart #js {:className "p-1"} children)
-         (react/createElement SelectScrollDownArrowPart #js {:className "ui__select-down-button flex cursor-default items-center justify-center py-1"}
-                              (react/createElement ChevronDown #js {:className "h-4 w-4"}))))))))
+         SelectPositionerPart positioner-props
+         (react/createElement
+          SelectPopupPart popup-props
+          (react/createElement SelectScrollUpArrowPart #js {:className "ui__select-up-button flex cursor-default items-center justify-center py-1"}
+                               (react/createElement IconChevronUp #js {:className "h-4 w-4"}))
+          (react/createElement SelectListPart #js {:className "p-1"} children)
+          (react/createElement SelectScrollDownArrowPart #js {:className "ui__select-down-button flex cursor-default items-center justify-center py-1"}
+                               (react/createElement IconChevronDown #js {:className "h-4 w-4"})))))))))
 (def SelectItem
   (react/forwardRef
    (fn [^js props ref]
-     (let [props' (with-class-props props "ui__select-item relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50" nil)
+     (let [props' (with-class-props props "ui__select-item relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50" nil)
            children (prop props "children")]
        (when ref (set-prop! props' "ref" ref))
        (clean-props! props' "children")
        (react/createElement
         SelectItemPart props'
-	        (react/createElement "span" #js {:className "absolute left-2 flex h-3.5 w-3.5 items-center justify-center"}
-	                             (react/createElement SelectItemIndicatorPart nil
-	                                                  (react/createElement Check #js {:className "h-4 w-4"})))
-	        (react/createElement SelectItemTextPart nil
-	                             (react/createElement "span" nil children)))))))
+                (react/createElement "span" #js {:className "absolute left-2 flex h-3.5 w-3.5 items-center justify-center"}
+                                     (react/createElement SelectItemIndicatorPart nil
+                                                          (react/createElement IconCheck #js {:className "h-4 w-4"})))
+                (react/createElement SelectItemTextPart nil
+                                     (react/createElement "span" nil children)))))))
 
 (def Tooltip (forward-part TooltipRootPart nil))
 (def TooltipTrigger (forward-part TooltipTriggerPart nil))
@@ -724,9 +865,7 @@
       (set-prop! props "type" variant)
       (set-prop! data "variant" variant))
     (when duration
-      (set-prop! props "timeout" (if (and (js/Number.isInteger duration) (<= duration 0))
-                                   (* 1000 120)
-                                   duration)))
+      (set-prop! props "timeout" duration))
     (when action (set-prop! data "action" action))
     (when icon (set-prop! data "icon" icon))
     (when class-name (set-prop! data "className" class-name))
@@ -765,17 +904,17 @@
                                          variant
                                          (prop data "className"))}
            (react/createElement
-            "div" #js {:className "grid gap-1"}
+            ToastContent #js {:className "grid gap-1"}
             icon
-            (when (.-title toast)
-              (react/createElement ToastTitle #js {:className "text-sm font-semibold"}))
-            (when (.-description toast)
-              (react/createElement ToastDescription #js {:className "text-sm opacity-90"})))
+            (when-let [title (.-title toast)]
+              (react/createElement ToastTitle #js {:className "text-sm font-semibold"} title))
+            (when-let [description (.-description toast)]
+              (react/createElement ToastDescription #js {:className "text-sm opacity-90"} description)))
            action
            (when-let [action-props (.-actionProps toast)]
              (react/createElement "button" action-props))
            (react/createElement ToastClose #js {:className "absolute right-2 top-2 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"}
-                                (react/createElement X #js {:className "h-4 w-4"})))))
+                                (react/createElement IconX #js {:className "h-4 w-4"})))))
       (array-seq toasts)))))
 
 (def Toaster
@@ -793,6 +932,12 @@
   #js {"Button" Button
        "Link" Link
        "ButtonGroup" ButtonGroup
+       "Toolbar" Toolbar
+       "ToolbarGroup" ToolbarGroup
+       "ToolbarButton" ToolbarButton
+       "ToolbarInput" ToolbarInput
+       "ToolbarLink" ToolbarLink
+       "ToolbarSeparator" ToolbarSeparator
        "Alert" Alert
        "AlertTitle" AlertTitle
        "AlertDescription" AlertDescription

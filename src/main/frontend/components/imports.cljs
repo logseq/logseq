@@ -460,7 +460,7 @@
   [importing?]
   (hooks/use-effect!
    (fn []
-     (when (and importing? (not (shui-dialog/get-modal :import-indicator)))
+     (when (and importing? (not (shui-dialog/get-dialog :import-indicator)))
        (shui/dialog-open! indicator-progress
                           {:id :import-indicator
                            :content-props

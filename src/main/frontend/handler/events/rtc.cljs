@@ -15,7 +15,7 @@
 
 (defn- rtc-collaborators-dialog?
   []
-  (= :rtc-collaborators (state/get-modal-id)))
+  (= :rtc-collaborators (state/get-dialog-id)))
 
 (defn- close-e2ee-blocking-ui!
   []

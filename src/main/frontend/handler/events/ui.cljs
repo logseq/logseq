@@ -354,7 +354,7 @@
        {:id :selection-action-bar
         :root-props {:modal false}
         :content-props {:side "top"
-                        :class "!py-0 !px-0 !border-none"}
+                        :class "!w-max !max-w-none !overflow-visible !py-0 !px-0 !border-none"}
         :force-popover? true
         :auto-side? false
         :align :start}))))

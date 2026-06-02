@@ -234,7 +234,7 @@
 
 (defn toggle-cards!
   []
-  (if (shui-dialog/get-modal :srs)
+  (if (shui-dialog/get-dialog :srs)
     (shui/dialog-close!)
     (state/pub-event! [:modal/show-cards])))
 

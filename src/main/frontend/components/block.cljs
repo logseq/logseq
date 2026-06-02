@@ -1012,12 +1012,12 @@
         entity
         (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
               inner (page-inner config entity children label)
-              modal? (shui-dialog/has-modal?)]
+              dialog? (shui-dialog/has-dialog?)]
           (if (and (not (util/mobile?))
                    (not= page-name (:id config))
                    (not (false? preview?))
                    (not disable-preview?)
-                   (not modal?))
+                   (not dialog?))
             (page-preview-trigger (assoc config :children inner) entity)
             inner))
 
@@ -4410,7 +4410,11 @@
   [component same-args?]
   (let [memo-class (react-core/memo
                     (fn [^js props]
-                      (apply component (.-args props)))
+                      (hsx/create-callable-component-element
+                       (cons 'memo-react-component (.-args props))
+                       component
+                       (.-args props)
+                       nil))
                     (fn [^js prev-props ^js next-props]
                       (same-args? (.-args prev-props)
                                   (.-args next-props))))]

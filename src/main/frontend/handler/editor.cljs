@@ -1265,7 +1265,7 @@
 
 (defn dialog-exists?
   [id]
-  (shui-dialog/get-modal id))
+  (shui-dialog/get-dialog id))
 
 (defn show-action-bar!
   [& {:keys [delay]
@@ -3897,14 +3897,14 @@
             (if-let [today-last-child (last (ldb/sort-by-order (:block/_parent today)))]
               (move-blocks! children today-last-child {:sibling? true})
               (move-blocks! children today {:sibling? false})))
-          (state/close-modal!)
+          (state/close-dialog!)
           (shui/popup-hide!)
           (when (seq children)
             (notification/show! (t :journal/add-blocks-to-today-success) :success))))))))
 
 (defn quick-add
   []
-  (if (shui-dialog/get-modal :ls-dialog-quick-add)
+  (if (shui-dialog/get-dialog :ls-dialog-quick-add)
     (quick-add-blocks!)
     (show-quick-add)))
 

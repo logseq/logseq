@@ -914,10 +914,11 @@
 
 (hsx/defc action-bar
   [table selected-rows {:keys [on-delete-rows]}]
-  (shui/table-actions
-   {}
-   [:div (t :view.table/selected-count (count selected-rows))]
-   (selection/action-bar
+  (shui/toolbar
+   {:class "ls-table-actions bg-gray-01"
+    :style {:z-index 101}}
+   [:div.selection-count.px-2 (t :view.table/selected-count (count selected-rows))]
+   (selection/action-group
     {:on-cut #(on-delete-rows table selected-rows)
      :selected-blocks selected-rows
      :hide-dots? true
@@ -2122,30 +2123,37 @@
     (str value)))
 
 (hsx/defc gallery-action-bar
-  [table option view-parent view-feature-type selected-rows]
+  [table _option view-parent view-feature-type selected-rows]
   (when (seq selected-rows)
     (let [checkbox-id (str (:db/id (:view-entity table)) "-gallery-select-all")
           checked? (or (:selected-all? table)
                        (and (:selected-some? table) "indeterminate"))]
       [:div.ls-gallery-action-bar-slot
-       [:div.ls-gallery-action-bar
-        [:label.ls-gallery-action-select-all
-         {:html-for checkbox-id
-          :title (t :view.table/select-all)}
-         (shui/checkbox
-          {:id checkbox-id
-           :checked checked?
-           :on-checked-change (fn [value]
-                                (p/do
-                                  (when value
-                                    (db-async/<get-blocks (state/get-current-repo) (:rows table) {}))
-                                  ((:toggle-selected-all! table) table value)))
-           :aria-label (t :view.table/select-all)
-           :class "flex"})]
-        (action-bar table selected-rows
-                    (assoc option
-                           :on-delete-rows (fn [table selected-ids]
-                                             (on-delete-rows view-parent view-feature-type table selected-ids))))]])))
+       (shui/toolbar
+        {:class "ls-gallery-action-bar"}
+        (shui/toolbar-group
+         {:class "ls-gallery-action-select-all"}
+         [:label.flex.h-full.w-full.cursor-pointer.items-center.justify-center
+          {:html-for checkbox-id
+           :title (t :view.table/select-all)}
+          (shui/checkbox
+           {:id checkbox-id
+            :checked checked?
+            :on-checked-change (fn [value]
+                                 (p/do
+                                   (when value
+                                     (db-async/<get-blocks (state/get-current-repo) (:rows table) {}))
+                                   ((:toggle-selected-all! table) table value)))
+            :aria-label (t :view.table/select-all)
+            :class "flex"})])
+        [:div.selection-count.px-2 (t :view.table/selected-count (count selected-rows))]
+        (selection/action-group
+         {:on-cut #(on-delete-rows view-parent view-feature-type table selected-rows)
+          :selected-blocks selected-rows
+          :hide-dots? true
+          :button-border? true
+          :outliner? false
+          :view-parent (:logseq.property/view-for (:view-entity table))}))])))
 
 (hsx/defc gallery-view
   [{:keys [config view-parent view-feature-type] :as option} table view-entity blocks row-selection *scroller-ref]

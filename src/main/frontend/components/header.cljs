@@ -1,5 +1,6 @@
 (ns frontend.components.header
-  (:require [cljs-bean.core :as bean]
+  (:require ["react" :as react]
+            [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [clojure.string :as string]
@@ -209,26 +210,32 @@
              :on-click (fn [^js e]
                          (shui/popup-show! (.-currentTarget e)
                                            (fn [{:keys [id]}]
-                                             (for [{:keys [hr item title options icon]} (items)]
+                                             (for [[idx {:keys [hr item title options icon]}] (map-indexed vector (items))]
                                                (let [on-click' (:on-click options)
-                                                     href (:href options)]
+                                                     href (:href options)
+                                                     key (or (:key options)
+                                                             (str (if hr "separator-" "item-") idx))]
                                                  (if hr
-                                                   (shui/dropdown-menu-separator)
-                                                   (shui/dropdown-menu-item
-                                                    (assoc options
-                                                           :on-click (fn [^js e]
-                                                                       (when on-click'
-                                                                         (when-not (false? (on-click' e))
-                                                                           (shui/popup-hide! id)))))
-                                                    (or item
-                                                        (if href
-                                                          [:a.flex.items-center.w-full
-                                                           {:href href :on-click #(shui/popup-hide! id)
-                                                            :style {:color "inherit"}}
+                                                   (react/cloneElement
+                                                    (shui/dropdown-menu-separator {})
+                                                    #js {:key (str key)})
+                                                   (react/cloneElement
+                                                    (shui/dropdown-menu-item
+                                                     (assoc options
+                                                            :on-click (fn [^js e]
+                                                                        (when on-click'
+                                                                          (when-not (false? (on-click' e))
+                                                                            (shui/popup-hide! id)))))
+                                                     (or item
+                                                         (if href
+                                                           [:a.flex.items-center.w-full
+                                                            {:href href :on-click #(shui/popup-hide! id)
+                                                             :style {:color "inherit"}}
+                                                            [:span.flex.items-center.gap-1.w-full
+                                                             icon [:div title]]]
                                                            [:span.flex.items-center.gap-1.w-full
-                                                            icon [:div title]]]
-                                                          [:span.flex.items-center.gap-1.w-full
-                                                           icon [:div title]])))))))
+                                                            icon [:div title]])))
+                                                    #js {:key (str key)})))))
                                            {:align "end"
                                             :as-dropdown? true
                                             :content-props {:class "w-64"

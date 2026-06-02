@@ -41,42 +41,42 @@
           config ks))
 
 ;; {:id :title :description :content :footer :open? :on-close ...}
-(def ^:private *modals (atom []))
+(def ^:private *dialogs (atom []))
 (def ^:private *id (atom 0))
 (def ^:private gen-id #(reset! *id (inc @*id)))
 
-(defn get-modal
+(defn get-dialog
   [id]
   (when id
-    (some->> (medley/indexed @*modals)
+    (some->> (medley/indexed @*dialogs)
              (filter #(= id (:id (second %)))) (first))))
 
-(defn update-modal!
+(defn update-dialog!
   [id ks val & {:keys [closing?]}]
-  (when-let [[index config] (get-modal id)]
+  (when-let [[index config] (get-dialog id)]
     (let [ks (if (coll? ks) ks [ks])
           config (if (nil? val)
                    (medley/dissoc-in config ks)
                    (assoc-in config ks val))]
-      (swap! *modals assoc index config)
+      (swap! *dialogs assoc index config)
       (when (and (false? (:open? config))
                  (fn? (:on-close config))
                  (not closing?))
         ((:on-close config) id)))))
 
-(defn upsert-modal!
+(defn upsert-dialog!
   [config]
   (when-let [_id (:id config)]
-    (swap! *modals conj config)))
+    (swap! *dialogs conj config)))
 
-(defn detach-modal!
+(defn detach-dialog!
   [id]
-  (when-let [[index] (get-modal id)]
-    (swap! *modals #(->> % (medley/remove-nth index) (vec)))))
+  (when-let [[index] (get-dialog id)]
+    (swap! *dialogs #(->> % (medley/remove-nth index) (vec)))))
 
-(defn has-modal?
+(defn has-dialog?
   []
-  (some-> @*modals (last) :open?))
+  (boolean (some :open? @*dialogs)))
 
 ;; apis
 (declare close!)
@@ -87,12 +87,16 @@
                  content-or-config
                  {:content content-or-config})
         content (:content config)
-        id (gen-id)
-        config (merge {:id id :open? true :close #(close! id)} config (first config'))
+        generated-id (gen-id)
+        config (merge {:id generated-id :open? true} config (first config'))
+        id (:id config)
+        config (cond-> config
+                 (nil? (:close config))
+                 (assoc :close #(close! id)))
         config (cond-> config
                  (fn? content)
                  (assoc :content (content config)))]
-    (upsert-modal! (assoc-in config [:content-props :onOpenAutoFocus]
+    (upsert-dialog! (assoc-in config [:content-props :onOpenAutoFocus]
                              #(.preventDefault %)))))
 
 (defn alert!
@@ -106,25 +110,25 @@
   [content-or-config & config']
   (alert! content-or-config (assoc (first config') :alert? :confirm)))
 
-(defn get-last-modal-id
+(defn get-last-dialog-id
   []
-  (some-> (last @*modals) (:id)))
+  (some-> (last @*dialogs) (:id)))
 
-(defn get-first-modal-id
+(defn get-first-dialog-id
   []
-  (some-> (first @*modals) (:id)))
+  (some-> (first @*dialogs) (:id)))
 
 (defn close!
-  ([] (close! (get-last-modal-id)))
-  ([id] (update-modal! id :open? false {:closing? true})))
+  ([] (close! (get-last-dialog-id)))
+  ([id] (update-dialog! id :open? false {:closing? true})))
 
 (defn close-all! []
-  (doseq [{:keys [id]} @*modals]
+  (doseq [{:keys [id]} @*dialogs]
     (close! id)))
 
 ;; components
-(hsx/defc modal-inner
-  [config]
+(hsx/defc dialog-inner
+  [config & [nested-child]]
   (let [{:keys [id title description content footer on-open-change align open?
                 auto-width? close-btn? root-props content-props
                 onEscapeKeyDown onPointerDownOutside]} config
@@ -137,15 +141,15 @@
     (hooks/use-effect!
      (fn []
        (when (false? open?)
-         (detach-modal! id)))
+         (detach-dialog! id)))
      [open?])
 
     (dialog
      (merge root-props
-            {:key (str "modal-" id)
+            {:key (str "dialog-" id)
              :open open?
              :on-open-change (fn [v e]
-                               (let [set-open! #(update-modal! id :open? %)
+                               (let [set-open! #(update-dialog! id :open? %)
                                      reason (some-> e (.-reason))
                                      event (some-> e (.-event))
                                      escape-handler (or (:onEscapeKeyDown content-props)
@@ -188,7 +192,7 @@
           auto-width? (assoc :data-auto-width true)
           (false? close-btn?) (assoc :data-close-btn false))
 
-        ;; nested title component is required for radix dialog content
+        ;; Title component is required for accessible dialog content.
         (dialog-title {:class (when (nil? title) "hidden")} title)
         (when description (dialog-description description))
 
@@ -196,10 +200,11 @@
           [:div.ui__dialog-main-content content])
 
         (when footer
-          (dialog-footer footer)))))))
+          (dialog-footer footer))))
+     nested-child)))
 
 (hsx/defc alert-inner
-  [config]
+  [config & [nested-child]]
   (let [{:keys [id title description content footer deferred open? ok-label]} config
         props (dissoc config :id :title :description :content :footer :deferred :open? :alert? :ok-label)
         ok-label (or ok-label "OK")]
@@ -207,14 +212,14 @@
     (hooks/use-effect!
      (fn []
        (when (false? open?)
-         (let [timeout (js/setTimeout #(detach-modal! id) 128)]
+         (let [timeout (js/setTimeout #(detach-dialog! id) 128)]
            #(js/clearTimeout timeout))))
      [open?])
 
     (alert-dialog
      {:key (str "alert-" id)
       :open open?
-      :on-open-change #(update-modal! id :open? %)}
+      :on-open-change #(update-dialog! id :open? %)}
      (alert-dialog-content props
                            (when (or title description)
                              (alert-dialog-header
@@ -233,10 +238,11 @@
                                (base/button
                                 {:key "ok"
                                  :on-click #(do (close!) (p/resolve! deferred true))
-                                 :size :sm} ok-label)]))))))
+                                 :size :sm} ok-label)])))
+     nested-child)))
 
 (hsx/defc confirm-inner
-  [config]
+  [config & [nested-child]]
   (let [{:keys [id deferred outside-cancel? data-reminder data-reminder-label
                 cancel-label ok-label]} config
         reminder? (boolean (and id data-reminder))
@@ -244,7 +250,29 @@
         *ok-ref (hooks/use-ref nil)
         *reminder-ref (hooks/use-ref nil)
         cancel-label (or cancel-label "Cancel")
-        ok-label (or ok-label "OK")]
+        ok-label (or ok-label "OK")
+        footer [:<>
+                [:span.flex.items-center.pt-1
+                 (when (and id data-reminder data-reminder-label)
+                   [:label.flex.items-center.gap-1.text-sm
+                    (form/checkbox {:ref *reminder-ref})
+                    [:span.opacity-50 data-reminder-label]])]
+                [:span.flex.gap-2
+                 (base/button
+                  {:key "cancel"
+                   :on-click #(do (close!) (p/reject! deferred false))
+                   :variant :outline
+                   :size :sm} cancel-label)
+                 (base/button
+                  {:key "ok"
+                   :ref *ok-ref
+                   :on-click (fn []
+                               (when-let [^js reminder (and id data-reminder (hooks/deref *reminder-ref))]
+                                 (when (= "checked" (.-state (.-dataset reminder)))
+                                   (js/localStorage.setItem (str id) (js/Date.now))))
+                               (close!)
+                               (p/resolve! deferred true))
+                   :size :sm} ok-label)]]]
 
     (hooks/use-effect!
      (fn []
@@ -259,7 +287,7 @@
        (try
          (if-let [reminder-v (and reminder? (js/localStorage.getItem (str id)))]
            (if (< (- (js/Date.now) reminder-v) (* 1000 60 10))
-             (do (detach-modal! id) (p/resolve! deferred true))
+             (do (detach-dialog! id) (p/resolve! deferred true))
              (set-ready! true))
            (set-ready! true))
          (catch js/Error _e
@@ -272,45 +300,29 @@
               :data-mode :confirm
               :overlay-props
               {:on-click #(when outside-cancel? (close!) (p/reject! deferred nil))}
+              :footer footer)
+       nested-child))))
 
-              :footer
-              [:<>
-               [:span.flex.items-center.pt-1
-                (when (and id data-reminder data-reminder-label)
-                  [:label.flex.items-center.gap-1.text-sm
-                   (form/checkbox {:ref *reminder-ref})
-                   [:span.opacity-50 data-reminder-label]])]
-               [:span.flex.gap-2
-                (base/button
-                 {:key "cancel"
-                  :on-click #(do (close!) (p/reject! deferred false))
-                  :variant :outline
-                  :size :sm} cancel-label)
-                (base/button
-                 {:key "ok"
-                  :ref *ok-ref
-                  :on-click (fn []
-                              (when-let [^js reminder (and id data-reminder (hooks/deref *reminder-ref))]
-                                (when (= "checked" (.-state (.-dataset reminder)))
-                                  (js/localStorage.setItem (str id) (js/Date.now))))
-                              (close!)
-                              (p/resolve! deferred true))
-                  :size :sm} ok-label)]])))))
+(defn- render-dialog-tree
+  [configs]
+  (when-let [configs (seq (drop-while (complement map?) configs))]
+    (let [config (first configs)
+          id (:id config)
+          alert? (:alert? config)
+          config (interpret-vals config
+                                 [:title :description :content :footer]
+                                 {:id id})
+          nested-child (render-dialog-tree (rest configs))]
+      (case alert?
+        :default
+        (alert-inner config nested-child)
 
-(hsx/defc install-modals
+        :confirm
+        (confirm-inner config nested-child)
+
+        (dialog-inner config nested-child)))))
+
+(hsx/defc install-dialogs
   []
-  (let [[modals _set-modals!] (util/use-atom *modals)]
-    (for [config modals
-          :when (map? config)]
-      (let [id (:id config)
-            alert? (:alert? config)
-            config (interpret-vals config
-                     [:title :description :content :footer]
-                     {:id id})]
-        (case alert?
-          :default
-          (alert-inner config)
-          :confirm
-          (confirm-inner config)
-          ;; modal
-          (modal-inner config))))))
+  (let [[dialogs _set-dialogs!] (util/use-atom *dialogs)]
+    (render-dialog-tree dialogs)))

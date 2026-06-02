@@ -69,7 +69,7 @@
      (fn []
        (let [cb  #(let [^js target (.-target %)]
                     (when (and (not (some-> (hooks/deref *el-popup) (.contains target)))
-                               (nil? (.closest target ".ui__modal")))
+                               (nil? (.closest target ".ui__dialog-content")))
                       (hide-settings!)))
              doc (resolve-own-container viewer)]
          (js/setTimeout

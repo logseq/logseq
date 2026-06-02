@@ -1,5 +1,6 @@
 (ns frontend.components.content
-  (:require [clojure.string :as string]
+  (:require ["react" :as react]
+            [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.components.block.comments-model :as comments-model]
@@ -409,14 +410,17 @@
   (when page
     (let [page-menu-options (page-menu/page-menu page)]
       [:<>
-       (for [{:keys [title options]} page-menu-options]
-         (let [on-click (:on-click options)]
-           (shui/dropdown-menu-item
-            (assoc options
-                   :on-click (fn [e]
-                               (when-not (false? (when on-click (on-click e)))
-                                 (shui/popup-hide! popup-id))))
-            title)))])))
+       (for [[idx {:keys [title options]}] (map-indexed vector page-menu-options)]
+         (let [on-click (:on-click options)
+               key (or (:key options) (str "page-menu-" idx))]
+           (react/cloneElement
+            (shui/dropdown-menu-item
+             (assoc options
+                    :on-click (fn [e]
+                                (when-not (false? (when on-click (on-click e)))
+                                  (shui/popup-hide! popup-id))))
+             title)
+            #js {:key (str key)})))])))
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
