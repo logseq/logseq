@@ -1306,8 +1306,6 @@
                                              search-mode
                                              search-args
                                              (state/get-current-repo))]
-    (when (nil? raw-search-mode)
-      (state/set-state! :search/mode :global))
     {::ref (atom nil)
      ::filter (atom filter-group)
      ::input (atom input)
@@ -1344,6 +1342,11 @@
         results-ordered (state->results-ordered state)
         all-items (mapcat last results-ordered)
         first-item (first all-items)]
+    (hooks/use-effect!
+     (fn []
+       (when (nil? search-mode)
+         (state/set-state! :search/mode :global)))
+     [])
     (hooks/use-effect!
      (fn []
        (let [{input :input filter-group :filter} (cmdk-state/build-initial-cmdk-search

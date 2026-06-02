@@ -206,33 +206,33 @@
     (ui/tooltip
      (shui/button-ghost-icon
       :dots {:class "toolbar-dots-btn"
-             :on-pointer-down (fn [^js e]
-                                (shui/popup-show! (.-target e)
-                                                  (fn [{:keys [id]}]
-                                                    (for [{:keys [hr item title options icon]} (items)]
-                                                      (let [on-click' (:on-click options)
-                                                            href (:href options)]
-                                                        (if hr
-                                                          (shui/dropdown-menu-separator)
-                                                          (shui/dropdown-menu-item
-                                                           (assoc options
-                                                                  :on-click (fn [^js e]
-                                                                              (when on-click'
-                                                                                (when-not (false? (on-click' e))
-                                                                                  (shui/popup-hide! id)))))
-                                                           (or item
-                                                               (if href
-                                                                 [:a.flex.items-center.w-full
-                                                                  {:href href :on-click #(shui/popup-hide! id)
-                                                                   :style {:color "inherit"}}
-                                                                  [:span.flex.items-center.gap-1.w-full
-                                                                   icon [:div title]]]
-                                                                 [:span.flex.items-center.gap-1.w-full
-                                                                  icon [:div title]])))))))
-                                                  {:align "end"
-                                                   :as-dropdown? true
-                                                   :content-props {:class "w-64"
-                                                                   :align-offset -32}}))})
+             :on-click (fn [^js e]
+                         (shui/popup-show! (.-currentTarget e)
+                                           (fn [{:keys [id]}]
+                                             (for [{:keys [hr item title options icon]} (items)]
+                                               (let [on-click' (:on-click options)
+                                                     href (:href options)]
+                                                 (if hr
+                                                   (shui/dropdown-menu-separator)
+                                                   (shui/dropdown-menu-item
+                                                    (assoc options
+                                                           :on-click (fn [^js e]
+                                                                       (when on-click'
+                                                                         (when-not (false? (on-click' e))
+                                                                           (shui/popup-hide! id)))))
+                                                    (or item
+                                                        (if href
+                                                          [:a.flex.items-center.w-full
+                                                           {:href href :on-click #(shui/popup-hide! id)
+                                                            :style {:color "inherit"}}
+                                                           [:span.flex.items-center.gap-1.w-full
+                                                            icon [:div title]]]
+                                                          [:span.flex.items-center.gap-1.w-full
+                                                           icon [:div title]])))))))
+                                           {:align "end"
+                                            :as-dropdown? true
+                                            :content-props {:class "w-64"
+                                                            :align-offset -32}}))})
      (t :header/more)
      {:trigger-props {:as-child true}})))
 
