@@ -464,6 +464,82 @@
       });
     })();"))
 
+(defn- journals-long-remount-metrics
+  [long-block-title]
+  (js-json
+   (format
+    "(async () => {
+      const longBlockTitle = %s;
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const scrollContainer = document.querySelector('#main-content-container');
+
+      const findLongJournal = () => Array.from(document.querySelectorAll('#journals .journal-item'))
+        .find((item) => item.textContent.includes(longBlockTitle));
+
+      const waitForLongJournal = async () => {
+        for (let i = 0; i < 80; i++) {
+          const journal = findLongJournal();
+          if (journal) {
+            return journal;
+          }
+          await delay(100);
+        }
+        throw new Error('Expected long journal item');
+      };
+
+      const stableLongJournalHeight = async () => {
+        let previous = null;
+        let stableCount = 0;
+        for (let i = 0; i < 80; i++) {
+          const journal = await waitForLongJournal();
+          const height = Math.round(journal.getBoundingClientRect().height);
+          if (previous !== null && Math.abs(height - previous) <= 1) {
+            stableCount += 1;
+          } else {
+            stableCount = 0;
+          }
+          previous = height;
+          if (stableCount >= 3) {
+            return height;
+          }
+          await delay(100);
+        }
+        return previous;
+      };
+
+      const snapshot = async (label) => {
+        const journal = await waitForLongJournal();
+        return {
+          label,
+          'scroll-top': Math.round(scrollContainer.scrollTop),
+          'scroll-height': Math.round(scrollContainer.scrollHeight),
+          'long-journal-height': Math.round(journal.getBoundingClientRect().height)
+        };
+      };
+
+      const initialLongJournalHeight = await stableLongJournalHeight();
+      const initial = await snapshot('initial');
+
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      await delay(500);
+      scrollContainer.scrollTop = 0;
+      await nextFrame();
+      const afterReturn = await snapshot('after-return');
+      await delay(800);
+      const afterSettle = await snapshot('after-settle');
+      await delay(5500);
+      const afterFallback = await snapshot('after-fallback');
+
+      return JSON.stringify({
+        'initial': { ...initial, 'long-journal-height': initialLongJournalHeight },
+        'after-return': afterReturn,
+        'after-settle': afterSettle,
+        'after-fallback': afterFallback
+      });
+    })();"
+    (json/write-value-as-string long-block-title))))
+
 (defn- multiline-heading-bullet-alignment
   [title]
   (-> (w/eval-js
@@ -589,6 +665,33 @@
       (w/wait-for (format ".ls-page-blocks .ls-block:has-text('%s')" (first blocks)))
       (let [{:keys [journals-scroller-count] :as metrics} (journals-layout-metrics)]
         (is (= 1 journals-scroller-count) metrics)))))
+
+(deftest journals-list-keeps-long-journal-height-after-remount
+  (testing "long journals do not restart progressive rendering from a low measured height after remount"
+    (let [long-block-title "journals remount stable block 001"
+          long-blocks (mapv #(format "journals remount stable block %03d %s"
+                                      %
+                                      (string/join " " (repeat 24 "wrapped-content")))
+                            (range 1 81))
+          older-journals (mapv (fn [idx]
+                                  {:date (format "2026-03-%02dT00:00:00.000Z" idx)
+                                   :blocks [(format "journals remount spacer block %02d" idx)]})
+                                (range 1 18))]
+      (seed-journals!
+       (into [{:date "2026-03-20T00:00:00.000Z"
+               :blocks long-blocks}]
+             older-journals))
+      (enable-virtualized-rendering!)
+      (w/wait-for (format ".ls-page-blocks .ls-block:has-text('%s')" long-block-title))
+      (let [{:keys [initial after-return after-settle after-fallback] :as metrics} (journals-long-remount-metrics long-block-title)
+            initial-height (:long-journal-height initial)
+            initial-scroll-height (:scroll-height initial)]
+        (is (>= (:long-journal-height after-return) (dec initial-height)) metrics)
+        (is (>= (:scroll-height after-return) (dec initial-scroll-height)) metrics)
+        (is (>= (:long-journal-height after-settle) (dec initial-height)) metrics)
+        (is (>= (:scroll-height after-settle) (dec initial-scroll-height)) metrics)
+        (is (>= (:long-journal-height after-fallback) (dec initial-height)) metrics)
+        (is (>= (:scroll-height after-fallback) (dec initial-scroll-height)) metrics)))))
 
 (deftest journals-list-keeps-single-scroller-with-iframe-embeds
   (testing "iframe embeds render inside journals without adding nested virtualized measurement owners"
