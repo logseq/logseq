@@ -15,11 +15,6 @@
                              :graph repo
                              :blocks blocks')))
 
-(defn config-with-document-mode
-  [config]
-  (assoc config
-         :document/mode? (state/sub [:document/mode?])))
-
 (defn safe-read-string
   [content error-message-or-handler]
   (try

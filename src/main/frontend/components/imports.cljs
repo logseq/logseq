@@ -36,7 +36,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- ignored-path?
   "Ignore path for ls-dir-files-with-handler! and reload-dir!"
@@ -151,14 +151,12 @@
       (notification/show! (t :import/select-edn-or-json)
                           :error))))
 
-(rum/defcs set-graph-name-dialog
-  < rum/reactive
-  (rum/local "" ::input)
-  [state input-e opts]
-  (let [*input (::input state)
-        on-submit #(if (repo/invalid-graph-name? @*input)
+(hsx/defc set-graph-name-dialog
+  [input-e opts]
+  (let [[input set-input!] (hooks/use-state "")
+        on-submit #(if (repo/invalid-graph-name? input)
                      (repo/invalid-graph-name-warning)
-                     (lsq-import-handler input-e (assoc opts :graph-name @*input)))]
+                     (lsq-import-handler input-e (assoc opts :graph-name input)))]
     [:div.container
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -166,9 +164,9 @@
         (t :import/new-graph-name)]]]
 
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
-      {:auto-focus true
+       {:auto-focus true
        :on-change (fn [e]
-                    (reset! *input (util/evalue e)))
+                    (set-input! (util/evalue e)))
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
                         (on-submit)))}]
@@ -177,7 +175,7 @@
       (ui/button (t :ui/submit)
                  {:on-click on-submit})]]))
 
-(rum/defc import-file-graph-dialog
+(hsx/defc import-file-graph-dialog
   [initial-name on-submit-fn]
   [:div.border.p-6.rounded.bg-gray-01.mt-4
    (let [form-ctx (form-core/use-form
@@ -197,7 +195,7 @@
                             ;; (js/console.log "[form] submit: " e (js->clj e))
                             (on-submit-fn (js->clj e :keywordize-keys true))
                             (shui/dialog-close!)))
-         [convert-all-tags-input set-convert-all-tags-input!] (rum/use-state true)]
+         [convert-all-tags-input set-convert-all-tags-input!] (hooks/use-state true)]
 
      (shui/form-provider form-ctx
                          [:form
@@ -440,9 +438,9 @@
                                     :else
                                     (import-graph-fn user-inputs)))))))
 
-(rum/defc indicator-progress < rum/reactive
+(hsx/defc indicator-progress
   []
-  (let [{:keys [total current-idx current-page label]} (state/sub :graph/importing-state)
+  (let [{:keys [total current-idx current-page label]} (state/use-sub :graph/importing-state)
         label (or label (t :import/loading))
         left-label (if (and current-idx total (= current-idx total))
                      [:div.flex.flex-row.font-bold (t :ui/loading)]
@@ -458,7 +456,7 @@
     [:div.p-5
      (ui/progress-bar-with-label width left-label process)]))
 
-(rum/defc import-indicator
+(hsx/defc import-indicator
   [importing?]
   (hooks/use-effect!
    (fn []
@@ -473,9 +471,9 @@
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
-(rum/defc ^:large-vars/cleanup-todo importer < rum/reactive
+(hsx/defc ^:large-vars/cleanup-todo importer
   [{:keys [query-params]}]
-  (let [importing? (state/sub :graph/importing)]
+  (let [importing? (state/use-sub :graph/importing)]
     [:<>
      (import-indicator importing?)
      (when-not importing?
@@ -490,8 +488,8 @@
           [:label.action-input.flex.items-center.mx-2.my-2
            [:span.as-flex-center [:i (svg/logo 28)]]
            [:span.flex.flex-col
-              [[:strong "SQLite"]
-             [:small (t :onboarding.import/sqlite-desc)]]]
+            [:strong "SQLite"]
+            [:small (t :onboarding.import/sqlite-desc)]]
            [:input.absolute.hidden
             {:id "import-sqlite-db"
              :type "file"
@@ -502,8 +500,8 @@
           [:label.action-input.flex.items-center.mx-2.my-2
            [:span.as-flex-center [:i (svg/logo 28)]]
            [:span.flex.flex-col
-              [[:strong (t :import/sqlite-and-assets-title)]
-               [:small (t :import/sqlite-and-assets-desc)]]]
+            [:strong (t :import/sqlite-and-assets-title)]
+            [:small (t :import/sqlite-and-assets-desc)]]
            [:input.absolute.hidden
             {:id "import-sqlite-zip"
              :type "file"
@@ -516,8 +514,8 @@
             [:label.action-input.flex.items-center.mx-2.my-2
              [:span.as-flex-center [:i (svg/logo 28)]]
              [:span.flex.flex-col
-              [[:strong (t :import/file-to-db-title)]
-               [:small (t :import/file-to-db-desc)]]]
+              [:strong (t :import/file-to-db-title)]
+              [:small (t :import/file-to-db-desc)]]
              ;; Test form style changes
              #_[:a.button {:on-click #(import-file-to-db-handler nil {:import-graph-fn js/alert})} "Open"]
              [:input.absolute.hidden
@@ -531,8 +529,8 @@
           [:label.action-input.flex.items-center.mx-2.my-2
            [:span.as-flex-center [:i (svg/logo 28)]]
            [:span.flex.flex-col
-              [[:strong (t :import/debug-transit-title)]
-               [:small (t :import/debug-transit-desc)]]]
+            [:strong (t :import/debug-transit-title)]
+            [:small (t :import/debug-transit-desc)]]
            [:input.absolute.hidden
             {:id "import-debug-transit"
              :type "file"
@@ -543,8 +541,8 @@
           [:label.action-input.flex.items-center.mx-2.my-2
            [:span.as-flex-center [:i (svg/logo 28)]]
            [:span.flex.flex-col
-              [[:strong (t :import/db-edn-title)]
-               [:small (t :import/db-edn-desc)]]]
+            [:strong (t :import/db-edn-title)]
+            [:small (t :import/db-edn-desc)]]
            [:input.absolute.hidden
             {:id "import-db-edn"
              :type "file"

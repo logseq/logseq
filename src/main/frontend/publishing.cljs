@@ -1,7 +1,8 @@
 (ns frontend.publishing
   "Entry ns for publishing build. Provides frontend for publishing single page
   application"
-  (:require [cljs.reader :as reader]
+  (:require ["react-dom/client" :as rdc]
+            [cljs.reader :as reader]
             [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.components.editor :as editor]
@@ -20,8 +21,7 @@
             [frontend.state :as state]
             [promesa.core :as p]
             [reitit.frontend :as rf]
-            [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [reitit.frontend.easy :as rfe]))
 
 ;; The publishing site should be as thin as possible.
 ;; Both files and git libraries can be removed.
@@ -77,7 +77,7 @@
 (defn start []
   (when-let [node (.getElementById js/document "root")]
     (set-router!)
-    (rum/mount (page/current-page) node)))
+    (.render (rdc/createRoot node) (page/current-page))))
 
 (defn- register-components-fns!
   []
