@@ -1,39 +1,37 @@
-#ui__ac {
-  &-inner {
-    overflow-x: hidden;
-    overflow-y: auto;
-    position: relative;
-    -webkit-overflow-scrolling: touch;
+#ui__ac-inner {
+  overflow-x: hidden;
+  overflow-y: auto;
+  position: relative;
+  -webkit-overflow-scrolling: touch;
 
-    .menu-link {
-      @apply break-all rounded;
+  .menu-link {
+    @apply break-all rounded;
 
-      .has-help {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
+    .has-help {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
 
-        small {
-          @apply cursor-help visible flex;
+      small {
+        @apply cursor-help visible flex;
 
-          svg {
-            @apply opacity-30 hover:opacity-90;
-          }
+        svg {
+          @apply opacity-30 hover:opacity-90;
         }
       }
+    }
 
-      &:hover, &.chosen {
-        background-color: var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))));
+    &:hover, &.chosen {
+      background-color: var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))));
 
-        .has-help small {
-          visibility: visible;
-        }
+      .has-help small {
+        visibility: visible;
       }
+    }
 
-      &:not(.chosen):hover {
-        background-color: unset !important;
-        color: var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--secondary))));
-      }
+    &:not(.chosen):hover {
+      background-color: unset !important;
+      color: var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--secondary))));
     }
   }
 }

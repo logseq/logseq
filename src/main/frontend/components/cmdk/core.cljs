@@ -323,7 +323,7 @@
                   result  []]
              (let [[b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
                    hiccups-add [[:span b-cut]
-                                [:mark.p-0.rounded-none hl-cut]]
+                                [:mark {:style {:padding 0 :border-radius 0}} hl-cut]]
                    hiccups-add (remove nil? hiccups-add)
                    new-result (concat result hiccups-add)]
                (if-not (string/blank? e-cut)
@@ -1243,8 +1243,8 @@
                                   :muted    true}))]
     [:div.hints
      [:div.text-sm.leading-6
-      [:div.flex.flex-row.gap-1.items-center]
-      [:div.font-medium.text-gray-12 (t :cmdk.tip/label)
+      [:div.flex.flex-row.gap-1.items-center
+       [:span.font-medium.text-gray-12 (t :cmdk.tip/label)]
        (tip state)]]
 
      [:div.gap-2.hidden.md:flex {:style {:margin-right -6}}

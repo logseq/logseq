@@ -158,11 +158,12 @@
   (let [specified-id id
         id (or specified-id (gen-id))
         *target (volatile! nil)
+        pointer-event? (or (instance? js/MouseEvent (or (.-nativeEvent event) event))
+                           (instance? js/goog.events.BrowserEvent event))
         position (cond
                    (vector? event) event
 
-                   (or (instance? js/MouseEvent (or (.-nativeEvent event) event))
-                       (instance? js/goog.events.BrowserEvent event))
+                   pointer-event?
                    (let [event' (or (.-nativeEvent event) event)]
                      (vreset! *target (some->> [(.-currentTarget event)
                                                  (.-currentTarget event')
@@ -191,7 +192,7 @@
                    event
                    :else [0 0])]
     (let [target @*target
-          suppressed-open? (and target (suppress-toggle-open? target))
+          suppressed-open? (and pointer-event? target (suppress-toggle-open? target))
           config (when (and target (not suppressed-open?))
                    (if specified-id
                      (some-> (get-popup specified-id)
@@ -325,10 +326,7 @@
                              (assoc :data-as-mask true)
 
                              (not use-menu?)
-                             (assoc :on-key-down (fn [^js e]
-                                                   (some-> content-props :on-key-down (apply [e]))
-                                                   (set! (. e -defaultPrevented) true))
-                                    :on-pointer-move #(set! (. % -defaultPrevented) true)))
+                             (assoc :on-key-down (:on-key-down content-props)))
              content (if (fn? content)
                        (content (cond-> {:id id}
                                   as-content?
