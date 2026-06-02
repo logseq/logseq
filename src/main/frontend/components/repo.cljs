@@ -23,7 +23,7 @@
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn graph-sync-icon-name
   [{:keys [remote? graph-e2ee?]}]
@@ -79,7 +79,7 @@
               (-> (rtc-handler/<rtc-upload-graph! url graph-e2ee?)
                   (p/finally hide-upload-log!)))))))))
 
-(rum/defc normalized-graph-label
+(hsx/defc normalized-graph-label
   [{:keys [url remote?] :as graph} on-click]
   (when graph
     [:span.flex.items-center
@@ -158,7 +158,7 @@
       (when target
         (state/pub-event! [:graph/open-new-window target])))))
 
-(rum/defc ^:large-vars/cleanup-todo repos-inner
+(hsx/defc ^:large-vars/cleanup-todo repos-inner
   "Graph list in `All graphs` page"
   [repos]
   (for [{:keys [root url remote? graph-e2ee? GraphUUID GraphSchemaVersion GraphName created-at last-seen-at] :as repo}
@@ -170,7 +170,7 @@
       [:span.flex.items-center.gap-1
        (normalized-graph-label repo
                                (fn []
-                                 (when-not (state/sub :rtc/downloading-graph-uuid)
+                                 (when-not (state/get-state :rtc/downloading-graph-uuid)
                                    (cond
                                      root ; exists locally
                                      (state/pub-event! [:graph/switch url])
@@ -280,18 +280,13 @@
                                                      (state/set-state! :rtc/loading-graphs? false)))))))))}
               (t :graph/leave-action))))))]]]))
 
-(rum/defc repos-cp < rum/reactive
-  {:will-mount (fn [state]
-                 (let [login? (:auth/id-token @state/state)]
-                   (when (and login? (user-handler/rtc-group?))
-                     (rtc-handler/<get-remote-graphs)))
-                 state)}
+(hsx/defc repos-cp
   []
-  (let [login? (boolean (state/sub :auth/id-token))
-        repos (state/sub [:me :repos])
+  (let [login? (boolean (state/use-sub :auth/id-token))
+        repos (state/use-sub [:me :repos])
         repos (util/distinct-by :url repos)
-        remotes (state/sub :rtc/graphs)
-        remotes-loading? (state/sub :rtc/loading-graphs?)
+        remotes (state/use-sub :rtc/graphs)
+        remotes-loading? (state/use-sub :rtc/loading-graphs?)
         repos (->> (if (and login? (seq remotes))
                      (repo-handler/combine-local-&-remote-graphs repos remotes)
                      repos)
@@ -305,6 +300,11 @@
         {remote-graphs true local-graphs false} (group-by (comp boolean :remote?) repos)
         {own-graphs true shared-graphs false}
         (group-by (fn [graph] (= "manager" (:graph<->user-user-type graph))) remote-graphs)]
+    (hooks/use-effect!
+     (fn []
+       (when (and login? (user-handler/rtc-group?))
+         (rtc-handler/<get-remote-graphs)))
+     [login?])
     [:div#graphs
      (when-not (util/capacitor?)
        [:h1.title (t :graph/all-graphs)])
@@ -424,15 +424,15 @@
                                  (route-handler/redirect-to-all-graphs)))}
                   (shui/tabler-icon "layout-2") [:span (t :graph/all-graphs)]))])
 
-(rum/defcs repos-dropdown-content < rum/reactive
-  [_state & {:keys [contentid footer?] :as opts
-             :or {footer? true}}]
-  (let [current-repo (state/sub :git/current-repo)
-        login? (boolean (state/sub :auth/id-token))
-        repos (state/sub [:me :repos])
-        rtc-graphs (state/sub :rtc/graphs)
-        downloading-graph-id (state/sub :rtc/downloading-graph-uuid)
-        remotes-loading? (state/sub :rtc/loading-graphs?)
+(hsx/defc repos-dropdown-content
+  [& {:keys [contentid footer?] :as opts
+      :or {footer? true}}]
+  (let [current-repo (state/use-sub :git/current-repo)
+        login? (boolean (state/use-sub :auth/id-token))
+        repos (state/use-sub [:me :repos])
+        rtc-graphs (state/use-sub :rtc/graphs)
+        downloading-graph-id (state/use-sub :rtc/downloading-graph-uuid)
+        remotes-loading? (state/use-sub :rtc/loading-graphs?)
         repos (sort-repos-with-metadata-local repos)
         repos (->>
                (if (and (seq rtc-graphs) login?)
@@ -509,10 +509,10 @@
        (ui/icon "trash")
        (t :graph/delete-local-action)])]))
 
-(rum/defcs graphs-selector < rum/reactive
-  [_state]
-  (let [current-repo (state/get-current-repo)
-        user-repos (state/get-repos)
+(hsx/defc graphs-selector
+  []
+  (let [current-repo (state/use-sub :git/current-repo)
+        user-repos (state/use-sub [:me :repos])
         current-repo' (some->> user-repos (medley/find-first #(= current-repo (:url %))))
         repo-name (when current-repo (db/get-repo-name current-repo))
         remote? (:remote? current-repo')
@@ -602,7 +602,7 @@
                    e)))
     (p/resolved nil)))
 
-(rum/defc new-db-graph-inner
+(hsx/defc new-db-graph-inner
   [rtc-group?]
   (let [[creating-db? set-creating-db?] (hooks/use-state false)
         [cloud? set-cloud?] (hooks/use-state false)
@@ -631,7 +631,7 @@
         submit! (fn submit!
                   [^js e click?]
                   (when-let [value (and (or click? (= (gobj/get e "key") "Enter"))
-                                        (util/trim-safe (.-value (rum/deref input-ref))))]
+                                        (util/trim-safe (.-value (hooks/deref input-ref))))]
                     (new-db-f value)))]
     (hooks/use-effect!
      (fn []
@@ -693,7 +693,7 @@
         (ui/loading (t :graph/creating))
         (t :ui/submit)))]))
 
-(rum/defc new-db-graph < rum/reactive
+(hsx/defc new-db-graph
   []
   (let [rtc-group? (user-handler/rtc-group?)]
     (new-db-graph-inner rtc-group?)))

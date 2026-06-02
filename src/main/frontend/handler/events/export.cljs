@@ -6,11 +6,11 @@
             [frontend.ui :as ui]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc indicator-progress < rum/reactive
+(hsx/defc indicator-progress
   []
-  (let [{:keys [total current-idx current-page label]} (state/sub :graph/exporting-state)
+  (let [{:keys [total current-idx current-page label]} (state/use-sub :graph/exporting-state)
         label (or label (t :export/exporting))
         left-label (if (and current-idx total (= current-idx total))
                      [:div.flex.flex-row.font-bold (t :ui/loading)]

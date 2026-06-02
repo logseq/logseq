@@ -153,4 +153,4 @@
                                         content
                                         result)))
                              (conj result [:span content])))]
-            [:span {:class "m-0"} elements]))))))
+            (into [:span {:class "m-0"}] elements)))))))
