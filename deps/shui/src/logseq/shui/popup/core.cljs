@@ -94,6 +94,20 @@
   (contains? #{"trigger-hover" "cancel-open"}
              (when event-details (.-reason event-details))))
 
+(defn- close-prevented?
+  [handler-result ^js event-details ^js native-event]
+  (when (or (false? handler-result)
+            (some-> native-event (.-defaultPrevented))
+            (some-> event-details (.-isCanceled)))
+    (some-> event-details (.cancel))
+    true))
+
+(defn- call-close-handler!
+  [handler ^js event-details]
+  (let [native-event (some-> event-details (.-event))
+        result (when (fn? handler) (handler native-event))]
+    (close-prevented? result event-details native-event)))
+
 (defn show!
   [^js event content & {:keys [id as-mask? as-dropdown? as-content?
                                focus-trigger? align root-props content-props
@@ -192,9 +206,10 @@
            _on-before-hide _on-after-hide]
     :as _props}]
   (when-let [[x y _ height] position]
-    (let [popup-root (if (not force-popover?) dropdown-menu popover)
-          popup-trigger (if (not force-popover?) dropdown-menu-trigger popover-trigger)
-          popup-content (if (not force-popover?) dropdown-menu-content popover-content)
+    (let [use-menu? (and as-dropdown? (not force-popover?))
+          popup-root (if use-menu? dropdown-menu popover)
+          popup-trigger (if use-menu? dropdown-menu-trigger popover-trigger)
+          popup-content (if use-menu? dropdown-menu-content popover-content)
           auto-side-fn (fn []
                          (let [vh js/window.innerHeight
                                [th bh] [y (- vh (+ y height))]]
@@ -217,10 +232,21 @@
                                   (do
                                     (some-> root-props (:onOpenChange) (apply [open? e]))
                                     (when-not open?
-                                      (when (= "escape-key" (.-reason e))
-                                        (some-> (.-event e) (.preventDefault))
-                                        (some-> (.-event e) (.stopPropagation)))
-                                      (hide! id 1 {:event e})))))]
+                                      (let [reason (.-reason e)
+                                            prevented? (case reason
+                                                         "escape-key"
+                                                         (do
+                                                           (let [prevented? (call-close-handler! (:onEscapeKeyDown content-props) e)]
+                                                             (some-> (.-event e) (.preventDefault))
+                                                             (some-> (.-event e) (.stopPropagation))
+                                                             prevented?))
+
+                                                         "outside-press"
+                                                         (call-close-handler! (:onPointerDownOutside content-props) e)
+
+                                                         false)]
+                                        (when-not prevented?
+                                          (hide! id 1 {:event (.-event e)})))))))]
       (popup-root
        (merge root-props {:open open?
                           :onOpenChange handle-open-change!})
@@ -238,8 +264,7 @@
                              as-mask?
                              (assoc :data-as-mask true)
 
-                             (and (not force-popover?)
-                                  (not as-dropdown?))
+                             (not use-menu?)
                              (assoc :on-key-down (fn [^js e]
                                                    (some-> content-props :on-key-down (apply [e]))
                                                    (set! (. e -defaultPrevented) true))
