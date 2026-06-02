@@ -93,7 +93,6 @@
  :block/open-block-references "開啟區塊引用"
  :block/practice "練習"
  :block/practice-cards "練習卡片"
- :block/ref-nesting-too-deep "區塊引用巢狀層級過深"
  :block/remove-tag "移除標籤"
  :block/remove-this-tag "移除此標籤"
  :block/render-error "區塊渲染錯誤："

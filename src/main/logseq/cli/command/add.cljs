@@ -155,6 +155,93 @@
               block)))
         blocks))
 
+(defn- normalize-block-content-keys
+  [blocks]
+  (mapv (fn normalize-block-content-key [block]
+          (let [content (:block/content block)
+                block (cond-> (dissoc block :block/content)
+                        (and (contains? block :block/content)
+                             (not (contains? block :block/title)))
+                        (assoc :block/title content))]
+            (if (seq (:block/children block))
+              (update block :block/children normalize-block-content-keys)
+              block)))
+        blocks))
+
+(def ^:private inline-property-key-namespace-prefixes
+  ["logseq.property" "user.property" "plugin.property"])
+
+(defn- inline-property-key-namespace?
+  [key-namespace]
+  (boolean
+   (and key-namespace
+        (some (fn [prefix]
+                (or (= key-namespace prefix)
+                    (string/starts-with? key-namespace (str prefix "."))))
+              inline-property-key-namespace-prefixes))))
+
+(defn- public-built-in-property-key?
+  [k]
+  (if-let [property (get db-property/built-in-properties k)]
+    (true? (get-in property [:schema :public?]))
+    true))
+
+(defn- inline-property-key?
+  [k]
+  (cond
+    (string? k)
+    (seq (string/trim k))
+
+    (or (number? k) (uuid? k))
+    true
+
+    (qualified-keyword? k)
+    (and (inline-property-key-namespace? (namespace k))
+         (public-built-in-property-key? k))
+
+    (keyword? k)
+    true
+
+    :else
+    false))
+
+(defn- split-inline-property-attrs
+  [block]
+  (reduce-kv (fn [acc k v]
+               (if (inline-property-key? k)
+                 (update acc :properties assoc k v)
+                 (update acc :block assoc k v)))
+             {:block {}
+              :properties {}}
+             block))
+
+(defn- extract-inline-properties
+  [blocks]
+  (letfn [(walk-block [block]
+            (let [{block-without-inline-properties :block
+                   inline-properties :properties} (split-inline-property-attrs block)
+                  children (:block/children block-without-inline-properties)
+                  walked-children (when (seq children)
+                                    (mapv walk-block children))
+                  block' (if (seq walked-children)
+                           (assoc block-without-inline-properties :block/children (mapv :block walked-children))
+                           block-without-inline-properties)
+                  block-uuid (:block/uuid block')]
+              (when (and (seq inline-properties) (nil? block-uuid))
+                (throw (ex-info "block uuid is required for inline properties"
+                                {:code :missing-block-uuid-for-inline-properties
+                                 :properties (keys inline-properties)})))
+              {:block block'
+               :property-assignments (cond-> []
+                                       (seq inline-properties)
+                                       (conj {:block-uuid block-uuid
+                                              :properties inline-properties})
+                                       (seq walked-children)
+                                       (into (mapcat :property-assignments walked-children)))}))]
+    (let [walked (mapv walk-block blocks)]
+      {:blocks (mapv :block walked)
+       :property-assignments (vec (mapcat :property-assignments walked))})))
+
 (defn- normalize-created-ids
   [ids]
   (->> ids
@@ -1050,6 +1137,27 @@
                                     properties))]
        (vec resolved-entries)))))
 
+(defn- resolve-inline-property-assignments
+  [config repo property-assignments]
+  (if (seq property-assignments)
+    (p/let [resolved (p/all
+                      (map (fn [{:keys [block-uuid properties]}]
+                             (p/let [resolved-properties (resolve-properties config repo properties
+                                                                              {:allow-non-built-in? true})]
+                               {:block-uuid block-uuid
+                                :properties resolved-properties}))
+                           property-assignments))]
+      (vec resolved))
+    (p/resolved nil)))
+
+(defn- inline-property-assignment-ops
+  [property-assignments]
+  (mapcat (fn [{:keys [block-uuid properties]}]
+            (map (fn [[property-ident value]]
+                   [:batch-set-property [[block-uuid] property-ident value {}]])
+                 properties))
+          property-assignments))
+
 (defn- resolve-add-target
   [config {:keys [repo target-id target-uuid target-page-name]}]
   (cond
@@ -1150,16 +1258,21 @@
 (defn execute-add-block
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              action-blocks (normalize-block-content-keys (:blocks action))
+              {blocks-without-inline-properties :blocks
+               inline-property-assignments :property-assignments} (extract-inline-properties action-blocks)
+              inline-property-assignments (resolve-inline-property-assignments cfg (:repo action)
+                                                                               inline-property-assignments)
               target-block-uuid (resolve-add-target cfg action)
-              ref-values (collect-page-refs (:blocks action))
+              ref-values (collect-page-refs blocks-without-inline-properties)
               {:keys [uuid-refs page-refs id-refs]} (partition-ref-values ref-values)
               _ (ensure-block-refs-exist! cfg (:repo action) uuid-refs)
               page-refs' (or (resolve-page-ref-entities cfg (:repo action) page-refs) [])
               id-refs' (or (resolve-id-ref-entities cfg (:repo action) id-refs) [])
               refs (into page-refs' id-refs')
               blocks (if (seq refs)
-                       (normalize-block-title-refs (:blocks action) refs)
-                       (:blocks action))
+                       (normalize-block-title-refs blocks-without-inline-properties refs)
+                       blocks-without-inline-properties)
               blocks-for-insert (flatten-block-tree blocks)
               status (:status action)
               tags (if (contains? action :resolved-tags)
@@ -1206,7 +1319,9 @@
                     (and (seq properties) (seq block-uuids))
                     (into (map (fn [[k v]]
                                  [:batch-set-property [block-uuids k v {}]])
-                               properties)))
+                               properties))
+                    (seq inline-property-assignments)
+                    (into (inline-property-assignment-ops inline-property-assignments)))
               apply-result (transport/invoke cfg :thread-api/apply-outliner-ops [(:repo action) ops {}])
               created-ids (resolve-created-block-ids cfg (:repo action) blocks-for-insert apply-result)]
         {:status :ok

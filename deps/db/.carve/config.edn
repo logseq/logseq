@@ -11,6 +11,8 @@
                   logseq.db.frontend.asset
                   ;; Used outside deps/db by frontend worker and electron modules.
                   logseq.db.sqlite.backup
+                  ;; Used outside deps/db by frontend handler and worker search.
+                  logseq.db.frontend.block-title
                   ;; Some fns are used by frontend but not worth moving over yet
                   logseq.db.frontend.schema
                   logseq.db.frontend.validate

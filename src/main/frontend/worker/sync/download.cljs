@@ -168,9 +168,12 @@
                                   {:sub-type :download-progress
                                    :graph-uuid graph-id
                                    :message "Saving data to DB"})
-       (if-let [rehydrate-f (@thread-api/*thread-apis :thread-api/db-sync-rehydrate-large-titles)]
-         (rehydrate-f repo graph-id)
-         (fail-fast :db-sync/missing-field {:field :thread-api/db-sync-rehydrate-large-titles}))
+       (->
+        (if-let [rehydrate-f (@thread-api/*thread-apis :thread-api/db-sync-rehydrate-large-titles)]
+          (rehydrate-f repo graph-id)
+          (fail-fast :db-sync/missing-field {:field :thread-api/db-sync-rehydrate-large-titles}))
+        (p/catch (fn [error]
+                   (log/error ::rehydrate-large-title-failed error))))
        (rtc-log-and-state/rtc-log :rtc.log/download
                                   {:sub-type :download-completed
                                    :graph-uuid graph-id

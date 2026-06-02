@@ -77,6 +77,7 @@
 (deftest test-execute-upsert-asset-create-applies-metadata-and-copies-file
   (async done
     (let [add-actions* (atom [])
+          lifecycle-calls* (atom [])
           copy-calls* (atom [])
           action {:type :upsert-asset
                   :mode :create
@@ -84,16 +85,19 @@
                   :graph "demo-graph"
                   :asset-path "/tmp/logo.png"
                   :content "Logo"
-                  :blocks [{:block/title "Logo"}] }]
+                  :blocks [{:block/title "Logo"
+                            :block/uuid (uuid "00000000-0000-0000-0000-000000000101")}] }]
       (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                       (p/resolved (assoc config :base-url "http://example")))
                           upsert-command/asset-file-exists? (fn [_] true)
                           upsert-command/asset-file-size-bytes (fn [_] 123)
                           upsert-command/asset-file-checksum (fn [_] "sha-256-value")
                           upsert-command/copy-asset-file-to-graph! (fn [_ repo block-uuid asset-type source-path]
+                                                                     (swap! lifecycle-calls* conj :copy)
                                                                      (swap! copy-calls* conj [repo block-uuid asset-type source-path])
                                                                      "/tmp/copied/logo.png")
                           add-command/execute-add-block (fn [add-action _]
+                                                          (swap! lifecycle-calls* conj :add-block)
                                                           (swap! add-actions* conj add-action)
                                                           (p/resolved {:status :ok
                                                                        :data {:result [101]}}))
@@ -127,7 +131,8 @@
                        (uuid "00000000-0000-0000-0000-000000000101")
                        "png"
                        "/tmp/logo.png"]]
-                     @copy-calls*))))
+                     @copy-calls*))
+              (is (= [:copy :add-block] @lifecycle-calls*))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -239,6 +244,72 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
+
+(deftest test-execute-upsert-block-create-normalizes-content-block-tree
+  (async done
+    (let [page-uuid (random-uuid)
+          parent-uuid (random-uuid)
+          child-uuid (random-uuid)
+          inserted-blocks* (atom nil)
+          action {:type :upsert-block
+                  :mode :create
+                  :repo "demo-repo"
+                  :graph "demo-graph"
+                  :target-page-name "TestPage"
+                  :blocks [{:block/content "Parent"
+                            :block/uuid parent-uuid
+                            :block/children [{:block/content "Child"
+                                              :block/uuid child-uuid}]}]
+                  :pos "last-child"}]
+      (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                      (p/resolved (assoc config :base-url "http://example")))
+                          transport/invoke (fn [_ method args]
+                                             (case method
+                                               :thread-api/q
+                                               (p/resolved [{:db/id 10
+                                                            :block/uuid page-uuid
+                                                            :block/name "testpage"
+                                                            :block/title "TestPage"}])
+
+                                               :thread-api/apply-outliner-ops
+                                               (let [[_ ops _] args
+                                                     blocks (get-in ops [0 1 0])]
+                                                 (reset! inserted-blocks* blocks)
+                                                 (if (every? (fn [block]
+                                                               (and (:block/title block)
+                                                                    (not (contains? block :block/content))))
+                                                             blocks)
+                                                   (p/resolved {:tx-data blocks})
+                                                   (p/rejected (ex-info "DB write failed with invalid data"
+                                                                        {:code :exception}))))
+
+                                               :thread-api/pull
+                                               (let [[_ _ lookup] args]
+                                                 (p/resolved
+                                                  (cond
+                                                    (= lookup [:block/uuid parent-uuid])
+                                                    {:db/id 101 :block/uuid parent-uuid}
+
+                                                    (= lookup [:block/uuid child-uuid])
+                                                    {:db/id 102 :block/uuid child-uuid}
+
+                                                    :else {})))
+
+                                               (throw (ex-info "unexpected invoke"
+                                                               {:method method
+                                                                :args args}))))]
+            (p/let [result (upsert-command/execute-upsert-block action {})]
+              (is (= :ok (:status result)))
+              (is (= [101 102] (get-in result [:data :result])))
+              (is (= [{:block/title "Parent"
+                       :block/uuid parent-uuid}
+                      {:block/title "Child"
+                       :block/uuid child-uuid
+                       :block/parent [:block/uuid parent-uuid]}]
+                     @inserted-blocks*))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
 
 (deftest test-build-task-action-validation
   (testing "upsert task requires target selector or content/page"
@@ -707,5 +778,3 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
-
-

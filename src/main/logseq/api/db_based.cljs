@@ -122,7 +122,7 @@
 
 (defn- schema-type-check!
   [type]
-  (let [valid-types #{:default :number :date :datetime :checkbox :url :node :json :string}]
+  (let [valid-types #{:default :number :date :datetime :checkbox :url :node :asset :json :string}]
     (when-not (contains? valid-types type)
       (throw (ex-info (str "Invalid type, type should be one of: " valid-types) {:type type})))))
 
@@ -132,7 +132,7 @@
           property-ident (api-block/get-db-ident-from-property-name k' this)
           _ (api-block/ensure-property-upsert-control this property-ident k')
           schema (or (some-> schema
-                             (update-keys #(if (contains? #{:hide :public} %)
+                             (update-keys #(if (contains? #{:public} %)
                                              (keyword (str (name %) "?")) %)))
                      {})
           _ (when (:type schema)
@@ -140,18 +140,22 @@
           schema (cond-> schema
                    (string? (:cardinality schema))
                    (-> (assoc :db/cardinality (->cardinality (:cardinality schema)))
-                       (dissoc :cardinality))
+                     (dissoc :cardinality))
+
+                   (boolean? (:hide schema))
+                   (-> (assoc :logseq.property/hide? (:hide schema))
+                     (dissoc :hide))
 
                    (string? (:type schema))
                    (-> (assoc :logseq.property/type (keyword (:type schema)))
-                       (dissoc :type)))
+                     (dissoc :type)))
           p (db-property-handler/upsert-property! property-ident schema
                                                   (assoc opts :property-name k'))]
     (db/entity (:db/id p))))
 
 (defn upsert-property
   "schema:
-    {:type :default | :number | :date | :datetime | :checkbox | :url | :node | :json | :string
+    {:type :default | :number | :date | :datetime | :checkbox | :url | :node | :asset | :json | :string
      :cardinality :many | :one
      :hide? true
      :view-context :page

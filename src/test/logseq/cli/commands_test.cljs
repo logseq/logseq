@@ -44,6 +44,13 @@
     (catch :default e
       (or (ex-message e) (.-message e) (str e)))))
 
+(defn- parse-args-capturing-error
+  [args]
+  (try
+    {:result (commands/parse-args args)}
+    (catch :default e
+      {:error (or (ex-message e) (.-message e) (str e))})))
+
 (defn- command-lines
   [summary]
   (let [lines (string/split-lines (strip-ansi summary))
@@ -85,7 +92,7 @@
       (is (string/includes? plain-summary "upsert asset"))
       (is (string/includes? plain-summary "remove"))
       (is (string/includes? plain-summary "query"))
-      (is (string/includes? plain-summary "qsearch"))
+      (is (not (string/includes? plain-summary "qsearch")))
       (is (string/includes? plain-summary "search"))
       (is (string/includes? plain-summary "show"))
       (is (string/includes? plain-summary "doctor"))
@@ -99,7 +106,7 @@
       (is (string/includes? plain-summary "completion"))
       (is (string/includes? plain-summary "example"))
       (is (not (string/includes? plain-summary "example upsert")))
-      (is (string/includes? plain-summary "qmd"))
+      (is (not (string/includes? plain-summary "qmd")))
       (is (string/includes? plain-summary "skill"))
       (is (not (string/includes? plain-summary "skill show")))
       (is (string/includes? plain-summary "Path to CLI root dir (default ~/logseq)"))
@@ -121,7 +128,7 @@
       (is (contains-bold? summary "remove property"))
       (is (contains-bold? summary "query"))
       (is (contains-bold? summary "query list"))
-      (is (contains-bold? summary "qsearch"))
+      (is (not (contains-bold? summary "qsearch")))
       (is (contains-bold? summary "search block"))
       (is (contains-bold? summary "search page"))
       (is (contains-bold? summary "search property"))
@@ -141,7 +148,7 @@
       (is (contains-bold? summary "completion"))
       (is (contains-bold? summary "example"))
       (is (not (contains-bold? summary "example upsert")))
-      (is (contains-bold? summary "qmd"))
+      (is (not (contains-bold? summary "qmd")))
       (is (contains-bold? summary "skill"))
       (is (not (contains-bold? summary "skill show")))
       (is (contains-bold? summary "--help"))
@@ -163,84 +170,16 @@
       (is (string/includes? plain-summary "Global options:"))
       (is (string/includes? plain-summary "Command options:")))))
 
-(deftest test-qmd-and-qsearch-parse
-  (testing "qmd parses as graph-scoped command"
-    (let [result (commands/parse-args ["qmd" "--graph" "demo"])]
-      (is (true? (:ok? result)))
-      (is (= :qmd (:command result)))
-      (is (= "demo" (get-in result [:options :graph])))))
-
-  (testing "qmd can omit graph so build-action can use the current graph"
-    (let [parsed (commands/parse-args ["qmd"])
-          result (commands/build-action parsed {:graph "demo"})]
-      (is (true? (:ok? parsed)))
-      (is (true? (:ok? result)))
-      (is (= "logseq_db_demo" (get-in result [:action :repo])))
-      (is (= "demo" (get-in result [:action :graph])))))
-
-  (testing "qmd without graph or current graph fails at build-action"
-    (let [parsed (commands/parse-args ["qmd"])
-          result (commands/build-action parsed {})]
-      (is (true? (:ok? parsed)))
-      (is (false? (:ok? result)))
-      (is (= :missing-repo (get-in result [:error :code])))))
-
-  (testing "qsearch accepts positional query text"
-    (let [result (commands/parse-args ["qsearch" "markdown" "mirror" "--graph" "demo" "-n" "10" "--no-rerank"])]
-      (is (true? (:ok? result)))
-      (is (= :qsearch (:command result)))
-      (is (= ["markdown" "mirror"] (:args result)))
-      (is (= "demo" (get-in result [:options :graph])))
-      (is (= 10 (get-in result [:options :limit])))
-      (is (true? (get-in result [:options :no-rerank])))))
-
-  (testing "qsearch can omit graph so build-action can use the current graph"
-    (let [parsed (commands/parse-args ["qsearch" "markdown" "mirror"])
-          result (commands/build-action parsed {:graph "demo"})]
-      (is (true? (:ok? parsed)))
-      (is (true? (:ok? result)))
-      (is (= "logseq_db_demo" (get-in result [:action :repo])))
-      (is (= "demo" (get-in result [:action :graph])))))
-
-  (testing "qsearch requires query text"
-    (let [result (commands/parse-args ["qsearch" "--graph" "demo"])]
-      (is (false? (:ok? result)))
-      (is (= :missing-query-text (get-in result [:error :code])))))
-
-  (testing "qsearch without graph or current graph fails at build-action"
-    (let [result (commands/parse-args ["qsearch" "markdown" "mirror"])]
-      (is (true? (:ok? result)))
-      (let [action-result (commands/build-action result {})]
-        (is (false? (:ok? action-result)))
-        (is (= :missing-repo (get-in action-result [:error :code]))))))
-
-  (testing "qsearch rejects unknown options after positional query"
-    (let [result (commands/parse-args ["qsearch" "markdown" "--unknown" "--graph" "demo"])]
-      (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
-
-  (testing "qmd and qsearch reject manual QMD collection and index options"
-    (doseq [args [["qmd" "--graph" "demo" "--collection" "custom"]
-                  ["qmd" "--graph" "demo" "--index" "custom-index"]
-                  ["qsearch" "markdown" "--graph" "demo" "--collection" "custom"]
-                  ["qsearch" "markdown" "--graph" "demo" "--index" "custom-index"]]]
+(deftest test-qmd-and-qsearch-are-not-registered
+  (doseq [args [["qmd"]
+                ["qmd" "--graph" "demo"]
+                ["qmd" "--help"]
+                ["qsearch" "markdown" "mirror"]
+                ["qsearch" "--help"]]]
+    (testing (pr-str args)
       (let [result (commands/parse-args args)]
-        (is (false? (:ok? result)) (pr-str args))
-        (is (= :invalid-options (get-in result [:error :code])) (pr-str args)))))
-
-  (testing "qmd and qsearch help omit internal collection and index options"
-    (doseq [args [["qmd" "--help"]
-                  ["qsearch" "--help"]]]
-      (let [result (commands/parse-args args)
-            summary (strip-ansi (:summary result))]
-        (is (true? (:help? result)) (pr-str args))
-        (is (not (string/includes? summary "--collection")) (pr-str args))
-        (is (not (string/includes? summary "--index")) (pr-str args)))))
-
-  (testing "qmd rejects obsolete positional subcommands"
-    (let [result (commands/parse-args ["qmd" "init" "--graph" "demo"])]
-      (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code]))))))
+        (is (false? (:ok? result)))
+        (is (= :unknown-command (get-in result [:error :code])))))))
 
 (deftest test-parse-args-help-groups-primary
   (testing "graph/list/upsert/server groups show subcommands"
@@ -504,6 +443,15 @@
       (is (contains-bold? summary "sync status"))
       (is (contains-bold? summary "sync config set"))
       (is (contains-bold? summary "sync grant-access")))))
+
+(deftest test-parse-args-help-sync-upload
+  (testing "sync upload command help explains full-graph initialization upload"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["sync" "upload" "--help"]))
+          summary (strip-ansi (:summary result))]
+      (is (true? (:help? result)))
+      (is (string/includes? summary "initializes upload of the entire graph"))
+      (is (string/includes? summary "not for incremental graph data syncing")))))
 
 (deftest test-parse-args-help-upsert-group
   (testing "add group is removed"
@@ -1270,6 +1218,13 @@
       (is (= :list-task (:command result)))
       (is (= "alpha" (get-in result [:options :content])))))
 
+  (testing "list task accepts numeric-looking content"
+    (let [{:keys [result error]} (parse-args-capturing-error ["list" "task" "-c" "1111"])]
+      (is (nil? error))
+      (is (true? (:ok? result)))
+      (is (= :list-task (:command result)))
+      (is (= "1111" (get-in result [:options :content])))))
+
   (testing "list node parses with tags/properties and common options"
     (let [result (commands/parse-args ["list" "node"
                                        "--tags" "project,work"
@@ -1346,7 +1301,14 @@
     (let [result (commands/parse-args ["search" "block" "-c" "Alpha"])]
       (is (true? (:ok? result)))
       (is (= :search-block (:command result)))
-      (is (= "Alpha" (get-in result [:options :content]))))))
+      (is (= "Alpha" (get-in result [:options :content])))))
+
+  (testing "search block accepts numeric-looking content"
+    (let [{:keys [result error]} (parse-args-capturing-error ["search" "block" "-c" "1111"])]
+      (is (nil? error))
+      (is (true? (:ok? result)))
+      (is (= :search-block (:command result)))
+      (is (= "1111" (get-in result [:options :content]))))))
 
 (deftest test-search-subcommand-validation
   (testing "search block requires --content"
@@ -1842,6 +1804,13 @@
       (is (= :upsert-block (:command result)))
       (is (= "hello" (get-in result [:options :content])))))
 
+  (testing "upsert block create mode accepts numeric-looking content"
+    (let [{:keys [result error]} (parse-args-capturing-error ["upsert" "block" "-c" "1111"])]
+      (is (nil? error))
+      (is (true? (:ok? result)))
+      (is (= :upsert-block (:command result)))
+      (is (= "1111" (get-in result [:options :content])))))
+
   (testing "upsert block create mode parses with target selectors and pos"
     (let [result (commands/parse-args ["upsert" "block"
                                        "--content" "hello"
@@ -1957,6 +1926,13 @@
       (is (= "high" (get-in result [:options :priority])))
       (is (= "2026-02-10T08:00:00.000Z" (get-in result [:options :scheduled])))
       (is (= "2026-02-12T18:00:00.000Z" (get-in result [:options :deadline])))))
+
+  (testing "upsert task accepts numeric-looking content"
+    (let [{:keys [result error]} (parse-args-capturing-error ["upsert" "task" "-c" "1111"])]
+      (is (nil? error))
+      (is (true? (:ok? result)))
+      (is (= :upsert-task (:command result)))
+      (is (= "1111" (get-in result [:options :content])))))
 
   (testing "upsert task parses explicit clear flags"
     (let [result (commands/parse-args ["upsert" "task"
@@ -2107,6 +2083,16 @@
       (is (= :upsert-asset (:command result)))
       (is (= 42 (get-in result [:options :id])))
       (is (= "Updated asset title" (get-in result [:options :content])))))
+
+  (testing "upsert asset update mode accepts numeric-looking content"
+    (let [{:keys [result error]} (parse-args-capturing-error ["upsert" "asset"
+                                                              "--id" "42"
+                                                              "-c" "1111"])]
+      (is (nil? error))
+      (is (true? (:ok? result)))
+      (is (= :upsert-asset (:command result)))
+      (is (= 42 (get-in result [:options :id])))
+      (is (= "1111" (get-in result [:options :content])))))
 
   (testing "upsert asset update mode rejects --path"
     (let [result (commands/parse-args ["upsert" "asset"

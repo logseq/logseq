@@ -15,8 +15,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.state :as state]
+            [frontend.mobile.util :as mobile-util]            [frontend.state :as state]
             [frontend.ui :as ui]
             [goog.date :as gdate]
             [logseq.common.util :as common-util]
@@ -27,20 +26,29 @@
             [missionary.core :as m]
             [mobile.components.settings :as mobile-settings]
             [mobile.components.ui :as ui-component]
+            [mobile.state :as mobile-state]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defonce native-top-bar-listener? (atom false))
+(defonce native-top-bar-listener-version (atom nil))
+(defonce *journal-calendar-open? (atom false))
+(def ^:private native-top-bar-listener-current-version :flashcards-title-selector-v1)
 
 (defn- open-journal-calendar! []
-  (let [apply-date! (fn [date]
-                      (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))]
-                        (if-let [journal (db/get-page page-name)]
-                          (route-handler/redirect-to-page! (:block/uuid journal))
-                          (p/let [page (page-handler/<create! page-name {:redirect? false})]
-                            (route-handler/redirect-to-page! (:block/uuid page))))))]
-    (-> (.showDatePicker mobile-util/ui-local)
-        (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))))
+  (when (compare-and-set! *journal-calendar-open? false true)
+    (let [apply-date! (fn [date]
+                        (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))]
+                          (if-let [journal (db/get-page page-name)]
+                            (route-handler/redirect-to-page! (:block/uuid journal))
+                            (p/let [page (page-handler/<create! page-name {:redirect? false})]
+                              (route-handler/redirect-to-page! (:block/uuid page))))))]
+      (-> (.showDatePicker mobile-util/ui-local)
+          (p/then (fn [^js e]
+                    (when-let [value (some-> e (.-value))]
+                      (apply-date! value))))
+          (p/finally (fn []
+                       (reset! *journal-calendar-open? false)))))))
 
 (defn- open-home-settings-actions! []
   (ui-component/open-popup!
@@ -60,11 +68,24 @@
       ;;   "Export"])
 
       (ui/menu-link
-       {:on-click (fn [] (route-handler/redirect! {:to :import}))}
+       {:on-click (fn []
+                    (p/do!
+                     (shui/popup-hide!)
+                     (route-handler/redirect! {:to :import})))}
        [:span.text-lg.flex.gap-2.items-center
         (shui/tabler-icon "file-upload" {:class "opacity-80" :size 22})
         (t :import/title)])])
    {:default-height false}))
+
+(defn- open-new-db-graph! []
+  (if (and (mobile-util/native-ios?) (= @mobile-state/*tab "graphs"))
+    (ui-component/open-popup!
+     (fn []
+       [:div.px-2
+        [:h2.py-2.opacity-40 (t :graph/create-new)]
+        (repo/new-db-graph)])
+     {:default-height false})
+    (state/pub-event! [:graph/new-db-graph])))
 
 (defn open-page-settings
   [block]
@@ -109,30 +130,74 @@
       (ui/menu-link
        {:on-click #(p/do!
                     (shui/popup-hide!)
-                    (state/pub-event! [:graph/new-db-graph]))}
-       (t :mobile.header/create-graph))])
+                    (open-new-db-graph!))}
+     (t :mobile.header/create-graph))])
    {:default-height false}))
+
+(defn- global-cards-id?
+  [cards-id]
+  (contains? #{:global "global"} cards-id))
+
+(defn- same-cards-id?
+  [a b]
+  (or (= a b)
+      (and (global-cards-id? a)
+           (global-cards-id? b))))
+
+(defn- open-flashcards-selector!
+  []
+  (when-let [{:keys [cards cards-id select-card!]} @mobile-state/*flashcards-selector]
+    (ui-component/open-popup!
+     (fn []
+       [:div.-mx-2
+        (for [card cards
+              :let [card-id (:db/id card)]]
+          (ui/menu-link
+           {:key (str card-id)
+            :on-click (fn []
+                        (p/do!
+                         (select-card! card-id)
+                         (shui/popup-hide!)))}
+           [:span.text-lg.flex.items-center.justify-between.gap-3.w-full
+            [:span.min-w-0.truncate (:block/title card)]
+            (when (same-cards-id? cards-id card-id)
+              (shui/tabler-icon "check" {:class "text-primary flex-none" :size 20}))]))])
+     {:title (t :flashcard/select-cards)
+      :default-height false})))
+
+(defn current-local-uploadable-graph
+  []
+  (let [current-repo (state/get-current-repo)]
+    (some (fn [{:keys [url] :as graph}]
+            (when (and (= current-repo url)
+                       (repo/local-uploadable-graph? graph))
+              graph))
+          (state/get-repos))))
 
 (defn- register-native-top-bar-events! [*configure-top-bar-f]
   (when (and (mobile-util/native-platform?)
              mobile-util/native-top-bar
-             (not @native-top-bar-listener?))
+             (not= native-top-bar-listener-current-version @native-top-bar-listener-version))
     (.addListener ^js mobile-util/native-top-bar "buttonTapped"
                   (fn [^js e]
                     (case (.-id e)
                       "back" (js/history.back)
-                      "title" (open-graph-switch!)
+                      "title" (if (= @mobile-state/*tab "flashcards")
+                                (open-flashcards-selector!)
+                                (open-graph-switch!))
                       "calendar" (open-journal-calendar!)
                       "capture" (do
                                   (state/clear-edit!)
                                   (editor-handler/quick-add-blocks!))
                       "audio-record" (state/pub-event! [:mobile/start-audio-record])
-                      "add-graph" (state/pub-event! [:graph/new-db-graph])
+                      "add-graph" (open-new-db-graph!)
                       "home-setting" (open-home-settings-actions!)
                       "graph-setting" (open-graph-settings-actions!)
-                      "sync" (shui/popup-show! nil
-                                               (rtc-indicator/details)
-                                               {})
+                      "sync" (if-let [graph (current-local-uploadable-graph)]
+                               (repo/upload-local-graph-with-confirm! graph)
+                               (shui/popup-show! nil
+                                                 (rtc-indicator/details)
+                                                 {}))
                       "favorite" (when-let [id (state/get-current-page)]
                                    (when (common-util/uuid-string? id)
                                      (when-let [block (db/entity [:block/uuid (uuid id)])]
@@ -150,10 +215,11 @@
                                            (open-page-settings block))))
 
                       nil)))
-    (reset! native-top-bar-listener? true)))
+    (reset! native-top-bar-listener? true)
+    (reset! native-top-bar-listener-version native-top-bar-listener-current-version)))
 
 (defn- configure-native-top-bar!
-  [{:keys [tab title route-name route-view sync-color favorited? show-sync?]}]
+  [{:keys [tab title route-name route-view sync-color favorited? show-sync? show-local-upload?]}]
   (when (and (mobile-util/native-platform?)
              mobile-util/native-top-bar)
     (let [hidden? (and (mobile-util/native-ios?) (= tab "search"))
@@ -161,7 +227,9 @@
                 {:hidden hidden?}
                  (not (mobile-util/native-ipad?))
                  (assoc :title title))
-          page? (= route-name :page)
+          page? (and (= route-name :page)
+                     (not (and (mobile-util/native-ios?)
+                               (= tab "graphs"))))
           left-buttons (cond
                          page? [{:id "back" :systemIcon "chevron.backward"}]
                          (and (= tab "home") (nil? route-view))
@@ -177,7 +245,10 @@
                           (cond-> []
                             (nil? route-view)
                             (conj {:id "home-setting" :systemIcon "ellipsis"})
-                            (and show-sync? (not page?))
+                            (and show-local-upload? (not page?))
+                            (conj {:id "sync" :systemIcon "icloud.and.arrow.up"
+                                   :size "medium"})
+                            (and (not show-local-upload?) show-sync? (not page?))
                             (conj {:id "sync" :systemIcon "circle.fill" :color sync-color
                                    :size "small"}))
 
@@ -195,16 +266,47 @@
           header (cond-> base
                    left-buttons (assoc :leftButtons left-buttons)
                    right-buttons (assoc :rightButtons right-buttons)
-                   (and (= tab "home") (not route-view)) (assoc :titleClickable true))]
+                   (and (contains? #{"home" "flashcards"} tab) (not route-view))
+                   (assoc :titleClickable true))]
       (.configure ^js mobile-util/native-top-bar
                   (clj->js header)))))
 
-(rum/defc header-inner
-  [current-repo tab route-match]
+(defn- flashcards-native-title
+  [{:keys [title progress]}]
+  (let [title (if (string/blank? title)
+                (t :nav/flashcards)
+                title)]
+    (string/trim (str title " ▾"
+                      (when-not (string/blank? progress)
+                        (str "  " progress))))))
+
+(defn- build-fallback-title
+  [current-repo tab flashcards-header]
+  (cond
+    (= tab "home")
+    (if current-repo
+      (db-conn/get-short-repo-name current-repo)
+      (t :graph.switch/select-prompt))
+
+    (= tab "search")
+    (t :nav/search)
+
+    (= tab "graphs")
+    (t :mobile.tab/graphs)
+
+    (= tab "flashcards")
+    (flashcards-native-title flashcards-header)
+
+    :else
+    (string/capitalize tab)))
+
+(hsx/defc header-inner
+  [current-repo tab route-match flashcards-header]
   (let [route-name (get-in route-match [:data :name])
         route-view (get-in route-match [:data :view])
         route-id (get-in route-match [:parameters :path :name])
-        page-route? (= route-name :page)
+        native-ios-graphs? (and (mobile-util/native-ios?) (= tab "graphs"))
+        page-route? (and (= route-name :page) (not native-ios-graphs?))
         [*configure-top-bar-f _] (hooks/use-state (atom nil))
         detail-info (hooks/use-flow-state (m/watch rtc-indicator/*detail-info))
         _ (hooks/use-flow-state flows/current-login-user-flow)
@@ -212,20 +314,12 @@
         rtc-state (:rtc-state detail-info)
         graph-uuid (or (:graph-uuid detail-info)
                        (ldb/get-graph-rtc-uuid (db/get-db)))
+        local-uploadable-graph (current-local-uploadable-graph)
         show-sync? (and current-repo graph-uuid (user-handler/logged-in?))
+        show-local-upload? (some? local-uploadable-graph)
         unpushed-block-update-count (:pending-local-ops detail-info)
         pending-asset-ops           (:pending-asset-ops detail-info)
-        fallback-title (cond
-                         (= tab "home")
-                         (if current-repo
-                           (db-conn/get-short-repo-name current-repo)
-                           (t :graph.switch/select-prompt))
-
-                         (= tab "search")
-                         (t :nav/search)
-
-                         :else
-                         (string/capitalize tab))
+        fallback-title (build-fallback-title current-repo tab flashcards-header)
         sync-color (if (and online?
                             (= :open rtc-state)
                             (zero? unpushed-block-update-count)
@@ -253,11 +347,12 @@
                      :route-view route-view
                      :sync-color sync-color
                      :show-sync? show-sync?
+                     :show-local-upload? show-local-upload?
                      :favorited? favorited?}))]
            (reset! *configure-top-bar-f f)
            (f favorited?)))
        nil)
-     [current-repo tab route-name route-view route-id fallback-title sync-color show-sync? page-route?])
+     [current-repo tab route-name route-view route-id fallback-title sync-color show-sync? show-local-upload? page-route?])
 
     (hooks/use-effect!
      (fn []
@@ -282,18 +377,21 @@
                                 :route-view route-view
                                 :sync-color sync-color
                                 :show-sync? show-sync?
+                                :show-local-upload? show-local-upload?
                                 :favorited? favorited?}))]
                       (reset! *configure-top-bar-f f)
                       (f favorited?)))))
                (p/catch (fn [_] nil)))
            #(reset! cancelled? true))
          nil))
-     [current-repo tab route-name route-view route-id sync-color show-sync? page-route?])
+     [current-repo tab route-name route-view route-id sync-color show-sync? show-local-upload? page-route?])
 
     [:<>]))
 
-(rum/defc header < rum/reactive
+(hsx/defc header
   [current-repo tab]
-  (let [route-match (state/sub :route-match)]
+  (let [route-match (state/use-sub :route-match)
+        [flashcards-header] (hooks/use-atom mobile-state/*flashcards-header)]
     (header-inner current-repo tab
-                  route-match)))
+                  route-match
+                  flashcards-header)))

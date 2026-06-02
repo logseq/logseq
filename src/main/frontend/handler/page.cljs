@@ -17,6 +17,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.graph :as graph-handler]
             [frontend.handler.route :as route-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
@@ -37,6 +38,7 @@
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
+(def edit-page-when-present! page-common-handler/edit-page-when-present!)
 
 (defn get-recycle-page
   []
@@ -313,5 +315,7 @@
   ([page-uuid]
    (if page-uuid
      (util/copy-to-clipboard!
-      (url-util/get-logseq-graph-page-url nil (state/get-current-repo) (str page-uuid)))
+      (url-util/get-logseq-web-page-url config/app-website
+                                        (graph-handler/current-graph-id)
+                                        (str page-uuid)))
      (notification/show! (t :page/no-page-found-to-copy) :warning))))

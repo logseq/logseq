@@ -35,7 +35,8 @@
    :pos {:desc "Position. Default: create=last-child, update=first-child"
          :validate #{"first-child" "last-child" "sibling"}}
    :content {:alias :c
-             :desc "Block content (create inserts; update rewrites source block content)"}
+             :desc "Block content (create inserts; update rewrites source block content)"
+             :coerce :string}
    :blocks {:desc "EDN vector of blocks [create only]"}
    :blocks-file {:desc "EDN file of blocks [create only]"
                  :coerce common-graph/expand-home
@@ -64,7 +65,8 @@
    :page {:desc "Task page name"
           :complete :pages}
    :content {:alias :c
-             :desc "Task block content (create mode)"}
+             :desc "Task block content (create mode)"
+             :coerce :string}
    :target-id {:desc "Target block db/id [create only]"
                :coerce :long}
    :target-uuid {:desc "Target block UUID [create only]"
@@ -108,7 +110,8 @@
    :pos {:desc "Position. Default: last-child"
          :validate #{"first-child" "last-child" "sibling"}}
    :content {:alias :c
-             :desc "Asset title (create/update)"}})
+             :desc "Asset title (create/update)"
+             :coerce :string}})
 
 (def ^:private upsert-tag-spec
   {:id {:desc "Target tag db/id (forces update mode)"
@@ -1317,23 +1320,21 @@
                                                :logseq.property.asset/checksum (:asset/checksum metadata)
                                                :block/tags #{asset-tag-id}})
                                       blocks)))
+                  block-uuid (get-in action* [:blocks 0 :block/uuid])
+                  _ (when-not (uuid? block-uuid)
+                      (throw (ex-info "created asset block missing uuid"
+                                      {:code :asset-create-failed})))
+                  _ (copy-asset-file-to-graph! config
+                                              (:repo action)
+                                              block-uuid
+                                              (:asset/type metadata)
+                                              asset-path)
                   create-result (add-command/execute-add-block (assoc action* :type :add-block) config)
                   created-ids (vec (or (get-in create-result [:data :result]) []))
                   created-id (first created-ids)
                   _ (when-not (some? created-id)
                       (throw (ex-info "asset block not created"
-                                      {:code :asset-create-failed})))
-                  created-entity (pull-entity-by-id cfg (:repo action) [:db/id :block/uuid] created-id)
-                  block-uuid (:block/uuid created-entity)
-                  _ (when-not (uuid? block-uuid)
-                      (throw (ex-info "created asset block missing uuid"
-                                      {:code :asset-create-failed
-                                       :id created-id})))
-                  _ (copy-asset-file-to-graph! config
-                                              (:repo action)
-                                              block-uuid
-                                              (:asset/type metadata)
-                                              asset-path)]
+                                      {:code :asset-create-failed})))]
             {:status :ok
              :data {:result [created-id]}})
 

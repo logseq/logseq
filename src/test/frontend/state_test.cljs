@@ -25,6 +25,21 @@
                               {:shortcuts {:editor/up ["ctrl+p" "up"]}}))
       "Map values get merged across configs"))
 
+(deftest get-state-reads-plain-and-atom-state
+  (let [original-state @state/state]
+    (try
+      (reset! state/state (assoc original-state
+                                 :plain-value 1
+                                 :nested-value {:a {:b 2}}
+                                 :atom-value (atom 3)
+                                 :nested-atom-value (atom {:a {:b 4}})))
+      (is (= 1 (state/get-state :plain-value)))
+      (is (= 2 (state/get-state [:nested-value :a :b])))
+      (is (= 3 (state/get-state :atom-value)))
+      (is (= 4 (state/get-state :nested-atom-value :path-in-sub-atom [:a :b])))
+      (finally
+        (reset! state/state original-state)))))
+
 (deftest get-editor-info-includes-selection-when-not-editing-test
   (let [selected-ids [(random-uuid) (random-uuid)]]
     (with-redefs [state/get-edit-block (constantly nil)

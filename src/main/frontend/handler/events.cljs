@@ -20,6 +20,7 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.code :as code-handler]
             [frontend.handler.common.page :as page-common-handler]
+            [frontend.handler.comments :as comments-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.db-based.sync :as rtc-handler]
@@ -104,6 +105,8 @@
   (p/do!
    (repo-handler/restore-and-setup-repo! graph)
    (graph-switch graph)
+   (graph-handler/<upsert-current-graph-registry!)
+   (graph-handler/remember-current-graph-id-in-tab!)
    (state/set-state! :sync-graph/init? false)
    (when (:rtc-download? opts)
      (repo-handler/refresh-repos!)
@@ -127,8 +130,8 @@
     (let [t2 (t/now)]
       (log/info ::graph-switch-spent (- t2 t1))))))
 
-(defmethod handle :graph/open-new-window [[_ev target-repo]]
-  (ui-handler/open-new-window-or-tab! target-repo))
+(defmethod handle :graph/open-new-window [[_ev target]]
+  (ui-handler/open-new-window-or-tab! target))
 
 (defmethod handle :page/create [[_ page-name opts]]
   (if (= page-name (date/today))
@@ -290,6 +293,9 @@
 
 (defmethod handle :editor/save-current-block [_]
   (editor-handler/save-current-block!))
+
+(defmethod handle :editor/add-comment [_]
+  (comments-handler/add-comment-to-current-context!))
 
 (defmethod handle :editor/save-code-editor [_]
   (code-handler/save-code-editor!))

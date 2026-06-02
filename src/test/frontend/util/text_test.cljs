@@ -36,6 +36,14 @@
     '(false false false false false false true true true true true true)
     (map #(text-util/wrapped-by? "prop::value" % "::" "") (take 12 (range)))))
 
+(deftest cut-by
+  (are [expected value before end] (= expected (text-util/cut-by value before end))
+    ["abc " " def " " ghi"] "abc <x> def </x> ghi" "<x>" "</x>"
+    ["abc" nil nil] "abc" "<x>" "</x>"
+    ["abc " "def" nil] "abc <x>def" "<x>" "</x>"
+    ["a " "b" " c [d] e"] "a [b] c [d] e" "[" "]"
+    ["" "" "abc"] "abc" "" ""))
+
 (deftest get-graph-name-from-path-strips-only-one-leading-db-prefix
   (are [input expected] (= expected (text-util/get-graph-name-from-path input))
     "logseq_db_demo" "demo"

@@ -9,7 +9,10 @@
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
             [logseq.common.path :as path]
+            [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.asset :as db-asset]
@@ -281,17 +284,20 @@
           "Repeated scheduled timestamp keeps its time")
       (is (= {:logseq.property.repeat/repeated? true
               :logseq.property.repeat/temporal-property :logseq.property/scheduled
+              :logseq.property.repeat/repeat-type :logseq.property.repeat/repeat-type.dotted-plus
               :logseq.property.repeat/recur-frequency 1
               :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.year}
              (select-keys birthday-properties
                           [:logseq.property.repeat/repeated?
                            :logseq.property.repeat/temporal-property
+                           :logseq.property.repeat/repeat-type
                            :logseq.property.repeat/recur-frequency
                            :logseq.property.repeat/recur-unit]))
-          "Repeated scheduled timestamp keeps its repeat properties")
+          "Repeated scheduled timestamp keeps its repeat properties including the `.+` cookie kind")
       (is (= {:logseq.property/deadline 20251107
               :logseq.property.repeat/repeated? true
               :logseq.property.repeat/temporal-property :logseq.property/deadline
+              :logseq.property.repeat/repeat-type :logseq.property.repeat/repeat-type.plus
               :logseq.property.repeat/recur-frequency 2
               :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week}
              (-> report-properties
@@ -299,9 +305,10 @@
                  (select-keys [:logseq.property/deadline
                                :logseq.property.repeat/repeated?
                                :logseq.property.repeat/temporal-property
+                               :logseq.property.repeat/repeat-type
                                :logseq.property.repeat/recur-frequency
                                :logseq.property.repeat/recur-unit])))
-          "Repeated deadline timestamp keeps its repeat properties")
+          "Repeated deadline timestamp keeps its repeat properties including the `+` cookie kind")
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Imported graph validates"))))
 
@@ -693,6 +700,10 @@
       (is (= [(:db/id (db-test/find-block-by-content @conn "original block"))]
              (mapv :db/id (:block/refs (db-test/find-block-by-content @conn #"ref to"))))
           "block with a block-ref has correct :block/refs")
+
+      (is (= "ref to [[65cbb772-fb79-462d-87c8-6f0dad751dee]]"
+             (:block/title (db-test/find-block-by-content @conn #"ref to")))
+          "block-ref ((uuid)) is converted to page-ref [[uuid]] in block title on import")
 
       (is (= 20221126
              (-> (db-test/readable-properties (db-test/find-block-by-content @conn "only deadline"))
@@ -1288,6 +1299,91 @@
                (:logseq.property/page-tags (db-test/readable-properties (db-test/find-page-by-title @conn "chat-gpt"))))
             "tagged page has new page and other pages marked with '#' and '[[]]` imported as tags to page-tags")))))
 
+(deftest-async import-journals-use-standard-uuids-and-keep-uuid-refs
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          files (mapv #(path/path-join file-graph-dir %) ["journals/2026_01_27.md"])
+          conn (db-test/create-conn)
+          _ (import-files-to-db files conn {})]
+    (let [journal (db-test/find-journal-by-journal-day @conn 20260127)
+          ref-journal (db-test/find-journal-by-journal-day @conn 20260101)
+          ref-block (some->> (d/q '[:find [?b ...]
+                                    :in $ ?page ?ref-page
+                                    :where
+                                    [?b :block/page ?page]
+                                    [?b :block/refs ?ref-page]]
+                                  @conn (:db/id journal) (:db/id ref-journal))
+                           first
+                           (d/entity @conn))]
+      (is (= (common-uuid/gen-uuid :journal-page-uuid 20260127)
+             (:block/uuid journal))
+          "Imported journal page keeps the standard journal uuid")
+      (is (= (common-uuid/gen-uuid :journal-page-uuid 20260101)
+             (:block/uuid ref-journal))
+          "Referenced journal page keeps the standard journal uuid")
+      (is (= #{(:block/uuid ref-journal)}
+             (set (map :block/uuid (:block/refs ref-block))))
+          "Journal refs point at the standard journal uuid"))))
+
+(deftest-async import-journal-with-slash-title-format-does-not-create-namespace-pages
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          files (mapv #(path/path-join file-graph-dir %) ["journals/2026_01_27.md"])
+          conn (db-test/create-conn)
+          _ (import-files-to-db files conn {:user-config {:journal/page-title-format "yyyy/MM/dd"}})
+          journal (db-test/find-journal-by-journal-day @conn 20260127)]
+    (is (= "2026/01/27" (:block/title journal))
+          "Journal title follows slash title format")
+    (is (= (common-uuid/gen-uuid :journal-page-uuid 20260127)
+             (:block/uuid journal))
+          "Slash-formatted journal keeps the standard journal uuid")
+    (is (nil? (:block/namespace journal))
+        "Slash-formatted journal does not keep a namespace attribute")
+    (is (nil? (db-test/find-page-by-title @conn "2026"))
+          "Journal title is not split into a year namespace page")
+    (is (nil? (db-test/find-page-by-title @conn "01"))
+          "Journal title is not split into a month namespace page")
+    (is (nil? (db-test/find-page-by-title @conn "27"))
+          "Journal title is not split into a day namespace page")))
+
+(deftest-async import-slash-journal-ref-does-not-create-namespace-pages
+  (p/let [file (write-temp-graph-file "journals/2026_05_18.md" "- yes\n- [[Sun, 2026/05/17]]\n")
+          conn (db-test/create-conn)
+          _ (import-files-to-db [file] conn {:user-config {:journal/page-title-format "EEE, yyyy/MM/dd"}})
+          ref-journal (db-test/find-journal-by-journal-day @conn 20260517)]
+    (is (= "Sun, 2026/05/17" (:block/title ref-journal))
+        "Journal reference is imported as a journal page")
+    (is (nil? (:block/namespace ref-journal))
+        "Referenced slash-formatted journal does not keep a namespace attribute")
+    (is (nil? (db-test/find-page-by-title @conn "Sun, 2026"))
+        "Journal reference is not split into a parent namespace page")
+    (is (nil? (db-test/find-page-by-title @conn "05"))
+        "Journal reference is not split into a child namespace page")))
+
+(deftest-async import-normalizes-existing-random-journal-uuid-and-text-refs
+  (let [old-journal-uuid (random-uuid)
+        standard-journal-uuid (common-uuid/gen-uuid :journal-page-uuid 20260127)
+        title (str "refs " (page-ref/->page-ref old-journal-uuid)
+                   " and " (block-ref/->block-ref old-journal-uuid))
+        conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:build/journal 20260127
+                        :block/uuid old-journal-uuid
+                        :build/keep-uuid? true}
+                 :blocks [{:block/title title}]}]})
+        file (write-temp-graph-file "pages/trigger-normalize.md" "- trigger normalize\n")]
+    (p/let [_ (import-files-to-db [file] conn {})
+            journal (db-test/find-journal-by-journal-day @conn 20260127)
+            ref-block (db-test/find-block-by-content @conn #"refs")]
+      (is (= standard-journal-uuid (:block/uuid journal))
+          "Existing random journal uuid is normalized to the standard journal uuid")
+      (is (nil? (d/entity @conn [:block/uuid old-journal-uuid]))
+          "Old journal uuid no longer resolves after normalization")
+      (is (= (str "refs " (page-ref/->page-ref standard-journal-uuid)
+                  " and " (block-ref/->block-ref standard-journal-uuid))
+             (:block/title ref-block))
+          "Text references are rewritten to the standard journal uuid")
+      (is (= (:db/id journal) (get-in ref-block [:block/page :db/id]))
+          "Structured block page reference still points to the same journal entity"))))
+
 (deftest-async export-files-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(path/path-join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
@@ -1678,3 +1774,71 @@
             "Block with text surrounding code has no children extracted")
         (is (string/includes? (:block/title b) "```")
             "Block title retains raw code fence markup")))))
+
+(deftest page-alias-sanitise-for-import
+  (testing "duplicate-owner alias is dropped and reported"
+    (let [alias-owners  (atom {})
+          ignored-props (atom [])
+          pages         [{:block/name "p1" :block/alias [{:block/name "shared"}]}
+                         {:block/name "p2" :block/alias [{:block/name "shared"}]}]
+          result        (gp-exporter/sanitize-page-aliases-for-import!
+                         pages alias-owners ignored-props)]
+      (is (= "p1" (get @alias-owners "shared"))
+          "first declarer wins ownership")
+      (is (= 1 (count (filter #(= :alias/duplicate-owner (:reason %)) @ignored-props)))
+          "duplicate alias is reported in ignored-properties")
+      (is (nil? (:block/alias (second result)))
+          "second page's conflicting alias is removed")))
+  (testing "alias-of-alias is dropped and reported"
+    (let [alias-owners  (atom {})
+          ignored-props (atom [])
+          pages         [{:block/name "root" :block/alias [{:block/name "mid"}]}
+                         {:block/name "mid"  :block/alias [{:block/name "leaf"}]}]
+          result        (gp-exporter/sanitize-page-aliases-for-import!
+                         pages alias-owners ignored-props)]
+      (is (= 1 (count (filter #(= :alias/alias-owns-aliases (:reason %)) @ignored-props)))
+          "alias-of-alias is reported in ignored-properties")
+      (is (nil? (:block/alias (first result)))
+          "alias pointing to a page that owns aliases is removed")))
+  (testing "self-alias is dropped and reported"
+    (let [alias-owners  (atom {})
+          ignored-props (atom [])
+          pages         [{:block/name "self" :block/alias [{:block/name "self"}]}]
+          result        (gp-exporter/sanitize-page-aliases-for-import!
+                         pages alias-owners ignored-props)]
+      (is (nil? (:block/alias (first result)))
+          "self-alias declaration is removed")
+      (is (some #(= :alias/self (:reason %)) @ignored-props)
+          "self-alias is reported in ignored-properties"))))
+
+(deftest page-alias-sanitise-for-import-cross-file
+  (testing "source-is-alias caught across files (root->mid in file 1, mid->leaf in file 2)"
+    (let [alias-owners  (atom {})
+          ignored-props (atom [])]
+      ;; File 1: root claims mid as alias → registers "mid" -> "root"
+      (gp-exporter/sanitize-page-aliases-for-import!
+       [{:block/name "root" :block/alias [{:block/name "mid"}]}]
+       alias-owners ignored-props)
+      ;; File 2: mid tries to declare leaf as its alias — but mid is already an alias
+      (let [result (gp-exporter/sanitize-page-aliases-for-import!
+                    [{:block/name "mid" :block/alias [{:block/name "leaf"}]}]
+                    alias-owners ignored-props)]
+        (is (nil? (:block/alias (first result)))
+            "mid's alias declaration dropped: mid is already an alias")
+        (is (some #(= :alias/source-is-alias (:reason %)) @ignored-props)
+            "source-is-alias reason recorded"))))
+  (testing "alias-owns-aliases caught across files (mid->leaf in file 1, root->mid in file 2)"
+    (let [alias-owners  (atom {})
+          ignored-props (atom [])]
+      ;; File 1: mid claims leaf as alias → registers "leaf" -> "mid"; mid is now an owner
+      (gp-exporter/sanitize-page-aliases-for-import!
+       [{:block/name "mid" :block/alias [{:block/name "leaf"}]}]
+       alias-owners ignored-props)
+      ;; File 2: root tries to use mid as alias — but mid already owns aliases
+      (let [result (gp-exporter/sanitize-page-aliases-for-import!
+                    [{:block/name "root" :block/alias [{:block/name "mid"}]}]
+                    alias-owners ignored-props)]
+        (is (nil? (:block/alias (first result)))
+            "root's alias pointing to mid dropped: mid already owns aliases")
+        (is (some #(= :alias/alias-owns-aliases (:reason %)) @ignored-props)
+            "alias-owns-aliases reason recorded")))))

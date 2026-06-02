@@ -231,10 +231,6 @@
    {:block/tags [:db/id :db/ident :block/name :block/title :block/uuid]}
    {:block/link link-target-selector}])
 
-(def block-render-selector
-  "Pull selector for rendering individual blocks with the same visible details as `show` tree rows."
-  (conj tree-block-selector {:block/page [:db/id :block/title :block/name :block/uuid]}))
-
 (def ^:private page-hierarchy-child-selector
   [:db/id
    :db/ident
@@ -295,6 +291,13 @@
        (= 2 (count value))
        (= :block/uuid (first value))
        (uuid? (second value))))
+
+(defn- db-id-ref?
+  [value]
+  (and (vector? value)
+       (= 2 (count value))
+       (= :db/id (first value))
+       (number? (second value))))
 
 (defn- epoch-ms->iso-string
   [ms]
@@ -475,6 +478,9 @@
   [{:keys [root linked-references]}]
   (letfn [(collect-value [acc value]
             (cond
+              (db-id-ref? value)
+              (update acc :ids conj (second value))
+
               (lookup-ref? value)
               (update acc :uuids conj (second value))
 
@@ -609,14 +615,22 @@
               built-in-pairs (transport/invoke config :thread-api/q
                                                [repo [built-in-query built-in-idents]])
               ident-type-pairs (into (vec user-pairs) built-in-pairs)
+              property-type-by-ident (into {} ident-type-pairs)
               datetime-idents (set (keep (fn [[a type]] (when (= :datetime type) a)) ident-type-pairs))
               property-idents (vec (map first ident-type-pairs))]
         (if (seq property-idents)
           (p/let [rows (transport/invoke config :thread-api/q
                                          [repo [props-query ids property-idents]])]
             (reduce (fn [acc [block-id attr value]]
-                      (let [value (if (and (number? value) (contains? datetime-idents attr))
+                      (let [property-type (get property-type-by-ident attr)
+                            value (cond
+                                    (and (number? value) (contains? datetime-idents attr))
                                     (epoch-ms->iso-string value)
+
+                                    (and (number? value) (not= :number property-type))
+                                    [:db/id value]
+
+                                    :else
                                     value)]
                         (update-in acc [block-id attr] merge-fetched-property-value value)))
                     {}
@@ -1103,11 +1117,6 @@
             (update :uuid->label merge nested-uuid->label)
             (update :referenced-uuids #(vec (distinct (concat (or % []) nested-uuid-refs))))))
       (p/resolved tree-data))))
-
-(defn attach-render-properties
-  "Attach user and displayable built-in properties needed by the shared tree renderer."
-  [config repo blocks]
-  (attach-user-properties config repo blocks))
 
 (defn prepare-tree-render-data
   "Attach shared tree-render metadata such as UUID labels and property titles."

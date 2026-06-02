@@ -1,0 +1,4 @@
+interface:
+  display_name: "Logseq Answer Machine"
+  short_description: "Answer Logseq repo questions with evidence"
+  default_prompt: "Use $logseq-answer-machine to answer a question about the Logseq repository with a detailed outline."

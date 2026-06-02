@@ -93,6 +93,62 @@
     ;; return global fn back to previous behavior
     (ldb/register-transact-pipeline-fn! identity)))
 
+(deftest ensure-comments-blocks-property-on-tag-additions-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "target"
+                                             :build/children [{:block/title ""}]}]}]})
+        target (db-test/find-block-by-content @conn "target")
+        empty-block (first (:block/_parent target))]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (ldb/transact! conn [[:db/add (:db/id empty-block) :block/tags :logseq.class/Comments]])
+      (let [comments-area (d/entity @conn (:db/id empty-block))]
+        (is (= #{(:db/id target)}
+               (set (map :db/id (:logseq.property.comments/blocks comments-area))))
+            "Tagging an existing empty child block with #Comments should target its parent"))
+      (finally
+        ;; return global fn back to previous behavior
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest code-block-tag-addition-preserves-explicit-code-lang-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "page1"}}]})
+        page (ldb/get-page @conn "page1")
+        now (js/Date.now)
+        code-block-uuid (random-uuid)
+        code-block-without-lang-uuid (random-uuid)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (ldb/transact! conn [{:db/ident :logseq.kv/latest-code-lang
+                            :kv/value "pascal"}])
+      (ldb/transact! conn [{:block/uuid code-block-uuid
+                            :block/title "1 + 2"
+                            :block/created-at now
+                            :block/updated-at now
+                            :block/page (:db/id page)
+                            :block/parent (:db/id page)
+                            :block/order (db-order/gen-key)
+                            :block/tags [:logseq.class/Code-block]
+                            :logseq.property.code/lang "calc"}])
+      (let [block (d/entity @conn [:block/uuid code-block-uuid])]
+        (is (= :code (:logseq.property.node/display-type block)))
+        (is (= "calc" (:logseq.property.code/lang block))))
+      (ldb/transact! conn [{:block/uuid code-block-without-lang-uuid
+                            :block/title "plain code"
+                            :block/created-at now
+                            :block/updated-at now
+                            :block/page (:db/id page)
+                            :block/parent (:db/id page)
+                            :block/order (db-order/gen-key)
+                            :block/tags [:logseq.class/Code-block]}])
+      (let [block (d/entity @conn [:block/uuid code-block-without-lang-uuid])]
+        (is (= :code (:logseq.property.node/display-type block)))
+        (is (= "pascal" (:logseq.property.code/lang block))))
+      (finally
+        ;; return global fn back to previous behavior
+        (ldb/register-transact-pipeline-fn! identity)))))
+
 (deftest journal-name-title-updates-throw-in-transact-pipeline-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:build/journal 20250203}}
@@ -151,7 +207,7 @@
 (deftest create-journal-page-name-uses-default-formatter-test
   (let [conn (db-test/create-conn)]
     (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]])
-    (let [[_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {})
+    (let [[_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {:journal? true})
           page (d/entity @conn [:block/uuid page-uuid])
           journal-day (:block/journal-day page)
           expected-title (date-time-util/int->journal-title journal-day "yyyy-MM-dd EEEE")

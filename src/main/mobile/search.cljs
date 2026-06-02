@@ -73,7 +73,7 @@
   [item]
   (let [block (:source-block item)
         id (:block/uuid block)
-        title (some-> block :block.temp/original-title string/trim)
+        title (some-> block :block.temp/unique-title string/trim)
         subtitle (build-native-subtitle block)]
     (when (and id (not (string/blank? title)))
       (let [short-title (when title (safe-truncate title))]

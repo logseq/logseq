@@ -7,7 +7,9 @@
             ["path" :as node-path]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [electron.cli-install :as cli-install]
             [electron.db :as db]
+            [electron.embedding-server :as embedding-server]
             [electron.exceptions :as exceptions]
             [electron.handler :as handler]
             [electron.i18n :as i18n :refer [t]]
@@ -28,14 +30,16 @@
 (defonce FILE_LSP_SCHEME "lsp")
 (defonce FILE_ASSETS_SCHEME "assets")
 (defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
-(defonce PLUGIN_URL (str LSP_PROTOCOL "logseq.io/"))
 (defonce STATIC_URL (str LSP_PROTOCOL "logseq.com/"))
+(defonce PLUGIN_URL (str LSP_PROTOCOL "logseq.io/plugins/"))
+(defonce EXTERNAL_PLUGIN_URL (str LSP_PROTOCOL "logseq.io/external/"))
+(defonce HOST_PLUGIN_URL (str STATIC_URL "plugins/"))
+(defonce HOST_EXTERNAL_PLUGIN_URL (str STATIC_URL "external/"))
 (defonce PLUGINS_ROOT (.join node-path (.homedir os) ".logseq/plugins"))
 
 (defonce *setup-fn (volatile! nil))
 (defonce *teardown-fn (volatile! nil))
 (defonce *quit-dirty? (volatile! true))
-(defonce CLI_LAUNCHER_MARKER "logseq-cli-managed")
 
 (defn setup-updater! [^js win]
   ;; manual/auto updater
@@ -96,13 +100,35 @@
    (fn [^js request callback]
      (let [url (.-url request)
            url' ^js (js/URL. url)
-           [_ ROOT] (if (string/starts-with? url PLUGIN_URL)
-                      [PLUGIN_URL PLUGINS_ROOT]
-                      [STATIC_URL js/__dirname])
-
+           plugin-url? (or (string/starts-with? url PLUGIN_URL)
+                           (string/starts-with? url HOST_PLUGIN_URL))
+           external-plugin-url? (or (string/starts-with? url EXTERNAL_PLUGIN_URL)
+                                    (string/starts-with? url HOST_EXTERNAL_PLUGIN_URL))
            path' (.-pathname url')
-           path' (utils/safe-decode-uri-component path')
-           path' (.join node-path ROOT path')]
+           path' (cond
+                   plugin-url?
+                   (->> path'
+                        (utils/safe-decode-uri-component)
+                        (#(string/replace-first % #"^/plugins" ""))
+                        (.join node-path PLUGINS_ROOT))
+
+                   external-plugin-url?
+                   (let [external-path (subs path' (count "/external/"))
+                         separator-index (string/index-of external-path "/")
+                         encoded-root (if separator-index
+                                        (subs external-path 0 separator-index)
+                                        external-path)
+                         relative-path (if separator-index
+                                         (subs external-path separator-index)
+                                         "")
+                         root (utils/safe-decode-uri-component encoded-root)
+                         relative-path (utils/safe-decode-uri-component relative-path)]
+                     (.join node-path root relative-path))
+
+                   :else
+                   (->> path'
+                        (utils/safe-decode-uri-component)
+                        (.join node-path js/__dirname)))]
 
        (callback #js {:path path'}))))
 
@@ -216,7 +242,7 @@
                               :accelerator false}])
                           [{:label "Always on Top"
                             :type "checkbox"
-                            :click (fn [menuItem browserWindow]
+                            :click (fn [^js menuItem ^js browserWindow]
                                      ;; switch alwaysOnTop state
                                      (.setAlwaysOnTop browserWindow (.-checked menuItem)))}])})
         ;; Windows has no about role
@@ -276,16 +302,6 @@
          (fn [error]
            (logger/warn :electron/wrong-release-warning-failed error))))))
 
-(defn- path-separator
-  []
-  (if utils/win32? ";" ":"))
-
-(defn- split-path-env
-  [path-env]
-  (->> (string/split (or path-env "") (re-pattern (path-separator)))
-       (remove string/blank?)
-       distinct))
-
 (defn- writable-dir?
   [dir]
   (try
@@ -297,29 +313,27 @@
     (catch :default _
       false)))
 
-(defn- find-first-writable-dir
-  [dirs]
-  (some #(when (writable-dir? %) %) dirs))
-
 (defn- ensure-dir!
   [dir]
   (when (and (string? dir) (not (fs/existsSync dir)))
     (fs/mkdirSync dir #js {:recursive true})))
 
+(defn- path-join
+  [& paths]
+  (apply node-path/join paths))
+
 (defn- preferred-unix-cli-dir
   []
-  (let [path-dirs (split-path-env (.-PATH js/process.env))
-        user-bin (node-path/join (.homedir os) ".local" "bin")]
-    (or (find-first-writable-dir path-dirs)
-        (do
-          (ensure-dir! user-bin)
-          (when (writable-dir? user-bin)
-            user-bin)))))
+  (cli-install/preferred-unix-cli-dir
+   {:home-dir (.homedir os)
+    :path-join path-join
+    :ensure-dir! ensure-dir!
+    :writable-dir? writable-dir?}))
 
 (defn- preferred-win-cli-dir
   []
   (let [path-env (or (.-PATH js/process.env) (.-Path js/process.env))
-        path-dirs (split-path-env path-env)
+        path-dirs (cli-install/split-path-env path-env utils/win32?)
         local-appdata (.-LOCALAPPDATA js/process.env)
         windows-apps-dir (when local-appdata
                            (node-path/join local-appdata "Microsoft" "WindowsApps"))]
@@ -327,7 +341,7 @@
           (ensure-dir! windows-apps-dir)
           (when (writable-dir? windows-apps-dir)
             windows-apps-dir))
-        (find-first-writable-dir path-dirs))))
+        (some #(when (writable-dir? %) %) path-dirs))))
 
 (defn- cli-script-path
   []
@@ -335,59 +349,28 @@
     (node-path/join js/process.resourcesPath "app.asar" "js" "logseq-cli.js")
     (node-path/join js/__dirname "logseq-cli.js")))
 
-(defn- render-unix-cli-launcher
-  [exe-path cli-path]
-  (str "#!/usr/bin/env sh\n"
-       "# " CLI_LAUNCHER_MARKER "\n"
-       "set -eu\n"
-       "ELECTRON_RUN_AS_NODE=1 exec \"" exe-path "\" \"" cli-path "\" \"$@\"\n"))
-
-(defn- render-win-cli-launcher
-  [exe-path cli-path]
-  (str "@echo off\r\n"
-       "REM " CLI_LAUNCHER_MARKER "\r\n"
-       "set ELECTRON_RUN_AS_NODE=1\r\n"
-       "\"" exe-path "\" \"" cli-path "\" %*\r\n"))
-
-(defn- write-cli-launcher!
-  [path content windows?]
-  (let [should-write? (if (fs/existsSync path)
-                        (let [existing (.readFileSync fs path "utf8")]
-                          (and (string/includes? existing CLI_LAUNCHER_MARKER)
-                               (not= existing content)))
-                        true)]
-    (when should-write?
-      (.writeFileSync fs path content "utf8")
-      (when-not windows?
-        (fs/chmodSync path "755"))
-      true)))
-
 (defn- install-cli-launcher!
   []
-  (try
-    (let [cli-path (cli-script-path)
-          cli-dir (if utils/win32?
+  (let [cli-path (cli-script-path)
+        cli-dir! #(if utils/win32?
                     (preferred-win-cli-dir)
                     (preferred-unix-cli-dir))]
-      (cond
-        (not (fs/existsSync cli-path))
-        (logger/warn :cli/install (str "Missing CLI script at " cli-path ", skip installing launcher"))
-
-        (nil? cli-dir)
-        (logger/warn :cli/install "No writable PATH directory found; skip installing logseq launcher")
-
-        :else
-        (let [target-path (if utils/win32?
-                            (node-path/join cli-dir "logseq.cmd")
-                            (node-path/join cli-dir "logseq"))
-              exe-path (.getPath app "exe")
-              content (if utils/win32?
-                        (render-win-cli-launcher exe-path cli-path)
-                        (render-unix-cli-launcher exe-path cli-path))]
-          (when (write-cli-launcher! target-path content utils/win32?)
-            (logger/info :cli/install (str "Installed launcher at " target-path))))))
-    (catch :default e
-      (logger/warn :cli/install "Failed to install logseq launcher" e))))
+    (cli-install/install-cli-launcher!
+     {:windows? utils/win32?
+      :cli-path cli-path
+      :cli-dir! cli-dir!
+      :exe-path (.getPath app "exe")
+      :appimage-path (.-APPIMAGE js/process.env)
+      :path-join path-join
+      :exists? #(fs/existsSync %)
+      :read-file! #(.readFileSync fs % "utf8")
+      :write-file! #(.writeFileSync fs %1 %2 "utf8")
+      :chmod! #(fs/chmodSync %1 %2)
+      :show-message-box! #(.showMessageBox dialog (clj->js %))
+      :show-error-box! #(.showErrorBox dialog %1 %2)
+      :t t
+      :log-info! logger/info
+      :log-warn! logger/warn})))
 
 (defn- on-app-ready!
   [^js app']
@@ -421,11 +404,15 @@
                             t2 (setup-app-manager! win)
                             t3 (handler/set-ipc-handler! win)
                             t4 (server/setup! win)
+                            t5 (embedding-server/setup! app')
                             tt (exceptions/setup-exception-listeners!)]
 
                         (vreset! *teardown-fn
-                                 #(doseq [f [t0 t1 t2 t3 t4 tt]]
-                                    (and f (f)))))))
+                                 #(-> (handler/stop-all-db-workers!)
+                                      (p/finally
+                                        (fn []
+                                          (doseq [f [t0 t1 t2 t3 t4 t5 tt]]
+                                            (and f (f))))))))))
 
            ;; setup effects
            (@*setup-fn)
@@ -455,7 +442,10 @@
                                     nil)))))
            (.on app' "before-quit" (fn [_e]
                                      (reset! win/*quitting? true)
-                                     (handler/stop-all-db-workers!)))
+                                     (-> (handler/stop-all-db-workers!)
+                                         (p/finally
+                                           (fn []
+                                             (embedding-server/stop!))))))
 
            (.on app' "activate" #(when @*win (.show win)))))))
 
@@ -492,8 +482,11 @@
 
       (.on app "window-all-closed" (fn []
                                      (logger/debug "window-all-closed" "Quitting...")
-                                     (handler/stop-all-db-workers!)
-                                     (.quit app)))
+                                     (-> (handler/stop-all-db-workers!)
+                                         (p/finally
+                                           (fn []
+                                             (embedding-server/stop!)
+                                             (.quit app))))))
       (on-app-ready! app))))
 
 (defn start []

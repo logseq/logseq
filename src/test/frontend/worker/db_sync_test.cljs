@@ -1585,6 +1585,87 @@
             (is (= asset-uuid (get-in asset-op [:update-asset 2 :block-uuid])))
             (is (= :update-asset (first (:update-asset asset-op))))))))))
 
+(defn- process-pending-asset-op!
+  [asset-uuid]
+  (client-op/add-asset-ops test-repo [[:update-asset 10 {:block-uuid asset-uuid}]])
+  (let [fail-fast-called? (atom false)
+        broadcast-count (atom 0)
+        asset-op (first (client-op/get-all-asset-ops test-repo))]
+    (#'sync-assets/process-asset-op!
+     test-repo
+     "graph-id"
+     asset-op
+     {:current-client-f (constantly {:repo test-repo})
+      :broadcast-rtc-state!-f (fn [_client] (swap! broadcast-count inc))
+      :fail-fast-f (fn [tag data]
+                     (reset! fail-fast-called? true)
+                     (throw (ex-info (name tag) data)))})
+    {:fail-fast-called? @fail-fast-called?
+     :broadcast-count @broadcast-count
+     :pending-count (client-op/get-unpushed-asset-ops-count test-repo)}))
+
+(deftest process-asset-op-drops-update-when-asset-entity-is-missing-test
+  (testing "stale asset upload ops should not block sync when the entity no longer exists"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          asset-uuid (random-uuid)]
+      (with-datascript-conns
+        conn
+        client-ops-conn
+        (fn []
+          (let [result (process-pending-asset-op! asset-uuid)]
+            (is (false? (:fail-fast-called? result)))
+            (is (= 1 (:broadcast-count result)))
+            (is (= 0 (:pending-count result)))))))))
+
+(deftest process-asset-op-drops-update-when-asset-type-is-missing-test
+  (testing "asset upload ops should be dropped when the entity is missing asset type"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          asset-uuid (random-uuid)]
+      (d/transact! conn [{:block/uuid asset-uuid
+                          :block/title "asset-without-type"
+                          :logseq.property.asset/checksum "sha-256-value"}])
+      (with-datascript-conns
+        conn
+        client-ops-conn
+        (fn []
+          (let [result (process-pending-asset-op! asset-uuid)]
+            (is (false? (:fail-fast-called? result)))
+            (is (= 1 (:broadcast-count result)))
+            (is (= 0 (:pending-count result)))))))))
+
+(deftest process-asset-op-drops-update-when-asset-checksum-is-missing-test
+  (testing "asset upload ops should be dropped when the entity is missing checksum"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          asset-uuid (random-uuid)]
+      (d/transact! conn [{:block/uuid asset-uuid
+                          :block/title "asset.png"
+                          :logseq.property.asset/type "png"}])
+      (with-datascript-conns
+        conn
+        client-ops-conn
+        (fn []
+          (let [result (process-pending-asset-op! asset-uuid)]
+            (is (false? (:fail-fast-called? result)))
+            (is (= 1 (:broadcast-count result)))
+            (is (= 0 (:pending-count result)))))))))
+
+(deftest process-asset-op-drops-update-when-required-asset-attributes-are-blank-test
+  (testing "asset upload ops should be dropped when required attributes are blank"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          asset-uuid (random-uuid)]
+      (d/transact! conn [{:block/uuid asset-uuid
+                          :block/title "asset.png"
+                          :logseq.property.asset/type "png"
+                          :logseq.property.asset/checksum ""}])
+      (with-datascript-conns
+        conn
+        client-ops-conn
+        (fn []
+          (let [result (process-pending-asset-op! asset-uuid)]
+            (is (false? (:fail-fast-called? result)))
+            (is (= 1 (:broadcast-count result)))
+            (is (= 0 (:pending-count result)))))))))
+
 (deftest apply-history-action-does-not-reuse-original-tx-id-test
   (testing "undo/redo history actions should not overwrite the original pending tx row"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
@@ -4042,6 +4123,61 @@
             (is (= local-title (:block/title (d/entity @conn [:block/uuid block-uuid]))))
             (is (= 1 (count pending)))))))))
 
+(deftest rebase-replays-fix-pending-tx-with-empty-reversed-data-test
+  (testing "schema fix txs with no reverse data should not fail remote rebase"
+    (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
+          tx-id (random-uuid)
+          parent-uuid (:block/uuid parent)
+          child-uuid (:block/uuid child1)
+          fix-title "local fix title"]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (seed-client-op-txs!
+           test-repo
+           [{:db-sync/tx-id tx-id
+             :db-sync/pending? true
+             :db-sync/created-at 1
+             :db-sync/outliner-op :fix
+             :db-sync/normalized-tx-data
+             [[:db/add [:block/uuid parent-uuid] :block/title fix-title]]
+             :db-sync/reversed-tx-data []}])
+          (#'sync-apply/apply-remote-txs!
+           test-repo
+           nil
+           [{:tx-data [[:db/add [:block/uuid child-uuid] :block/title "remote child"]]}])
+          (let [pending-after (#'sync-apply/pending-tx-by-id test-repo tx-id)]
+            (is (= fix-title
+                   (:block/title (d/entity @conn [:block/uuid parent-uuid]))))
+            (is (= "remote child"
+                   (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+            (is (= :rebase (:outliner-op pending-after)))))))))
+
+(deftest rebase-drops-no-op-fix-pending-tx-with-empty-reversed-data-test
+  (testing "schema fix txs with no reverse data should be dropped when remote already applied the same tx"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          tx-id (random-uuid)
+          parent-uuid (:block/uuid parent)
+          fix-title "remote already fixed"]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (seed-client-op-txs!
+           test-repo
+           [{:db-sync/tx-id tx-id
+             :db-sync/pending? true
+             :db-sync/created-at 1
+             :db-sync/outliner-op :fix
+             :db-sync/normalized-tx-data
+             [[:db/add [:block/uuid parent-uuid] :block/title fix-title]]
+             :db-sync/reversed-tx-data []}])
+          (#'sync-apply/apply-remote-txs!
+           test-repo
+           nil
+           [{:tx-data [[:db/add [:block/uuid parent-uuid] :block/title fix-title]]}])
+          (is (= fix-title
+                 (:block/title (d/entity @conn [:block/uuid parent-uuid]))))
+          (is (not-any? #(= tx-id (:tx-id %))
+                        (#'sync-apply/pending-txs test-repo))))))))
+
 (deftest reverse-tx-data-create-property-text-block-restores-base-db-test
   (testing "reverse-tx-data for create-property-text-block should restore the base db"
     (let [conn (db-test/create-conn-with-blocks
@@ -4686,6 +4822,69 @@
                                   :upload-fn upload-fn
                                   :aes-key nil})]
                    (is (= tx-data result)))
+                 (p/catch (fn [e]
+                            (is false (str e))))
+                 (p/finally done))))))
+
+(deftest offload-large-title-preserves-map-form-tx-items-test
+  (testing "map-form tx items from built-in repair should not crash upload preparation"
+    (async done
+           (let [tx-data [{:db/ident :logseq.class/Comments
+                           :block/uuid #uuid "00000002-2556-9161-5000-000000000000"
+                           :block/title "Comments"}
+                          [:db/add [:block/uuid #uuid "00000002-2556-9161-5000-000000000000"]
+                           :block/title "Comments"]]
+                 upload-fn (fn [_repo _graph-id _title _aes-key]
+                             (p/rejected (ex-info "unexpected upload" {})))]
+             (-> (p/let [result (sync-large-title/offload-large-titles
+                                 tx-data
+                                 {:repo test-repo
+                                  :graph-id "graph-1"
+                                  :upload-fn upload-fn
+                                  :aes-key nil})]
+                   (is (= tx-data result)))
+                 (p/catch (fn [e]
+                            (is false (str e))))
+                 (p/finally done))))))
+
+(deftest offload-large-title-datoms-drops-stale-object-for-same-entity-test
+  (testing "snapshot upload should not keep an old large-title object when offloading the same entity title"
+    (async done
+           (let [large-title (apply str (repeat 5000 "a"))
+                 old-obj {:asset-uuid "old-title" :asset-type "txt"}
+                 other-obj {:asset-uuid "other-title" :asset-type "txt"}
+                 new-obj {:asset-uuid "new-title" :asset-type "txt"}
+                 datoms [{:e 1 :a :block/title :v large-title}
+                         {:e 1 :a :logseq.property.sync/large-title-object :v old-obj}
+                         {:e 2 :a :logseq.property.sync/large-title-object :v other-obj}]
+                 upload-calls (atom [])
+                 upload-fn (fn [_repo _graph-id title _aes-key]
+                             (swap! upload-calls conj title)
+                             (p/resolved new-obj))]
+             (-> (p/let [result (sync-large-title/offload-large-titles-in-datoms-batch
+                                 test-repo "graph-1" datoms nil upload-fn)]
+                   (is (= [large-title] @upload-calls))
+                   (is (= [{:e 1 :a :block/title :v ""}
+                           {:e 1 :a :logseq.property.sync/large-title-object :v new-obj}
+                           {:e 2 :a :logseq.property.sync/large-title-object :v other-obj}]
+                          result)))
+                 (p/catch (fn [e]
+                            (is false (str e))))
+                 (p/finally done))))))
+
+(deftest offload-large-title-datoms-drops-stale-object-from-known-offload-set-test
+  (testing "snapshot upload drops stale large-title objects even when title and object are in different batches"
+    (async done
+           (let [old-obj {:asset-uuid "old-title" :asset-type "txt"}
+                 other-obj {:asset-uuid "other-title" :asset-type "txt"}
+                 datoms [{:e 1 :a :logseq.property.sync/large-title-object :v old-obj}
+                         {:e 2 :a :logseq.property.sync/large-title-object :v other-obj}]
+                 upload-fn (fn [_repo _graph-id _title _aes-key]
+                             (p/rejected (ex-info "unexpected upload" {})))]
+             (-> (p/let [result (sync-large-title/offload-large-titles-in-datoms-batch
+                                 test-repo "graph-1" datoms nil upload-fn #{1})]
+                   (is (= [{:e 2 :a :logseq.property.sync/large-title-object :v other-obj}]
+                          result)))
                  (p/catch (fn [e]
                             (is false (str e))))
                  (p/finally done))))))

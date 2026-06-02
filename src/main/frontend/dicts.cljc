@@ -51,6 +51,7 @@
    :ko      (edn-resource "dicts/ko.edn")
    :pl      (edn-resource "dicts/pl.edn")
    :sk      (edn-resource "dicts/sk.edn")
+   :vi      (edn-resource "dicts/vi.edn")
    :uk      (edn-resource "dicts/uk.edn")
    :fa      (edn-resource "dicts/fa.edn")
    :id      (edn-resource "dicts/id.edn")
@@ -68,6 +69,7 @@
    {:label "Afrikaans" :value :af}
    {:label "Català" :value :ca}
    {:label "Español" :value :es}
+   {:label "Tiếng Việt" :value :vi}
    {:label "Norsk (bokmål)" :value :nb-NO}
    {:label "Polski" :value :pl}
    {:label "Português (Brasileiro)" :value :pt-BR}

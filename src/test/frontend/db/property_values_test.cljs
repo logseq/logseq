@@ -7,6 +7,7 @@
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.test.helper :as db-test]
+            [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]))
 
 (def repo test-helper/test-db)
@@ -47,6 +48,65 @@
         property (d/entity db :user.property/closed-values-visibility)
         values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
     (is (= ["Visible closed value"] (map :block/title values)))))
+
+(defn- assert-deleting-block-removes-cli-created-property-values
+  [property-type property-ident value]
+  (let [property-title (name property-ident)
+        conn (db-test/create-conn-with-blocks
+              {:properties {property-ident {:logseq.property/type property-type
+                                            :db/cardinality :db.cardinality/many
+                                            :logseq.property/public? true
+                                            :block/title property-title}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "block1"}]}]})
+        block (db-test/find-block-by-content @conn "block1")
+        block-uuid (:block/uuid block)]
+    (outliner-property/batch-set-property! conn [block-uuid] property-ident value)
+    (let [block (d/entity @conn [:block/uuid block-uuid])
+          value (first (get block property-ident))
+          value-id (:db/id value)]
+      (is (= (:db/id block) (:db/id (:block/parent value)))
+          "Generated property value blocks should be owned by their block")
+      (outliner-core/delete-blocks! conn [block] {})
+      (is (nil? (d/entity @conn value-id))
+          "Deleting the owning block removes its generated property value block"))))
+
+(deftest deleting-block-removes-cli-created-default-property-values-test
+  (assert-deleting-block-removes-cli-created-property-values
+   :default
+   :user.property/xxx-IiHzt48w
+   "x1"))
+
+(deftest deleting-block-removes-cli-created-url-property-values-test
+  (assert-deleting-block-removes-cli-created-property-values
+   :url
+   :user.property/url-IiHzt48w
+   "https://example.com/x1"))
+
+(deftest batch-set-property-does-not-partially-write-generated-values-test
+  (let [property-ident :user.property/atomic-IiHzt48w
+        conn (db-test/create-conn-with-blocks
+              {:properties {property-ident {:logseq.property/type :default
+                                            :db/cardinality :db.cardinality/many
+                                            :logseq.property/public? true
+                                            :block/title "atomic"}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "block1"}]}]})
+        block (db-test/find-block-by-content @conn "block1")
+        block-uuid (:block/uuid block)]
+    (is (thrown? js/Error
+                 (outliner-property/batch-set-property! conn [block-uuid] property-ident ["x1" {}])))
+    (let [block (d/entity @conn [:block/uuid block-uuid])
+          generated-values (d/q '[:find [?v ...]
+                                  :in $ ?property-ident
+                                  :where
+                                  [?v :logseq.property/created-from-property ?property-ident]]
+                                @conn
+                                property-ident)]
+      (is (empty? (get block property-ident))
+          "Failed updates should not leave generated values on the block")
+      (is (empty? generated-values)
+          "Failed updates should not leave generated value blocks"))))
 
 (deftest class-add-property-keeps-scoped-choices-unchanged-test
   (let [conn (db-test/create-conn-with-blocks

@@ -4,13 +4,13 @@
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.graph :as graph]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -23,18 +23,74 @@
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc normalized-graph-label
-  [{:keys [url remote? graph-e2ee?] :as graph} on-click]
+(defn graph-sync-icon-name
+  [{:keys [remote? graph-e2ee?]}]
+  (when remote?
+    (if graph-e2ee? "lock" "cloud")))
+
+(defn local-uploadable-graph?
+  [{:keys [root remote?]}]
+  (and (or root
+           (mobile-util/native-platform?))
+       (not remote?)
+       (user-handler/logged-in?)
+       (user-handler/rtc-group?)))
+
+(defn- graph-e2ee-enabled?
+  [{:keys [url graph-e2ee?] :as graph}]
+  (if (contains? graph :graph-e2ee?)
+    (true? graph-e2ee?)
+    (if (= url (state/get-current-repo))
+      (let [e2ee? (ldb/get-graph-rtc-e2ee? (db/get-db))]
+        (if (nil? e2ee?) true (true? e2ee?)))
+      true)))
+
+(defn- <ensure-current-graph-for-upload!
+  [repo]
+  (if (= repo (state/get-current-repo))
+    (p/resolved nil)
+    (state/pub-event! [:graph/switch repo])))
+
+(defn upload-local-graph-with-confirm!
+  [{:keys [url] :as graph}]
+  (let [graph-name (config/db-graph-name url)
+        dialog-config {:cancel-label (t :ui/cancel)
+                       :ok-label (t :ui/confirm)}]
+    (-> (shui/dialog-confirm!
+         [:p.font-medium.-my-4 (t :graph/upload-local-confirm-desc graph-name)]
+         dialog-config)
+        (p/then
+         (fn []
+           (p/let [_ (<ensure-current-graph-for-upload! url)
+                   graph-e2ee? (graph-e2ee-enabled? graph)]
+             (let [mobile? (util/mobile?)
+                   hide-upload-log! (fn []
+                                      (when mobile?
+                                        (shui/popup-hide! :rtc-graph-upload-log)))]
+              (when mobile?
+                (shui/popup-show! nil
+                                  (fn []
+                                    (rtc-indicator/uploading-logs))
+                                  {:id :rtc-graph-upload-log}))
+              (rtc-indicator/on-upload-finished-task
+               hide-upload-log!)
+              (-> (rtc-handler/<rtc-upload-graph! url graph-e2ee?)
+                  (p/finally hide-upload-log!)))))))))
+
+(hsx/defc normalized-graph-label
+  [{:keys [url remote?] :as graph} on-click]
   (when graph
     [:span.flex.items-center
      (let [local-dir (config/get-local-dir url)
            graph-name (text-util/get-graph-name-from-path url)]
-       [:a.flex.items-center {:title local-dir
-                              :on-click #(on-click graph)}
-        [:span graph-name]
-        (when remote? [:strong.px-1.flex.items-center (ui/icon (if graph-e2ee? "lock" "cloud"))])])]))
+       [:<>
+        [:a.flex.items-center {:title local-dir
+                               :on-click #(on-click graph)}
+         [:span graph-name]
+         (when remote?
+           [:strong.px-1.flex.items-center (ui/icon (graph-sync-icon-name graph))])]])]))
 
 (defn sort-repos-with-metadata-local
   [repos]
@@ -57,20 +113,52 @@
   [{:keys [root]}]
   (util/open-url (str "file://" root)))
 
+(defn- can-delete-local-graph?
+  [repo]
+  (repo-handler/removable-repo? repo (state/get-repos)))
+
 (defn- delete-local-graph!
   [{:keys [url] :as repo}]
-  (let [graph-name (config/db-graph-name url)
-        dialog-config {:cancel-label (t :ui/cancel)
-                       :ok-label (t :ui/confirm)}]
-    (-> (shui/dialog-confirm!
-         [:p.font-medium.-my-4 (t :graph/delete-local-confirm-desc graph-name)
-          [:span.my-2.flex.font-normal.opacity-75
-           [:small (t :graph/delete-warning)]]]
-         dialog-config)
-        (p/then (fn []
-                  (repo-handler/remove-repo! repo))))))
+  (when (can-delete-local-graph? repo)
+    (let [graph-name (config/db-graph-name url)
+          dialog-config {:cancel-label (t :ui/cancel)
+                         :ok-label (t :ui/confirm)}]
+      (-> (shui/dialog-confirm!
+           (assoc dialog-config
+                  :title (t :graph/delete-local-confirm-desc graph-name)
+                  :description (t :graph/delete-warning)))
+          (p/then (fn []
+                    (repo-handler/remove-repo! repo)))))))
 
-(rum/defc ^:large-vars/cleanup-todo repos-inner
+(defn graph-open-new-window-target
+  [{:keys [url] :as repo}]
+  (when-let [graph-id (:graph-id (graph/repo-summary->registry-entry repo))]
+    {:repo url
+     :graph-id graph-id}))
+
+(defn- <graph-open-new-window-target
+  [{:keys [url] :as repo}]
+  (if-let [target (graph-open-new-window-target repo)]
+    (p/resolved target)
+    (p/let [registry (graph/<get-graph-registry)
+            entry (graph/resolve-registry-target registry {:graph-identifier url})]
+      (when entry
+        {:repo (:repo entry)
+         :graph-id (:graph-id entry)}))))
+
+(defn open-in-another-tab-action?
+  [{:keys [root]}]
+  (boolean (and util/web-platform? root)))
+
+(defn open-graph-in-another-tab!
+  [repo]
+  (if-let [target (graph-open-new-window-target repo)]
+    (state/pub-event! [:graph/open-new-window target])
+    (p/let [target (<graph-open-new-window-target repo)]
+      (when target
+        (state/pub-event! [:graph/open-new-window target])))))
+
+(hsx/defc ^:large-vars/cleanup-todo repos-inner
   "Graph list in `All graphs` page"
   [repos]
   (for [{:keys [root url remote? graph-e2ee? GraphUUID GraphSchemaVersion GraphName created-at last-seen-at] :as repo}
@@ -82,7 +170,7 @@
       [:span.flex.items-center.gap-1
        (normalized-graph-label repo
                                (fn []
-                                 (when-not (state/sub :rtc/downloading-graph-uuid)
+                                 (when-not (state/get-state :rtc/downloading-graph-uuid)
                                    (cond
                                      root ; exists locally
                                      (state/pub-event! [:graph/switch url])
@@ -116,12 +204,23 @@
             (ui/icon "dots" {:size 15})))
           (shui/dropdown-menu-content
            {:align "end"}
-           (when root
+           (when (open-in-another-tab-action? repo)
              (shui/dropdown-menu-item
-              {:key "delete-locally"
-               :class "delete-local-graph-menu-item"
-               :on-click #(delete-local-graph! repo)}
-              (t :graph/delete-local-action)))
+              {:key "open-in-another-tab"
+               :class "open-in-another-tab-menu-item"
+               :on-click #(open-graph-in-another-tab! repo)}
+              (t :graph/open-in-another-tab-action)))
+
+           (when root
+             (let [disabled? (not (can-delete-local-graph? repo))]
+               (shui/dropdown-menu-item
+                {:key "delete-locally"
+                 :class "delete-local-graph-menu-item"
+                 :disabled disabled?
+                 :on-click #(when-not disabled?
+                              (delete-local-graph! repo))}
+                (t :graph/delete-local-action))))
+
            (when (and root
                       (user-handler/logged-in?)
                       (user-handler/rtc-group?)
@@ -130,26 +229,7 @@
              (shui/dropdown-menu-item
               {:key "logseq-sync"
                :class "use-logseq-sync-menu-item"
-               :on-click (fn []
-                           (let [repo (state/get-current-repo)
-                                 token (state/get-auth-id-token)
-                                 remote-graph-name (config/db-graph-name (state/get-current-repo))
-                                 graph-e2ee? (let [e2ee? (ldb/get-graph-rtc-e2ee? (db/get-db))]
-                                               (if (nil? e2ee?) true (true? e2ee?)))]
-                             (when (and token remote-graph-name)
-                               (rtc-handler/<rtc-upload-graph! repo graph-e2ee?)
-                               (when (util/mobile?)
-                                 (shui/popup-show! nil
-                                                   (fn []
-                                                     (rtc-indicator/uploading-logs))
-                                                   {:id :rtc-graph-upload-log}))
-
-                               (rtc-indicator/on-upload-finished-task
-                                (fn []
-                                  (when (util/mobile?) (shui/popup-hide! :rtc-graph-upload-log))
-                                  (p/do!
-                                   (rtc-flows/trigger-rtc-start repo)
-                                   (rtc-handler/<get-remote-graphs)))))))}
+               :on-click #(upload-local-graph-with-confirm! repo)}
               (t :graph/use-sync-beta)))
 
            (when (and remote?
@@ -160,10 +240,9 @@
                :on-click (fn []
                            (let [prompt-str (t :graph/delete-server-confirm-desc graph-name)]
                              (-> (shui/dialog-confirm!
-                                  [:p.font-medium.-my-4 prompt-str
-                                   [:span.my-2.flex.font-normal.opacity-75
-                                    [:small (t :graph/delete-warning)]]]
-                                  dialog-config)
+                                  (assoc dialog-config
+                                         :title prompt-str
+                                         :description (t :graph/delete-warning)))
                                  (p/then
                                   (fn []
                                     (state/set-state! :rtc/loading-graphs? true)
@@ -201,18 +280,13 @@
                                                      (state/set-state! :rtc/loading-graphs? false)))))))))}
               (t :graph/leave-action))))))]]]))
 
-(rum/defc repos-cp < rum/reactive
-  {:will-mount (fn [state]
-                 (let [login? (:auth/id-token @state/state)]
-                   (when (and login? (user-handler/rtc-group?))
-                     (rtc-handler/<get-remote-graphs)))
-                 state)}
+(hsx/defc repos-cp
   []
-  (let [login? (boolean (state/sub :auth/id-token))
-        repos (state/sub [:me :repos])
+  (let [login? (boolean (state/use-sub :auth/id-token))
+        repos (state/use-sub [:me :repos])
         repos (util/distinct-by :url repos)
-        remotes (state/sub :rtc/graphs)
-        remotes-loading? (state/sub :rtc/loading-graphs?)
+        remotes (state/use-sub :rtc/graphs)
+        remotes-loading? (state/use-sub :rtc/loading-graphs?)
         repos (->> (if (and login? (seq remotes))
                      (repo-handler/combine-local-&-remote-graphs repos remotes)
                      repos)
@@ -226,6 +300,11 @@
         {remote-graphs true local-graphs false} (group-by (comp boolean :remote?) repos)
         {own-graphs true shared-graphs false}
         (group-by (fn [graph] (= "manager" (:graph<->user-user-type graph))) remote-graphs)]
+    (hooks/use-effect!
+     (fn []
+       (when (and login? (user-handler/rtc-group?))
+         (rtc-handler/<get-remote-graphs)))
+     [login?])
     [:div#graphs
      (when-not (util/capacitor?)
        [:h1.title (t :graph/all-graphs)])
@@ -294,17 +373,25 @@
                                        (when (and ready-for-use? (not downloading?))
                                          (when-let [on-click (:on-click opts)]
                                            (on-click e))
-                                         (if (and (gobj/get e "shiftKey")
-                                                  (not (and rtc-graph? remote?)))
-                                           (state/pub-event! [:graph/open-new-window url])
+                                         (if (and (gobj/get e "shiftKey") (:root graph))
+                                           (if (util/electron?)
+                                             (state/pub-event! [:graph/open-new-window url])
+                                             (if-let [target (graph-open-new-window-target graph)]
+                                               (state/pub-event! [:graph/open-new-window target])
+                                               (p/let [target (<graph-open-new-window-target graph)]
+                                                 (when target
+                                                   (state/pub-event! [:graph/open-new-window target])))))
                                            (cond
                                                   ;; exists locally?
                                              (or (:root graph) (not rtc-graph?))
                                              (state/pub-event! [:graph/switch url])
 
                                              (and rtc-graph? remote?)
-                                             (state/pub-event!
-                                              [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion graph-e2ee?])
+                                             (do
+                                               (state/pub-event!
+                                                [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion graph-e2ee?])
+                                               (when (util/mobile?)
+                                                 false))
 
                                              :else
                                              (state/pub-event! [:graph/pull-down-remote-graph graph])))))}})))
@@ -337,15 +424,15 @@
                                  (route-handler/redirect-to-all-graphs)))}
                   (shui/tabler-icon "layout-2") [:span (t :graph/all-graphs)]))])
 
-(rum/defcs repos-dropdown-content < rum/reactive
-  [_state & {:keys [contentid footer?] :as opts
-             :or {footer? true}}]
-  (let [current-repo (state/sub :git/current-repo)
-        login? (boolean (state/sub :auth/id-token))
-        repos (state/sub [:me :repos])
-        rtc-graphs (state/sub :rtc/graphs)
-        downloading-graph-id (state/sub :rtc/downloading-graph-uuid)
-        remotes-loading? (state/sub :rtc/loading-graphs?)
+(hsx/defc repos-dropdown-content
+  [& {:keys [contentid footer?] :as opts
+      :or {footer? true}}]
+  (let [current-repo (state/use-sub :git/current-repo)
+        login? (boolean (state/use-sub :auth/id-token))
+        repos (state/use-sub [:me :repos])
+        rtc-graphs (state/use-sub :rtc/graphs)
+        downloading-graph-id (state/use-sub :rtc/downloading-graph-uuid)
+        remotes-loading? (state/use-sub :rtc/loading-graphs?)
         repos (sort-repos-with-metadata-local repos)
         repos (->>
                (if (and (seq rtc-graphs) login?)
@@ -401,28 +488,31 @@
 
 (defn- current-repo-context-menu-content
   [repo]
-  [:<>
-   (shui/dropdown-menu-item
-    {:key "open-repo-folder"
-     :on-click #(open-repo-folder! repo)}
-    [:span.flex.items-center.gap-1
-     (ui/icon "folder-pin")
-     (t :graph/open-folder-action)])
+  (let [disabled? (not (can-delete-local-graph? repo))]
+    [:<>
+     (shui/dropdown-menu-item
+      {:key "open-repo-folder"
+       :on-click #(open-repo-folder! repo)}
+      [:span.flex.items-center.gap-1
+       (ui/icon "folder-pin")
+       (t :graph/open-folder-action)])
 
-   (shui/dropdown-menu-separator)
+     (shui/dropdown-menu-separator)
 
-   (shui/dropdown-menu-item
-    {:key "delete-locally"
-     :class "delete-local-graph-menu-item"
-     :on-click #(delete-local-graph! repo)}
-    [:span.flex.items-center.gap-1.text-red-700
-     (ui/icon "trash")
-     (t :graph/delete-local-action)])])
+     (shui/dropdown-menu-item
+      {:key "delete-locally"
+       :class "delete-local-graph-menu-item"
+       :disabled disabled?
+       :on-click #(when-not disabled?
+                    (delete-local-graph! repo))}
+      [:span.flex.items-center.gap-1.text-red-700
+       (ui/icon "trash")
+       (t :graph/delete-local-action)])]))
 
-(rum/defcs graphs-selector < rum/reactive
-  [_state]
-  (let [current-repo (state/get-current-repo)
-        user-repos (state/get-repos)
+(hsx/defc graphs-selector
+  []
+  (let [current-repo (state/use-sub :git/current-repo)
+        user-repos (state/use-sub [:me :repos])
         current-repo' (some->> user-repos (medley/find-first #(= current-repo (:url %))))
         repo-name (when current-repo (db/get-repo-name current-repo))
         remote? (:remote? current-repo')
@@ -448,7 +538,8 @@
      (ui/tooltip
       [:a.item.flex.items-center.gap-1.select-none
        selector-opts
-       [:span.thumb (shui/tabler-icon (if remote? "cloud" "topology-star") {:size 16})]
+       [:span.thumb
+        (shui/tabler-icon (if remote? "cloud" "topology-star") {:size 16})]
        [:strong short-repo-name]
        (shui/tabler-icon "selector" {:size 18})]
       current-repo)]))
@@ -511,7 +602,7 @@
                    e)))
     (p/resolved nil)))
 
-(rum/defc new-db-graph-inner
+(hsx/defc new-db-graph-inner
   [rtc-group?]
   (let [[creating-db? set-creating-db?] (hooks/use-state false)
         [cloud? set-cloud?] (hooks/use-state false)
@@ -540,7 +631,7 @@
         submit! (fn submit!
                   [^js e click?]
                   (when-let [value (and (or click? (= (gobj/get e "key") "Enter"))
-                                        (util/trim-safe (.-value (rum/deref input-ref))))]
+                                        (util/trim-safe (.-value (hooks/deref input-ref))))]
                     (new-db-f value)))]
     (hooks/use-effect!
      (fn []
@@ -602,7 +693,7 @@
         (ui/loading (t :graph/creating))
         (t :ui/submit)))]))
 
-(rum/defc new-db-graph < rum/reactive
+(hsx/defc new-db-graph
   []
   (let [rtc-group? (user-handler/rtc-group?)]
     (new-db-graph-inner rtc-group?)))

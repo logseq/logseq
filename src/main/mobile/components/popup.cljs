@@ -7,7 +7,7 @@
             [logseq.shui.ui :as shui]
             [mobile.state :as mobile-state]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defonce *last-popup? (atom nil))
 (defonce *last-popup-data (atom nil))
@@ -42,6 +42,17 @@
   (when-let [^js plugin mobile-util/native-bottom-sheet]
     (.dismiss plugin #js {})))
 
+(defn- notify-native-sheet-content-ready!
+  []
+  (when-let [^js plugin mobile-util/native-bottom-sheet]
+    (.requestAnimationFrame
+     js/window
+     (fn []
+       (.requestAnimationFrame
+        js/window
+        (fn []
+          (.contentReady plugin #js {})))))))
+
 (defn- handle-native-sheet-state!
   [^js data]
   (let [dismissing? (.-dismissing data)]
@@ -53,7 +64,8 @@
          (mobile-state/set-popup! nil)
          (reset! *last-popup-data nil)
          (when-let [plugin ^js mobile-util/native-editor-toolbar]
-           (.dismiss plugin))))
+           (.dismiss plugin))
+         (notify-native-sheet-content-ready!)))
 
       :else
       nil)))
@@ -65,7 +77,7 @@
 
 (defn- wrap-calc-commands-popup-side
   [pos opts]
-  (let [[side mh] (let [[_x y _ height] pos
+  (let [[side _mh] (let [[_x y _ height] pos
                         vh (.-clientHeight js/document.body)
                         [th bh] [(- y 85) (- vh (+ y height) 310)]
                         direction (if (> bh 280) "bottom"
@@ -74,8 +86,7 @@
                     (if (= "top" direction)
                       ["top" th]
                       ["bottom" bh]))]
-    (-> (assoc opts :auto-side? false)
-        (assoc :max-popup-height mh)
+    (-> (assoc opts :auto-side? true)
         (assoc-in [:content-props :side] side))))
 
 (defn popup-show!
@@ -122,7 +133,7 @@
 (set! shui/popup-show! popup-show!)
 (set! shui/popup-hide! popup-hide!)
 
-(rum/defc popup
+(hsx/defc popup
   [opts content-fn]
   (let [title (or (:title opts) (when (string? content-fn) content-fn))
         content (if (fn? content-fn)

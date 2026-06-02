@@ -236,6 +236,17 @@
     (let [token (gen/spec->token [:output {:validate #{"human" "json" "edn"} :desc "Format"}])]
       (is (= :enum (:type token)))
       (is (= ["edn" "human" "json"] (:values token)))))
+  (testing "spec with :validate {:pred set} → :enum type"
+    (let [token (gen/spec->token [:priority {:validate {:pred #{"low" "medium" "high" "urgent"}
+                                                        :ex-msg (fn [_] "bad")}
+                                             :desc "Priority"}])]
+      (is (= :enum (:type token)))
+      (is (= ["high" "low" "medium" "urgent"] (:values token)))))
+  (testing "spec with :validate {:pred fn} → :free type (predicate is not enumerable)"
+    (let [token (gen/spec->token [:id {:validate {:pred number? :ex-msg (fn [_] "bad")}
+                                       :desc "Id"}])]
+      (is (= :free (:type token)))
+      (is (nil? (:values token)))))
   (testing "spec with :complete :graphs → :dynamic type"
     (let [token (gen/spec->token [:graph {:complete :graphs :desc "Graph name"}])]
       (is (= :dynamic (:type token)))
@@ -620,6 +631,23 @@
             (is (contains? sub-subcmds "create"))
             (is (contains? sub-subcmds "restore"))
             (is (contains? sub-subcmds "remove"))))))))
+
+;; Regression: `logseq list page -g woot -<TAB>` must offer leaf (command-specific) options
+;; e.g. --journal-only, not just globals. _arguments at the dispatcher
+;; level must stop consuming options once the subcommand is identified.
+;; The `(-)` exclusion list on the positional and rest specs delegates
+;; option parsing/completion entirely to the leaf function.
+(deftest test-zsh-dispatchers-disable-option-parsing-after-subcommand
+  (let [output (gen/generate-completions "zsh" full-table)]
+    (testing "top-level dispatcher uses (-) on positional and rest"
+      (is (re-find #"(?s)_logseq\(\) \{.*?'\(-\)1:command:->cmds'.*?'\(-\)\*::args:->args'"
+                   output)))
+    (testing "group dispatcher (e.g. _logseq_list) uses (-) on positional and rest"
+      (is (re-find #"(?s)_logseq_list\(\) \{.*?'\(-\)1:subcommand:->subcmd'.*?'\(-\)\*::args:->args'"
+                   output)))
+    (testing "subgroup dispatcher (e.g. _logseq_graph_backup) uses (-) on positional and rest"
+      (is (re-find #"(?s)_logseq_graph_backup\(\) \{.*?'\(-\)1:subcommand:->subcmd'.*?'\(-\)\*::args:->args'"
+                   output)))))
 
 (deftest test-e2e-generated-header
   (testing "zsh output includes do-not-edit header"

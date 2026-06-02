@@ -17,6 +17,7 @@
             [electron.configs :as cfgs]
             [electron.db :as db]
             [electron.db-worker :as db-worker]
+            [electron.embedding-server :as embedding-server]
             [electron.find-in-page :as find]
             [electron.handler-interface :refer [handle]]
             [electron.i18n :as i18n]
@@ -30,10 +31,10 @@
             [electron.utils :as utils]
             [electron.window :as win]
             [electron.graph-switch-flow :as graph-switch-flow]
-            [logseq.cli.common.graph :as cli-common-graph]
             [logseq.cli.common :as cli-common]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
+            [logseq.common.graph-registry :as graph-registry]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
@@ -195,7 +196,7 @@
 (defn get-graphs
   "Returns all graph names"
   []
-  (distinct (cli-common-graph/get-db-based-graphs)))
+  (distinct (common-graph/get-db-based-graphs)))
 
 (defn- canonical-repo
   [graph]
@@ -206,17 +207,23 @@
   "Given a graph's name of string, returns the graph's fullname. For example, given
   `cat`, returns `logseq_db_cat`.  Returns `nil` if no such graph exists."
   [graph-identifier]
-  (when-let [repo (canonical-repo graph-identifier)]
-    (let [graph-name (common-config/strip-leading-db-version-prefix repo)]
-      (->> (get-graphs)
-           (some #(when (or
-                         (= (utils/normalize-lc %) (utils/normalize-lc repo))
-                         (string/ends-with? (utils/normalize-lc %)
-                                            (str "/" (utils/normalize-lc graph-name))))
-                    %))))))
+  (or (:repo (graph-registry/resolve-target
+              (cfgs/read-graph-registry)
+              {:graph-identifier graph-identifier}))
+      (when-let [repo (canonical-repo graph-identifier)]
+        (let [graph-name (common-config/strip-leading-db-version-prefix repo)]
+          (->> (get-graphs)
+               (some #(when (or
+                             (= (utils/normalize-lc %) (utils/normalize-lc repo))
+                             (string/ends-with? (utils/normalize-lc %)
+                                                (str "/" (utils/normalize-lc graph-name))))
+                        %)))))))
 
 (defmethod handle :getGraphs [_window [_]]
   (get-graphs))
+
+(defmethod handle :upsertGraphRegistryEntry [_window [_ entry]]
+  (cfgs/upsert-graph-registry-entry! entry))
 
 (defmethod handle :deleteGraph [_window [_ graph]]
   (when-let [repo (canonical-repo graph)]
@@ -232,7 +239,11 @@
 (defmethod handle :db-worker-runtime [^js window [_ repo]]
   (if (string/blank? repo)
     (p/rejected (ex-info "repo is required" {:code :missing-repo}))
-    (db-worker/ensure-runtime! (canonical-repo repo) (.-id window))))
+    (p/let [embedding-endpoint (embedding-server/ensure-endpoint! app)]
+      (db-worker/ensure-runtime! (canonical-repo repo)
+                                 (.-id window)
+                                 {:embedding-endpoint embedding-endpoint
+                                  :embedding-model-id (.-LOGSEQ_EMBEDDING_MODEL js/process.env)}))))
 
 (defmethod handle :releaseDbWorkerRuntime [^js window [_ repo]]
   (if (string/blank? repo)

@@ -7,13 +7,16 @@
             [frontend.handler.export :as export]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [io.factorhouse.hsx.core :as hsx]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            ))
 
 (defn- setup-fns!
   []
@@ -24,7 +27,7 @@
     (catch :default _e
       nil)))
 
-(rum/defc helpful-default-error-screen
+(hsx/defc helpful-default-error-screen
   "This screen is displayed when the UI has crashed hard. It provides the user
   with basic troubleshooting steps to get them back to a working state. This
   component is purposefully stupid simple as it needs to render under any number
@@ -103,8 +106,9 @@
                  (t :page/open-all-graphs-desc)
                  :links
                  [{:on-click (fn []
-                               (set! (.-href js/window.location) (rfe/href :graphs))
-                               (.reload js/window.location))}])]
+                               (if (util/capacitor?)
+                                 (state/pub-event! [:mobile/set-tab "graphs"])
+                                 (route-handler/redirect-to-all-graphs)))}])]
                [:p.m-0
                 (interpolate-sentence
                  (t :page/open-issue-desc)
@@ -112,7 +116,7 @@
                  [{:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"}])]]]]]]]]]]
      (ui/notification)]))
 
-(rum/defc not-found
+(hsx/defc not-found
   []
   [:div {:class "flex flex-col items-center justify-center min-h-screen bg-background"}
    [:h1 {:class "text-6xl font-bold text-gray-12 mb-4"} "404"]
@@ -122,27 +126,26 @@
                  :variant :outline}
                 (shui/tabler-icon "home") (t :page/go-back-home))])
 
-(rum/defc current-page < rum/reactive
-  {:did-mount    (fn [state]
-                   (state/set-root-component! (:rum/react-component state))
-                   (state/setup-electron-updater!)
-                   (state/load-app-user-cfgs)
-                   (ui/inject-document-devices-envs!)
-                   (ui/inject-dynamic-style-node!)
-                   (plugin-handler/host-mounted!)
-                   (assoc state ::teardown (setup-fns!)))
-   :will-unmount (fn [state]
-                   (when-let [teardown (::teardown state)]
-                     (teardown)))}
+(hsx/defc current-page
   []
-  (if-let [route-match (state/sub :route-match)]
+  (hooks/use-effect!
+   (fn []
+     (state/setup-electron-updater!)
+     (state/load-app-user-cfgs)
+     (ui/inject-document-devices-envs!)
+     (ui/inject-dynamic-style-node!)
+     (plugin-handler/host-mounted!)
+     (setup-fns!))
+   [])
+  (if-let [route-match (state/use-sub :route-match)]
     (when-let [view (:view (:data route-match))]
       (ui/catch-error-and-notify
        (helpful-default-error-screen)
        [:<>
         (container/root-container
          route-match
-         (view route-match))
+         ^{:key (:path route-match)}
+         [view route-match])
         (when config/lsp-enabled?
           (plugin/hook-daemon-renderers))]))
     (not-found)))

@@ -179,13 +179,19 @@
   [repo graph-id source-conn aes-key update-progress]
   (p/let [temp (sync-temp-sqlite/<create-temp-sqlite-conn (d/schema @source-conn) [])
           datoms (d/datoms @source-conn :eavt)
+          large-title-eids (into #{}
+                                 (keep (fn [datom]
+                                         (when (sync-large-title/large-title-datom? datom)
+                                           (:e datom))))
+                                 datoms)
           _ (sync-large-title/process-upload-datoms-in-batches!
              datoms
              {:batch-size upload-prepare-datoms-batch-size
               :process-batch-f
               (fn [batch]
                 (p/let [datoms* (sync-large-title/offload-large-titles-in-datoms-batch
-                                 repo graph-id batch aes-key sync-apply/upload-large-title!)
+                                 repo graph-id batch aes-key
+                                 sync-apply/upload-large-title! large-title-eids)
                         {:keys [kept dropped]} (drop-oversized-upload-datoms datoms*)
                         _ (when (seq dropped)
                             (prn :db-sync/drop-oversized-upload-datoms
