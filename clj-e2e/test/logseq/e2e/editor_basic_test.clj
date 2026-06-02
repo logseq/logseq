@@ -424,7 +424,7 @@
       scrollContainer.scrollTop = 0;
       await nextFrame();
 
-      for (let i = 0; i < 120; i++) {
+      for (let i = 0; i < 240; i++) {
         const item = findText();
         if (item) {
           item.scrollIntoView({ block: 'center' });
@@ -432,7 +432,7 @@
           return true;
         }
 
-        scrollContainer.scrollTop += Math.max(320, Math.floor(scrollContainer.clientHeight * 0.8));
+        scrollContainer.scrollTop += Math.max(280, Math.floor(scrollContainer.clientHeight * 0.7));
         await delay(80);
       }
 

@@ -111,18 +111,18 @@
 (hsx/defc all-journals
   []
   (let [data (sub-journals)]
-       (when (seq data)
-         (let [selection-block-ids (journal-block-ids data)]
-           [:div#journals
-            (ui/virtualized-list
-             {:custom-scroll-parent (util/app-scroll-container-node)
-              :increase-viewport-by {:top 100 :bottom 100}
-              :skipAnimationFrameInResizeObserver true
-              :compute-item-key (fn [idx]
-                                  (let [id (util/nth-safe data idx)]
-                                    (str "journal-" id)))
-              :total-count (count data)
-              :item-content (fn [idx]
-                              (let [id (util/nth-safe data idx)
-                                    last? (= (inc idx) (count data))]
-                                (journal-cp id last? selection-block-ids)))})]))))
+    (when (seq data)
+      (let [selection-block-ids (journal-block-ids data)]
+        [:div#journals
+         (ui/virtualized-list
+          {:custom-scroll-parent (util/app-scroll-container-node)
+           :increase-viewport-by {:top 100 :bottom 100}
+           :skipAnimationFrameInResizeObserver true
+           :compute-item-key (fn [idx]
+                               (let [id (util/nth-safe data idx)]
+                                 (str "journal-" id)))
+           :total-count (count data)
+           :item-content (fn [idx]
+                           (let [id (util/nth-safe data idx)
+                                 last? (= (inc idx) (count data))]
+                             (journal-cp id last? selection-block-ids)))})]))))
