@@ -1430,7 +1430,7 @@
                             :let [pkey (str (name pid) ":" key)]]
                         {:title key
                          :item [:div.flex.items-center.item-wrap
-                                (ui-item-renderer pid :toolbar (assoc opts :prefix "pl-" :key (str "pl-" key)))
+                                [ui-item-renderer pid :toolbar (assoc opts :prefix "pl-" :key (str "pl-" key))]
                                 [:span {:style {:padding-left "2px"}} key]
                                 [:span.pin.flex.items-center.opacity-60
                                  {:class (util/classnames [{:pinned pinned?}])}
@@ -1465,7 +1465,7 @@
                           :icon (ui/icon "download")})]
 
                       [{:hr true :key "dropdown-more"}
-                       {:title (auto-check-for-updates-control)}])
+                       {:title [auto-check-for-updates-control]}])
                      (remove nil?)))]
 
     [:div.toolbar-plugins-manager
@@ -1512,16 +1512,16 @@
            {:data-type (name type)}
 
            [:<>
-            (header-ui-items-list-wrap
+            [header-ui-items-list-wrap
              (for [[_ {:keys [key pinned?] :as opts} pid] items]
                (when (or (not toolbar?)
                          (not (set? pinned-items)) pinned?)
                  ^{:key key}
-                 [ui-item-renderer pid type opts])))
+                 [ui-item-renderer pid type opts]))]
 
             ;; manage plugin buttons
             (when toolbar?
-              (toolbar-plugins-manager-list updates-coming items))]])))))
+              [toolbar-plugins-manager-list updates-coming items])]])))))
 
 (hsx/defc hook-ui-fenced-code
   [block content {:keys [render edit] :as _opts}]
