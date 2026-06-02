@@ -10,13 +10,14 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.common.path :as path]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.frontend.asset :as db-asset]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+            [promesa.core :as p]))
 
 (defn- local-asset-file-name
   "Returns the local Asset file name represented by `asset`."
@@ -143,7 +144,7 @@
        (if asc? result (- result))))
    assets))
 
-(rum/defc orphan-assets-sort-header
+(hsx/defc orphan-assets-sort-header
   [label column sort-state set-sort-state!]
   (let [active? (= column (:column sort-state))
         asc? (:asc? sort-state)]
@@ -156,10 +157,10 @@
      (when active?
        (ui/icon (if asc? "arrow-up" "arrow-down") {:size 14}))]))
 
-(rum/defc orphan-assets-dialog-content
+(hsx/defc orphan-assets-dialog-content
   [assets all-file-paths *selected-file-paths]
-  (let [[selected-file-paths set-selected-file-paths!] (rum/use-state @*selected-file-paths)
-        [sort-state set-sort-state!] (rum/use-state {:column :time :asc? false})
+  (let [[selected-file-paths set-selected-file-paths!] (hooks/use-state @*selected-file-paths)
+        [sort-state set-sort-state!] (hooks/use-state {:column :time :asc? false})
         assets (sort-orphan-assets assets sort-state)
         set-selection! (fn [selection]
                          (reset! *selected-file-paths selection)

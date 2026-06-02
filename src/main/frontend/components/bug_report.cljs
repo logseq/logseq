@@ -5,9 +5,9 @@
             [frontend.handler.notification :as notification]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]
-            [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [reitit.frontend.easy :as rfe]))
 
 (defn paste-shortcut-label
   [mac?]
@@ -34,11 +34,11 @@
                   (map (fn [file] {:name (.-name file) :type (.-type file) :size (.-size file)}))
                   (conj))})))
 
-(rum/defc clipboard-data-inspector
+(hsx/defc clipboard-data-inspector
   "bug report tool for clipboard"
   []
-  (let [[result set-result!] (rum/use-state {})
-        [step set-step!] (rum/use-state 0)
+  (let [[result set-result!] (hooks/use-state {})
+        [step set-step!] (hooks/use-state 0)
         paste-handler! (fn [e]
                          (let [clipboard-data (.-clipboardData e)
                                result (parse-clipboard-data-transfer clipboard-data)
@@ -86,7 +86,7 @@
 
         [:pre.whitespace-pre-wrap [:code (js/JSON.stringify (clj->js result) nil 2)]]))]))
 
-(rum/defc bug-report-tool-route
+(hsx/defc bug-report-tool-route
   [route-match]
   (let [name (get-in route-match [:parameters :path :tool])]
     [:div.flex.flex-col ;; container
@@ -97,7 +97,7 @@
        (= name "clipboard-data-inspector")
        (clipboard-data-inspector))]))
 
-(rum/defc report-item-button
+(hsx/defc report-item-button
   [title description icon-name {:keys [on-click]}]
   [:a.cp__bug-report-item-button.flex.items-center.px-4.py-2.my-2.rounded-lg {:on-click on-click}
    [(ui/icon icon-name)
@@ -105,7 +105,7 @@
      [:div title]
      [:div.opacity-60 description]]]])
 
-(rum/defc bug-report
+(hsx/defc bug-report
   []
   [:div.flex.flex-col
    [:div.flex.flex-col.items-center

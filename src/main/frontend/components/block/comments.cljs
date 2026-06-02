@@ -20,7 +20,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- comment-time-title
   [created-at]
@@ -177,7 +177,7 @@
          #(.removeEventListener js/document "pointerdown" on-pointer-down true))))
    [active? (:block/uuid editor-block)]))
 
-(rum/defc comment-box
+(hsx/defc comment-box
   [{:keys [config comments-block comment-block initial-value placeholder on-submit on-cancel refocus-after-submit? focus-on-mount?]
     :or {refocus-after-submit? true
          focus-on-mount? false}}]
@@ -301,7 +301,7 @@
                                        (get comment-block :block/format :markdown)
                                        (:block/title comment-block)))))
 
-(rum/defc comment-row-view
+(hsx/defc comment-row-view
   [config comment-block *hide-block-refs? *show-query? {:keys [block-content-or-editor block-reactions]}]
   (let [[editing? set-editing!] (hooks/use-state false)
         {:keys [author avatar-src author-uuid body created-at]} (comments-model/comment-row comment-block)
@@ -391,7 +391,7 @@
                         (comments-handler/delete-comment! comment-block))}
            (shui/tabler-icon "trash" {:size 14})))])]))
 
-(rum/defc add-comment-button
+(hsx/defc add-comment-button
   [config comments-block {:keys [focus-on-mount?]}]
   (let [placeholder (t :block.comments/placeholder)]
     [:div.ls-comment-add
@@ -417,7 +417,7 @@
         (dom/add-class! el "is-comment-thread-hovered")
         (dom/remove-class! el "is-comment-thread-hovered")))))
 
-(rum/defc comment-thread-targets-view
+(hsx/defc comment-thread-targets-view
   [comments-area]
   (let [targets (comments-model/comment-thread-target-blocks comments-area)]
     (when (> (count targets) 1)
@@ -436,8 +436,8 @@
   [config block]
   (let [block-uuid (:block/uuid block)
         container-id (:container-id config)
-        editing-in-container? (state/sub-editing? [container-id block-uuid])
-        editing-in-unknown-container? (state/sub-editing? [:unknown-container block-uuid])]
+        editing-in-container? (state/use-sub-editing? [container-id block-uuid])
+        editing-in-unknown-container? (state/use-sub-editing? [:unknown-container block-uuid])]
     (boolean
      (and block-uuid
           (or editing-in-container?
@@ -471,7 +471,7 @@
                     (comments-handler/edit-comments-area-title! block (:container-id config)))}
        (comments-model/comments-area-title block)])))
 
-(rum/defc comments-area-view
+(hsx/defc comments-area-view
   [config block children collapsed? *hide-block-refs? *show-query? renderers {:keys [focus-editor? inline?]}]
   (let [*comments-list-ref (hooks/use-ref nil)
         [targets-open? set-targets-open!] (hooks/use-state false)
@@ -522,7 +522,6 @@
           [:div.ls-comments-list
            {:ref *comments-list-ref}
            (for [comment-block children]
-             (rum/with-key
-               (comment-row-view config comment-block *hide-block-refs? *show-query? renderers)
-               (str (:block/uuid comment-block))))])
+             ^{:key (str (:block/uuid comment-block))}
+             [comment-row-view config comment-block *hide-block-refs? *show-query? renderers])])
         (add-comment-button config block {:focus-on-mount? focus-editor?})])]))

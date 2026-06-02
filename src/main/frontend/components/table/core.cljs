@@ -5,9 +5,9 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]
-            [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [logseq.shui.ui :as shui]))
 
 (defn get-column-size
   "Returns the rendered pixel width for `column` using table resize state."
@@ -32,7 +32,7 @@
         (:block/created-at :block/updated-at) 160
         180))))
 
-(rum/defc lazy-table-cell
+(hsx/defc lazy-table-cell
   [cell-render-f cell-placeholder]
   (let [^js state (ui/useInView #js {:rootMargin "0px"})
         in-view? (.-inView state)]
@@ -107,7 +107,7 @@
           (.scrollIntoView next-cell #js {:inline "center"
                                           :block "nearest"}))))))
 
-(rum/defc table-cell-container
+(hsx/defc table-cell-container
   [cell-opts body]
   (let [*ref (hooks/use-ref nil)
         editable? (not (false? (:editable? cell-opts)))
@@ -119,9 +119,9 @@
             :on-click (fn [e]
                         (when (and editable?
                                    (not (dom/has-class? (.-target e) "jtrigger")))
-                          (activate-cell-editor (rum/deref *ref))))
+                          (activate-cell-editor (hooks/deref *ref))))
             :on-key-down (fn [e]
-                           (let [container (rum/deref *ref)]
+                           (let [container (hooks/deref *ref)]
                              (case (util/ekey e)
                                "Escape"
                                (do
@@ -154,7 +154,7 @@
                                nil))))
      body)))
 
-(rum/defc table-row-inner < rum/static
+(hsx/defc table-row-inner
   [{:keys [row-selected?] :as table} row props {:keys [show-add-property? scrolling?]}]
   (let [*ref (hooks/use-ref nil)
         pinned-columns (get-in table [:state :pinned-columns])
@@ -199,7 +199,7 @@
                :blockid (str (:block/uuid row))
                :on-pointer-down (fn [_e] (db-async/<get-block (state/get-current-repo) (:db/id row) {:children? false}))
                :on-key-down (fn [e]
-                              (let [container (rum/deref *ref)]
+                              (let [container (hooks/deref *ref)]
                                 (when (dom/has-class? container "selected")
                                   (case (util/ekey e)
                                     "Enter"

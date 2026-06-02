@@ -9,9 +9,9 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.db.frontend.property :as db-property]
-            [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [logseq.shui.ui :as shui]))
 
 (defn- build-asset-file-column
   "Builds the Asset table file preview column."
@@ -60,7 +60,7 @@
     (disj ids pdf-id)
     (conj ids pdf-id)))
 
-(rum/defc asset-pdf-title-cell
+(hsx/defc asset-pdf-title-cell
   [original-cell table row column style annotation-index set-expanded-pdf-ids!]
   (let [pdf-id (:db/id row)
         annotations (get-in annotation-index [:pdf-id->annotations pdf-id])
@@ -89,7 +89,7 @@
                        column style))
       (original-cell table row column style))))
 
-(rum/defc asset-annotation-title
+(hsx/defc asset-annotation-title
   [annotation]
   (ui/tooltip
    (shui/button

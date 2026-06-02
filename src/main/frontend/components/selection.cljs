@@ -9,7 +9,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn show-comment-action?
   [outliner? comment-targets]
@@ -17,12 +17,13 @@
    (and outliner?
         (seq comment-targets))))
 
-(rum/defc action-bar < rum/reactive
+(hsx/defc action-bar
   [& {:keys [on-cut on-copy selected-blocks hide-dots? button-border? view-parent outliner?]
       :or {on-cut #(editor-handler/cut-selection-blocks true)
            outliner? true}}]
-  (when-not (or (state/sub :search/mode)
-                (state/sub :ui/show-property-dialog?))
+  (let [search-mode (state/use-sub :search/mode)
+        property-dialog? (state/use-sub :ui/show-property-dialog?)]
+    (when-not (or search-mode property-dialog?)
     (let [selected-blocks (or (seq selected-blocks)
                               (seq (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids))))
           selected-blocks (map (fn [block] (if (number? block) (db/entity block) block)) selected-blocks)
@@ -103,4 +104,4 @@
                                                           ((state/get-component :selection/context-menu))])
                                                        {:content-props {:class "w-[280px] ls-context-menu-content"}
                                                         :as-dropdown? true})))
-           (ui/icon "dots" {:size 13}))))])))
+           (ui/icon "dots" {:size 13}))))]))))

@@ -7,18 +7,17 @@
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
+            [frontend.db.hooks :as db-hooks]
             [frontend.db.react :as react]
             [frontend.handler.editor :as editor-handler]
-            [frontend.mixins :as mixins]
             [frontend.state :as state]
+            [io.factorhouse.hsx.core :as hsx]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+            [promesa.core :as p]))
 
 (defn- refresh-view-data!
   [view-parent view table ids]
@@ -75,12 +74,14 @@
 
 (defn- sub-class-objects-data-changes
   [class-ident]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [class-id (:db/id (db/entity class-ident))]
-      (let [*version (atom 0)]
-        (react/q repo [:frontend.worker.react/objects class-id]
-                 {:query-fn (fn [_] (swap! *version inc))}
-                 nil)))))
+  (let [repo (state/get-current-repo)
+        class-id (:db/id (db/entity class-ident))
+        *version (hooks/use-memo #(atom 0) [repo class-id])
+        query-ref (when (and repo class-id)
+                    (react/q repo [:frontend.worker.react/objects class-id]
+                             {:query-fn (fn [_] (swap! *version inc))}
+                             nil))]
+    (db-hooks/use-query query-ref)))
 
 (defn- class-objects-view
   [*ref config class columns view-options]
@@ -99,7 +100,7 @@
                                                                 :class-schema? true
                                                                 :target (.-target e)}]))}))])
 
-(rum/defc regular-class-objects-inner < rum/static
+(hsx/defc regular-class-objects-inner
   [config class properties]
   (let [*ref (hooks/use-ref nil)
         db-ident (:db/ident class)
@@ -119,7 +120,7 @@
      *ref config class columns
      {:add-new-object! add-new-object!})))
 
-(rum/defc asset-class-objects-inner < rum/static
+(hsx/defc asset-class-objects-inner
   [config class properties]
   (let [*ref (hooks/use-ref nil)
         [expanded-pdf-ids set-expanded-pdf-ids!] (hooks/use-state #{})
@@ -190,24 +191,20 @@
         :additional-actions [asset-orphans/orphan-assets-action]
         :add-new-object! add-new-object!}))))
 
-(rum/defc class-objects-inner < rum/static
+(hsx/defc class-objects-inner
   [config class properties]
   (if (= (:db/ident class) :logseq.class/Asset)
     (asset-class-objects-inner config class properties)
     (regular-class-objects-inner config class properties)))
 
-(rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
-  [state class config]
+(hsx/defc class-objects
+  [class config]
   (when class
     (let [class (db/sub-block (:db/id class))
           asset? (= (:db/ident class) :logseq.class/Asset)
-          pdf-annotation-data-changes-version (when asset?
-                                                (some-> (sub-class-objects-data-changes :logseq.class/Pdf-annotation)
-                                                        rum/react))
-          asset-data-changes-version (when asset?
-                                       (some-> (sub-class-objects-data-changes :logseq.class/Asset)
-                                               rum/react))
-          config (cond-> (assoc config :container-id (:container-id state))
+          pdf-annotation-data-changes-version (sub-class-objects-data-changes :logseq.class/Pdf-annotation)
+          asset-data-changes-version (sub-class-objects-data-changes :logseq.class/Asset)
+          config (cond-> (assoc config :container-id (views/view-container-id config))
                    asset?
                    (assoc :asset-data-changes-version asset-data-changes-version
                           :pdf-annotation-data-changes-version pdf-annotation-data-changes-version))
@@ -229,7 +226,7 @@
     (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 {:container-id :unknown-container})
     block))
 
-(rum/defc property-related-objects-inner < rum/static
+(hsx/defc property-related-objects-inner
   [config property properties]
   (let [tags? (= :block/tags (:db/ident property))
         columns (views/build-columns config properties
@@ -247,11 +244,11 @@
                  :show-add-property? false})))
 
 ;; Show all nodes containing the given property
-(rum/defcs property-related-objects < rum/reactive db-mixins/query mixins/container-id
-  [state property config]
+(hsx/defc property-related-objects
+  [property config]
   (when property
     (let [property' (db/sub-block (:db/id property))
-          config (assoc config :container-id (:container-id state))
+          config (assoc config :container-id (views/view-container-id config))
           ;; Show tags to help differentiate property rows
           properties (if (= (:db/ident property) :block/tags)
                        [property']

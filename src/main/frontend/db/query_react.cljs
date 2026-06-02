@@ -43,7 +43,7 @@
                    result)
           result-transform-fn (:result-transform q)]
       (if-let [result-transform (if (keyword? result-transform-fn)
-                                  (get-in (state/sub-config) [:query/result-transforms result-transform-fn])
+                                  (get-in (state/get-config) [:query/result-transforms result-transform-fn])
                                   result-transform-fn)]
         (if-let [f (sci/eval-string (pr-str result-transform))]
           (try

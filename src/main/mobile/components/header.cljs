@@ -15,8 +15,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.state :as state]
+            [frontend.mobile.util :as mobile-util]            [frontend.state :as state]
             [frontend.ui :as ui]
             [goog.date :as gdate]
             [logseq.common.util :as common-util]
@@ -29,7 +28,7 @@
             [mobile.components.ui :as ui-component]
             [mobile.state :as mobile-state]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defonce native-top-bar-listener? (atom false))
 (defonce native-top-bar-listener-version (atom nil))
@@ -301,7 +300,7 @@
     :else
     (string/capitalize tab)))
 
-(rum/defc header-inner
+(hsx/defc header-inner
   [current-repo tab route-match flashcards-header]
   (let [route-name (get-in route-match [:data :name])
         route-view (get-in route-match [:data :view])
@@ -389,10 +388,10 @@
 
     [:<>]))
 
-(rum/defc header < rum/reactive
+(hsx/defc header
   [current-repo tab]
-  (let [route-match (state/sub :route-match)
-        flashcards-header (rum/react mobile-state/*flashcards-header)]
+  (let [route-match (state/use-sub :route-match)
+        [flashcards-header] (hooks/use-atom mobile-state/*flashcards-header)]
     (header-inner current-repo tab
                   route-match
                   flashcards-header)))
