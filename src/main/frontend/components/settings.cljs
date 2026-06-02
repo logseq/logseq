@@ -277,7 +277,7 @@
         {:key t
          :variant :secondary
          :class (when active? " border-primary border-[2px]")
-         :style {:width "4.4rem"}
+         :style {:width "5.75rem"}
          :on-click #(state/set-editor-font! {:type t})}
         [:span.flex.flex-col
          {:class (str "ls-font-" t)}
@@ -1446,15 +1446,18 @@
 
           (when label
             [:li.settings-menu-item
-             {:key      text
-              :data-id  (name text)
+             {:key      (name label)
+              :data-id  (name label)
               :class    (classnames [{:active (= label (first active))}])
               :on-click (fn []
                           (if (= label :plugins-setting)
                             (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])
                             (reset! *active [label (first active)])))}
 
-             [:a.flex.items-center.settings-menu-link icon [:strong text]]]))]]
+             [:button.flex.items-center.settings-menu-link
+              {:type "button"}
+              icon
+              [:strong text]]]))]]
 
       [:article
        [:header.cp__settings-header
