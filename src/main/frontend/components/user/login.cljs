@@ -100,7 +100,13 @@
 
 (hsx/defc login-form
   [{:keys [set-current-tab! set-session-user! set-error! on-session-callback]}]
-  (let [[loading? set-loading!] (hooks/use-state false)]
+  (let [[loading? set-loading!] (hooks/use-state false)
+        email-ref (hooks/use-ref nil)]
+    (hooks/use-effect!
+     (fn []
+       (let [timeout (js/setTimeout #(some-> (hooks/deref email-ref) (.focus)) 16)]
+         #(js/clearTimeout timeout)))
+     [])
     [:form.relative.flex.flex-col.justify-center.items-center.gap-4.w-full
      {:on-submit
       (fn [event]
@@ -125,7 +131,8 @@
                            (throw (js/Error. (str "Unsupported sign-in step: " next-step)))))))
               (.catch #(set-error! (auth-error-message %)))
               (.finally #(set-loading! false)))))}
-     (input-row {:id "email" :type "email" :name "email" :required true :auto-focus true
+     (input-row {:id "email" :type "text" :name "email" :required true :auto-focus true
+                 :ref email-ref
                  :auto-complete "username" :label (t :account/email)})
      (input-row {:id "password" :type "password" :name "password" :required true
                  :auto-complete "current-password" :label (t :account/password)})
