@@ -226,7 +226,9 @@ private struct LiquidTabs26View: View {
 
     @State private var selectedTab: LiquidTabsTabSelection = .content(0)
     @State private var searchPath = NavigationPath()
-    @State private var pendingSelectionRequestId = 0
+    @State private var deferredWebSelection: LiquidTabsTabSelection?
+    @State private var notifiedSelectionId: String?
+    @State private var suppressedSelectionId: String?
 
     private let maxMainTabs = 6
 
@@ -287,22 +289,46 @@ private struct LiquidTabs26View: View {
         }
     }
 
-    private func selectTab(_ selection: LiquidTabsTabSelection) {
-        pendingSelectionRequestId += 1
-        let requestId = pendingSelectionRequestId
-        let deferred = webBackedTabId(for: selection) != nil
-
+    private func selectTab(_ selection: LiquidTabsTabSelection, notify: Bool = true) {
         prepareForSelectionChange(to: selection)
 
-        let applySelection = {
-            guard pendingSelectionRequestId == requestId else { return }
-            selectedTab = selection
+        if let id = webBackedTabId(for: selection) {
+            deferredWebSelection = selection
+            if notify {
+                notifiedSelectionId = id
+                LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
+            } else {
+                suppressedSelectionId = id
+            }
+            return
         }
 
-        if deferred {
-            DispatchQueue.main.async(execute: applySelection)
+        deferredWebSelection = nil
+        if let id = store.tabId(for: selection), !notify {
+            suppressedSelectionId = id
+        }
+        selectedTab = selection
+    }
+
+    private func applyDeferredWebSelectionIfReady() {
+        guard store.pendingWebTabId == nil,
+              let selection = deferredWebSelection else {
+            return
+        }
+
+        deferredWebSelection = nil
+        selectedTab = selection
+    }
+
+    private func notifySelectedTabIfNeeded(_ id: String) {
+        store.selectedId = id
+
+        if notifiedSelectionId == id {
+            notifiedSelectionId = nil
+        } else if suppressedSelectionId == id {
+            suppressedSelectionId = nil
         } else {
-            applySelection()
+            LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
         }
     }
 
@@ -412,7 +438,6 @@ private struct LiquidTabs26View: View {
                 if store.pendingWebTabId != nil {
                     Color.logseqBackground
                         .ignoresSafeArea()
-                        .allowsHitTesting(false)
                         .zIndex(1)
                 }
             }
@@ -445,8 +470,7 @@ private struct LiquidTabs26View: View {
             }
             .onChange(of: selectedTab) { newValue in
                 if let id = store.tabId(for: newValue) {
-                    store.selectedId = id
-                    LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
+                    notifySelectedTabIfNeeded(id)
                 }
 
                 switch newValue {
@@ -468,11 +492,14 @@ private struct LiquidTabs26View: View {
                 if newSelection != selectedTab {
                     let isExternalSelectionChange = store.tabId(for: selectedTab) != id
                     if isExternalSelectionChange {
-                        selectTab(newSelection)
+                        selectTab(newSelection, notify: false)
                     } else {
                         selectedTab = newSelection
                     }
                 }
+            }
+            .onChange(of: store.pendingWebTabId) { _ in
+                applyDeferredWebSelectionIfReady()
             }
             .animation(nil, value: selectedTab)
         }
@@ -862,7 +889,9 @@ private struct LiquidTabs16View: View {
     let navController: UINavigationController
 
     @State private var searchPath = NavigationPath()
-    @State private var pendingSelectionRequestId = 0
+    @State private var deferredWebTabId: String?
+    @State private var notifiedSelectionId: String?
+    @State private var suppressedSelectionId: String?
 
     private var searchTextBinding: Binding<String> {
         Binding(
@@ -898,25 +927,47 @@ private struct LiquidTabs16View: View {
         }
     }
 
-    private func selectTab(_ id: String) {
-        guard id != store.selectedId else { return }
+    private func selectTab(_ id: String, notify: Bool = true) {
+        guard id != store.selectedId || deferredWebTabId != nil else { return }
 
-        pendingSelectionRequestId += 1
-        let requestId = pendingSelectionRequestId
         let deferred = webBackedTabId(id) != nil
 
         prepareForSelectionChange(to: id)
 
-        let applySelection = {
-            guard pendingSelectionRequestId == requestId else { return }
+        if deferred {
+            deferredWebTabId = id
+            if notify {
+                notifiedSelectionId = id
+                LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
+            } else {
+                suppressedSelectionId = id
+            }
+        } else {
+            deferredWebTabId = nil
+            if !notify {
+                suppressedSelectionId = id
+            }
             store.selectedId = id
-            LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
+        }
+    }
+
+    private func applyDeferredWebSelectionIfReady() {
+        guard store.pendingWebTabId == nil,
+              let id = deferredWebTabId else {
+            return
         }
 
-        if deferred {
-            DispatchQueue.main.async(execute: applySelection)
+        deferredWebTabId = nil
+        store.selectedId = id
+    }
+
+    private func notifySelectedTabIfNeeded(_ id: String) {
+        if notifiedSelectionId == id {
+            notifiedSelectionId = nil
+        } else if suppressedSelectionId == id {
+            suppressedSelectionId = nil
         } else {
-            applySelection()
+            LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
         }
     }
 
@@ -989,6 +1040,13 @@ private struct LiquidTabs16View: View {
                         } else {
                             store.suppressSearchNotifications = true
                         }
+
+                        if let id = newId {
+                            notifySelectedTabIfNeeded(id)
+                        }
+                    }
+                    .onChange(of: store.pendingWebTabId) { _ in
+                        applyDeferredWebSelectionIfReady()
                     }
                     .background {
                         TabReselectObserver(selectedId: {
@@ -1000,7 +1058,6 @@ private struct LiquidTabs16View: View {
                     if store.pendingWebTabId != nil {
                         Color.logseqBackground
                             .ignoresSafeArea()
-                            .allowsHitTesting(false)
                             .zIndex(1)
                     }
                 }
