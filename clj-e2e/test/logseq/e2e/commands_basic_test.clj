@@ -18,26 +18,31 @@
   fixtures/new-logseq-page
   fixtures/validate-graph)
 
+(def ^:private date-picker-day-selector
+  ".ui__calendar [role='gridcell'] button, .ui__calendar button[role='gridcell']")
+
 (defn- focused-date-picker-day
   []
   (json/read-value
    (w/eval-js
-    "(() => {
+    (format
+     "(() => {
        const active = document.activeElement;
-       const dayButton = active?.closest?.('.ui__calendar button[role=\"gridcell\"]');
+       const dayButton = active?.closest?.(%s);
        return JSON.stringify({
          focused: !!dayButton,
          text: dayButton?.textContent ?? null,
          label: dayButton?.getAttribute('aria-label') ?? dayButton?.textContent ?? null
        });
-     })()")
+     })()"
+     (json/write-value-as-string date-picker-day-selector)))
    json/keyword-keys-object-mapper))
 
 (defn- assert-date-picker-keyboard-navigation
   [command]
   (b/new-block (str command " keyboard test"))
   (util/input-command command)
-  (w/wait-for ".ui__calendar button[role='gridcell']")
+  (w/wait-for date-picker-day-selector)
   (let [initial (focused-date-picker-day)]
     (is (:focused initial)
         (str command " should focus a calendar day when opened."))

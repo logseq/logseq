@@ -228,6 +228,9 @@
         throw new Error('Expected virtualized list scroller');
       }
 
+      scrollContainer.scrollTop = 0;
+      await delay(500);
+
       const appWrapper = document.querySelector('#app-container-wrapper');
       appWrapper?.dispatchEvent(new PointerEvent('pointerdown', {
         bubbles: true,
