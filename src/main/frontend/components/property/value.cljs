@@ -71,6 +71,12 @@
     (keep value->db-id value)
     (some-> value value->db-id vector)))
 
+(defn- property-value-popup-blocked-link?
+  [target]
+  (when-let [node (some-> target (.closest "a"))]
+    (not (or (d/has-class? node "page-ref")
+             (d/has-class? node "tag")))))
+
 (hsx/defc property-empty-btn-value
   [property & opts]
   (let [text (if (= (:db/ident property) :logseq.property/description)
@@ -1395,14 +1401,15 @@
                            (property-value-select-node block property select-opts' (assoc opts :target target)))])
         trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
         show-popup! (fn [target]
-                      (shui/popup-show! target (fn [] (popup-content target))
-                                        (cond->
-                                         {:align "start"
-                                          :as-dropdown? true
-                                          :auto-focus? (not (false? popup-auto-focus-trigger?))
-                                          :trigger-id trigger-id}
-                                          (some? popup-focus-trigger?)
-                                          (assoc :focus-trigger? popup-focus-trigger?))))]
+                      (when-let [anchor (hooks/deref *el)]
+                        (shui/popup-show! anchor (fn [] (popup-content target))
+                                          (cond->
+                                           {:align "start"
+                                            :as-dropdown? true
+                                            :auto-focus? (not (false? popup-auto-focus-trigger?))
+                                            :trigger-id trigger-id}
+                                            (some? popup-focus-trigger?)
+                                            (assoc :focus-trigger? popup-focus-trigger?)))))]
     (if editing?
       (popup-content nil)
       (let [show! (fn [e]
@@ -1412,10 +1419,7 @@
                       (when-not (or config/publishing?
                                     (util/shift-key? e)
                                     (util/meta-key? e)
-                                    (util/link? target)
-                                    (when-let [node (.closest target "a")]
-                                      (not (or (d/has-class? node "page-ref")
-                                               (d/has-class? node "tag")))))
+                                    (property-value-popup-blocked-link? target))
                         (show-popup! target))))]
         (shui/trigger-as
          (if (:other-position? opts) :div.jtrigger :div.jtrigger.flex.flex-1.w-full.cursor-pointer)
@@ -2027,7 +2031,8 @@
                          (select-cp {:content-props content-props} target))
             show-popup! (fn [^js e]
                           (let [target (.-target e)]
-                            (when-not (or (util/link? target) (.closest target "a") config/publishing?)
+                            (when-not (or config/publishing?
+                                          (property-value-popup-blocked-link? target))
                               (shui/popup-show! (hooks/deref *el)
                                                 (fn [opts]
                                                   (content-fn opts target))
