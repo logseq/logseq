@@ -15,7 +15,6 @@
         calendar-opts* (atom nil)
         inserted* (atom [])]
     (with-redefs [state/state app-state*
-                  state/sub (fn [k] (get @app-state* k))
                   state/set-state! (fn [k v & _] (swap! app-state* assoc k v) nil)
                   state/clear-editor-action! (fn [] nil)
                   date/js-date->journal-title (constantly "May 20th, 2026")

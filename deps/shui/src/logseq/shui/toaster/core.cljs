@@ -1,9 +1,8 @@
 (ns logseq.shui.toaster.core
   (:require [cljs-bean.core :as bean]
-            [daiquiri.interpreter :refer [interpret]]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]
-            [logseq.shui.util :as util]
-            [rum.core :as rum]))
+            [logseq.shui.util :as util]))
 
 (defonce ^:private Toaster (util/lsui-wrap "Toaster"))
 (defonce ^:private *toast (atom nil))
@@ -20,8 +19,7 @@
            (toast-fn! s)))
        dismiss!])))
 
-(rum/defc install-toaster
-  < rum/static
+(hsx/defc install-toaster
   []
   (let [^js js-toast (js/window.LSUI.useToast)]
     (hooks/use-effect!
@@ -46,7 +44,7 @@
   (reduce (fn [config k]
             (let [v (get config k)
                   v (if (fn? v) (apply v args) v)]
-              (if (vector? v) (assoc config k (interpret v)) config)))
+              (if (vector? v) (assoc config k (hsx/create-element v)) config)))
           config ks))
 
 (defn toast!

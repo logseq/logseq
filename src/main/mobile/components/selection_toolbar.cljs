@@ -10,7 +10,7 @@
             [frontend.state :as state]
             [frontend.util.url :as url-util]
             [logseq.shui.hooks :as hooks]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- dismiss-action-bar!
   []
@@ -103,7 +103,7 @@
                    (state/clear-selection!)
                    (close!))}]))))
 
-(rum/defc action-bar
+(hsx/defc action-bar
   []
   (let [actions (selection-actions)
         action-ids (mapv :id actions)

@@ -140,4 +140,4 @@
 (defn listen!
   []
   (listen-to-electron!)
-  (electron-locale/push-locale! (state/sub :preferred-language)))
+  (electron-locale/push-locale! (state/get-state :preferred-language)))

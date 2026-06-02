@@ -9,10 +9,11 @@
             [frontend.ui :as ui]
             [lambdaisland.glogi :as log]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defonce debug-state (:rtc/state @state/state))
 
@@ -22,32 +23,25 @@
    (state/<invoke-db-worker :thread-api/rtc-stop)
    (reset! debug-state nil)))
 
-(rum/defcs ^:large-vars/cleanup-todo rtc-debug-ui < rum/reactive
-  (rum/local nil ::logs)
-  (rum/local nil ::sub-log-canceler)
-  (rum/local nil ::keys-state)
-  {:will-mount (fn [state]
-                 (let [canceler
-                       (c.m/run-task ::sub-logs
-                         (m/reduce
-                          (fn [logs log]
-                            (let [logs* (if log
-                                          (take 10 (conj logs log))
-                                          logs)]
-                              (reset! (get state ::logs) logs*)
-                              logs*))
-                          nil rtc-flows/rtc-log-flow))]
-                   (reset! (get state ::sub-log-canceler) canceler)
-                   state))
-   :will-unmount (fn [state]
-                   (when-let [canceler (some-> (get state ::sub-log-canceler) deref)]
-                     (canceler))
-                   state)}
-  [state]
-  (let [debug-state* (rum/react debug-state)
-        rtc-logs @(get state ::logs)
+(hsx/defc ^:large-vars/cleanup-todo rtc-debug-ui
+  []
+  (let [[debug-state*] (hooks/use-atom debug-state)
+        [rtc-logs set-rtc-logs!] (hooks/use-state nil)
+        [keys-state set-keys-state!] (hooks/use-state nil)
         rtc-state (:rtc-state debug-state*)
         rtc-lock (:rtc-lock debug-state*)]
+    (hooks/use-effect!
+     (fn []
+       (c.m/run-task ::sub-logs
+         (m/reduce
+          (fn [logs log]
+            (let [logs* (if log
+                          (take 10 (conj logs log))
+                          logs)]
+              (set-rtc-logs! logs*)
+              logs*))
+          nil rtc-flows/rtc-log-flow)))
+     [])
     [:div
      {:on-click (fn [^js e]
                   (when-let [^js btn (.closest (.-target e) ".ui__button")]
@@ -138,9 +132,7 @@
                (shui/tabler-icon "player-stop") "stop")]])
 
      [:hr.my-2]
-     (let [*keys-state (get state ::keys-state)
-           keys-state @*keys-state]
-       [:div
+     [:div
         [:div.pb-2.flex.flex-row.items-center.gap-2
          (shui/button
           {:size :sm
@@ -149,7 +141,7 @@
                          (p/let [user-rsa-key-pair (state/<invoke-db-worker
                                                     :thread-api/get-user-rsa-key-pair
                                                     (state/get-auth-id-token) user-uuid)]
-                           (reset! *keys-state user-rsa-key-pair))))}
+                           (set-keys-state! user-rsa-key-pair))))}
           (shui/tabler-icon "refresh") "keys-state")
          (shui/button
           {:size :sm
@@ -163,4 +155,4 @@
          [:pre.select-text
           (-> keys-state
               (fipp/pprint {:width 20})
-              with-out-str)]]])]))
+              with-out-str)]]]]))

@@ -7,9 +7,9 @@
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc trigger-table []
+(hsx/defc trigger-table []
   [:table.classic-table.w-full
    [:thead
     [:tr
@@ -76,7 +76,7 @@
               [:td.text-right (get rendered name)]])
            list)]]))
 
-(rum/defc shortcut-page
+(hsx/defc shortcut-page
   [{:keys [show-title?]
     :or {show-title? true}}]
   [:div.cp__shortcut-page.px-2
