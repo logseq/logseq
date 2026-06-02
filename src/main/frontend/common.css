@@ -647,10 +647,6 @@ html[data-theme='dark'] .keyboard-shortcut > code {
   0 0 1px 1px rgba(255, 255, 255, 0.2);
 }
 
-.ui__modal-panel {
-  border-radius: 8px;
-}
-
 .overflow-y-scroll {
   overflow-y: scroll;
 }

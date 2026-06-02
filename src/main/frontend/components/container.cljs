@@ -45,7 +45,7 @@
   (when-let [^js element (gdom/getElement "main-content-container")]
     (let [active-element (.-activeElement js/document)]
       (when (and (not (state/editing?))
-                 (not (state/modal-opened?))
+                 (not (state/dialog-opened?))
                  (or (nil? active-element)
                      (identical? active-element (.-body js/document))))
         (.focus element #js {:preventScroll true})))))
@@ -171,7 +171,7 @@
                 (util/meta-key? e)
                 (state/get-edit-input-id)
                 (some-> (.-target e) util/input?)
-                (= (shui-dialog/get-last-modal-id) :property-dialog)
+                (= (shui-dialog/get-last-dialog-id) :property-dialog)
                 (some-> (.-target e) (.closest ".ls-block"))
                 (some-> (.-target e) (.closest "[data-keep-selection]")))
     (if (and esc? (editor-handler/popup-exists? :selection-action-bar))
@@ -429,13 +429,13 @@
        (let [keydown-handler (fn [e]
                                (cond
                                  (= 27 (.-keyCode e))
-                                 (if (and (state/modal-opened?)
+                                 (if (and (state/dialog-opened?)
                                           (not
                                            (and
                                             ;; FIXME: this does not work on CI tests
                                             util/node-test?
                                             (state/editing?))))
-                                   (state/close-modal!)
+                                   (state/close-dialog!)
                                    (hide-context-menu-and-clear-selection e {:esc? true})))
                                (state/set-ui-last-key-code! (.-key e)))
              keyup-handler (fn [_e]
@@ -529,10 +529,8 @@
 
        [:div#app-single-container]]
 
-      (ui/notification)
-
       (shui-toaster/install-toaster)
-      (shui-dialog/install-modals)
+      (shui-dialog/install-dialogs)
       (shui-popup/install-popups)
 
       (custom-context-menu)
