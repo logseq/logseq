@@ -228,8 +228,10 @@
         throw new Error('Expected virtualized list scroller');
       }
 
-      scrollContainer.scrollTop = 0;
-      await delay(500);
+      if (!blockByTitle(blockTitles[0])) {
+        scrollContainer.scrollTop = 0;
+        await delay(500);
+      }
 
       const appWrapper = document.querySelector('#app-container-wrapper');
       appWrapper?.dispatchEvent(new PointerEvent('pointerdown', {
@@ -695,14 +697,22 @@
 
 (deftest copy-blocks-selected-while-scrolling-journals-list
   (testing "copy includes blocks selected across virtualized journals while scrolling"
-    (let [journals (mapv (fn [idx]
+    (let [later-journal-blocks (mapv #(format "journals selection prelude block %03d %s"
+                                               %
+                                               (string/join " " (repeat 30 "wrapped-content")))
+                                     (range 1 101))
+          journals (mapv (fn [idx]
                            {:date (format "2026-02-%02dT12:00:00" idx)
-                            :blocks (mapv #(format "journal-%02d-scroll-copy-block-%02d" idx %)
+                            :blocks (mapv #(format "journal %02d scroll copy block %02d" idx %)
                                           (range 1 31))})
                          (range 1 5))
           blocks (mapcat :blocks (reverse journals))]
+      (seed-journals!
+       [{:date "2026-03-21T12:00:00"
+         :blocks later-journal-blocks}])
       (seed-journals! journals)
       (w/wait-for "#journals [data-virtuoso-scroller]")
+      (scroll-journals-to-text! (first blocks))
       (is (pos? (count (select-block-titles-while-scrolling! blocks))))
       (b/copy)
       (let [clipboard (w/clipboard-text)]
