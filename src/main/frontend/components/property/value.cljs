@@ -350,7 +350,7 @@
        (create-page-f journal {:redirect? false})))))
 
 (def ^:private selected-day-selector
-  "[aria-selected=true].rdp-day_button, [aria-selected=true] .rdp-day_button, .rdp-day_button[aria-selected=true], .rdp-day_button[tabindex='0']")
+  "[role='gridcell'][aria-selected='true'] button, [role='gridcell'] button[tabindex='0']")
 
 (defn- calendar-default-month
   [^js d]

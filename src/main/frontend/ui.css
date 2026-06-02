@@ -379,7 +379,6 @@ input[type='range'] {
 
 .ls-editor-date-picker {
   box-sizing: border-box;
-  width: 560px;
   max-width: calc(100vw - 32px);
 
   .ls-nlp-calendar,
@@ -394,9 +393,5 @@ input[type='range'] {
 .ls-property-date-picker {
   .ui__calendar {
     box-sizing: border-box;
-    flex: 0 0 560px;
-    width: 560px !important;
-    min-width: 560px;
-    max-width: 560px;
   }
 }

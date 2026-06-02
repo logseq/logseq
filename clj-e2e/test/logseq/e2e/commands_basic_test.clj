@@ -112,6 +112,52 @@
      })()")
    json/keyword-keys-object-mapper))
 
+(defn- focused-date-picker-day
+  []
+  (json/read-value
+   (w/eval-js
+    "(() => {
+       const active = document.activeElement;
+       const dayButton = active?.closest?.('.ui__calendar [role=\"gridcell\"] button');
+       return JSON.stringify({
+         focused: !!dayButton,
+         text: dayButton?.textContent ?? null,
+         label: dayButton?.getAttribute('aria-label') ?? null
+       });
+     })()")
+   json/keyword-keys-object-mapper))
+
+(defn- assert-date-picker-keyboard-navigation
+  [command]
+  (b/new-block (str command " keyboard test"))
+  (util/input-command command)
+  (w/wait-for ".ui__calendar [role='gridcell'] button")
+  (let [initial (focused-date-picker-day)]
+    (is (:focused initial)
+        (str command " should focus a calendar day when opened."))
+    (k/arrow-right)
+    (let [right (focused-date-picker-day)]
+      (is (:focused right)
+          (str command " should keep calendar focus after ArrowRight."))
+      (is (not= (:label initial) (:label right))
+          (str command " should move focused date with ArrowRight."))
+      (k/arrow-left)
+      (is (= (:label initial) (:label (focused-date-picker-day)))
+          (str command " should move focused date back with ArrowLeft.")))
+    (k/arrow-down)
+    (let [down (focused-date-picker-day)]
+      (is (:focused down)
+          (str command " should keep calendar focus after ArrowDown."))
+      (is (not= (:label initial) (:label down))
+          (str command " should move focused date with ArrowDown."))
+      (k/arrow-up)
+      (is (= (:label initial) (:label (focused-date-picker-day)))
+          (str command " should move focused date back with ArrowUp.")))
+    (k/enter)
+    (if (= command "date picker")
+      (w/wait-for-not-visible ".ui__calendar")
+      (assert/assert-is-visible ".ui__calendar"))))
+
 (deftest command-trigger-test
   (testing "/command trigger popup"
     (b/new-block "b2")
@@ -330,6 +376,12 @@
           "Calendar should stay compact.")
       (is (<= (abs (- (:width monthPanel) (- (:width calendar) 24))) 2)
           "Month panel should align with the calendar width."))))
+
+(deftest date-command-keyboard-navigation-test
+  (testing "date commands focus the calendar and support keyboard navigation"
+    (doseq [command ["date picker" "Scheduled" "Deadline"]]
+      (fixtures/create-page)
+      (assert-date-picker-keyboard-navigation command))))
 
 ;; TODO: java "MMMM d, yyyy" vs js "MMM do, yyyy"
 (deftest date-time-test

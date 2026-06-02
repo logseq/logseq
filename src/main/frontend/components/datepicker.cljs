@@ -11,6 +11,18 @@
             [logseq.shui.hooks :as hooks]
             [io.factorhouse.hsx.core :as hsx]))
 
+(def ^:private focused-day-selector
+  "[role='gridcell'][aria-selected='true'] button, [role='gridcell'] button[tabindex='0']")
+
+(defn- focus-calendar-day!
+  [root-id remaining]
+  (when (pos? remaining)
+    (if-let [day (some-> root-id
+                         (js/document.getElementById)
+                         (.querySelector focused-day-selector))]
+      (.focus day)
+      (js/setTimeout #(focus-calendar-day! root-id (dec remaining)) 16))))
+
 (hsx/defc date-picker
   [dom-id format]
   (hooks/use-effect!
@@ -33,6 +45,11 @@
                                (reset! commands/*current-command nil)
                                (state/set-state! :date-picker/date d))))
                          [dom-id format selected-date])]
+    (hooks/use-effect!
+     (fn []
+       (js/setTimeout #(focus-calendar-day! "date-time-picker" 10) 16)
+       nil)
+     [selected-date])
     (hooks/use-window-keydown
      (fn [^js e]
        (when (and (= "Enter" (.-key e))
