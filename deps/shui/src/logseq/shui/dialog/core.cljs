@@ -126,10 +126,12 @@
 (hsx/defc modal-inner
   [config]
   (let [{:keys [id title description content footer on-open-change align open?
-                auto-width? close-btn? root-props content-props]} config
+                auto-width? close-btn? root-props content-props
+                onEscapeKeyDown onPointerDownOutside]} config
         props (dissoc config
                       :id :title :description :content :footer :auto-width? :close-btn?
-                      :close :align :on-open-change :open? :root-props :content-props)
+                      :close :align :on-open-change :open? :root-props :content-props
+                      :onEscapeKeyDown :onPointerDownOutside)
         props (assoc-in props [:overlay-props :data-align] (name (or align :center)))]
 
     (hooks/use-effect!
@@ -142,11 +144,29 @@
      (merge root-props
             {:key (str "modal-" id)
              :open open?
-             :on-open-change (fn [v]
-                               (let [set-open! #(update-modal! id :open? %)]
-                                 (if (fn? on-open-change)
-                                   (on-open-change {:value v :set-open! set-open!})
-                                   (set-open! v))))})
+             :on-open-change (fn [v e]
+                               (let [set-open! #(update-modal! id :open? %)
+                                     reason (some-> e (.-reason))
+                                     event (some-> e (.-event))
+                                     escape-handler (or (:onEscapeKeyDown content-props)
+                                                        onEscapeKeyDown)
+                                     pointer-handler (or (:onPointerDownOutside content-props)
+                                                         onPointerDownOutside)]
+                                 (when (false? v)
+                                   (case reason
+                                     "escape-key"
+                                     (when (fn? escape-handler)
+                                       (escape-handler event))
+
+                                     "outside-press"
+                                     (when (fn? pointer-handler)
+                                       (pointer-handler event))
+
+                                     nil))
+                                 (when-not (some-> event (.-defaultPrevented))
+                                   (if (fn? on-open-change)
+                                     (on-open-change {:value v :set-open! set-open!})
+                                     (set-open! v)))))})
      (let [onPointerDownOutside (:onPointerDownOutside content-props)
            onEscapeKeyDown (:onEscapeKeyDown content-props)
            handle-key-escape! (fn [^js e]
@@ -159,9 +179,10 @@
                                             (onPointerDownOutside e))
                                           (when-not (some-> (.-target e) (.closest ".ui__dialog-overlay"))
                                             (.preventDefault e)))
-           content-props (assoc content-props
-                           :onEscapeKeyDown handle-key-escape!
-                           :onPointerDownOutside handle-pointer-down-outside!)]
+           content-props (-> content-props
+                             (dissoc :onEscapeKeyDown :onPointerDownOutside)
+                             (assoc :onEscapeKeyDown handle-key-escape!
+                                    :onPointerDownOutside handle-pointer-down-outside!))]
        (dialog-content
         (cond-> (merge props content-props)
           auto-width? (assoc :data-auto-width true)
