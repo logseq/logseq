@@ -228,8 +228,28 @@
         throw new Error('Expected virtualized list scroller');
       }
 
+      const appWrapper = document.querySelector('#app-container-wrapper');
+      appWrapper?.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 1,
+        clientY: 1
+      }));
+      appWrapper?.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 0,
+        clientX: 1,
+        clientY: 1
+      }));
+      await nextFrame();
+
       const firstBlock = await scrollToBlock(blockTitles[0]);
       const firstContent = firstBlock.querySelector('.block-content');
+      await delay(500);
       const firstRect = firstContent.getBoundingClientRect();
       const clientX = Math.floor(firstRect.left + 24);
       const clientY = Math.floor(firstRect.top + Math.min(20, firstRect.height / 2));
@@ -249,14 +269,22 @@
       for (const title of blockTitles.slice(1)) {
         const block = await scrollToBlock(title);
         const target = block.querySelector('.block-main-container');
+        const targetRect = target.getBoundingClientRect();
+        const targetX = Math.floor(targetRect.left + 24);
+        const targetY = Math.floor(targetRect.top + Math.min(20, targetRect.height / 2));
+        const targetPointer = {
+          ...pointerInit,
+          clientX: targetX,
+          clientY: targetY
+        };
         if (previousTarget.isConnected) {
           previousTarget.dispatchEvent(new MouseEvent('mouseout', {
-            ...pointerInit,
+            ...targetPointer,
             relatedTarget: target
           }));
         }
         target.dispatchEvent(new MouseEvent('mouseover', {
-          ...pointerInit,
+          ...targetPointer,
           relatedTarget: previousTarget
         }));
         previousTarget = target;
