@@ -51,7 +51,7 @@
                 (map-indexed (fn [i seg]
                                (if (even? i)
                                  [:span seg]
-                                 [:mark.p-0.rounded-none seg]))
+                                 [:mark {:style {:padding 0 :border-radius 0}} seg]))
                              segs))
           [:span normal-text])))))
 
