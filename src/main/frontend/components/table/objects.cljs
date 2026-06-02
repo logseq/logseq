@@ -125,9 +125,9 @@
   (let [*ref (hooks/use-ref nil)
         [expanded-pdf-ids set-expanded-pdf-ids!] (hooks/use-state #{})
         [annotation-index set-annotation-index!] (hooks/use-state nil)
-        asset-data-changes-version (:asset-data-changes-version config)
+        asset-data-changes-version (sub-class-objects-data-changes :logseq.class/Asset)
         asset-data-changes-version (hooks/use-debounced-value asset-data-changes-version 100)
-        pdf-annotation-data-changes-version (:pdf-annotation-data-changes-version config)
+        pdf-annotation-data-changes-version (sub-class-objects-data-changes :logseq.class/Pdf-annotation)
         pdf-annotation-data-changes-version (hooks/use-debounced-value pdf-annotation-data-changes-version 100)
         table-data-transform (hooks/use-callback
                               (fn [rows]
@@ -201,13 +201,7 @@
   [class config]
   (when class
     (let [class (db/sub-block (:db/id class))
-          asset? (= (:db/ident class) :logseq.class/Asset)
-          pdf-annotation-data-changes-version (sub-class-objects-data-changes :logseq.class/Pdf-annotation)
-          asset-data-changes-version (sub-class-objects-data-changes :logseq.class/Asset)
-          config (cond-> (assoc config :container-id (views/view-container-id config))
-                   asset?
-                   (assoc :asset-data-changes-version asset-data-changes-version
-                          :pdf-annotation-data-changes-version pdf-annotation-data-changes-version))
+          config (assoc config :container-id (views/view-container-id config))
           properties (outliner-property/get-class-properties class)]
       [:div.ml-1
        (class-objects-inner config class properties)])))
