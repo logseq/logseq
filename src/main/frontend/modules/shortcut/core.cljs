@@ -322,6 +322,11 @@
       :else
       (get code->key-name-map code))))
 
+(defn- event-code
+  [e]
+  (or (gobj/getValueByKeys e "event_" "code")
+      (gobj/get e "code")))
+
 (defn- resolve-key-name
   "Resolve the key name from a KeyEvent. Tries key-names (keyCode) first,
    then falls back to code->key-name (native KeyboardEvent.code) when a
@@ -329,7 +334,7 @@
   [e]
   (or (get key-names (str (.-keyCode e)))
       (when (or (.-altKey e) (.-ctrlKey e) (.-metaKey e))
-        (some-> (gobj/getValueByKeys e "event_" "code")
+        (some-> (event-code e)
                 code->key-name))))
 
 (defn- name-with-meta [e resolved-name]

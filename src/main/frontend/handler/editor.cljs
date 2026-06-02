@@ -75,6 +75,11 @@
 (def clear-selection! state/clear-selection!)
 (def edit-block! block-handler/edit-block!)
 
+(defn- event-code
+  [e]
+  (or (gobj/getValueByKeys e "event_" "code")
+      (gobj/get e "code")))
+
 (defn- outliner-save-block!
   [block & {:as opts}]
   (outliner-op/save-block! block opts))
@@ -3040,7 +3045,7 @@
              (gobj/get e "key")
              (if (mobile-util/native-android?)
                (gobj/get e "key")
-               (gobj/getValueByKeys e "event_" "code"))
+               (event-code e))
                 ;; #3440
               (util/goog-event-is-composing? e true)])
             comment-editor? (:comment-editor? (last (state/get-editor-args)))]
