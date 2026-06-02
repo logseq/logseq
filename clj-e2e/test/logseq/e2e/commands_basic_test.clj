@@ -18,26 +18,31 @@
   fixtures/new-logseq-page
   fixtures/validate-graph)
 
+(def ^:private date-picker-day-selector
+  ".ui__calendar [role='gridcell'] button, .ui__calendar button[role='gridcell']")
+
 (defn- focused-date-picker-day
   []
   (json/read-value
    (w/eval-js
-    "(() => {
+    (format
+     "(() => {
        const active = document.activeElement;
-       const dayButton = active?.closest?.('.ui__calendar [role=\"gridcell\"] button');
+       const dayButton = active?.closest?.(%s);
        return JSON.stringify({
          focused: !!dayButton,
          text: dayButton?.textContent ?? null,
-         label: dayButton?.getAttribute('aria-label') ?? null
+         label: dayButton?.getAttribute('aria-label') ?? dayButton?.textContent ?? null
        });
-     })()")
+     })()"
+     (json/write-value-as-string date-picker-day-selector)))
    json/keyword-keys-object-mapper))
 
 (defn- assert-date-picker-keyboard-navigation
   [command]
   (b/new-block (str command " keyboard test"))
   (util/input-command command)
-  (w/wait-for ".ui__calendar [role='gridcell'] button")
+  (w/wait-for date-picker-day-selector)
   (let [initial (focused-date-picker-day)]
     (is (:focused initial)
         (str command " should focus a calendar day when opened."))
@@ -224,10 +229,6 @@
         (util/input-command command)
         (k/enter)
         (assert/assert-editor-mode)
-        ;; FIXME: cannot exit edit by k/esc???
-        ;; (util/exit-edit)
-        (k/esc)
-        (b/new-block "temp fix")
         (util/exit-edit)
         (is (= command (util/get-text ".property-k")))
         (is (= "Today" (util/get-text ".ls-datetime a.page-ref")))))))
@@ -301,7 +302,7 @@
       (w/click btn)
       (util/input "page reference")
       (w/click "a.menu-link:has-text('page reference')")
-      (w/click "a.menu-link:has-text('foo')")
+      (w/click (first (w/query "a.menu-link:has-text('foo')")))
       (assert/assert-is-visible "div:text('Live query (2)')"))))
 
 (deftest advanced-query-test
