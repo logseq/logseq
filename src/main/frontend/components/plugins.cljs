@@ -1490,37 +1490,38 @@
 (hsx/defc hook-ui-items
   "type of :toolbar, :pagebar"
   [type]
-  (when (state/use-sub [:plugin/installed-ui-items])
-    (let [toolbar?     (= :toolbar type)
-          pinned-items (state/use-sub [:plugin/preferences :pinnedToolbarItems])
-          pinned-items (and (sequential? pinned-items) (into #{} pinned-items))
-          items        (state/get-plugins-ui-items-with-type type)
-          items        (sort-by #(:key (second %)) items)]
+  (let [installed-ui-items (state/use-sub [:plugin/installed-ui-items])
+        pinned-items       (state/use-sub [:plugin/preferences :pinnedToolbarItems])
+        updates-coming     (state/use-sub :plugin/updates-coming)
+        toolbar?           (= :toolbar type)
+        pinned-items       (and (sequential? pinned-items) (into #{} pinned-items))]
+    (when installed-ui-items
+      (let [items (state/get-plugins-ui-items-with-type type)
+            items (sort-by #(:key (second %)) items)]
 
-      (when-let [items (and (seq items)
-                            (if toolbar?
-                              (map #(assoc-in % [1 :pinned?]
-                                              (let [[_ {:keys [key]} pid] %
-                                                    pkey (str (name pid) ":" key)]
-                                                (contains? pinned-items pkey)))
-                                   items)
-                              items))]
+        (when-let [items (and (seq items)
+                              (if toolbar?
+                                (map #(assoc-in % [1 :pinned?]
+                                                (let [[_ {:keys [key]} pid] %
+                                                      pkey (str (name pid) ":" key)]
+                                                  (contains? pinned-items pkey)))
+                                     items)
+                                items))]
 
-        [:div.ui-items-container
-         {:data-type (name type)}
+          [:div.ui-items-container
+           {:data-type (name type)}
 
-         [:<>
-          (header-ui-items-list-wrap
-           (for [[_ {:keys [key pinned?] :as opts} pid] items]
-             (when (or (not toolbar?)
-                       (not (set? pinned-items)) pinned?)
-               ^{:key key}
-               [ui-item-renderer pid type opts])))
+           [:<>
+            (header-ui-items-list-wrap
+             (for [[_ {:keys [key pinned?] :as opts} pid] items]
+               (when (or (not toolbar?)
+                         (not (set? pinned-items)) pinned?)
+                 ^{:key key}
+                 [ui-item-renderer pid type opts])))
 
-          ;; manage plugin buttons
-          (when toolbar?
-            (let [updates-coming (state/use-sub :plugin/updates-coming)]
-              (toolbar-plugins-manager-list updates-coming items)))]]))))
+            ;; manage plugin buttons
+            (when toolbar?
+              (toolbar-plugins-manager-list updates-coming items))]])))))
 
 (hsx/defc hook-ui-fenced-code
   [block content {:keys [render edit] :as _opts}]
