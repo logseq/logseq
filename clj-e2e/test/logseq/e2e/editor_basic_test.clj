@@ -193,6 +193,10 @@
   (w/refresh)
   (assert/assert-graph-loaded?))
 
+(defn- js-json
+  [script]
+  (json/read-value (w/eval-js script) json/keyword-keys-object-mapper))
+
 (defn- select-block-titles-while-scrolling!
   [blocks]
   (w/eval-js
@@ -378,6 +382,88 @@
     })();"
     (json/write-value-as-string journals))))
 
+(defn- seed-journals-with-linked-ref!
+  []
+  (w/eval-js
+   "(async () => {
+      const target = await window.logseq.api.create_journal_page('2026-03-01T00:00:00.000Z');
+      const source = await window.logseq.api.create_journal_page('2026-02-28T00:00:00.000Z');
+
+      await window.logseq.api.insert_batch_block(
+        target.uuid,
+        [{ content: 'journals linked refs visible target' }],
+        { sibling: false }
+      );
+      await window.logseq.api.insert_batch_block(
+        source.uuid,
+        [{ content: `journals linked refs visible source [[${target.name}]]` }],
+        { sibling: false }
+      );
+
+      await window.logseq.api.exit_editing_mode(false);
+      window.logseq.api.push_state('all-journals', null, null);
+    })();"))
+
+(defn- journals-layout-metrics
+  []
+  (js-json
+   "(async () => {
+      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      for (let i = 0; i < 40; i++) {
+        if (document.querySelector('#journals .journal-item')) {
+          break;
+        }
+        await nextFrame();
+      }
+
+      const journalItem = document.querySelector('#journals .journal-item');
+      if (!journalItem) {
+        throw new Error('Expected a mounted journal item');
+      }
+
+      const style = getComputedStyle(journalItem);
+      return JSON.stringify({
+        'journal-item-margin-bottom': Number.parseFloat(style.marginBottom),
+        'journal-item-padding-bottom': Number.parseFloat(style.paddingBottom),
+        'journals-scroller-count': document.querySelectorAll('#journals [data-virtuoso-scroller]').length
+      });
+    })();"))
+
+(defn- journals-linked-refs-metrics
+  []
+  (js-json
+   "(async () => {
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      let references = null;
+      let foldableContent = null;
+      let viewBody = null;
+
+      for (let i = 0; i < 80; i++) {
+        references = document.querySelector('#journals .references');
+        foldableContent = references?.querySelector('.ls-foldable-content');
+        viewBody = references?.querySelector('.ls-view-body');
+        const expanded = foldableContent?.getAttribute('aria-hidden') !== 'true';
+        const bodyHeight = viewBody?.getBoundingClientRect().height || 0;
+
+        if (references && expanded && bodyHeight > 0) {
+          break;
+        }
+        await delay(100);
+      }
+
+      if (!references) {
+        throw new Error('Expected linked references in journals');
+      }
+
+      return JSON.stringify({
+        'collapsed': foldableContent?.getAttribute('aria-hidden') === 'true',
+        'body-mounted': Boolean(viewBody),
+        'body-height': viewBody?.getBoundingClientRect().height || 0
+      });
+    })();"))
+
 (defn- multiline-heading-bullet-alignment
   [title]
   (-> (w/eval-js
@@ -479,6 +565,49 @@
       (let [clipboard (w/clipboard-text)]
         (doseq [block blocks]
           (is (string/includes? clipboard block)))))))
+
+(deftest journals-list-uses-measured-spacing-without-item-margins
+  (testing "journals list spacing does not use item margins that destabilize Virtuoso measurement"
+    (seed-journals!
+     [{:date "2026-03-05T00:00:00.000Z"
+       :blocks ["journals measured spacing first"]}
+      {:date "2026-03-04T00:00:00.000Z"
+       :blocks ["journals measured spacing second"]}])
+    (w/wait-for "#journals .journal-item")
+    (let [{:keys [journal-item-margin-bottom journal-item-padding-bottom] :as metrics} (journals-layout-metrics)]
+      (is (zero? journal-item-margin-bottom) metrics)
+      (is (pos? journal-item-padding-bottom) metrics))))
+
+(deftest journals-list-does-not-nest-virtualized-scrollers-in-long-journal
+  (testing "long journals keep a single virtualized measurement owner"
+    (let [blocks (mapv #(format "journals long stable block %03d" %) (range 1 81))]
+      (seed-journals!
+       [{:date "2026-03-06T00:00:00.000Z"
+         :blocks blocks}])
+      (enable-virtualized-rendering!)
+      (w/wait-for "#journals [data-virtuoso-scroller]")
+      (w/wait-for (format ".ls-page-blocks .ls-block:has-text('%s')" (first blocks)))
+      (let [{:keys [journals-scroller-count] :as metrics} (journals-layout-metrics)]
+        (is (= 1 journals-scroller-count) metrics)))))
+
+(deftest journals-list-keeps-single-scroller-with-iframe-embeds
+  (testing "iframe embeds render inside journals without adding nested virtualized measurement owners"
+    (seed-journals!
+     [{:date "2026-03-07T00:00:00.000Z"
+       :blocks ["{{video https://www.youtube.com/watch?v=7xTGNNLPyMI}}"]}])
+    (enable-virtualized-rendering!)
+    (w/wait-for "#journals iframe")
+    (let [{:keys [journals-scroller-count] :as metrics} (journals-layout-metrics)]
+      (is (= 1 journals-scroller-count) metrics))))
+
+(deftest journals-linked-refs-remain-visible
+  (testing "journals linked refs stay visible while journals layout owns the outer measurement"
+    (seed-journals-with-linked-ref!)
+    (w/wait-for "#journals .references")
+    (let [{:keys [collapsed body-mounted body-height] :as metrics} (journals-linked-refs-metrics)]
+      (is (false? collapsed) metrics)
+      (is (true? body-mounted) metrics)
+      (is (pos? body-height) metrics))))
 
 (deftest drag-and-drop-asset-does-not-create-blank-asset
   (testing "dragging and dropping a file should keep non-empty asset title"

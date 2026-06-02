@@ -50,6 +50,7 @@
             (ui/virtualized-list
              {:custom-scroll-parent (util/app-scroll-container-node)
               :increase-viewport-by {:top 100 :bottom 100}
+              :skipAnimationFrameInResizeObserver true
               :compute-item-key (fn [idx]
                                   (let [id (util/nth-safe data idx)]
                                     (str "journal-" id)))
