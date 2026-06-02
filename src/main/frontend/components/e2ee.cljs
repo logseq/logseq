@@ -8,9 +8,9 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc e2ee-request-new-password
+(hsx/defc e2ee-request-new-password
   [password-promise]
   (let [[password set-password!] (hooks/use-state "")
         [password-confirm set-password-confirm!] (hooks/use-state "")
@@ -57,7 +57,7 @@
                        (false? matched?))}
         (t :ui/submit))]]]))
 
-(rum/defc e2ee-request-password
+(hsx/defc e2ee-request-password
   [password-promise]
   (let [[password set-password!] (hooks/use-state "")
         on-submit (fn []
@@ -82,7 +82,7 @@
                            (on-submit)))}
         (t :ui/submit))]]]))
 
-(rum/defc e2ee-password-to-decrypt-private-key
+(hsx/defc e2ee-password-to-decrypt-private-key
   [encrypted-private-key private-key-promise]
   (let [[password set-password!] (hooks/use-state "")
         [decrypt-fail? set-decrypt-fail!] (hooks/use-state false)

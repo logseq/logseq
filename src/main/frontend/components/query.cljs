@@ -4,7 +4,6 @@
             [frontend.components.query.view :as query-view]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
             [frontend.db.react :as react]
             [frontend.extensions.sci :as sci]
             [frontend.state :as state]
@@ -12,12 +11,13 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- built-in-custom-query?
-  [{:keys [title-key]}]
-  (let [queries (get-in (state/sub-config) [:default-queries :journals])]
+  [repo-config {:keys [title-key]}]
+  (let [queries (get-in repo-config [:default-queries :journals])]
     (when (seq queries)
       (boolean
        (some (fn [built-in-query]
@@ -26,10 +26,10 @@
              queries)))))
 
 (defn- resolve-built-in-query?
-  [built-in-query? q]
+  [repo-config built-in-query? q]
   (boolean
    (or built-in-query?
-       (built-in-custom-query? q))))
+       (built-in-custom-query? repo-config q))))
 
 (defn- grouped-by-page-result?
   [result group-by-page?]
@@ -44,8 +44,8 @@
               (:db/id first-page))
           (:block/uuid first-block)))))
 
-(rum/defcs custom-query-inner < rum/static
-  [state {:keys [dsl-query?] :as config} {:keys [query breadcrumb-show?]}
+(hsx/defc custom-query-inner
+  [{:keys [dsl-query?] :as config} {:keys [query breadcrumb-show?]}
    {:keys [query-error-atom
            current-block
            view-f
@@ -114,7 +114,7 @@
          :else
          [:div.text-sm.mt-2.opacity-90 (t :search/no-result)])])))
 
-(rum/defc query-title
+(hsx/defc query-title
   [config {:keys [title title-key title-icon]} {:keys [result-count]}]
   (let [inline-text (:inline-text config)]
     [:div.custom-query-title.flex.justify-between.w-full
@@ -141,25 +141,20 @@
         (t :search/result-count result-count)])]))
 
 (defn- calculate-collapsed?
-  [current-block current-block-uuid {:keys [collapsed? container-id]}]
-  (let [temp-collapsed? (state/sub-block-collapsed current-block-uuid container-id)
-        collapsed?' (if (some? temp-collapsed?)
+  [current-block {:keys [collapsed? temp-collapsed?]}]
+  (let [collapsed?' (if (some? temp-collapsed?)
                       temp-collapsed?
                       (or collapsed?
                           (:block/collapsed? current-block)))]
     collapsed?'))
 
-(rum/defcs custom-query* < rum/reactive db-mixins/query
-  {:init (fn [state]
-           (let [[config q] (:rum/args state)]
-             (assoc state
-                    ::result (atom nil)
-                    ::collapsed? (atom (or (:collapsed? q) (:collapsed? config))))))}
-  [state {:keys [*query-error dsl-query? built-in-query? table? current-block] :as config}
+(hsx/defc custom-query*
+  [{:keys [*query-error dsl-query? built-in-query? table? current-block] :as config}
    {:keys [builder query view _collapsed?] :as q}]
-  (let [*result (::result state)
-        *collapsed? (::collapsed? state)
-        collapsed? (rum/react *collapsed?)
+  (let [*result (hooks/use-memo #(atom nil) [])
+        repo-config (state/use-sub-config)
+        *collapsed? (hooks/use-memo #(atom (or (:collapsed? q) (:collapsed? config))) [])
+        [collapsed?] (hooks/use-atom *collapsed?)
         [k result] (query-result/run-custom-query config q *result *query-error)
         result (some->> result
                         (query-result/transform-query-result config q))
@@ -177,7 +172,7 @@
                                 (when (and current-block (:db/id current-block)) (= (:db/id b) (:db/id current-block))))))
                  result)
         ;; Args for displaying query header and results
-        view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
+        view-fn (if (keyword? view) (get-in repo-config [:query/views view]) view)
         view-f (and view-fn (sci/eval-string (pr-str view-fn)))
         page-list? (and (seq result) (some? (:block/name (first result))))
         opts {:query-error-atom *query-error
@@ -187,49 +182,49 @@
               :page-list? page-list?
               :result result
               :group-by-page? (query-result/get-group-by-page q {:table? table?})}]
-    (if (:custom-query? config)
-      ;; Don't display recursive results when query blocks are a query result
-      [:code (if dsl-query?
-               (t :query/results-for (pr-str query))
-               (t :query/advanced-results))]
-      (when-not (and built-in-query? (empty? result))
-        [:div.custom-query (get config :attr {})
-         (when (and dsl-query? builder) builder)
+       (if (:custom-query? config)
+         ;; Don't display recursive results when query blocks are a query result
+         [:code (if dsl-query?
+                  (t :query/results-for (pr-str query))
+                  (t :query/advanced-results))]
+         (when-not (and built-in-query? (empty? result))
+           [:div.custom-query (get config :attr {})
+            (when (and dsl-query? builder) builder)
 
-         (if built-in-query?
-           [:div {:style {:margin-left 2}}
-            (ui/foldable
-             (query-title config q {:result-count (count result)})
-             (fn []
-               (custom-query-inner config q opts))
-             {:default-collapsed? collapsed?
-              :title-trigger? true
-              :on-pointer-down #(reset! *collapsed? %)})]
-           [:div.bd
-            (when-not collapsed?
-              (custom-query-inner config q opts))])]))))
+            (if built-in-query?
+              [:div {:style {:margin-left 2}}
+               (ui/foldable
+                (query-title config q {:result-count (count result)})
+                (fn []
+                  (custom-query-inner config q opts))
+                {:default-collapsed? collapsed?
+                 :title-trigger? true
+                 :on-pointer-down #(reset! *collapsed? %)})]
+              [:div.bd
+               (when-not collapsed?
+                 (custom-query-inner config q opts))])]))))
 
-(rum/defcs custom-query < rum/static
-  {:init (fn [state]
-           (assoc state :query-error (atom nil)))}
-  [state {:keys [built-in-query?] :as config}
+(hsx/defc custom-query
+  [{:keys [built-in-query?] :as config}
    {:keys [collapsed?] :as q}]
   (ui/catch-error
    (ui/block-error (t :query/error) {:content (:query q)})
-   (let [*query-error (:query-error state)
+   (let [*query-error (hooks/use-memo #(atom nil) [])
+         repo-config (state/use-sub-config)
          current-block-uuid (or (:block/uuid (:block config))
                                 (:block/uuid config))
          current-block (db/entity [:block/uuid current-block-uuid])
-        ;; Get query result
-         collapsed?' (calculate-collapsed? current-block current-block-uuid
+         temp-collapsed? (state/use-sub-block-collapsed current-block-uuid (:container-id config))
+         ;; Get query result
+         collapsed?' (calculate-collapsed? current-block
                                            {:collapsed? false
-                                            :container-id (:container-id config)})
+                                            :temp-collapsed? temp-collapsed?})
          built-in-collapsed? (and collapsed? built-in-query?)
          config' (assoc config
                         :current-block current-block
                         :current-block-uuid current-block-uuid
                         :collapsed? collapsed?'
-                        :built-in-query? (resolve-built-in-query? built-in-query? q)
+                        :built-in-query? (resolve-built-in-query? repo-config built-in-query? q)
                         :*query-error *query-error)]
      (when (or built-in-collapsed? (not collapsed?'))
        (custom-query* config' q)))))
