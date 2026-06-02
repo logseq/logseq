@@ -2,8 +2,7 @@
   (:require [dommy.core :as d]
             [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.util :as util :refer [use-atom]]
-            [medley.core :as medley]
-            ))
+            [medley.core :as medley]))
 
 ;; ui
 (def button (util/ui-wrap "Button"))
@@ -34,6 +33,7 @@
 (defonce ^:private *popups (atom []))
 (defonce ^:private *id (atom 0))
 (defonce ^:private gen-id #(reset! *id (inc @*id)))
+(defonce ^:private *recent-toggle-close (atom nil))
 (def *opened-sub-menus (atom #{}))
 
 (defn get-popup
@@ -81,6 +81,10 @@
            (and (.-contains target) (.contains target target'))
            (and (.-contains target') (.contains target' target)))))
 
+(defn- element?
+  [target]
+  (instance? js/Element target))
+
 (defn- open-popup-by-target
   [target]
   (some (fn [config]
@@ -88,6 +92,45 @@
                      (same-popup-target? (:target config) target))
             config))
         @*popups))
+
+(defn- native-event
+  [^js event]
+  (or (some-> event (.-nativeEvent)) event))
+
+(defn- event-target
+  [^js event]
+  (let [^js native-event (native-event event)]
+    (or (some-> event (.-currentTarget))
+        (some-> native-event (.-currentTarget))
+        (some-> event (.-target))
+        (some-> native-event (.-target)))))
+
+(defn- stop-toggle-event!
+  [^js event]
+  (let [^js native-event (native-event event)]
+    (doseq [^js e (distinct (remove nil? [event native-event]))]
+      (when (fn? (.-preventDefault e))
+        (.preventDefault e))
+      (when (fn? (.-stopPropagation e))
+        (.stopPropagation e))
+      (when (fn? (.-stopImmediatePropagation e))
+        (.stopImmediatePropagation e)))))
+
+(defn- remember-toggle-close!
+  [target]
+  (reset! *recent-toggle-close {:target target
+                                :time (js/Date.now)}))
+
+(defn- suppress-toggle-open?
+  [target]
+  (when-let [{recent-target :target time :time} @*recent-toggle-close]
+    (when (or (> (- (js/Date.now) time) 500)
+              (not (same-popup-target? recent-target target)))
+      (reset! *recent-toggle-close nil))
+    (when-let [{recent-target :target} @*recent-toggle-close]
+      (when (same-popup-target? recent-target target)
+        (reset! *recent-toggle-close nil)
+        true))))
 
 (defn- hover-close-reason?
   [^js event-details]
@@ -121,10 +164,12 @@
                    (or (instance? js/MouseEvent (or (.-nativeEvent event) event))
                        (instance? js/goog.events.BrowserEvent event))
                    (let [event' (or (.-nativeEvent event) event)]
-                     (vreset! *target (or (.-currentTarget event)
-                                          (.-currentTarget event')
-                                          (.-target event')
-                                          (.-target event)))
+                     (vreset! *target (some->> [(.-currentTarget event)
+                                                 (.-currentTarget event')
+                                                 (.-target event')
+                                                 (.-target event)]
+                                                (filter element?)
+                                                first))
                      [(.-clientX event') (.-clientY event')])
 
                    (instance? js/Element event)
@@ -145,38 +190,48 @@
                    (and (vector event) (= (count event) 2) (every? integer? event))
                    event
                    :else [0 0])]
-    (if-let [config (let [target @*target]
-                      (when target
-                        (if specified-id
-                          (some-> (get-popup specified-id)
-                                  second
-                                  (#(when (and (:open? %)
-                                               (same-popup-target? (:target %) target))
-                                      %)))
-                          (open-popup-by-target target))))]
-      (do
-        (hide! (:id config) 0 {:event event})
-        (:id config))
-      (do
-        (some-> @*target (d/set-attr! "data-popup-active" (if (keyword? id) (name id) (str id))))
-        (let [on-before-hide (fn [^js e]
-                               (when-let [^js trigger (and (not (false? focus-trigger?))
-                                                           (some-> @*target (.closest "[tabindex='0']")))]
-                                 (js/setTimeout #(.focus trigger) 16))
-                               (some-> on-before-hide (apply [e])))]
-          (upsert-popup!
-           (merge opts
-                  {:id id :target (deref *target)
-                   :trigger-id trigger-id
-                   :open? true :content content :position position
-                   :as-dropdown? as-dropdown?
-                   :as-content? as-content?
-                   :root-props root-props
-                   :on-before-hide on-before-hide
-                   :on-after-hide on-after-hide
-                   :content-props (cond-> content-props
-                                    (not (nil? align))
-                                    (assoc :align (name align)))})))))))
+    (let [target @*target
+          suppressed-open? (and target (suppress-toggle-open? target))
+          config (when (and target (not suppressed-open?))
+                   (if specified-id
+                     (some-> (get-popup specified-id)
+                             second
+                             (#(when (and (:open? %)
+                                          (same-popup-target? (:target %) target))
+                                 %)))
+                     (open-popup-by-target target)))]
+      (cond
+        suppressed-open?
+        (stop-toggle-event! event)
+
+        config
+        (do
+          (stop-toggle-event! event)
+          (hide! (:id config) 0 {:event event})
+          (:id config))
+
+        :else
+        (do
+          (when (element? target)
+            (d/set-attr! target "data-popup-active" (if (keyword? id) (name id) (str id))))
+          (let [on-before-hide (fn [^js e]
+                                 (when-let [^js trigger (and (not (false? focus-trigger?))
+                                                             (some-> target (.closest "[tabindex='0']")))]
+                                   (js/setTimeout #(.focus trigger) 16))
+                                 (some-> on-before-hide (apply [e])))]
+            (upsert-popup!
+             (merge opts
+                    {:id id :target target
+                     :trigger-id trigger-id
+                     :open? true :content content :position position
+                     :as-dropdown? as-dropdown?
+                     :as-content? as-content?
+                     :root-props root-props
+                     :on-before-hide on-before-hide
+                     :on-after-hide on-after-hide
+                     :content-props (cond-> content-props
+                                      (not (nil? align))
+                                      (assoc :align (name align)))}))))))))
 
 (defn hide!
   ([] (when-let [id (some-> (get-popups) (last) :id)] (hide! id 0)))
@@ -202,7 +257,7 @@
 
 (hsx/defc x-popup
   [{:keys [id open? content position as-dropdown? as-content? force-popover?
-           auto-side? as-mask? _auto-focus? _target root-props content-props
+           auto-side? as-mask? _auto-focus? target root-props content-props
            _on-before-hide _on-after-hide]
     :as _props}]
   (when-let [[x y _ height] position]
@@ -232,7 +287,9 @@
                                   (do
                                     (some-> root-props (:onOpenChange) (apply [open? e]))
                                     (when-not open?
-                                      (let [reason (.-reason e)
+                                      (let [native-event (.-event e)
+                                            toggle-close? (same-popup-target? target (event-target native-event))
+                                            reason (.-reason e)
                                             prevented? (case reason
                                                          "escape-key"
                                                          (do
@@ -246,7 +303,10 @@
 
                                                          false)]
                                         (when-not prevented?
-                                          (hide! id 1 {:event (.-event e)})))))))]
+                                          (when toggle-close?
+                                            (remember-toggle-close! target)
+                                            (stop-toggle-event! native-event))
+                                          (hide! id 1 {:event native-event})))))))]
       (popup-root
        (merge root-props {:open open?
                           :onOpenChange handle-open-change!})
