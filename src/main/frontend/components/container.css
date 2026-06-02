@@ -364,6 +364,8 @@
     @apply w-full h-full;
 
     .left-sidebar-inner {
+      --tw-translate-x: 0;
+      translate: 0 0;
       transform: translate3d(0, 0, 0);
       overflow: hidden;
     }
@@ -383,6 +385,8 @@
   &.is-closing {
     .left-sidebar-inner {
       transition: transform .3s;
+      --tw-translate-x: -100%;
+      translate: -100% 0;
       transform: translate3d(-100%, 0, 0) !important;
     }
 
@@ -572,46 +576,6 @@
     max-width: 60vw;
   }
 
-  &-scollable {
-    min-height: 100%;
-    overflow-y: scroll;
-  }
-
-  &-inner {
-    padding-top: 0;
-    background-color: var(--lx-gray-02, var(--ls-secondary-background-color));
-  }
-
-  &-settings {
-    @apply flex flex-row;
-    margin-bottom: 0;
-    margin-top: 0;
-    overflow: auto;
-
-    &-btn {
-      display: block;
-      white-space: nowrap;
-    }
-  }
-
-  &-topbar {
-    position: sticky;
-    position: -webkit-sticky;
-    top: 0;
-    left: 0;
-    right: 0;
-    background-color: var(--ls-right-sidebar-topbar-color, var(--lx-gray-02, var(--ls-secondary-background-color, #d8e1e8)));
-    z-index: 999;
-    user-select: none;
-    -webkit-app-region: drag;
-
-    a,
-    svg,
-    button {
-      -webkit-app-region: no-drag;
-    }
-  }
-
   .page {
     @apply mt-0 mx-3 my-5;
   }
@@ -693,6 +657,46 @@
         }
       }
     }
+  }
+}
+
+.cp__right-sidebar-scrollable {
+  min-height: 100%;
+  overflow-y: scroll;
+}
+
+.cp__right-sidebar-inner {
+  padding-top: 0;
+  background-color: var(--lx-gray-02, var(--ls-secondary-background-color));
+}
+
+.cp__right-sidebar-settings {
+  @apply flex flex-row;
+  margin-bottom: 0;
+  margin-top: 0;
+  overflow: auto;
+}
+
+.cp__right-sidebar-settings-btn {
+  display: block;
+  white-space: nowrap;
+}
+
+.cp__right-sidebar-topbar {
+  position: sticky;
+  position: -webkit-sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  background-color: var(--ls-right-sidebar-topbar-color, var(--lx-gray-02, var(--ls-secondary-background-color, #d8e1e8)));
+  z-index: 999;
+  user-select: none;
+  -webkit-app-region: drag;
+
+  a,
+  svg,
+  button {
+    -webkit-app-region: no-drag;
   }
 }
 

@@ -50,6 +50,7 @@
   (button
    (merge (dissoc props :icon-props :button-size)
           {:variant variant
+           :size :icon
            :data-button :icon
            :style (when button-size {:width button-size :height button-size})})
    (tabler-icon/root (name icon-name) (merge {:size 20} icon-props))
