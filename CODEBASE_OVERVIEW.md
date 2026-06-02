@@ -58,8 +58,6 @@ This is overview of this repository's most important directories and files.
 - `deps/` contains ClojureScript dependencies or libraries used by the frontend.
   - `deps/graph-parser/` is a library that parses a Logseq graph and saves it to a database.
 
-- `packages/` contains JavaScript dependencies used by the frontend
-  - `packages/ui/` - The frontend's component system based on shadcn
 - `scripts` - Dev scripts
 - `clj-e2e/` - end to end clj frontend tests
 - `android/` -  Android app

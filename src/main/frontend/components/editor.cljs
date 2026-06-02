@@ -471,7 +471,7 @@
       (when (seq options)
         (let [command (:command (first options))]
           [:div.p-2.rounded-md.flex.flex-col.gap-2
-           (for [{:keys [id placeholder type]} options]
+           (for [{:keys [id placeholder type auto-focus]} options]
              (shui/input
               (cond->
                {:key (str "modal-input-" (name id))
@@ -481,7 +481,10 @@
                              (swap! input-value assoc id (util/evalue e)))}
 
                 placeholder
-                (assoc :placeholder placeholder))))
+                (assoc :placeholder placeholder)
+
+                auto-focus
+                (assoc :auto-focus true))))
            (ui/button
             (t :ui/submit)
             :on-click

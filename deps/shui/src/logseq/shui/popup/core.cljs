@@ -6,29 +6,29 @@
             ))
 
 ;; ui
-(def button (util/lsui-wrap "Button"))
-(def popover (util/lsui-wrap "Popover"))
-(def popover-trigger (util/lsui-wrap "PopoverTrigger"))
-(def popover-content (util/lsui-wrap "PopoverContent"))
-(def popover-arrow (util/lsui-wrap "PopoverArrow"))
-(def popover-close (util/lsui-wrap "PopoverClose"))
-(def popover-remove-scroll (util/lsui-wrap "PopoverRemoveScroll"))
-(def dropdown-menu (util/lsui-wrap "DropdownMenu"))
-(def dropdown-menu-trigger (util/lsui-wrap "DropdownMenuTrigger"))
-(def dropdown-menu-content (util/lsui-wrap "DropdownMenuContent"))
-(def dropdown-menu-arrow (util/lsui-wrap "DropdownMenuArrow"))
-(def dropdown-menu-group (util/lsui-wrap "DropdownMenuGroup"))
-(def dropdown-menu-item (util/lsui-wrap "DropdownMenuItem"))
-(def dropdown-menu-checkbox-item (util/lsui-wrap "DropdownMenuCheckboxItem"))
-(def dropdown-menu-radio-group (util/lsui-wrap "DropdownMenuRadioGroup"))
-(def dropdown-menu-radio-item (util/lsui-wrap "DropdownMenuRadioItem"))
-(def dropdown-menu-label (util/lsui-wrap "DropdownMenuLabel"))
-(def dropdown-menu-separator (util/lsui-wrap "DropdownMenuSeparator"))
-(def dropdown-menu-shortcut (util/lsui-wrap "DropdownMenuShortcut"))
-(def dropdown-menu-portal (util/lsui-wrap "DropdownMenuPortal"))
-(def dropdown-menu-sub (util/lsui-wrap "DropdownMenuSub"))
-(def dropdown-menu-sub-content (util/lsui-wrap "DropdownMenuSubContent"))
-(def dropdown-menu-sub-trigger (util/lsui-wrap "DropdownMenuSubTrigger"))
+(def button (util/ui-wrap "Button"))
+(def popover (util/ui-wrap "Popover"))
+(def popover-trigger (util/ui-wrap "PopoverTrigger"))
+(def popover-content (util/ui-wrap "PopoverContent"))
+(def popover-arrow (util/ui-wrap "PopoverArrow"))
+(def popover-close (util/ui-wrap "PopoverClose"))
+(def popover-remove-scroll (util/ui-wrap "PopoverRemoveScroll"))
+(def dropdown-menu (util/ui-wrap "DropdownMenu"))
+(def dropdown-menu-trigger (util/ui-wrap "DropdownMenuTrigger"))
+(def dropdown-menu-content (util/ui-wrap "DropdownMenuContent"))
+(def dropdown-menu-arrow (util/ui-wrap "DropdownMenuArrow"))
+(def dropdown-menu-group (util/ui-wrap "DropdownMenuGroup"))
+(def dropdown-menu-item (util/ui-wrap "DropdownMenuItem"))
+(def dropdown-menu-checkbox-item (util/ui-wrap "DropdownMenuCheckboxItem"))
+(def dropdown-menu-radio-group (util/ui-wrap "DropdownMenuRadioGroup"))
+(def dropdown-menu-radio-item (util/ui-wrap "DropdownMenuRadioItem"))
+(def dropdown-menu-label (util/ui-wrap "DropdownMenuLabel"))
+(def dropdown-menu-separator (util/ui-wrap "DropdownMenuSeparator"))
+(def dropdown-menu-shortcut (util/ui-wrap "DropdownMenuShortcut"))
+(def dropdown-menu-portal (util/ui-wrap "DropdownMenuPortal"))
+(def dropdown-menu-sub (util/ui-wrap "DropdownMenuSub"))
+(def dropdown-menu-sub-content (util/ui-wrap "DropdownMenuSubContent"))
+(def dropdown-menu-sub-trigger (util/ui-wrap "DropdownMenuSubTrigger"))
 
 ;; {:id :open? false :content nil :position [0 0] :root-props nil :content-props nil}
 (defonce ^:private *popups (atom []))
@@ -170,9 +170,17 @@
                                  (hide! id 1 {:event e})))
           handle-pointer-outside! (fn [^js e]
                                     (when-not (false? (some-> content-props (:onPointerDownOutside) (apply [e])))
-                                      (hide! id 1 {:event e})))]
+                                      (hide! id 1 {:event e})))
+          handle-open-change! (fn [open? ^js e]
+                                (some-> root-props (:onOpenChange) (apply [open? e]))
+                                (when-not open?
+                                  (when (= "escape-key" (.-reason e))
+                                    (some-> (.-event e) (.preventDefault))
+                                    (some-> (.-event e) (.stopPropagation)))
+                                  (hide! id 1 {:event e})))]
       (popup-root
-       (merge root-props {:open open?})
+       (merge root-props {:open open?
+                          :onOpenChange handle-open-change!})
        (popup-trigger
         {:as-child true}
         (button {:class "overflow-hidden fixed p-0 opacity-0"

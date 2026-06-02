@@ -91,7 +91,7 @@
     .panel-wrap {
       @apply p-1 flex flex-col gap-4;
 
-      @screen sm {
+      @media (min-width: 640px) {
         width: 600px;
       }
 
