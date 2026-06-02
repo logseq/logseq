@@ -26,15 +26,15 @@
         header (:header result)
         [selected-choices] (hooks/use-atom *selected-choices)
         row [:div.flex.flex-row.justify-between.w-full
-             {:class (when chosen? "chosen")
-              :on-pointer-down util/stop-propagation}
-             [:div.flex.flex-row.items-center.gap-1
-              (when multiple-choices?
-                (ui/checkbox {:checked (boolean (selected-choices (:value result)))
-                              :on-click (fn [e]
-                                          (.preventDefault e))
-                              :disabled (:disabled? result)}))
-              value]
+	             {:class (when chosen? "chosen")
+	              :on-pointer-down util/stop-propagation}
+	             [:div.flex.flex-row.items-center.gap-1
+	              (when multiple-choices?
+	                (ui/checkbox {:checked (boolean (selected-choices (:value result)))
+	                              :on-click (fn [e]
+	                                          (.preventDefault e))
+	                              :disabled (:disabled? result)}))
+	              value]
              (when (and (map? result) (:id result))
                [:div.tip.flex
                 [:code.opacity-20.bg-transparent (:id result)]])]]

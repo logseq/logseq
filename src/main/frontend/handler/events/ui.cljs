@@ -250,7 +250,8 @@
         (if target'
           (shui/popup-show! target'
                             #(property-dialog/dialog blocks opts')
-                            (cond-> {:align "start"}
+                            (cond-> {:align "start"
+                                     :force-popover? true}
                               popup-id
                               (assoc :id popup-id)))
           (shui/dialog-open! #(property-dialog/dialog blocks opts')
@@ -354,6 +355,7 @@
         :root-props {:modal false}
         :content-props {:side "top"
                         :class "!py-0 !px-0 !border-none"}
+        :force-popover? true
         :auto-side? false
         :align :start}))))
 

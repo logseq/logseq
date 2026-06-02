@@ -1,5 +1,6 @@
 (ns frontend.components.plugins
-  (:require [cljs-bean.core :as bean]
+  (:require ["react" :as react]
+            [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.components.plugins-settings :as plugins-settings]
@@ -693,7 +694,7 @@
     [:div.p-4.flex.flex-col.gap-3
      [:h1.text-xl.font-bold (t :plugin/bulk-remove-disabled-title)]
      (if (seq plugins)
-       [:<>
+      [:<>
         [:p.opacity-70.text-sm (t :plugin/bulk-remove-disabled-desc)]
         [:ul.max-h-96.overflow-y-auto.flex.flex-col.gap-2.ml-0
          (for [{:keys [id name title version icon]} plugins
@@ -1576,7 +1577,7 @@
        (ui/button (ui/icon "source-code" {:size 14})
                   :on-click #(editor-handler/edit-block! block (count content1)))]
       (when (fn? render)
-        (js/React.createElement render #js {:content content1}))]]))
+        (react/createElement render #js {:content content1}))]]))
 
 (hsx/defc plugins-page
   []

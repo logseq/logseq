@@ -4,15 +4,16 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.util :as util]))
 
-(defonce ^:private Toaster (util/lsui-wrap "Toaster"))
+(defonce ^:private Toaster (util/ui-wrap "Toaster"))
 (defonce ^:private *toast (atom nil))
 
 (defn gen-id []
-  (js/window.LSUI.genToastId))
+  ((util/ui-get "genToastId")))
 
 (defn use-toast []
-  (when-let [^js js-toast (js/window.LSUI.useToast)]
-    (let [toast-fn! (.-toast js-toast)
+  (when-let [use-toast' (util/ui-get "useToast")]
+    (let [^js js-toast (use-toast')
+          toast-fn! (.-toast js-toast)
           dismiss! (.-dismiss js-toast)]
       [(fn [s]
          (let [^js s (bean/->js s)]
@@ -21,7 +22,7 @@
 
 (hsx/defc install-toaster
   []
-  (let [^js js-toast (js/window.LSUI.useToast)]
+  (let [^js js-toast ((util/ui-get "useToast"))]
     (hooks/use-effect!
      (fn []
        (reset! *toast {:toast   (.-toast js-toast)

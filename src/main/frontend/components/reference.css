@@ -15,12 +15,12 @@
 }
 
 .ls-filters {
-    @screen md {
+    @media (min-width: 768px) {
         min-width: 700px;
         width: 700px;
     }
 
-    @screen sm {
+    @media (min-width: 640px) {
         min-width: 600px;
         width: 600px;
     }

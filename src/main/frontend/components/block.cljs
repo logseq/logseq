@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [range])
   (:require-macros [hiccups.core])
   (:require ["/frontend/utils" :as utils]
+            ["react" :as react-core]
             [cljs-bean.core :as bean]
             [cljs.core.match :refer [match]]
             [clojure.set :as set]
@@ -936,7 +937,7 @@
 
     (hooks/use-effect!
      (fn []
-       (if (some-> (hooks/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
+      (if (some-> (hooks/deref *el-wrap) (.closest ".ui__popover-content, .ui__dropdown-menu-content, .ui__context-menu-content"))
          (set-in-popup! true)
          (set-in-popup! false)))
      [])
@@ -1956,8 +1957,8 @@
 
 (defn- defer-placeholder-element
   []
-  (js/React.createElement "div"
-                          #js {:style #js {:minHeight 28}}))
+  (react-core/createElement "div"
+                            #js {:style #js {:minHeight 28}}))
 
 (defn- deferred-child-render-cost
   [child]
@@ -4287,7 +4288,7 @@
                           (set-plugin-renderer-error! true))
               :fallback-view outline-view-cp}
              (when-some [renderer (:render matched-block-renderer)]
-               (js/React.createElement renderer block-renderer-props-js))]]]
+               (react-core/createElement renderer block-renderer-props-js))]]]
 
           ;; --- Original outline ---
           outline-view-cp)
@@ -4407,14 +4408,14 @@
 
 (defn- memo-react-component
   [component same-args?]
-  (let [memo-class (js/React.memo
+  (let [memo-class (react-core/memo
                     (fn [^js props]
                       (apply component (.-args props)))
                     (fn [^js prev-props ^js next-props]
                       (same-args? (.-args prev-props)
                                   (.-args next-props))))]
     (fn [& args]
-      (js/React.createElement memo-class #js {:args args}))))
+      (react-core/createElement memo-class #js {:args args}))))
 
 (defn- set-collapsed-block!
   [block-id v container-id]
