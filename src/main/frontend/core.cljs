@@ -13,6 +13,7 @@
             [frontend.log]
             [frontend.page :as page]
             [frontend.routes :as routes]
+            [frontend.runtime.globals :as runtime-globals]
             [frontend.spec]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
@@ -101,6 +102,7 @@
   ;; so it is available even in :advanced release builds
 
   ;; (setup-entity-profile!)
+  (runtime-globals/install!)
   (log/info ::init "App started")
   (handler/start! start))
 

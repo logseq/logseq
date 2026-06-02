@@ -233,7 +233,7 @@ input.simple-input:focus {
 }
 
 .page-configure {
-  @screen md {
+  @media (min-width: 768px) {
     max-width: 720px;
   }
 }

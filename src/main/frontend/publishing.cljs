@@ -18,6 +18,7 @@
             [frontend.page :as page]
             [frontend.persist-db.browser :as db-browser]
             [frontend.routes :as routes]
+            [frontend.runtime.globals :as runtime-globals]
             [frontend.state :as state]
             [promesa.core :as p]
             [reitit.frontend :as rf]
@@ -100,6 +101,7 @@
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
+  (runtime-globals/install!)
   (register-components-fns!)
   ;; Set :preferred-lang as some components depend on it
   (i18n/start)

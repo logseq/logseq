@@ -68,8 +68,7 @@
     (hooks/use-effect!
      #(let [doc js/document.documentElement
             preferred-language' (i18n/locale-tag preferred-language)]
-        (.setAttribute doc "lang" preferred-language')
-        (js/LSI18N.setLocale preferred-language'))
+        (.setAttribute doc "lang" preferred-language'))
      [preferred-language])
 
     (hooks/use-effect!

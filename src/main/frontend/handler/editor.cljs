@@ -1701,11 +1701,11 @@
 (defn in-shui-popup?
   []
   (or (some-> js/document.activeElement
-              (.closest "[data-radix-menu-content]")
+              (.closest ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content")
               (nil?)
               (not))
       (.querySelector js/document.body
-                      "div[data-radix-popper-content-wrapper]")))
+                      ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content")))
 
 (defn get-current-input-char
   [input]

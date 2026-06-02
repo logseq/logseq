@@ -54,7 +54,7 @@ pre {
 #time-repeater {
   min-width: 300px;
 
-  @screen sm {
+  @media (min-width: 640px) {
     width: 135px;
   }
 }

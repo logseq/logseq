@@ -3,6 +3,7 @@
   (:require ["@emoji-mart/data" :as emoji-data]
             ["emoji-mart" :as emoji-mart]
             ["react-intersection-observer" :as react-intersection-observer]
+            ["react" :as react]
             ["@sentry/react" :refer [ErrorBoundary]]
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
@@ -67,13 +68,13 @@
 
 (defn- react-element
   [component opts children]
-  (apply js/React.createElement component (normalize-react-props opts) (react-children children)))
+  (apply react/createElement component (normalize-react-props opts) (react-children children)))
 
 (defn transition-group [opts & children]
   (react-element TransitionGroup opts children))
 
 (defn css-transition [opts & children]
-  (let [node-ref (or (:node-ref opts) (js/React.createRef))
+  (let [node-ref (or (:node-ref opts) (react/createRef))
         opts (assoc opts :nodeRef node-ref)
         children (map (fn [child]
                         (if (fn? child)
@@ -107,7 +108,7 @@
 
 (defn dropdown-exists?
   []
-  (some? (js/document.querySelector "[data-radix-popper-content-wrapper]")))
+  (some? (js/document.querySelector ".ui__popover-content, .ui__dropdown-menu-content, .ui__context-menu-content")))
 
 (defn last-shui-preview-popup?
   []
@@ -399,6 +400,9 @@
   (let [on-change' (:on-change option)
         on-click' (:on-click option)
         option (cond-> (dissoc option :on-change :on-click)
+                 (and on-click' (nil? on-change'))
+                 (assoc :data-inputless true)
+
                  (or on-change' on-click')
                  (assoc :on-click
                         (fn [^js e]
@@ -538,23 +542,25 @@
         render-f (fn [matched]
                    (for [[idx item] matched]
                      (let [react-key (str idx)
+                           choose! (fn [e]
+                                     (util/stop e)
+                                     (when-not (:disabled? item)
+                                       (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                         (on-shift-chosen item)
+                                         (on-chosen item e))))
                            item-cp
                            [:div.menu-link-wrap
                             {:key react-key
                              ;; mouse-move event to indicate that cursor moved by user
-                             :on-mouse-move  #(reset! *current-idx idx)}
+                             :on-mouse-move  #(reset! *current-idx idx)
+                             :on-click choose!}
                             (let [chosen? (= current-idx idx)]
                               (menu-link
                                {:id (str "ac-" react-key)
                                 :tab-index "0"
                                 :class (when chosen? "chosen")
                                 :on-mouse-down util/stop
-                                :on-click (fn [e]
-                                            (util/stop e)
-                                            (when-not (:disabled? item)
-                                              (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                                (on-shift-chosen item)
-                                                (on-chosen item e))))}
+                                :on-click choose!}
                                (if item-render (item-render item chosen?) item)))]
                            group-name (and (fn? get-group-name) (get-group-name item))]
                        (if (and group-name (not (contains? @*groups group-name)))

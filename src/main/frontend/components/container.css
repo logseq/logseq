@@ -43,7 +43,7 @@
   &.is-left-sidebar-open {
     padding-left: 0;
 
-    @screen sm {
+    @media (min-width: 640px) {
       padding-left: var(--ls-left-sidebar-width);
     }
   }
@@ -311,7 +311,7 @@
     }
   }
 
-  @screen sm {
+  @media (min-width: 640px) {
     padding-top: 0;
     width: var(--ls-left-sidebar-width) !important;
 
@@ -421,7 +421,7 @@
     }
   }
 
-  @screen sm {
+  @media (min-width: 640px) {
     @apply w-0 z-[var(--ls-z-index-level-1)] transition-[width];
 
     &:before {
@@ -444,7 +444,7 @@
 
 .ls-left-sidebar-open {
 
-  @screen sm {
+  @media (min-width: 640px) {
     .cp__header > .r {
       display: flex;
     }
@@ -494,7 +494,7 @@
     @apply px-8 pt-4;
   }
 
-  @screen sm {
+  @media (min-width: 640px) {
     .page {
       @apply px-2 pt-0;
     }

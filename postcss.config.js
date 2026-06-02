@@ -3,8 +3,7 @@ module.exports = {
     'autoprefixer': {},
     'postcss-import-ext-glob': {},
     'postcss-import': {},
-    'tailwindcss/nesting': 'postcss-nested',
-    tailwindcss: {},
+    '@tailwindcss/postcss': {},
     ...(process.env.NODE_ENV === 'production' ? { cssnano: {} } : {})
   }
 }

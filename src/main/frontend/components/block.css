@@ -1,6 +1,6 @@
 .block-content-wrapper {
   user-select: text;
-  @screen sm {
+  @media (min-width: 640px) {
     overflow-x: visible;
   }
 }

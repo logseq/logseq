@@ -76,10 +76,10 @@
 (defn double-esc
   "Exits editing mode and ensure there's no action bar"
   []
-  (when (w/visible? "div[data-radix-popper-content-wrapper]")
+  (when (w/visible? ".ui__popover-content, .ui__dropdown-menu-content, .ui__context-menu-content")
     (k/esc))
   (exit-edit)
-  (when (w/visible? "div[data-radix-popper-content-wrapper]")
+  (when (w/visible? ".ui__popover-content, .ui__dropdown-menu-content, .ui__context-menu-content")
     (k/esc)))
 
 (defn search

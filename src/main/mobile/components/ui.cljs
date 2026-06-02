@@ -6,6 +6,7 @@
             [frontend.state :as state]
             [logseq.shui.ui :as shui]
             [mobile.components.popup :as popup]
+            ["react" :as react]
             [react-transition-group :refer [CSSTransition TransitionGroup]]
             [io.factorhouse.hsx.core :as hsx]))
 
@@ -38,7 +39,7 @@
 
 (defn- react-element
   [component opts children]
-  (apply js/React.createElement component (normalize-react-props opts) (react-children children)))
+  (apply react/createElement component (normalize-react-props opts) (react-children children)))
 
 (defn transition-group
   [opts & children]
@@ -46,7 +47,7 @@
 
 (defn css-transition
   [opts & children]
-  (let [node-ref (or (:node-ref opts) (js/React.createRef))
+  (let [node-ref (or (:node-ref opts) (react/createRef))
         opts (assoc opts :nodeRef node-ref)
         children (map (fn [child]
                         (if (fn? child)

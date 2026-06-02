@@ -5,8 +5,8 @@ This guide summarizes Logseq's current UI theme architecture and gives a practic
 It is based on the current repository structure and these theme-related entry points:
 
 - CSS load order: `tailwind.all.css`
-- Design tokens and theme variables: `packages/ui/src/radix.css`, `packages/ui/src/radix-hsl.css`, `packages/ui/src/vars-classic.css`, `packages/ui/src/colors.css`
-- Shared shui/Radix component CSS: `resources/css/shui.css`
+- Design tokens and theme variables: `src/main/frontend/shui/radix.css`, `src/main/frontend/shui/radix-hsl.css`, `src/main/frontend/shui/vars-classic.css`, `src/main/frontend/shui/colors.css`
+- Shared shui/Base UI component CSS: `resources/css/shui.css`
 - CodeMirror theme bridge: `resources/css/codemirror.lsradix.css`
 - Frontend component CSS: `src/main/frontend/**/*.css`
 - Theme runtime attributes: `src/main/frontend/components/theme.cljs`, `src/main/frontend/state.cljs`, `src/main/frontend/ui.cljs`
@@ -20,12 +20,12 @@ Logseq themes are mostly CSS-variable based. A theme plugin should first overrid
 
 The main stylesheet imports theme foundations before app component CSS:
 
-1. `packages/ui/src/radix.css` — Radix color scales as `--rx-*` variables, for example `--rx-gray-01` through `--rx-gray-12` and alpha variants.
-2. `packages/ui/src/radix-hsl.css` — HSL forms such as `--rx-gray-01-hsl` for Tailwind/shui tokens.
-3. `packages/ui/src/vars-classic.css` — Logseq semantic variables, layout variables, default light/dark values for `data-color=logseq`.
-4. `packages/ui/src/colors.css` — accent palettes selected by `html[data-color=...]`, mapping `--lx-accent-*`, `--lx-gray-*`, shui tokens, and many `--ls-*` values.
-5. `packages/ui/src/index.css` — Tailwind base.
-6. `resources/css/shui.css` — shared UI components built on shui/Radix/Tailwind tokens.
+1. `src/main/frontend/shui/radix.css` — color scales as `--rx-*` variables, for example `--rx-gray-01` through `--rx-gray-12` and alpha variants.
+2. `src/main/frontend/shui/radix-hsl.css` — HSL forms such as `--rx-gray-01-hsl` for Tailwind/shui tokens.
+3. `src/main/frontend/shui/vars-classic.css` — Logseq semantic variables, layout variables, default light/dark values for `data-color=logseq`.
+4. `src/main/frontend/shui/colors.css` — accent palettes selected by `html[data-color=...]`, mapping `--lx-accent-*`, `--lx-gray-*`, shui tokens, and many `--ls-*` values.
+5. `src/main/frontend/shui/index.css` — Tailwind base.
+6. `resources/css/shui.css` — shared UI components built on shui/Base UI/Tailwind tokens.
 7. Third-party CSS: Inter, PhotoSwipe, KaTeX, CodeMirror, PDF.js, Tabler, `codemirror.lsradix.css`.
 8. `src/main/frontend/**/[!_]*.css` — component and extension CSS.
 9. A selected plugin theme is injected later as a `<link rel="stylesheet">`, so it can override earlier rules when specificity is equal or higher.
@@ -591,5 +591,4 @@ Before publishing a theme plugin, test at least these screens and states:
 3. Map `--lx-gray-*` and `--lx-accent-*` for newer shared UI consistency.
 4. Add extension variables such as `--ph-*` and `--ls-wb-*` only if your theme covers PDF/whiteboard.
 5. Add low-specificity, mode-scoped selector overrides for the remaining gaps.
-
 

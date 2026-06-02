@@ -1587,7 +1587,7 @@
   (contains? config/video-formats (some-> asset-type keyword)))
 
 (def ^:private asset-embedded-control-selector
-  ".asset-action-bar, [data-radix-popper-content-wrapper], [role='menu'], [role='menuitem'], button, a, input, textarea, select")
+  ".asset-action-bar, .ui__popover-content, .ui__dropdown-menu-content, .ui__context-menu-content, [role='menu'], [role='menuitem'], button, a, input, textarea, select")
 
 (defn- asset-embedded-control-click?
   [^js target]
@@ -2132,7 +2132,8 @@
                          :class (str (when empty-value? "empty-value")
                                      (when-not (:other-position? opts) " w-full"))
                          :on-pointer-down (fn [e]
-                                            (when-not (some-> (.-target e) (.closest "[data-radix-popper-content-wrapper]"))
+                                            (when-not (some-> (.-target e)
+                                                             (.closest ".ui__popover-content, .ui__dropdown-menu-content, .ui__context-menu-content"))
                                               (state/clear-selection!)))}
                         (cond
                           (and multiple-values? (contains? #{:default :url} type) (not closed-values?) (not editing?))

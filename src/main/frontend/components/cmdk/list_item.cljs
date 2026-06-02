@@ -18,11 +18,17 @@
     (nil? input) ""
     :else (pr-str input)))
 
+(defn- remove-accents*
+  [s]
+  (if-let [remove-fn (.-remove remove-accents)]
+    (remove-fn s)
+    (remove-accents s)))
+
 (defn- normalize-text [app-config text]
   (cond-> (to-string text)
     ;; :lower-case (string/lower-case)
     :normalize (.normalize "NFKC")
-    (:feature/enable-search-remove-accents? app-config) (remove-accents)))
+    (:feature/enable-search-remove-accents? app-config) (remove-accents*)))
 
 (defn highlight-query* [app-config query text]
   (cond

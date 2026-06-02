@@ -51,9 +51,9 @@
 (defn link-steps []
   [[:editor/input (str command-trigger "link")]
    [:editor/show-input [{:command :link
-                         :id :link
-                         :placeholder (t :ui/link)
-                         :autoFocus true}
+                        :id :link
+                        :placeholder (t :ui/link)
+                         :auto-focus true}
                         {:command :link
                          :id :label
                          :placeholder (t :ui/label)}]]])
@@ -61,9 +61,9 @@
 (defn image-link-steps []
   [[:editor/input (str command-trigger "link")]
    [:editor/show-input [{:command :image-link
-                         :id :link
-                         :placeholder (t :ui/link)
-                         :autoFocus true}
+                        :id :link
+                        :placeholder (t :ui/link)
+                         :auto-focus true}
                         {:command :image-link
                          :id :label
                          :placeholder (t :ui/label)}]]])
