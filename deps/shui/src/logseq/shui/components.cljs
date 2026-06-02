@@ -753,8 +753,33 @@
 (def TooltipTrigger (forward-part TooltipTriggerPart nil))
 (def TooltipPortal TooltipPortalPart)
 (def TooltipContent
-  (composed-popup TooltipPortalPart TooltipPositionerPart TooltipPopupPart
-                  "ui__tooltip-content z-50 overflow-hidden rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground shadow-md"))
+  (react/forwardRef
+   (fn [^js props ref]
+     (let [portal-props (merge-object-props! (copy-named-props props portal-prop-names)
+                                             (prop props "portalProps"))
+           positioner-props (merge-object-props! (copy-named-props props positioner-prop-names)
+                                                 (prop props "positionerProps"))
+           popup-props (with-class-props props "ui__tooltip-content z-50 rounded-md border bg-popover px-3 py-1.5 text-xs text-popover-foreground shadow-md" nil)
+           children (prop props "children")]
+       (set-prop! positioner-props "style"
+                  (merge-object-props! #js {:zIndex 99999} (prop positioner-props "style")))
+       (adapt-focus-props! popup-props)
+       (clean-radix-popup-props! popup-props)
+       (when ref (set-prop! popup-props "ref" ref))
+       (doseq [k (concat portal-prop-names
+                         positioner-prop-names
+                         ["portalProps" "positionerProps"
+                          "children" "withoutAnimation" "position"])]
+         (js-delete popup-props k))
+       (react/createElement
+        TooltipPortalPart portal-props
+        (react/createElement
+         TooltipPositionerPart positioner-props
+         (react/createElement
+          TooltipPopupPart popup-props
+          children
+          (react/createElement TooltipArrowPart
+                               #js {:className "ui__tooltip-arrow h-2 w-2 rotate-45 border bg-popover data-[side=top]:-bottom-1 data-[side=bottom]:-top-1 data-[side=left]:-right-1 data-[side=right]:-left-1"}))))))))
 (def TooltipProvider TooltipProviderPart)
 (def TooltipArrow (forward-part TooltipArrowPart nil))
 
