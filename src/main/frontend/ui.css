@@ -61,6 +61,12 @@
 
   .switcher {
     @apply inline-block h-5 w-5 rounded-full bg-white shadow;
+
+    translate: 0 0;
+
+    &.is-on {
+      translate: 1.25rem 0;
+    }
   }
 
   &.is-small {
@@ -70,6 +76,10 @@
 
     .switcher {
       @apply h-3 w-3;
+
+      &.is-on {
+        translate: 1rem 0;
+      }
     }
   }
 }

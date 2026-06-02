@@ -515,7 +515,7 @@
      {:aria-checked (if on? "true" "false"), :tab-index "0", :role "checkbox"
       :class        (if on? "ui__toggle-background-on" "ui__toggle-background-off")}
      [:span.switcher.transform.transition.ease-in-out.duration-200
-      {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
+      {:class       (if on? "is-on" "is-off")
        :aria-hidden "true"}]]]))
 
 (defn keyboard-shortcut-from-config [shortcut-name & {:keys [pick-first?]}]
