@@ -161,6 +161,10 @@
     (set-prop! props "finalFocus" false))
   (clean-props! props "onOpenAutoFocus" "onCloseAutoFocus"))
 
+(defn- clean-radix-popup-props!
+  [^js props]
+  (clean-props! props "onEscapeKeyDown" "onPointerDownOutside"))
+
 (defn- prop-name
   [v]
   (cond
@@ -168,12 +172,77 @@
     (keyword? v) (name v)
     :else (str v)))
 
+(defn- variant-split-index
+  [class-name]
+  (let [length (count class-name)]
+    (loop [idx 0
+           bracket-depth 0
+           split-idx nil]
+      (if (< idx length)
+        (let [ch (.charAt class-name idx)]
+          (cond
+            (= ch "[") (recur (inc idx) (inc bracket-depth) split-idx)
+            (= ch "]") (recur (inc idx) (max 0 (dec bracket-depth)) split-idx)
+            (and (= ch ":") (zero? bracket-depth)) (recur (inc idx) bracket-depth idx)
+            :else (recur (inc idx) bracket-depth split-idx)))
+        split-idx))))
+
+(defn- utility-conflict
+  [class-name]
+  (let [split-idx (variant-split-index class-name)
+        variant-prefix (if split-idx (subs class-name 0 (inc split-idx)) "")
+        utility (if split-idx (subs class-name (inc split-idx)) class-name)
+        important? (string/starts-with? utility "!")
+        utility (cond-> utility important? (subs 1))
+        group (cond
+                (re-matches #"^-?h-.+" utility) "h"
+                (re-matches #"^-?min-h-.+" utility) "min-h"
+                (re-matches #"^-?max-h-.+" utility) "max-h"
+                (re-matches #"^-?w-.+" utility) "w"
+                (re-matches #"^-?min-w-.+" utility) "min-w"
+                (re-matches #"^-?max-w-.+" utility) "max-w"
+                (re-matches #"^-?p-.+" utility) "p"
+                (re-matches #"^-?px-.+" utility) "px"
+                (re-matches #"^-?py-.+" utility) "py"
+                (re-matches #"^-?pt-.+" utility) "pt"
+                (re-matches #"^-?pr-.+" utility) "pr"
+                (re-matches #"^-?pb-.+" utility) "pb"
+                (re-matches #"^-?pl-.+" utility) "pl")]
+    (when group
+      {:key (str variant-prefix group)
+       :important? important?})))
+
+(defn- merge-classes
+  [classes]
+  (:classes
+   (reduce
+    (fn [{:keys [classes indexes important?] :as state} class-name]
+      (if-let [{key :key current-important? :important?} (utility-conflict class-name)]
+        (if-let [idx (get indexes key)]
+          (if (and (get important? key) (not current-important?))
+            state
+            {:classes (conj (assoc classes idx nil) class-name)
+             :indexes (assoc indexes key (count classes))
+             :important? (assoc important? key current-important?)})
+          {:classes (conj classes class-name)
+           :indexes (assoc indexes key (count classes))
+           :important? (assoc important? key current-important?)})
+        (update state :classes conj class-name)))
+    {:classes []
+     :indexes {}
+     :important? {}}
+    classes)))
+
 (defn cn
   [& xs]
   (->> xs
        flatten
        (remove #(or (nil? %) (false? %) (= "" %)))
        (map prop-name)
+       (mapcat #(string/split % #"\s+"))
+       (remove string/blank?)
+       merge-classes
+       (remove nil?)
        (string/join " ")))
 
 (defn- with-class-props
@@ -223,6 +292,8 @@
            popup-props (with-class-props props base-class (some-> extra-class-fn (apply [props])))
            children (prop props "children")]
        (adapt-focus-props! popup-props)
+       (clean-radix-popup-props! positioner-props)
+       (clean-radix-popup-props! popup-props)
        (when ref (set-prop! popup-props "ref" ref))
        (doseq [k ["className" "children" "withoutAnimation" "position"]]
          (js-delete positioner-props k))
@@ -253,7 +324,7 @@
        "lg" "h-11 text-base rounded-md px-8"
        "sm" "h-7 rounded px-3 py-1"
        "xs" "h-6 text-xs rounded px-3"
-       "icon" "h-10 w-10"
+       "icon" "box-content h-6 w-6 p-1 overflow-hidden"
        "h-10 px-4 py-2"))))
 
 (def Button
@@ -436,10 +507,12 @@
 (def DialogContent
   (react/forwardRef
    (fn [^js props ref]
-     (let [overlay-props (or (prop props "overlayProps") #js {})
-           popup-props (with-class-props props "ui__dialog-content relative z-50 grid w-full max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg bg-background p-6 shadow-lg duration-200" nil)
+      (let [overlay-props (or (prop props "overlayProps") #js {})
+           popup-props (with-class-props props "ui__dialog-content fixed left-[50%] top-[50%] z-50 grid w-full max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg bg-background p-6 shadow-lg duration-200" nil)
            children (prop props "children")]
        (adapt-focus-props! popup-props)
+       (clean-radix-popup-props! popup-props)
+       (set-prop! popup-props "style" (js/Object.assign #js {} (prop popup-props "style") #js {:transform "translate(-50%, -50%)"}))
        (when ref (set-prop! popup-props "ref" ref))
        (clean-props! popup-props "overlayProps" "children")
        (react/createElement
