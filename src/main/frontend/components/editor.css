@@ -71,13 +71,14 @@ pre {
 
   &[data-editor-popup-ref=commands] {
     @apply w-72;
+    overflow-y: auto;
 
     &[data-side=top] {
-      max-height: min(calc(var(--radix-popover-content-available-height) - 60px), 460px);
+      max-height: min(calc(var(--available-height) - 60px), 460px);
     }
 
     &[data-side=bottom] {
-      max-height: min(calc(var(--radix-popover-content-available-height) - 20px), 480px);
+      max-height: min(calc(var(--available-height) - 20px), 480px);
     }
   }
 

@@ -463,14 +463,17 @@
      {:class (when (<= (count repos) 1) "no-repos")}
      (header-fn)
      [:div.cp__repos-list-wrap
-      (for [{:keys [hr item hover-detail title options icon]} (items-fn)]
+      (for [[idx {:keys [hr item hover-detail title options icon]}] (map-indexed vector (items-fn))]
         (let [on-click' (:on-click options)
               href' (:href options)
               menu-item (if (util/mobile?) ui/menu-link shui/dropdown-menu-item)]
           (if hr
-            (if (util/mobile?) [:hr.py-2] (shui/dropdown-menu-separator))
+            (if (util/mobile?)
+              [:hr.py-2 {:key (str "separator-" idx)}]
+              (shui/dropdown-menu-separator {:key (str "separator-" idx)}))
             (menu-item
              (assoc options
+                    :key (or href' hover-detail (str "repo-" idx))
                     :title hover-detail
                     :on-click (fn [^js e]
                                 (when on-click'

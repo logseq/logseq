@@ -369,11 +369,13 @@
     (cn
      "ui__button inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none"
      (case variant
+       "default" "bg-primary/90 hover:bg-primary/100 active:opacity-90 text-primary-foreground hover:text-primary-foreground as-solid"
        "solid" "bg-primary/90 hover:bg-primary/100 active:opacity-90 text-primary-foreground hover:text-primary-foreground as-solid"
        "destructive" "bg-destructive/90 hover:bg-destructive/100 active:opacity-90 text-destructive-foreground hover:text-destructive-foreground as-destructive"
        "outline" "border bg-background hover:bg-accent hover:text-accent-foreground active:opacity-80 as-outline"
        "secondary" "bg-secondary/70 text-secondary-foreground hover:bg-secondary/100 active:opacity-80 as-secondary"
        "ghost" "hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-ghost"
+       "text" "hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 as-text"
        "link" "text-primary underline-offset-4 hover:underline active:opacity-80 as-link"
        "")
      (case size
@@ -644,7 +646,8 @@
    (fn [^js props ref]
       (let [overlay-props (or (prop props "overlayProps") #js {})
            popup-props (with-class-props props "ui__dialog-content fixed left-[50%] top-[50%] z-50 grid w-full max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg bg-background p-6 shadow-lg transition-transform duration-200" nil)
-           children (prop props "children")]
+           children (prop props "children")
+           show-close? (not (false? (prop props "data-close-btn")))]
        (adapt-focus-props! popup-props)
        (clean-radix-popup-props! popup-props)
        (set-prop! popup-props "style" (js/Object.assign #js {} (prop popup-props "style") #js {:transform "translate(-50%, -50%) scale(calc(1 - var(--nested-dialogs, 0) * 0.03))"}))
@@ -655,8 +658,9 @@
         (react/createElement DialogBackdropPart (with-class-props overlay-props "ui__dialog-overlay fixed inset-0 z-50 bg-background/90 flex justify-center items-center" nil))
         (react/createElement DialogPopupPart popup-props
                              children
-                             (react/createElement DialogClosePart #js {:className "ui__dialog-close absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"}
-                                                  (react/createElement IconX #js {:className "h-4 w-4"}))))))))
+                             (when show-close?
+                               (react/createElement DialogClosePart #js {:className "ui__dialog-close absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"}
+                                                    (react/createElement IconX #js {:className "h-4 w-4"})))))))))
 (def DialogHeader (forward-dom "div" "ui__dialog-header flex flex-col space-y-1.5 text-center sm:text-left"))
 (def DialogFooter (forward-dom "div" "ui__dialog-footer flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2"))
 (def DialogTitle (forward-part DialogTitlePart "ui__dialog-title text-lg font-semibold leading-none tracking-tight"))
