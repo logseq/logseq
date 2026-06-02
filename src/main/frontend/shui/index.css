@@ -59,6 +59,7 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
+    --lx-gray-02: var(--ls-secondary-background-color, hsl(var(--secondary)));
   }
 }
 
@@ -93,6 +94,18 @@
 }
 
 @layer components {
+  .ui__dialog-overlay[data-base-ui-inert],
+  .ui__alert-dialog-overlay[data-base-ui-inert],
+  .ui__dialog-content[data-base-ui-inert],
+  .ui__alert-dialog-content[data-base-ui-inert],
+  [role="presentation"][data-base-ui-inert] {
+    pointer-events: none !important;
+
+    * {
+      pointer-events: none !important;
+    }
+  }
+
   /* ui components */
   .ui__button {
     &.as-classic {

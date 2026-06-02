@@ -521,10 +521,13 @@
             "span" props'
             (when checked?
               (react/createElement IconCheck #js {:className "h-4 w-4"}))))
-         (react/createElement
-          CheckboxRootPart props'
-          (react/createElement CheckboxIndicatorPart nil
-                               (react/createElement IconCheck #js {:className "h-4 w-4"}))))))))
+         (do
+           (set-prop! props' "render" (react/createElement "button"))
+           (set-prop! props' "nativeButton" true)
+           (react/createElement
+            CheckboxRootPart props'
+            (react/createElement CheckboxIndicatorPart nil
+                                 (react/createElement IconCheck #js {:className "h-4 w-4"})))))))))
 
 (def Switch
   (react/forwardRef

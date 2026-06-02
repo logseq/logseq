@@ -6,7 +6,7 @@
             ["react" :as react]
             ["@sentry/react" :refer [ErrorBoundary]]
             ["react-textarea-autosize" :as TextareaAutosize]
-            ["react-transition-group" :refer [CSSTransition TransitionGroup]]
+            ["react-transition-group" :refer [CSSTransition]]
             ["react-virtuoso" :refer [Virtuoso VirtuosoGrid]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
@@ -69,9 +69,6 @@
 (defn- react-element
   [component opts children]
   (apply react/createElement component (normalize-react-props opts) (react-children children)))
-
-(defn transition-group [opts & children]
-  (react-element TransitionGroup opts children))
 
 (defn css-transition [opts & children]
   (let [node-ref (or (:node-ref opts) (react/createRef))

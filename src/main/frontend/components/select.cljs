@@ -46,7 +46,16 @@
 
 (hsx/defc search-input
   [*input {:keys [prompt-key input-default-placeholder input-opts on-input]}]
-  (let [[input set-input!] (hooks/use-state @*input)]
+  (let [[input set-input!] (hooks/use-state @*input)
+        input-ref (hooks/use-ref nil)
+        auto-focus? (not (util/mobile?))]
+    (hooks/use-effect!
+     (fn []
+       (when auto-focus?
+         (let [timeout (js/setTimeout #(some-> (hooks/deref input-ref) (.focus)) 16)]
+           #(js/clearTimeout timeout))))
+     [auto-focus?])
+
     (hooks/use-effect!
      (fn []
        (reset! *input input)
@@ -62,9 +71,10 @@
     [:div.input-wrap
      [:input.cp__select-input.w-full
       (merge {:type "text"
+              :ref input-ref
               :class "!p-1.5"
               :placeholder (or input-default-placeholder (t prompt-key))
-              :auto-focus (not (util/mobile?))
+              :auto-focus auto-focus?
               :value input
               :on-change (fn [e]
                            (let [v (util/evalue e)]

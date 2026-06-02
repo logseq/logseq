@@ -177,6 +177,27 @@
          #(.removeEventListener js/document "pointerdown" on-pointer-down true))))
    [active? (:block/uuid editor-block)]))
 
+(defn- comment-box-editor-props
+  [{:keys [active? editor-box editor-block input-id config focus-editor? draft
+           placeholder container-id update-draft! asset-target-block submit!
+           create-sibling-block! exit-comment-editor! activate-reply! draft']}]
+  {:active? active?
+   :editor-box editor-box
+   :editor-block editor-block
+   :input-id input-id
+   :config config
+   :focus-editor? focus-editor?
+   :draft draft
+   :placeholder placeholder
+   :container-id container-id
+   :update-draft! update-draft!
+   :asset-target-block asset-target-block
+   :submit! submit!
+   :create-sibling-block! create-sibling-block!
+   :exit-comment-editor! exit-comment-editor!
+   :activate-reply! activate-reply!
+   :draft' draft'})
+
 (hsx/defc comment-box
   [{:keys [config comments-block comment-block initial-value placeholder on-submit on-cancel refocus-after-submit? focus-on-mount?]
     :or {refocus-after-submit? true
@@ -258,22 +279,13 @@
     (use-comment-box-outside-click! active? editor-block exit-comment-editor!)
     [:div.ls-comment-box
      (comment-box-editor-view
-      {:active? active?
-       :editor-box editor-box
-       :editor-block editor-block
-       :input-id input-id
-       :config config
-       :focus-editor? focus-editor?
-       :draft draft
-       :placeholder placeholder
-       :container-id container-id
-       :update-draft! update-draft!
-       :asset-target-block (or comments-block (:block/parent comment-block))
-       :submit! submit!
-       :create-sibling-block! create-sibling-block!
-       :exit-comment-editor! exit-comment-editor!
-       :activate-reply! activate-reply!
-       :draft' draft'})
+      (comment-box-editor-props
+       {:active? active? :editor-box editor-box :editor-block editor-block :input-id input-id
+        :config config :focus-editor? focus-editor? :draft draft :placeholder placeholder
+        :container-id container-id :update-draft! update-draft!
+        :asset-target-block (or comments-block (:block/parent comment-block))
+        :submit! submit! :create-sibling-block! create-sibling-block!
+        :exit-comment-editor! exit-comment-editor! :activate-reply! activate-reply! :draft' draft'}))
      (comment-box-actions
       {:content content
        :on-cancel on-cancel
