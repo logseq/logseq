@@ -1,6 +1,10 @@
 @charset "utf-8";
 
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+
+@source "./src/main/**/*.{cljs,cljc,js,css,html}";
+@source "./resources/**/*.html";
+@source "./deps/shui/src/**/*.{cljs,cljc,css}";
 
 @import "./src/main/frontend/shui/radix.css";
 @import "./src/main/frontend/shui/radix-hsl.css";
