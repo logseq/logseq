@@ -78,6 +78,20 @@
   []
   (boolean (some :open? @*dialogs)))
 
+(defn- close-prevented?
+  [handler-result ^js event-details ^js native-event]
+  (when (or (false? handler-result)
+            (some-> native-event (.-defaultPrevented))
+            (some-> event-details (.-isCanceled)))
+    (some-> event-details (.cancel))
+    true))
+
+(defn- call-close-handler!
+  [handler ^js event-details]
+  (let [native-event (some-> event-details (.-event))
+        result (when (fn? handler) (handler native-event))]
+    (close-prevented? result event-details native-event)))
+
 ;; apis
 (declare close!)
 
@@ -151,23 +165,20 @@
              :on-open-change (fn [v e]
                                (let [set-open! #(update-dialog! id :open? %)
                                      reason (some-> e (.-reason))
-                                     event (some-> e (.-event))
                                      escape-handler (or (:onEscapeKeyDown content-props)
                                                         onEscapeKeyDown)
                                      pointer-handler (or (:onPointerDownOutside content-props)
-                                                         onPointerDownOutside)]
-                                 (when (false? v)
-                                   (case reason
-                                     "escape-key"
-                                     (when (fn? escape-handler)
-                                       (escape-handler event))
+                                                         onPointerDownOutside)
+                                     prevented? (when (false? v)
+                                                  (case reason
+                                                    "escape-key"
+                                                    (call-close-handler! escape-handler e)
 
-                                     "outside-press"
-                                     (when (fn? pointer-handler)
-                                       (pointer-handler event))
+                                                    "outside-press"
+                                                    (call-close-handler! pointer-handler e)
 
-                                     nil))
-                                 (when-not (some-> event (.-defaultPrevented))
+                                                    false))]
+                                 (when-not prevented?
                                    (if (fn? on-open-change)
                                      (on-open-change {:value v :set-open! set-open!})
                                      (set-open! v)))))})
