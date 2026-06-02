@@ -398,7 +398,16 @@
                                                :schema {:type :property
                                                         :hide? true}}
 
-     ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
+     :logseq.property/assignee {:title "Assignee"
+                                :schema {:type :node
+                                         :cardinality :many
+                                         :public? true
+                                         :ui-position :block-below
+                                         :classes #{:logseq.class/Page}}
+                                :properties {:logseq.property/hide-empty-value true}
+                                :queryable? true}
+
+     ;; TODO: Add more props :Estimate, :Cycle, :Project
 
      :logseq.property/icon {:title "Icon"
                             :schema {:type :map}}
@@ -450,6 +459,41 @@
                                                :public? false
                                                :hide? true}
                                               :queryable? true}
+
+     :logseq.property.view/gallery-asset-property {:title "Gallery asset property"
+                                                   :schema
+                                                   {:type :property
+                                                    :hide? true
+                                                    :public? false}}
+
+     :logseq.property.view/gallery-display-properties {:title "Gallery display properties"
+                                                       :schema
+                                                       {:type :property
+                                                        :cardinality :many
+                                                        :hide? true
+                                                        :public? false}}
+
+     :logseq.property.view/gallery-card-size {:title "Gallery card size"
+                                              :schema
+                                              {:type :keyword
+                                               :hide? true
+                                               :public? false}
+                                              :properties {:logseq.property/scalar-default-value :default}
+                                              :rtc property-ignore-rtc}
+
+     :logseq.property.view/gallery-card-width {:title "Gallery card width"
+                                               :schema
+                                               {:type :raw-number
+                                                :hide? true
+                                                :public? false}
+                                               :rtc property-ignore-rtc}
+
+     :logseq.property.view/gallery-card-height {:title "Gallery card height"
+                                                :schema
+                                                {:type :raw-number
+                                                 :hide? true
+                                                 :public? false}
+                                                :rtc property-ignore-rtc}
 
      :logseq.property.view/sort-groups-by-property {:title "View sort groups by"
                                                     :schema
@@ -638,6 +682,12 @@
                                        :schema {:type :node
                                                 :public? false
                                                 :hide? true}}
+     :logseq.property.agent/session-id {:title "Agent Session ID"
+                                        :schema {:type :string
+                                                 :public? true
+                                                 :hide? true}
+                                        :properties
+                                        {:logseq.property/description "Stores the AgentBridge session ID for a routed task."}}
      :logseq.property/used-template {:title "Used template"
                                      :schema {:type :node
                                               :public? false
@@ -710,7 +760,7 @@
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
     "logseq.property.user" "logseq.property.history"
     "logseq.property.reaction" "logseq.property.sync" "logseq.property.publish"
-    "logseq.property.recycle" "logseq.property.comments"})
+    "logseq.property.recycle" "logseq.property.comments" "logseq.property.agent"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"

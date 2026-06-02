@@ -1,6 +1,7 @@
 (ns frontend.components.block.comments-model
   (:require [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
+            [frontend.util :as util]
             [goog.object :as gobj]))
 
 (def comments-tag-ident :logseq.class/Comments)
@@ -35,16 +36,27 @@
   (or (comments-area? block)
       (comment-block? block)))
 
+(defn- move-source-allowed?
+  [block sibling?]
+  (and (not (comment-block? block))
+       (or sibling?
+           (not (comments-area? block)))))
+
+(defn- move-target-allowed?
+  [target-block sibling?]
+  (and (not (comment-block? target-block))
+       (or sibling?
+           (not (comments-area? target-block)))))
+
 (defn move-allowed?
   ([blocks target-block]
    (move-allowed? blocks target-block {}))
-  ([blocks target-block _opts]
+  ([blocks target-block {:keys [sibling?]}]
    (boolean
     (and (seq blocks)
          target-block
-         (not-any? protected-comment-block? blocks)
-         (not (comment-block? target-block))
-         (not (comments-area? target-block))))))
+         (every? #(move-source-allowed? % sibling?) blocks)
+         (move-target-allowed? target-block sibling?)))))
 
 (defn comment-target-blocks
   [blocks]
@@ -333,4 +345,5 @@
    (boolean
     (and (nil? editor-action)
          (= "Enter" (gobj/get event "key"))
+         (not (util/native-event-is-composing? event))
          (not (true? (gobj/get event "shiftKey")))))))

@@ -221,7 +221,7 @@
 (def ^:export set_property_node_tags db-based-api/set-property-node-tags)
 
 ;; Internal db-based CLI APIs
-;; CLI APIs should use ensure-db-graph unless they have a nested check in cli-common-mcp-tools ns
+;; CLI APIs should use ensure-db-graph unless they have a nested check in logseq.api.db-based.tools.
 (defn- ensure-db-graph
   [f]
   (fn ensure-db-graph-wrapper [& args]

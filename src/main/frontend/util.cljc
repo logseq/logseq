@@ -23,8 +23,7 @@
                      [goog.userAgent]
                      [logseq.common.config :as common-config]
                      [logseq.common.util :as common-util]
-                     [promesa.core :as p]
-                     [rum.core :as rum]))
+                     [promesa.core :as p]))
   #?(:cljs (:import [goog.async Debouncer]))
   (:require
    [clojure.pprint]
@@ -762,10 +761,7 @@
    (defn react
      [ref]
      (when ref
-       #_{:clj-kondo/ignore [:private-call]}
-       (if rum/*reactions*
-         (rum/react ref)
-         @ref))))
+       @ref)))
 
 #?(:cljs
    (def time-ms common-util/time-ms))
@@ -1167,7 +1163,9 @@
                          (.-nativeEvent e)
 
                          :else e))]
-       (.-isComposing native-event))))
+       (or (.-isComposing native-event)
+           (= (gobj/get native-event "keyCode") 229)
+           (= (gobj/get native-event "key") "Process")))))
 
 #?(:cljs
    (defn open-url
@@ -1331,7 +1329,7 @@
           ret)
         @last-mem))))
 
-;; from rum
+;; requestAnimationFrame fallback
 #?(:cljs
    (def schedule
      (or (and (exists? js/window)

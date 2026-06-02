@@ -4,9 +4,9 @@
             [dommy.core :refer-macros [sel1] :as dom]
             [frontend.util :as util]
             [goog.object :as gobj]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]
-            [logseq.shui.table.impl :as impl]
-            [rum.core :as rum]))
+            [logseq.shui.table.impl :as impl]))
 
 (defn- get-head-container
   []
@@ -138,12 +138,13 @@
       [prop (rest prop-and-children)]
       [{} prop-and-children])))
 
-(rum/defc table < rum/static
+(hsx/defc table
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div (merge {:class "ls-table w-full caption-bottom text-sm table-fixed"}
-                 prop)
-     children]))
+    (into
+     [:div (merge {:class "ls-table w-full caption-bottom text-sm table-fixed"}
+                  prop)]
+     children)))
 
 (defn- remove-sticky-header
   []
@@ -155,7 +156,7 @@
   [^js/HTMLDivElement target-ref container]
   (hooks/use-effect!
    (fn []
-     (let [^js target (rum/deref target-ref)
+     (let [^js target (hooks/deref target-ref)
            ^js container (or (.closest target ".sidebar-item-list") container)
            ^js table (.closest target ".ls-table-rows")]
        (when (and container table)
@@ -220,51 +221,54 @@
   (when-let [user-agent js/navigator.userAgent]
     (re-find #"Mobi" user-agent)))
 
-(rum/defc table-header < rum/static
+(hsx/defc table-header
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)
-        el-ref (rum/use-ref nil)
+        el-ref (hooks/use-ref nil)
         _ (when-not (mobile?) (use-sticky-element! el-ref (:main-container prop)))]
-    [:div.ls-table-header
-     (merge {:class "border-y transition-colors bg-gray-01"
-             :ref el-ref
-             :style {:z-index 9}}
-            (dissoc prop :main-container))
-     children]))
+    (into
+     [:div.ls-table-header
+      (merge {:class "border-y transition-colors bg-gray-01"
+              :ref el-ref
+              :style {:z-index 9}}
+             (dissoc prop :main-container))]
+     children)))
 
-(rum/defc table-footer
-  [children]
-  [:div.ls-table-footer.fade-in.faster
-   children])
+(hsx/defc table-footer
+  [& children]
+  (into [:div.ls-table-footer.fade-in.faster] children))
 
-(rum/defc table-row < rum/static
+(hsx/defc table-row
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div.ls-table-row.ls-block.flex.flex-row.items-center
-     (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted bg-gray-01 items-stretch"}
-            prop)
-     children]))
+    (into
+     [:div.ls-table-row.ls-block.flex.flex-row.items-center
+      (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted bg-gray-01 items-stretch"}
+             prop)]
+     children)))
 
-(rum/defc table-cell < rum/static
+(hsx/defc table-cell
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
     [:div.ls-table-cell.flex.relative.h-full (dissoc prop :select? :add-property?)
-     [:div {:class (str "flex align-middle w-full overflow-x-clip items-center"
-                        (cond
-                          (:select? prop)
-                          " px-0"
-                          (:add-property? prop)
-                          ""
-                          :else
-                          " border-r px-2"))}
-      children]]))
+     (into
+      [:div {:class (str "flex align-middle w-full overflow-x-clip items-center"
+                         (cond
+                           (:select? prop)
+                           " px-0"
+                           (:add-property? prop)
+                           ""
+                           :else
+                           " border-r px-2"))}]
+      children)]))
 
-(rum/defc table-actions < rum/static
+(hsx/defc table-actions
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)
-        el-ref (rum/use-ref nil)]
-    [:div.ls-table-actions.flex.flex-row.items-center.gap-1.bg-gray-01
-     (merge {:ref el-ref
-             :style {:z-index 101}}
-            prop)
-     children]))
+        el-ref (hooks/use-ref nil)]
+    (into
+     [:div.ls-table-actions.flex.flex-row.items-center.gap-1.bg-gray-01
+      (merge {:ref el-ref
+              :style {:z-index 101}}
+             prop)]
+     children)))

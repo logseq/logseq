@@ -4,12 +4,12 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [goog.dom :as gdom]))
+            [goog.dom :as gdom]
+            [logseq.shui.hooks :as hooks]))
 
 (defn did-mount!
-  [state]
-  (let [[_ id config] (:rum/args state)
-        content (state/get-edit-content)
+  [id config]
+  (let [content (state/get-edit-content)
         input (state/get-input)
         node (util/rec-get-node input "ls-block")
         container-id (when node
@@ -39,25 +39,10 @@
             (state/<invoke-db-worker :thread-api/undo-redo-record-editor-info
                                      repo
                                      editor-info)))))
-    (state/set-state! :editor/op nil))
-  state)
+    (state/set-state! :editor/op nil)))
 
-;; (defn will-remount!
-;;   [_old-state state]
-;;   (let [new-block (:block (first (:rum/args state)))
-;;         edit-block (state/get-edit-content)
-;;         repo (state/get-current-repo)]
-;;     (when (and edit-block
-;;            (= (:block/uuid new-block)
-;;               (:block/uuid edit-block))
-;;            (not= (some-> edit-block string/trim)
-;;                  (some-> (:block/title new-block) string/trim)))
-;;       (when-let [input (state/get-input)]
-;;         (util/set-change-value input
-;;                                (block-handler/sanity-block-content repo (get new-block :block/format :markdown) (:block/title new-block))))))
-;;   state)
-
-(def lifecycle
-  {:did-mount did-mount!
-   ;; :will-remount will-remount!
-   })
+(defn use-did-mount!
+  [id config]
+  (hooks/use-layout-effect!
+   #(did-mount! id config)
+   []))

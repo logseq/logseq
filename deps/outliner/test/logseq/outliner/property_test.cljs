@@ -143,8 +143,10 @@
           _ (outliner-property/set-block-property! conn [:block/uuid block-uuid] :user.property/num (:db/id property-value))]
       (is (= (:db/id property-value)
              (:db/id (:user.property/num (db-test/find-block-by-content @conn "b2")))))
-      (outliner-property/set-block-property! conn [:block/uuid block-uuid] :user.property/num (:db/id (d/entity @conn :logseq.property/empty-placeholder)))
-      (is (= 9 (:logseq.property/value (:user.property/num (d/entity @conn [:block/uuid block-uuid])))))))
+      (let [empty-placeholder-id (:db/id (d/entity @conn :logseq.property/empty-placeholder))]
+        (outliner-property/set-block-property! conn [:block/uuid block-uuid] :user.property/num empty-placeholder-id)
+        (is (= empty-placeholder-id
+               (:logseq.property/value (:user.property/num (d/entity @conn [:block/uuid block-uuid]))))))))
 
   (testing "Update a :number value with existing value"
     (let [conn (db-test/create-conn-with-blocks
@@ -265,14 +267,16 @@
 
 (deftest status-property-setting-classes
   (let [conn (db-test/create-conn-with-blocks
-              {:classes {:Project {:build/class-properties [:logseq.property/status]}}
+              {:classes {:Cat {}
+                         :Project {:build/class-properties [:logseq.property/status]}}
                :pages-and-blocks
                [{:page {:block/title "page1"}
                  :blocks [{:block/title ""}
+                          {:block/title "cat task" :build/tags [:Cat]}
                           {:block/title "project task" :build/tags [:Project]}]}]})
         page1 (:block/uuid (db-test/find-page-by-title @conn "page1"))
-        [empty-task project]
-        (map #(:block/uuid (db-test/find-block-by-content @conn %)) ["" "project task"])]
+        [empty-task cat-task project]
+        (map #(:block/uuid (db-test/find-block-by-content @conn %)) ["" "cat task" "project task"])]
 
     (outliner-property/batch-set-property! conn [empty-task] :logseq.property/status :logseq.property/status.doing)
     (is (= [:logseq.class/Task]
@@ -284,10 +288,15 @@
            (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid page1])))))
         "Adds Task to page without tag")
 
+    (outliner-property/batch-set-property! conn [cat-task] :logseq.property/status :logseq.property/status.doing)
+    (is (= #{:logseq.class/Task :user.class/Cat}
+           (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid cat-task])))))
+        "Adds Task to tagged block when its classes do not provide status")
+
     (outliner-property/batch-set-property! conn [project] :logseq.property/status :logseq.property/status.doing)
     (is (= [:user.class/Project]
            (mapv :db/ident (:block/tags (d/entity @conn [:block/uuid project]))))
-        "Doesn't add Task to block when it is already tagged")))
+        "Doesn't add Task to block when its class provides status")))
 
 (deftest batch-set-property-rejects-private-built-in-entity
   (let [conn (db-test/create-conn)
@@ -471,6 +480,78 @@
            #"Extends cycle"
            (outliner-property/set-block-property! conn (:db/id class3) :logseq.property.class/extends (:db/id class1)))
           "Extends cycle"))))
+
+(deftest extends-redundant-direct-parent-cleanup
+  (testing "Clean redundant direct parents from descendants when a class gets a new parent"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:A {}
+                           :B {}
+                           :C {:build/class-extends [:B]}
+                           :D {:build/class-extends [:A :C]}}})
+          b (d/entity @conn :user.class/B)]
+      (outliner-property/set-block-property! conn
+                                             (:db/id b)
+                                             :logseq.property.class/extends
+                                             (:db/id (d/entity @conn :user.class/A)))
+      (is (= [:user.class/C]
+             (:logseq.property.class/extends
+              (db-test/readable-properties (d/entity @conn :user.class/D))))
+          "D keeps only the nearest direct parent"))))
+
+(deftest extends-redundant-cleanup-with-lookup-ref-parent
+  (testing "Treat lookup refs as a single parent reference"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:A {}
+                           :B {}
+                           :C {:build/class-extends [:B]}
+                           :D {:build/class-extends [:A :C]}}})]
+      (outliner-property/set-block-property! conn
+                                             (:db/id (d/entity @conn :user.class/B))
+                                             :logseq.property.class/extends
+                                             [:db/ident :user.class/A])
+      (is (= [:user.class/A]
+             (:logseq.property.class/extends
+              (db-test/readable-properties (d/entity @conn :user.class/B))))
+          "B uses the lookup ref as one parent")
+      (is (= [:user.class/C]
+             (:logseq.property.class/extends
+              (db-test/readable-properties (d/entity @conn :user.class/D))))
+          "D removes the direct parent inherited through C"))))
+
+(deftest extends-redundant-cleanup-with-keyword-vector-parents
+  (testing "Treat a vector of class idents as multiple parents"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:A {}
+                           :B {}
+                           :C {:build/class-extends [:A]}
+                           :D {:build/class-extends [:A :B]}}})]
+      (outliner-property/batch-set-property! conn
+                                             [(:db/id (d/entity @conn :user.class/B))]
+                                             :logseq.property.class/extends
+                                             [:user.class/A :user.class/C])
+      (is (= [:user.class/C]
+             (:logseq.property.class/extends
+              (db-test/readable-properties (d/entity @conn :user.class/B))))
+          "B keeps only the nearest parent")
+      (is (= [:user.class/B]
+             (:logseq.property.class/extends
+              (db-test/readable-properties (d/entity @conn :user.class/D))))
+          "D removes the direct parent inherited through B"))))
+
+(deftest extends-redundant-direct-parent-cleanup-for-root-reset
+  (testing "Clean descendant Root parents when an ancestor is reset to Root"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:B {}
+                           :C {:build/class-extends [:B]}
+                           :D {:build/class-extends [:logseq.class/Root :C]}}})]
+      (outliner-property/set-block-property! conn
+                                             (:db/id (d/entity @conn :user.class/B))
+                                             :logseq.property.class/extends
+                                             :logseq.class/Root)
+      (is (= [:user.class/C]
+             (:logseq.property.class/extends
+              (db-test/readable-properties (d/entity @conn :user.class/D))))
+          "D removes the direct Root parent inherited through C"))))
 
 (deftest delete-property-value!
   (let [conn (db-test/create-conn-with-blocks

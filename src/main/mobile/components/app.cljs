@@ -11,9 +11,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.extensions.fsrs :as fsrs]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.rum :as frum]
-            [frontend.state :as state]
+            [frontend.mobile.util :as mobile-util]            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
@@ -32,11 +30,11 @@
             [mobile.components.ui :as ui-component]
             [mobile.state :as mobile-state]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc component-with-restoring < rum/static rum/reactive
+(hsx/defc component-with-restoring
   [component]
-  (let [db-restoring? (state/sub :db/restoring?)]
+  (let [db-restoring? (state/use-sub :db/restoring?)]
     (if db-restoring?
       [:div.space-y-2.mt-8.mx-0.opacity-75
        (shui/skeleton {:class "h-10 w-full mb-6"})
@@ -44,11 +42,12 @@
        (shui/skeleton {:class "h-6 w-full"})]
       component)))
 
-(rum/defc home < rum/static
-  {:did-mount (fn [state]
-                (ui/inject-document-devices-envs!)
-                state)}
+(hsx/defc home
   []
+  (hooks/use-effect!
+   (fn []
+     (ui/inject-document-devices-envs!))
+   [])
   (component-with-restoring (journal/all-journals)))
 
 (defn use-theme-effects!
@@ -112,12 +111,13 @@
    :cancelButton (t :ui/cancel)})
 
 (defn- native-graph-actions
-  [{:keys [url root remote? GraphUUID GraphSchemaVersion]}]
+  [repos {:keys [url root remote? GraphUUID GraphSchemaVersion] :as graph}]
   (let [graph-name (config/db-graph-name url)
         warning (t :graph/delete-warning)
-        delete-message (fn [message] (str message "\n\n" warning))]
+        delete-message (fn [message] (str message "\n\n" warning))
+        delete-local? (repo-handler/removable-repo? graph repos)]
     (cond-> []
-      root
+      (and root delete-local?)
       (conj
        (native-graph-action
         "deleteLocal"
@@ -147,10 +147,10 @@
         (t :graph/leave-confirm-desc))))))
 
 (defn- native-graph-item
-  [downloading-graph-id {:keys [url root remote? graph-e2ee?
-                                GraphName GraphSchemaVersion GraphUUID
-                                graph-ready-for-use? created-at last-seen-at]
-                         :as graph}]
+  [repos downloading-graph-id {:keys [url root remote? graph-e2ee?
+                                      GraphName GraphSchemaVersion GraphUUID
+                                      graph-ready-for-use? created-at last-seen-at]
+                               :as graph}]
   (let [display-name (text-util/get-graph-name-from-path url)
         time (safe-locale-date (or last-seen-at created-at))
         downloading? (and downloading-graph-id (= GraphUUID downloading-graph-id))]
@@ -167,7 +167,7 @@
        :graphName GraphName
        :graphUUID GraphUUID
        :graphSchemaVersion GraphSchemaVersion
-       :actions (native-graph-actions graph)})))
+       :actions (native-graph-actions repos graph)})))
 
 (defn- native-graph-sections
   [repos remotes login? downloading-graph-id]
@@ -185,7 +185,7 @@
         {own-graphs true shared-graphs false}
         (group-by (fn [graph] (= "manager" (:graph<->user-user-type graph))) remote-graphs)
         section (fn [id title refreshable? show-empty? graphs]
-                  (let [items (vec (keep #(native-graph-item downloading-graph-id %) graphs))]
+                  (let [items (vec (keep #(native-graph-item repos downloading-graph-id %) graphs))]
                     (when (or show-empty? (seq items))
                       {:id id
                        :title title
@@ -199,14 +199,14 @@
 
 (defn- use-native-graphs-effects!
   []
-  (let [[id-token] (frum/use-atom-in state/state :auth/id-token)
-        [repos] (frum/use-atom-in state/state [:me :repos])
-        [remotes] (frum/use-atom-in state/state :rtc/graphs)
-        [downloading-graph-id] (frum/use-atom-in state/state :rtc/downloading-graph-uuid)
-        [loading-graphs?] (frum/use-atom-in state/state :rtc/loading-graphs?)
-        [route-match] (frum/use-atom-in state/state :route-match)
-        [_preferred-language] (frum/use-atom-in state/state :preferred-language)
-        [tab] (frum/use-atom mobile-state/*tab)
+  (let [[id-token] (hooks/use-atom-in state/state :auth/id-token)
+        [repos] (hooks/use-atom-in state/state [:me :repos])
+        [remotes] (hooks/use-atom-in state/state :rtc/graphs)
+        [downloading-graph-id] (hooks/use-atom-in state/state :rtc/downloading-graph-uuid)
+        [loading-graphs?] (hooks/use-atom-in state/state :rtc/loading-graphs?)
+        [route-match] (hooks/use-atom-in state/state :route-match)
+        [_preferred-language] (hooks/use-atom-in state/state :preferred-language)
+        [tab] (hooks/use-atom mobile-state/*tab)
         login? (boolean id-token)
         route-name (get-in route-match [:data :name])
         visible? (and (= tab "graphs")
@@ -232,33 +232,35 @@
        nil)
      [labels sections visible? loading-graphs?])))
 
-(rum/defc native-graphs-bridge
+(hsx/defc native-graphs-bridge
   []
   (use-native-graphs-effects!)
   [:<>])
 
-(rum/defc capture <
-  {:did-mount (fn [state]
-                (p/do!
-                 (editor-handler/quick-add-ensure-new-block-exists!)
-                 (when (mobile-util/native-ios?)
-                   ;; FIXME: android doesn't open keyboard automatically
-                   (editor-handler/quick-add-open-last-block!)))
-                state)}
+(hsx/defc capture
   []
+  (hooks/use-effect!
+   (fn []
+     (p/do!
+      (editor-handler/quick-add-ensure-new-block-exists!)
+      (when (mobile-util/native-ios?)
+        ;; FIXME: android doesn't open keyboard automatically
+        (editor-handler/quick-add-open-last-block!))))
+   [])
   (quick-add/quick-add))
 
-(rum/defc flashcards <
-  {:did-mount (fn [state]
-                (fsrs/update-due-cards-count)
-                state)}
+(hsx/defc flashcards
   []
+  (hooks/use-effect!
+   (fn []
+     (fsrs/update-due-cards-count))
+   [])
   [:div.ls-mobile-flashcards
    (fsrs/cards-view nil {:mobile? true
                          :on-header-change mobile-state/set-flashcards-header!
                          :on-selector-change mobile-state/set-flashcards-selector!})])
 
-(rum/defc other-page < rum/static
+(hsx/defc other-page
   [route-view tab route-match]
   (let [page-view? (= (get-in route-match [:data :name]) :page)]
     [:div#main-content-container.pl-3.ls-layer
@@ -274,7 +276,7 @@
          (= tab "flashcards") (component-with-restoring (flashcards))
          (= tab "capture") (component-with-restoring (capture))))]))
 
-(rum/defc main-content < rum/static
+(hsx/defc main-content
   [tab route-match]
   (let [view (get-in route-match [:data :view])
         home? (and (= tab "home") (nil? view))
@@ -301,11 +303,11 @@
      (when-not home?
        (other-page view tab route-match))]))
 
-(rum/defc app
+(hsx/defc app
   [current-repo route-match]
   (let [[tab] (mobile-state/use-tab)
-        preferred-language (state/sub :preferred-language)
-        [theme] (frum/use-atom-in state/state :ui/theme)]
+        preferred-language (state/use-sub :preferred-language)
+        [theme] (hooks/use-atom-in state/state :ui/theme)]
     (use-screen-size-effects!)
     (use-theme-effects! current-repo theme)
     (hooks/use-effect!
@@ -339,13 +341,13 @@
    {:id mobile-util/mobile-keyboard-anchor-id
     :type "text"}])
 
-(rum/defc main < rum/reactive
+(hsx/defc main
   []
-  (let [current-repo (state/sub :git/current-repo)
-        show-action-bar? (state/sub :mobile/show-action-bar?)
-        {:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
+  (let [current-repo (state/use-sub :git/current-repo)
+        show-action-bar? (state/use-sub :mobile/show-action-bar?)
+        [{:keys [open? content-fn opts]}] (hooks/use-atom mobile-state/*popup-data)
         show-popup? (and open? content-fn)
-        route-match (state/sub :route-match)]
+        route-match (state/use-sub :route-match)]
     [:main#app-container-wrapper.ls-fold-button-on-right
      [:div#app-container {:class (when show-popup? "invisible")}
       [:div#main-container.flex.flex-1.overflow-x-hidden

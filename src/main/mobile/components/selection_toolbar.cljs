@@ -5,11 +5,12 @@
             [frontend.context.i18n :refer [t]]
             [frontend.handler.comments :as comments-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.mobile.haptics :as haptics]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util.url :as url-util]
             [logseq.shui.hooks :as hooks]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- dismiss-action-bar!
   []
@@ -33,6 +34,8 @@
   (let [close! close-selection-bar!
         blocks (selected-blocks)
         first-block-id (:block/uuid (first blocks))
+        reaction-blocks (mapv #(select-keys % [:block/uuid]) blocks)
+        selection-target (first (state/get-selection-blocks))
         comment-targets (comments-model/comment-target-blocks blocks)]
     (vec
      (concat
@@ -54,10 +57,22 @@
                    (editor-handler/on-tab :right))}]
       (when (seq comment-targets)
         [{:id "comment"
-          :label (t :block.comments/add-comment)
+          :label (t :mobile.toolbar/comment)
           :system-icon "text.bubble"
           :handler (fn []
                      (comments-handler/add-comment-to-blocks! comment-targets)
+                     (close!))}])
+      (when (and (seq reaction-blocks) selection-target)
+        [{:id "reaction"
+          :label (t :mobile.toolbar/reaction)
+          :system-icon "face.smiling"
+          :handler (fn []
+                     (let [opts (if (= 1 (count reaction-blocks))
+                                  {:block (first reaction-blocks)
+                                   :target selection-target}
+                                  {:blocks reaction-blocks
+                                   :target selection-target})]
+                       (state/pub-event! [:editor/new-reaction opts]))
                      (close!))}])
       [{:id "delete"
         :label (t :ui/delete)
@@ -88,7 +103,7 @@
                    (state/clear-selection!)
                    (close!))}]))))
 
-(rum/defc action-bar
+(hsx/defc action-bar
   []
   (let [actions (selection-actions)
         action-ids (mapv :id actions)
@@ -103,9 +118,8 @@
                                       "action"
                                       (fn [^js e]
                                         (when-let [id (.-id e)]
-                                          (prn :debug :id id
-                                               :handler (.-current handlers-ref))
                                           (when-let [handler (get (.-current handlers-ref) id)]
+                                            (haptics/haptics)
                                             (handler)))))
                actions' {:actions (map (fn [{:keys [id label system-icon]}]
                                          {:id id

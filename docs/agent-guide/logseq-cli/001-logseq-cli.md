@@ -112,6 +112,7 @@ The top-level help groups commands into graph inspection/editing, graph manageme
 
 - `login`
 - `logout`
+- `agent bridge`
 - `completion`
 - `debug pull`
 - `skill show`
@@ -119,6 +120,10 @@ The top-level help groups commands into graph inspection/editing, graph manageme
 - `example <selector...>`
 
 `example` entries are generated from command metadata for the inspect/edit families `list`, `upsert`, `remove`, `query`, `search`, and `show`. Use exact selectors such as `example upsert page` or prefix selectors such as `example upsert`.
+
+### Agent bridge
+
+`agent bridge` is the first AgentBridge command surface. It resolves the target graph using normal CLI config precedence, resolves the AgentBridge name from `:agent-name` in `cli.edn` or the machine hostname, checks that `codex` is available, starts or reuses the graph's db-worker-node, registers the AgentBridge name in the graph, initializes the per-agent master prompt, scans TODO `#Task` blocks assigned to that AgentBridge name, and listens to db-worker-node events for follow-up scans. Matched task and comment requests are dispatched to the master Codex session.
 
 ## Global flags and output modes
 

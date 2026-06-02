@@ -29,7 +29,7 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 - `doctor`
 - `sync status|start|stop|upload|download|remote-graphs|ensure-keys|grant-access|config set|get|unset`
 - Authentication: `login|logout`
-- Utilities: `completion`, `debug`, `example`, `skill`
+- Utilities: `agent bridge`, `completion`, `debug`, `example`, `skill`
 
 ## Global options
 
@@ -116,6 +116,7 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 ## Tips
 
 - `query list` returns both built-ins and `custom-queries` from `cli.edn`.
+- `agent bridge` starts/reuses db-worker-node, listens to db-worker-node events, scans routable tasks on startup and each event, starts one in-process master Codex session, and dispatches matched task/comment requests to that session.
 - `show --id` accepts either one db/id or an EDN vector of ids.
 - `remove block --id` also accepts one db/id or an EDN vector.
 - `upsert block` enters update mode when `--id` or `--uuid` is provided.

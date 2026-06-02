@@ -5,6 +5,7 @@
             ["http" :as http]
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
+            [logseq.db-worker.log :as db-worker-log]
             [promesa.core :as p]))
 
 (def ^:private valid-owner-sources
@@ -221,21 +222,32 @@
              :interval-ms 50}))
 
 (defn spawn-server!
-  [{:keys [script repo root-dir owner-source create-empty-db?]}]
+  [{:keys [script repo root-dir owner-source create-empty-db? embedding-endpoint embedding-model-id]}]
   (let [owner-source (normalize-owner-source owner-source)
         detached? (not= owner-source :electron)
         args (clj->js (cond-> [script "--repo" repo "--root-dir" root-dir "--owner-source" (name owner-source)]
-                        create-empty-db? (conj "--create-empty-db")))
+                        create-empty-db? (conj "--create-empty-db")
+                        (seq embedding-endpoint) (conj "--embedding-endpoint" embedding-endpoint)
+                        (seq embedding-model-id) (conj "--embedding-model-id" embedding-model-id)))
         env (js/Object.assign #js {} (.-env js/process) #js {:ELECTRON_RUN_AS_NODE "1"})]
     (if-not script
       (do
         (log/warn :db-worker-daemon/missing-script {:repo repo :root-dir root-dir})
         nil)
-      (let [child (.spawn child-process (.-execPath js/process) args #js {:detached detached?
-                                                                          :stdio (if detached?
-                                                                                   "ignore"
-                                                                                   "inherit")
-                                                                          :env env})]
+      (let [stdio-config (when detached?
+                           (db-worker-log/child-stdio! {:root-dir root-dir
+                                                        :repo repo}))
+            _ (when detached?
+                (aset env db-worker-log/stdio-redirected-env "1"))
+            child (try
+                    (.spawn child-process (.-execPath js/process) args #js {:detached detached?
+                                                                            :stdio (if detached?
+                                                                                     (:stdio stdio-config)
+                                                                                     "inherit")
+                                                                            :env env})
+                    (finally
+                      (when-let [close! (:close! stdio-config)]
+                        (close!))))]
         (when detached?
           (.unref child))
         child))))

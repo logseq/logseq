@@ -5,13 +5,16 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor]
             [frontend.handler.route :as route-handler]
+            [frontend.modules.outliner.op :as outliner-op]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
+            [logseq.db :as ldb]
             [logseq.outliner.core :as outliner-core]
             [promesa.core :as p]))
 
@@ -360,6 +363,87 @@
          (keydown-dollar-without-selection-result {:value "inline $$"
                                                    :cursor-pos 8}))))
 
+(defn- delete-block-at-zero-pos-result
+  [block]
+  (let [deleted? (atom false)
+        stopped? (atom false)
+        input #js {:value ""}]
+    (with-redefs [state/get-input (constantly input)
+                  cursor/pos (constantly 0)
+                  util/stop (fn [_] (reset! stopped? true))
+                  state/get-current-repo (constantly test-helper/test-db)
+                  state/get-edit-block (constantly block)
+                  db/entity (fn [_] block)
+                  ldb/get-left-sibling (constantly nil)
+                  editor/get-state (constantly {:config {}})
+                  editor/delete-block! (fn [_] (reset! deleted? true))]
+      (#'editor/delete-block-when-zero-pos! nil)
+      {:deleted? @deleted?
+       :stopped? @stopped?})))
+
+(deftest delete-block-when-zero-pos-keeps-asset-block-test
+  (testing "Backspace at the start of an asset block does not delete the block"
+    (is (= {:deleted? false
+            :stopped? true}
+           (delete-block-at-zero-pos-result
+            {:db/id 1
+             :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+             :block/title ""
+             :block/page {:db/id 10}
+             :logseq.property.asset/type "png"})))))
+
+(deftest delete-block-when-zero-pos-keeps-comments-block-test
+  (testing "Backspace at the start of a Comments block does not delete the block"
+    (is (= {:deleted? false
+            :stopped? true}
+           (delete-block-at-zero-pos-result
+            {:db/id 1
+             :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+             :block/title ""
+             :block/page {:db/id 10}
+             :block/tags [{:db/ident :logseq.class/Comments}]})))))
+
+(deftest delete-block-when-zero-pos-keeps-regular-empty-block-behavior-test
+  (testing "Backspace at the start of a regular empty block still deletes it"
+    (is (= {:deleted? true
+            :stopped? true}
+           (delete-block-at-zero-pos-result
+            {:db/id 1
+             :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+             :block/title ""
+             :block/page {:db/id 10}})))))
+
+(deftest move-to-prev-block-edit-fn-focuses-merged-asset-title-test
+  (let [asset-block {:db/id 1
+                     :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                     :block/title ""
+                     :logseq.property.asset/type "png"}
+        sibling-dom #js {:getAttribute #({"blockid" (str (:block/uuid asset-block))
+                                          "containerid" nil} %)}
+        edit-calls (atom [])]
+    (with-redefs [db/entity (fn [lookup-ref]
+                              (when (contains? #{[:block/uuid (:block/uuid asset-block)]
+                                                 (:db/id asset-block)}
+                                               lookup-ref)
+                                asset-block))
+                  editor/edit-block! (fn [block pos opts]
+                                       (swap! edit-calls conj {:block block
+                                                               :pos pos
+                                                               :opts opts}))]
+      (let [{:keys [new-content pos edit-block-f]} (#'editor/move-to-prev-block
+                                                    test-helper/test-db
+                                                    sibling-dom
+                                                    "after")]
+        (is (= "after" new-content))
+        (is (= 0 pos))
+        (edit-block-f)
+        (is (= [{:block asset-block
+                 :pos 0
+                 :opts {:custom-content "after"
+                        :tail-len 5
+                        :container-id nil}}]
+               @edit-calls))))))
+
 (defn- handle-last-input-handler
   "Spied version of editor/handle-last-input"
   [{:keys [value cursor-pos editor-config]}]
@@ -478,6 +562,77 @@
           "Comment editor expand shortcut should not expand synthetic draft blocks")
       (is (empty? @collapsed)
           "Comment editor collapse shortcut should not collapse synthetic draft blocks"))))
+
+(deftest db-based-save-assets-honors-explicit-target-block
+  (async done
+    (let [draft-uuid #uuid "8789a99e-5147-41a1-a836-4e0a6f03fe9e"
+          asset-uuid #uuid "146b4102-b3d4-4e74-9044-a1c4c3a93326"
+          target-block {:block/uuid #uuid "aa2b426a-7357-452d-a5cc-f1d9117b1772"
+                        :block/title "Comments"}
+          inserted (atom nil)]
+      (-> (p/with-redefs [assets-handler/ensure-assets-dir! (fn [_repo]
+                                                              (p/resolved ["/tmp/repo" "assets"]))
+                          model/get-today-journal-title (constantly "Today")
+                          model/get-journal-page (constantly {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})
+                          state/get-edit-block (constantly {:block/uuid draft-uuid
+                                                            :block/title ""})
+                          state/get-edit-content (constantly "")
+                          state/get-editor-args (constantly [nil nil {:comment-editor? true
+                                                                      :comment-asset-target-block target-block}])
+                          editor/new-asset-block (fn [_repo _file opts]
+                                                   (p/resolved {:block/uuid (or (:block/uuid opts) asset-uuid)}))
+                          outliner-op/insert-blocks! (fn [blocks target opts]
+                                                       (reset! inserted {:blocks blocks
+                                                                         :target target
+                                                                         :opts opts}))
+                          db/entity (fn [lookup]
+                                      (when (= lookup [:block/uuid asset-uuid])
+                                        {:block/uuid asset-uuid}))]
+            (editor/db-based-save-assets! "repo" [#js {:name "image.jpeg"}]
+                                          :target-block target-block))
+          (p/then (fn [_]
+                    (is (= target-block (:target @inserted)))
+                    (is (= {:bottom? true
+                            :keep-uuid? true
+                            :replace-empty-target? false
+                            :sibling? false}
+                           (:opts @inserted)))))
+          (p/finally done)))))
+
+(deftest db-based-save-assets-ignores-stale-comment-target-without-explicit-target
+  (async done
+    (let [asset-uuid #uuid "6b326622-8fe8-463f-b625-70e5329d92d5"
+          edit-block {:block/uuid #uuid "f387fbb5-ef2a-41f7-9b99-f49b91a61cde"
+                      :block/title "Current block"}
+          stale-comment-target {:block/uuid #uuid "4da73880-13d5-4952-86fc-eb1be04bb030"
+                                :block/title "Stale comments"}
+          inserted (atom nil)]
+      (-> (p/with-redefs [assets-handler/ensure-assets-dir! (fn [_repo]
+                                                              (p/resolved ["/tmp/repo" "assets"]))
+                          model/get-today-journal-title (constantly "Today")
+                          model/get-journal-page (constantly {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})
+                          state/get-edit-block (constantly edit-block)
+                          state/get-edit-content (constantly "Current block")
+                          state/get-editor-args (constantly [nil nil {:comment-editor? true
+                                                                      :comment-asset-target-block stale-comment-target}])
+                          editor/new-asset-block (fn [_repo _file opts]
+                                                   (p/resolved {:block/uuid (or (:block/uuid opts) asset-uuid)}))
+                          outliner-op/insert-blocks! (fn [blocks target opts]
+                                                       (reset! inserted {:blocks blocks
+                                                                         :target target
+                                                                         :opts opts}))
+                          db/entity (fn [lookup]
+                                      (when (= lookup [:block/uuid asset-uuid])
+                                        {:block/uuid asset-uuid}))]
+            (editor/db-based-save-assets! "repo" [#js {:name "image.jpeg"}]))
+          (p/then (fn [_]
+                    (is (= edit-block (:target @inserted)))
+                    (is (= {:bottom? true
+                            :keep-uuid? true
+                            :replace-empty-target? true
+                            :sibling? true}
+                           (:opts @inserted)))))
+          (p/finally done)))))
 
 (deftest save-block!
   (testing "Saving blocks with and without properties"

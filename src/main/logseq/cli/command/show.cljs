@@ -231,10 +231,6 @@
    {:block/tags [:db/id :db/ident :block/name :block/title :block/uuid]}
    {:block/link link-target-selector}])
 
-(def block-render-selector
-  "Pull selector for rendering individual blocks with the same visible details as `show` tree rows."
-  (conj tree-block-selector {:block/page [:db/id :block/title :block/name :block/uuid]}))
-
 (def ^:private page-hierarchy-child-selector
   [:db/id
    :db/ident
@@ -1121,11 +1117,6 @@
             (update :uuid->label merge nested-uuid->label)
             (update :referenced-uuids #(vec (distinct (concat (or % []) nested-uuid-refs))))))
       (p/resolved tree-data))))
-
-(defn attach-render-properties
-  "Attach user and displayable built-in properties needed by the shared tree renderer."
-  [config repo blocks]
-  (attach-user-properties config repo blocks))
 
 (defn prepare-tree-render-data
   "Attach shared tree-render metadata such as UUID labels and property titles."
