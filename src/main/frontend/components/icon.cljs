@@ -1,5 +1,6 @@
 (ns frontend.components.icon
   (:require ["@emoji-mart/data" :as emoji-data]
+            ["@tabler/icons-react" :as tabler-icons]
             ["emoji-mart" :refer [SearchIndex]]
             [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
@@ -93,7 +94,7 @@
   []
   (if @*tabler-icons
     @*tabler-icons
-    (let [result (->> (keys (bean/->clj js/tablerIcons))
+    (let [result (->> (keys (bean/->clj tabler-icons))
                       (map (fn [k]
                              (-> (string/replace (csk/->Camel_Snake_Case (name k)) "_" " ")
                                  (string/replace-first "Icon " ""))))

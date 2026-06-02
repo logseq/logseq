@@ -1,5 +1,6 @@
 (ns frontend.components.right-sidebar
-  (:require [cljs-bean.core :as bean]
+  (:require ["react" :as react]
+            [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.components.cmdk.core :as cmdk]
@@ -231,13 +232,13 @@
   component)
 
 (def inner-component
-  (let [memo-class (js/React.memo
+  (let [memo-class (react/memo
                     (fn [^js props]
                       (apply inner-component-inner (.-args props)))
                     (fn [_prev-props ^js next-props]
                       (not (last (.-args next-props)))))]
     (fn [& args]
-      (js/React.createElement memo-class #js {:args (vec args)}))))
+      (react/createElement memo-class #js {:args (vec args)}))))
 
 (hsx/defc sidebar-item-inner
   [db-id {:keys [repo idx block-type collapsed? drag-from drag-to block-count *db-id init-key]}]
@@ -337,13 +338,13 @@
                                :init-key init-key})))
 
 (def sidebar-item
-  (let [memo-class (js/React.memo
+  (let [memo-class (react/memo
                     (fn [^js props]
                       (apply sidebar-item-component (.-args props)))
                     (fn [^js prev-props ^js next-props]
                       (= (.-args prev-props) (.-args next-props))))]
     (fn [& args]
-      (js/React.createElement memo-class #js {:args (vec args)}))))
+      (react/createElement memo-class #js {:args (vec args)}))))
 
 (defn- get-page
   [match]
@@ -537,8 +538,8 @@
        (sidebar-inner repo t blocks))]))
 
 (def sidebar
-  (let [memo-class (js/React.memo
+  (let [memo-class (react/memo
                     (fn [_props]
                       (sidebar-component)))]
     (fn []
-      (js/React.createElement memo-class #js {}))))
+      (react/createElement memo-class #js {}))))
