@@ -386,8 +386,8 @@
   []
   (w/eval-js
    "(async () => {
-      const target = await window.logseq.api.create_journal_page('2026-03-01T00:00:00.000Z');
-      const source = await window.logseq.api.create_journal_page('2026-02-28T00:00:00.000Z');
+      const target = await window.logseq.api.create_journal_page('2026-03-01T12:00:00');
+      const source = await window.logseq.api.create_journal_page('2026-02-28T12:00:00');
 
       await window.logseq.api.insert_batch_block(
         target.uuid,
@@ -665,7 +665,7 @@
 (deftest copy-blocks-selected-while-scrolling-journals-list
   (testing "copy includes blocks selected across virtualized journals while scrolling"
     (let [journals (mapv (fn [idx]
-                           {:date (format "2026-02-%02dT00:00:00.000Z" idx)
+                           {:date (format "2026-02-%02dT12:00:00" idx)
                             :blocks (mapv #(format "journal-%02d-scroll-copy-block-%02d" idx %)
                                           (range 1 31))})
                          (range 1 5))
@@ -681,9 +681,9 @@
 (deftest journals-list-uses-measured-spacing-without-item-margins
   (testing "journals list spacing does not use item margins that destabilize Virtuoso measurement"
     (seed-journals!
-     [{:date "2026-03-05T00:00:00.000Z"
+     [{:date "2026-03-05T12:00:00"
        :blocks ["journals measured spacing first"]}
-      {:date "2026-03-04T00:00:00.000Z"
+      {:date "2026-03-04T12:00:00"
        :blocks ["journals measured spacing second"]}])
     (w/wait-for "#journals .journal-item")
     (let [{:keys [journal-item-margin-bottom journal-item-padding-bottom] :as metrics} (journals-layout-metrics)]
@@ -694,7 +694,7 @@
   (testing "long journals keep a single virtualized measurement owner"
     (let [blocks (mapv #(format "journals long stable block %03d" %) (range 1 81))]
       (seed-journals!
-       [{:date "2026-03-06T00:00:00.000Z"
+       [{:date "2026-03-06T12:00:00"
          :blocks blocks}])
       (enable-virtualized-rendering!)
       (w/wait-for "#journals [data-virtuoso-scroller]")
@@ -710,11 +710,11 @@
                                       (string/join " " (repeat 24 "wrapped-content")))
                             (range 1 81))
           older-journals (mapv (fn [idx]
-                                  {:date (format "2026-03-%02dT00:00:00.000Z" idx)
+                                  {:date (format "2026-03-%02dT12:00:00" idx)
                                    :blocks [(format "journals remount spacer block %02d" idx)]})
                                 (range 1 18))]
       (seed-journals!
-       (into [{:date "2026-03-20T00:00:00.000Z"
+       (into [{:date "2026-03-20T12:00:00"
                :blocks long-blocks}]
              older-journals))
       (enable-virtualized-rendering!)
@@ -732,7 +732,7 @@
 (deftest journals-list-keeps-single-scroller-with-iframe-embeds
   (testing "iframe embeds render inside journals without adding nested virtualized measurement owners"
     (seed-journals!
-     [{:date "2026-03-07T00:00:00.000Z"
+     [{:date "2026-03-07T12:00:00"
        :blocks ["{{video https://www.youtube.com/watch?v=7xTGNNLPyMI}}"]}])
     (enable-virtualized-rendering!)
     (w/wait-for "#journals iframe")
