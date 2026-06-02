@@ -313,6 +313,23 @@
    :root-dir root-dir
    :revision (build-version/revision)})
 
+(defn- log-invoke-error!
+  [res error method-kw]
+  (let [data (ex-data error)
+        status (invoke-error-status data)
+        code (invoke-error-code data)
+        message (invoke-error-message error data)
+        payload {:ok false
+                 :error {:code code
+                         :message message}}]
+    (log/error :db-worker-node-invoke-failed
+               {:status status
+                :code code
+                :error error
+                :message message
+                :method method-kw})
+    (send-json! res status payload)))
+
 (defn- make-server
   [proxy {:keys [bound-repo stop-fn host port owner-source root-dir]}]
   (http/createServer
@@ -368,35 +385,27 @@
 
          (= request-path "/v1/invoke")
          (if (= method "POST")
-           (-> (p/let [body (<read-body req)
-                       payload (js/JSON.parse body)
-                       {:keys [method argsTransit args]} (js->clj payload :keywordize-keys true)
-                       method-kw (normalize-method-kw method)
-                       method-str (normalize-method-str method)
-                       args' (or argsTransit args)
-                       args-for-validation (if (string? args')
-                                             (ldb/read-transit-str args')
-                                             args')]
-                 (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
-                   (send-json! res status {:ok false :error error})
-                   (p/let [_ (when (contains? write-methods method-kw)
-                               (let [{:keys [path lock]} @*lock-info]
-                                 (db-lock/assert-lock-owner! path lock)))
-                           result (<invoke! proxy method-str method-kw args')]
-                     (send-json! res 200 {:ok true :resultTransit result}))))
-               (p/catch (fn [error]
-                          (let [data (ex-data error)
-                                status (invoke-error-status data)
-                                code (invoke-error-code data)
-                                message (invoke-error-message error data)
-                                payload {:ok false
-                                         :error {:code code
-                                                 :message message}}]
-                            (log/error :db-worker-node-invoke-failed
-                                       {:status status
-                                        :code code
-                                        :message message})
-                            (send-json! res status payload)))))
+           (->
+            (p/let [body (<read-body req)
+                    payload (js/JSON.parse body)
+                    {:keys [method argsTransit args]} (js->clj payload :keywordize-keys true)
+                    method-kw (normalize-method-kw method)
+                    method-str (normalize-method-str method)]
+              (-> (p/let [args' (or argsTransit args)
+                          args-for-validation (if (string? args')
+                                                (ldb/read-transit-str args')
+                                                args')]
+                    (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
+                      (send-json! res status {:ok false :error error})
+                      (p/let [_ (when (contains? write-methods method-kw)
+                                  (let [{:keys [path lock]} @*lock-info]
+                                    (db-lock/assert-lock-owner! path lock)))
+                              result (<invoke! proxy method-str method-kw args')]
+                        (send-json! res 200 {:ok true :resultTransit result}))))
+                  (p/catch (fn [error]
+                             (log-invoke-error! res error method-kw)))))
+            (p/catch (fn [error]
+                       (log-invoke-error! res error nil))))
            (send-text! res 405 "method-not-allowed"))
 
          (= url "/v1/shutdown")
