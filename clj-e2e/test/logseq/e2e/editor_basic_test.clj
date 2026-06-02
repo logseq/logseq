@@ -404,6 +404,42 @@
       window.logseq.api.push_state('all-journals', null, null);
     })();"))
 
+(defn- scroll-journals-to-text!
+  [text]
+  (w/eval-js
+   (format
+    "(async () => {
+      const text = %s;
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const scrollContainer = document.querySelector('#main-content-container');
+
+      if (!scrollContainer) {
+        throw new Error('Expected main content scroller');
+      }
+
+      const findText = () => Array.from(document.querySelectorAll('#journals .journal-item'))
+        .find((item) => item.textContent.includes(text));
+
+      scrollContainer.scrollTop = 0;
+      await nextFrame();
+
+      for (let i = 0; i < 120; i++) {
+        const item = findText();
+        if (item) {
+          item.scrollIntoView({ block: 'center' });
+          await nextFrame();
+          return true;
+        }
+
+        scrollContainer.scrollTop += Math.max(320, Math.floor(scrollContainer.clientHeight * 0.8));
+        await delay(80);
+      }
+
+      throw new Error(`Could not find mounted journal text ${text}`);
+    })();"
+    (json/write-value-as-string text))))
+
 (defn- journals-layout-metrics
   []
   (js-json
@@ -662,7 +698,7 @@
          :blocks blocks}])
       (enable-virtualized-rendering!)
       (w/wait-for "#journals [data-virtuoso-scroller]")
-      (w/wait-for (format ".ls-page-blocks .ls-block:has-text('%s')" (first blocks)))
+      (scroll-journals-to-text! (first blocks))
       (let [{:keys [journals-scroller-count] :as metrics} (journals-layout-metrics)]
         (is (= 1 journals-scroller-count) metrics)))))
 
@@ -706,7 +742,7 @@
 (deftest journals-linked-refs-remain-visible
   (testing "journals linked refs stay visible while journals layout owns the outer measurement"
     (seed-journals-with-linked-ref!)
-    (w/wait-for "#journals .references")
+    (scroll-journals-to-text! "journals linked refs visible target")
     (let [{:keys [collapsed body-mounted body-height] :as metrics} (journals-linked-refs-metrics)]
       (is (false? collapsed) metrics)
       (is (true? body-mounted) metrics)
