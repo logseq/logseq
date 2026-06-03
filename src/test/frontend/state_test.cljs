@@ -1,5 +1,6 @@
 (ns frontend.state-test
   (:require [clojure.test :refer [deftest is]]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]))
 
 (deftest merge-configs
@@ -25,20 +26,84 @@
                               {:shortcuts {:editor/up ["ctrl+p" "up"]}}))
       "Map values get merged across configs"))
 
-(deftest get-state-reads-plain-and-atom-state
+(deftest get-state-reads-plain-state
   (let [original-state @state/state]
     (try
       (reset! state/state (assoc original-state
                                  :plain-value 1
                                  :nested-value {:a {:b 2}}
-                                 :atom-value (atom 3)
-                                 :nested-atom-value (atom {:a {:b 4}})))
+                                 :nested-path-value {:a {:b 4}}))
+      (rfx/init! {:initial-value @state/state
+                  :registry (atom {})})
       (is (= 1 (state/get-state :plain-value)))
       (is (= 2 (state/get-state [:nested-value :a :b])))
-      (is (= 3 (state/get-state :atom-value)))
-      (is (= 4 (state/get-state :nested-atom-value :path-in-sub-atom [:a :b])))
+      (is (= 4 (state/get-state :nested-path-value :nested-path [:a :b])))
       (finally
-        (reset! state/state original-state)))))
+        (reset! state/state original-state)
+        (rfx/init! {:initial-value original-state
+                    :registry (atom {})})))))
+
+(deftest plain-state-accessors-use-rfx-app-db
+  (let [original-state @state/state]
+    (try
+      (reset! state/state {:legacy-value 1
+                           :nested {:value 2}})
+      (rfx/init! {:initial-value {:legacy-value 10
+                                  :nested {:value 20}}
+                  :registry (atom {})})
+
+      (is (= 10 (state/get-state :legacy-value)))
+      (is (= 20 (state/get-state [:nested :value])))
+
+      (state/set-state! :legacy-value 30)
+      (is (= 30 (state/get-state :legacy-value)))
+      (is (= 30 (:legacy-value (rfx/snapshot))))
+
+      (state/update-state! [:nested :value] inc)
+      (is (= 21 (state/get-state [:nested :value])))
+      (is (= 21 (get-in (rfx/snapshot) [:nested :value])))
+      (finally
+        (reset! state/state original-state)
+        (rfx/init! {:initial-value original-state
+                    :registry (atom {})})))))
+
+(deftest rfx-state-subscriptions-read-top-level-and-nested-paths
+  (let [original-state @state/state]
+    (try
+      (rfx/init! {:initial-value {:route-match {:data {:name :home}}
+                                  :ui/theme "light"}
+                  :registry (atom {})})
+      (state/register-rfx-state-subs!)
+
+      (is (= {:data {:name :home}}
+             (rfx/snapshot-sub [:route-match])))
+      (is (= :home
+             (rfx/snapshot-sub [:route-match :data :name])))
+      (is (= "light"
+             (rfx/snapshot-sub [:ui/theme])))
+      (finally
+        (reset! state/state original-state)
+        (rfx/init! {:initial-value original-state
+                    :registry (atom {})})
+        (state/register-rfx-state-subs!)))))
+
+(deftest rfx-state-subscriptions-read-plain-values
+  (let [original-state @state/state]
+    (try
+      (rfx/init! {:initial-value {:editor/action :search
+                                  :editor/content {:block-1 "hello"}}
+                  :registry (atom {})})
+      (state/register-rfx-state-subs!)
+
+      (is (= :search
+             (rfx/snapshot-sub [:editor/action])))
+      (is (= "hello"
+             (rfx/snapshot-sub [:editor/content :block-1])))
+      (finally
+        (reset! state/state original-state)
+        (rfx/init! {:initial-value original-state
+                    :registry (atom {})})
+        (state/register-rfx-state-subs!)))))
 
 (deftest get-editor-info-includes-selection-when-not-editing-test
   (let [selected-ids [(random-uuid) (random-uuid)]]

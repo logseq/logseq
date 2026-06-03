@@ -69,6 +69,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.reaction :as reaction]
+            [frontend.rfx :as rfx]
             [frontend.security :as security]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -95,7 +96,6 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
-            [missionary.core :as m]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
@@ -1082,7 +1082,7 @@
 (defn- maybe-request-asset-download!
   [file-exists? requested? block]
   (let [repo (state/get-current-repo)
-        asset-file-write-finish @(get @state/state :assets/asset-file-write-finish)
+        asset-file-write-finish (state/get-state :assets/asset-file-write-finish)
         asset-file-write-finished? (get-in asset-file-write-finish [repo (str (:block/uuid block))])
         file-ready? (or file-exists? asset-file-write-finished?)]
     (when (and (true? @requested?) file-ready?)
@@ -1099,11 +1099,9 @@
         requested?* (hooks/use-memo #(atom false) [(:block/uuid block)])
         [file-exists?] (hooks/use-atom file-exists?*)
         repo (state/get-current-repo)
-        asset-file-write-finished? (state/use-sub :assets/asset-file-write-finish
-                                                  :path-in-sub-atom [repo (str (:block/uuid block))])
+        asset-file-write-finished? (rfx/use-sub [:assets/asset-file-write-finish repo (str (:block/uuid block))])
         file-ready? (or file-exists? asset-file-write-finished?)
-        progress-entry (state/use-sub :rtc/asset-upload-download-progress
-                                      :path-in-sub-atom [repo (str (:block/uuid block))])
+        progress-entry (rfx/use-sub [:rtc/asset-upload-download-progress repo (str (:block/uuid block))])
         {:keys [direction loaded total]} progress-entry
         in-progress? (and (number? loaded) (number? total) (pos? total) (not= loaded total))
         percent (when in-progress?
@@ -1312,7 +1310,9 @@
 
 (hsx/defc nested-link
   [config html-export? link]
-  (let [show-brackets? (not (false? (:ui/show-brackets? (state/use-sub-config))))
+  (let [show-brackets? (not (false? (:ui/show-brackets?
+                                     (state/config-for-repo (rfx/use-sub [:config])
+                                                            (state/get-current-repo)))))
         {:keys [content children]} link]
     [:span.page-reference.nested
      (when (and show-brackets?
@@ -2233,9 +2233,9 @@
 (hsx/defc ^:large-vars/cleanup-todo block-control
   [config block {:keys [uuid block-id collapsed? *control-show? edit? selected? top? bottom?]}]
   (let [*bullet-dragging? (hooks/use-memo #(atom false) [])
-        doc-mode? (state/use-sub :document/mode?)
+        doc-mode? (rfx/use-sub [:document/mode?])
         [control-show?] (hooks/use-atom *control-show?)
-        rtc-state (state/use-sub :rtc/state)
+        rtc-state (rfx/use-sub [:rtc/state])
         online-users (:online-users rtc-state)
         current-user-uuid (user-handler/user-uuid)
         editing-user (editing-user-for-block uuid online-users current-user-uuid)
@@ -2587,9 +2587,34 @@
   [target]
   (boolean (util/rec-get-node target "ls-comments-area")))
 
+(defn- caret-range-from-point
+  [e block-dom-element]
+  (when-let [node (some-> block-dom-element
+                          (dom/by-class "block-content-inner")
+                          first)]
+    (let [doc (or (gobj/get node "ownerDocument") js/document)
+          win (or (gobj/get doc "defaultView") js/window)
+          x (gobj/get e "clientX")
+          y (gobj/get e "clientY")
+          range (cond
+                  (fn? (gobj/get doc "caretRangeFromPoint"))
+                  (.caretRangeFromPoint doc x y)
+
+                  (fn? (gobj/get doc "caretPositionFromPoint"))
+                  (when-let [pos (.caretPositionFromPoint doc x y)]
+                    (let [range (.createRange doc)]
+                      (.setStart range (gobj/get pos "offsetNode") (gobj/get pos "offset"))
+                      (.collapse range true)
+                      range)))]
+      (when range
+        (let [selection (.getSelection win)]
+          (.removeAllRanges selection)
+          (.addRange selection range)
+          (util/caret-range node))))))
+
 (defn- block-content-on-pointer-down
   [e block block-id edit-input-id content config]
-  (when-not @(:ui/scrolling? @state/state)
+  (when-not (state/get-state :ui/scrolling?)
     (let [target (.-target e)
           selection-blocks (state/get-selection-blocks)
           starting-block (state/get-selection-start-block-or-first)
@@ -2649,7 +2674,11 @@
                   (state/set-selection-start-block! block-dom-element))
 
                 :else
-                (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
+                (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)
+                      point-cursor-range (when-not mobile?
+                                           (caret-range-from-point e block-dom-element))]
+                  (when-not mobile?
+                    (.preventDefault e))
                   (mobile-util/mobile-focus-hidden-input)
                   (editor-handler/clear-selection!)
                   (editor-handler/unhighlight-blocks!)
@@ -2662,7 +2691,8 @@
                    (when-not (:block.temp/load-status (db/entity (:db/id block)))
                      (db-async/<get-block (state/get-current-repo) (:db/id block) {:children? false}))
 
-                   (let [cursor-range (if mobile? mobile-range (get-cursor-range))
+                   (let [cursor-range (or point-cursor-range
+                                          (if mobile? mobile-range (get-cursor-range)))
                          block (db/entity (:db/id block))
                          content (:block/title block)]
 
@@ -3015,19 +3045,11 @@
     (ui/button (t :sync/mark-conflicts-resolved)
                :on-click on-mark-resolved)]])
 
-(defn- sync-block-conflicts-flow
-  [repo block-id]
-  (let [path [repo (str block-id)]]
-    (->> (m/watch (:sync/block-conflicts @state/state))
-         (m/eduction
-          (map #(get-in % path))
-          (dedupe)))))
-
 (hsx/defc sync-conflicts-warning-button
   [block]
   (let [repo (state/get-current-repo)
         block-id (:block/uuid block)
-        conflicts (hooks/use-flow-state (sync-block-conflicts-flow repo block-id))
+        conflicts (rfx/use-sub [:sync/block-conflicts repo (str block-id)])
         visible-conflicts (visible-sync-conflicts block conflicts)]
     (hooks/use-effect!
      (fn []
@@ -3035,7 +3057,7 @@
          (p/let [result (state/<invoke-db-worker :thread-api/db-sync-get-block-conflicts repo block-id)]
            (state/set-state! :sync/block-conflicts
                              (or result [])
-                             :path-in-sub-atom [repo (str block-id)])))
+                             :nested-path [repo (str block-id)])))
        nil)
      [repo block-id conflicts])
     (when (seq visible-conflicts)
@@ -3206,7 +3228,7 @@
                                block-ref/block-ref?)
         named? (some? (:block/name block))
         table? (:table? config)
-        raw-mode-block (state/use-sub :editor/raw-mode-block)
+        raw-mode-block (rfx/use-sub [:editor/raw-mode-block])
         type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
                                 (not= (:db/id block) (:db/id raw-mode-block)))
         config (assoc config :block-parent-id block-id)
@@ -4047,7 +4069,10 @@
         level (:level config)
         *control-show? (get container-state ::control-show?)
         db-collapsed? (util/collapsed? block)
-        temp-collapsed? (state/use-sub-block-collapsed uuid container-id)
+        temp-collapsed? (rfx/use-sub [:ui/collapsed-blocks
+                                      (state/get-current-repo)
+                                      (state/resolve-container-id container-id)
+                                      uuid])
         collapsed? (cond
                      (:ignore-block-collapsed? config)
                      false
@@ -4083,7 +4108,7 @@
                                (:thread hydrated-comment-thread))))
         has-comment-thread? (or comment-thread
                                 (true? comment-thread-present?))
-        inline-thread (state/use-sub :comments/inline-thread)
+        inline-thread (rfx/use-sub [:comments/inline-thread])
         show-inline-comments? (inline-comment-thread? inline-thread uuid comment-thread)
         page-icon (when (:page-title? config)
                     (let [icon' (get block :logseq.property/icon)]
@@ -4383,9 +4408,9 @@
   [container-state repo config* block opts]
   (let [container-id (:container-id config*)
         block-id (:block/uuid block)
-        v1 (state/use-sub-editing? [container-id block-id])
-        v2 (state/use-sub-editing? [:unknown-container block-id])
-        selected? (state/use-sub-block-selected? block-id)
+        v1 (boolean (rfx/use-sub [:editor/editing? [container-id block-id]]))
+        v2 (boolean (rfx/use-sub [:editor/editing? [:unknown-container block-id]]))
+        selected? (rfx/use-sub [:selection/block-selected? block-id])
         editing? (or v1 v2)]
     (block-container-inner-aux container-state repo config* block (assoc opts
                                                                          :editing? editing?
@@ -4416,11 +4441,7 @@
   [component same-args?]
   (let [memo-class (react-core/memo
                     (fn [^js props]
-                      (hsx/create-callable-component-element
-                       (cons 'memo-react-component (.-args props))
-                       component
-                       (.-args props)
-                       nil))
+                      (apply component (.-args props)))
                     (fn [^js prev-props ^js next-props]
                       (same-args? (.-args prev-props)
                                   (.-args next-props))))]

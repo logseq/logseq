@@ -34,7 +34,7 @@
 (defn- use-cached-refs!
   [refs block]
   (let [refs (remove #(= (:block/uuid block) (:block/uuid %)) refs)
-        cached-refs (->> @(:editor/block-refs @state/state)
+        cached-refs (->> (state/get-state :editor/block-refs)
                          (concat (map (fn [ref]
                                         (select-keys ref [:db/id :block/uuid :block/title]))
                                       (:block/refs (db/entity (:db/id block)))))

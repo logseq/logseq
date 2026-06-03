@@ -19,6 +19,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.undo-redo.debug-ui :as undo-redo-debug-ui]
@@ -326,7 +327,7 @@
         init-key (hooks/use-memo #(random-uuid) [])
         drag-from (first (hooks/use-atom *drag-from))
         drag-to (first (hooks/use-atom *drag-to))
-        collapsed? (state/use-sub [:ui/sidebar-collapsed-blocks db-id])]
+        collapsed? (rfx/use-sub [:ui/sidebar-collapsed-blocks db-id])]
     (sidebar-item-inner db-id {:repo repo
                                :idx idx
                                :block-type block-type
@@ -469,7 +470,7 @@
 (hsx/defc sidebar-inner
   [repo t blocks]
   (let [block-count (count blocks)
-        developer-mode? (state/use-sub [:ui/developer-mode?])]
+        developer-mode? (rfx/use-sub [:ui/developer-mode?])]
     [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
 
      [:div.cp__right-sidebar-scrollable
@@ -527,9 +528,9 @@
         blocks (if (empty? blocks)
                  [[(state/get-current-repo) "contents" :contents nil]]
                  blocks)
-        sidebar-open? (state/use-sub :ui/sidebar-open?)
-        width (state/use-sub :ui/sidebar-width)
-        repo (state/use-sub :git/current-repo)]
+        sidebar-open? (rfx/use-sub [:ui/sidebar-open?])
+        width (rfx/use-sub [:ui/sidebar-width])
+        repo (rfx/use-sub [:git/current-repo])]
     [:div#right-sidebar.cp__right-sidebar.h-screen
      {:class (if sidebar-open? "open" "closed")
       :style {:width width}}

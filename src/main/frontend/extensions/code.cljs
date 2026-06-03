@@ -135,6 +135,7 @@
             [frontend.handler.code :as code-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.schema.handler.common-config :refer [Config-edn]]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
@@ -572,8 +573,8 @@
   [config id attr code options]
   (let [editor-atom (hooks/use-memo #(atom nil) [id])
         [calc-lines set-calc-lines!] (hooks/use-state (calc/eval-lines code))
-        current-theme (state/use-sub :ui/theme)
-        radix-color? (state/use-sub :ui/radix-color)
+        current-theme (rfx/use-sub [:ui/theme])
+        radix-color? (rfx/use-sub [:ui/radix-color])
         code-options (hooks/use-memo #(atom options) [id])
         last-theme (hooks/use-memo #(atom (theme-name current-theme radix-color?)) [id])
         component-state {:config config

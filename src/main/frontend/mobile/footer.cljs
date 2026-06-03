@@ -3,6 +3,7 @@
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -17,8 +18,8 @@
 
 (hsx/defc footer
   []
-  (let [route-name (state/use-sub [:route-match :data :name])
-        show-tabbar? (state/use-sub :mobile/show-tabbar?)]
+  (let [route-name (rfx/use-sub [:route-match :data :name])
+        show-tabbar? (rfx/use-sub [:mobile/show-tabbar?])]
     (when (and (#{:page :home} route-name)
              (not (state/editing?))
              show-tabbar?

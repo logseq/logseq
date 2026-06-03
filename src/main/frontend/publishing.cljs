@@ -17,6 +17,7 @@
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.page :as page]
             [frontend.persist-db.browser :as db-browser]
+            [frontend.rfx :as rfx]
             [frontend.routes :as routes]
             [frontend.runtime.globals :as runtime-globals]
             [frontend.state :as state]
@@ -65,7 +66,7 @@
   []
   (when-let [data js/window.logseq_state]
     (let [data (reader/read-string data)]
-      (swap! state/state merge data))))
+      (state/swap-state! merge data))))
 
 (defn set-router!
   []
@@ -78,7 +79,7 @@
 (defn start []
   (when-let [node (.getElementById js/document "root")]
     (set-router!)
-    (.render (rdc/createRoot node) (page/current-page))))
+    (.render (rdc/createRoot node) (rfx/provider (page/current-page)))))
 
 (defn- register-components-fns!
   []

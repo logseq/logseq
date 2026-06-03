@@ -56,8 +56,7 @@
                     {:current-id (.getAttribute (w/-query ".editor-wrapper textarea") "id")
                      :last-id last-id}
                     e))
-            (do (prn :retry-new-block title)
-                (new-block title true))))))))
+            (new-block title true)))))))
 
 ;; TODO: support tree
 (defn new-blocks

@@ -1,11 +1,10 @@
 (ns frontend.handler.events
-  "System-component-like ns that defines named events and listens on a
-  core.async channel to handle them. Any part of the system can dispatch
-  one of these events using state/pub-event!"
+  "System-component-like ns that defines named RFX events. Any part of the
+  system can dispatch one of these events using state/pub-event!"
   (:refer-clojure :exclude [run!])
+  (:require-macros [frontend.handler.events.macros :refer [defevent!]])
   (:require ["@sentry/react" :as Sentry]
             [cljs-bean.core :as bean]
-            [clojure.core.async :as async]
             [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.components.rtc.indicator :as indicator]
@@ -43,6 +42,7 @@
             [frontend.modules.shortcut.core :as st]
             [frontend.persist-db :as persist-db]
             [frontend.quick-capture :as quick-capture]
+            [frontend.rfx :as rfx]
             [frontend.search.plugin :as search-plugin]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -56,7 +56,13 @@
 
 ;; TODO: should we move all events here?
 
-(defmulti handle first)
+(defonce ^:private event-definitions
+  (atom {}))
+
+(defn register-event-definition!
+  [event-id handler]
+  (swap! event-definitions assoc event-id handler)
+  nil)
 
 (defonce ^:private *search-index-build-timeout (atom nil))
 (defn- <build-search-index!
@@ -85,7 +91,7 @@
                (schedule-search-index-build! repo)))
            1000)))
 
-(defmethod handle :init/commands [_]
+(defevent! :init/commands [_]
   (page-handler/init-commands!))
 
 (defn- graph-switch
@@ -119,7 +125,7 @@
             (search-plugin/call-service! service "search:rebuildPagesIndice" {})
             (search-plugin/call-service! service "search:rebuildBlocksIndice" {}))))))))
 
-(defmethod handle :graph/switch [[_ graph opts]]
+(defevent! :graph/switch [[_ graph opts]]
   (let [t1 (t/now)]
     (p/do!
     (export/cancel-db-backup!)
@@ -130,24 +136,24 @@
     (let [t2 (t/now)]
       (log/info ::graph-switch-spent (- t2 t1))))))
 
-(defmethod handle :graph/open-new-window [[_ev target]]
+(defevent! :graph/open-new-window [[_ev target]]
   (ui-handler/open-new-window-or-tab! target))
 
-(defmethod handle :page/create [[_ page-name opts]]
+(defevent! :page/create [[_ page-name opts]]
   (if (= page-name (date/today))
     (page-handler/create-today-journal!)
     (page-handler/<create! page-name opts)))
 
-(defmethod handle :page/deleted [[_ page-name _tx-meta]]
+(defevent! :page/deleted [[_ page-name _tx-meta]]
   (when page-name
     (when-not (util/mobile?)
       (page-common-handler/after-page-deleted! page-name))))
 
-(defmethod handle :page/renamed [[_ repo data]]
+(defevent! :page/renamed [[_ repo data]]
   (when-not (util/mobile?)
     (page-common-handler/after-page-renamed! repo data)))
 
-(defmethod handle :graph/sync-context []
+(defevent! :graph/sync-context []
   (let [context {:dev? config/dev?
                  :node-test? util/node-test?
                  :mobile? (util/mobile?)
@@ -161,19 +167,19 @@
 ;; Hook on a graph is ready to be shown to the user.
 ;; It's different from :graph/restored, as :graph/restored is for window reloaded
 ;; FIXME: config may not be loaded when the graph is ready.
-(defmethod handle :graph/ready
+(defevent! :graph/ready
   [[_ repo]]
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo))
 
-(defmethod handle :instrument [[_ {:keys [type payload] :as opts}]]
+(defevent! :instrument [[_ {:keys [type payload] :as opts}]]
   (when-not (empty? (dissoc opts :type :payload))
     (log/error :event :invalid-instrument-payload-keys
                :message "instrument data-map should only contain [:type :payload]"
                :payload opts))
   (posthog/capture type payload))
 
-(defmethod handle :capture-error [[_ {:keys [error payload extra]}]]
+(defevent! :capture-error [[_ {:keys [error payload extra]}]]
   (let [payload (merge
                  {:schema-version (str db-schema/version)
                   :db-schema-version (when-let [db (db/get-db)]
@@ -184,15 +190,15 @@
                              (bean/->js {:tags payload
                                          :extra extra}))))
 
-(defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
+(defevent! :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))
 
-(defmethod handle :shortcut-handler-refreshed [[_]]
+(defevent! :shortcut-handler-refreshed [[_]]
   (when-not @st/*pending-inited?
     (reset! st/*pending-inited? true)
     (st/consume-pending-shortcuts!)))
 
-(defmethod handle :mobile/keyboard-will-show [[_ keyboard-height]]
+(defevent! :mobile/keyboard-will-show [[_ keyboard-height]]
   (let [_main-node (util/app-scroll-container-node)]
     (when-let [^js html (js/document.querySelector ":root")]
       (.setProperty (.-style html) "--ls-native-kb-height" (str keyboard-height "px"))
@@ -204,7 +210,7 @@
        #(some-> (state/get-input)
                 (util/scroll-editor-cursor false))))))
 
-(defmethod handle :mobile/keyboard-will-hide [[_]]
+(defevent! :mobile/keyboard-will-hide [[_]]
   (let [main-node (util/app-scroll-container-node)]
     (when-let [^js html (js/document.querySelector ":root")]
       (.removeProperty (.-style html) "--ls-native-kb-height")
@@ -219,23 +225,23 @@
       (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
         (set! (.. right-sidebar-node -style -paddingBottom) "150px")))))
 
-(defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data] :as payload}]]
+(defevent! :plugin/hook-db-tx [[_ {:keys [blocks tx-data] :as payload}]]
   (when-let [payload (and (seq blocks)
                           (merge payload {:tx-data (map #(into [] %) tx-data)}))]
     (plugin-handler/hook-plugin-db :changed payload)
     (plugin-handler/hook-plugin-block-changes payload)))
 
-(defmethod handle :rebuild-slash-commands-list [[_]]
+(defevent! :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))
 
-(defmethod handle :shortcut/refresh [[_]]
+(defevent! :shortcut/refresh [[_]]
   (st/refresh!))
 
-(defmethod handle :editor/set-heading [[_ block heading]]
+(defevent! :editor/set-heading [[_ block heading]]
   (when-let [id (:block/uuid block)]
     (editor-handler/set-heading! id heading)))
 
-(defmethod handle :graph/restored [[_ graph]]
+(defevent! :graph/restored [[_ graph]]
   (when graph (assets-handler/ensure-assets-dir! graph))
   (state/pub-event! [:graph/sync-context])
   (when graph
@@ -246,23 +252,23 @@
   (when-not (mobile-util/native-platform?)
     (state/pub-event! [:graph/ready graph])))
 
-(defmethod handle :graph/save-db-to-disk [[_ _opts]]
+(defevent! :graph/save-db-to-disk [[_ _opts]]
   (persist-db/export-current-graph! :succ-notification? true))
 
-(defmethod handle :graph/db-save-shortcut [[_]]
-  (handle [:graph/save-db-to-disk {:source :shortcut}]))
+(defevent! :graph/db-save-shortcut [[_]]
+  (state/pub-event! [:graph/save-db-to-disk {:source :shortcut}]))
 
-(defmethod handle :ui/re-render-root [[_]]
+(defevent! :ui/re-render-root [[_]]
   (ui-handler/re-render-root!))
 
-(defmethod handle :run/cli-command [[_ command content]]
+(defevent! :run/cli-command [[_ command content]]
   (when (and command (not (string/blank? content)))
     (shell-handler/run-cli-command-wrapper! command content)))
 
-(defmethod handle :editor/quick-capture [[_ ^js args]]
+(defevent! :editor/quick-capture [[_ ^js args]]
   (quick-capture/quick-capture args))
 
-(defmethod handle :editor/invoke-command [[_ ^js args]]
+(defevent! :editor/invoke-command [[_ ^js args]]
   (when-let [{:keys [action payload]} (bean/->clj args)]
     ;; parse "plugin.vibe-clipper.models.onReceiveClipperData"
     (let [keys' (string/split action #"\.")
@@ -272,10 +278,10 @@
         :plugin (plugin-api/invoke_external_plugin_cmd id group action [payload])
         (log/warn :unknown-invoke-command-type action)))))
 
-(defmethod handle :modal/keymap [[_]]
+(defevent! :modal/keymap [[_]]
   (state/open-settings! :keymap))
 
-(defmethod handle :editor/toggle-own-number-list [[_ blocks]]
+(defevent! :editor/toggle-own-number-list [[_ blocks]]
   (let [batch? (sequential? blocks)
         blocks (cond->> blocks
                  batch?
@@ -287,23 +293,23 @@
           (editor-handler/remove-block-own-order-list-type! block)
           (editor-handler/make-block-as-own-order-list! block))))))
 
-(defmethod handle :editor/remove-own-number-list [[_ block]]
+(defevent! :editor/remove-own-number-list [[_ block]]
   (when (some-> block (editor-handler/own-order-number-list?))
     (editor-handler/remove-block-own-order-list-type! block)))
 
-(defmethod handle :editor/save-current-block [_]
+(defevent! :editor/save-current-block [_]
   (editor-handler/save-current-block!))
 
-(defmethod handle :editor/add-comment [_]
+(defevent! :editor/add-comment [_]
   (comments-handler/add-comment-to-current-context!))
 
-(defmethod handle :editor/save-code-editor [_]
+(defevent! :editor/save-code-editor [_]
   (code-handler/save-code-editor!))
 
-(defmethod handle :editor/focus-code-editor [[_ editing-block container]]
+(defevent! :editor/focus-code-editor [[_ editing-block container]]
   (when-let [^js cm (util/get-cm-instance container)]
     (when-not (.hasFocus cm)
-      (let [cursor-pos (some-> (:editor/cursor-range @state/state) (deref) (count))
+      (let [cursor-pos (some-> (state/get-state :editor/cursor-range) count)
             direction (:block.editing/direction editing-block)
             pos (:block.editing/pos editing-block)
             to-line (case direction
@@ -316,11 +322,11 @@
           (.focus)
           (.setCursor to-line (or cursor-pos 0)))))))
 
-(defmethod handle :editor/toggle-children-number-list [[_ block]]
+(defevent! :editor/toggle-children-number-list [[_ block]]
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
 
-(defmethod handle :editor/upsert-type-block [[_ {:keys [block type lang update-current-block?]}]]
+(defevent! :editor/upsert-type-block [[_ {:keys [block type lang update-current-block?]}]]
   (p/do!
    (when-not update-current-block?
      (editor-handler/save-current-block!))
@@ -358,21 +364,21 @@
                                  (db/entity [:block/uuid (:block/uuid db-block)])))]
        (js/setTimeout #(editor-handler/edit-block! converted-block :max) 100)))))
 
-(defmethod handle :rtc/sync-state [[_ state]]
+(defevent! :rtc/sync-state [[_ state]]
   (state/update-state! :rtc/state (fn [old] (merge old state))))
 
-(defmethod handle :rtc/presence-update [[_ {:keys [editing-block-uuid]}]]
+(defevent! :rtc/presence-update [[_ {:keys [editing-block-uuid]}]]
   (rtc-handler/<rtc-update-presence! editing-block-uuid))
 
-(defmethod handle :rtc/log [[_ data]]
+(defevent! :rtc/log [[_ data]]
   (state/set-state! :rtc/log data))
 
-(defmethod handle :rtc/remote-graph-gone [_]
+(defevent! :rtc/remote-graph-gone [_]
   (p/do!
    (notification/show! (t :graph/removed-from-sync) :warning false)
    (rtc-handler/<get-remote-graphs)))
 
-(defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version graph-e2ee?]]
+(defevent! :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version graph-e2ee?]]
   (assert (= (:major (db-schema/parse-schema-version db-schema/version))
              (:major (db-schema/parse-schema-version graph-schema-version)))
           {:app db-schema/version
@@ -399,7 +405,7 @@
                 (notification/show! (t :encryption/wrong-password) :error false))))))
 
 ;; db-worker -> UI
-(defmethod handle :db/sync-changes [[_ data]]
+(defevent! :db/sync-changes [[_ data]]
   (let [retract-datoms (filter (fn [d] (and (= :block/uuid (:a d)) (false? (:added d)))) (:tx-data data))
         retracted-tx-data (map (fn [d] [:db/retractEntity (:e d)]) retract-datoms)
         tx-data (concat (:tx-data data) retracted-tx-data)]
@@ -407,14 +413,14 @@
 
     nil))
 
-(defmethod handle :db/export-sqlite [_]
+(defevent! :db/export-sqlite [_]
   (export/export-repo-as-sqlite-db! (state/get-current-repo))
   nil)
 
-(defmethod handle :editor/run-query-command [_]
+(defevent! :editor/run-query-command [_]
   (editor-handler/run-query-command!))
 
-(defmethod handle :editor/load-blocks [[_ ids]]
+(defevent! :editor/load-blocks [[_ ids]]
   (when (seq ids)
     ;; not using `<get-blocks` here becuase because we want to
     ;; load all nested children here for copy/export
@@ -422,27 +428,35 @@
                   (db-async/<get-block (state/get-current-repo) id
                                        {:skip-refresh? false})) ids))))
 
+(defn- capture-event-error!
+  [event error]
+  (log/error :event-error error :event (first event))
+  (let [type :handle-system-events/failed]
+    (state/pub-event! [:capture-error {:error error
+                                       :payload {:type type
+                                                 :payload event}}])))
+
+(defn- handle-rfx-event
+  [handler _coeffects event]
+  (try
+    (let [result (-> (p/resolved (handler event))
+                     (p/catch (fn [error]
+                                (capture-event-error! event error)
+                                (p/rejected error))))]
+      {::rfx/result result})
+    (catch :default error
+      (capture-event-error! event error)
+      {::rfx/error error})))
+
+(defn- register-rfx-handlers!
+  []
+  (doseq [[event-id handler] @event-definitions]
+    (rfx/reg-event-fx! event-id (fn [coeffects event]
+                                  (handle-rfx-event handler coeffects event)))))
+
 (defn run!
   []
-  (let [chan (state/get-events-chan)]
-    (async/go-loop []
-      (let [[payload d] (async/<! chan)]
-        (->
-         (try
-           (p/resolved (handle payload))
-           (catch :default error
-             (p/rejected error)))
-         (p/then (fn [result]
-                   (p/resolve! d result)))
-         (p/catch (fn [error]
-                    (log/error :event-error error :event (first payload))
-                    (let [type :handle-system-events/failed]
-                      (state/pub-event! [:capture-error {:error error
-                                                         :payload {:type type
-                                                                   :payload payload}}])
-                      (p/reject! d error))))))
-      (recur))
-    chan))
+  (register-rfx-handlers!))
 
 (comment
   (let [{:keys [deprecated-app-id current-app-id]} {:deprecated-app-id "AFDADF9A-7466-4ED8-B74F-AAAA0D4565B9", :current-app-id "7563518E-0EFD-4AD2-8577-10CFFD6E4596"}]
