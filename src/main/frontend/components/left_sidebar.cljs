@@ -216,6 +216,7 @@
 (hsx/defc ^:large-vars/cleanup-todo sidebar-navigations
   [{:keys [default-home route-match route-name srs-open?]}]
   (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
+        _preferred-language (state/use-sub [:preferred-language])
         [checked-navs set-checked-navs!] (hooks/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:flashcards :all-pages :graph-view]))]
 
@@ -313,6 +314,7 @@
 (hsx/defc sidebar-favorites
   []
   (let [_favorites-updated? (state/use-sub :favorites/updated?)
+        _preferred-language (state/use-sub [:preferred-language])
         favorite-entities (page-handler/get-favorites)]
     (sidebar-content-group
      [:a.wrap-th
@@ -338,7 +340,8 @@
 
 (hsx/defc sidebar-recent-pages
   []
-  (let [pages (recent-handler/get-recent-pages)]
+  (let [_preferred-language (state/use-sub [:preferred-language])
+        pages (recent-handler/get-recent-pages)]
        (sidebar-content-group
         [:a.wrap-th [:strong.flex-1 (t :sidebar.left/recent-pages)]]
 
