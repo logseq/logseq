@@ -10,7 +10,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (def ^:private default-open-groups #{:view-mode :displayed-tags :layout})
 (def ^:private default-depth 1)
@@ -702,10 +702,10 @@
                    loading?
                    filtered-graph-data
                    available-tags
-	                   selected-tag-ids
-	                   tag-query
-	                   set-tag-query!
-	                   selected-nodes)
+                           selected-tag-ids
+                           tag-query
+                           set-tag-query!
+                           selected-nodes)
    (time-travel-control
     settings
     set-settings!
@@ -888,10 +888,10 @@
          {:repo repo
           :settings next-settings})))))
 
-(rum/defc global-graph
+(hsx/defc global-graph
   []
   (let [repo (state/get-current-repo)
-        theme (state/sub :ui/theme)
+        theme (state/use-sub :ui/theme)
         theme-token (use-theme-token)
         dark? (effective-dark-theme? theme theme-token)
         [settings-state set-settings-state!] (hooks/use-state {:repo repo :settings (load-graph-settings repo)})
@@ -941,21 +941,21 @@
           tags-graph-data (get graph-data-by-mode :tags-and-objects)
           loading? (contains? loading-modes view-mode)
           build-error (get build-errors view-mode)
-	          available-tags (hooks/use-memo #(when (and (= view-mode :tags-and-objects) tags-graph-data)
-	                                            (tag-options tags-graph-data))
-	                                         [view-mode tags-graph-data])
-	          canvas-available-tags (hooks/use-memo #(when (and (= graph-view-mode :tags-and-objects) graph-data)
-	                                                   (tag-options graph-data))
-	                                                [graph-view-mode graph-data])
+                  available-tags (hooks/use-memo #(when (and (= view-mode :tags-and-objects) tags-graph-data)
+                                                    (tag-options tags-graph-data))
+                                                 [view-mode tags-graph-data])
+                  canvas-available-tags (hooks/use-memo #(when (and (= graph-view-mode :tags-and-objects) graph-data)
+                                                           (tag-options graph-data))
+                                                        [graph-view-mode graph-data])
           selected-tag-ids (selected-tag-id-set canvas-settings canvas-available-tags)
           selected-tag-key (if (some? (:selected-tag-ids canvas-settings))
                              (string/join "\u0000" (sort (:selected-tag-ids canvas-settings)))
                              "__all__")
-	          mode-graph-data (hooks/use-memo #(when graph-data
-	                                             (if (= graph-view-mode :tags-and-objects)
-	                                               (filter-tags-and-objects-graph graph-data selected-tag-ids)
-	                                               graph-data))
-	                                          [graph-data graph-view-mode selected-tag-key])
+                  mode-graph-data (hooks/use-memo #(when graph-data
+                                                     (if (= graph-view-mode :tags-and-objects)
+                                                       (filter-tags-and-objects-graph graph-data selected-tag-ids)
+                                                       graph-data))
+                                                  [graph-data graph-view-mode selected-tag-key])
           layout-filtered-graph-data (hooks/use-memo
                                       #(when mode-graph-data
                                          (filter-graph-by-layout-settings
@@ -963,25 +963,25 @@
                                           graph-view-mode
                                           show-journals?))
                                       [mode-graph-data graph-view-mode show-journals?])
-	          filtered-graph-data (when mode-graph-data
-	                                (filter-graph-by-created-at layout-filtered-graph-data
-	                                                            (:created-at-filter canvas-settings)))
+                  filtered-graph-data (when mode-graph-data
+                                        (filter-graph-by-created-at layout-filtered-graph-data
+                                                                    (:created-at-filter canvas-settings)))
           visible-node-ids (graph-visible-node-ids mode-graph-data filtered-graph-data)
           background-visible-node-ids visible-node-ids]
-	      (global-graph-content
-	       (global-graph-content-props
-	        {:settings-open? settings-open? :set-settings-open! set-settings-open! :settings settings
-	         :set-settings! set-settings! :view-mode view-mode :switch-view-mode! switch-view-mode!
-	         :loading? loading? :build-error build-error :retry! #(set-retry-token! (inc retry-token))}
-	        {:filtered-graph-data filtered-graph-data :mode-graph-data mode-graph-data :canvas-settings canvas-settings
-	         :visible-node-ids visible-node-ids :background-visible-node-ids background-visible-node-ids
-	         :dark? dark? :graph-view-mode graph-view-mode}
-	        {:available-tags available-tags :selected-tag-ids selected-tag-ids :tag-query tag-query
-	         :set-tag-query! set-tag-query!}
-	        {:time-travel-animation-ref time-travel-animation-ref :time-travel-open? time-travel-open?
-	         :set-time-travel-open! set-time-travel-open!}
-	        {:selected-nodes selected-nodes :set-selected-nodes! set-selected-nodes!
-	         :focused-tag-node focused-tag-node :set-focused-tag-node! set-focused-tag-node! :reset-token reset-token
-	         :on-reset-interaction #(do (set-selected-nodes! [])
-	                                    (set-focused-tag-node! nil)
-	                                    (set-reset-token! (inc reset-token)))})))))
+              (global-graph-content
+               (global-graph-content-props
+                {:settings-open? settings-open? :set-settings-open! set-settings-open! :settings settings
+                 :set-settings! set-settings! :view-mode view-mode :switch-view-mode! switch-view-mode!
+                 :loading? loading? :build-error build-error :retry! #(set-retry-token! (inc retry-token))}
+                {:filtered-graph-data filtered-graph-data :mode-graph-data mode-graph-data :canvas-settings canvas-settings
+                 :visible-node-ids visible-node-ids :background-visible-node-ids background-visible-node-ids
+                 :dark? dark? :graph-view-mode graph-view-mode}
+                {:available-tags available-tags :selected-tag-ids selected-tag-ids :tag-query tag-query
+                 :set-tag-query! set-tag-query!}
+                {:time-travel-animation-ref time-travel-animation-ref :time-travel-open? time-travel-open?
+                 :set-time-travel-open! set-time-travel-open!}
+                {:selected-nodes selected-nodes :set-selected-nodes! set-selected-nodes!
+                 :focused-tag-node focused-tag-node :set-focused-tag-node! set-focused-tag-node! :reset-token reset-token
+                 :on-reset-interaction #(do (set-selected-nodes! [])
+                                            (set-focused-tag-node! nil)
+                                            (set-reset-token! (inc reset-token)))})))))

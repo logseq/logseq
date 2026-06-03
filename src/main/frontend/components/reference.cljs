@@ -4,7 +4,6 @@
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -12,10 +11,10 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
-            [rum.core :as rum]
+            [io.factorhouse.hsx.core :as hsx]
             [promesa.core :as p]))
 
-(rum/defc references-aux
+(hsx/defc references-aux
   [page-entity config]
   (let [filters (db-reference/get-filters page-entity)
         open-blocks-level (state/get-ref-open-blocks-level)
@@ -54,22 +53,23 @@
                                    (zero? open-blocks-level))
                           {:default-collapsed? true})})))
 
-(rum/defc references-cp < rum/reactive db-mixins/query
+(hsx/defc references-cp
   [entity config]
   (let [block (db/sub-block (:db/id entity))]
-    (references-aux block config)))
+       (references-aux block config)))
 
-(rum/defc references
+(hsx/defc references
   [entity config]
   (when-let [id (:db/id entity)]
     (let [[refs-total-count set-refs-total-count!] (hooks/use-state (:refs-count config))]
       (hooks/use-effect!
        #(c.m/run-task*
          (m/sp
-           (when-not (:refs-count config)
+           (if-let [refs-count (:refs-count config)]
+             (set-refs-total-count! refs-count)
              (let [result (c.m/<? (db-async/<get-block-refs-count (state/get-current-repo) id))]
                (set-refs-total-count! result)))))
-       [])
+       [id (:refs-count config)])
       (when (> refs-total-count 0)
         (ui/catch-error
          (ui/component-error
@@ -77,7 +77,7 @@
          [:div.references
           (references-cp entity (assoc config :refs-total-count refs-total-count))])))))
 
-(rum/defc unlinked-references
+(hsx/defc unlinked-references
   [entity config]
   (when-let [id (:db/id entity)]
     (let [[has-references? set-has-references!] (hooks/use-state nil)]
