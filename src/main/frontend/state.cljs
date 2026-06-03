@@ -93,8 +93,7 @@
       :me                      nil
       :git/current-repo        current-graph
       :db/restoring?           nil
-      :db/query-results        {}
-
+      :db/query-results                      {}
       :search/q                              ""
       :search/mode                           nil
       :search/args                           nil
@@ -348,13 +347,17 @@
 
 (defn register-rfx-state-subs!
   []
+  (rfx/reg-sub! ::state-key
+    (fn [db [_ k]]
+      (get db k)))
   (doseq [k (keys (rfx/snapshot))]
+    (rfx/register-state-sub-id! k)
     (rfx/reg-sub! k
-      (fn [db [_ & path]]
-        (let [value (get db k)]
-          (if (seq path)
-            (get-in value path)
-            value)))))
+      [[::state-key k]]
+      (fn [value [_ & path]]
+        (if (seq path)
+          (get-in value path)
+          value))))
   (rfx/reg-sub! :selection/block-selected?
     [[:selection/blocks]]
     (fn [selection-blocks [_ block-id]]
@@ -364,6 +367,25 @@
   true)
 
 (register-rfx-state-subs!)
+
+(declare get-state update-state! set-state!)
+(defn async-query-requested?
+  [query-key]
+  (get (get-state :db/async-queries) query-key))
+
+(defn mark-async-query-requested!
+  [query-key]
+  (update-state! :db/async-queries assoc query-key true))
+
+(defn clear-async-queries!
+  []
+  (set-state! :db/async-queries {}))
+
+(defn set-sync-block-conflicts!
+  [repo block-id conflicts]
+  (set-state! :sync/block-conflicts
+              (or conflicts [])
+              :nested-path [repo (str block-id)]))
 
 ;; User configuration getters under :config (and sometimes :me)
 ;; ========================================
@@ -716,6 +738,19 @@ should be done through this fn in order to get global config and config defaults
       :else
       (assoc db path value))))
 
+(defn- full-state-path
+  [path nested-path]
+  (let [base-path (if (coll? path) (vec path) [path])]
+    (cond
+      (and nested-path (coll? nested-path))
+      (into base-path nested-path)
+
+      nested-path
+      (conj base-path nested-path)
+
+      :else
+      base-path)))
+
 (defn- update-state-db
   [db path f nested-path]
   (let [path-coll?             (coll? path)
@@ -743,7 +778,7 @@ should be done through this fn in order to get global config and config defaults
   (let [old-v (read-state-value (rfx/snapshot) path nested-path)]
     (when (not= old-v value)
       (let [db' (assoc-state-db (rfx/snapshot) path value nested-path)]
-        (rfx/replace-state! db')
+        (rfx/replace-state! db' (full-state-path path nested-path))
         (reset! state db'))))
   nil)
 
@@ -751,7 +786,7 @@ should be done through this fn in order to get global config and config defaults
   [path f & {:keys [nested-path]}]
   (vswap! *profile-state update path inc)
   (let [db' (update-state-db (rfx/snapshot) path f nested-path)]
-    (rfx/replace-state! db')
+    (rfx/replace-state! db' (full-state-path path nested-path))
     (reset! state db'))
   nil)
 

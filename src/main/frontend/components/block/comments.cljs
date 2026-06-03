@@ -453,13 +453,9 @@
   [config block]
   (let [block-uuid (:block/uuid block)
         container-id (:container-id config)
-        editing-state (rfx/use-sub [:editor/editing?])
-        editing-in-container? (boolean (get editing-state [container-id block-uuid]))
-        editing-in-unknown-container? (boolean (get editing-state [:unknown-container block-uuid]))]
-    (boolean
-     (and block-uuid
-          (or editing-in-container?
-              editing-in-unknown-container?)))))
+        editing? (or (boolean (rfx/use-sub [:editor/editing? [container-id block-uuid]]))
+                     (boolean (rfx/use-sub [:editor/editing? [:unknown-container block-uuid]])))]
+    (and block-uuid editing?)))
 
 (defn- comments-area-title-view
   [config block editing? *hide-block-refs? *show-query? {:keys [block-content-or-editor]}]

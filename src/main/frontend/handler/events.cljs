@@ -129,7 +129,7 @@
   (let [t1 (t/now)]
     (p/do!
     (export/cancel-db-backup!)
-    (state/set-state! :db/async-queries {})
+    (state/clear-async-queries!)
     (st/refresh!)
     (graph-switch-on-persisted graph opts)
     (export/backup-db-graph (state/get-current-repo))
