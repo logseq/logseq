@@ -73,41 +73,16 @@
                (not preview?))
       (editor-handler/edit-block! block :max))))
 
-(defn- <prefetch-linked-references-critical-data
-  [repo page-e]
-  (when (and repo (ldb/page? page-e))
-    (p/all [(db-async/<get-block-refs-count repo (:db/id page-e))
-            (db-async/<get-views repo (:db/id page-e) :linked-references)])))
-
 (hsx/defc page-blocks-inner
   [page-e blocks config sidebar? _preview? _block-uuid]
-  (let [*page-block-adornments-ready? (hooks/use-memo #(atom sidebar?) [(:db/id page-e) sidebar?])
-        [page-block-adornments-ready?] (hooks/use-atom *page-block-adornments-ready?)]
-    (hooks/use-effect! #(open-root-block! page-e sidebar? _preview?) [])
-    (hooks/use-effect!
-     (fn []
-       (let [repo (state/get-current-repo)]
-         (reset! *page-block-adornments-ready? sidebar?)
-         (when (and repo page-e (seq blocks) (not sidebar?))
-           (->
-            (p/let [_ (<prefetch-linked-references-critical-data repo page-e)]
-              (reset! *page-block-adornments-ready? true)
-              (component-block/prefetch-block-adornments! repo blocks))
-            (p/catch (fn [error]
-                       (js/console.error "Failed to prefetch page render data" error)
-                       (reset! *page-block-adornments-ready? true))))))
-       (fn []))
-     [(:db/id page-e) sidebar?])
-    (when page-e
-      (let [hiccup (component-block/->hiccup blocks
-                                            (assoc config :page-block-adornments-ready?
-                                                   page-block-adornments-ready?)
-                                            {})]
-        [:div.page-blocks-inner {:style {:min-height 29}}
-         ^{:key (str (:block/uuid page-e) "-hiccup")}
-         [content/content (str (:block/uuid page-e))
-          {:hiccup   hiccup
-           :sidebar? sidebar?}]]))))
+  (hooks/use-effect! #(open-root-block! page-e sidebar? _preview?) [])
+  (when page-e
+    (let [hiccup (component-block/->hiccup blocks config {})]
+      [:div.page-blocks-inner {:style {:min-height 29}}
+       ^{:key (str (:block/uuid page-e) "-hiccup")}
+       [content/content (str (:block/uuid page-e))
+        {:hiccup   hiccup
+         :sidebar? sidebar?}]])))
 
 (declare page-cp)
 
@@ -448,8 +423,6 @@
         container-id (or (:container-id option) (state/get-container-id container-key))
         page (or page (some-> (:db/id option) db/entity))
         page-id (:db/id page)
-        unlinked-refs-ready?* (hooks/use-memo #(atom false) [page-id])
-        [unlinked-refs-ready?] (hooks/use-atom unlinked-refs-ready?*)
         config (assoc config
                       :id (str (:block/uuid page)))
         repo (or repo current-repo)
@@ -474,13 +447,6 @@
                           ;; Fallback to avoid blocking refs forever when tab content is reused.
                           (= page-id linked-refs-blocks-ready-page-id))
         linked-refs-ready? (and blocks-ready? tagged-ready?)]
-    (hooks/use-effect!
-     (fn []
-       (reset! unlinked-refs-ready?* false)
-       (when linked-refs-ready?
-         (reset! unlinked-refs-ready?* true))
-       (fn []))
-     [page-id linked-refs-ready?])
     (if page
       (when (or title block?)
         (if recycled?
@@ -562,8 +528,7 @@
                                              :refs-count (:refs-count option)
                                              :linked-refs-section? true}]])
 
-              (when-not (or (not unlinked-refs-ready?)
-                            unlinked-refs?
+              (when-not (or unlinked-refs?
                             sidebar?
                             tag-dialog?
                             home?
@@ -592,10 +557,13 @@
        (when (:block.temp/load-status page-in-db)
          (reset! *loading? false))
        (p/let [repo (state/get-current-repo)
-               page-block (db-async/<get-block repo page-id-uuid-or-name)]
+               page-block (db-async/<get-block repo page-id-uuid-or-name)
+               page-id (:db/id page-block)
+               refs-count (when-not (or (ldb/class? page-block) (ldb/property? page-block))
+                            (db-async/<get-block-refs-count repo page-id))]
          (reset! *loading? false)
          (reset! *page (db/entity (:db/id page-block)))
-         (reset! *refs-count nil)
+         (reset! *refs-count refs-count)
          (when page-block
            (when-not (or preview-or-sidebar? (:tag-dialog? option))
              (if-let [page-uuid (and (not (:db/id option))

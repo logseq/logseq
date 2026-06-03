@@ -65,9 +65,6 @@
   nil)
 
 (defonce ^:private *search-index-build-timeout (atom nil))
-(def ^:private search-index-build-delay-ms 60000)
-(def ^:private search-index-build-idle-diff-ms 30000)
-
 (defn- <build-search-index!
   [repo]
   (-> (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)
@@ -85,14 +82,14 @@
                (not= repo (state/get-current-repo))
                (reset! *search-index-build-timeout nil)
 
-               (state/input-idle? repo :diff search-index-build-idle-diff-ms)
+               (state/input-idle? repo :diff 5000)
                (do
                  (reset! *search-index-build-timeout nil)
                  (<build-search-index! repo))
 
                :else
                (schedule-search-index-build! repo)))
-           search-index-build-delay-ms)))
+           1000)))
 
 (defevent! :init/commands [_]
   (page-handler/init-commands!))

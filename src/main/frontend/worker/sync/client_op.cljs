@@ -455,15 +455,6 @@
                             remote-t
                             now]))))))))
 
-(defn- sync-conflict-row->map
-  [row]
-  {:id (aget row "id")
-   :block-uuid (parse-uuid-str (aget row "block_uuid"))
-   :attr (str->qualified-kw (aget row "attr"))
-   :value (aget row "value")
-   :remote-t (aget row "remote_t")
-   :created-at (aget row "created_at")})
-
 (defn get-sync-conflicts
   [repo block-uuid]
   (when (uuid? block-uuid)
@@ -473,25 +464,13 @@
                              "from sync_conflicts where block_uuid = ? "
                              "order by created_at desc, id desc")
                         [(str block-uuid)])
-           (mapv sync-conflict-row->map)))))
-
-(defn get-sync-conflicts-batch
-  [repo block-uuids]
-  (let [block-uuids (->> block-uuids (filter uuid?) distinct vec)]
-    (if (empty? block-uuids)
-      []
-      (when-let [store (sqlite-store-or-throw repo)]
-        (let [block-uuid-strs (mapv str block-uuids)
-              placeholders (string/join "," (repeat (count block-uuid-strs) "?"))
-              rows (sqlite-rows store
-                                (str "select id, block_uuid, attr, value, remote_t, created_at "
-                                     "from sync_conflicts where block_uuid in (" placeholders ") "
-                                     "order by block_uuid, created_at desc, id desc")
-                                block-uuid-strs)
-              conflicts-by-block-uuid (->> rows
-                                            (map sync-conflict-row->map)
-                                            (group-by :block-uuid))]
-          (mapv #(vec (get conflicts-by-block-uuid %)) block-uuids))))))
+           (mapv (fn [row]
+                   {:id (aget row "id")
+                    :block-uuid (parse-uuid-str (aget row "block_uuid"))
+                    :attr (str->qualified-kw (aget row "attr"))
+                    :value (aget row "value")
+                    :remote-t (aget row "remote_t")
+                    :created-at (aget row "created_at")}))))))
 
 (defn clear-sync-conflicts!
   [repo block-uuid]
