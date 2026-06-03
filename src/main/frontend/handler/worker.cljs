@@ -69,7 +69,7 @@
   (when (and (seq repo) block-uuid)
     (state/set-state! :sync/block-conflicts
                       (or conflicts [])
-                      :path-in-sub-atom [repo (str block-uuid)])))
+                      :nested-path [repo (str block-uuid)])))
 
 (defmethod handle :rtc-log [_ _worker log]
   (state/pub-event! [:rtc/log log]))

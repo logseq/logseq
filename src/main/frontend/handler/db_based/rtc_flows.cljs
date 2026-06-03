@@ -3,13 +3,12 @@
   (:require [frontend.common.missionary :as c.m]
             [frontend.flows :as flows]
             [frontend.mobile.flows :as mobile-flows]
-            [frontend.state :as state]
             [logseq.common.util :as common-util]
             [missionary.core :as m])
   (:import [missionary Cancelled]))
 
 (def rtc-log-flow
-  (->> (m/watch (:rtc/log @state/state))
+  (->> (flows/sub-flow [:rtc/log])
        (m/eduction
         (remove #(and (= :skip (:sub-type %))
                       (= :rtc.log/apply-remote-update (:type %)))))))
@@ -30,21 +29,7 @@
    rtc-log-flow))
 
 (def rtc-state-flow
-  (m/watch (:rtc/state @state/state)))
-
-(def rtc-running-flow
-  (m/eduction (map :rtc-lock) rtc-state-flow))
-
-(def rtc-online-users-flow
-  (c.m/throttle
-   500
-   (m/eduction
-    (map (fn [m]
-           (when (and (= :open (:ws-state (:rtc-state m)))
-                      (:rtc-lock m))
-             (:online-users m))))
-    (dedupe)
-    rtc-state-flow)))
+  (flows/sub-flow [:rtc/state]))
 
 (def rtc-try-restart-flow
   "emit an event when it's time to restart rtc loop.

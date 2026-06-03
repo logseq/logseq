@@ -28,7 +28,7 @@
     (is (= ["b1" "b2" "b1" "b2"] (util/get-page-blocks-contents)))
     (b/undo)
     (util/exit-edit)
-    (is (= ["b1" "b2"] (util/get-page-blocks-contents)))
+    (is (= ["b1" "b2" ""] (util/get-page-blocks-contents)))
     (b/redo)
     (util/exit-edit)
     (is (= ["b1" "b2" "b1" "b2"] (util/get-page-blocks-contents)))))

@@ -19,6 +19,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
             [frontend.modules.shortcut.core :as shortcut]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -738,7 +739,7 @@
         id (hooks/use-memo #(str (random-uuid)) [])
         block (resolve-linked-block-if-exists target-block)
         show-properties? (or sidebar-properties? tag-dialog?)
-        show-empty-and-hidden-properties? (let [{:keys [mode show? ids]} (state/use-sub :ui/show-empty-and-hidden-properties?)]
+        show-empty-and-hidden-properties? (let [{:keys [mode show? ids]} (rfx/use-sub [:ui/show-empty-and-hidden-properties?])]
                                             (and show?
                                                  (or (= mode :global)
                                                      (and (set? ids) (contains? ids (:block/uuid block))))))

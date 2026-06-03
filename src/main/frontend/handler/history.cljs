@@ -35,7 +35,7 @@
     (when (and (not= route-data current-route-data) route-data
                (contains? #{:home :page :page-block :all-journals} (:to route-data)))
       (route-handler/redirect! route-data))
-    (swap! state/state merge (dissoc state :route-data))))
+    (state/swap-state! merge (dissoc state :route-data))))
 
 (defn- restore-cursor-and-state!
   [result]

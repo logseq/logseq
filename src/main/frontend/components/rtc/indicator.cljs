@@ -5,10 +5,10 @@
             [frontend.common.missionary :as c.m]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.flows :as flows]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.context.i18n :refer [locale-format-date t]]
             [frontend.handler.db-based.sync :as rtc-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -70,13 +70,6 @@
                                 rtc-flows/rtc-state-flow)))]
       (reset! *update-detail-info-canceler canceler))))
 (run-task--update-detail-info)
-
-(defn- asset-upload-download-progress-flow
-  [repo]
-  (->> (m/watch (get @state/state :rtc/asset-upload-download-progress))
-       (m/eduction
-        (keep #(get % repo))
-        (dedupe))))
 
 (defn asset-transfer-counts
   [progress]
@@ -157,9 +150,9 @@
 
 (hsx/defc details
   []
-  (let [online? (hooks/use-flow-state flows/network-online-event-flow)
+  (let [online? (rfx/use-sub [:network/online?])
         repo (state/get-current-repo)
-        asset-progress (hooks/use-flow-state (asset-upload-download-progress-flow repo))
+        asset-progress (rfx/use-sub [:rtc/asset-upload-download-progress repo])
         [expand-debug? set-expand-debug!] (hooks/use-state false)
         show-checksums? (or config/dev? util/node-test?)
         {:keys [graph-uuid local-tx remote-tx local-checksum remote-checksum rtc-state
@@ -210,8 +203,8 @@
 (hsx/defc indicator
   []
   (let [detail-info                 (hooks/use-flow-state (m/watch *detail-info))
-        _                           (hooks/use-flow-state flows/current-login-user-flow)
-        online?                     (hooks/use-flow-state flows/network-online-event-flow)
+        _                           (rfx/use-sub [:auth/current-login-user])
+        online?                     (rfx/use-sub [:network/online?])
         rtc-state                   (:rtc-state detail-info)
         unpushed-block-update-count (:pending-local-ops detail-info)
         pending-asset-ops           (:pending-asset-ops detail-info)

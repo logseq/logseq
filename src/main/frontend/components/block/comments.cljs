@@ -13,6 +13,7 @@
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.reaction :as reaction-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
@@ -67,7 +68,7 @@
    (state/set-state! :editor/block block)
    (state/set-editing-block-id! [(or container-id :comments-area) (:block/uuid block)])
    (state/set-state! :editor/container-id container-id)
-   (state/set-state! :editor/content (or content "") :path-in-sub-atom (:block/uuid block))
+   (state/set-state! :editor/content (or content "") :nested-path (:block/uuid block))
    (state/set-state! :editor/last-key-code nil)
    (state/set-state! :editor/set-timestamp-block nil)
    (state/set-state! :editor/cursor-range nil)
@@ -452,8 +453,9 @@
   [config block]
   (let [block-uuid (:block/uuid block)
         container-id (:container-id config)
-        editing-in-container? (state/use-sub-editing? [container-id block-uuid])
-        editing-in-unknown-container? (state/use-sub-editing? [:unknown-container block-uuid])]
+        editing-state (rfx/use-sub [:editor/editing?])
+        editing-in-container? (boolean (get editing-state [container-id block-uuid]))
+        editing-in-unknown-container? (boolean (get editing-state [:unknown-container block-uuid]))]
     (boolean
      (and block-uuid
           (or editing-in-container?

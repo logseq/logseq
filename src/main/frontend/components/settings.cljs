@@ -22,6 +22,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
+            [frontend.rfx :as rfx]
             [frontend.spec.storage :as storage-spec]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -54,8 +55,8 @@
 
 (hsx/defc app-updater
   [version]
-  (let [update-pending? (state/use-sub :electron/updater-pending?)
-        {:keys [type payload]} (state/use-sub :electron/updater)]
+  (let [update-pending? (rfx/use-sub [:electron/updater-pending?])
+        {:keys [type payload]} (rfx/use-sub [:electron/updater])]
     [:span.cp__settings-app-updater
      [:div.ctls.flex.items-center
       [:div.mt-1.sm:mt-0.sm:col-span-2.flex.gap-4.items-center.flex-wrap
@@ -291,7 +292,7 @@
 
 (hsx/defc switch-spell-check-row
   [t]
-  (let [enabled? (state/use-sub [:electron/user-cfgs :spell-check])]
+  (let [enabled? (rfx/use-sub [:electron/user-cfgs :spell-check])]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       (t :settings.editor/spell-checker)]
@@ -307,7 +308,7 @@
         true)]]]))
 
 (hsx/defc app-auto-update-row [t]
-  (let [enabled? (state/use-sub [:electron/user-cfgs :auto-update])
+  (let [enabled? (rfx/use-sub [:electron/user-cfgs :auto-update])
         enabled? (if (nil? enabled?) true enabled?)]
     (toggle "usage-diagnostics"
             (t :settings.advanced/auto-updater)
@@ -333,15 +334,15 @@
 
 (hsx/defc theme-modes-row
   [t]
-  (let [theme (state/use-sub :ui/theme)
+  (let [theme (rfx/use-sub [:ui/theme])
         dark? (= "dark" theme)
-        system-theme? (state/use-sub :ui/system-theme?)
+        system-theme? (rfx/use-sub [:ui/system-theme?])
         switch-theme (if dark? "light" "dark")
         switch-theme-label (case switch-theme
                              "light" (t :settings.general/theme-light)
                              "dark" (t :settings.general/theme-dark)
                              (t :settings.general/theme-system))
-        color-accent (state/use-sub :ui/radix-color)
+        color-accent (rfx/use-sub [:ui/radix-color])
         pick-theme [:ul.cp__theme-modes-options
                     [:li {:on-click (partial state/use-theme-mode! "light")
                           :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light {:class (when color-accent "radix")}] [:strong (t :settings.general/theme-light)]]
@@ -358,7 +359,7 @@
 
 (hsx/defc accent-color-row
   [_in-modal?]
-  (let [color-accent (state/use-sub :ui/radix-color)
+  (let [color-accent (rfx/use-sub [:ui/radix-color])
         color-label (fn [color]
                       (case color
                         :none [:p {:style {:max-width "300px"}}
@@ -419,9 +420,9 @@
 
 (hsx/defc appearance
   []
-  (let [_config (state/use-sub :config)
-        editor-font (state/use-sub :ui/editor-font)
-        wide-mode? (state/use-sub :ui/wide-mode?)]
+  (let [_config (rfx/use-sub [:config])
+        editor-font (rfx/use-sub [:ui/editor-font])
+        wide-mode? (rfx/use-sub [:ui/wide-mode?])]
     [:div#appearance_settings.cp__settings-appearance-dialog-inner
      (theme-modes-row t)
      (editor-font-family-row t editor-font)
@@ -755,7 +756,8 @@
 (hsx/defc markdown-mirror-row
   [t]
   (let [repo (state/get-current-repo)
-        repo-config (when repo (state/use-sub [:config repo]))
+        repo-config (rfx/use-sub [:config repo])
+        repo-config (when repo repo-config)
         enabled? (true? (:feature/markdown-mirror? repo-config))
         *regenerating? (hooks/use-memo #(atom false) [])
         [regenerating?] (hooks/use-atom *regenerating?)
@@ -804,9 +806,9 @@
 
 (hsx/defc auto-chmod-row
   [t]
-  (let [enabled? (if (= nil (state/use-sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))
+  (let [enabled? (if (= nil (rfx/use-sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))
                    true
-                   (state/use-sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))]
+                   (rfx/use-sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))]
     (toggle
      "automatic-chmod"
      (t :settings.advanced/auto-chmod)
@@ -818,7 +820,7 @@
 
 (hsx/defc native-titlebar-row
   [t]
-  (let [enabled? (state/use-sub [:electron/user-cfgs :window/native-titlebar?])]
+  (let [enabled? (rfx/use-sub [:electron/user-cfgs :window/native-titlebar?])]
     (toggle
      "native-titlebar"
      (t :settings.general/native-titlebar)
@@ -831,9 +833,9 @@
 
 (hsx/defc settings-general
   [current-repo]
-  (let [preferred-language (state/use-sub [:preferred-language])
+  (let [preferred-language (rfx/use-sub [:preferred-language])
         show-radix-themes? true
-        editor-font (state/use-sub :ui/editor-font)]
+        editor-font (rfx/use-sub [:ui/editor-font])]
     [:div.panel-wrap.is-general
      (version-row t fv/version)
      (language-row t preferred-language)
@@ -848,7 +850,7 @@
 
 (hsx/defc settings-editor
   []
-  (let [_config (state/use-sub :config)
+  (let [_config (rfx/use-sub [:config])
         preferred-date-format (state/get-date-formatter)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
@@ -856,9 +858,9 @@
         preferred-pasting-file? (state/preferred-pasting-file?)
         auto-expand-block-refs? (state/auto-expand-block-refs?)
         enable-tooltip? (state/enable-tooltip?)
-        enable-shortcut-tooltip? (state/use-sub :ui/shortcut-tooltip?)
+        enable-shortcut-tooltip? (rfx/use-sub [:ui/shortcut-tooltip?])
         show-brackets? (state/show-brackets?)
-        wide-mode? (state/use-sub :ui/wide-mode?)]
+        wide-mode? (rfx/use-sub [:ui/wide-mode?])]
 
     [:div.panel-wrap.is-editor
      (date-format-row t preferred-date-format)
@@ -878,9 +880,9 @@
 
 (hsx/defc settings-advanced
   []
-  (let [instrument-disabled? (state/use-sub :instrument/disabled?)
-        developer-mode? (state/use-sub [:ui/developer-mode?])
-        https-agent-opts (state/use-sub [:electron/user-cfgs :settings/agent])]
+  (let [instrument-disabled? (rfx/use-sub [:instrument/disabled?])
+        developer-mode? (rfx/use-sub [:ui/developer-mode?])
+        https-agent-opts (rfx/use-sub [:electron/user-cfgs :settings/agent])]
     [:div.panel-wrap.is-advanced
      (when (and (or util/mac? util/win32?) (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
@@ -945,10 +947,10 @@
 (hsx/defc ^:large-vars/cleanup-todo settings-account
   []
   (let [graph-usage []
-        auth-refresh-token (state/use-sub :auth/refresh-token)
+        auth-refresh-token (rfx/use-sub [:auth/refresh-token])
         logged-in? (and (string? auth-refresh-token)
                         (not (string/blank? auth-refresh-token)))
-        user-info (state/use-sub :user/info)
+        user-info (rfx/use-sub [:user/info])
         paid-user? (#{"active" "on_trial" "cancelled"} (:LemonStatus user-info))
         gift-user? (some #{"pro"} (:UserGroups user-info))
         pro-account? (or paid-user? gift-user?)
@@ -1088,8 +1090,10 @@
 
 (hsx/defc settings-features
   []
-  (let [_config (state/use-sub :config)
-        default-home-page (state/use-sub-default-home-page)
+  (let [_config (rfx/use-sub [:config])
+        default-home-page (get-in (state/config-for-repo (rfx/use-sub [:config])
+                                                         (state/get-current-repo))
+                                  [:default-home :page] "")
         current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
@@ -1156,7 +1160,7 @@
         [loading? set-loading!] (hooks/use-state true)
         current-repo (state/get-current-repo)
         manager? (user-handler/manager? current-repo)
-        [users-info] (hooks/use-atom (:rtc/users-info @state/state))
+        users-info (rfx/use-sub [:rtc/users-info])
         users (get users-info current-repo)
         invite-user! (fn []
                        (let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
@@ -1400,8 +1404,8 @@
 
 (hsx/defc ^:large-vars/cleanup-todo settings
   [_active-tab]
-  (let [current-repo (state/use-sub :git/current-repo)
-        _installed-plugins (state/use-sub :plugin/installed-plugins)
+  (let [current-repo (rfx/use-sub [:git/current-repo])
+        _installed-plugins (rfx/use-sub [:plugin/installed-plugins])
         plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
         *active (hooks/use-memo #(atom DEFAULT-ACTIVE-TAB-STATE) [])
         [active] (hooks/use-atom *active)

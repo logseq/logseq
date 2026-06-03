@@ -30,7 +30,7 @@
 
     ;; skip recording editor info when undo or redo is still running
     (when-not (or (:skip-focus? config)
-                  (contains? #{:undo :redo} @(:editor/op @state/state)))
+                  (contains? #{:undo :redo} (state/get-state :editor/op)))
       (when-let [edit-block-db-id (:db/id (state/get-edit-block))]
         (let [page-id (:block/uuid (:block/page (db/entity edit-block-db-id)))
               repo (state/get-current-repo)
