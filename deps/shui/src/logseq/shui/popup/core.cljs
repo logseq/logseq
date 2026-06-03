@@ -1,9 +1,9 @@
 (ns logseq.shui.popup.core
   (:require [dommy.core :as d]
-            [logseq.shui.util :as util]
-            [logseq.shui.util :refer [use-atom]]
+            [io.factorhouse.hsx.core :as hsx]
+            [logseq.shui.util :as util :refer [use-atom]]
             [medley.core :as medley]
-            [rum.core :as rum]))
+            ))
 
 ;; ui
 (def button (util/lsui-wrap "Button"))
@@ -146,7 +146,7 @@
   (doseq [{:keys [id]} @*popups]
     (hide! id 0 {:all? true})))
 
-(rum/defc x-popup
+(hsx/defc x-popup
   [{:keys [id open? content position as-dropdown? as-content? force-popover?
            auto-side? as-mask? _auto-focus? _target root-props content-props
            _on-before-hide _on-after-hide]
@@ -201,11 +201,11 @@
            content
            (popup-content content-props content)))))))
 
-(rum/defc install-popups
-  < rum/static
+(hsx/defc install-popups
   []
   (let [[popups _set-popups!] (use-atom *popups)]
     [:<>
      (for [config popups
            :when (and (map? config) (:id config) (not (:all? config)))]
-       (rum/with-key (x-popup config) (:id config)))]))
+       ^{:key (:id config)}
+       [x-popup config])]))

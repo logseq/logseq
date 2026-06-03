@@ -1,18 +1,19 @@
 (ns frontend.extensions.highlight
-  (:require [rum.core :as rum]))
+  (:require [logseq.shui.hooks :as hooks]
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- highlight!
-  [state]
-  (let [[id attr] (:rum/args state)]
-    (when (:data-lang attr)
-      (when-let [element (js/document.getElementById id)]
-        (js/hljs.highlightElement element)))))
+  [id attr]
+  (when (:data-lang attr)
+    (when-let [element (js/document.getElementById id)]
+      (js/hljs.highlightElement element))))
 
-(rum/defcs highlight < rum/reactive
-  {:did-mount (fn [state]
-                (highlight! state)
-                state)}
-  [state id attr code]
+(hsx/defc highlight
+  [id attr code]
+  (hooks/use-effect!
+   (fn []
+     (highlight! id attr))
+   [id attr])
   [:pre.code.pre-wrap-white-space
    [:code (assoc attr :id id)
     code]])

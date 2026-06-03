@@ -313,6 +313,23 @@
    :root-dir root-dir
    :revision (build-version/revision)})
 
+(defn- log-invoke-error!
+  [res error method-kw]
+  (let [data (ex-data error)
+        status (invoke-error-status data)
+        code (invoke-error-code data)
+        message (invoke-error-message error data)
+        payload {:ok false
+                 :error {:code code
+                         :message message}}]
+    (log/error :db-worker-node-invoke-failed
+               {:status status
+                :code code
+                :error error
+                :message message
+                :method method-kw})
+    (send-json! res status payload)))
+
 (defn- make-server
   [proxy {:keys [bound-repo stop-fn host port owner-source root-dir]}]
   (http/createServer

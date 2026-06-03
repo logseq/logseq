@@ -13,27 +13,27 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.string :as gstring]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
-            [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [reitit.frontend.easy :as rfe]))
 
 (defn- get-path
-  [state]
-  (let [route-match (first (:rum/args state))]
-    (get-in route-match [:parameters :path :path])))
+  [route-match]
+  (get-in route-match [:parameters :path :path]))
 
-(rum/defcs files-all < rum/reactive
-  {:init (fn [state]
-           (let [*files (atom nil)]
+(hsx/defc files-all
+  []
+  (let [[files set-files!] (hooks/use-state nil)
+        _ (hooks/use-effect!
+           (fn []
              (p/let [result (db-async/<get-files (state/get-current-repo))]
-               (reset! *files result))
-             (assoc state ::files *files)))}
-  [state]
-  (let [files (rum/react (::files state))
+               (set-files! result)))
+           [])
         files (sort-by first gstring/intAwareCompare files)
         mobile? (util/mobile?)]
     [:table.table-auto
@@ -59,7 +59,7 @@
                      (date/get-date-time-string
                       (t/to-default-time-zone (tc/to-date-time modified-at))))]])]))]]))
 
-(rum/defc files
+(hsx/defc files
   []
   [:div.flex-1.overflow-hidden
    [:h1.title
@@ -67,38 +67,32 @@
    (files-all)])
 
 ;; FIXME: misuse of rpath and fpath
-(rum/defcs file-inner < rum/reactive
-  {:will-mount (fn [state]
-                 (let [*content (atom nil)
-                       [path format] (:rum/args state)
-                       repo (state/get-current-repo)
-                       repo-dir (config/get-repo-dir repo)
-                       [dir path] (cond
-                                    (path/absolute? path)
-                                    [nil path]
-
-                                    ;; assume local file, relative path
-                                    :else
-                                    [repo-dir path])]
-                   (when (and format (contains? (common-config/text-formats) format))
-                     (p/let [content (if-not (string/starts-with? path "/")
-                                       (db/get-file path)
-                                       (fs/read-file dir path))]
-                       (reset! *content (or content ""))))
-                   (assoc state ::file-content *content)))
-   :did-mount (fn [state]
-                (state/set-file-component! (:rum/react-component state))
-                state)
-   :will-unmount (fn [state]
-                   (state/clear-file-component!)
-                   state)}
-  [state path format]
+(hsx/defc file-inner
+  [path format]
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))
         rel-path (when (string/starts-with? path repo-dir)
                    (path/trim-dir-prefix repo-dir path))
         file-path path
-        random-id (str (common-uuid/gen-uuid))
-        content (rum/react (::file-content state))]
+        random-id (hooks/use-memo #(str (common-uuid/gen-uuid)) [path])
+        [content set-content!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (let [repo (state/get-current-repo)
+             repo-dir (config/get-repo-dir repo)
+             [dir path] (cond
+                          (path/absolute? path)
+                          [nil path]
+
+                          ;; assume local file, relative path
+                          :else
+                          [repo-dir path])]
+         (when (and format (contains? (common-config/text-formats) format))
+           (p/let [content (if-not (string/starts-with? path "/")
+                             (db/get-file path)
+                             (fs/read-file dir path))]
+             (set-content! (or content "")))))
+       #(state/clear-file-component!))
+     [path format])
     [:div.file {:id (str "file-edit-wrapper-" random-id)
                 :key path}
      [:h1.title
@@ -129,8 +123,9 @@
        :else
        [:div (t :file/format-not-supported (name format))])]))
 
-(rum/defcs file
-  [state]
-  (let [path (get-path state)
+(hsx/defc file
+  [route-match]
+  (let [path (get-path route-match)
         format (common-util/get-format path)]
-    (rum/with-key (file-inner path format) path)))
+    ^{:key path}
+    [file-inner path format]))

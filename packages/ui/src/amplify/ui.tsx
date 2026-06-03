@@ -249,8 +249,12 @@ export function LoginForm() {
         setLoading(false)
       }
     }}>
-      <InputRow id="email" type="text" required={true} name="email" autoFocus={true} label={t('Email')}/>
-      <InputRow id="password" type="password" required={true} name="password" label={t('Password')}/>
+      <InputRow id="email" type="text" required={true} name="email" autoFocus={true}
+                autoComplete="username"
+                label={t('Email')}/>
+      <InputRow id="password" type="password" required={true} name="password"
+                autoComplete="current-password"
+                label={t('Password')}/>
 
       <div className={'w-full'}>
         <Button type="submit" disabled={loading} className={'w-full'}>
@@ -364,14 +368,20 @@ export function SignupForm() {
           setLoading(false)
         }
       }}>
-        <InputRow id="email" type="email" name="email" autoFocus={true} required={true} label={t('Email')}/>
-        <InputRow id="username" type="text" name="username" required={true} label={t('Username')}/>
+        <InputRow id="email" type="email" name="email" autoFocus={true} required={true}
+                  autoComplete="email"
+                  label={t('Email')}/>
+        <InputRow id="username" type="text" name="username" required={true}
+                  autoComplete="username"
+                  label={t('Username')}/>
         <InputRow id="password" type="password" name="password"
                   required={true}
+                  autoComplete="new-password"
                   placeholder={t('Password')}
                   label={t('Password')}/>
         <InputRow id="confirm_password" type="password" name="confirm_password"
                   required={true}
+                  autoComplete="new-password"
                   placeholder={t('Confirm Password')}
                   label={t('Confirm Password')}/>
         <div className={'-mt-1'}>
@@ -511,11 +521,13 @@ export function ResetPasswordForm() {
                     label={t('Enter the code sent to your email')}/>
 
           <InputRow id="password" type="password" name="password" required={true}
+                    autoComplete="new-password"
                     placeholder={t('New Password')}
                     label={t('New Password')}/>
 
           <InputRow label={t('Confirm Password')}
                     id="confirm_password" type="password" name="confirm_password" required={true}
+                    autoComplete="new-password"
                     placeholder={t('Confirm Password')}/>
 
           <div className={'w-full'}>

@@ -19,16 +19,15 @@
             [frontend.util :as util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.export :as sqlite-export]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defcs auto-backup < rum/reactive
-  {:init (fn [state]
-           (assoc state ::folder (atom (ldb/get-key-value (db/get-db) :logseq.kv/graph-backup-folder))))}
-  [state]
-  (let [*backup-folder (::folder state)
-        backup-folder (rum/react *backup-folder)
+(hsx/defc auto-backup
+  []
+  (let [*backup-folder (hooks/use-memo #(atom (ldb/get-key-value (db/get-db) :logseq.kv/graph-backup-folder)) [])
+        [backup-folder] (hooks/use-atom *backup-folder)
         repo (state/get-current-repo)]
     [:div.flex.flex-col.gap-4
      [:div.font-medium.opacity-50
@@ -82,7 +81,7 @@
           :links [{:href "https://developer.chrome.com/docs/capabilities/web-apis/file-system-access"
                    :target "_blank"}])]])]))
 
-(rum/defc export
+(hsx/defc export
   []
   (when-let [current-repo (state/get-current-repo)]
     [:div.export
@@ -219,34 +218,28 @@
   (->> (block-handler/get-top-level-blocks (map #(db/entity [:block/uuid %]) selection-ids))
        (map :block/uuid)))
 
-(rum/defcs ^:large-vars/cleanup-todo
-  export-blocks < rum/static
-  (rum/local false ::copied?)
-  (rum/local nil ::text-remove-options)
-  (rum/local nil ::text-indent-style)
-  (rum/local nil ::text-other-options)
-  (rum/local nil ::content)
-  {:will-mount (fn [state]
-                 (let [top-level-uuids (get-top-level-uuids (first (:rum/args state)))]
-                   (reset! *export-block-type :text)
-                   (if (= @*export-block-type :png)
-                     (do (reset! (::content state) nil)
-                         (get-image-blob top-level-uuids
-                                         (merge (second (:rum/args state)) {:transparent-bg? false})
-                                         (fn [blob] (reset! (::content state) blob))))
-                     (reset! (::content state) (export-helper top-level-uuids)))
-                   (reset! (::text-remove-options state) (set (state/get-export-block-text-remove-options)))
-                   (reset! (::text-indent-style state) (state/get-export-block-text-indent-style))
-                   (reset! (::text-other-options state) (state/get-export-block-text-other-options))
-                   (assoc state ::top-level-uuids top-level-uuids)))}
-  [state _selection-ids {:keys [export-type] :as options}]
-  (let [top-level-uuids (::top-level-uuids state)
-        tp @*export-block-type
-        *text-other-options (::text-other-options state)
-        *text-remove-options (::text-remove-options state)
-        *text-indent-style (::text-indent-style state)
-        *copied? (::copied? state)
-        *content (::content state)]
+(hsx/defc ^:large-vars/cleanup-todo export-blocks
+  [_selection-ids {:keys [export-type] :as options}]
+  (let [top-level-uuids (hooks/use-memo #(get-top-level-uuids _selection-ids) [_selection-ids])
+        *text-other-options (hooks/use-memo #(atom nil) [])
+        *text-remove-options (hooks/use-memo #(atom nil) [])
+        *text-indent-style (hooks/use-memo #(atom nil) [])
+        *copied? (hooks/use-memo #(atom false) [])
+        *content (hooks/use-memo #(atom nil) [])
+        [text-other-options] (hooks/use-atom *text-other-options)
+        [text-remove-options] (hooks/use-atom *text-remove-options)
+        [text-indent-style] (hooks/use-atom *text-indent-style)
+        [copied?] (hooks/use-atom *copied?)
+        [content] (hooks/use-atom *content)
+        tp @*export-block-type]
+    (hooks/use-effect!
+     (fn []
+       (reset! *export-block-type :text)
+       (reset! *content (export-helper top-level-uuids))
+       (reset! *text-remove-options (set (state/get-export-block-text-remove-options)))
+       (reset! *text-indent-style (state/get-export-block-text-indent-style))
+       (reset! *text-other-options (state/get-export-block-text-other-options)))
+     [top-level-uuids])
     [:div.export.resize
      {:class "-m-5"}
      [:div.p-6
@@ -280,10 +273,10 @@
                                      (reset! *content pull-data)))))]
       (if (= :png tp)
         [:div.flex.items-center.justify-center.relative
-         (when (not @*content) [:div.absolute (ui/loading "")])
-        [:img {:alt (t :export/preview-alt) :id "export-preview" :class "my-4" :style {:visibility (when (not @*content) "hidden")}}]]
+         (when (not content) [:div.absolute (ui/loading "")])
+        [:img {:alt (t :export/preview-alt) :id "export-preview" :class "my-4" :style {:visibility (when (not content) "hidden")}}]]
 
-        [:textarea.overflow-y-auto.h-96 {:value @*content :read-only true}])
+        [:textarea.overflow-y-auto.h-96 {:value content :read-only true}])
 
       (if (= :png tp)
         [:div.flex.items-center
@@ -294,7 +287,7 @@
                                     (get-image-blob top-level-uuids (merge options {:transparent-bg? e.currentTarget.checked}) (fn [blob] (reset! *content blob))))})]
         (let [options (->> text-indent-style-options
                            (mapv (fn [opt]
-                                   (if (= @*text-indent-style (:title-key opt))
+                                   (if (= text-indent-style (:title-key opt))
                                      (assoc opt :selected true)
                                      opt))))]
           [:div [:div.flex.items-center
@@ -318,7 +311,7 @@
            [:div.flex.items-center
             (ui/checkbox {:class "mr-2"
                           :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-                          :checked (contains? @*text-remove-options :page-ref)
+                          :checked (contains? text-remove-options :page-ref)
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :page-ref)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
@@ -328,7 +321,7 @@
 
             (ui/checkbox {:class "mr-2 ml-4"
                           :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-                          :checked (contains? @*text-remove-options :emphasis)
+                          :checked (contains? text-remove-options :emphasis)
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :emphasis)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
@@ -339,7 +332,7 @@
 
             (ui/checkbox {:class "mr-2 ml-4"
                           :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-                          :checked (contains? @*text-remove-options :tag)
+                          :checked (contains? text-remove-options :tag)
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :tag)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
@@ -351,7 +344,7 @@
            [:div.flex.items-center
             (ui/checkbox {:class "mr-2"
                           :style {:visibility (if (#{:text} tp) "visible" "hidden")}
-                          :checked (boolean (:newline-after-block @*text-other-options))
+                          :checked (boolean (:newline-after-block text-other-options))
                           :on-change (fn [e]
                                        (state/update-export-block-text-other-options!
                                         :newline-after-block (boolean (util/echecked? e)))
@@ -362,7 +355,7 @@
 
             (ui/checkbox {:class "mr-2 ml-4"
                           :style {:visibility (if (#{:text} tp) "visible" "hidden")}
-                          :checked (contains? @*text-remove-options :property)
+                          :checked (contains? text-remove-options :property)
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :property)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
@@ -373,7 +366,7 @@
            [:div.flex.items-center
             (ui/checkbox {:class "mr-2"
                           :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-                          :checked (boolean (:open-blocks-only @*text-other-options))
+                          :checked (boolean (:open-blocks-only text-other-options))
                           :on-change (fn [e]
                                        (state/update-export-block-text-other-options!
                                         :open-blocks-only (boolean (util/echecked? e)))
@@ -387,7 +380,7 @@
              (t :export/level-lte)]
             [:select.block.my-2.text-lg.rounded.border.px-2.py-0
              {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-              :value (or (:keep-only-level<=N @*text-other-options) :all)
+              :value (or (:keep-only-level<=N text-other-options) :all)
               :on-change (fn [e]
                            (let [value (util/evalue e)
                                  level (if (= "all" value) :all (util/safe-parse-int value))]
@@ -397,18 +390,18 @@
              (for [n (cons "all" (range 1 10))]
                [:option {:key n :value n} n])]]]))
 
-      (when @*content
+      (when content
         [:div.mt-4.flex.flex-row.gap-2
-         (ui/button (if @*copied? (t :export/copied-to-clipboard) (t :ui/copy-to-clipboard))
+         (ui/button (if copied? (t :export/copied-to-clipboard) (t :ui/copy-to-clipboard))
                     :class "mr-4"
                     :on-click (fn []
                                 (if (= tp :png)
-                                  (js/navigator.clipboard.write [(js/ClipboardItem. #js {"image/png" @*content})])
-                                  (util/copy-to-clipboard! @*content :html (when (= tp :html) @*content)))
+                                  (js/navigator.clipboard.write [(js/ClipboardItem. #js {"image/png" content})])
+                                  (util/copy-to-clipboard! content :html (when (= tp :html) content)))
                                 (reset! *copied? true)))
          (ui/button (t :export/save-to-file)
                     :on-click #(let [file-name (if (uuid? top-level-uuids)
                                                  (-> (db/get-page top-level-uuids)
                                                      (util/get-page-title))
                                                  (t/now))]
-                                 (utils/saveToFile (js/Blob. [@*content]) (str "logseq_" file-name) (if (= tp :text) "txt" (name tp)))))])]]))
+                                 (utils/saveToFile (js/Blob. [content]) (str "logseq_" file-name) (if (= tp :text) "txt" (name tp)))))])]]))

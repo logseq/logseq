@@ -1,8 +1,9 @@
 {:paths ["src/main" "src/electron" "src/resources" "src/dev-cljs"]
  :deps
  {org.clojure/clojure                   {:mvn/version "1.12.4"}
-  rum/rum                               {:git/url "https://github.com/logseq/rum" ;; fork
-                                         :sha     "5d672bf84ed944414b9f61eeb83808ead7be9127"}
+  org.clojure/clojurescript             {:mvn/version "1.12.134"}
+  io.factorhouse/hsx                    {:git/url "https://github.com/logseq/hsx"
+                                         :sha     "c45cdaea9568d8dfe265761af79d3a78e1bfbf1f"}
 
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
                                          :sha     "3f141af97b70e1f14c65eaa119acd822ebece37e"}

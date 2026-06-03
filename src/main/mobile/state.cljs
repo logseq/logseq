@@ -1,7 +1,7 @@
 (ns mobile.state
   "Mobile state"
-  (:require [frontend.rum :as r]
-            [frontend.state :as state]
+  (:require [frontend.state :as state]
+            [logseq.shui.hooks :as hooks]
             [mobile.navigation :as mobile-nav]))
 
 (defonce *search-input (atom ""))
@@ -18,7 +18,7 @@
       (mobile-nav/reset-stack-history! "search"))
     (reset! *tab tab)
     (mobile-nav/switch-stack! tab)))
-(defn use-tab [] (r/use-atom *tab))
+(defn use-tab [] (hooks/use-atom *tab))
 
 (defonce *popup-data (atom nil))
 (defn set-popup!
