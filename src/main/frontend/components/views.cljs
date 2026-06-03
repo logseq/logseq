@@ -2913,16 +2913,22 @@
              (set-views! nil)
              (set-view-entity! view-entity*)
              (when-not view-entity*
-               (c.m/<? (db-async/<get-views repo (:db/id view-parent) view-feature-type))
                (let [views (get-views view-parent view-feature-type)]
                  (if-let [v (first views)]
                    (do
                      (set-views! views)
                      (when-not view-entity* (set-view-entity! v)))
-                   (when (and view-parent view-feature-type (not view-entity*))
-                     (let [new-view (c.m/<? (create-view! view-parent view-feature-type {:auto-triggered? true}))]
-                       (set-views! (concat views [new-view]))
-                       (set-view-entity! new-view))))))))))
+                   (do
+                     (c.m/<? (db-async/<get-views repo (:db/id view-parent) view-feature-type))
+                     (let [views (get-views view-parent view-feature-type)]
+                       (if-let [v (first views)]
+                         (do
+                           (set-views! views)
+                           (set-view-entity! v))
+                         (when (and view-parent view-feature-type (not view-entity*))
+                           (let [new-view (c.m/<? (create-view! view-parent view-feature-type {:auto-triggered? true}))]
+                             (set-views! (concat views [new-view]))
+                             (set-view-entity! new-view)))))))))))))
      [(:db/id view-parent) view-feature-type (:db/id view-entity*) query?])
     (when view-entity
       (let [option' (assoc option
