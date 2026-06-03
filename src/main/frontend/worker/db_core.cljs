@@ -747,11 +747,6 @@
   [repo block-uuid]
   (client-op/get-sync-conflicts repo block-uuid))
 
-(def-thread-api :thread-api/db-sync-get-block-conflicts-batch
-  [repo block-uuids]
-  (or (client-op/get-sync-conflicts-batch repo block-uuids)
-      (mapv (constantly []) block-uuids)))
-
 (def-thread-api :thread-api/db-sync-clear-block-conflicts
   [repo block-uuid]
   (client-op/clear-sync-conflicts! repo block-uuid)
@@ -843,8 +838,7 @@
 (def-thread-api :thread-api/get-blocks
   [repo requests]
   (let [requests (ldb/read-transit-str requests)]
-    (worker-util/profile "get-blocks"
-                         (get-blocks-with-cache repo requests))))
+    (get-blocks-with-cache repo requests)))
 
 (def-thread-api :thread-api/get-block-refs
   [repo id]
@@ -853,118 +847,10 @@
          :ref-blocks
          (map (fn [b] (assoc (into {} b) :db/id (:db/id b)))))))
 
-(def-thread-api :thread-api/get-linked-reference-page-count
-  [repo id]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-util/profile
-     "get-linked-reference-page-count"
-     (:ref-pages-count
-      (db-reference/get-linked-references @conn id {:include-ref-pages-count? true})))))
-
 (def-thread-api :thread-api/get-block-refs-count
   [repo id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (ldb/get-block-refs-count @conn id)))
-
-(def-thread-api :thread-api/get-block-refs-counts
-  [repo ids]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [db @conn]
-      (worker-util/profile "get-block-refs-counts"
-                           (common-initial-data/get-block-refs-counts db ids)))))
-
-(defn- datom-e
-  [db attr value]
-  (some-> (first (d/datoms db :avet attr value)) :e))
-
-(defn- datom-v
-  [db eid attr]
-  (some-> (first (d/datoms db :eavt eid attr)) :v))
-
-(defn- comments-area-for-block?
-  [db comments-class-id block-id comments-area-id]
-  (let [comments-parent-id (datom-v db comments-area-id :block/parent)]
-    (and comments-parent-id
-         (not= block-id comments-parent-id)
-         (some #(= comments-class-id (:v %))
-               (d/datoms db :eavt comments-area-id :block/tags))
-         (empty? (d/datoms db :eavt comments-area-id :logseq.property/deleted-at)))))
-
-(defn- comment-thread-present?
-  [db comments-class-id block-id]
-  (some (fn [datom]
-          (comments-area-for-block? db comments-class-id block-id (:e datom)))
-        (d/datoms db :avet :logseq.property.comments/blocks block-id)))
-
-(def-thread-api :thread-api/get-comment-thread-block-uuids
-  [repo block-uuids]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [db @conn
-          comments-class-id (datom-e db :db/ident :logseq.class/Comments)]
-      (worker-util/profile
-       "get-comment-thread-block-uuids"
-       (when comments-class-id
-         (->> block-uuids
-              (keep (fn [block-uuid]
-                      (when-let [block-id (datom-e db :block/uuid block-uuid)]
-                        (when (comment-thread-present? db comments-class-id block-id)
-                          (str block-uuid)))))
-              vec))))))
-
-(defn- reaction-created-by-ref
-  [db reaction-id]
-  (when-let [created-by-id (datom-v db reaction-id :logseq.property/created-by-ref)]
-    (common-util/remove-nils-non-nested
-     {:db/id created-by-id
-      :block/title (datom-v db created-by-id :block/title)})))
-
-(defn- reaction-display-data
-  [db reaction-id]
-  (common-util/remove-nils-non-nested
-   {:db/id reaction-id
-    :logseq.property.reaction/emoji-id (datom-v db reaction-id :logseq.property.reaction/emoji-id)
-    :logseq.property/created-by-ref (reaction-created-by-ref db reaction-id)}))
-
-(def-thread-api :thread-api/get-block-reactions
-  [repo target-ids]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [db @conn]
-      (worker-util/profile
-       "get-block-reactions"
-       (mapv (fn [target-id]
-               (->> (d/datoms db :avet :logseq.property.reaction/target target-id)
-                    (map (fn [datom]
-                           (reaction-display-data db (:e datom))))
-                    vec))
-             target-ids)))))
-
-(defn- ident-ref-data
-  [db eid]
-  (some-> (d/entity db eid)
-          (select-keys [:db/ident :block/title])))
-
-(defn- task-history-display-data
-  [db history-id]
-  (common-util/remove-nils-non-nested
-   {:block/created-at (datom-v db history-id :block/created-at)
-    :logseq.property.history/property
-    (ident-ref-data db (datom-v db history-id :logseq.property.history/property))
-    :logseq.property.history/ref-value
-    (ident-ref-data db (datom-v db history-id :logseq.property.history/ref-value))}))
-
-(def-thread-api :thread-api/get-task-status-histories
-  [repo block-ids]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [db @conn]
-      (worker-util/profile
-       "get-task-status-histories"
-       (mapv (fn [block-id]
-               (->> (d/datoms db :avet :logseq.property.history/block block-id)
-                    (map (fn [datom]
-                           (task-history-display-data db (:e datom))))
-                    (sort-by :block/created-at)
-                    vec))
-             block-ids)))))
 
 (def-thread-api :thread-api/get-block-source
   [repo id]
@@ -1121,29 +1007,20 @@
                      (search-blocks repo q option))))
       (p/resolved (search-blocks repo q option)))))
 
-(defn- has-unlinked-reference?
-  [db id title]
-  (when-not (string/blank? title)
-    (let [title (string/lower-case title)]
-      (some (fn [datom]
-              (when (and (not= id (:e datom))
-                         (string/includes? (string/lower-case (:v datom)) title))
-                (let [block (d/entity db (:e datom))]
-                  (and (not (:block/link block))
-                       (not (ldb/built-in? block))
-                       (not (some #(= id (:db/id %)) (:block/refs block)))))))
-            (d/datoms db :avet :block/title)))))
-
 (def-thread-api :thread-api/block-refs-check
   [repo id {:keys [unlinked?]}]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn
           block (d/entity db id)]
-      (worker-util/profile
-       "block-refs-check"
-       (if unlinked?
-         (boolean (has-unlinked-reference? db id (:block/title block)))
-         (some? (first (common-initial-data/get-block-refs db (:db/id block)))))))))
+      (if unlinked?
+        (let [title (string/lower-case (:block/title block))
+              result (search-blocks repo title {:limit 100})]
+          (boolean (some (fn [b]
+                           (let [block (d/entity db (:db/id b))]
+                             (and (not= id (:db/id block))
+                                  (not ((set (map :db/id (:block/refs block))) id))
+                                  (string/includes? (string/lower-case (:block/title block)) title)))) result)))
+        (some? (first (common-initial-data/get-block-refs db (:db/id block))))))))
 
 (def-thread-api :thread-api/get-block-parents
   [repo id depth]
@@ -1644,25 +1521,7 @@
 (def-thread-api :thread-api/get-view-data
   [repo view-id option]
   (let [db @(worker-state/get-datascript-conn repo)]
-    (worker-util/profile "get-view-data"
-                         (db-view/get-view-data db view-id option))))
-
-(defn- get-views-by-feature-type
-  [db view-for-id view-feature-type]
-  (->> (d/datoms db :avet :logseq.property/view-for view-for-id)
-       (keep (fn [datom]
-               (let [view-id (:e datom)]
-                 (when (= view-feature-type
-                          (datom-v db view-id :logseq.property.view/feature-type))
-                   (d/pull db '[*] view-id)))))
-       vec))
-
-(def-thread-api :thread-api/get-views
-  [repo view-for-id view-feature-type]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [db @conn]
-      (worker-util/profile "get-views"
-                           (get-views-by-feature-type db view-for-id view-feature-type)))))
+    (db-view/get-view-data db view-id option)))
 
 (def-thread-api :thread-api/get-class-objects
   [repo class-id]

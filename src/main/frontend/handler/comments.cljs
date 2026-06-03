@@ -109,7 +109,19 @@
                                     nil)))
                           vec)]
      (when (and repo (seq block-uuids))
-       (state/<invoke-db-worker :thread-api/get-comment-thread-block-uuids repo block-uuids)))))
+       (p/let [result (db-async/<q repo
+                                   {:transact-db? false}
+                                   '[:find [?block-uuid ...]
+                                     :in $ [?block-uuid ...]
+                                     :where
+                                     [?block :block/uuid ?block-uuid]
+                                     [?comments-area :logseq.property.comments/blocks ?block]
+                                     [?comments-area :block/tags :logseq.class/Comments]
+                                     [?comments-area :block/parent ?comments-area-parent]
+                                     [(not= ?comments-area-parent ?block)]
+                                     [(missing? $ ?comments-area :logseq.property/deleted-at)]]
+                                   block-uuids)]
+         (mapv str result))))))
 
 (defn- single-comment-targets
   [block]
