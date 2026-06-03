@@ -135,34 +135,148 @@
 
   .ui__toaster {
     &-viewport {
-      @apply m-0;
+      @apply fixed z-50 m-0 overflow-visible pointer-events-none;
+      width: calc(100vw - 2rem);
+      bottom: 1rem;
+      right: 1rem;
+      left: auto;
+      top: auto;
 
-      > li {
+      .ui__toast {
+        --gap: 0.75rem;
+        --peek: 0.75rem;
+        --scale: calc(1 - (var(--toast-index) * 0.1));
+        --shrink: calc(1 - var(--scale));
+        --height: var(--toast-frontmost-height, var(--toast-height));
+        --offset-y: calc(var(--toast-offset-y) * -1 + (var(--toast-index) * var(--gap) * -1) + var(--toast-swipe-movement-y));
+
+        @apply absolute bottom-0 w-full overflow-hidden rounded-md border bg-background text-foreground shadow-lg select-none cursor-default;
         border-color: hsl(var(--border));
+        box-sizing: border-box;
+        height: var(--height);
+        right: 0;
+        left: auto;
+        margin: 0 auto;
+        margin-right: 0;
+        transform-origin: bottom center;
+        z-index: calc(1000 - var(--toast-index));
+        transform: translateX(var(--toast-swipe-movement-x))
+          translateY(calc(var(--toast-swipe-movement-y) - (var(--toast-index) * var(--peek)) - (var(--shrink) * var(--height))))
+          scale(var(--scale));
+        transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s, height 0.15s;
 
-        &.has-variant-icon {
-          @apply relative border pl-12 py-5;
+        &[data-expanded] {
+          transform: translateX(var(--toast-swipe-movement-x))
+            translateY(var(--offset-y));
+          height: var(--toast-height);
+        }
 
-          .variant-icon {
-            @apply absolute left-[14px] top-[19px] flex items-center;
+        &[data-starting-style],
+        &[data-ending-style] {
+          transform: translateY(150%);
+        }
+
+        &[data-limited] {
+          opacity: 0;
+        }
+
+        &[data-ending-style] {
+          opacity: 0;
+
+          &[data-swipe-direction="up"] {
+            transform: translateY(calc(var(--toast-swipe-movement-y) - 150%));
           }
 
-          &.info .variant-icon {
+          &[data-swipe-direction="down"] {
+            transform: translateY(calc(var(--toast-swipe-movement-y) + 150%));
+          }
+
+          &[data-swipe-direction="left"] {
+            transform: translateX(calc(var(--toast-swipe-movement-x) - 150%))
+              translateY(var(--offset-y));
+          }
+
+          &[data-swipe-direction="right"] {
+            transform: translateX(calc(var(--toast-swipe-movement-x) + 150%))
+              translateY(var(--offset-y));
+          }
+        }
+
+        &::after {
+          content: "";
+          position: absolute;
+          top: 100%;
+          left: 0;
+          width: 100%;
+          height: calc(var(--gap) + 1px);
+        }
+
+        &:focus-visible {
+          @apply outline outline-2 outline-offset-[-1px] outline-primary;
+        }
+
+        .ui__toast-content {
+          @apply box-border flex h-full flex-col gap-3 overflow-hidden p-3;
+          transition: opacity 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+
+          &[data-behind] {
+            @apply opacity-0;
+          }
+
+          &[data-expanded] {
+            @apply opacity-100;
+          }
+        }
+
+        .ui__toast-header {
+          @apply flex w-full shrink-0 items-center justify-between gap-3;
+        }
+
+        .ui__toast-body {
+          @apply flex min-h-0 w-full flex-1 flex-col gap-3 overflow-hidden;
+        }
+
+        .ui__toast-text {
+          @apply flex min-w-0 flex-1 flex-col gap-1;
+        }
+
+        .ui__toast-title {
+          @apply m-0 text-sm font-semibold leading-5;
+        }
+
+        .ui__toast-description {
+          @apply m-0 text-sm leading-5 opacity-90;
+        }
+
+        .ui__toast-close {
+          @apply ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground/50 transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-1px] focus-visible:outline-primary;
+        }
+
+        .ui__toast-status-icon {
+          @apply shrink-0;
+
+          &.info {
             @apply text-blue-rx-09-alpha;
           }
 
-          &.success .variant-icon {
+          &.success {
             @apply text-green-rx-09-alpha;
           }
 
-          &.warning .variant-icon {
+          &.warning {
             @apply text-yellow-rx-10-alpha;
           }
 
-          &.error .variant-icon {
+          &.error {
             @apply text-red-rx-10-alpha;
           }
         }
+      }
+
+      @media (min-width: 500px) {
+        width: 22.5rem;
+        bottom: 2rem;
+        right: 2rem;
       }
     }
   }

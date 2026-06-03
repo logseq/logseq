@@ -1975,20 +1975,22 @@
                                 (when-let [on-checked-change (:on-checked-change opts)]
                                   (on-checked-change value)))]
             [:label.flex.w-full.as-scalar-value-wrap.cursor-pointer
-             (shui/checkbox {:class "jtrigger flex flex-row items-center"
-                             :disabled config/publishing?
-                             :auto-focus editing?
-                             :checked value
-                             :on-checked-change (fn []
-                                                  (add-property! (not value)))
-                             :on-key-down (fn [e]
-                                            (when (= (util/ekey e) "Enter")
-                                              (add-property! (not value)))
-                                            (when (contains? #{"Backspace" "Delete"} (util/ekey e))
-                                              (delete-block-property! block property)))})])
+             ^{:key "checkbox"}
+             [:<> (shui/checkbox {:class "jtrigger flex flex-row items-center"
+                                  :disabled config/publishing?
+                                  :auto-focus editing?
+                                  :checked value
+                                  :on-checked-change (fn []
+                                                       (add-property! (not value)))
+                                  :on-key-down (fn [e]
+                                                 (when (= (util/ekey e) "Enter")
+                                                   (add-property! (not value)))
+                                                 (when (contains? #{"Backspace" "Delete"} (util/ekey e))
+                                                   (delete-block-property! block property)))})]])
           ;; :others
           [:div.flex.flex-1
-           (property-value-inner block property value opts)])))))
+           ^{:key "property-value-inner"}
+           [:<> (property-value-inner block property value opts)]])))))
 
 (hsx/defc property-scalar-value
   [block property value* {:keys [container-id editing?]

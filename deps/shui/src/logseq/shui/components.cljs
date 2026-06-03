@@ -931,22 +931,27 @@
           (react/createElement
            ToastRoot #js {:key (.-id toast)
                           :toast toast
-                          :className (cn "ui__toast group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md border bg-background p-6 pr-8 shadow-lg"
-                                         (when icon "has-variant-icon")
+                          :className (cn "ui__toast group pointer-events-auto"
                                          variant
                                          (prop data "className"))}
            (react/createElement
-            ToastContent #js {:className "grid gap-1"}
-            icon
-            (when-let [title (.-title toast)]
-              (react/createElement ToastTitle #js {:className "text-sm font-semibold"} title))
-            (when-let [description (.-description toast)]
-              (react/createElement ToastDescription #js {:className "text-sm opacity-90"} description)))
-           action
-           (when-let [action-props (.-actionProps toast)]
-             (react/createElement "button" action-props))
-           (react/createElement ToastClose #js {:className "absolute right-2 top-2 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"}
-                                (react/createElement IconX #js {:className "h-4 w-4"})))))
+            ToastContent #js {:className "ui__toast-content"}
+            (react/createElement
+             "div" #js {:className "ui__toast-header"}
+             icon
+             (react/createElement ToastClose #js {:className "ui__toast-close"}
+                                  (react/createElement IconX #js {:className "h-4 w-4"})))
+            (react/createElement
+             "div" #js {:className "ui__toast-body"}
+             (react/createElement
+              "div" #js {:className "ui__toast-text"}
+              (when-let [title (.-title toast)]
+                (react/createElement ToastTitle #js {:className "ui__toast-title"} title))
+              (when-let [description (.-description toast)]
+                (react/createElement ToastDescription #js {:className "ui__toast-description"} description)))
+             action
+             (when-let [action-props (.-actionProps toast)]
+               (react/createElement "button" action-props)))))))
       (array-seq toasts)))))
 
 (def Toaster
@@ -957,7 +962,7 @@
       (react/createElement
        ToastPortal nil
        (react/createElement
-        ToastViewport #js {:className "ui__toaster-viewport fixed bottom-0 right-0 z-50 flex max-h-screen w-full flex-col-reverse p-4 sm:max-w-[420px]"}
+        ToastViewport #js {:className "ui__toaster-viewport"}
         (react/createElement ToastList nil)))))))
 
 (def registry
