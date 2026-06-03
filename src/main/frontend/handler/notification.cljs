@@ -15,7 +15,7 @@
      :warning "alert-circle"
      :error "circle-x"
      "info-circle")
-   {:class "variant-icon"
+   {:class (str "ui__toast-status-icon " (name status))
     :size 20}))
 
 (defn clear!

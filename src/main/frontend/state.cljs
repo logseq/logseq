@@ -109,6 +109,7 @@
       ;; modals
       :modal/dropdowns                       {}
       :modal/id                              nil
+      :notification/contents                 {}
 
       ;; ui
       :ui/viewport                           {}
@@ -150,6 +151,7 @@
       :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
                                                false
                                                true)
+      :ui/shortcut-handler-refreshing?       false
       :ui/scrolling?                         false
       :ui/show-empty-and-hidden-properties?  {:mode :global
                                               :show? false}
@@ -168,6 +170,7 @@
       :editor/last-saved-cursor              {}
       :editor/editing?                       nil
       :editor/in-composition?                false
+      :editor/code-mode?                     false
       :editor/content                        {}
       :editor/block                          nil
       :editor/set-timestamp-block            nil ;; click rendered block timestamp-cp to set timestamp
@@ -272,6 +275,8 @@
       :copy/export-block-text-other-options  (or (storage/get :copy/export-block-text-other-options)
                                                  {})
       :date-picker/date                      nil
+      :page-title/context                    nil
+      :block-ref/context                     nil
 
       :youtube/players                       {}
 
@@ -291,6 +296,9 @@
       :auth/refresh-token                    (some-> (storage/get "refresh-token") str)
       :auth/access-token                     nil
       :auth/id-token                         nil
+      :auth/oauth-token-url                  nil
+      :auth/oauth-domain                     nil
+      :auth/oauth-client-id                  nil
       :auth/current-login-user               nil
 
       ;; graph-uuid -> ...
@@ -317,6 +325,7 @@
 
       :ui/find-in-page                       nil
       :comments/inline-thread                nil
+      :graph/exporting                       nil
       :graph/exporting-state                 nil
       :graph/importing                       nil
       :graph/importing-state                 {}
@@ -331,6 +340,7 @@
                                                  3)
       :favorites/updated?                    0
       :db/async-queries                      {}
+      :sync-graph/init?                      nil
       :db/latest-transacted-entity-uuids     {}})))
 
 (rfx/init! {:initial-value @state
