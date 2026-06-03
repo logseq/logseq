@@ -9,7 +9,6 @@
             [frontend.db.async.util :as db-async-util]
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
-            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -51,19 +50,19 @@
 (defn sync-query-result!
   [result-atom]
   (when-let [k (query-key result-atom)]
-    (rfx/update-state! assoc-in [:db/query-results k] @result-atom)))
+    (state/set-state! :db/query-results @result-atom :nested-path [k])))
 
 (defn set-new-result!
   [k new-result]
   (when-let [result-atom (get-in @*query-state [k :result])]
     (reset! result-atom new-result)
-    (rfx/update-state! assoc-in [:db/query-results k] new-result)))
+    (state/set-state! :db/query-results new-result :nested-path [k])))
 
 (defn clear-query-state!
   []
   (reset! *query-state {})
   (reset! *collapsed-queries {})
-  (rfx/update-state! assoc :db/query-results {}))
+  (state/set-state! :db/query-results {}))
 
 (defn add-q!
   [k query inputs result-atom transform-fn query-fn inputs-fn]
