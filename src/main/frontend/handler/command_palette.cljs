@@ -20,10 +20,13 @@
           ;; checks translation ns first
           :opt-un [:command/desc :command/shortcut :command/tag :command/handler-id]))
 
+(def global-shortcut-handler-ids
+  #{:shortcut.handler/editor-global
+    :shortcut.handler/global-prevent-default
+    :shortcut.handler/global-non-editing-only})
+
 (defn global-shortcut-commands []
-  (->> [:shortcut.handler/editor-global
-        :shortcut.handler/global-prevent-default
-        :shortcut.handler/global-non-editing-only]
+  (->> global-shortcut-handler-ids
        (mapcat shortcut-helper/shortcuts->commands)))
 
 (defn get-commands []
@@ -106,8 +109,10 @@
       (history (filter #(not= (:id %) id) (history))))))
 
 (defn register-global-shortcut-commands []
-  (let [cmds (global-shortcut-commands)]
-    (doseq [cmd cmds] (register cmd))))
+  (let [existing-commands (remove #(contains? global-shortcut-handler-ids (:handler-id %))
+                                  @(get @state/state :command-palette/commands))]
+    (state/set-state! :command-palette/commands
+                      (vec (concat existing-commands (global-shortcut-commands))))))
 
 (comment
   ;; register custom command example

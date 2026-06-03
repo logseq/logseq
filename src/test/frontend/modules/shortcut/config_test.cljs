@@ -26,3 +26,16 @@
     (is (not (.includes source "Manual save is no longer required.")))
     (is (.includes source "(persist-db/export-current-graph!"))
     (is (.includes source ":succ-notification? true"))))
+
+(deftest developer-shortcuts-follow-developer-mode
+  (testing "developer shortcuts are excluded while developer mode is off"
+    (with-redefs [state/developer-mode? (constantly false)]
+      (is (not (contains?
+                (:shortcut.handler/global-non-editing-only (shortcut-config/build-config))
+                :dev/show-block-data)))))
+
+  (testing "developer shortcuts are included after developer mode is on"
+    (with-redefs [state/developer-mode? (constantly true)]
+      (is (= "(Dev) Show block data"
+             (get-in (shortcut-config/build-config)
+                     [:shortcut.handler/global-non-editing-only :dev/show-block-data :desc]))))))
