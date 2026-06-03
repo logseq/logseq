@@ -20,6 +20,99 @@
 
 (def <q db-async-util/<q)
 
+(defonce ^:private *block-reactions-batch-state
+  (atom {:scheduled? false
+         :queue []}))
+
+(def ^:private block-reactions-cache-ttl-ms 30000)
+(defonce ^:private *block-reactions-cache (atom {}))
+
+(declare flush-block-reactions-batch!)
+
+(defn- fresh-block-reactions-cache-entry
+  [cache-key]
+  (when-let [{:keys [ts] :as entry} (get @*block-reactions-cache cache-key)]
+    (when (< (- (util/time-ms) ts) block-reactions-cache-ttl-ms)
+      entry)))
+
+(defn- schedule-block-reactions-batch-flush!
+  []
+  (let [should-schedule? (not (:scheduled? @*block-reactions-batch-state))]
+    (when should-schedule?
+      (swap! *block-reactions-batch-state assoc :scheduled? true)
+      (util/schedule flush-block-reactions-batch!))))
+
+(defn- enqueue-block-reactions-request!
+  [graph target-id]
+  (let [result (p/deferred)]
+    (swap! *block-reactions-batch-state
+           (fn [state]
+             (update state :queue conj {:graph graph
+                                        :target-id target-id
+                                        :result result})))
+    (schedule-block-reactions-batch-flush!)
+    result))
+
+(defn- flush-block-reactions-batch!
+  []
+  (let [queue (:queue @*block-reactions-batch-state)]
+    (swap! *block-reactions-batch-state
+           (fn [state] (assoc state :scheduled? false :queue [])))
+    (doseq [[graph entries] (group-by :graph queue)]
+      (let [target-ids (->> entries (map :target-id) distinct vec)]
+        (->
+         (p/let [responses (state/<invoke-db-worker :thread-api/get-block-reactions graph target-ids)
+                 reactions-by-target (zipmap target-ids responses)]
+           (doseq [{:keys [target-id result]} entries]
+             (p/resolve! result (get reactions-by-target target-id []))))
+         (p/catch (fn [error]
+                    (doseq [{:keys [result]} entries]
+                      (p/reject! result error)))))))))
+
+(defn- cache-block-reactions-response!
+  [graph target-ids responses]
+  (doseq [[target-id reactions] (map vector target-ids responses)]
+    (swap! *block-reactions-cache assoc [graph target-id]
+           {:value (or reactions [])
+            :ts (util/time-ms)})))
+
+(defn <get-block-reactions
+  ([graph target-id]
+   (<get-block-reactions graph target-id nil))
+  ([graph target-id {:keys [refresh?]}]
+   (when (and graph target-id)
+     (let [cache-key [graph target-id]]
+       (if-let [{:keys [value promise]} (when-not refresh?
+                                          (fresh-block-reactions-cache-entry cache-key))]
+         (or promise (p/resolved value))
+         (let [promise (-> (enqueue-block-reactions-request! graph target-id)
+                           (p/then (fn [value]
+                                     (swap! *block-reactions-cache assoc cache-key
+                                            {:value value
+                                             :ts (util/time-ms)})
+                                     value))
+                           (p/catch (fn [error]
+                                      (swap! *block-reactions-cache dissoc cache-key)
+                                      (throw error))))]
+           (swap! *block-reactions-cache assoc cache-key {:promise promise
+                                                          :ts (util/time-ms)})
+           promise))))))
+
+(defn <prefetch-block-reactions
+  [graph target-ids]
+  (let [target-ids (->> target-ids
+                        distinct
+                        (remove #(fresh-block-reactions-cache-entry [graph %]))
+                        vec)]
+    (when (and graph (seq target-ids))
+      (-> (p/let [responses (state/<invoke-db-worker :thread-api/get-block-reactions graph target-ids)]
+            (cache-block-reactions-response! graph target-ids responses)
+            responses)
+          (p/catch (fn [error]
+                     (doseq [target-id target-ids]
+                       (swap! *block-reactions-cache dissoc [graph target-id]))
+                     (throw error)))))))
+
 (defn <get-files
   [graph]
   (p/let [result (<q graph
@@ -45,11 +138,33 @@
     (state/<invoke-db-worker :thread-api/get-property-values (state/get-current-repo)
                              (assoc opts :property-ident property-id))))
 
+(def ^:private bidirectional-properties-cache-ttl-ms 30000)
+(defonce ^:private *bidirectional-properties-cache (atom {}))
+
 (defn <get-bidirectional-properties
   [target-id]
-  (when target-id
-    (state/<invoke-db-worker :thread-api/get-bidirectional-properties (state/get-current-repo)
-                             {:target-id target-id})))
+  (when-let [graph (and target-id (state/get-current-repo))]
+    (let [cache-key [graph target-id]
+          now (util/time-ms)
+          {:keys [value promise ts]} (get @*bidirectional-properties-cache cache-key)]
+      (cond
+        (and ts (< (- now ts) bidirectional-properties-cache-ttl-ms))
+        (or promise (p/resolved value))
+
+        :else
+        (let [promise (-> (state/<invoke-db-worker :thread-api/get-bidirectional-properties graph
+                                                   {:target-id target-id})
+                          (p/then (fn [value]
+                                    (swap! *bidirectional-properties-cache assoc cache-key
+                                           {:value value
+                                            :ts (util/time-ms)})
+                                    value))
+                          (p/catch (fn [error]
+                                     (swap! *bidirectional-properties-cache dissoc cache-key)
+                                     (throw error))))]
+          (swap! *bidirectional-properties-cache assoc cache-key {:promise promise
+                                                                  :ts now})
+          promise)))))
 
 (defn- worker-get-blocks-requests
   [requests]
@@ -68,6 +183,9 @@
 
 (defonce ^:private *get-blocks-batch-enabled? (atom true))
 
+(def ^:private get-blocks-cache-ttl-ms 30000)
+(defonce ^:private *get-blocks-cache (atom {}))
+
 (defonce ^:private *get-blocks-batch-state
   (atom {:scheduled? false
          :queue []}))
@@ -83,14 +201,36 @@
 
 (defn- enqueue-get-blocks-request!
   [graph request]
-  (let [result (p/deferred)]
-    (swap! *get-blocks-batch-state
-           (fn [state]
-             (update state :queue conj {:graph graph
-                                        :request request
-                                        :result result})))
-    (schedule-get-blocks-batch-flush!)
-    result))
+  (let [cache-key [graph (worker-get-blocks-requests [request])]
+        now (util/time-ms)
+        {:keys [value promise ts]} (get @*get-blocks-cache cache-key)]
+    (cond
+      (and (some? value) ts (< (- now ts) get-blocks-cache-ttl-ms))
+      (p/resolved value)
+
+      promise
+      promise
+
+      :else
+      (let [result (p/deferred)
+            promise (-> result
+                        (p/then (fn [value]
+                                  (swap! *get-blocks-cache assoc cache-key
+                                         {:value value
+                                          :ts (util/time-ms)})
+                                  value))
+                        (p/catch (fn [error]
+                                   (swap! *get-blocks-cache dissoc cache-key)
+                                   (throw error))))]
+        (swap! *get-blocks-cache assoc cache-key {:promise promise
+                                                  :ts now})
+        (swap! *get-blocks-batch-state
+               (fn [state]
+                 (update state :queue conj {:graph graph
+                                            :request request
+                                            :result result})))
+        (schedule-get-blocks-batch-flush!)
+        promise))))
 
 (defn- resolve-batched-get-blocks!
   [entries responses]
@@ -220,10 +360,163 @@
   (assert (integer? eid))
   (state/<invoke-db-worker :thread-api/get-block-refs graph eid))
 
+(defonce ^:private *get-block-refs-counts-batch-state
+  (atom {:scheduled? false
+         :queue []}))
+
+(def ^:private get-block-refs-count-cache-ttl-ms 30000)
+(defonce ^:private *get-block-refs-count-cache (atom {}))
+
+(declare flush-get-block-refs-counts-batch!)
+
+(defn- schedule-get-block-refs-counts-batch-flush!
+  []
+  (let [should-schedule? (not (:scheduled? @*get-block-refs-counts-batch-state))]
+    (when should-schedule?
+      (swap! *get-block-refs-counts-batch-state assoc :scheduled? true)
+      (util/schedule flush-get-block-refs-counts-batch!))))
+
+(defn- enqueue-get-block-refs-count-request!
+  [graph eid]
+  (let [cache-key [graph eid]
+        now (util/time-ms)
+        {:keys [value promise ts]} (get @*get-block-refs-count-cache cache-key)]
+    (cond
+      (and (some? value) ts (< (- now ts) get-block-refs-count-cache-ttl-ms))
+      (p/resolved value)
+
+      promise
+      promise
+
+      :else
+      (let [result (p/deferred)
+            promise (-> result
+                        (p/then (fn [value]
+                                  (swap! *get-block-refs-count-cache assoc cache-key
+                                         {:value value
+                                          :ts (util/time-ms)})
+                                  value))
+                        (p/catch (fn [error]
+                                   (swap! *get-block-refs-count-cache dissoc cache-key)
+                                   (throw error))))]
+        (swap! *get-block-refs-count-cache assoc cache-key {:promise promise
+                                                            :ts now})
+        (swap! *get-block-refs-counts-batch-state
+               (fn [state]
+                 (update state :queue conj {:graph graph
+                                            :eid eid
+                                            :result result})))
+        (schedule-get-block-refs-counts-batch-flush!)
+        promise))))
+
+(defn- resolve-batched-get-block-refs-counts!
+  [entries responses]
+  (doseq [[idx {:keys [result]}] (map-indexed vector entries)]
+    (p/resolve! result (nth responses idx nil))))
+
+(defn- reject-batched-get-block-refs-counts!
+  [entries error]
+  (doseq [{:keys [result]} entries]
+    (p/reject! result error)))
+
+(defn- flush-get-block-refs-counts-batch!
+  []
+  (let [queue (:queue @*get-block-refs-counts-batch-state)]
+    (swap! *get-block-refs-counts-batch-state
+           (fn [state] (assoc state :scheduled? false :queue [])))
+    (doseq [[graph entries] (group-by :graph queue)]
+      (let [ids (mapv :eid entries)]
+        (->
+         (p/let [result (state/<invoke-db-worker :thread-api/get-block-refs-counts graph ids)
+                 result (if (= (count result) (count ids))
+                          result
+                          nil)
+                 result (or result
+                            (p/all (mapv #(state/<invoke-db-worker :thread-api/get-block-refs-count graph %) ids)))]
+           (resolve-batched-get-block-refs-counts! entries result))
+         (p/catch (fn [error]
+                    (reject-batched-get-block-refs-counts! entries error))))))))
+
+(defn <get-block-refs-counts
+  [graph eids]
+  (let [eids (vec eids)]
+    (run! #(assert (integer? %)) eids)
+    (when (seq eids)
+      (p/all (mapv #(enqueue-get-block-refs-count-request! graph %) eids)))))
+
 (defn <get-block-refs-count
   [graph eid]
   (assert (integer? eid))
-  (state/<invoke-db-worker :thread-api/get-block-refs-count graph eid))
+  (enqueue-get-block-refs-count-request! graph eid))
+
+(defonce ^:private *block-conflicts-batch-state
+  (atom {:scheduled? false
+         :queue []}))
+
+(def ^:private block-conflicts-batch-delay-ms 100)
+(def ^:private block-conflicts-cache-ttl-ms 30000)
+(defonce ^:private *block-conflicts-cache (atom {}))
+
+(declare flush-block-conflicts-batch!)
+
+(defn- fresh-block-conflicts-cache-entry
+  [cache-key]
+  (when-let [{:keys [ts] :as entry} (get @*block-conflicts-cache cache-key)]
+    (when (< (- (util/time-ms) ts) block-conflicts-cache-ttl-ms)
+      entry)))
+
+(defn- schedule-block-conflicts-batch-flush!
+  []
+  (let [should-schedule? (not (:scheduled? @*block-conflicts-batch-state))]
+    (when should-schedule?
+      (swap! *block-conflicts-batch-state assoc :scheduled? true)
+      (js/setTimeout flush-block-conflicts-batch! block-conflicts-batch-delay-ms))))
+
+(defn- enqueue-block-conflicts-request!
+  [graph block-uuid]
+  (let [result (p/deferred)]
+    (swap! *block-conflicts-batch-state
+           (fn [state]
+             (update state :queue conj {:graph graph
+                                        :block-uuid block-uuid
+                                        :result result})))
+    (schedule-block-conflicts-batch-flush!)
+    result))
+
+(defn- flush-block-conflicts-batch!
+  []
+  (let [queue (:queue @*block-conflicts-batch-state)]
+    (swap! *block-conflicts-batch-state
+           (fn [state] (assoc state :scheduled? false :queue [])))
+    (doseq [[graph entries] (group-by :graph queue)]
+      (let [block-uuids (mapv :block-uuid entries)]
+        (->
+         (p/let [responses (state/<invoke-db-worker :thread-api/db-sync-get-block-conflicts-batch
+                                                    graph
+                                                    block-uuids)]
+           (doseq [[idx {:keys [result]}] (map-indexed vector entries)]
+             (p/resolve! result (nth responses idx []))))
+         (p/catch (fn [error]
+                    (doseq [{:keys [result]} entries]
+                      (p/reject! result error)))))))))
+
+(defn <get-block-conflicts
+  [graph block-uuid]
+  (let [cache-key [graph block-uuid]]
+    (if-let [{:keys [value promise]} (fresh-block-conflicts-cache-entry cache-key)]
+      (or promise (p/resolved value))
+      (let [promise (-> (enqueue-block-conflicts-request! graph block-uuid)
+                        (p/then (fn [value]
+                                  (swap! *block-conflicts-cache assoc cache-key
+                                         {:value value
+                                          :ts (util/time-ms)})
+                                  value))
+                        (p/catch (fn [error]
+                                   (swap! *block-conflicts-cache dissoc cache-key)
+                                   (throw error))))]
+        (swap! *block-conflicts-cache assoc cache-key {:promise promise
+                                                       :ts (util/time-ms)})
+        promise))))
 
 (defn <get-date-scheduled-or-deadlines
   [journal-title]
@@ -267,16 +560,23 @@
           [?b :block/tags ?class-id]]
         class-ids)))
 
+(defonce ^:private *get-views-in-flight (atom {}))
+
 (defn <get-views
   [graph class-id view-feature-type]
-  (<q graph {:transact-db? true}
-      '[:find [(pull ?b [*]) ...]
-        :in $ ?class-id ?view-feature-type
-        :where
-        [?b :logseq.property/view-for ?class-id]
-        [?b :logseq.property.view/feature-type ?view-feature-type]]
-      class-id
-      view-feature-type))
+  (let [request-key [graph class-id view-feature-type]]
+    (if-let [promise (get @*get-views-in-flight request-key)]
+      promise
+      (let [promise (-> (p/let [result (state/<invoke-db-worker :thread-api/get-views graph class-id view-feature-type)]
+                          (when (seq result)
+                            (when-let [conn (db/get-db graph false)]
+                              (d/transact! conn result)))
+                          result)
+                        (p/finally
+                         (fn []
+                           (swap! *get-views-in-flight dissoc request-key))))]
+        (swap! *get-views-in-flight assoc request-key promise)
+        promise))))
 
 (defn <get-asset-with-checksum
   [graph checksum]
@@ -301,12 +601,11 @@
     (->> (sort-by :block/created-at result)
          (map (fn [b] (db/entity (:db/id b)))))))
 
-(defn <task-spent-time
-  [graph block-id]
-  (p/let [history (<get-block-properties-history graph block-id)
-          status-history (filter
-                          (fn [b] (= :logseq.property/status (:db/ident (:logseq.property.history/property b))))
-                          history)]
+(defn- task-spent-time-from-history
+  [history]
+  (let [status-history (filter
+                        (fn [b] (= :logseq.property/status (:db/ident (:logseq.property.history/property b))))
+                        history)]
     (when (seq status-history)
       (let [time (loop [[last-item item & others] status-history
                         time 0]
@@ -329,3 +628,102 @@
                            (recur (cons item others) time'))))
                      (quot time 1000)))]
         [status-history time]))))
+
+(defn- <task-spent-times-batch
+  [graph block-ids]
+  (let [block-ids (vec (distinct block-ids))]
+    (when (seq block-ids)
+      (p/let [histories (state/<invoke-db-worker :thread-api/get-task-status-histories graph block-ids)
+              history-by-block-id (zipmap block-ids histories)]
+        (into {}
+              (map (fn [block-id]
+                     [block-id (task-spent-time-from-history (get history-by-block-id block-id))])
+                   block-ids))))))
+
+(defonce ^:private *task-spent-time-batch-state
+  (atom {:scheduled? false
+         :queue []}))
+
+(def ^:private task-spent-time-cache-ttl-ms 30000)
+(defonce ^:private *task-spent-time-cache (atom {}))
+
+(declare flush-task-spent-time-batch!)
+
+(defn- cache-task-spent-times!
+  [graph block-id->time]
+  (doseq [[block-id value] block-id->time]
+    (swap! *task-spent-time-cache assoc [graph block-id]
+           {:value value
+            :ts (util/time-ms)})))
+
+(defn- fresh-task-spent-time-cache-entry
+  [cache-key]
+  (when-let [{:keys [ts] :as entry} (get @*task-spent-time-cache cache-key)]
+    (when (< (- (util/time-ms) ts) task-spent-time-cache-ttl-ms)
+      entry)))
+
+(defn- schedule-task-spent-time-batch-flush!
+  []
+  (let [should-schedule? (not (:scheduled? @*task-spent-time-batch-state))]
+    (when should-schedule?
+      (swap! *task-spent-time-batch-state assoc :scheduled? true)
+      (util/schedule flush-task-spent-time-batch!))))
+
+(defn- enqueue-task-spent-time-request!
+  [graph block-id]
+  (let [result (p/deferred)]
+    (swap! *task-spent-time-batch-state
+           (fn [state]
+             (update state :queue conj {:graph graph
+                                        :block-id block-id
+                                        :result result})))
+    (schedule-task-spent-time-batch-flush!)
+    result))
+
+(defn- flush-task-spent-time-batch!
+  []
+  (let [queue (:queue @*task-spent-time-batch-state)]
+    (swap! *task-spent-time-batch-state
+           (fn [state] (assoc state :scheduled? false :queue [])))
+    (doseq [[graph entries] (group-by :graph queue)]
+      (let [block-ids (mapv :block-id entries)]
+        (->
+         (p/let [batch-result (<task-spent-times-batch graph block-ids)]
+           (doseq [{:keys [block-id result]} entries]
+             (p/resolve! result (get batch-result block-id))))
+         (p/catch (fn [error]
+                    (doseq [{:keys [result]} entries]
+                      (p/reject! result error)))))))))
+
+(defn <task-spent-time
+  [graph block-id]
+  (let [cache-key [graph block-id]]
+    (if-let [{:keys [value promise]} (fresh-task-spent-time-cache-entry cache-key)]
+      (or promise (p/resolved value))
+      (let [promise (-> (enqueue-task-spent-time-request! graph block-id)
+                        (p/then (fn [value]
+                                  (swap! *task-spent-time-cache assoc cache-key
+                                         {:value value
+                                          :ts (util/time-ms)})
+                                  value))
+                        (p/catch (fn [error]
+                                   (swap! *task-spent-time-cache dissoc cache-key)
+                                   (throw error))))]
+        (swap! *task-spent-time-cache assoc cache-key {:promise promise
+                                                       :ts (util/time-ms)})
+        promise))))
+
+(defn <prefetch-task-spent-times
+  [graph block-ids]
+  (let [block-ids (->> block-ids
+                       distinct
+                       (remove #(fresh-task-spent-time-cache-entry [graph %]))
+                       vec)]
+    (when (and graph (seq block-ids))
+      (-> (p/let [block-id->time (<task-spent-times-batch graph block-ids)]
+            (cache-task-spent-times! graph block-id->time)
+            block-id->time)
+          (p/catch (fn [error]
+                     (doseq [block-id block-ids]
+                       (swap! *task-spent-time-cache dissoc [graph block-id]))
+                     (throw error)))))))

@@ -245,7 +245,11 @@
       {:included included-pages
        :excluded excluded-pages})))
 
-(defn get-linked-references [db id]
+(defn get-linked-references
+  ([db id]
+   (get-linked-references db id {:include-ref-pages-count? true}))
+  ([db id {:keys [include-ref-pages-count?]
+           :or {include-ref-pages-count? true}}]
   (let [entity       (d/entity db id)
         ids          (set (cons id (ldb/get-block-alias db id)))
         page-filters (get-filters entity)
@@ -285,12 +289,15 @@
         children-ids
         (if has-filters?
           (set (remove full-ref-block-ids matched-refs-with-children-ids))
-          (->> ref-blocks
-               (mapcat (fn [ref] (ldb/get-block-children-ids db (:db/id ref))))
-               set))]
-    {:ref-blocks ref-blocks
-     :ref-pages-count (get-ref-pages-count db id ref-blocks children-ids)
-     :ref-matched-children-ids (when has-filters? children-ids)}))
+          (when include-ref-pages-count?
+            (->> ref-blocks
+                 (mapcat (fn [ref] (ldb/get-block-children-ids db (:db/id ref))))
+                 set)))]
+    (cond->
+     {:ref-blocks ref-blocks
+      :ref-matched-children-ids (when has-filters? children-ids)}
+      include-ref-pages-count?
+      (assoc :ref-pages-count (get-ref-pages-count db id ref-blocks children-ids))))))
 
 (defn get-unlinked-references
   [db id]

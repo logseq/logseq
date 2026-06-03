@@ -10,7 +10,12 @@
   (m/observe
    (fn [emit!]
      (let [listener-id (random-uuid)
-           emit-current! #(emit! (get-in (rfx/snapshot) sub))]
+           last-value (volatile! ::not-set)
+           emit-current! (fn []
+                           (let [value (get-in (rfx/snapshot) sub)]
+                             (when-not (= @last-value value)
+                               (vreset! last-value value)
+                               (emit! value))))]
        (emit-current!)
        (rfx/listen! listener-id (fn [_db] (emit-current!)))))))
 

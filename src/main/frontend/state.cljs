@@ -63,6 +63,23 @@
   (->> (m/watch *db-worker)
        (m/eduction (map fn?))))
 
+(defn- truncate-log-value
+  [value limit]
+  (let [s (pr-str value)]
+    (if (> (count s) limit)
+      (str (subs s 0 limit) "...")
+      s)))
+
+(defn- log-db-worker-invoke!
+  [qkw started-at args status]
+  (js/console.info
+   (str "[db-worker/invoke]"
+        " method=" qkw
+        " elapsed-ms=" (- (util/time-ms) started-at)
+        " args-count=" (count args)
+        " status=" status
+        " args=" (truncate-log-value args 480))))
+
 (defn <invoke-db-worker
   "invoke db-worker thread api"
   [qkw & args]
@@ -70,7 +87,24 @@
     (when (nil? worker)
       (prn :<invoke-db-worker-error qkw)
       (throw (ex-info "db-worker has not been initialized" {})))
-    (apply worker qkw args)))
+    (let [started-at (util/time-ms)
+          log! #(log-db-worker-invoke! qkw started-at args %)]
+      (try
+        (let [result (apply worker qkw args)]
+          (if (p/promise? result)
+            (-> result
+                (p/then (fn [value]
+                          (log! "resolved")
+                          value))
+                (p/catch (fn [error]
+                           (log! "rejected")
+                           (throw error))))
+            (do
+              (log! "returned")
+              result)))
+        (catch :default error
+          (log! "thrown")
+          (throw error))))))
 
 ;; Stores main application state
 (defonce ^:large-vars/data-var state

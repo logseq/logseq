@@ -1,6 +1,5 @@
 (ns frontend.components.reference
-  (:require [frontend.common.missionary :as c.m]
-            [frontend.components.reference-filters :as filters]
+  (:require [frontend.components.reference-filters :as filters]
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -10,7 +9,6 @@
             [logseq.db.common.reference :as db-reference]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [io.factorhouse.hsx.core :as hsx]
             [promesa.core :as p]))
 
@@ -25,11 +23,17 @@
                              :class "text-muted-foreground !px-1"
                              :size :sm
                              :on-click (fn [e]
-                                         (shui/popup-show! (.-target e)
-                                                           (fn []
-                                                             [:div.p-4
-                                                              (filters/filter-dialog page-entity ref-pages-count)])
-                                                           {:align "end"}))}
+                                         (let [target (.-target e)]
+                                           (p/let [ref-pages-count (or ref-pages-count
+                                                                       (state/<invoke-db-worker
+                                                                        :thread-api/get-linked-reference-page-count
+                                                                        (state/get-current-repo)
+                                                                        (:db/id page-entity)))]
+                                             (shui/popup-show! target
+                                                               (fn []
+                                                                 [:div.p-4
+                                                                  (filters/filter-dialog page-entity ref-pages-count)])
+                                                               {:align "end"}))))}
                             (ui/icon "filter-cog"
                                      {:class (cond
                                                (and (empty? (:included filters)) (empty? (:excluded filters)))
@@ -61,16 +65,18 @@
 (hsx/defc references
   [entity config]
   (when-let [id (:db/id entity)]
-    (let [[refs-total-count set-refs-total-count!] (hooks/use-state (:refs-count config))]
+    (let [[refs-total-count set-refs-total-count!] (hooks/use-state nil)]
       (hooks/use-effect!
-       #(c.m/run-task*
-         (m/sp
-           (if-let [refs-count (:refs-count config)]
-             (set-refs-total-count! refs-count)
-             (let [result (c.m/<? (db-async/<get-block-refs-count (state/get-current-repo) id))]
-               (set-refs-total-count! result)))))
+       (fn []
+         (let [cancelled? (volatile! false)]
+           (set-refs-total-count! nil)
+           (p/let [refs-count (or (:refs-count config)
+                                  (db-async/<get-block-refs-count (state/get-current-repo) id))]
+             (when-not @cancelled?
+               (set-refs-total-count! refs-count)))
+           #(vreset! cancelled? true)))
        [id (:refs-count config)])
-      (when (> refs-total-count 0)
+      (when (pos? (or refs-total-count 0))
         (ui/catch-error
          (ui/component-error
           "Linked References: Unexpected error.")

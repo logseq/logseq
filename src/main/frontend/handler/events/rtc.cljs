@@ -11,6 +11,7 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
+            [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
             [promesa.core :as p]))
@@ -69,19 +70,33 @@
 (defn- sync-app-state!
   []
   (let [state-flow
-        (->> (flows/sub-flow [])
-             (m/eduction
-              (map (fn [app-state]
-                     (cond-> (select-keys app-state [:git/current-repo :config
-                                                     :auth/id-token :auth/access-token :auth/refresh-token
-                                                     :auth/oauth-token-url :auth/oauth-domain :auth/oauth-client-id
-                                                     :user/info])
-                       (seq config/OAUTH-DOMAIN)
-                       (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
+        (->> (m/latest
+              (fn [current-repo config id-token access-token refresh-token oauth-token-url oauth-domain oauth-client-id user-info]
+                (cond-> (common-util/remove-nils-non-nested
+                         {:git/current-repo current-repo
+                          :config config
+                          :auth/id-token id-token
+                          :auth/access-token access-token
+                          :auth/refresh-token refresh-token
+                          :auth/oauth-token-url oauth-token-url
+                          :auth/oauth-domain oauth-domain
+                          :auth/oauth-client-id oauth-client-id
+                          :user/info user-info})
+                  (seq config/OAUTH-DOMAIN)
+                  (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
 
-                       (seq config/COGNITO-CLIENT-ID)
-                       (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID))))
-              (dedupe)))
+                  (seq config/COGNITO-CLIENT-ID)
+                  (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID)))
+              flows/current-repo-flow
+              (flows/sub-flow [:config])
+              (flows/sub-flow [:auth/id-token])
+              (flows/sub-flow [:auth/access-token])
+              (flows/sub-flow [:auth/refresh-token])
+              (flows/sub-flow [:auth/oauth-token-url])
+              (flows/sub-flow [:auth/oauth-domain])
+              (flows/sub-flow [:auth/oauth-client-id])
+              (flows/sub-flow [:user/info]))
+             (m/eduction (dedupe)))
         <init-sync-done? (p/deferred)
         task (m/reduce
               (constantly nil)

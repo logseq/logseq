@@ -34,10 +34,8 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.hooks :as db-hooks]
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
-            [frontend.db.react :as react]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.lightbox :as lightbox]
@@ -112,7 +110,11 @@
 (def ^:private comment-thread-presence-ttl-ms 30000)
 (defonce *comment-thread-presence (atom {}))
 (defonce *comment-thread-presence-requests (atom {}))
+(defonce *comment-thread-presence-in-flight (atom {}))
 (defonce *comment-thread-presence-flush-scheduled? (atom false))
+(def ^:private comment-thread-presence-batch-delay-ms 500)
+(def ^:private block-refs-count-cache-ttl-ms 30000)
+(defonce ^:private *block-refs-count-cache (atom {}))
 
 ;; TODO:
 ;; add `key`
@@ -120,6 +122,50 @@
 (defn- remove-nils
   [col]
   (remove nil? col))
+
+(defn- <cached-block-refs-count
+  [repo id]
+  (let [cache-key [repo id]
+        now (util/time-ms)
+        {:keys [value promise ts]} (get @*block-refs-count-cache cache-key)]
+    (cond
+      (and (some? value) ts (< (- now ts) block-refs-count-cache-ttl-ms))
+      (p/resolved value)
+
+      promise
+      promise
+
+      :else
+      (let [promise (-> (db-async/<get-block-refs-count repo id)
+                        (p/then (fn [value]
+                                  (swap! *block-refs-count-cache assoc cache-key
+                                         {:value value
+                                          :ts (util/time-ms)})
+                                  value))
+                        (p/catch (fn [error]
+                                   (swap! *block-refs-count-cache dissoc cache-key)
+                                   (throw error))))]
+        (swap! *block-refs-count-cache assoc cache-key {:promise promise
+                                                        :ts now})
+        promise))))
+
+(defn- cache-block-refs-counts-promise!
+  [repo ids result-promise]
+  (let [now (util/time-ms)]
+    (doseq [[idx id] (map-indexed vector ids)]
+      (let [cache-key [repo id]
+            promise (-> result-promise
+                        (p/then (fn [values]
+                                  (let [value (nth values idx nil)]
+                                    (swap! *block-refs-count-cache assoc cache-key
+                                           {:value value
+                                            :ts (util/time-ms)})
+                                    value)))
+                        (p/catch (fn [error]
+                                   (swap! *block-refs-count-cache dissoc cache-key)
+                                   (throw error))))]
+        (swap! *block-refs-count-cache assoc cache-key {:promise promise
+                                                        :ts now})))))
 
 (defn vec-cat
   [& args]
@@ -2020,6 +2066,13 @@
          {:present? (boolean present?)
           :checked-at (js/Date.now)}))
 
+(defn- cache-comment-thread-presences!
+  [repo block-uuids commented-block-uuids]
+  (let [commented-block-uuids (into #{} (map str) commented-block-uuids)]
+    (doseq [uuid block-uuids]
+      (cache-comment-thread-presence! [repo (str uuid)]
+                                      (contains? commented-block-uuids (str uuid))))))
+
 (declare flush-comment-thread-presence!)
 
 (defn- schedule-comment-thread-presence-check!
@@ -2034,6 +2087,9 @@
         cached-entry
         (reset! *comment-thread-present? (:present? cached-entry))
 
+        (contains? @*comment-thread-presence-in-flight cache-key)
+        (swap! *comment-thread-presence-in-flight update cache-key (fnil conj #{}) *comment-thread-present?)
+
         :else
         (do
           (swap! *comment-thread-presence-requests
@@ -2042,7 +2098,8 @@
                  (fnil conj #{})
                  *comment-thread-present?)
           (when (compare-and-set! *comment-thread-presence-flush-scheduled? false true)
-            (util/schedule flush-comment-thread-presence!)))))))
+            (js/setTimeout flush-comment-thread-presence!
+                           comment-thread-presence-batch-delay-ms)))))))
 
 (defn- flush-comment-thread-presence!
   []
@@ -2054,13 +2111,77 @@
       (let [repo-cache-keys (mapv first repo-requests)
             block-uuids (mapv second repo-cache-keys)]
         (when (seq block-uuids)
-          (p/let [commented-block-uuids (comments-handler/<get-comment-thread-block-uuids repo block-uuids)
-                  commented-block-uuids (into #{} commented-block-uuids)]
-            (doseq [[cache-key listeners] repo-requests
-                    :let [present? (contains? commented-block-uuids (second cache-key))]]
-              (cache-comment-thread-presence! cache-key present?)
-              (doseq [*listener listeners]
-                (reset! *listener present?)))))))))
+          (swap! *comment-thread-presence-in-flight
+                 (fn [state]
+                   (reduce (fn [state [cache-key listeners]]
+                             (update state cache-key (fnil into #{}) listeners))
+                           state
+                           repo-requests)))
+          (-> (p/let [commented-block-uuids (comments-handler/<get-comment-thread-block-uuids repo block-uuids)]
+                (cache-comment-thread-presences! repo block-uuids commented-block-uuids)
+                (let [commented-block-uuids (into #{} (map str) commented-block-uuids)]
+                  (doseq [cache-key repo-cache-keys
+                          :let [present? (contains? commented-block-uuids (second cache-key))
+                                listeners (get @*comment-thread-presence-in-flight cache-key)]]
+                    (swap! *comment-thread-presence-in-flight dissoc cache-key)
+                    (doseq [*listener listeners]
+                      (reset! *listener present?)))))
+              (p/catch (fn [error]
+                         (swap! *comment-thread-presence-in-flight
+                                (fn [state]
+                                  (apply dissoc state repo-cache-keys)))
+                         (throw error)))))))))
+
+(defn- collect-block-tree
+  [blocks]
+  (mapcat (fn [block]
+            (cons block (collect-block-tree (ldb/get-children block))))
+          blocks))
+
+(defn prefetch-block-adornments!
+  [repo blocks]
+  (let [blocks (->> (collect-block-tree blocks)
+                    (remove #(or (ldb/page? %)
+                                 (:block/page %)
+                                 (comments-model/comments-area? %)))
+                    vec)
+        ids (->> blocks (keep :db/id) distinct vec)
+        uuids (->> blocks (keep :block/uuid) distinct vec)
+        task-ids (->> blocks
+                      (filter #(ldb/class-instance? (db/entity :logseq.class/Task) %))
+                      (keep :db/id)
+                      distinct
+                      vec)]
+    (when (seq ids)
+      (cache-block-refs-counts-promise! repo ids (db-async/<get-block-refs-counts repo ids))
+      (db-async/<prefetch-block-reactions repo ids))
+    (when (seq task-ids)
+      (db-async/<prefetch-task-spent-times repo task-ids))
+    (when (seq uuids)
+      (let [uuids (->> uuids
+                       (remove #(fresh-comment-thread-presence [repo (str %)]))
+                       (remove #(contains? @*comment-thread-presence-in-flight [repo (str %)]))
+                       vec)]
+        (when (seq uuids)
+          (swap! *comment-thread-presence-in-flight
+                 (fn [state]
+                   (reduce (fn [state uuid]
+                             (update state [repo (str uuid)] (fnil into #{}) #{}))
+                           state
+                           uuids)))
+          (-> (p/let [commented-block-uuids (comments-handler/<get-comment-thread-block-uuids repo uuids)]
+                (cache-comment-thread-presences! repo uuids commented-block-uuids)
+                (let [commented-block-uuids (into #{} (map str) commented-block-uuids)]
+                  (doseq [uuid uuids
+                          :let [cache-key [repo (str uuid)]]]
+                    (doseq [*listener (get @*comment-thread-presence-in-flight cache-key)]
+                      (reset! *listener (contains? commented-block-uuids (str uuid))))
+                    (swap! *comment-thread-presence-in-flight dissoc cache-key))))
+              (p/catch (fn [error]
+                         (swap! *comment-thread-presence-in-flight
+                                (fn [state]
+                                  (apply dissoc state (mapv #(vector repo (str %)) uuids))))
+                         (throw error)))))))))
 
 (defn- hydrate-comment-thread!
   [state block]
@@ -2772,40 +2893,44 @@
            [:<> (pv/property-value block property (assoc opts :show-tooltip? true))])]))))
 
 (hsx/defc block-reactions
-  [block]
+  [block adornments-ready?]
   (let [repo (state/get-current-repo)
         target-id (:db/id block)
-        reactions-result (db-hooks/use-query
-                          (react/q repo [:frontend.worker.react/block-reactions target-id]
-                                   {}
-                                   '[:find (pull ?r [*])
-                                     :in $ ?target
-                                     :where
-                                     [?r :logseq.property.reaction/target ?target]]
-                                   target-id))
-        reactions (->> (or reactions-result [])
-                       (map first))
-        user-db-id (when-let [id-str (user-handler/user-uuid)]
-                     (when-let [user-id (uuid id-str)]
-                       (:db/id (db/entity repo [:block/uuid user-id]))))
-        summary (reaction/summarize reactions user-db-id)
-        read-only? config/publishing?
-        on-pick (fn [popup-id emoji]
-                  (reaction-handler/toggle-reaction! (:block/uuid block) (:id emoji))
-                  (shui/popup-hide! popup-id))
-        open-picker! (fn [^js e]
-                       (util/stop e)
-                       (shui/popup-show!
-                        (.-target e)
-                        (fn [{:keys [id]}]
-                          (icon-component/icon-search
-                           {:on-chosen (fn [_emoji-event emoji _keep-popup?] (on-pick id emoji))
-                            :tabs [[:emoji "Emojis"]]
-                            :default-tab :emoji
-                            :show-used? true
-                            :icon-value nil}))
-                        {:align :start
-                         :content-props {:class "ls-icon-picker"}}))]
+        [reactions set-reactions!] (hooks/use-state nil)
+        reload-reactions! (fn [& {:keys [refresh?]}]
+                            (when (and adornments-ready? repo target-id)
+                              (p/let [result (db-async/<get-block-reactions repo target-id {:refresh? refresh?})]
+                                (set-reactions! result))))]
+    (hooks/use-effect!
+     (fn []
+       (if adornments-ready?
+         (reload-reactions!)
+         (set-reactions! nil))
+       (fn []))
+     [adornments-ready? repo target-id])
+    (let [reactions (or reactions [])
+          user-db-id (when-let [id-str (user-handler/user-uuid)]
+                       (when-let [user-id (uuid id-str)]
+                         (:db/id (db/entity repo [:block/uuid user-id]))))
+          summary (reaction/summarize reactions user-db-id)
+          read-only? config/publishing?
+          on-pick (fn [popup-id emoji]
+                    (when (reaction-handler/toggle-reaction! (:block/uuid block) (:id emoji))
+                      (js/setTimeout #(reload-reactions! :refresh? true) 0))
+                    (shui/popup-hide! popup-id))
+          open-picker! (fn [^js e]
+                         (util/stop e)
+                         (shui/popup-show!
+                          (.-target e)
+                          (fn [{:keys [id]}]
+                            (icon-component/icon-search
+                             {:on-chosen (fn [_emoji-event emoji _keep-popup?] (on-pick id emoji))
+                              :tabs [[:emoji "Emojis"]]
+                              :default-tab :emoji
+                              :show-used? true
+                              :icon-value nil}))
+                          {:align :start
+                           :content-props {:class "ls-icon-picker"}}))]
     (when (seq summary)
       [:div.ls-block-reactions.flex.flex-row.flex-wrap.items-center.mt-1
        (for [{:keys [emoji-id count reacted-by-me? usernames]} summary]
@@ -2821,7 +2946,8 @@
                      :on-click (fn [e]
                                  (when-not read-only?
                                    (util/stop e)
-                                   (reaction-handler/toggle-reaction! (:block/uuid block) emoji-id)))}
+                                   (when (reaction-handler/toggle-reaction! (:block/uuid block) emoji-id)
+                                     (js/setTimeout #(reload-reactions! :refresh? true) 0))))}
                     [:span.text-sm.leading-none
                      [:em-emoji {:id emoji-id
                                  :style {:line-height 1}}]]
@@ -2837,7 +2963,7 @@
            :on-click open-picker!
            :on-pointer-down (fn [e]
                               (util/stop e))}
-                 (ui/icon "plus" {:size 14})))])))
+                 (ui/icon "plus" {:size 14})))]))))
 
 (hsx/defc status-history-cp
   [status-history]
@@ -2860,27 +2986,28 @@
            [:div (date/int->local-time-2 (:block/created-at item))]]))]]))
 
 (hsx/defc task-spent-time-cp
-  [block]
-  (when (ldb/class-instance? (db/entity :logseq.class/Task) block)
-    (let [[result set-result!] (hooks/use-state nil)
-          repo (state/get-current-repo)
-          [status-history time-spent] result]
-      (hooks/use-effect!
-       (fn []
+  [block adornments-ready?]
+  (let [[result set-result!] (hooks/use-state nil)
+        repo (state/get-current-repo)
+        task? (ldb/class-instance? (db/entity :logseq.class/Task) block)
+        [status-history time-spent] result]
+    (hooks/use-effect!
+     (fn []
+       (when (and adornments-ready? task?)
          (p/let [result (db-async/<task-spent-time repo (:db/id block))]
-           (set-result! result)))
-       [(:logseq.property/status block)])
-      (when (and time-spent (> time-spent 0))
-        [:div.text-sm.time-spent.ml-1
-         (shui/button
-          {:variant :ghost
-           :size :sm
-           :class "text-muted-foreground !py-0 !px-1 h-6 font-normal"
-           :on-click (fn [e]
-                       (shui/popup-show! (.-target e)
-                                         (fn [] (status-history-cp status-history))
-                                         {:align :end}))}
-           (clock/seconds->days:hours:minutes:seconds time-spent))]))))
+           (set-result! result))))
+     [adornments-ready? task? (:logseq.property/status block)])
+    (when (and adornments-ready? task? time-spent (> time-spent 0))
+      [:div.text-sm.time-spent.ml-1
+       (shui/button
+        {:variant :ghost
+         :size :sm
+         :class "text-muted-foreground !py-0 !px-1 h-6 font-normal"
+         :on-click (fn [e]
+                     (shui/popup-show! (.-target e)
+                                       (fn [] (status-history-cp status-history))
+                                       {:align :end}))}
+        (clock/seconds->days:hours:minutes:seconds time-spent))])))
 
 (defn- sync-conflict-attr-label
   [attr]
@@ -2926,21 +3053,12 @@
                :on-click on-mark-resolved)]])
 
 (hsx/defc sync-conflicts-warning-button
-  [block]
+  [block adornments-ready?]
   (let [repo (state/get-current-repo)
         block-id (:block/uuid block)
         conflicts (rfx/use-sub [:sync/block-conflicts repo (str block-id)])
         visible-conflicts (visible-sync-conflicts block conflicts)]
-    (hooks/use-effect!
-     (fn []
-       (when (and repo block-id (nil? conflicts))
-         (p/let [result (state/<invoke-db-worker :thread-api/db-sync-get-block-conflicts repo block-id)]
-           (state/set-state! :sync/block-conflicts
-                             (or result [])
-                             :nested-path [repo (str block-id)])))
-       nil)
-     [repo block-id conflicts])
-    (when (seq visible-conflicts)
+    (when (and adornments-ready? (seq visible-conflicts))
       (ui/tooltip
        (shui/button
         {:variant :secondary
@@ -3040,7 +3158,7 @@
          [:div.block-head-wrap
           (block-title config block {:*show-query? *show-query?})])
 
-       (task-spent-time-cp block)]
+      (task-spent-time-cp block (:block-adornments-ready? config))]
 
       (block-content-inner config block ast-body plugin-slotted? collapsed? block-ref-with-title?)]]))
 
@@ -3195,7 +3313,7 @@
          [:div.ls-block-right.flex.flex-row.items-center.self-start.gap-1
           (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
                         (:property? config))
-            (sync-conflicts-warning-button block))
+            (sync-conflicts-warning-button block (:block-adornments-ready? config)))
 
           (when-not table?
             [:div.opacity-70.hover:opacity-100
@@ -3858,7 +3976,7 @@
          *hide-block-refs?
          *show-query?
          {:block-content-or-editor block-content-or-editor
-          :block-reactions block-reactions}
+          :block-reactions #(block-reactions % (:block-adornments-ready? config))}
           {})
          (block-content-or-editor config
            parsed-block
@@ -3873,8 +3991,8 @@
    (when (and (not collapsed?) (not (or table? property?)))
      (block-positioned-properties config block :block-below))
 
-   (when-not (or (:table? config) (:property? config))
-     (block-reactions block))])
+   (when-not (or (:table? config) (:property? config) (not (:block-adornments-ready? config)))
+     (block-reactions block (:block-adornments-ready? config)))])
 
 (hsx/defc block-renderer-error-boundary
   [{:keys [on-error fallback-view]} view]
@@ -3900,6 +4018,9 @@
            *hydrated-comment-thread (hooks/use-memo #(atom nil) [])
            *comment-thread-present? (hooks/use-memo #(atom nil) [])
            *refs-count (hooks/use-memo #(atom nil) [(:db/id block)])
+           *adornments-ready? (hooks/use-memo #(atom false) [repo (:db/id block)])
+           adornments-enabled? (and (not (:list-view? config*))
+                                    (not (false? (:page-block-adornments-ready? config*))))
            [show-query?] (hooks/use-atom *show-query?)
            [hydrated-comment-thread] (hooks/use-atom *hydrated-comment-thread)
            [comment-thread-present?] (hooks/use-atom *comment-thread-present?)
@@ -3907,15 +4028,27 @@
            [use-plugin-renderer?] (hooks/use-atom *use-plugin-renderer?)
            [hide-block-refs?] (hooks/use-atom *hide-block-refs?)
            [refs-count] (hooks/use-atom *refs-count)
+           [adornments-ready?] (hooks/use-atom *adornments-ready?)
            _ (hooks/use-effect!
               (fn []
-                (when-not (or (:view? config*) (ldb/page? block))
-                  (when-let [id (:db/id block)]
-                    (p/let [count (db-async/<get-block-refs-count (state/get-current-repo) id)]
-                      (reset! *refs-count count)))))
-              [(:db/id block)])
+                (reset! *adornments-ready? adornments-enabled?)
+                (fn []))
+              [repo (:db/id block) adornments-enabled?])
            _ (hooks/use-effect!
-              #(schedule-comment-thread-presence-check! *comment-thread-present? block))
+              (fn []
+                (when (and adornments-ready?
+                           (not (or (:view? config*) (ldb/page? block))))
+                  (when-let [id (:db/id block)]
+                    (p/let [count (<cached-block-refs-count repo id)]
+                      (reset! *refs-count count)))))
+              [adornments-ready? repo (:db/id block)])
+           _ (hooks/use-effect!
+              (fn []
+                (if adornments-ready?
+                  (schedule-comment-thread-presence-check! *comment-thread-present? block)
+                  (reset! *comment-thread-present? nil))
+                (fn []))
+              [adornments-ready? (:block/uuid block)])
            _ (hooks/use-effect!
               (fn []
                 ;; Mobile swipe handling calls preventDefault, so avoid registering
@@ -3945,7 +4078,8 @@
         ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get container-state ::navigating-block)
         {:block/keys [uuid title]} block
-        config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
+        config (assoc (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
+                      :block-adornments-ready? (and adornments-enabled? adornments-ready?))
         level (:level config)
         *control-show? (get container-state ::control-show?)
         db-collapsed? (util/collapsed? block)
@@ -4229,7 +4363,7 @@
          *hide-block-refs?
          *show-query?
          {:block-content-or-editor block-content-or-editor
-          :block-reactions block-reactions}
+          :block-reactions #(block-reactions % (:block-adornments-ready? config))}
          {:focus-editor? true
           :inline? true})])
 
