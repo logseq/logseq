@@ -11,6 +11,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [promesa.core :as p]))
@@ -187,10 +188,11 @@
 
 (defn- sync-app-state-payload
   []
-  (cond-> (select-keys @state/state [:git/current-repo :config
-                                     :auth/id-token :auth/access-token :auth/refresh-token
-                                     :auth/oauth-token-url :auth/oauth-domain :auth/oauth-client-id
-                                     :user/info])
+  (cond-> (common-util/remove-nils-non-nested
+           (select-keys @state/state [:git/current-repo :config
+                                      :auth/id-token :auth/access-token :auth/refresh-token
+                                      :auth/oauth-token-url :auth/oauth-domain :auth/oauth-client-id
+                                      :user/info]))
     (seq config/OAUTH-DOMAIN)
     (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
 
