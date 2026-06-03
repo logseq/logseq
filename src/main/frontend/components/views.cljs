@@ -2490,15 +2490,16 @@
      ^{:key (:db/id view*)}
      (view-tab-button view-parent current-view view* opts))
 
-     (shui/button
-       {:variant :text
-       :size :sm
-        :title (t :view/add-new-view)
-        :class (str "!px-1 -ml-1 text-muted-foreground hover:text-foreground transition-opacity ease-in duration-300 " opacity)
-        :on-click (fn []
-                    (p/let [view (create-view! view-parent view-feature-type {:auto-triggered? false})]
-                      (set-views! (concat views [view]))))}
-       (ui/icon "plus" {:size 15}))])
+   (shui/button
+    {:key "add-view"
+     :variant :text
+     :size :sm
+     :title (t :view/add-new-view)
+     :class (str "!px-1 -ml-1 text-muted-foreground hover:text-foreground transition-opacity ease-in duration-300 " opacity)
+     :on-click (fn []
+                 (p/let [view (create-view! view-parent view-feature-type {:auto-triggered? false})]
+                   (set-views! (concat views [view]))))}
+    (ui/icon "plus" {:size 15}))])
 
 (hsx/defc view-head
   [view-parent view-entity table columns input sorting
