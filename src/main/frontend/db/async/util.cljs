@@ -34,13 +34,13 @@
                         (rest inputs))
                   inputs)
         query-key [inputs' opts]
-        async-requested? (get (state/get-state :db/async-queries) query-key)]
+        async-requested? (state/async-query-requested? query-key)]
     (if (and async-requested? transact-db?)
       (p/promise
        (let [db (db-conn/get-db graph)]
          (apply d/q (first inputs') db (rest inputs'))))
       (p/let [result (state/<invoke-db-worker :thread-api/q graph inputs')]
-        (state/update-state! :db/async-queries assoc query-key true)
+        (state/mark-async-query-requested! query-key)
         (when result
           (when (and transact-db? (seq result) (coll? result))
             (when-let [conn (db-conn/get-db graph false)]

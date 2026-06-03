@@ -89,7 +89,8 @@
         (if (some (fn [existing-cmd] (= (:id existing-cmd) id)) cmds)
           (log/error :command/register {:msg "Failed to register command. Command with same id already exist"
                                         :id  id})
-          (state/set-state! :command-palette/commands (conj cmds command))))
+          (state/set-state! :command-palette/commands
+                            (conj (vec (state/get-state :command-palette/commands)) command))))
       ;; Catch unexpected errors so that subsequent register calls pass
       (catch :default e
         (log/error :command/register {:msg "Unexpectedly failed to register command"
@@ -101,7 +102,7 @@
   (let [id (keyword id)
         cmds (get-commands-unique)]
     (when (contains? cmds id)
-      (state/set-state! :command-palette/commands (vals (dissoc cmds id)))
+      (state/set-state! :command-palette/commands (vec (vals (dissoc cmds id))))
       ;; clear history
       (history (filter #(not= (:id %) id) (history))))))
 

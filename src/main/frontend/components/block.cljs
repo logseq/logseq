@@ -2935,9 +2935,7 @@
      (fn []
        (when (and repo block-id (nil? conflicts))
          (p/let [result (state/<invoke-db-worker :thread-api/db-sync-get-block-conflicts repo block-id)]
-           (state/set-state! :sync/block-conflicts
-                             (or result [])
-                             :nested-path [repo (str block-id)])))
+           (state/set-sync-block-conflicts! repo block-id result)))
        nil)
      [repo block-id conflicts])
     (when (seq visible-conflicts)
@@ -4321,7 +4319,11 @@
   [component same-args?]
   (let [memo-class (react-core/memo
                     (fn [^js props]
-                      (apply component (.-args props)))
+                      (hsx/create-callable-component-element
+                       (cons 'memo-react-component (.-args props))
+                       component
+                       (.-args props)
+                       nil))
                     (fn [^js prev-props ^js next-props]
                       (same-args? (.-args prev-props)
                                   (.-args next-props))))]
@@ -4336,41 +4338,65 @@
       (state/set-collapsed-block! block-id v container-id))
     (state/set-collapsed-block! block-id v container-id)))
 
+(defn- generated-container-id-key
+  [config block]
+  [:block-container-inner
+   (:container-id config)
+   (:id config)
+   (:db/id config)
+   (:page-name config)
+   (:sidebar? config)
+   (:embed? config)
+   (:custom-query? config)
+   (:table? config)
+   (:block? config)
+   (:ref? config)
+   (:view? config)
+   (:block/uuid block)
+   (some-> (:original-block config) :block/uuid)])
+
+(defn- resolve-block-container-id
+  [config block linked-block?]
+  (if (and (:container-id config) (not linked-block?))
+    (:container-id config)
+    (state/get-container-id (generated-container-id-key config block))))
+
 (hsx/defc loaded-block-container-inner
   [config block & {:as opts}]
   (let [repo (state/get-current-repo)
-           linked-block? (or (:block/link block)
-                             (:original-block config))
-           container-id (hooks/use-memo
-                         #(if (or linked-block? (nil? (:container-id config)))
-                            (state/get-next-container-id)
-                            (:container-id config))
-                         [(:container-id config) (:block/uuid block)])
-           *control-show? (hooks/use-memo #(atom false) [])
-           *navigating-block (hooks/use-memo #(atom (:block/uuid block)) [(:block/uuid block)])
-           [navigating-block] (hooks/use-atom *navigating-block)
-           _ (hooks/use-effect!
-              (fn []
-                (let [block-id (:block/uuid block)]
-                  (when-not (:property-block? config)
-                    (cond
-                      (and (:page-title? config) (or (ldb/class? block) (ldb/property? block)) (not config/publishing?))
-                      (let [collapsed? (state/get-block-collapsed block-id container-id)]
-                        (set-collapsed-block! block-id (if (some? collapsed?) collapsed? true) container-id))
+        linked-block? (or (:block/link block)
+                          (:original-block config))
+        container-id (hooks/use-memo
+                      #(resolve-block-container-id config block linked-block?)
+                      [(:container-id config)
+                       (:block/uuid block)
+                       (some-> (:original-block config) :block/uuid)
+                       linked-block?])
+        *control-show? (hooks/use-memo #(atom false) [])
+        *navigating-block (hooks/use-memo #(atom (:block/uuid block)) [(:block/uuid block)])
+        [navigating-block] (hooks/use-atom *navigating-block)
+        _ (hooks/use-effect!
+           (fn []
+             (let [block-id (:block/uuid block)]
+               (when-not (:property-block? config)
+                 (cond
+                   (and (:page-title? config) (or (ldb/class? block) (ldb/property? block)) (not config/publishing?))
+                   (let [collapsed? (state/get-block-collapsed block-id container-id)]
+                     (set-collapsed-block! block-id (if (some? collapsed?) collapsed? true) container-id))
 
-                      (root-block? config block)
-                      (set-collapsed-block! block-id false container-id)
+                   (root-block? config block)
+                   (set-collapsed-block! block-id false container-id)
 
-                      (or (:view? config) (:ref? config) (:custom-query? config))
-                      (set-collapsed-block! block-id
-                                            (boolean (editor-handler/block-default-collapsed? block config))
-                                            container-id)
+                   (or (:view? config) (:ref? config) (:custom-query? config))
+                   (set-collapsed-block! block-id
+                                         (boolean (editor-handler/block-default-collapsed? block config))
+                                         container-id)
 
-                      :else
-                      nil))
-                  #(when (root-block? config block)
-                     (set-collapsed-block! block-id nil container-id))))
-              [])
+                   :else
+                   nil))
+               #(when (root-block? config block)
+                  (set-collapsed-block! block-id nil container-id))))
+           [])
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
         config' (->
                  (assoc config :container-id container-id)
