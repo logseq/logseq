@@ -771,9 +771,24 @@
 (defonce *config
   (atom (build-config)))
 
+(defonce *runtime-shortcuts
+  (atom {}))
+
+(defn- merge-runtime-shortcuts
+  [config handler-id shortcuts]
+  (update config handler-id
+          (fn [handler-shortcuts]
+            (if handler-shortcuts
+              (with-meta (merge handler-shortcuts shortcuts)
+                (meta handler-shortcuts))
+              shortcuts))))
+
 (defn rebuild-config!
   []
-  (reset! *config (build-config)))
+  (reset! *config
+          (reduce-kv merge-runtime-shortcuts
+                     (build-config)
+                     @*runtime-shortcuts)))
 
 ;; To add a new entry to this map, first add it here and then
 ;; a description for it in frontend.dicts.en/dicts
@@ -955,6 +970,7 @@
 (defn add-shortcut!
   ([handler-id id shortcut-map] (add-shortcut! handler-id id shortcut-map false))
   ([handler-id id shortcut-map config-only?]
+   (swap! *runtime-shortcuts assoc-in [handler-id id] shortcut-map)
    (swap! *config assoc-in [handler-id id] shortcut-map)
    (when-not config-only?
      (swap! *shortcut-cmds assoc id (:cmd shortcut-map))
@@ -967,6 +983,7 @@
 
 (defn remove-shortcut!
   [handler-id id]
+  (swap! *runtime-shortcuts medley/dissoc-in [handler-id id])
   (swap! *config medley/dissoc-in [handler-id id])
   (swap! *shortcut-cmds dissoc id)
   (doseq [category (keys @*category)]

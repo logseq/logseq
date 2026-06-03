@@ -39,3 +39,18 @@
       (is (= "(Dev) Show block data"
              (get-in (shortcut-config/build-config)
                      [:shortcut.handler/global-non-editing-only :dev/show-block-data :desc]))))))
+
+(deftest rebuild-config-preserves-runtime-shortcuts
+  (let [handler-id :shortcut.handler/global-non-editing-only
+        shortcut-id :plugin.test/runtime-shortcut
+        shortcut-map {:binding "mod+shift+9"
+                      :desc "Runtime shortcut"
+                      :fn (fn [])}]
+    (try
+      (shortcut-config/add-shortcut! handler-id shortcut-id shortcut-map)
+      (shortcut-config/rebuild-config!)
+      (is (= shortcut-map
+             (get-in @shortcut-config/*config [handler-id shortcut-id])))
+      (finally
+        (shortcut-config/remove-shortcut! handler-id shortcut-id)
+        (shortcut-config/rebuild-config!)))))
