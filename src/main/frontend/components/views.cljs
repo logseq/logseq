@@ -2779,8 +2779,6 @@
                           :input input
                           :filters filters
                           :sorting sorting}
-                          (= view-feature-type :linked-references)
-                          (assoc :include-ref-pages-count? false)
                           query?
                           (assoc :query-entity-ids query-entity-ids
                                  :query query))
@@ -2915,8 +2913,7 @@
              (set-views! nil)
              (set-view-entity! view-entity*)
              (when-not view-entity*
-               (when-not (seq (get-views view-parent view-feature-type))
-                 (c.m/<? (db-async/<get-views repo (:db/id view-parent) view-feature-type)))
+               (c.m/<? (db-async/<get-views repo (:db/id view-parent) view-feature-type))
                (let [views (get-views view-parent view-feature-type)]
                  (if-let [v (first views)]
                    (do
