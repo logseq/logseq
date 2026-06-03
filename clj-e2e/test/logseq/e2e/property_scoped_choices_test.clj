@@ -21,7 +21,7 @@
   (b/new-blocks ["setup"])
   (w/click (util/get-by-text "setup" true))
   (k/press "Control+e")
-  (util/input-command "Add new property")
+  (util/input-command "Add property")
   (w/click "input[placeholder]")
   (util/input property-name)
   (w/click (w/get-by-text "New option:"))

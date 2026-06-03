@@ -36,7 +36,7 @@
                        (when-not page-db-id
                          {:files files}))
                search-key (if more? :search/more-result :search/result)]
-           (swap! state/state assoc search-key result)
+           (state/swap-state! assoc search-key result)
            result))))))
 
 (defn open-find-in-page!
@@ -99,7 +99,7 @@
   ([clear-search-mode?]
    (let [m {:search/result nil
             :search/q ""}]
-     (swap! state/state merge m)
+     (state/swap-state! merge m)
      (when config/lsp-enabled? (state/reset-plugin-search-engines)))
    (when clear-search-mode?
      (state/set-search-mode! :global))))

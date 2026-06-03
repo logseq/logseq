@@ -21,6 +21,7 @@
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.modules.shortcut.utils :as shortcut-utils]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
@@ -163,7 +164,7 @@
 (hsx/defc ls-textarea
   [{:keys [on-change] :as props}]
   (let [*el (hooks/use-ref nil)
-        skip-composition? (state/use-sub :editor/action)
+        skip-composition? (rfx/use-sub [:editor/action])
         on-composition (fn [e]
                          (if skip-composition?
                            (on-change e)
@@ -756,7 +757,7 @@
 
 (hsx/defc tweet-embed
   [id]
-  (let [theme (state/use-sub :ui/theme)]
+  (let [theme (rfx/use-sub [:ui/theme])]
     [:iframe
      {:class "tweet-embed"
       :src (str "https://platform.twitter.com/embed/Tweet.html?id=" id
@@ -822,8 +823,9 @@
 
 (hsx/defc with-shortcut
   [shortcut-key _position content & [title]]
-  (let [shortcut-tooltip? (state/use-sub :ui/shortcut-tooltip?)
-        config            (state/use-sub-config)
+  (let [shortcut-tooltip? (rfx/use-sub [:ui/shortcut-tooltip?])
+        config            (state/config-for-repo (rfx/use-sub [:config])
+                                                 (state/get-current-repo))
         enabled-tooltip?  (if (state/mobile?)
                             false
                             (get config :ui/enable-tooltip? true))

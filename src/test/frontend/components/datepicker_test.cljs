@@ -6,6 +6,7 @@
             [frontend.components.datepicker :as datepicker]
             [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]))
 
@@ -15,6 +16,7 @@
         calendar-opts* (atom nil)
         inserted* (atom [])]
     (with-redefs [state/state app-state*
+                  rfx/use-sub (fn [sub] (get-in @app-state* sub))
                   state/set-state! (fn [k v & _] (swap! app-state* assoc k v) nil)
                   state/clear-editor-action! (fn [] nil)
                   date/js-date->journal-title (constantly "May 20th, 2026")

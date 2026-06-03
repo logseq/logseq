@@ -30,7 +30,7 @@
             (let [previous-state @*previous-state]
               (test-helper/destroy-test-db!)
               (state/set-current-repo! (:git/current-repo previous-state))
-              (reset! state/state previous-state)
+              (state/replace-state! previous-state)
               (reset! *previous-state nil)))})
 
 (defn- fake-key-event
@@ -50,8 +50,8 @@
                          :getAttribute #({"blockid" (str (:block/uuid sibling-block))
                                           "data-embed" (if embed? "true" "false")} %)}
         edit-content (or edit-content (:block/title block))
-        previous-repo (:git/current-repo @state/state)]
-    (swap! state/state assoc :git/current-repo test-helper/test-db)
+        previous-repo (state/get-state :git/current-repo)]
+    (state/set-state! :git/current-repo test-helper/test-db)
     (-> (p/with-redefs
          [editor/get-state (constantly {:block-id (:block/uuid block)
                                         :block-parent-id block-dom-id
@@ -90,7 +90,7 @@
              (on-delete))))
         (p/finally
           (fn []
-            (swap! state/state assoc :git/current-repo previous-repo))))))
+            (state/set-state! :git/current-repo previous-repo))))))
 
 (deftest-async delete-block-async!
   (testing "backspace deletes empty block"
@@ -383,7 +383,7 @@
                                                                (p/resolved nil))]
           (editor/insert-new-block! nil nil)
           ((editor/keydown-tab-handler :right) event)
-          (p/let [_ (when-let [edit-block-f @(:editor/edit-block-fn @state/state)]
+          (p/let [_ (when-let [edit-block-f (state/get-state :editor/edit-block-fn)]
                        (edit-block-f))]
             (is @stopped? "Tab should still be consumed while the new block is pending")
             (is (empty? @current-block-indents) "Tab must not indent the block that was split by Enter")

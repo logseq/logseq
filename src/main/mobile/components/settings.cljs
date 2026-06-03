@@ -9,6 +9,7 @@
             [frontend.dicts :as dicts]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
@@ -225,11 +226,11 @@
 
 (hsx/defc page
   []
-  (let [login? (and (state/use-sub :auth/id-token)
+  (let [login? (and (rfx/use-sub [:auth/id-token])
                     (user-handler/logged-in?))
-        theme (state/use-sub :ui/theme)
-        system-theme? (state/use-sub :ui/system-theme?)
-        preferred-language (state/use-sub :preferred-language)
+        theme (rfx/use-sub [:ui/theme])
+        system-theme? (rfx/use-sub [:ui/system-theme?])
+        preferred-language (rfx/use-sub [:preferred-language])
         theme-value (if system-theme?
                       "system"
                       (or theme "system"))]

@@ -187,8 +187,9 @@
            handle-key-escape! (fn [^js e]
                                 (if (fn? onEscapeKeyDown)
                                   (onEscapeKeyDown e)
-                                  ;; default handled by global Escape listener
-                                  (.preventDefault e)))
+                                  (do
+                                    (.preventDefault e)
+                                    (close! id))))
            handle-pointer-down-outside! (fn [^js e]
                                           (when (fn? onPointerDownOutside)
                                             (onPointerDownOutside e))

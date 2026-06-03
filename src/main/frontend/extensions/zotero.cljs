@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
             [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
@@ -27,7 +28,9 @@
 
 (defn use-zotero-config
   []
-  (:zotero/settings-v2 (state/use-sub-config)))
+  (:zotero/settings-v2
+   (state/config-for-repo (rfx/use-sub [:config])
+                          (state/get-current-repo))))
 
 (def default-settings
   {:type                                    :user

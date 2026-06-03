@@ -27,6 +27,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -142,7 +143,7 @@
 
 (hsx/defc add-button
   [block config]
-  (let [editing? (state/use-sub :editor/editing?)]
+  (let [editing? (rfx/use-sub [:editor/editing?])]
     (add-button-inner block (assoc config :editing? editing?))))
 
 (hsx/defc page-blocks-cp
@@ -177,7 +178,7 @@
                      :else
                      children)
           config (assoc config :library? (ldb/library? block))
-          document-mode? (state/use-sub :document/mode?)]
+          document-mode? (rfx/use-sub [:document/mode?])]
       (cond
         (and
          (not block?)
@@ -209,7 +210,8 @@
 (hsx/defc today-queries
   [repo today? sidebar?]
   (when (and today? (not sidebar?))
-    (let [queries (get-in (state/use-sub-config repo) [:default-queries :journals])]
+    (let [queries (get-in (state/config-for-repo (rfx/use-sub [:config]) repo)
+                          [:default-queries :journals])]
       (when (seq queries)
         [:div#today-queries
          (for [query queries]
@@ -412,7 +414,7 @@
 ;; A page is just a logical block
 (hsx/defc ^:large-vars/cleanup-todo page-inner
   [{:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals?] :as option}]
-  (let [current-repo (state/use-sub :git/current-repo)
+  (let [current-repo (rfx/use-sub [:git/current-repo])
         linked-refs-blocks-ready-page-id* (hooks/use-memo #(atom nil) [])
         linked-refs-tagged-ready-page-id* (hooks/use-memo #(atom nil) [])
         [linked-refs-blocks-ready-page-id] (hooks/use-atom linked-refs-blocks-ready-page-id*)
@@ -619,9 +621,9 @@
 
 (hsx/defc page-graph
   []
-  (let [route-name (state/use-sub [:route-match :data :name])
-        route-path-name (state/use-sub [:route-match :path-params :name])
-        theme (state/use-sub :ui/theme)
+  (let [route-name (rfx/use-sub [:route-match :data :name])
+        route-path-name (rfx/use-sub [:route-match :path-params :name])
+        theme (rfx/use-sub [:ui/theme])
         current-page (or
                       (and (= :page route-name)
                            route-path-name)

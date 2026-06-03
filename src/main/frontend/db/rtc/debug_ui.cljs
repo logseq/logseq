@@ -15,7 +15,7 @@
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
-(defonce debug-state (:rtc/state @state/state))
+(defonce debug-state (atom (state/get-state :rtc/state)))
 
 (defn- stop
   []

@@ -9,6 +9,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -138,7 +139,7 @@
      (plugin-handler/host-mounted!)
      (setup-fns!))
    [])
-  (if-let [route-match (state/use-sub :route-match)]
+  (if-let [route-match (rfx/use-sub [:route-match])]
     (when-let [view (:view (:data route-match))]
       (ui/catch-error-and-notify
        (helpful-default-error-screen)

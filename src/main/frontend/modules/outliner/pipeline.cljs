@@ -84,7 +84,7 @@
 
             (when-not (:graph/importing @state/state)
 
-              (let [edit-block-f @(:editor/edit-block-fn @state/state)]
+              (let [edit-block-f (state/get-state :editor/edit-block-fn)]
                 (state/set-state! :editor/edit-block-fn nil)
                 (when-not (:skip-refresh? tx-meta)
                   (react/refresh! repo affected-keys))

@@ -396,7 +396,7 @@
 
 (defn- pending-new-block
   []
-  @(:editor/pending-new-block @state/state))
+  (state/get-state :editor/pending-new-block))
 
 (defn- pending-new-block?
   []
@@ -2833,7 +2833,7 @@
           hashtag? (or (surround-by? input "#" " ")
                        (surround-by? input "#" :end)
                        (= key "#"))]
-      (when (or (not @(:editor/start-pos @state/state))
+      (when (or (not (state/get-state :editor/start-pos))
                 (and key (string/starts-with? key "Arrow")))
         (state/set-state! :editor/start-pos pos))
 
@@ -2882,7 +2882,7 @@
         (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
         nil
 
-        (some? @(:editor/action @state/state))
+        (some? (state/get-state :editor/action))
         nil
 
         (and (not (string/blank? (util/get-selected-text)))
@@ -3115,7 +3115,7 @@
 
 (defn- cut-blocks-and-clear-selections!
   [copy?]
-  (when-not (get-in @state/state [:ui/find-in-page :active?])
+  (when-not (:active? (state/get-state :ui/find-in-page))
     (cut-selection-blocks copy?)
     (clear-selection!)))
 
@@ -3163,7 +3163,7 @@
       (state/selection?)
       (shortcut-copy-selection e)
 
-      (and (state/editing?) (nil? (:editor/code-block-context @state/state)))
+      (and (state/editing?) (nil? (state/get-state :editor/code-block-context)))
       (let [input (state/get-input)
             selected-start (util/get-selection-start input)
             selected-end (util/get-selection-end input)]
@@ -3724,7 +3724,7 @@
       :else
       (do
         (util/stop e)
-        (when-not @(:selection/selected-all? @state/state)
+        (when-not (state/get-state :selection/selected-all?)
           (if-let [block-id (some-> (first (state/get-selection-blocks))
                                     (dom/attr "blockid")
                                     uuid)]

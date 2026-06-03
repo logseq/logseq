@@ -24,6 +24,7 @@
             [frontend.mobile.footer :as footer]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -55,7 +56,7 @@
 
 (hsx/defc main
   [{:keys [route-match margin-less-pages? route-name db-restoring? main-content]}]
-  (let [left-sidebar-open? (state/use-sub :ui/left-sidebar-open?)
+  (let [left-sidebar-open? (rfx/use-sub [:ui/left-sidebar-open?])
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
                                   (= :home route-name))
@@ -124,7 +125,7 @@
 (hsx/defc main-content
   []
   (let [default-home (app-left-sidebar/get-default-home-if-valid)
-           current-repo (state/use-sub :git/current-repo)
+           current-repo (rfx/use-sub [:git/current-repo])
            redirect-target (cond
                              (and default-home
                                   (= :home (state/get-current-route))
@@ -196,15 +197,15 @@
 
 (hsx/defc custom-context-menu
   []
-  (let [show? (state/use-sub :custom-context-menu/show?)
-        links (state/use-sub :custom-context-menu/links)
-        position (state/use-sub :custom-context-menu/position)]
+  (let [show? (rfx/use-sub [:custom-context-menu/show?])
+        links (rfx/use-sub [:custom-context-menu/links])
+        position (rfx/use-sub [:custom-context-menu/position])]
     (when (and show? links position)
       (render-custom-context-menu links position))))
 
 (hsx/defc new-block-mode
   []
-  (when (state/use-sub [:document/mode?])
+  (when (rfx/use-sub [:document/mode?])
     (ui/tooltip
      [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
       {:on-click state/toggle-document-mode!}
@@ -279,8 +280,8 @@
 
 (hsx/defc help-button
   []
-  (let [help-open? (state/use-sub :ui/help-open?)
-        handbooks-open? (state/use-sub :ui/handbooks-open?)]
+  (let [help-open? (rfx/use-sub [:ui/help-open?])
+        handbooks-open? (rfx/use-sub [:ui/handbooks-open?])]
     [:<>
      [:div.cp__sidebar-help-btn
       (ui/tooltip
@@ -403,32 +404,32 @@
 
 (hsx/defc ^:large-vars/cleanup-todo root-container
   [route-match main-content']
-  (let [current-repo (state/use-sub :git/current-repo)
-        theme (state/use-sub :ui/theme)
-        accent-color (some-> (state/use-sub :ui/radix-color) (name))
-        editor-font (state/use-sub :ui/editor-font)
-        system-theme? (state/use-sub :ui/system-theme?)
+  (let [current-repo (rfx/use-sub [:git/current-repo])
+        theme (rfx/use-sub [:ui/theme])
+        accent-color (some-> (rfx/use-sub [:ui/radix-color]) (name))
+        editor-font (rfx/use-sub [:ui/editor-font])
+        system-theme? (rfx/use-sub [:ui/system-theme?])
         light? (= "light" theme)
-        sidebar-open? (state/use-sub :ui/sidebar-open?)
-        settings-open? (state/use-sub :ui/settings-open?)
-        left-sidebar-open? (state/use-sub :ui/left-sidebar-open?)
-        wide-mode? (state/use-sub :ui/wide-mode?)
-        ls-block-hl-colored? (state/use-sub :pdf/block-highlight-colored?)
+        sidebar-open? (rfx/use-sub [:ui/sidebar-open?])
+        settings-open? (rfx/use-sub [:ui/settings-open?])
+        left-sidebar-open? (rfx/use-sub [:ui/left-sidebar-open?])
+        wide-mode? (rfx/use-sub [:ui/wide-mode?])
+        ls-block-hl-colored? (rfx/use-sub [:pdf/block-highlight-colored?])
         right-sidebar-blocks (state/use-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
         margin-less-pages? (boolean (#{:graph} route-name))
-        db-restoring? (state/use-sub :db/restoring?)
+        db-restoring? (rfx/use-sub [:db/restoring?])
         page? (= :page route-name)
         home? (= :home route-name)
-        native-titlebar? (state/use-sub [:electron/user-cfgs :window/native-titlebar?])
+        native-titlebar? (rfx/use-sub [:electron/user-cfgs :window/native-titlebar?])
         window-controls? (and (util/electron?) (not util/mac?) (not native-titlebar?))
         edit? (state/editing?)
         default-home (app-left-sidebar/get-default-home-if-valid)
         logged? (user-handler/logged-in?)
         fold-button-on-right? (state/use-enable-fold-button-right?)
-        show-action-bar? (state/use-sub :mobile/show-action-bar?)
-        preferred-language (state/use-sub [:preferred-language])
-        uploading? (state/use-sub :rtc/uploading?)]
+        show-action-bar? (rfx/use-sub [:mobile/show-action-bar?])
+        preferred-language (rfx/use-sub [:preferred-language])
+        uploading? (rfx/use-sub [:rtc/uploading?])]
     (hooks/use-effect!
      (fn []
        (let [keydown-handler (fn [e]

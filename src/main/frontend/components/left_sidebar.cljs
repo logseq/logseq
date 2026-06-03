@@ -15,6 +15,7 @@
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
@@ -193,7 +194,7 @@
 
 (hsx/defc sidebar-content-group
   [name {:keys [class count more header-props enter-show-more? collapsable?]} child]
-  (let [collapsed? (state/use-sub [:ui/navigation-item-collapsed? class])]
+  (let [collapsed? (rfx/use-sub [:ui/navigation-item-collapsed? class])]
     [:div.sidebar-content-group
      {:class (util/classnames [class {:is-expand (not collapsed?)
                                       :has-children (and (number? count) (> count 0))}])}
@@ -270,7 +271,7 @@
         (cond
           (= nav :flashcards)
           (when (state/enable-flashcards? (state/get-current-repo))
-            (let [num (state/use-sub :srs/cards-due-count)]
+            (let [num (rfx/use-sub [:srs/cards-due-count])]
               (sidebar-item
                {:class "flashcards-nav"
                 :title (t :nav/flashcards)
@@ -312,7 +313,7 @@
 
 (hsx/defc sidebar-favorites
   []
-  (let [_favorites-updated? (state/use-sub :favorites/updated?)
+  (let [_favorites-updated? (rfx/use-sub [:favorites/updated?])
         favorite-entities (page-handler/get-favorites)]
     (sidebar-content-group
      [:a.wrap-th
@@ -498,7 +499,7 @@
         [touch-state set-touch-state!] (hooks/use-state nil)
         [close-signal set-close-signal!] (hooks/use-state -1)
         touch-point-fn (fn [^js e] (some-> (gobj/get e "touches") (aget 0) (#(hash-map :x (.-clientX %) :y (.-clientY %)))))
-        srs-open? (= :srs (state/use-sub :modal/id))
+        srs-open? (= :srs (rfx/use-sub [:modal/id]))
         touching-x-offset (and (some-> touch-state :after)
                                (some->> touch-state
                                         ((juxt :after :before))

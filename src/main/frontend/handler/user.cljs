@@ -13,7 +13,6 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.debug :as debug]
-            [frontend.flows :as flows]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -105,13 +104,13 @@
 
 (defn- auth-file-path
   []
-  (when-let [home-dir (get-in @state/state [:system/info :home-dir])]
+  (when-let [home-dir (state/get-state [:system/info :home-dir])]
     (path/path-join home-dir "logseq" "auth.json")))
 
 (defn- auth-file-payload
   []
   {:id-token (state/get-auth-id-token)
-   :access-token (:auth/access-token @state/state)
+   :access-token (state/get-state :auth/access-token)
    :refresh-token (state/get-auth-refresh-token)
    :updated-at (.now js/Date)})
 
@@ -174,7 +173,7 @@
    (set-token-to-localstorage! id-token access-token)
    (persist-auth-file!)
    (some->> (parse-jwt (state/get-auth-id-token))
-            (reset! flows/*current-login-user)))
+            (state/set-state! :auth/current-login-user)))
   ([id-token access-token refresh-token]
    (state/set-auth-id-token id-token)
    (state/set-auth-access-token access-token)
@@ -182,7 +181,7 @@
    (set-token-to-localstorage! id-token access-token refresh-token)
    (persist-auth-file!)
    (some->> (parse-jwt (state/get-auth-id-token))
-            (reset! flows/*current-login-user))))
+            (state/set-state! :auth/current-login-user))))
 
 (defn- <refresh-tokens
   "return refreshed id-token, access-token"
@@ -311,7 +310,7 @@
   (.clear js/localStorage)
   (state/clear-user-info!)
   (state/pub-event! [:user/logout])
-  (reset! flows/*current-login-user :logout))
+  (state/set-state! :auth/current-login-user :logout))
 
 (defn upgrade []
   (let [base-upgrade-url "https://logseqdemo.lemonsqueezy.com/checkout/buy/13e194b5-c927-41a8-af58-ed1a36d6000d"

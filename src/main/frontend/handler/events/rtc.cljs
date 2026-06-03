@@ -1,10 +1,12 @@
 (ns frontend.handler.events.rtc
   "RTC events"
+  (:require-macros [frontend.handler.events.macros :refer [defevent!]])
   (:require [frontend.common.crypt :as crypt]
             [frontend.common.missionary :as c.m]
             [frontend.components.e2ee :as e2ee]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.flows :as flows]
             [frontend.handler.events :as events]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
@@ -23,7 +25,7 @@
     (shui/dialog-close-all!))
   (shui/popup-hide! :download-rtc-graph))
 
-(defmethod events/handle :rtc/decrypt-user-e2ee-private-key [[_ encrypted-private-key]]
+(defevent! :rtc/decrypt-user-e2ee-private-key [[_ encrypted-private-key]]
   (let [private-key-promise (p/deferred)
         refresh-token (str (state/get-auth-refresh-token))]
     (close-e2ee-blocking-ui!)
@@ -43,7 +45,7 @@
                       (shui/dialog-close!))}))))
     private-key-promise))
 
-(defmethod events/handle :rtc/request-e2ee-password [[_ {:keys [reason]}]]
+(defevent! :rtc/request-e2ee-password [[_ {:keys [reason]}]]
   (let [password-promise (p/deferred)
         decrypt-reason? (= :decrypt-user-rsa-private-key reason)]
     (close-e2ee-blocking-ui!)
@@ -58,16 +60,16 @@
                   (shui/dialog-close!))})
     password-promise))
 
-(defmethod events/handle :rtc/storage-exceed-limit [[_]]
+(defevent! :rtc/storage-exceed-limit [[_]]
   (notification/show! (t :sync/storage-exceed-limit) :warning false))
 
-(defmethod events/handle :rtc/graph-count-exceed-limit [[_]]
+(defevent! :rtc/graph-count-exceed-limit [[_]]
   (notification/show! (t :sync/graph-count-exceed-limit) :warning false))
 
 (defn- sync-app-state!
   []
   (let [state-flow
-        (->> (m/watch state/state)
+        (->> (flows/sub-flow [])
              (m/eduction
               (map (fn [app-state]
                      (cond-> (select-keys app-state [:git/current-repo :config
@@ -91,5 +93,5 @@
     (c.m/run-task* task)
     <init-sync-done?))
 
-(defmethod events/handle :rtc/sync-app-state [[_]]
+(defevent! :rtc/sync-app-state [[_]]
   (sync-app-state!))

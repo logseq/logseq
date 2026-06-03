@@ -259,7 +259,7 @@
                      :icon (:logseq.property/icon block)
                      :description (or (db-property/property-value-content (:logseq.property/description block)) "")})
         [form-data, set-form-data!] (hooks/use-state (hooks/deref *form-data))
-        [scoped-to-owner?, set-scoped-to-owner!] (hooks/use-state false)
+        [scoped-to-owner?, set-scoped-to-owner!] (hooks/use-state (and create? (ldb/class? owner-block)))
         *input-ref (hooks/use-ref nil)]
 
     (hooks/use-effect!

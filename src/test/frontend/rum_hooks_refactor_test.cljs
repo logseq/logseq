@@ -46,10 +46,9 @@
            "use-hide-on-esc-or-outside"
            "use-modal-state"]}
    {:file "src/main/frontend/state.cljs"
-    :vars ["use-sub"
-           "use-sub-config"
-           "use-sub-editing?"
-           "use-container-id"]}
+    :vars ["use-container-id"]}
+   {:file "src/main/frontend/rfx.cljs"
+    :vars ["use-sub"]}
    {:file "src/main/frontend/db/hooks.cljs"
     :vars ["use-query"]}])
 
@@ -152,6 +151,72 @@
         hook-ui-items-source (form-source source "(hsx/defc hook-ui-items")]
     (is (some? hook-ui-items-source)
         "hook-ui-items component should exist")
-    (is (re-find #"(?s)\(let\s+\[[^\]]*installed-ui-items\s+\(state/use-sub \[:plugin/installed-ui-items\]\)[^\]]*pinned-items\s+\(state/use-sub \[:plugin/preferences :pinnedToolbarItems\]\)[^\]]*updates-coming\s+\(state/use-sub :plugin/updates-coming\)"
+    (is (re-find #"(?s)\(let\s+\[[^\]]*installed-ui-items\s+\(rfx/use-sub \[:plugin/installed-ui-items\]\)[^\]]*pinned-items\s+\(rfx/use-sub \[:plugin/preferences :pinnedToolbarItems\]\)[^\]]*updates-coming\s+\(rfx/use-sub \[:plugin/updates-coming\]\)"
                  hook-ui-items-source)
         "hook-ui-items should call plugin state subscriptions unconditionally at the top of the component so plugin startup state changes do not alter React hook order")))
+
+(deftest frontend-events-use-rfx-dispatch
+  (let [state-source (source-for "src/main/frontend/state.cljs")
+        events-source (source-for "src/main/frontend/handler/events.cljs")
+        event-ui-source (source-for "src/main/frontend/handler/events/ui.cljs")
+        event-rtc-source (source-for "src/main/frontend/handler/events/rtc.cljs")
+        event-export-source (source-for "src/main/frontend/handler/events/export.cljs")]
+    (testing "frontend.state no longer owns a core.async system event channel"
+      (is (not (string/includes? state-source ":system/events")))
+      (is (not (string/includes? state-source "get-events-chan"))))
+
+    (testing "event namespaces register RFX handlers instead of starting a channel loop or multimethod bridge"
+      (is (string/includes? events-source "[frontend.rfx :as rfx]"))
+      (is (string/includes? events-source "register-rfx-handlers!"))
+      (is (string/includes? events-source "rfx/reg-event-fx!"))
+      (is (not (string/includes? events-source "async/go-loop")))
+      (is (not (string/includes? events-source "async/<! chan")))
+      (doseq [source [events-source event-ui-source event-rtc-source event-export-source]]
+        (is (not (re-find #"\(defmethod\s+(?:events/)?handle\b" source)))))))
+
+(deftest root-render-provides-rfx-context
+  (testing "app roots provide the Logseq RFX context"
+    (doseq [file ["src/main/frontend/core.cljs"
+                  "src/main/frontend/publishing.cljs"]]
+      (let [source (source-for file)]
+        (is (string/includes? source "[frontend.rfx :as rfx]")
+            (str file " should require frontend.rfx"))
+        (is (string/includes? source "(rfx/provider (page/current-page))")
+            (str file " should wrap current-page with rfx/provider"))))))
+
+(deftest db-query-hook-uses-rfx-subscriptions
+  (let [hooks-source (source-for "src/main/frontend/db/hooks.cljs")
+        react-source (source-for "src/main/frontend/db/react.cljs")]
+    (testing "UI-facing DB query hook subscribes through RFX"
+      (is (string/includes? hooks-source "[frontend.rfx :as rfx]"))
+      (is (string/includes? hooks-source "(rfx/use-sub [:db/query-results query-key])"))
+      (is (not (string/includes? hooks-source "hooks/use-state")))
+      (is (not (string/includes? hooks-source "add-watch"))))
+
+    (testing "DB query refresh writes query results into RFX state"
+      (is (string/includes? react-source "[frontend.rfx :as rfx]"))
+      (is (string/includes? react-source "sync-query-result!"))
+      (is (string/includes? react-source "[:db/query-results k]")))
+
+    (testing "DB query render path does not write RFX state"
+      (is (not (string/includes? react-source "(doto (set-query-key! result-atom k)"))
+          "Cached react/q calls should only tag the atom during render.")
+      (is (not (re-find #"set! \(\.-state result-atom\) result'\s+\(sync-query-result!" react-source))
+          "Synchronous react/q calls should let use-query sync from an effect."))))
+
+(deftest frontend-state-flows-derive-from-rfx
+  (let [flows-source (source-for "src/main/frontend/flows.cljs")
+        state-source (source-for "src/main/frontend/state.cljs")
+        user-source (source-for "src/main/frontend/handler/user.cljs")]
+    (testing "frontend.flows derives app state streams from RFX app-db"
+      (is (string/includes? flows-source "[frontend.rfx :as rfx]"))
+      (is (string/includes? flows-source "sub-flow"))
+      (is (string/includes? flows-source "(sub-flow [:git/current-repo])"))
+      (is (string/includes? flows-source "(sub-flow [:auth/current-login-user])"))
+      (is (string/includes? flows-source "(sub-flow [:network/online?])"))
+      (is (not (re-find #"\(def\s+\*current-(?:repo|login-user)" flows-source)))
+      (is (not (string/includes? flows-source "*network-online?"))))
+
+    (testing "state writers no longer write parallel flow atoms"
+      (doseq [source [state-source user-source]]
+        (is (not (re-find #"flows/\*current-|flows/\*network-online" source)))))))

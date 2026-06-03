@@ -5,6 +5,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.handler.comments :as comments-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -21,8 +22,8 @@
   [{:keys [on-cut on-copy selected-blocks hide-dots? button-border? view-parent outliner?]
     :or {on-cut #(editor-handler/cut-selection-blocks true)
          outliner? true}}]
-  (let [search-mode (state/use-sub :search/mode)
-        property-dialog? (state/use-sub :ui/show-property-dialog?)]
+  (let [search-mode (rfx/use-sub [:search/mode])
+        property-dialog? (rfx/use-sub [:ui/show-property-dialog?])]
     (when-not (or search-mode property-dialog?)
     (let [selected-blocks (or (seq selected-blocks)
                               (seq (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids))))

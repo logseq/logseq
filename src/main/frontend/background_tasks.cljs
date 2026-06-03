@@ -33,11 +33,12 @@
   (fn [_ [online? db-worker-ready?]]
     (when db-worker-ready?
       (state/<invoke-db-worker :thread-api/update-thread-atom :thread-atom/online-event online?)))
+  nil
   (m/latest vector flows/network-online-event-flow state/db-worker-ready-flow)))
 
 (c.m/run-background-task
  ::sync-to-worker-search-input-idle-status
- (m/reduce
+  (m/reduce
   (fn [{:keys [last-synced-repo last-synced-idle? prev-db-worker-ready?] :as sync-state}
        [_tick db-worker-ready? repo]]
     (if (and db-worker-ready? (seq repo))
@@ -61,6 +62,7 @@
              :last-synced-repo nil
              :last-synced-idle? nil
              :prev-db-worker-ready? db-worker-ready?)))
+  {}
   (m/latest vector
             (search-input-idle-tick-flow)
             state/db-worker-ready-flow

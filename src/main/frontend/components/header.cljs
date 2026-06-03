@@ -21,12 +21,12 @@
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler :as handler]
-            [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -37,7 +37,6 @@
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [io.factorhouse.hsx.core :as hsx]))
@@ -74,7 +73,7 @@
 (hsx/defc rtc-collaborators
   []
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
-        online-users (hooks/use-flow-state nil rtc-flows/rtc-online-users-flow)]
+        online-users (rfx/use-sub [:rtc/state :online-users])]
     (when rtc-graph-id
       [:div.rtc-collaborators.flex.gap-1.text-sm.bg-gray-01.items-center
        (shui/button-ghost-icon :user-plus
@@ -125,13 +124,13 @@
 
 (hsx/defc ^:large-vars/cleanup-todo toolbar-dots-menu
   [{:keys [current-repo t]}]
-  (let [_route-match (state/use-sub :route-match)
+  (let [_route-match (rfx/use-sub [:route-match])
         current-page (sidebar/get-current-page)
         page (or (some-> current-page db/get-page)
                  (when (util/uuid-string? current-page)
                    (db/entity [:block/uuid (uuid current-page)])))
         ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
-        working-page? (if config/publishing? (not (state/use-sub :db/restoring?)) true)
+        working-page? (if config/publishing? (not (rfx/use-sub [:db/restoring?])) true)
         page-menu (if (and working-page? (ldb/page? page))
                     (page-menu/page-menu page)
                     (when-not config/publishing?
@@ -149,7 +148,7 @@
                           :options {:on-click #(shui/dialog-open! (fn [] (page-menu/publish-page-dialog page))
                                                                   {:class "w-auto max-w-md"})}}])))
         page-menu-and-hr (concat page-menu [{:hr true}])
-        login? (and (state/use-sub :auth/id-token) (user-handler/logged-in?))
+        login? (and (rfx/use-sub [:auth/id-token]) (user-handler/logged-in?))
         items (fn []
                 (->>
                  [(when (state/enable-editing?)
@@ -359,7 +358,7 @@
 
 (hsx/defc recent-slider
   []
-  (let [highlight? (state/use-sub :ui/toggle-highlight-recent-blocks?)]
+  (let [highlight? (rfx/use-sub [:ui/toggle-highlight-recent-blocks?])]
     (hooks/use-effect!
      (fn []
        (when-not highlight?
@@ -370,7 +369,7 @@
 
 (hsx/defc block-breadcrumb
   [page-name]
-  (let [db-restoring? (state/use-sub :db/restoring?)]
+  (let [db-restoring? (rfx/use-sub [:db/restoring?])]
     (when-let [page (when (and page-name (common-util/uuid-string? page-name))
                       (db/entity [:block/uuid (uuid page-name)]))]
       ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
@@ -386,7 +385,7 @@
 (hsx/defc search-index-progress
   []
   (let [current-repo (state/get-current-repo)
-        {:keys [visible? running? repo progress]} (or (state/use-sub :search/index-build) {})
+        {:keys [visible? running? repo progress]} (or (rfx/use-sub [:search/index-build]) {})
         progress' (-> (or progress 0)
                       (max 0)
                       (min 100))]
@@ -400,8 +399,10 @@
 (hsx/defc ^:large-vars/cleanup-todo header-aux
   [{:keys [current-repo default-home new-block-mode]}]
   (let [electron-mac? (and util/mac? (util/electron?))
-        rtc-graphs (state/use-sub :rtc/graphs)
-        default-home-page (state/use-sub-default-home-page)
+        rtc-graphs (rfx/use-sub [:rtc/graphs])
+        default-home-page (get-in (state/config-for-repo (rfx/use-sub [:config])
+                                                         (state/get-current-repo))
+                                  [:default-home :page] "")
         left-menu (left-menu-button {:on-click (fn []
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
@@ -477,7 +478,7 @@
           (plugins/updates-notifications)])
 
        (when (state/feature-http-server-enabled?)
-         (server/server-indicator (state/use-sub :electron/server)))
+         (server/server-indicator (rfx/use-sub [:electron/server])))
 
        (when (util/electron?)
          (back-and-forward))
@@ -497,14 +498,8 @@
 
        (updater-tips-new-version t)]]]))
 
-(def ^:private header-related-flow
-  (m/latest
-   (fn [state rtc-running?]
-     {:user-groups (get-in state [:user/info :UserGroups])
-      :rtc-running? rtc-running?})
-   (m/watch state/state) rtc-flows/rtc-running-flow))
-
 (hsx/defc header
   [opts]
-  (let [_m (hooks/use-flow-state header-related-flow)]
+  (let [_user-groups (rfx/use-sub [:user/info :UserGroups])
+        _rtc-running? (rfx/use-sub [:rtc/state :rtc-lock])]
     (header-aux opts)))

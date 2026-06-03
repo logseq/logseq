@@ -23,6 +23,7 @@
             [frontend.handler.publish :as publish-handler]
             [frontend.handler.route :as route-handler]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.rfx :as rfx]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -1992,7 +1993,8 @@
 (hsx/defc property-scalar-value
   [block property value* {:keys [container-id editing?]
                           :as opts}]
-  (let [block-editing? (state/use-sub-editing? [container-id (:block/uuid block)])
+  (let [block-editing? (boolean (get (rfx/use-sub [:editor/editing?])
+                                     [container-id (:block/uuid block)]))
         editing (or editing?
                     (and block-editing?
                          (= (:db/id property) (:db/id (:property (state/get-editor-action-data))))))]
@@ -2051,19 +2053,23 @@
                            (delete-block-property! block property)
                            :dune))
           :class "flex flex-1 flex-row items-center flex-wrap gap-1"}
-         (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
-           (if (and (seq items) not-empty-value?)
-             (if (= type :asset)
-               (for [item items]
-                 ^{:key (or (:block/uuid item) (str item))}
-                 [asset-value-content item])
-               (concat
-                (->> (for [item items]
-                       ^{:key (or (:block/uuid item) (str item))}
-                       [select-item property type item (assoc opts :show-popup! show-popup!)])
-                     (interpose [:span.opacity-50.-ml-1 ","]))
-                (when date?
-                  [(property-value-date-picker block property nil {:toggle-fn toggle-fn})])))
+	         (let [items' (vec items)
+	               not-empty-value? (not= (map :db/ident items') [:logseq.property/empty-placeholder])]
+	           (if (and (seq items) not-empty-value?)
+	             (if (= type :asset)
+	               (for [item items']
+	                 ^{:key (or (:block/uuid item) (str item))}
+	                 [asset-value-content item])
+	               (concat
+	                (for [[idx item] (map-indexed vector items')]
+	                  ^{:key (str "value-" (or (:block/uuid item) item) "-" idx)}
+	                  [:<>
+	                   [select-item property type item (assoc opts :show-popup! show-popup!)]
+	                   (when (< idx (dec (count items')))
+	                     [:span.opacity-50.-ml-1 ","])])
+	                (when date?
+	                  [^{:key "empty-date-picker"}
+	                   (property-value-date-picker block property nil {:toggle-fn toggle-fn})])))
              (if date?
                (property-value-date-picker block property nil {:toggle-fn toggle-fn})
                (if (= type :asset)

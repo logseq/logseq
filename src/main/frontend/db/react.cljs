@@ -9,6 +9,7 @@
             [frontend.db.async.util :as db-async-util]
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -47,15 +48,22 @@
   (when result-atom
     (gobj/get result-atom query-key-prop)))
 
+(defn sync-query-result!
+  [result-atom]
+  (when-let [k (query-key result-atom)]
+    (rfx/update-state! assoc-in [:db/query-results k] @result-atom)))
+
 (defn set-new-result!
   [k new-result]
   (when-let [result-atom (get-in @*query-state [k :result])]
-    (reset! result-atom new-result)))
+    (reset! result-atom new-result)
+    (rfx/update-state! assoc-in [:db/query-results k] new-result)))
 
 (defn clear-query-state!
   []
   (reset! *query-state {})
-  (reset! *collapsed-queries {}))
+  (reset! *collapsed-queries {})
+  (rfx/update-state! assoc :db/query-results {}))
 
 (defn add-q!
   [k query inputs result-atom transform-fn query-fn inputs-fn]
@@ -90,16 +98,6 @@
       (when (empty? (get @query-key->components query))
         (remove-q! query))))
   (vswap! component->query-key dissoc component))
-
-(defn- request-query-component-render!
-  [component]
-  (when (fn? component)
-    (component)))
-
-(defn- refresh-query-components!
-  [k]
-  (doseq [component (get @query-key->components k)]
-    (request-query-component-render! component)))
 
 ;; Reactive query
 
@@ -165,7 +163,8 @@
               (do
                 (p/let [result p-or-value
                         result' (transform-fn result)]
-                  (reset! result-atom result'))
+                  (reset! result-atom result')
+                  (sync-query-result! result-atom))
                 result-atom)
 
               :else
@@ -180,8 +179,7 @@
   (p/let [p-or-value (<q-aux graph db query-fn inputs-fn k query inputs built-in-query?)
           result' (transform-fn p-or-value)]
     (when-not (= result' result)
-      (set-new-result! k result'))
-    (refresh-query-components! k)))
+      (set-new-result! k result'))))
 
 (defn refresh-affected-queries!
   [repo-url affected-keys & {:keys [skip-kv-custom-keys?]
