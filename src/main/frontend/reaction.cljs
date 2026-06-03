@@ -26,7 +26,8 @@
                                :else nil)))
         reaction-username (fn [reaction]
                             (let [user (:logseq.property/created-by-ref reaction)]
-                              (:block/title (db/entity (:db/id user)))))
+                              (or (:block/title user)
+                                  (:block/title (db/entity (:db/id user))))))
         summary (reduce (fn [acc reaction]
                           (let [emoji-id (:logseq.property.reaction/emoji-id reaction)
                                 user-id (reaction-user-id reaction)

@@ -11,6 +11,9 @@
             [medley.core :as medley]
             [promesa.core :as p]))
 
+(def ^:private remote-asset-download-delay-ms 5000)
+(defonce ^:private *pending-remote-asset-downloads (atom #{}))
+
 (defn exceed-limit-size?
   "Asset size no more than 100M"
   [^js file]
@@ -286,8 +289,18 @@
   [repo asset-block file-ready?]
   (let [progress (get (or (state/get-state :rtc/asset-upload-download-progress) {}) repo)]
     (when (should-request-remote-asset-download? repo asset-block file-ready? progress)
-      (state/<invoke-db-worker
-       :thread-api/db-sync-request-asset-download
-       repo
-       (:block/uuid asset-block))
-      true)))
+      (let [asset-uuid (:block/uuid asset-block)
+            cache-key [repo asset-uuid]]
+        (when-not (contains? @*pending-remote-asset-downloads cache-key)
+          (swap! *pending-remote-asset-downloads conj cache-key)
+          (js/setTimeout
+           (fn []
+             (swap! *pending-remote-asset-downloads disj cache-key)
+             (let [progress (get (or (state/get-state :rtc/asset-upload-download-progress) {}) repo)]
+               (when (should-request-remote-asset-download? repo asset-block file-ready? progress)
+                 (state/<invoke-db-worker
+                  :thread-api/db-sync-request-asset-download
+                  repo
+                  asset-uuid))))
+           remote-asset-download-delay-ms))
+        true))))
