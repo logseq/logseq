@@ -71,12 +71,14 @@
                              (set-input! v)))}
              input-opts)]]))
 
-(defn- next-local-selected-choices
-  [old-choices new-choices current-choices selected-choices-atom]
-  (when (and (nil? selected-choices-atom)
-             (not= old-choices new-choices)
-             (not= new-choices current-choices))
-    new-choices))
+(defn- sync-local-selected-choices!
+  [*selected-choices *prev-selected-choices selected-choices selected-choices-atom]
+  (let [new-choices (set selected-choices)]
+    (when (nil? selected-choices-atom)
+      (when (and (not= @*prev-selected-choices new-choices)
+                 (not= new-choices @*selected-choices))
+        (reset! *selected-choices new-choices)))
+    (reset! *prev-selected-choices new-choices)))
 
 (defn- toggle-selected-choice!
   [*selected-choices chosen]
@@ -132,11 +134,11 @@
         [selected-choices] (hooks/use-atom *selected-choices)
         _ (hooks/use-effect!
            (fn []
-             (let [old-choices @*prev-selected-choices
-                   new-choices (set (:selected-choices opts))]
-               (when-let [choices (next-local-selected-choices old-choices new-choices @*selected-choices selected-choices-atom)]
-                 (reset! *selected-choices choices))
-               (reset! *prev-selected-choices new-choices)))
+             (sync-local-selected-choices!
+              *selected-choices
+              *prev-selected-choices
+              (:selected-choices opts)
+              selected-choices-atom))
            [(:selected-choices opts) selected-choices-atom])
         _ (hooks/use-effect!
            (fn []

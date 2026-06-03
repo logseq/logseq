@@ -2,25 +2,38 @@
   (:require [cljs.test :refer [deftest is]]
             [frontend.components.select :as select]))
 
-(deftest next-local-selected-choices-ignores-unchanged-props-test
-  (is (nil? (#'select/next-local-selected-choices
-             {:selected-choices [1]}
-             {:selected-choices [1]}
-             #{1 2}))))
+(deftest sync-local-selected-choices-preserves-local-state-when-props-are-unchanged-test
+  (let [selected-choices (atom #{1 2})
+        prev-selected-choices (atom #{1})]
+    (#'select/sync-local-selected-choices!
+     selected-choices
+     prev-selected-choices
+     [1]
+     nil)
+    (is (= #{1 2} @selected-choices))
+    (is (= #{1} @prev-selected-choices))))
 
-(deftest next-local-selected-choices-syncs-changed-props-test
-  (is (= #{1 2}
-         (#'select/next-local-selected-choices
-          {:selected-choices [1]}
-          {:selected-choices [1 2]}
-          #{1}))))
+(deftest sync-local-selected-choices-syncs-changed-props-test
+  (let [selected-choices (atom #{1})
+        prev-selected-choices (atom #{1})]
+    (#'select/sync-local-selected-choices!
+     selected-choices
+     prev-selected-choices
+     [1 2]
+     nil)
+    (is (= #{1 2} @selected-choices))
+    (is (= #{1 2} @prev-selected-choices))))
 
-(deftest next-local-selected-choices-skips-external-state-test
-  (is (nil? (#'select/next-local-selected-choices
-             {:selected-choices [1]}
-             {:selected-choices [1 2]
-              :selected-choices-atom (atom #{1})}
-             #{1}))))
+(deftest sync-local-selected-choices-skips-external-state-test
+  (let [selected-choices (atom #{1})
+        prev-selected-choices (atom #{1})]
+    (#'select/sync-local-selected-choices!
+     selected-choices
+     prev-selected-choices
+     [1 2]
+     selected-choices)
+    (is (= #{1} @selected-choices))
+    (is (= #{1 2} @prev-selected-choices))))
 
 (deftest toggle-selected-choice-removes-only-chosen-value-test
   (let [choices (atom #{1 2})]
