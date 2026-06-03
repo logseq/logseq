@@ -75,9 +75,14 @@
                                :inputs-fn inputs-fn})
   result-atom)
 
+(defn- keep-query-after-unmount?
+  [k]
+  (contains? #{:frontend.worker.react/block-reactions} (second k)))
+
 (defn remove-q!
   [k]
-  (when-not (and (= (second k) :custom) (nth k 3))                   ; today query
+  (when-not (or (keep-query-after-unmount? k)
+                (and (= (second k) :custom) (nth k 3)))              ; today query
     (swap! *query-state dissoc k)))
 
 (defn add-query-component!
@@ -116,7 +121,8 @@
             (fn [query inputs] (apply d/q query db inputs))
             (fn [query inputs]
               (let [q-f #(apply db-async-util/<q repo {:transact-db? false
-                                                       :advanced-query? true} (cons query inputs))]
+                                                       :advanced-query? true
+                                                       :debug-query-key k} (cons query inputs))]
                 (if built-in-query?
                   ;; delay built-in-queries to not block journal rendering
                   (p/let [_ (p/delay 100)]
