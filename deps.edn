@@ -4,6 +4,8 @@
   org.clojure/clojurescript             {:mvn/version "1.12.134"}
   io.factorhouse/hsx                    {:git/url "https://github.com/logseq/hsx"
                                          :sha     "c45cdaea9568d8dfe265761af79d3a78e1bfbf1f"}
+  io.github.logseq/rfx                  {:git/url "https://github.com/logseq/rfx.git"
+                                         :git/sha "d37aaceb37fcaf969c5cd04646dfdb985d65d3c2"}
 
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
                                          :sha     "3f141af97b70e1f14c65eaa119acd822ebece37e"}

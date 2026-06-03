@@ -22,6 +22,7 @@
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.search :as search]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -1330,8 +1331,8 @@
   [{:keys [sidebar?] :as opts}]
   (let [state (hooks/use-memo #(cmdk-init-state opts) [])
         *input (::input state)
-        search-mode (state/use-sub :search/mode)
-        search-args (state/use-sub :search/args)
+        search-mode (rfx/use-sub [:search/mode])
+        search-args (rfx/use-sub [:search/args])
         [filter'] (hooks/use-atom (::filter state))
         [_results] (hooks/use-atom (::results state))
         [_highlighted-item] (hooks/use-atom (::highlighted-item state))
@@ -1408,10 +1409,11 @@
                                       (and (contains? #{:create} group-filter)
                                            (= group-key :create))))))
                    results-ordered)]
-        (if (seq items)
-          (for [[group-name group-key _group-count group-items] items]
-            (let [title (string/capitalize group-name)]
-              (result-group state title group-key group-items first-item sidebar?)))
+	        (if (seq items)
+	          (for [[group-name group-key _group-count group-items] items]
+	            ^{:key (str "cmdk-group-" (name group-key))}
+	            (let [title (string/capitalize group-name)]
+	              (result-group state title group-key group-items first-item sidebar?)))
           [:div.flex.flex-col.p-4.opacity-50
            (when-not (string/blank? @*input)
              (t :search/no-result))]))]

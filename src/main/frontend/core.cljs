@@ -12,6 +12,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.log]
             [frontend.page :as page]
+            [frontend.rfx :as rfx]
             [frontend.routes :as routes]
             [frontend.runtime.globals :as runtime-globals]
             [frontend.spec]
@@ -130,7 +131,7 @@
       (install-css-hot-reload!))
     (set-router!)
 
-    (.render ^js root (page/current-page))
+    (.render ^js root (rfx/provider (page/current-page)))
 
     (display-welcome-message)))
 

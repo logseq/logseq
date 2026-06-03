@@ -3,7 +3,7 @@
   (:require [cljs-bean.core :as bean]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]
-            [frontend.state :as state]
+            [frontend.rfx :as rfx]
             [logseq.shui.ui :as shui]
             [mobile.components.popup :as popup]
             ["react" :as react]
@@ -120,7 +120,7 @@
 
 (hsx/defc install-notifications
   []
-  (let [contents (state/use-sub :notification/contents)]
+  (let [contents (rfx/use-sub [:notification/contents])]
     (transition-group
      {:class-name "notifications ui__notifications"}
      (let [notifications

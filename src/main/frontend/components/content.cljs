@@ -21,6 +21,7 @@
             [frontend.handler.property.util :as pu]
             [frontend.handler.reaction :as reaction-handler]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -169,8 +170,8 @@
 (hsx/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id property-default-value?]
   (let [block (db/entity [:block/uuid block-id])
-        simple-commands (state/use-sub [:plugin/simple-commands])
-        developer-mode? (state/use-sub [:ui/developer-mode?])
+        simple-commands (rfx/use-sub [:plugin/simple-commands])
+        developer-mode? (rfx/use-sub [:ui/developer-mode?])
         [set-icon-sub-menu-open? set-icon-sub-menu-open] (hooks/use-state false)
         [heading set-heading!] (hooks/use-state (or (pu/lookup block :logseq.property/heading) false))
         [current-color set-current-color!] (hooks/use-state (pu/lookup block :logseq.property/background-color))]
@@ -434,7 +435,7 @@
 
 (hsx/defc non-hiccup-content
   [id content on-click on-hide config format]
-  (let [edit? (state/use-sub-editing? id)]
+  (let [edit? (boolean (get (rfx/use-sub [:editor/editing?]) id))]
     (if edit?
       (editor/box {:on-hide on-hide
                    :format format}
