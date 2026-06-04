@@ -50,11 +50,12 @@
                        (medley/indexed alias-dirs))))
 
 (defn get-area-block-asset-url
-  "Returns asset url for an area block used by pdf assets. This lives in this ns
-  because it is used by this dep and needs to be independent from the frontend app"
+  "Returns asset url for an area block used by PDF assets. This lives in these ns
+  because it is used by this dep and needs to be independent of the frontend app.
+  block - `hl-image` for compatibility with old PDF assets, or the block itself for new PDF assets.
+  The block should have the `block/uuid` property."
   [block]
-  (when-let [image (:logseq.property.pdf/hl-image block)]
-    (str "./assets/" (:block/uuid image) ".png")))
+  (str "./assets/" (:block/uuid block) ".png"))
 
 (defn resolve-asset-real-path-url
   [repo rpath]

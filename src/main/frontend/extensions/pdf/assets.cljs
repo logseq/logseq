@@ -1,28 +1,23 @@
 (ns frontend.extensions.pdf.assets
   (:require [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.context.i18n :as i18n :refer [t]]
+            [frontend.context.i18n :as i18n]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
-            [frontend.extensions.lightbox :as lightbox]
             [frontend.extensions.pdf.windows :as pdf-windows]
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.route :as route-handler]
             [frontend.state :as state]
-            [frontend.ui :as ui]
+            [frontend.date :as date]
             [frontend.util :as util]
             [frontend.util.ref :as ref]
             [logseq.common.config :as common-config]
             [logseq.graph-parser.exporter :as gp-exporter]
-            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
-            [reitit.frontend.easy :as rfe]
-            [io.factorhouse.hsx.core :as hsx]))
+            [reitit.frontend.easy :as rfe]))
 
 (defn get-in-repo-assets-full-filename
   [url]
@@ -64,48 +59,55 @@
 (defn db-based-ensure-ref-block!
   [pdf-current {:keys [id content page properties] :as hl} insert-opts]
   (when-let [pdf-block (:block pdf-current)]
-    (let [ref-block (db-model/query-block-by-uuid id)]
+    (let [ref-block (db-model/query-block-by-uuid id)
+          build-props (fn []
+                        (let [ref-asset-id (:image content)
+                              asset? (not (nil? ref-asset-id))
+                              colors (:property/closed-values (db/entity :logseq.property.pdf/hl-color))
+                              color-id (some (fn [color] (when (= (:block/title color) (:color properties))
+                                                           (:db/id color))) colors)]
+                          (when color-id
+                            (cond->
+                              {:block/collapsed? false
+                               :logseq.property/ls-type :annotation
+                               :logseq.property.pdf/hl-color color-id
+                               :logseq.property/asset (:db/id pdf-block)
+                               :logseq.property.pdf/hl-page page
+                               :logseq.property.pdf/hl-value hl}
+
+                              asset?
+                              (assoc :logseq.property.pdf/hl-type :area)))))]
+
       (if (:block/title ref-block)
-        (do
-          (println "[existed ref block]" ref-block)
-          ref-block)
+        (if-not (nil? (:logseq.property/ls-type ref-block))
+          (do (println "[existed ref block]" ref-block) ref-block)
+          ;; update ref block properties
+          (let [properties (build-props)]
+            (when (seq properties)
+              (property-handler/set-block-properties! id properties))
+            ;; should move asset block to owner block?
+            ;;(editor-handler/move-blocks! [ref-block] pdf-block {:sibling? false})
+            ref-block))
+
         (let [ref-asset-id (:image content)
               image? (not (nil? ref-asset-id))
               text (if image? (i18n/locale-format-date (js/Date.))
-                       (:text content))
-              colors (:property/closed-values (db/entity :logseq.property.pdf/hl-color))
-              color-id (some (fn [color] (when (= (:block/title color) (:color properties))
-                                           (:db/id color))) colors)]
-          (when color-id
-            (let [properties (cond->
-                              {:block/tags #{:logseq.class/Pdf-annotation}
-                               :block/collapsed? image?
-                               :logseq.property/ls-type  :annotation
-                               :logseq.property.pdf/hl-color color-id
-                               :logseq.property/asset (:db/id pdf-block)
-                               :logseq.property.pdf/hl-page  page
-                               :logseq.property.pdf/hl-value hl}
-
-                               image?
-                               (assoc :logseq.property.pdf/hl-type :area
-                                      :logseq.property.pdf/hl-image ref-asset-id))]
+                     (:text content))
+              base-props (build-props)]
+          (when (seq base-props)
+            (let [properties (assoc base-props :block/tags #{:logseq.class/Pdf-annotation})]
               (when (string? text)
                 (editor-handler/api-insert-new-block!
-                 text (merge {:block-uuid (:block/uuid pdf-block)
-                              :sibling? false
-                              :custom-uuid id
-                              :properties properties}
-                             (assoc insert-opts :edit-block? false)))))))))))
+                  text (merge {:block-uuid (:block/uuid pdf-block)
+                               :sibling? false
+                               :custom-uuid id
+                               :properties properties}
+                         (assoc insert-opts :edit-block? false)))))))))))
 
 (defn ensure-ref-block!
   [pdf-current hl insert-opts]
-  (p/let [ref-block (db-based-ensure-ref-block! pdf-current hl insert-opts)
-          asset-block (:logseq.property.pdf/hl-image ref-block)]
-      ;; try to move the asset block to the ref block
-    (p/do!
-     (when asset-block
-       (editor-handler/move-blocks! [asset-block] ref-block {:sibling? false}))
-     ref-block)))
+  (p/let [ref-block (db-based-ensure-ref-block! pdf-current hl insert-opts)]
+    ref-block))
 
 (defn db-based-load-hls-data$
   [{:keys [block]}]
@@ -126,13 +128,16 @@
   (and hl (not (nil? (get-in hl [:content :image])))))
 
 (defn- db-based-persist-hl-area-image
-  [repo png]
-  (let [file (js/File. #js [png] "pdf area highlight.png")]
-    (editor-handler/db-based-save-assets! repo [file] {:pdf-area? true})))
+  [repo png hl]
+  (let [file (js/File. #js [png] (str (date/get-date-time-string-3) ".png"))
+        current-pdf (state/get-current-pdf)
+        opts {:pdf-highlight hl
+              :target-block (:block current-pdf)}]
+    (editor-handler/db-based-save-assets! repo [file] opts)))
 
 (defn- persist-hl-area-image
-  [repo-url _repo-dir _current _new-hl _old-hl png]
-  (p/let [result (db-based-persist-hl-area-image repo-url png)]
+  [repo-url _repo-dir _current new-hl _old-hl png]
+  (p/let [result (db-based-persist-hl-area-image repo-url png new-hl)]
     (first result)))
 
 (defn persist-hl-area-image$
@@ -254,68 +259,3 @@
   ([current id]
    (when current
      (rfe/push-state :page {:name (:block/uuid (:block current))} (if id {:anchor (str "block-content-" + id)} nil)))))
-
-(defn open-lightbox!
-  [e]
-  (let [images (js/document.querySelectorAll ".hl-area img")
-        images (to-array images)
-        images (if-not (= (count images) 1)
-                 (let [^js image (.closest (.-target e) ".hl-area")
-                       image     (. image querySelector "img")]
-                   (->> images
-                        (sort-by (juxt #(.-y %) #(.-x %)))
-                        (split-with (complement #{image}))
-                        reverse
-                        (apply concat)))
-                 images)
-        images (for [^js it images] {:src (.-src it)
-                                     :w   (.-naturalWidth it)
-                                     :h   (.-naturalHeight it)})]
-
-    (when (seq images)
-      (lightbox/preview-images! images))))
-
-(hsx/defc area-display
-  [block]
-  (let [[src set-src!] (hooks/use-state nil)]
-    (when-let [asset-path' (and block (assets-handler/get-area-block-asset-url block))]
-      (hooks/use-effect!
-       (fn []
-         (p/let [asset-path (assets-handler/<make-asset-url asset-path')]
-           (set-src! asset-path)))
-       [asset-path'])
-      (when src
-        (let [asset-block (some-> block (:logseq.property.pdf/hl-image))
-              resize-metadata (some-> asset-block :logseq.property.asset/resize-metadata)
-              style (when-let [w (:width resize-metadata)] {:style {:width w}})]
-          [:div.hl-area style
-           [:div.asset-container
-            {:style {:width (if style "100%" "auto")}}
-            [:span.asset-action-bar
-             (when-let [asset-uuid (some-> asset-block (:block/uuid))]
-               [:button.asset-action-btn
-                {:title (t :asset/ref-block)
-                 :tabIndex "-1"
-                 :on-pointer-down util/stop
-                 :on-click (fn [] (route-handler/redirect-to-page! asset-uuid))}
-                (ui/icon "file-symlink")])
-
-             (when-not config/publishing?
-               [:button.asset-action-btn
-                {:title (t :asset/copy)
-                 :tabIndex "-1"
-                 :on-pointer-down util/stop
-                 :on-click (fn [e]
-                             (util/stop e)
-                             (-> (util/copy-image-to-clipboard (common-config/remove-asset-protocol src))
-                                 (p/then #(notification/show! (t :notification/copied) :success))))}
-                (ui/icon "copy")])
-
-             [:button.asset-action-btn
-              {:title (t :asset/maximize)
-               :tabIndex "-1"
-               :on-pointer-down util/stop
-               :on-click open-lightbox!}
-
-              (ui/icon "maximize")]]
-            [:img.w-full {:src src}]]])))))

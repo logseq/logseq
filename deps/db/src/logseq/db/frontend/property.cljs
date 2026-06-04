@@ -242,8 +242,6 @@
                                            [:logseq.property/color.purple "purple"]])}
      :logseq.property.pdf/hl-page {:title "Annotation page"
                                    :schema {:type :raw-number :hide? true}}
-     :logseq.property.pdf/hl-image {:title "Annotation image"
-                                    :schema {:type :entity :hide? true}}
      :logseq.property.pdf/hl-value {:title "Annotation data"
                                     :schema {:type :map :hide? true}}
      ;; FIXME: :logseq.property/order-list-type should updated to closed values
