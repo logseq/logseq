@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [logseq.db :as ldb]
             [logseq.db.common.reference :as db-reference]
+            [logseq.db.test.helper :as db-test]
             [shadow.resource :as rc]))
 
 (def test-transit (rc/inline "fixtures/references.transit"))
@@ -66,6 +67,33 @@
   [conn foo-id]
   (d/transact! conn [[:db/retract foo-id :logseq.property.linked-references/includes]
                      [:db/retract foo-id :logseq.property.linked-references/excludes]]))
+
+(defn- create-property-value-reference-conn!
+  [include-owner-ref?]
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/notes {:logseq.property/type :default
+                                                  :block/title "Notes"}}
+               :pages-and-blocks
+               [{:page {:block/title "Target"}}
+                {:page {:block/title "Context"}}
+                {:page {:block/title "Source"}
+                 :blocks [{:block/title "Owner block"
+                           :build/properties {:user.property/notes "Property value block"}}]}]})
+        db @conn
+        target-id (:db/id (db-test/find-page-by-title db "Target"))
+        context-id (:db/id (db-test/find-page-by-title db "Context"))
+        owner-id (:db/id (db-test/find-block-by-content db "Owner block"))
+        property-value-id (:db/id (db-test/find-block-by-content db "Property value block"))]
+    (d/transact! conn
+                 (cond-> [[:db/add property-value-id :block/refs target-id]
+                          [:db/add property-value-id :block/refs context-id]]
+                   include-owner-ref?
+                   (conj [:db/add owner-id :block/refs target-id])))
+    {:conn conn
+     :target-id target-id
+     :context-id context-id
+     :owner-id owner-id
+     :property-value-id property-value-id}))
 
 (deftest ^:large-vars/cleanup-todo get-linked-references
   (let [conn (create-conn!)
@@ -176,6 +204,30 @@
             "ref-matched-children-ids check failed")
         (is (= #{"[[foo]] 1" "[[foo]] 2"} (set (map :block/title ref-blocks)))
             "ref-blocks check failed")))))
+
+(deftest property-value-linked-references-are-shown-on-owner-block-test
+  (testing "property value refs use the owning block as the visible reference"
+    (let [{:keys [conn target-id property-value-id]} (create-property-value-reference-conn! false)
+          {:keys [ref-pages-count ref-blocks ref-matched-children-ids]} (db-reference/get-linked-references @conn target-id)]
+      (is (= ["Owner block"] (mapv :block/title ref-blocks)))
+      (is (not (contains? (set (map :db/id ref-blocks)) property-value-id)))
+      (is (= #{["Source" 1] ["Context" 1]} (set ref-pages-count)))
+      (is (nil? ref-matched-children-ids))))
+
+  (testing "owner and generated property value refs are deduped into one visible reference"
+    (let [{:keys [conn target-id property-value-id]} (create-property-value-reference-conn! true)
+          {:keys [ref-pages-count ref-blocks]} (db-reference/get-linked-references @conn target-id)]
+      (is (= ["Owner block"] (mapv :block/title ref-blocks)))
+      (is (not (contains? (set (map :db/id ref-blocks)) property-value-id)))
+      (is (= #{["Source" 1] ["Context" 1]} (set ref-pages-count)))))
+
+  (testing "filtered property value matches keep the raw value block as match context"
+    (let [{:keys [conn target-id context-id property-value-id]} (create-property-value-reference-conn! false)
+          _ (d/transact! conn [{:db/id target-id
+                                :logseq.property.linked-references/includes context-id}])
+          {:keys [ref-blocks ref-matched-children-ids]} (db-reference/get-linked-references @conn target-id)]
+      (is (= ["Owner block"] (mapv :block/title ref-blocks)))
+      (is (contains? ref-matched-children-ids property-value-id)))))
 
 (deftest get-unlinked-references
   (let [conn (create-conn!)

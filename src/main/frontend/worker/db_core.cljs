@@ -850,7 +850,7 @@
 (def-thread-api :thread-api/get-block-refs-count
   [repo id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/get-block-refs-count @conn id)))
+    (db-reference/get-linked-references-count @conn id)))
 
 (def-thread-api :thread-api/get-block-source
   [repo id]

@@ -1717,6 +1717,67 @@
        (let [result (get-block-refs! test-repo [:block/uuid ref-uuid])]
          (is (seq result)))))))
 
+(deftest get-block-refs-count-dedupes-property-value-references
+  (restoring-worker-state
+   (fn []
+     (let [get-block-refs! (get-thread-api :thread-api/get-block-refs)
+           get-block-refs-count! (get-thread-api :thread-api/get-block-refs-count)
+           conn (d/create-conn db-schema/schema)
+           target-id 100
+           owner-id 101
+           property-value-id 102
+           property-id 103]
+       (d/transact! conn [{:db/id target-id
+                           :block/uuid (random-uuid)
+                           :block/title "reference target"}
+                          {:db/id property-id
+                           :db/ident :user.property/notes}
+                          {:db/id owner-id
+                           :block/uuid (random-uuid)
+                           :block/title "owner block"
+                           :block/refs target-id}
+                          {:db/id property-value-id
+                           :block/uuid (random-uuid)
+                           :block/title "property value"
+                           :block/parent owner-id
+                           :logseq.property/created-from-property property-id
+                           :block/refs target-id}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (is (= ["owner block"]
+              (mapv :block/title (get-block-refs! test-repo target-id))))
+       (is (= 1 (get-block-refs-count! test-repo target-id)))))))
+
+(deftest get-block-refs-count-ignores-linked-reference-filters
+  (restoring-worker-state
+   (fn []
+     (let [get-block-refs-count! (get-thread-api :thread-api/get-block-refs-count)
+           conn (d/create-conn
+                 (assoc db-schema/schema
+                        :logseq.property.linked-references/includes
+                        {:db/valueType :db.type/ref
+                         :db/cardinality :db.cardinality/many}))
+           target-id 100
+           context-id 101
+           filtered-out-id 102
+           matched-id 103]
+       (d/transact! conn [{:db/id target-id
+                           :block/uuid (random-uuid)
+                           :block/title "reference target"
+                           :logseq.property.linked-references/includes context-id}
+                          {:db/id context-id
+                           :block/uuid (random-uuid)
+                           :block/title "context"}
+                          {:db/id filtered-out-id
+                           :block/uuid (random-uuid)
+                           :block/title "target only"
+                           :block/refs target-id}
+                          {:db/id matched-id
+                           :block/uuid (random-uuid)
+                           :block/title "target with context"
+                           :block/refs [target-id context-id]}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (is (= 2 (get-block-refs-count! test-repo target-id)))))))
+
 ;; ---- block-refs-check thread-api tests ----
 
 (deftest block-refs-check-unlinked-returns-true-when-title-match-without-link

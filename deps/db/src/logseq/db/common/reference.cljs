@@ -68,6 +68,66 @@
   [db parent-eid]
   (into #{} (map :e) (d/datoms db :avet :block/parent parent-eid)))
 
+(defn- visible-ref-block
+  "Return the block users should see for a raw linked-reference match.
+
+   Property value blocks are storage nodes created under an owning block. They
+   can carry refs, but linked references should show the owner block because the
+   value block is not a normal outline node."
+  [ref]
+  (loop [block ref
+         seen #{}]
+    (let [block-id (:db/id block)]
+      (if (and (:logseq.property/created-from-property block)
+               (:block/parent block)
+               (not (contains? seen block-id)))
+        (recur (:block/parent block) (conj seen block-id))
+        block))))
+
+(defn- normalize-ref-blocks
+  [ref-blocks]
+  (reduce
+   (fn [acc ref]
+     (let [visible-ref (visible-ref-block ref)
+           visible-id (:db/id visible-ref)
+           raw-id (:db/id ref)
+           acc' (if (contains? (:seen-visible-ids acc) visible-id)
+                  acc
+                  (-> acc
+                      (update :ref-blocks conj visible-ref)
+                      (update :seen-visible-ids conj visible-id)))]
+       (cond-> acc'
+         (not= raw-id visible-id)
+         (update :property-value-ref-ids conj raw-id))))
+   {:ref-blocks []
+    :property-value-ref-ids #{}
+    :seen-visible-ids #{}}
+   ref-blocks))
+
+(defn- target-ref-ids
+  [db id]
+  (set (cons id (ldb/get-block-alias db id))))
+
+(defn- class-ref-ids
+  [db entity id]
+  (when (ldb/class? entity)
+    (let [class-children (db-class/get-structured-children db id)]
+      (set (conj class-children id)))))
+
+(defn- excluded-ref-block?
+  [class-ids ref]
+  (or
+   (when class-ids
+     (some class-ids (map :db/id (:block/tags ref))))
+   (entity-util/hidden? ref)
+   (entity-util/hidden? (:block/page ref))))
+
+(defn- top-ref-blocks
+  [db ids class-ids]
+  (->> ids
+       (mapcat (fn [pid] (:block/_refs (d/entity db pid))))
+       (remove (fn [ref] (excluded-ref-block? class-ids ref)))))
+
 (defn- own-refs
   "Refs contributed by this block itself:
    - direct :block/refs
@@ -245,27 +305,29 @@
       {:included included-pages
        :excluded excluded-pages})))
 
+(defn get-linked-references-count
+  [db id]
+  (let [entity (d/entity db id)
+        ids (target-ref-ids db id)
+        class-ids (class-ref-ids db entity id)]
+    (->> (top-ref-blocks db ids class-ids)
+         (reduce (fn [visible-ids ref]
+                   (conj visible-ids (:db/id (visible-ref-block ref))))
+                 #{})
+         count)))
+
 (defn get-linked-references [db id]
   (let [entity       (d/entity db id)
-        ids          (set (cons id (ldb/get-block-alias db id)))
+        ids          (target-ref-ids db id)
         page-filters (get-filters entity)
         excludes     (map :db/id (:excluded page-filters))
         includes     (map :db/id (:included page-filters))
         has-filters? (or (seq excludes) (seq includes))
 
-        class-ids    (when (ldb/class? entity)
-                       (let [class-children (db-class/get-structured-children db id)]
-                         (set (conj class-children id))))
+        class-ids    (class-ref-ids db entity id)
         ;; Collect all top ref blocks that directly reference the page (or any alias).
         full-ref-block-ids
-        (->> ids
-             (mapcat (fn [pid] (:block/_refs (d/entity db pid))))
-             (remove (fn [ref]
-                       (or
-                        (when class-ids
-                          (some class-ids (map :db/id (:block/tags ref))))
-                        (entity-util/hidden? ref)
-                        (entity-util/hidden? (:block/page ref)))))
+        (->> (top-ref-blocks db ids class-ids)
              (map :db/id)
              set)
         ;; matched can be top or child ids
@@ -281,13 +343,16 @@
           (set/intersection full-ref-block-ids matched-refs-with-children-ids)
           full-ref-block-ids)
         ;; Materialize only at the end.
-        ref-blocks (map #(d/entity db %) final-ref-ids)
+        raw-ref-blocks (map #(d/entity db %) final-ref-ids)
+        {:keys [ref-blocks property-value-ref-ids]} (normalize-ref-blocks raw-ref-blocks)
         children-ids
-        (if has-filters?
-          (set (remove full-ref-block-ids matched-refs-with-children-ids))
-          (->> ref-blocks
-               (mapcat (fn [ref] (ldb/get-block-children-ids db (:db/id ref))))
-               set))]
+        (set/union
+         property-value-ref-ids
+         (if has-filters?
+           (set (remove full-ref-block-ids matched-refs-with-children-ids))
+           (->> ref-blocks
+                (mapcat (fn [ref] (ldb/get-block-children-ids db (:db/id ref))))
+                set)))]
     {:ref-blocks ref-blocks
      :ref-pages-count (get-ref-pages-count db id ref-blocks children-ids)
      :ref-matched-children-ids (when has-filters? children-ids)}))
