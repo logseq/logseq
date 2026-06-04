@@ -1,0 +1,159 @@
+let any value = Edn_ocaml.Any value
+
+let keyword_name value =
+  if String.length value > 0 && value.[0] = ':' then
+    String.sub value 1 (String.length value - 1)
+  else value
+
+let keyword_t value = Edn_ocaml.Keyword (keyword_name value)
+
+let keyword_to_string (value : Edn_ocaml.keyword Edn_ocaml.t) =
+  match value with
+  | Edn_ocaml.Keyword value -> ":" ^ keyword_name value
+  | _ -> assert false
+
+let keyword_any value = any (keyword_t value)
+let list_t values = Edn_ocaml.List (Iarray.of_list values)
+let vector_t values = Edn_ocaml.Vector (Iarray.of_list values)
+let set_t values = Edn_ocaml.Set (Iarray.of_list values)
+let map_t fields = Edn_ocaml.Map (Iarray.of_list fields)
+let nil = any Edn_ocaml.Nil
+let bool value = any (Edn_ocaml.Bool value)
+let int value = any (Edn_ocaml.Int (Int64.of_int value))
+let int64 value = any (Edn_ocaml.Int value)
+let float value = any (Edn_ocaml.Float value)
+let string value = any (Edn_ocaml.String value)
+let keyword value = any (keyword_t value)
+let uuid value = any (Edn_ocaml.Tagged ("uuid", string value))
+
+let bytes value =
+  any (Edn_ocaml.Tagged ("bytes", string (Bytes.to_string value)))
+
+let list values = any (list_t values)
+let vector values = any (vector_t values)
+let set values = any (set_t values)
+let map fields = any (map_t fields)
+
+let iarray_to_list values =
+  List.init (Iarray.length values) (fun index -> Iarray.get values index)
+
+let keyword_text value = ":" ^ keyword_name value
+
+let int64_to_int_opt value =
+  let int_value = Int64.to_int value in
+  if Int64.of_int int_value = value then Some int_value else None
+
+let as_bool = function
+  | Edn_ocaml.Any (Edn_ocaml.Bool value) -> Some value
+  | _ -> None
+
+let as_int = function
+  | Edn_ocaml.Any (Edn_ocaml.Int value) -> int64_to_int_opt value
+  | _ -> None
+
+let as_int64 = function
+  | Edn_ocaml.Any (Edn_ocaml.Int value) -> Some value
+  | _ -> None
+
+let as_float = function
+  | Edn_ocaml.Any (Edn_ocaml.Float value) -> Some value
+  | _ -> None
+
+let as_string = function
+  | Edn_ocaml.Any (Edn_ocaml.String value) -> Some value
+  | _ -> None
+
+let as_keyword = function
+  | Edn_ocaml.Any (Edn_ocaml.Keyword value) -> Some (keyword_text value)
+  | _ -> None
+
+let as_keyword_t = function
+  | Edn_ocaml.Any (Edn_ocaml.Keyword value) -> Some (keyword_t value)
+  | _ -> None
+
+let rec as_uuid = function
+  | Edn_ocaml.Any (Edn_ocaml.Tagged ("uuid", value)) -> as_string value
+  | _ -> None
+
+let rec as_bytes = function
+  | Edn_ocaml.Any (Edn_ocaml.Tagged ("bytes", value)) ->
+      Option.map Bytes.of_string (as_string value)
+  | _ -> None
+
+let as_list = function
+  | Edn_ocaml.Any (Edn_ocaml.List values) -> Some (iarray_to_list values)
+  | _ -> None
+
+let as_vector = function
+  | Edn_ocaml.Any (Edn_ocaml.Vector values) -> Some (iarray_to_list values)
+  | _ -> None
+
+let as_vector_t = function
+  | Edn_ocaml.Any (Edn_ocaml.Vector values) -> Some (Edn_ocaml.Vector values)
+  | _ -> None
+
+let as_set = function
+  | Edn_ocaml.Any (Edn_ocaml.Set values) -> Some (iarray_to_list values)
+  | _ -> None
+
+let as_map = function
+  | Edn_ocaml.Any (Edn_ocaml.Map fields) -> Some (iarray_to_list fields)
+  | _ -> None
+
+let as_map_t = function
+  | Edn_ocaml.Any (Edn_ocaml.Map fields) -> Some (Edn_ocaml.Map fields)
+  | _ -> None
+
+let expect_vector_t label value =
+  match as_vector_t value with
+  | Some value -> value
+  | None -> invalid_arg (label ^ " must be an EDN vector")
+
+let expect_map_t label value =
+  match as_map_t value with
+  | Some value -> value
+  | None -> invalid_arg (label ^ " must be an EDN map")
+
+let is_null = function Edn_ocaml.Any Edn_ocaml.Nil -> true | _ -> false
+
+let as_seq value =
+  match (as_list value, as_vector value, as_set value) with
+  | Some values, _, _ | _, Some values, _ | _, _, Some values -> Some values
+  | _ -> None
+
+let as_string_like value =
+  match (as_string value, as_keyword value, as_uuid value) with
+  | Some value, _, _ | _, Some value, _ | _, _, Some value -> Some value
+  | _ -> None
+
+let key_matches key field =
+  match (as_keyword field, as_string field) with
+  | Some value, _ | _, Some value -> value = key || value = ":" ^ key
+  | _ -> false
+
+let get value key =
+  match as_map value with
+  | Some fields ->
+      fields
+      |> List.find_map (fun (field, value) ->
+          if key_matches key field then Some value else None)
+  | None -> None
+
+let get_string value key = Option.bind (get value key) as_string_like
+let get_int value key = Option.bind (get value key) as_int
+let get_int64 value key = Option.bind (get value key) as_int64
+let get_bool value key = Option.bind (get value key) as_bool
+
+let assoc key value raw =
+  match as_map raw with
+  | Some fields ->
+      map
+        ((keyword key, value)
+        :: List.filter (fun (field, _) -> not (key_matches key field)) fields)
+  | None -> map [ (keyword key, value); (keyword "_", raw) ]
+
+let remove key raw =
+  match as_map raw with
+  | Some fields ->
+      map (List.filter (fun (field, _) -> not (key_matches key field)) fields)
+  | None -> raw
