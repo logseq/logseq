@@ -1,5 +1,6 @@
 (ns frontend.components.icon
   (:require ["@emoji-mart/data" :as emoji-data]
+            ["react" :as react]
             ["@tabler/icons-react" :as tabler-icons]
             ["emoji-mart" :refer [SearchIndex]]
             [camel-snake-kebab.core :as csk]
@@ -172,8 +173,9 @@
 
 (defn- keyed-item-render
   [idx item opts]
-  [:<> {:key (item-render-key item idx)}
-   (item-render item opts)])
+  (react/cloneElement
+   (item-render item opts)
+   #js {:key (item-render-key item idx)}))
 
 (hsx/defc pane-section
   [label items & {:keys [searching? virtual-list?]
@@ -267,7 +269,7 @@
         icon-items (take 48 (get-tabler-icons))
         opts (assoc opts :virtual-list? false)]
     [:div.all-pane.pb-10
-     (when (count used-items)
+     (when (seq used-items)
        (pane-section (t :ui/frequently-used) used-items opts))
      (pane-section (t :icon/emojis-count (count emojis))
                    emoji-items

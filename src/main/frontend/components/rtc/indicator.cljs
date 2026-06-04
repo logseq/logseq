@@ -264,13 +264,18 @@
                  (let [graph-uuid (:graph-uuid first-log)]
                    (take-while (fn [log] (= (str graph-uuid) (str (:graph-uuid log)))) logs))))))))
 
+(defn- log-row-key
+  [prefix idx log]
+  (str prefix "-" (:graph-uuid log) "-" (:sub-type log) "-" (:message log) "-" idx))
+
 (hsx/defc downloading-logs
   []
   (let [download-logs-flow (accumulated-logs-flow *accumulated-download-logs)
         download-logs (hooks/use-flow-state download-logs-flow)]
     (when (seq download-logs)
       [:div.flex.flex-col.gap-1
-       (for [log download-logs]
+       (for [[idx log] (map-indexed vector download-logs)]
+         ^{:key (log-row-key "download" idx log)}
          [:div (string/capitalize (:message log))])])))
 
 (hsx/defc uploading-logs
@@ -279,7 +284,8 @@
         upload-logs (hooks/use-flow-state upload-logs-flow)]
     (when (seq upload-logs)
       [:div.capitalize.flex.flex-col.gap-1
-       (for [log (reverse upload-logs)]
+       (for [[idx log] (map-indexed vector (reverse upload-logs))]
+         ^{:key (log-row-key "upload" idx log)}
          [:div (:message log)])])))
 
 (def ^:private downloading?-flow
