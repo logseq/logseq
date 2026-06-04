@@ -166,7 +166,7 @@
 ;; http request
 (defonce ^:private *request-k (volatile! 0))
 
-(defn ^:export exper_request
+(defn ^:export net_request
   [pid ^js options]
   (when-let [^js pl (plugin-handler/get-plugin-inst pid)]
     (let [req-id (vreset! *request-k (inc @*request-k))
@@ -176,7 +176,7 @@
           (p/catch #(req-cb %)))
       req-id)))
 
-(defn ^:export http_request_abort
+(defn ^:export net_request_abort
   [req-id]
   (ipc/ipc :httpRequestAbort req-id))
 

@@ -88,3 +88,23 @@
    (delete-impl url nil))
   ([url options]
    (delete-impl url options)))
+
+(defn stream
+  "Stream a HTTP response body as text or binary chunks.\n\nThe first version uses browser `fetch`, including on desktop plugin iframes,\nso it is still subject to normal CORS rules until host-proxied streaming is\nimplemented."
+  [options]
+  (let [method (aget api-proxy "stream")
+        args [options]]
+    (core/call-method api-proxy method args)))
+
+(defn- clear-cache-impl
+  [key]
+  (let [method (aget api-proxy "clearCache")
+        args [key]]
+    (core/call-method api-proxy method args)))
+
+(defn clear-cache
+  "Clear in-memory GET/HEAD cache entries created when `cache` is enabled.\n\nPass a cache key to invalidate a specific entry. Omitting the key clears\nthe entire cache."
+  ([]
+   (clear-cache-impl nil))
+  ([key]
+   (clear-cache-impl key)))

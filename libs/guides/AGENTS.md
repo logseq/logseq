@@ -328,6 +328,48 @@ const url = await logseq.Assets.makeUrl('path/to/file')
 await logseq.Assets.builtInOpen('path/to/asset. pdf')
 ```
 
+### `logseq.Net` - HTTP Client
+
+Desktop requests are proxied by the host process so iframe plugins can avoid
+browser CORS limitations. Web mode falls back to the browser `fetch` API.
+
+```typescript
+const response = await logseq.Net.request({
+  url: 'https://api.example.com/items',
+  method: 'GET',
+  responseType: 'json',
+  cache: { ttl: 60_000 },
+})
+
+const body = await response.json()
+
+const data = await logseq.Net.get('https://api.example.com/items', {
+  cache: true,
+  retry: 2,
+})
+
+logseq.Net.clearCache()
+
+const stream = await logseq.Net.stream({
+  url: 'https://example.com/sse-or-chunked-text',
+  responseType: 'text',
+})
+
+for await (const chunk of stream) {
+  console.log(chunk)
+}
+```
+
+Supported today:
+
+- `request(options)` → `LSPluginNetResponse` with `.json()` / `.text()` /
+  `.arrayBuffer()`
+- `stream(options)` → `LSPluginNetStreamResponse`, consumable with `for await`
+- shortcut helpers: `get`, `head`, `post`, `put`, `patch`, `delete`
+- `timeout`, `AbortSignal`, retry, GET/HEAD in-memory cache, `clearCache()`
+- current `stream()` is fetch-based and therefore still subject to normal CORS
+  rules until host-proxied streaming is implemented
+
 ## UI Injection Patterns
 
 ### provideUI - Inject Custom UI

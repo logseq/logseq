@@ -139,6 +139,35 @@ const serializeCallable = (symbol, member) => {
   };
 };
 
+const dedupeCallables = (callables) => {
+  const merged = new Map();
+
+  callables.forEach((callable) => {
+    if (!callable) return;
+
+    const existing = merged.get(callable.name);
+    if (!existing) {
+      merged.set(callable.name, callable);
+      return;
+    }
+
+    const seen = new Set(existing.signatures.map((sig) => JSON.stringify(sig)));
+    callable.signatures.forEach((sig) => {
+      const key = JSON.stringify(sig);
+      if (!seen.has(key)) {
+        existing.signatures.push(sig);
+        seen.add(key);
+      }
+    });
+
+    if (!existing.documentation && callable.documentation) {
+      existing.documentation = callable.documentation;
+    }
+  });
+
+  return Array.from(merged.values());
+};
+
 const sourceFiles = project.getSourceFiles();
 sourceFiles.forEach((source) => {
   source.getInterfaces().forEach((iface) => {
@@ -149,10 +178,10 @@ sourceFiles.forEach((source) => {
 
     const interfaceSymbol = iface.getType().getSymbol();
     const doc = serializeDoc(interfaceSymbol);
-    const methods = iface
+    const methods = dedupeCallables(iface
       .getMembers()
       .map((member) => serializeCallable(member.getSymbol(), member))
-      .filter(Boolean);
+      .filter(Boolean));
 
     schema.interfaces[name] = {
       documentation: doc,
@@ -168,11 +197,11 @@ sourceFiles.forEach((source) => {
 
     const classSymbol = cls.getType().getSymbol();
     const doc = serializeDoc(classSymbol);
-    const methods = cls
+    const methods = dedupeCallables(cls
       .getInstanceMethods()
       .filter((method) => method.getName() !== 'constructor')
       .map((method) => serializeCallable(method.getSymbol(), method))
-      .filter(Boolean);
+      .filter(Boolean));
     const getters = cls.getGetAccessors().map((accessor) => ({
       name: accessor.getName(),
       documentation: serializeDoc(accessor.getSymbol()),

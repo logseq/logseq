@@ -1246,6 +1246,18 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   UI: IUIProxy
   Assets: IAssetsProxy
 
+  /**
+   * HTTP client for plugins. Desktop requests are proxied by the host process so
+   * iframe plugins can avoid browser CORS limitations. Web requests fall back to
+   * browser fetch and are subject to normal CORS rules.
+   *
+   * Use `clearCache()` to invalidate in-memory GET/HEAD cache entries created by
+   * `request()` and the shortcut helpers when `cache` is enabled.
+   *
+   * Use `stream()` to consume a response body incrementally as text or binary
+   * chunks. The first version uses browser `fetch`, so it remains subject to
+   * normal CORS rules until host-proxied streaming is implemented.
+   */
   Net: LSPluginNet
   FileStorage: LSPluginFileStorage
   Experiments: LSPluginExperiments

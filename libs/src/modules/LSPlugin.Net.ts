@@ -9,6 +9,8 @@ export type NetResponseType =
   | 'arraybuffer'
   | 'arrayBuffer'
 
+export type NetStreamResponseType = 'text' | 'arraybuffer'
+
 export type NetHeaders = Record<string, string>
 
 export type NetRetryOptions = {
@@ -45,6 +47,13 @@ export type NetRequestConfig<TBody = any> = Omit<
   'url' | 'method'
 >
 
+export type NetStreamRequestOptions<TBody = any> = Omit<
+  NetRequestOptions<TBody>,
+  'responseType' | 'retry' | 'cache'
+> & {
+  responseType?: NetStreamResponseType
+}
+
 export type NetRequestBody<TBody = any> = TBody | string | ArrayBuffer
 
 export type NetResponsePayload<T = any> = {
@@ -68,6 +77,8 @@ type CacheEntry<T = any> = {
 
 type HostResponseType = 'json' | 'text' | 'base64' | 'arraybuffer'
 
+type StreamChunk = string | Uint8Array
+
 type HostRequestID = string | number
 
 const DEFAULT_CACHE_TTL = 5 * 60 * 1000
@@ -77,6 +88,12 @@ const genTaskCallbackType = (id: HostRequestID) => `task_callback_${id}`
 
 function normalizeResponseType(type?: NetResponseType): HostResponseType {
   return type === 'arrayBuffer' ? 'arraybuffer' : type || 'json'
+}
+
+function normalizeStreamResponseType(
+  type?: NetStreamResponseType
+): NetStreamResponseType {
+  return type || 'text'
 }
 
 function makeAbortError() {
@@ -266,6 +283,103 @@ export class LSPluginNetError<T = any> extends Error {
   }
 }
 
+/**
+ * Streaming HTTP response for plugins.
+ *
+ * The stream can only be consumed once. Use `for await ... of` to iterate text
+ * or binary chunks.
+ */
+export class LSPluginNetStreamResponse<
+  TChunk extends StreamChunk = string | Uint8Array,
+> implements AsyncIterable<TChunk> {
+  private _consumed = false
+
+  constructor(
+    private _payload: Omit<NetResponsePayload<null>, 'body'>,
+    private _body: ReadableStream<Uint8Array> | null,
+    private _responseType: NetStreamResponseType,
+    private _fallbackChunk?: TChunk
+  ) {}
+
+  get status() {
+    return this._payload.status
+  }
+
+  get statusText() {
+    return this._payload.statusText
+  }
+
+  get ok() {
+    return this._payload.ok
+  }
+
+  get url() {
+    return this._payload.url
+  }
+
+  get headers() {
+    return this._payload.headers
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<TChunk> {
+    if (this._consumed) {
+      throw new Error('LSPluginNetStreamResponse can only be consumed once')
+    }
+
+    this._consumed = true
+    return this.iterate()
+  }
+
+  private async *iterate(): AsyncGenerator<TChunk, void, unknown> {
+    if (typeof this._fallbackChunk !== 'undefined') {
+      yield this._fallbackChunk
+      return
+    }
+
+    if (!this._body) return
+
+    const reader = this._body.getReader()
+    const decoder =
+      this._responseType === 'text' ? new TextDecoder() : undefined
+    let doneReading = false
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+
+        if (done) {
+          doneReading = true
+          break
+        }
+
+        if (!value) continue
+
+        if (decoder) {
+          const chunk = decoder.decode(value, { stream: true })
+          if (chunk) yield chunk as TChunk
+        } else {
+          yield value as TChunk
+        }
+      }
+
+      if (decoder) {
+        const chunk = decoder.decode()
+        if (chunk) yield chunk as TChunk
+      }
+    } finally {
+      if (!doneReading) {
+        try {
+          await reader.cancel()
+        } catch {}
+      }
+
+      try {
+        reader.releaseLock()
+      } catch {}
+    }
+  }
+}
+
 function responseBodyOrThrow<T>(response: LSPluginNetResponse<T>) {
   if (response.status >= 200 && response.status < 300) {
     return response.body
@@ -397,6 +511,43 @@ export class LSPluginNet {
     return this.requestWithMethod<T, TBody>('DELETE', url, options)
   }
 
+  /**
+   * Stream a HTTP response body as text or binary chunks.
+   *
+   * The first version uses browser `fetch`, including on desktop plugin iframes,
+   * so it is still subject to normal CORS rules until host-proxied streaming is
+   * implemented.
+   */
+  stream<TBody = any>(
+    options: NetStreamRequestOptions<TBody> & { responseType: 'arraybuffer' }
+  ): Promise<LSPluginNetStreamResponse<Uint8Array>>
+  stream<TBody = any>(
+    options: NetStreamRequestOptions<TBody> & { responseType?: 'text' }
+  ): Promise<LSPluginNetStreamResponse<string>>
+  async stream<TBody = any>(
+    options: NetStreamRequestOptions<TBody>
+  ): Promise<LSPluginNetStreamResponse<string | Uint8Array>> {
+    const method = (options.method || 'GET').toUpperCase() as NetMethod
+    const responseType = normalizeStreamResponseType(options.responseType)
+
+    return this.performFetchStreamRequest(options, method, responseType)
+  }
+
+  /**
+   * Clear in-memory GET/HEAD cache entries created when `cache` is enabled.
+   *
+   * Pass a cache key to invalidate a specific entry. Omitting the key clears
+   * the entire cache.
+   */
+  clearCache(key?: string) {
+    if (typeof key === 'string') {
+      this._cache.delete(key)
+      return
+    }
+
+    this._cache.clear()
+  }
+
   private requestWithMethod<T = any, TBody = any>(
     method: NetMethod,
     url: string,
@@ -456,7 +607,7 @@ export class LSPluginNet {
 
     const abortable = Boolean(options.abortable || options.signal)
     const reqId = await this._ctx._execCallableAPIAsync(
-      'exper_request',
+      'net_request',
       this._ctx.baseInfo.id,
       {
         url: options.url,
@@ -506,7 +657,70 @@ export class LSPluginNet {
 
   private abortProxyRequest(reqId: HostRequestID, abortable: boolean) {
     if (!abortable) return
-    this._ctx._execCallableAPI('http_request_abort', reqId)
+    this._ctx._execCallableAPI('net_request_abort', reqId)
+  }
+
+  private async performFetchStreamRequest(
+    options: NetStreamRequestOptions,
+    method: NetMethod,
+    responseType: NetStreamResponseType
+  ) {
+    if (typeof fetch !== 'function') {
+      throw new Error('Browser fetch is not available')
+    }
+
+    if (options.signal?.aborted) {
+      throw makeAbortError()
+    }
+
+    const timeout =
+      typeof options.timeout === 'number' && options.timeout > 0
+        ? options.timeout
+        : undefined
+    const controller = timeout || options.signal ? new AbortController() : null
+    const abort = () => controller?.abort()
+    const timeoutId = timeout ? setTimeout(abort, timeout) : null
+
+    options.signal?.addEventListener('abort', abort, { once: true })
+
+    try {
+      const response = await fetch(options.url, {
+        method,
+        headers: options.headers,
+        body: ['GET', 'HEAD'].includes(method)
+          ? undefined
+          : bodyToFetchBody(options.body ?? options.data),
+        signal: controller?.signal || options.signal,
+      })
+
+      const emptyBody =
+        method === 'HEAD' || response.status === 204 || response.status === 205
+      const body = emptyBody ? null : response.body
+      let fallbackChunk: StreamChunk | undefined
+
+      if (!emptyBody && !body) {
+        fallbackChunk =
+          responseType === 'text'
+            ? await response.text()
+            : new Uint8Array(await response.arrayBuffer())
+      }
+
+      return new LSPluginNetStreamResponse(
+        {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+          url: response.url,
+          headers: headersToRecord(response.headers),
+        },
+        body,
+        responseType,
+        fallbackChunk as string | Uint8Array | undefined
+      )
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId)
+      options.signal?.removeEventListener('abort', abort)
+    }
   }
 
   private async performFetchRequest<T>(
