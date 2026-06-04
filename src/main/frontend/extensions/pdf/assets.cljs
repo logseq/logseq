@@ -12,14 +12,12 @@
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
             [frontend.date :as date]
-            [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.ref :as ref]
             [logseq.common.config :as common-config]
             [logseq.graph-parser.exporter :as gp-exporter]
             [promesa.core :as p]
-            [reitit.frontend.easy :as rfe]
-            [io.factorhouse.hsx.core :as hsx]))
+            [reitit.frontend.easy :as rfe]))
 
 (defn get-in-repo-assets-full-filename
   [url]
