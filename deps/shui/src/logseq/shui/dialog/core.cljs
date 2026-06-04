@@ -192,9 +192,7 @@
                                     (close! id))))
            handle-pointer-down-outside! (fn [^js e]
                                           (when (fn? onPointerDownOutside)
-                                            (onPointerDownOutside e))
-                                          (when-not (some-> (.-target e) (.closest ".ui__dialog-overlay"))
-                                            (.preventDefault e)))
+                                            (onPointerDownOutside e)))
            content-props (-> content-props
                              (dissoc :onEscapeKeyDown :onPointerDownOutside)
                              (assoc :onEscapeKeyDown handle-key-escape!
