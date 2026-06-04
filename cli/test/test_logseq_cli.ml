@@ -13609,7 +13609,7 @@ setInterval(() => {}, 1000);
           in
           assert_int ~name:"remove property ambiguous exit" 1 output.exit_code;
           assert_equal ~name:"remove property ambiguous json"
-            {|{"status":"error","error":{"code":"ambiguous-property-name","message":"multiple propertys match name: Owner; rerun with --id","candidates":[{"id":7,"name":"Owner"},{"id":9,"name":"owner"}]}}|}
+            {|{"status":"error","error":{"code":"ambiguous-property-name","message":"multiple properties match name: Owner; rerun with --id","candidates":[{"id":7,"name":"Owner"},{"id":9,"name":"owner"}]}}|}
             (String.trim (cli_stdout output))));
 
   check "Cli.run rejects built-in remove property id" (fun () ->
