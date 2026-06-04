@@ -94,11 +94,8 @@
 }
 
 @layer components {
-  .ui__dialog-overlay[data-base-ui-inert],
-  .ui__alert-dialog-overlay[data-base-ui-inert],
   .ui__dialog-content[data-base-ui-inert],
-  .ui__alert-dialog-content[data-base-ui-inert],
-  [role="presentation"][data-base-ui-inert] {
+  .ui__alert-dialog-content[data-base-ui-inert] {
     pointer-events: none !important;
 
     * {
