@@ -1,0 +1,410 @@
+type env = string -> string option
+
+type defaults = {
+  timeout_ms : Cli_primitive.duration_ms;
+  login_timeout_ms : Cli_primitive.duration_ms;
+  logout_timeout_ms : Cli_primitive.duration_ms;
+  list_title_max_display_width : int;
+  root_dir : Cli_primitive.path;
+  ws_url : Cli_primitive.url;
+  http_base : Cli_primitive.url;
+}
+
+type t = {
+  graph : Cli_primitive.graph option;
+  repo : Cli_primitive.repo option;
+  root_dir : Cli_primitive.path;
+  config_path : Cli_primitive.path;
+  timeout_ms : Cli_primitive.duration_ms;
+  login_timeout_ms : Cli_primitive.duration_ms;
+  logout_timeout_ms : Cli_primitive.duration_ms;
+  list_title_max_display_width : int;
+  output_format : Output.Mode.packed option;
+  verbose : bool;
+  profile : bool;
+  ws_url : Cli_primitive.url option;
+  http_base : Cli_primitive.url option;
+  auth_path : Cli_primitive.path option;
+  id_token : string option;
+  access_token : string option;
+  refresh_token : string option;
+  base_url : Cli_primitive.url option;
+  owner_source : Cli_primitive.owner_source;
+  project_dir : Cli_primitive.path option;
+  raw_file_config : Edn_ocaml.any option;
+  profile_session : Profile_types.session option;
+}
+
+type source = Defaults | Env | File of Cli_primitive.path | Argv
+type resolved = { config : t; sources : source list }
+
+let default_root_dir () =
+  Filename.concat (Sys.getenv_opt "HOME" |> Option.value ~default:".") "logseq"
+
+let default_config_path root_dir = Filename.concat root_dir "cli.edn"
+
+let defaults () =
+  {
+    timeout_ms = 10_000L;
+    login_timeout_ms = 300_000L;
+    logout_timeout_ms = 120_000L;
+    list_title_max_display_width = 40;
+    root_dir = default_root_dir ();
+    ws_url = "wss://api.logseq.io/sync/%s";
+    http_base = "https://api.logseq.io";
+  }
+
+let db_version_prefix = "logseq_db_"
+
+let starts_with ~prefix value =
+  let prefix_len = String.length prefix in
+  String.length value >= prefix_len && String.sub value 0 prefix_len = prefix
+
+let strip_db_version_prefix value =
+  if starts_with ~prefix:db_version_prefix value then
+    String.sub value
+      (String.length db_version_prefix)
+      (String.length value - String.length db_version_prefix)
+  else value
+
+let graph_to_repo graph =
+  let stripped =
+    let rec loop value =
+      if starts_with ~prefix:db_version_prefix value then
+        loop (strip_db_version_prefix value)
+      else value
+    in
+    loop (Cli_primitive.string_of_graph graph)
+  in
+  Cli_primitive.create_repo stripped
+
+let repo_to_graph repo =
+  Cli_primitive.create_graph
+    (strip_db_version_prefix (Cli_primitive.string_of_repo repo))
+let value_of_edn edn = edn
+
+let edn_string_escape value =
+  let buffer = Buffer.create (String.length value + 8) in
+  String.iter
+    (function
+      | '"' -> Buffer.add_string buffer "\\\""
+      | '\\' -> Buffer.add_string buffer "\\\\"
+      | '\n' -> Buffer.add_string buffer "\\n"
+      | '\r' -> Buffer.add_string buffer "\\r"
+      | '\t' -> Buffer.add_string buffer "\\t"
+      | c -> Buffer.add_char buffer c)
+    value;
+  Buffer.contents buffer
+
+let edn_of_value = Edn_ocaml.to_edn_string
+
+let read_file path =
+  let ic = open_in_bin path in
+  Fun.protect
+    ~finally:(fun () -> close_in_noerr ic)
+    (fun () ->
+      let len = in_channel_length ic in
+      really_input_string ic len)
+
+let read_config_file path =
+  if not (Sys.file_exists path) then Ok None
+  else
+    try Ok (Some (Edn_ocaml.of_edn_string (read_file path) |> value_of_edn))
+    with exn ->
+      Error
+        (Error.make
+           (Edn_util.keyword_t "invalid-config")
+           ("invalid config file: " ^ path ^ " (" ^ Printexc.to_string exn ^ ")"))
+
+let current_graph_path root_dir = Filename.concat root_dir "current-graph"
+
+let read_current_graph root_dir =
+  let path = current_graph_path root_dir in
+  if not (Sys.file_exists path) then None
+  else
+    try
+      let graph = String.trim (read_file path) in
+      if graph = "" then None else Some (Cli_primitive.create_graph graph)
+    with _ -> None
+
+let parse_int_value value =
+  let value = String.trim value in
+  if value = "" then None
+  else Option.map Edn_util.int64 (Int64.of_string_opt value)
+
+let env_string key env value_key fields =
+  match env key with
+  | Some value when String.trim value <> "" ->
+      (Edn_util.keyword value_key, Edn_util.string value) :: fields
+  | _ -> fields
+
+let env_int key env value_key fields =
+  match Option.bind (env key) parse_int_value with
+  | Some value -> (Edn_util.keyword value_key, value) :: fields
+  | None -> fields
+
+let env_config env =
+  let fields =
+    []
+    |> env_string "LOGSEQ_CLI_GRAPH" env ":graph"
+    |> env_string "LOGSEQ_CLI_ROOT_DIR" env ":root-dir"
+    |> env_string "LOGSEQ_CLI_CONFIG" env ":config-path"
+    |> env_int "LOGSEQ_CLI_TIMEOUT_MS" env ":timeout-ms"
+    |> env_int "LOGSEQ_CLI_LOGIN_TIMEOUT_MS" env ":login-timeout-ms"
+    |> env_int "LOGSEQ_CLI_LOGOUT_TIMEOUT_MS" env ":logout-timeout-ms"
+    |> env_string "LOGSEQ_CLI_OUTPUT" env ":output-format"
+    |> env_string "LOGSEQ_CLI_WS_URL" env ":ws-url"
+    |> env_string "LOGSEQ_CLI_HTTP_BASE" env ":http-base"
+  in
+  Edn_util.map_t (List.rev fields)
+
+let sanitize_file_config value =
+  match Edn_util.as_map value with
+  | Some fields ->
+      Edn_util.map
+        (List.filter
+           (fun (key, _) ->
+             match Edn_util.as_string_like key with
+             | Some
+                 ( ":auth-token" | ":retries" | ":e2ee-password" | "auth-token"
+                 | "retries" | "e2ee-password" ) ->
+                 false
+             | _ -> true)
+           fields)
+  | None -> value
+
+let assoc_opt key value fields =
+  match value with
+  | None -> fields
+  | Some value ->
+      (Edn_util.keyword key, Edn_util.string value)
+      :: List.remove_assoc (Edn_util.keyword key) fields
+
+let map_fields value = Option.value (Edn_util.as_map value) ~default:[]
+
+let rec mkdir_p path =
+  if path = "" || path = Filename.dirname path || Sys.file_exists path then ()
+  else (
+    mkdir_p (Filename.dirname path);
+    Cli_unix.mkdir path 0o755)
+
+let write_config_file path value =
+  mkdir_p (Filename.dirname path);
+  let oc = open_out_bin path in
+  Fun.protect
+    ~finally:(fun () -> close_out_noerr oc)
+    (fun () -> output_string oc (edn_of_value value ^ "\n"))
+
+let pick_graph config globals =
+  match globals.Global_opts.graph with Some _ as g -> g | None -> config.graph
+
+let pick_repo config globals =
+  match pick_graph config globals with
+  | Some graph -> Some (graph_to_repo graph)
+  | None -> config.repo
+
+let value_string key value = Edn_util.get_string value key
+let value_int key value = Edn_util.get_int value key
+let value_int64 key value = Edn_util.get_int64 value key
+
+let normalize_output_string value =
+  let value = String.trim value in
+  if value <> "" && value.[0] = ':' then
+    String.sub value 1 (String.length value - 1)
+  else value
+
+let value_output key value =
+  Option.bind (value_string key value) (fun value ->
+      Output.Mode.of_string (normalize_output_string value))
+
+let first_some values = List.find_map (fun value -> value) values
+
+let positive_or_default value default =
+  match value with Some value when value > 0 -> value | _ -> default
+
+let resolve ~(defaults : defaults) ~env (globals : Global_opts.t) =
+  let env_config = Edn_util.any (env_config env) in
+  let initial_root_dir =
+    first_some
+      [
+        globals.root_dir;
+        value_string ":root-dir" env_config;
+        Some defaults.root_dir;
+      ]
+    |> Option.value ~default:defaults.root_dir
+  in
+  let config_path =
+    first_some
+      [
+        globals.config_path;
+        value_string ":config-path" env_config;
+        Some (default_config_path initial_root_dir);
+      ]
+    |> Option.value ~default:(default_config_path initial_root_dir)
+  in
+  match read_config_file config_path with
+  | Error _ as err -> Cli_effect.pure err
+  | Ok raw_file_config ->
+      let raw_file_config = Option.map sanitize_file_config raw_file_config in
+      let base_url = env "LOGSEQ_CLI_BASE_URL" in
+      let file_graph =
+        Option.bind raw_file_config (value_string ":graph")
+        |> Option.map Cli_primitive.create_graph
+      in
+      let env_graph =
+        value_string ":graph" env_config |> Option.map Cli_primitive.create_graph
+      in
+      let root_dir =
+        first_some
+          [
+            globals.root_dir;
+            value_string ":root-dir" env_config;
+            Option.bind raw_file_config (value_string ":root-dir");
+            Some initial_root_dir;
+          ]
+        |> Option.value ~default:initial_root_dir
+      in
+      let current_graph = read_current_graph root_dir in
+      let graph =
+        first_some [ globals.graph; env_graph; current_graph; file_graph ]
+      in
+      let repo = Option.map graph_to_repo graph in
+      let file_ws_url =
+        Option.bind raw_file_config (fun value ->
+            Edn_util.get_string value ":ws-url")
+      in
+      let file_http_base =
+        Option.bind raw_file_config (fun value ->
+            Edn_util.get_string value ":http-base")
+      in
+      let file_auth_path =
+        Option.bind raw_file_config (fun value ->
+            Edn_util.get_string value ":auth-path")
+      in
+      let file_id_token =
+        Option.bind raw_file_config (fun value ->
+            Edn_util.get_string value ":id-token")
+      in
+      let file_access_token =
+        Option.bind raw_file_config (fun value ->
+            Edn_util.get_string value ":access-token")
+      in
+      let file_refresh_token =
+        Option.bind raw_file_config (fun value ->
+            Edn_util.get_string value ":refresh-token")
+      in
+      let env_ws_url = Edn_util.get_string env_config ":ws-url" in
+      let env_http_base = Edn_util.get_string env_config ":http-base" in
+      let output_format =
+        first_some
+          [
+            globals.output_format;
+            value_output ":output-format" env_config;
+            Option.bind raw_file_config (value_output ":output-format");
+            Option.bind raw_file_config (value_output ":output");
+          ]
+      in
+      let timeout_ms =
+        first_some
+          [
+            globals.timeout_ms;
+            value_int64 ":timeout-ms" env_config;
+            Option.bind raw_file_config (value_int64 ":timeout-ms");
+            Some defaults.timeout_ms;
+          ]
+        |> Option.value ~default:defaults.timeout_ms
+      in
+      let login_timeout_ms =
+        first_some
+          [
+            value_int64 ":login-timeout-ms" env_config;
+            Option.bind raw_file_config (value_int64 ":login-timeout-ms");
+            Some defaults.login_timeout_ms;
+          ]
+        |> Option.value ~default:defaults.login_timeout_ms
+      in
+      let logout_timeout_ms =
+        first_some
+          [
+            value_int64 ":logout-timeout-ms" env_config;
+            Option.bind raw_file_config (value_int64 ":logout-timeout-ms");
+            Some defaults.logout_timeout_ms;
+          ]
+        |> Option.value ~default:defaults.logout_timeout_ms
+      in
+      let list_title_max_display_width =
+        positive_or_default
+          (Option.bind raw_file_config
+             (value_int ":list-title-max-display-width"))
+          defaults.list_title_max_display_width
+      in
+      let config =
+        {
+          graph;
+          repo;
+          root_dir;
+          config_path;
+          timeout_ms;
+          login_timeout_ms;
+          logout_timeout_ms;
+          list_title_max_display_width;
+          output_format;
+          verbose = globals.verbose;
+          profile = globals.profile;
+          ws_url =
+            Some
+              (Option.value env_ws_url
+                 ~default:(Option.value file_ws_url ~default:defaults.ws_url));
+          http_base =
+            Some
+              (Option.value env_http_base
+                 ~default:
+                   (Option.value file_http_base ~default:defaults.http_base));
+          auth_path = file_auth_path;
+          id_token = file_id_token;
+          access_token = file_access_token;
+          refresh_token = file_refresh_token;
+          base_url;
+          owner_source = Cli_primitive.Cli;
+          project_dir = None;
+          raw_file_config;
+          profile_session = None;
+        }
+      in
+      Cli_effect.pure
+        (Ok { config; sources = [ Defaults; File config_path; Env; Argv ] })
+
+let update_config config patch =
+  let original =
+    match config.raw_file_config with
+    | Some value -> value
+    | None -> Edn_util.map []
+  in
+  let fields = map_fields original in
+  let fields =
+    fields
+    |> assoc_opt ":ws-url" (Edn_util.get_string patch ":ws-url")
+    |> assoc_opt ":http-base" (Edn_util.get_string patch ":http-base")
+  in
+  let fields =
+    match Edn_util.get patch ":ws-url" with
+    | Some value when Edn_util.is_null value ->
+        List.remove_assoc (Edn_util.keyword ":ws-url") fields
+    | _ -> fields
+  in
+  let fields =
+    match Edn_util.get patch ":http-base" with
+    | Some value when Edn_util.is_null value ->
+        List.remove_assoc (Edn_util.keyword ":http-base") fields
+    | _ -> fields
+  in
+  let value = Edn_util.map_t (List.rev fields) in
+  try
+    write_config_file config.config_path (Edn_util.any value);
+    Cli_effect.pure (Ok value)
+  with exn ->
+    Cli_effect.pure
+      (Error
+         (Error.make
+            (Edn_util.keyword_t "config-write-failed")
+            ("failed to write config file: " ^ Printexc.to_string exn)))
