@@ -1,0 +1,10 @@
+(executable
+ (name main)
+ (modes wasm)
+ (libraries logseq_cli lwt))
+
+(install
+ (section bin)
+ (package logseq-cli)
+ (files
+  (main.bc.wasm.js as logseq-cli.js)))

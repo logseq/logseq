@@ -1,0 +1,5 @@
+pin-depends: [
+  ["transit.dev" "git+https://github.com/RCmerci/transit-ocaml.git"]
+  ["edn_ocaml.dev" "git+https://github.com/RCmerci/edn-ocaml.git"]
+  ["humanize.dev" "git+https://github.com/RCmerci/humanize.git"]
+]

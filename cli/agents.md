@@ -1,0 +1,7 @@
+- Do not modify any files under `spec/` during development unless explicitly asked to modify the `.mli` files under `spec/`.
+- If development is blocked because the `.mli` definitions under `spec/` are unclear or unreasonable, stop development immediately and report the specific spec issue, suggested changes, and rationale.
+- IMPORTANT: Code under `lib/` must implement the dune virtual library defined under `spec/`.
+- This repository implements only the CLI portion. It does not include the db-worker-node server, and should use the existing cljs version of the db-worker-node server.
+- Compile with `wasm_of_ocaml`; native-only libraries such as `Unix` are forbidden.
+- Complete the parts that are not blocked by spec issues first, then report the spec blockers at the end.
+- Do not use magic methods to cast types.
