@@ -505,7 +505,7 @@
 (def Checkbox
   (react/forwardRef
    (fn [^js props ref]
-     (let [props' (with-class-props props "ui__checkbox peer h-4 w-4 shrink-0 rounded-sm border border-primary ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[checked]:bg-primary data-[checked]:text-primary-foreground" nil)
+     (let [props' (with-class-props props "ui__checkbox peer h-4 w-4 shrink-0 cursor-pointer rounded-sm border border-primary ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[checked]:bg-primary data-[checked]:text-primary-foreground" nil)
            checked? (true? (prop props "checked"))
            disabled? (true? (prop props "disabled"))]
        (when ref (set-prop! props' "ref" ref))

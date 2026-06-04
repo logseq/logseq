@@ -106,7 +106,7 @@
         checked? (row-selected? row)
         {:keys [last-selected-idx row-selection]} state
         {:keys [set-last-selected-idx! set-row-selection!]} data-fns]
-    [:label.h-8.w-8.flex.items-center.justify-center.cursor-pointer
+    [:label.jtrigger.h-8.w-8.flex.items-center.justify-center.cursor-pointer
      {:html-for (str (:db/id row) "-" "checkbox")
       :on-mouse-over #(set-show! true)
       :on-mouse-out #(set-show! false)}
@@ -134,7 +134,7 @@
                                  (set-last-selected-idx! nil)))
                              (row-toggle-selected! row-selection row v)))
        :aria-label (t :view.table/select-row)
-       :class (str "flex transition-opacity "
+       :class (str "jtrigger flex transition-opacity "
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
 
 (hsx/defc gallery-card-checkbox
@@ -1191,7 +1191,7 @@
             :tabIndex 0
             :ref *ref
             :on-click (fn [e]
-                        (when-not (dom/has-class? (.-target e) "jtrigger")
+                        (when-not (some-> (.-target e) (.closest ".jtrigger"))
                           (click-cell (hooks/deref *ref))))
             :on-key-down (fn [e]
                            (let [container (hooks/deref *ref)]
