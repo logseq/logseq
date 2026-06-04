@@ -1,0 +1,7 @@
+(library
+ (name logseq_cli)
+ (implements logseq_cli_spec)
+ (libraries cmdliner lwt transit edn_ocaml humanize unix)
+ (foreign_stubs
+  (language c)
+  (names js_bytecode_stubs)))

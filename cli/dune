@@ -1,0 +1,4 @@
+(alias
+ (name default)
+ (deps
+  (alias_rec check)))
