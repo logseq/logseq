@@ -35,6 +35,11 @@
 
   .ls-table-row {
     @apply h-[33px] min-h-[33px] max-h-[33px];
+
+    &:has([data-table-row-select] .ui__checkbox[data-checked]) {
+      @apply bg-muted;
+    }
+
     div, span, a {
       @apply whitespace-nowrap;
     }

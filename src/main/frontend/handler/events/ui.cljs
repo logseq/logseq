@@ -325,7 +325,7 @@
   (shui/dialog-open!
    repo/new-db-graph
    {:id :new-db-graph
-    :title [:h2 (t :graph/create-new)]
+    :title (t :graph/create-new)
     :align (if (util/mobile?) :top :center)
     :style {:max-width "500px"}}))
 

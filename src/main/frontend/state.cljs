@@ -334,6 +334,7 @@
       :system/info                           {}
       ;; Whether block is selected
       :ui/select-query-cache                 {}
+      :view/table-selection                  {}
       :ui/toggle-highlight-recent-blocks?    false
       :ui/highlight-recent-days              (or (storage/get :ui/highlight-recent-days)
                                                  3)
@@ -358,6 +359,7 @@
         (if (seq path)
           (get-in value path)
           value))))
+  (rfx/register-state-sub-id! :view/table-selection)
   (rfx/reg-sub! :selection/block-selected?
     [[:selection/blocks]]
     (fn [selection-blocks [_ block-id]]
