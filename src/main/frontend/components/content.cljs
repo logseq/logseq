@@ -1,7 +1,5 @@
 (ns frontend.components.content
-  (:require [cljs-time.coerce :as tc]
-            [cljs.pprint :as pp]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.components.block.comments-model :as comments-model]
@@ -32,14 +30,15 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [logseq.shui.popup.core :as shui-popup]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc ^:large-vars/cleanup-todo custom-context-menu-content
+(hsx/defc ^:large-vars/cleanup-todo custom-context-menu-content
   []
-  (let [[set-icon-sub-menu-open? set-icon-sub-menu-open] (rum/use-state false)
+  (let [[set-icon-sub-menu-open? set-icon-sub-menu-open] (hooks/use-state false)
         comment-targets (comments-model/comment-target-blocks
                          (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids)))]
     [:<>
@@ -166,12 +165,14 @@
       (t :editor/collapse-block-children)
       (ui/dropdown-shortcut :editor/collapse-block-children))]))
 
-(rum/defc ^:large-vars/cleanup-todo block-context-menu-content
+(hsx/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id property-default-value?]
   (let [block (db/entity [:block/uuid block-id])
-        [set-icon-sub-menu-open? set-icon-sub-menu-open] (rum/use-state false)
-        [heading set-heading!] (rum/use-state (or (pu/lookup block :logseq.property/heading) false))
-        [current-color set-current-color!] (rum/use-state (pu/lookup block :logseq.property/background-color))]
+        simple-commands (state/use-sub [:plugin/simple-commands])
+        developer-mode? (state/use-sub [:ui/developer-mode?])
+        [set-icon-sub-menu-open? set-icon-sub-menu-open] (hooks/use-state false)
+        [heading set-heading!] (hooks/use-state (or (pu/lookup block :logseq.property/heading) false))
+        [current-color set-current-color!] (hooks/use-state (pu/lookup block :logseq.property/background-color))]
     (when block
       [:<>
        (ui/menu-background-color current-color
@@ -343,7 +344,7 @@
           (t :editor/collapse-block-children)
           (ui/dropdown-shortcut :editor/collapse-block-children))
 
-         (when (state/sub [:plugin/simple-commands])
+         (when simple-commands
            (when-let [cmds (state/get-plugins-commands-with-type :block-context-menu-item)]
              (for [[_ {:keys [key label] :as cmd} action pid] cmds]
                (shui/dropdown-menu-item
@@ -352,15 +353,15 @@
                              pid (assoc cmd :uuid block-id) action)}
                 label))))
 
-         (when (state/sub [:ui/developer-mode?])
+         (when developer-mode?
            [:<>
             (shui/dropdown-menu-separator)
             (shui/dropdown-menu-sub
              (shui/dropdown-menu-sub-trigger
               (t :context-menu/developer-tools))
 
-              (shui/dropdown-menu-sub-content
-               (shui/dropdown-menu-item
+             (shui/dropdown-menu-sub-content
+              (shui/dropdown-menu-item
                {:key :dev/show-block-data
                 :on-click (fn []
                             (dev-common-handler/show-entity-data [:block/uuid block-id]))}
@@ -371,24 +372,9 @@
                             (let [block (db/entity [:block/uuid block-id])]
                               (dev-common-handler/show-content-ast (:block/title block)
                                                                    (get block :block/format :markdown))))}
-               (shortcut-dh/shortcut-desc-by-id :dev/show-block-ast))
-              (shui/dropdown-menu-item
-               {:key :dev/show-block-content-history
-                :on-click
-                (fn []
-                  (let [token (state/get-auth-id-token)
-                        graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
-                    (p/let [blocks-versions (state/<invoke-db-worker :thread-api/rtc-get-block-content-versions token graph-uuid block-id)]
-                      (doseq [[block-uuid versions] blocks-versions]
-                        (prn :block-uuid block-uuid)
-                        (pp/print-table [:content :created-at]
-                                        (map (fn [version]
-                                               {:created-at (tc/from-long (* (:created-at version) 1000))
-                                                :content (:value version)})
-                                             versions))))))}
-               "(Dev) Show block content history")))])])))
+               (shortcut-dh/shortcut-desc-by-id :dev/show-block-ast))))])])))
 
-(rum/defc block-ref-custom-context-menu-content
+(hsx/defc block-ref-custom-context-menu-content
   [block block-ref-id]
   (when (and block block-ref-id)
     [:<>
@@ -418,7 +404,7 @@
        :on-click (fn [] (editor-handler/replace-ref-with-embed! block block-ref-id))}
       (t :reference/replace-with-embed))]))
 
-(rum/defc page-title-custom-context-menu-content
+(hsx/defc page-title-custom-context-menu-content
   [page popup-id]
   (when page
     (let [page-menu-options (page-menu/page-menu page)]
@@ -435,16 +421,16 @@
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
 ;; blocks were already selected.
-(rum/defc hiccup-content < rum/static
+(hsx/defc hiccup-content
   [id {:keys [hiccup]}]
   [:div {:id id}
    (if hiccup
      hiccup
      [:div.cursor (t :editor/click-to-edit)])])
 
-(rum/defc non-hiccup-content
+(hsx/defc non-hiccup-content
   [id content on-click on-hide config format]
-  (let [edit? (state/sub-editing? id)]
+  (let [edit? (state/use-sub-editing? id)]
     (if edit?
       (editor/box {:on-hide on-hide
                    :format format}
@@ -464,14 +450,13 @@
            [:div.cursor (t :editor/click-to-edit)]
            content)]))))
 
-(rum/defcs content < rum/reactive
-  {}
-  [state id {:keys [format
-                    config
-                    hiccup
-                    on-click
-                    on-hide]
-             :as option}]
+(hsx/defc content
+  [id {:keys [format
+              config
+              hiccup
+              on-click
+              on-hide]
+       :as option}]
   (if hiccup
     [:div
      (hiccup-content id option)]

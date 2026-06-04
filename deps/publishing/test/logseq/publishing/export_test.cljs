@@ -35,6 +35,9 @@
          (reduce concat)
          (concat (get-files dir)))))
 
+(defn- js-map-files []
+  (map #(str % ".map") publish-export/js-files))
+
 (defn- create-export
   [static-dir graph-dir output-dir {:keys [html assets]
                                     :or {html "<!DOCTYPE html>"
@@ -56,6 +59,8 @@
   (fs/mkdirSync (path/join dir "js" "publishing"))
   (mapv #(fs/writeFileSync (path/join dir "js" "publishing" %) %)
         (conj publish-export/js-files "manifest.edn"))
+  (doseq [file (conj (vec (js-map-files)) "db-worker.js.map")]
+    (fs/writeFileSync (path/join dir "js" file) file))
   (fs/writeFileSync (path/join dir "404.html") ""))
 
 (defn- create-logseq-graph
@@ -81,7 +86,10 @@
                "index.html is copied correctly")
            (is (= "main.js"
                   (str (fs/readFileSync "tmp/published-graph/static/js/main.js")))
-               "cljs frontend compiled as main.js is copied correctly"))))
+               "cljs frontend compiled as main.js is copied correctly")
+           (is (empty? (filter #(.endsWith (path/basename %) ".map")
+                               (get-files "tmp/published-graph/static/js")))
+               "source maps are not copied"))))
 
 (deftest-async create-export-with-css-files
   (create-static-dir "tmp/static")

@@ -9,6 +9,7 @@
             [clojure.string :as string]
             [electron.cli-install :as cli-install]
             [electron.db :as db]
+            [electron.embedding-server :as embedding-server]
             [electron.exceptions :as exceptions]
             [electron.handler :as handler]
             [electron.i18n :as i18n :refer [t]]
@@ -29,8 +30,11 @@
 (defonce FILE_LSP_SCHEME "lsp")
 (defonce FILE_ASSETS_SCHEME "assets")
 (defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
-(defonce PLUGIN_URL (str LSP_PROTOCOL "logseq.io/"))
 (defonce STATIC_URL (str LSP_PROTOCOL "logseq.com/"))
+(defonce PLUGIN_URL (str LSP_PROTOCOL "logseq.io/plugins/"))
+(defonce EXTERNAL_PLUGIN_URL (str LSP_PROTOCOL "logseq.io/external/"))
+(defonce HOST_PLUGIN_URL (str STATIC_URL "plugins/"))
+(defonce HOST_EXTERNAL_PLUGIN_URL (str STATIC_URL "external/"))
 (defonce PLUGINS_ROOT (.join node-path (.homedir os) ".logseq/plugins"))
 
 (defonce *setup-fn (volatile! nil))
@@ -96,13 +100,35 @@
    (fn [^js request callback]
      (let [url (.-url request)
            url' ^js (js/URL. url)
-           [_ ROOT] (if (string/starts-with? url PLUGIN_URL)
-                      [PLUGIN_URL PLUGINS_ROOT]
-                      [STATIC_URL js/__dirname])
-
+           plugin-url? (or (string/starts-with? url PLUGIN_URL)
+                           (string/starts-with? url HOST_PLUGIN_URL))
+           external-plugin-url? (or (string/starts-with? url EXTERNAL_PLUGIN_URL)
+                                    (string/starts-with? url HOST_EXTERNAL_PLUGIN_URL))
            path' (.-pathname url')
-           path' (utils/safe-decode-uri-component path')
-           path' (.join node-path ROOT path')]
+           path' (cond
+                   plugin-url?
+                   (->> path'
+                        (utils/safe-decode-uri-component)
+                        (#(string/replace-first % #"^/plugins" ""))
+                        (.join node-path PLUGINS_ROOT))
+
+                   external-plugin-url?
+                   (let [external-path (subs path' (count "/external/"))
+                         separator-index (string/index-of external-path "/")
+                         encoded-root (if separator-index
+                                        (subs external-path 0 separator-index)
+                                        external-path)
+                         relative-path (if separator-index
+                                         (subs external-path separator-index)
+                                         "")
+                         root (utils/safe-decode-uri-component encoded-root)
+                         relative-path (utils/safe-decode-uri-component relative-path)]
+                     (.join node-path root relative-path))
+
+                   :else
+                   (->> path'
+                        (utils/safe-decode-uri-component)
+                        (.join node-path js/__dirname)))]
 
        (callback #js {:path path'}))))
 
@@ -378,11 +404,15 @@
                             t2 (setup-app-manager! win)
                             t3 (handler/set-ipc-handler! win)
                             t4 (server/setup! win)
+                            t5 (embedding-server/setup! app')
                             tt (exceptions/setup-exception-listeners!)]
 
                         (vreset! *teardown-fn
-                                 #(doseq [f [t0 t1 t2 t3 t4 tt]]
-                                    (and f (f)))))))
+                                 #(-> (handler/stop-all-db-workers!)
+                                      (p/finally
+                                        (fn []
+                                          (doseq [f [t0 t1 t2 t3 t4 t5 tt]]
+                                            (and f (f))))))))))
 
            ;; setup effects
            (@*setup-fn)
@@ -412,7 +442,10 @@
                                     nil)))))
            (.on app' "before-quit" (fn [_e]
                                      (reset! win/*quitting? true)
-                                     (handler/stop-all-db-workers!)))
+                                     (-> (handler/stop-all-db-workers!)
+                                         (p/finally
+                                           (fn []
+                                             (embedding-server/stop!))))))
 
            (.on app' "activate" #(when @*win (.show win)))))))
 
@@ -449,8 +482,11 @@
 
       (.on app "window-all-closed" (fn []
                                      (logger/debug "window-all-closed" "Quitting...")
-                                     (handler/stop-all-db-workers!)
-                                     (.quit app)))
+                                     (-> (handler/stop-all-db-workers!)
+                                         (p/finally
+                                           (fn []
+                                             (embedding-server/stop!)
+                                             (.quit app))))))
       (on-app-ready! app))))
 
 (defn start []

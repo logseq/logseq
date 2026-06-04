@@ -25,14 +25,28 @@
   [root-dir]
   (server-list/path root-dir))
 
+(def ^:private cors-headers
+  #js {"Access-Control-Allow-Origin" "lsp://logseq.com"
+       "Access-Control-Allow-Methods" "GET,POST,OPTIONS"
+       "Access-Control-Allow-Headers" "Content-Type,Authorization"})
+
+(defn- response-headers
+  [headers]
+  (js/Object.assign #js {} cors-headers headers))
+
+(defn- send-no-content!
+  [^js res]
+  (.writeHead res 204 cors-headers)
+  (.end res))
+
 (defn- send-json!
   [^js res status payload]
-  (.writeHead res status #js {"Content-Type" "application/json"})
+  (.writeHead res status (response-headers #js {"Content-Type" "application/json"}))
   (.end res (js/JSON.stringify (clj->js payload))))
 
 (defn- send-text!
   [^js res status text]
-  (.writeHead res status #js {"Content-Type" "text/plain"})
+  (.writeHead res status (response-headers #js {"Content-Type" "text/plain"}))
   (.end res text))
 
 (defn- <read-body-buffer
@@ -63,6 +77,8 @@
           "--repo" (recur (subvec args 2) (assoc opts :repo (second args)))
           "--owner-source" (recur (subvec args 2) (assoc opts :owner-source (second args)))
           "--log-level" (recur (subvec args 2) (assoc opts :log-level (second args)))
+          "--embedding-endpoint" (recur (subvec args 2) (assoc opts :embedding-endpoint (second args)))
+          "--embedding-model-id" (recur (subvec args 2) (assoc opts :embedding-model-id (second args)))
           "--create-empty-db" (recur (subvec args 1) (assoc opts :create-empty-db? true))
           "--version" (recur (subvec args 1) (assoc opts :version? true))
           "--help" (recur (subvec args 1) (assoc opts :help? true))
@@ -115,9 +131,9 @@
 
 (defn- sse-handler
   [^js req ^js res]
-  (.writeHead res 200 #js {"Content-Type" "text/event-stream"
-                           "Cache-Control" "no-cache"
-                           "Connection" "keep-alive"})
+  (.writeHead res 200 (response-headers #js {"Content-Type" "text/event-stream"
+                                              "Cache-Control" "no-cache"
+                                              "Connection" "keep-alive"}))
   (.write res "\n")
   (swap! *sse-clients conj res)
   (.on req "close" (fn []
@@ -297,6 +313,23 @@
    :root-dir root-dir
    :revision (build-version/revision)})
 
+(defn- log-invoke-error!
+  [res error method-kw]
+  (let [data (ex-data error)
+        status (invoke-error-status data)
+        code (invoke-error-code data)
+        message (invoke-error-message error data)
+        payload {:ok false
+                 :error {:code code
+                         :message message}}]
+    (log/error :db-worker-node-invoke-failed
+               {:status status
+                :code code
+                :error error
+                :message message
+                :method method-kw})
+    (send-json! res status payload)))
+
 (defn- make-server
   [proxy {:keys [bound-repo stop-fn host port owner-source root-dir]}]
   (http/createServer
@@ -306,6 +339,9 @@
            request-path (.-pathname parsed-url)
            method (.-method req)]
        (cond
+         (= method "OPTIONS")
+         (send-no-content! res)
+
          (= request-path "/healthz")
          (send-json! res (if @*ready? 200 503)
                      (health-payload {:bound-repo bound-repo
@@ -349,35 +385,27 @@
 
          (= request-path "/v1/invoke")
          (if (= method "POST")
-           (-> (p/let [body (<read-body req)
-                       payload (js/JSON.parse body)
-                       {:keys [method argsTransit args]} (js->clj payload :keywordize-keys true)
-                       method-kw (normalize-method-kw method)
-                       method-str (normalize-method-str method)
-                       args' (or argsTransit args)
-                       args-for-validation (if (string? args')
-                                             (ldb/read-transit-str args')
-                                             args')]
-                 (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
-                   (send-json! res status {:ok false :error error})
-                   (p/let [_ (when (contains? write-methods method-kw)
-                               (let [{:keys [path lock]} @*lock-info]
-                                 (db-lock/assert-lock-owner! path lock)))
-                           result (<invoke! proxy method-str method-kw args')]
-                     (send-json! res 200 {:ok true :resultTransit result}))))
-               (p/catch (fn [error]
-                          (let [data (ex-data error)
-                                status (invoke-error-status data)
-                                code (invoke-error-code data)
-                                message (invoke-error-message error data)
-                                payload {:ok false
-                                         :error {:code code
-                                                 :message message}}]
-                            (log/error :db-worker-node-invoke-failed
-                                       {:status status
-                                        :code code
-                                        :message message})
-                            (send-json! res status payload)))))
+           (->
+            (p/let [body (<read-body req)
+                    payload (js/JSON.parse body)
+                    {:keys [method argsTransit args]} (js->clj payload :keywordize-keys true)
+                    method-kw (normalize-method-kw method)
+                    method-str (normalize-method-str method)]
+              (-> (p/let [args' (or argsTransit args)
+                          args-for-validation (if (string? args')
+                                                (ldb/read-transit-str args')
+                                                args')]
+                    (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
+                      (send-json! res status {:ok false :error error})
+                      (p/let [_ (when (contains? write-methods method-kw)
+                                  (let [{:keys [path lock]} @*lock-info]
+                                    (db-lock/assert-lock-owner! path lock)))
+                              result (<invoke! proxy method-str method-kw args')]
+                        (send-json! res 200 {:ok true :resultTransit result}))))
+                  (p/catch (fn [error]
+                             (log-invoke-error! res error method-kw)))))
+            (p/catch (fn [error]
+                       (log-invoke-error! res error nil))))
            (send-text! res 405 "method-not-allowed"))
 
          (= url "/v1/shutdown")
@@ -399,6 +427,8 @@
   (println (str "  " (style/bold "--root-dir") " <path>    (required)"))
   (println (str "  " (style/bold "--repo") " <name>        (required)"))
   (println (str "  " (style/bold "--create-empty-db") "  (start with empty initial datoms)"))
+  (println (str "  " (style/bold "--embedding-endpoint") " <url>"))
+  (println (str "  " (style/bold "--embedding-model-id") " <id>"))
   (println (str "  " (style/bold "--log-level") " <level>  (default info)"))
   (println (str "  " (style/bold "--version") "            (print build metadata and exit)"))
   (println "  logs: <root-dir>/graphs/<graph-dir>/db-worker-node-YYYYMMDD.log (retains 7)"))
@@ -555,7 +585,9 @@
                                                              :event-fn handle-event!
                                                              :write-guard-fn assert-lock-owner!
                                                              :owner-source owner-source
-                                                             :recreate-lock-fn recreate-lock!})
+                                                             :recreate-lock-fn recreate-lock!
+                                                             :embedding-endpoint (:embedding-endpoint opts)
+                                                             :embedding-model-id (:embedding-model-id opts)})
                       proxy (db-core/init-core! platform)
                       _ (<init-worker! proxy)
                       {:keys [path lock]} (db-lock/ensure-lock! {:root-dir root-dir
@@ -600,6 +632,8 @@
                                 :repo repo
                                 :create-empty-db? (:create-empty-db? opts)
                                 :owner-source owner-source
+                                :embedding-endpoint (:embedding-endpoint opts)
+                                :embedding-model-id (:embedding-model-id opts)
                                 :on-stopped! (fn []
                                                (log/info :db-worker-node-stopped nil)
                                                (.exit js/process 0))

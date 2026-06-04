@@ -244,6 +244,10 @@
 
 (def *touch-start (atom nil))
 
+(defn- touch-event
+  [^js event]
+  (or (.-event_ event) event))
+
 (defn on-touch-start
   [event uuid]
   (util/stop-propagation event)
@@ -263,8 +267,8 @@
             (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil})))))))
 
 (defn on-touch-move
-  [^js goog-event]
-  (let [event (.-event_ goog-event)]
+  [^js touch-event*]
+  (let [event (touch-event touch-event*)]
     (when-let [touches (.-targetTouches event)]
       (let [selection-type (.-type (.getSelection js/document))
             target (.-target event)
@@ -298,7 +302,7 @@
                   (when (and (< (. js/Math abs dy) 30)
                              (> (. js/Math abs dx) 10)
                              direction)
-                    (.preventDefault goog-event)
+                    (.preventDefault touch-event*)
                     (let [left (if (= direction :right)
                                  (if (>= dx 0) (min dx 48) (max dx 0))
                                  (if (<= dx 0) (- (min (js/Math.abs dx) 48)) (min dx 48)))]

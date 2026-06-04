@@ -376,3 +376,22 @@ input[type='range'] {
 .ls-nlp-calendar {
   @apply flex flex-col gap-2 relative;
 }
+
+.ls-editor-date-picker {
+  box-sizing: border-box;
+  max-width: calc(100vw - 32px);
+
+  .ls-nlp-calendar,
+  .ui__calendar {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+.ls-property-date-picker {
+  .ui__calendar {
+    box-sizing: border-box;
+  }
+}

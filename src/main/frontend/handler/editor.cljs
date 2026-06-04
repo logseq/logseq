@@ -65,8 +65,7 @@
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+            [promesa.core :as p]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -75,6 +74,11 @@
 
 (def clear-selection! state/clear-selection!)
 (def edit-block! block-handler/edit-block!)
+
+(defn- event-code
+  [e]
+  (or (gobj/getValueByKeys e "event_" "code")
+      (gobj/get e "code")))
 
 (defn- outliner-save-block!
   [block & {:as opts}]
@@ -2262,7 +2266,7 @@
         target (when e (.-target e))]
     (when (or (nil? target)
               (inside-of-editor-block target))
-      (if (or (state/doc-mode-enter-for-new-line?) (inside-of-single-block (rum/dom-node state)))
+      (if (or (state/doc-mode-enter-for-new-line?) (inside-of-single-block (:node state)))
         (keydown-new-line)
         (do
           (when e (.preventDefault e))
@@ -2271,7 +2275,7 @@
 (defn keydown-new-line-handler [e]
   (let [state (get-state)]
     (when (or (nil? (.-target e)) (inside-of-editor-block (.-target e)))
-      (if (and (state/doc-mode-enter-for-new-line?) (not (inside-of-single-block (rum/dom-node state))))
+      (if (and (state/doc-mode-enter-for-new-line?) (not (inside-of-single-block (:node state))))
         (keydown-new-block state)
         (do
           (.preventDefault e)
@@ -3046,7 +3050,7 @@
              (gobj/get e "key")
              (if (mobile-util/native-android?)
                (gobj/get e "key")
-               (gobj/getValueByKeys e "event_" "code"))
+               (event-code e))
                 ;; #3440
               (util/goog-event-is-composing? e true)])
             comment-editor? (:comment-editor? (last (state/get-editor-args)))]

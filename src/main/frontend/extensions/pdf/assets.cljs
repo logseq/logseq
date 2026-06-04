@@ -12,12 +12,14 @@
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
             [frontend.date :as date]
+            [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.ref :as ref]
             [logseq.common.config :as common-config]
             [logseq.graph-parser.exporter :as gp-exporter]
             [promesa.core :as p]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn get-in-repo-assets-full-filename
   [url]
@@ -209,7 +211,7 @@
 
 (defn get-zotero-local-pdf-path
   [path & {:keys [id]}]
-  (let [zotero-config (get-in (state/sub-config) [:zotero/settings-v2 "default"])
+  (let [zotero-config (get-in (state/get-config) [:zotero/settings-v2 "default"])
         zotero-data-directory (:zotero-data-directory zotero-config)
         zotero-linked-attachment-base-directory (:zotero-linked-attachment-base-directory zotero-config)
         relative-path (subs path 14)]

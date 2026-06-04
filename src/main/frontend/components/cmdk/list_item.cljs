@@ -6,7 +6,7 @@
    [frontend.handler.block :as block-handler]
    [goog.string :as gstring]
    [logseq.shui.ui :as shui]
-   [rum.core :as rum]))
+   [io.factorhouse.hsx.core :as hsx]))
 
 (defn- to-string [input]
   (cond
@@ -64,7 +64,7 @@
   (when-not (string/blank? label)
     [:span.cp__cmdk-current-page-badge label]))
 
-(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted header hoverable
+(hsx/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted header hoverable
                         compact rounded on-mounted on-click on-mouse-move source-block] :as props
                  :or {hoverable true rounded true}}
                 {:keys [app-config]}]

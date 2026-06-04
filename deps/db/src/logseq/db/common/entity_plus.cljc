@@ -221,7 +221,7 @@
    :default
    (extend-type Entity
      cljs.core/IEncodeJS
-     (-clj->js [_this] nil)                 ; avoid `clj->js` overhead when entity was passed to rum components
+     (-clj->js [_this] nil)                 ; avoid `clj->js` overhead when entity is passed to React components
      (-key->js [_this] nil)
 
      IAssociative
