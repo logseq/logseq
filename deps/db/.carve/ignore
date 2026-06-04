@@ -37,6 +37,8 @@ logseq.db.common.initial-data/with-parent
 ;; API
 logseq.db.common.initial-data/get-block-refs
 ;; API
+logseq.db.common.reference/get-linked-references-count
+;; API
 logseq.db.common.initial-data/get-block-and-children
 ;; API
 logseq.db.common.initial-data/get-initial-data
