@@ -122,7 +122,7 @@
   [icon' {:keys [on-chosen hover]}]
   [:button.w-9.h-9.transition-opacity
    (when-let [icon' (cond-> icon' (string? icon') (string/replace " " ""))]
-     {:key icon'
+     {:key (str "tabler-icon-" icon')
       :tabIndex "0"
       :title icon'
       :on-click (fn [e]
@@ -141,7 +141,8 @@
   [{:keys [id name] :as emoji} {:keys [on-chosen hover]}]
   [:button.text-2xl.w-9.h-9.transition-opacity
    (cond->
-    {:tabIndex "0"
+    {:key (str "emoji-" id)
+     :tabIndex "0"
      :title name
      :on-click (fn [e]
                  (on-chosen e (assoc emoji :type :emoji)))
@@ -160,6 +161,20 @@
     (icon-cp (if (string? item) item (:id item)) opts)
     (emoji-cp item opts)))
 
+(defn- item-render-key
+  [item idx]
+  (str (cond
+         (string? item) "tabler-icon"
+         (:type item) (name (:type item))
+         :else "item")
+       "-"
+       (or (:id item) item idx)))
+
+(defn- keyed-item-render
+  [idx item opts]
+  [:<> {:key (item-render-key item idx)}
+   (item-render item opts)])
+
 (hsx/defc pane-section
   [label items & {:keys [searching? virtual-list?]
                   :or {virtual-list? true}
@@ -175,15 +190,21 @@
      (if virtual-list?
        (let [items-per-row 9
              rows (vec (partition-all items-per-row items))]
-         (ui/virtualized-list
-          (cond-> {:total-count (count rows)
-                   :item-content (fn [idx]
-                                   (icons-row (mapv #(item-render % opts) (nth rows idx []))))}
+          (ui/virtualized-list
+           (cond-> {:total-count (count rows)
+                    :item-content (fn [idx]
+                                    (icons-row
+                                     (map-indexed
+                                      (fn [item-idx item]
+                                        (keyed-item-render item-idx item opts))
+                                      (nth rows idx []))))}
 
-            searching?
-            (assoc :custom-scroll-parent (some-> (hooks/deref *el-ref) (.closest ".bd-scroll"))))))
+             searching?
+             (assoc :custom-scroll-parent (some-> (hooks/deref *el-ref) (.closest ".bd-scroll"))))))
        [:div.its
-        (map #(item-render % opts) items)])]))
+        (map-indexed (fn [idx item]
+                       (keyed-item-render idx item opts))
+                     items)])]))
 
 (defn- normalize-tabs
   [tabs default-tab]
