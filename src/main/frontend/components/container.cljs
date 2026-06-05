@@ -393,14 +393,29 @@
    [])
   nil)
 
+(defn- skip-selection-action-bar-target?
+  [target]
+  (when target
+    (or (.closest target ".block-control-wrap")
+        (.closest target "button")
+        (.closest target "input")
+        (.closest target "textarea")
+        (.closest target "a"))))
+
+(defn- maybe-show-selection-action-bar!
+  [target]
+  (when-not (skip-selection-action-bar-target? target)
+    (editor-handler/show-action-bar!)))
+
 (defn- on-mouse-up
   [e]
-  (when-not (or (.closest (.-target e) ".block-control-wrap")
-                (.closest (.-target e) "button")
-                (.closest (.-target e) "input")
-                (.closest (.-target e) "textarea")
-                (.closest (.-target e) "a"))
-    (editor-handler/show-action-bar!)))
+  (maybe-show-selection-action-bar! (.-target e)))
+
+(defn- on-pointer-up
+  [e]
+  (block-selection/clear-pointer-down!)
+  (let [target (.-target e)]
+    (js/setTimeout #(maybe-show-selection-action-bar! target) 0)))
 
 (hsx/defc ^:large-vars/cleanup-todo root-container
   [route-match main-content']
@@ -447,14 +462,14 @@
              keyup-handler (fn [_e]
                              (state/set-state! :editor/latest-shortcut nil))]
          (.addEventListener js/window "pointerdown" hide-context-menu-and-clear-selection)
-         (.addEventListener js/window "pointerup" block-selection/clear-pointer-down!)
+         (.addEventListener js/window "pointerup" on-pointer-up)
          (.addEventListener js/window "pointercancel" block-selection/clear-pointer-down!)
          (.addEventListener js/window "blur" block-selection/clear-pointer-down!)
          (.addEventListener js/window "keydown" keydown-handler)
          (.addEventListener js/window "keyup" keyup-handler)
          #(do
             (.removeEventListener js/window "pointerdown" hide-context-menu-and-clear-selection)
-            (.removeEventListener js/window "pointerup" block-selection/clear-pointer-down!)
+            (.removeEventListener js/window "pointerup" on-pointer-up)
             (.removeEventListener js/window "pointercancel" block-selection/clear-pointer-down!)
             (.removeEventListener js/window "blur" block-selection/clear-pointer-down!)
             (.removeEventListener js/window "keydown" keydown-handler)

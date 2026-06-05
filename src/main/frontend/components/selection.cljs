@@ -44,7 +44,7 @@
          (assoc button-opts
                 :on-pointer-down (fn [e]
                                    (util/stop e)
-                                   (state/pub-event! [:editor/new-property {:target (.-target e)
+                                   (state/pub-event! [:editor/new-property {:target (.-currentTarget e)
                                                                             :selected-blocks selected-blocks
                                                                             :property-key "Tags"
                                                                             :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
@@ -70,7 +70,7 @@
          (assoc button-opts
                 :on-pointer-down (fn [e]
                                    (util/stop e)
-                                   (state/pub-event! [:editor/new-property {:target (.-target e)
+                                   (state/pub-event! [:editor/new-property {:target (.-currentTarget e)
                                                                             :selected-blocks selected-blocks
                                                                             :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
          (t :property/set-property))
@@ -78,7 +78,7 @@
          (assoc button-opts
                 :on-pointer-down (fn [e]
                                    (util/stop e)
-                                   (state/pub-event! [:editor/new-property {:target (.-target e)
+                                   (state/pub-event! [:editor/new-property {:target (.-currentTarget e)
                                                                             :selected-blocks selected-blocks
                                                                             :remove-property? true
                                                                             :select-opts {:show-new-when-not-exact-match? false}

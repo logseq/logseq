@@ -538,10 +538,11 @@
                     "font-normal text-sm px-[0.5px] text-muted-foreground hover:text-foreground")
          :on-click (fn [^js e]
                      (when-not disabled?
-                       (shui/popup-show! (.-target e) content-fn
+                       (shui/popup-show! (.-currentTarget e) content-fn
                                          (medley/deep-merge
                                           {:align :start
                                            :id :ls-icon-picker
+                                           :force-popover? true
                                            :content-props {:class "ls-icon-picker"
                                                            :onEscapeKeyDown #(.preventDefault %)}}
                                           popup-opts))))}
