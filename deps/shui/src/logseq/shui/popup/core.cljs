@@ -24,7 +24,6 @@
 (def dropdown-menu-label (util/ui-wrap "DropdownMenuLabel"))
 (def dropdown-menu-separator (util/ui-wrap "DropdownMenuSeparator"))
 (def dropdown-menu-shortcut (util/ui-wrap "DropdownMenuShortcut"))
-(def dropdown-menu-portal (util/ui-wrap "DropdownMenuPortal"))
 (def dropdown-menu-sub (util/ui-wrap "DropdownMenuSub"))
 (def dropdown-menu-sub-content (util/ui-wrap "DropdownMenuSubContent"))
 (def dropdown-menu-sub-trigger (util/ui-wrap "DropdownMenuSubTrigger"))
@@ -175,6 +174,7 @@
                                focus-trigger? align root-props content-props
                                on-before-hide on-after-hide trigger-id] :as opts}]
   (let [id (or id (gen-id))
+        ;; _ (prn :debug :show :id id)
         *target (volatile! nil)
         pointer-event? (or (instance? js/MouseEvent (or (.-nativeEvent event) event))
                            (instance? js/goog.events.BrowserEvent event))
@@ -249,6 +249,7 @@
   ([id] (hide! id 0 {}))
   ([id delay] (hide! id delay {}))
   ([id delay {:keys [_all? ^js event]}]
+   ;; (prn :debug :hide id)
    (when-let [popup (get-popup id)]
      (let [config (last popup)
            target (:target config)
@@ -318,6 +319,7 @@
                                                   "escape-key" (:onEscapeKeyDown content-props)
                                                   "outside-press" (:onPointerDownOutside content-props)
                                                   nil)]
+                                    ;; (prn :debug :id id :reason reason)
                                     (if (or target-toggle?
                                             focus-retained?
                                             menu-transition?)

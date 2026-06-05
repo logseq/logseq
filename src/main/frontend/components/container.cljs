@@ -408,15 +408,22 @@
   (when-not (skip-selection-action-bar-target? target)
     (editor-handler/show-action-bar!)))
 
+(defn- show-selection-action-bar-for-pointer!
+  [button target]
+  (when (zero? button)
+    (maybe-show-selection-action-bar! target)))
+
 (defn- on-mouse-up
   [e]
-  (maybe-show-selection-action-bar! (.-target e)))
+  (show-selection-action-bar-for-pointer! (.-button e) (.-target e)))
 
 (defn- on-pointer-up
   [e]
   (block-selection/clear-pointer-down!)
-  (let [target (.-target e)]
-    (js/setTimeout #(maybe-show-selection-action-bar! target) 0)))
+  (let [button (.-button e)
+        target (.-target e)]
+    (js/setTimeout #(show-selection-action-bar-for-pointer! button target)
+                   0)))
 
 (hsx/defc ^:large-vars/cleanup-todo root-container
   [route-match main-content']

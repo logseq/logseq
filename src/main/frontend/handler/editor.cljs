@@ -1332,7 +1332,7 @@
       (when element
         (util/scroll-to-block element)
         (state/drop-last-selection-block!))))
-  (show-action-bar! {:delay 500})
+  (show-action-bar! {:delay 200})
   nil)
 
 (defn on-select-block

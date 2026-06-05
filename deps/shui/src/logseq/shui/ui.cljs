@@ -101,7 +101,6 @@
 (def dropdown-menu-label popup-core/dropdown-menu-label)
 (def dropdown-menu-separator popup-core/dropdown-menu-separator)
 (def dropdown-menu-shortcut popup-core/dropdown-menu-shortcut)
-(def dropdown-menu-portal popup-core/dropdown-menu-portal)
 (def dropdown-menu-sub popup-core/dropdown-menu-sub)
 (def dropdown-menu-sub-content popup-core/dropdown-menu-sub-content)
 (def dropdown-menu-sub-trigger popup-core/dropdown-menu-sub-trigger)
