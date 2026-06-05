@@ -132,8 +132,9 @@
 
   .ui__toaster {
     &-viewport {
-      @apply fixed z-50 m-0 overflow-visible pointer-events-none;
+      @apply fixed m-0 overflow-visible pointer-events-none;
       width: calc(100vw - 2rem);
+      z-index: 100000;
       bottom: 1rem;
       right: 1rem;
       left: auto;
