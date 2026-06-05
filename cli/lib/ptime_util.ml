@@ -3,20 +3,7 @@ let time_of_float_s seconds =
   | Some time -> time
   | None -> invalid_arg "invalid POSIX timestamp"
 
-let js_float source = float_of_string (Cli_unix.js_call_string source [||])
-let js_int source = int_of_string (Cli_unix.js_call_string source [||])
-
-let now () =
-  if Cli_unix.js_backend () then
-    time_of_float_s
-      (js_float
-         {|
-(function() {
-  return String(Date.now() / 1000);
-})
-         |})
-  else Ptime_clock.now ()
-
+let now = Ptime_clock.now
 let time_of_epoch_ms ms = time_of_float_s (Int64.to_float ms /. 1000.)
 let time_to_epoch_ms time = Int64.of_float (Ptime.to_float_s time *. 1000.)
 let time_to_epoch_seconds time = Int64.of_float (Ptime.to_float_s time)
@@ -31,18 +18,7 @@ let span_to_ms_float span = Ptime.Span.to_float_s span *. 1000.
 let span_to_seconds_float = Ptime.Span.to_float_s
 
 let local_date time =
-  let current_tz_offset_s =
-    if Cli_unix.js_backend () then
-      Some
-        (js_int
-           {|
-(function() {
-  return String((new Date()).getTimezoneOffset() * -60);
-})
-           |})
-    else Ptime_clock.current_tz_offset_s ()
-  in
-  match current_tz_offset_s with
+  match Ptime_clock.current_tz_offset_s () with
   | Some tz_offset_s ->
       let (year, month, day), _ = Ptime.to_date_time ~tz_offset_s time in
       (year, month, day)
