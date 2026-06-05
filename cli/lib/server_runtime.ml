@@ -67,6 +67,21 @@ let process_alive pid =
   | Cli_unix.Cli_unix_error (Cli_unix.ESRCH, _, _) -> false
   | Cli_unix.Cli_unix_error (Cli_unix.EPERM, _, _) -> true
 
+let http_request ~(method_ : Cohttp.Code.meth) ~url ~headers ~body ~timeout_span
+    =
+  Cli_effect.bind
+    (Cli_platform.HTTP.request ?timeout_span method_ (Uri.of_string url)
+       ~headers:(Cohttp.Header.of_list headers)
+       ~body:(Cohttp_lwt.Body.of_string body))
+    (fun (response, body) ->
+      Cli_effect.bind
+        (Cli_effect.of_lwt (Cohttp_lwt.Body.to_string body))
+        (fun body -> Cli_effect.pure (response, body)))
+
+let http_success response =
+  let status = Cohttp.Response.status response |> Cohttp.Code.code_of_status in
+  status >= 200 && status < 300
+
 let parse_server_list_line line =
   match
     String.split_on_char ' ' (String.trim line) |> List.filter (( <> ) "")
@@ -290,16 +305,15 @@ let server_of_health ~fallback_port body =
 let discover_server (_pid, port) =
   Cli_effect.catch
     (Cli_effect.map
-       (fun response ->
-         Some (server_of_health ~fallback_port:port response.Transport.body))
-       (Transport.request
-          {
-            method_ = "GET";
-            url = "http://127.0.0.1:" ^ string_of_int port ^ "/healthz";
-            headers = [ ("Accept", "application/json") ];
-            body = None;
-            timeout_span = Some (Ptime_util.span_of_ms 1_000L);
-          }))
+       (fun (response, body) ->
+         if http_success response then
+           Some (server_of_health ~fallback_port:port body)
+         else None)
+       (http_request ~method_:`GET
+          ~url:("http://127.0.0.1:" ^ string_of_int port ^ "/healthz")
+          ~headers:[ ("Accept", "application/json") ]
+          ~body:""
+          ~timeout_span:(Some (Ptime_util.span_of_ms 1_000L))))
     (fun _ -> Cli_effect.pure None)
 
 let list_servers config =
@@ -562,16 +576,12 @@ let ensure_server config repo ~create_empty_db =
 let shutdown_server server =
   Cli_effect.catch
     (Cli_effect.map
-       (fun response ->
-         response.Transport.status >= 200 && response.status < 300)
-       (Transport.request
-          {
-            method_ = "POST";
-            url = server.base_url ^ "/v1/shutdown";
-            headers = [ ("Content-Type", "application/json") ];
-            body = Some "{}";
-            timeout_span = Some (Ptime_util.span_of_ms 1_000L);
-          }))
+       (fun (response, _body) -> http_success response)
+       (http_request ~method_:`POST
+          ~url:(server.base_url ^ "/v1/shutdown")
+          ~headers:[ ("Content-Type", "application/json") ]
+          ~body:"{}"
+          ~timeout_span:(Some (Ptime_util.span_of_ms 1_000L))))
     (fun _ -> Cli_effect.pure false)
 
 let stop_server config repo =

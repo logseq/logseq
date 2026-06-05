@@ -1,13 +1,3 @@
-type request = {
-  method_ : string;
-  url : Cli_primitive.url;
-  headers : (string * string) list;
-  body : string option;
-  timeout_span : Ptime.span option;
-}
-
-type response = { status : int; body : string }
-
 type invoke_config = {
   base_url : Cli_primitive.url;
   timeout_span : Ptime.span;
@@ -17,8 +7,6 @@ type invoke_config = {
 type event_type = Cli_primitive.keyword
 type event_payload = Edn_ocaml.any
 type event_subscription = { close : unit -> unit Cli_effect.t }
-
-val request : request -> response Cli_effect.t
 
 val connect_events :
   invoke_config ->
