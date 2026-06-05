@@ -66,6 +66,28 @@ let json_escape value =
 let json_string key value = "\"" ^ key ^ "\":\"" ^ json_escape value ^ "\""
 let json_int key value = "\"" ^ key ^ "\":" ^ Int64.to_string value
 
+let http_error_message status body =
+  if String.trim body = "" then
+    "http request failed (" ^ string_of_int status ^ ")"
+  else
+    "http request failed (" ^ string_of_int status ^ ")\nhttp response: " ^ body
+
+let http_request ~(method_ : Cohttp.Code.meth) ~url ~headers ~body ~timeout_span
+    =
+  Cli_effect.bind
+    (Cli_platform.HTTP.request ?timeout_span method_ (Uri.of_string url)
+       ~headers:(Cohttp.Header.of_list headers)
+       ~body:(Cohttp_lwt.Body.of_string body))
+    (fun (response, body) ->
+      Cli_effect.bind
+        (Cli_effect.of_lwt (Cohttp_lwt.Body.to_string body))
+        (fun body ->
+          let status =
+            Cohttp.Response.status response |> Cohttp.Code.code_of_status
+          in
+          if status >= 200 && status <= 299 then Cli_effect.pure body
+          else Cli_effect.error (Failure (http_error_message status body))))
+
 let add_opt_string key value fields =
   match value with
   | Some value -> json_string key value :: fields
@@ -497,25 +519,17 @@ let refresh_auth config data =
             | Some client_id -> fields @ [ ("client_id", client_id) ]
             | None -> fields
           in
-          let request =
-            Transport.request
-              {
-                method_ = "POST";
-                url;
-                headers =
-                  [
-                    ("Content-Type", "application/x-www-form-urlencoded");
-                    ("Accept", "application/json");
-                  ];
-                body = Some (form_body fields);
-                timeout_span = Some config.timeout_span;
-              }
-          in
           Cli_effect.catch
             (Cli_effect.map
-               (fun response ->
-                 refreshed_auth_of_body data response.Transport.body)
-               request)
+               (fun body -> refreshed_auth_of_body data body)
+               (http_request ~method_:`POST ~url
+                  ~headers:
+                    [
+                      ("Content-Type", "application/x-www-form-urlencoded");
+                      ("Accept", "application/json");
+                    ]
+                  ~body:(form_body fields)
+                  ~timeout_span:(Some config.timeout_span)))
             (fun exn ->
               Cli_effect.pure
                 (Error
@@ -553,23 +567,9 @@ let auth_code_exchange config ~code ~redirect_uri ~code_verifier =
         | Some client_id -> fields @ [ ("client_id", client_id) ]
         | None -> fields
       in
-      let request =
-        Transport.request
-          {
-            method_ = "POST";
-            url;
-            headers =
-              [
-                ("Content-Type", "application/x-www-form-urlencoded");
-                ("Accept", "application/json");
-              ];
-            body = Some (form_body fields);
-            timeout_span = Some config.timeout_span;
-          }
-      in
       Cli_effect.catch
         (Cli_effect.map
-           (fun response ->
+           (fun body ->
              refreshed_auth_of_body
                {
                  provider = "cognito";
@@ -581,8 +581,14 @@ let auth_code_exchange config ~code ~redirect_uri ~code_verifier =
                  email = None;
                  updated_at = Ptime_util.now ();
                }
-               response.Transport.body)
-           request)
+               body)
+           (http_request ~method_:`POST ~url
+              ~headers:
+                [
+                  ("Content-Type", "application/x-www-form-urlencoded");
+                  ("Accept", "application/json");
+                ]
+              ~body:(form_body fields) ~timeout_span:(Some config.timeout_span)))
         (fun exn ->
           Cli_effect.pure
             (Error

@@ -1,13 +1,3 @@
-type request = {
-  method_ : string;
-  url : Cli_primitive.url;
-  headers : (string * string) list;
-  body : string option;
-  timeout_span : Ptime.span option;
-}
-
-type response = { status : int; body : string }
-
 type invoke_config = {
   base_url : Cli_primitive.url;
   timeout_span : Ptime.span;
@@ -279,30 +269,20 @@ let http_error_message status body =
   | None ->
       Option.value (json_string_field_from "message" body) ~default:fallback
 
-let method_of_string method_ =
-  method_ |> String.uppercase_ascii |> Cohttp.Code.method_of_string
+let response_status response =
+  Cohttp.Response.status response |> Cohttp.Code.code_of_status
 
-let uri_of_url = Uri.of_string
+let success_status status = status >= 200 && status <= 299
 
-let request req =
-  let uri = uri_of_url req.url in
-  let headers = Cohttp.Header.of_list req.headers in
-  let body =
-    req.body |> Option.value ~default:"" |> Cohttp_lwt.Body.of_string
-  in
+let request ?timeout_span method_ uri ~headers ~body =
   Cli_effect.bind
-    (Cli_platform.HTTP.request ?timeout_span:req.timeout_span
-       (method_of_string req.method_)
-       uri ~headers ~body)
+    (Cli_platform.HTTP.request ?timeout_span method_ uri ~headers ~body)
     (fun (response, body) ->
       Cli_effect.bind
         (Cli_effect.of_lwt (Cohttp_lwt.Body.to_string body))
         (fun body ->
-          let status =
-            Cohttp.Response.status response |> Cohttp.Code.code_of_status
-          in
-          if status >= 200 && status <= 299 then
-            Cli_effect.pure { status; body }
+          let status = response_status response in
+          if success_status status then Cli_effect.pure (response, body)
           else Cli_effect.error (Failure (http_error_message status body))))
 
 let method_name method_ =
@@ -474,24 +454,19 @@ let invoke config method_ args =
   let stage = "transport.invoke:" ^ method_name method_ in
   Profile_types.time config.profile_session stage (fun () ->
       Cli_effect.map
-        (fun response ->
-          match
-            extract_json_string_field ~field:"resultTransit" response.body
-          with
+        (fun (_response, body) ->
+          match extract_json_string_field ~field:"resultTransit" body with
           | Some result_transit -> value_of_transit_string result_transit
           | None -> Edn_util.nil)
-        (request
-           {
-             method_ = "POST";
-             url = base_url ^ "/v1/invoke";
-             headers =
-               [
-                 ("Content-Type", "application/json");
-                 ("Accept", "application/json");
-               ];
-             body = Some (invoke_body method_ args);
-             timeout_span = Some config.timeout_span;
-           }))
+        (request ~timeout_span:config.timeout_span `POST
+           (Uri.of_string (base_url ^ "/v1/invoke"))
+           ~headers:
+             (Cohttp.Header.of_list
+                [
+                  ("Content-Type", "application/json");
+                  ("Accept", "application/json");
+                ])
+           ~body:(Cohttp_lwt.Body.of_string (invoke_body method_ args))))
 
 let repo_value repo = Edn_util.string (Cli_primitive.string_of_repo repo)
 
