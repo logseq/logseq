@@ -6254,6 +6254,44 @@ process.exit(0);
           assert_equal ~name:"file http base remains" "https://file"
             (Option.value config.http_base ~default:""));
 
+  check "Cli_config rejects invalid env values" (fun () ->
+      let env key =
+        match key with "LOGSEQ_CLI_TIMEOUT_MS" -> Some "slow" | _ -> None
+      in
+      match
+        run_blocking
+          (Cli_config.resolve ~defaults:(Cli_config.defaults ()) ~env
+             (Global_opts.create ()))
+      with
+      | Ok _ -> failf "expected invalid env config"
+      | Error err ->
+          assert_equal ~name:"invalid env config code"
+            (Edn_util.keyword_t "invalid-config")
+            err.Error.code;
+          assert_equal ~name:"invalid env config message"
+            "invalid env LOGSEQ_CLI_TIMEOUT_MS: slow. Expected integer"
+            err.message);
+
+  check "Cli_config rejects invalid file config values" (fun () ->
+      let root = fresh_root "logseq-cli-invalid-file-config-" in
+      let config_path = Filename.concat root "cli.edn" in
+      ensure_test_dir root;
+      write_text_file config_path "{:timeout-ms \"slow\"}";
+      match
+        run_blocking
+          (Cli_config.resolve ~defaults:(Cli_config.defaults ())
+             ~env:(fun _ -> None)
+             (Global_opts.create ~config_path ~root_dir:root ()))
+      with
+      | Ok _ -> failf "expected invalid file config"
+      | Error err ->
+          assert_equal ~name:"invalid file config code"
+            (Edn_util.keyword_t "invalid-config")
+            err.Error.code;
+          assert_equal ~name:"invalid file config message"
+            "invalid file config :timeout-ms: \"slow\". Expected integer"
+            err.message);
+
   check "Cli_config lets argv override env config" (fun () ->
       let env_root = fresh_root "logseq-cli-env-root-" in
       let argv_root = fresh_root "logseq-cli-argv-root-" in
