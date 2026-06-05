@@ -49,9 +49,11 @@
         (if (seq segs)
           (into [:span {"data-testid" text-string}]
                 (map-indexed (fn [i seg]
-                               (if (even? i)
-                                 [:span seg]
-                                 [:mark {:style {:padding 0 :border-radius 0}} seg]))
+                               (with-meta
+                                 (if (even? i)
+                                   [:span seg]
+                                   [:mark {:style {:padding 0 :border-radius 0}} seg])
+                                 {:key (str "highlight-" i)}))
                              segs))
           [:span normal-text])))))
 
