@@ -1,9 +1,9 @@
 type env = string -> string option
 
 type defaults = {
-  timeout_ms : Cli_primitive.duration_ms;
-  login_timeout_ms : Cli_primitive.duration_ms;
-  logout_timeout_ms : Cli_primitive.duration_ms;
+  timeout_span : Ptime.span;
+  login_timeout_span : Ptime.span;
+  logout_timeout_span : Ptime.span;
   list_title_max_display_width : int;
   root_dir : Cli_primitive.path;
   ws_url : Cli_primitive.url;
@@ -15,9 +15,9 @@ type t = {
   repo : Cli_primitive.repo option;
   root_dir : Cli_primitive.path;
   config_path : Cli_primitive.path;
-  timeout_ms : Cli_primitive.duration_ms;
-  login_timeout_ms : Cli_primitive.duration_ms;
-  logout_timeout_ms : Cli_primitive.duration_ms;
+  timeout_span : Ptime.span;
+  login_timeout_span : Ptime.span;
+  logout_timeout_span : Ptime.span;
   list_title_max_display_width : int;
   output_format : Output.Mode.packed option;
   verbose : bool;

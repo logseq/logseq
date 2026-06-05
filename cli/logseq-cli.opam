@@ -17,10 +17,15 @@ depends: [
   "transit"
   "edn_ocaml"
   "humanize"
+  "ptime"
+  "cohttp"
+  "cohttp-lwt"
+  "cohttp-lwt-unix"
+  "uri"
   "alcotest"
   "js_of_ocaml"
+  "js_of_ocaml-lwt"
   "js_of_ocaml-compiler"
-  "wasm_of_ocaml-compiler"
   "odoc" {with-doc}
 ]
 build: [

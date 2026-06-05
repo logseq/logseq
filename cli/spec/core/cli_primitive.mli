@@ -9,12 +9,9 @@ type path = string
 type url = string
 type email = string
 type shell = Bash | Zsh
-type timestamp_ms = int64
-type duration_ms = int64
 type port = int
 type pid = int
 type owner_source = Cli | Electron | Unknown | Other of string
-
 
 val create_graph : string -> graph
 

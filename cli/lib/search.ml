@@ -195,7 +195,8 @@ let normalize_uuid_refs config repo items =
 
 let execute action config mode =
   let open Cli_effect in
-  bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false) (function
+  bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
+    (function
     | Error err -> pure (Output_mode.error ~command:action.command mode err)
     | Ok invoke_config ->
         bind

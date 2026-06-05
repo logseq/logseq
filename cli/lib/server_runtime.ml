@@ -253,8 +253,7 @@ let server_of_health ~fallback_port body =
   let raw = value_of_json body in
   let repo =
     Edn_util.get_string raw ":repo"
-    |> Option.value ~default:""
-    |> Cli_primitive.create_repo
+    |> Option.value ~default:"" |> Cli_primitive.create_repo
   in
   let host =
     Edn_util.get_string raw ":host" |> Option.value ~default:"127.0.0.1"
@@ -299,7 +298,7 @@ let discover_server (_pid, port) =
             url = "http://127.0.0.1:" ^ string_of_int port ^ "/healthz";
             headers = [ ("Accept", "application/json") ];
             body = None;
-            timeout_ms = Some 1_000L;
+            timeout_span = Some (Ptime_util.span_of_ms 1_000L);
           }))
     (fun _ -> Cli_effect.pure None)
 
@@ -376,7 +375,8 @@ let env_with_node_runtime () =
   in
   Array.of_list ("ELECTRON_RUN_AS_NODE=1" :: without_key "ELECTRON_RUN_AS_NODE")
 
-let spawn_server_process ~script ~root_dir ~repo ~owner_source ~create_empty_db =
+let spawn_server_process ~script ~root_dir ~repo ~owner_source ~create_empty_db
+    =
   let devnull = Cli_unix.openfile "/dev/null" [ Cli_unix.O_RDWR ] 0 in
   Fun.protect
     ~finally:(fun () -> Cli_unix.close devnull)
@@ -411,23 +411,24 @@ let find_repo_server config repo =
 let invoke_config_of_server config server =
   {
     Transport.base_url = server.base_url;
-    timeout_ms = config.Cli_config.timeout_ms;
+    timeout_span = config.Cli_config.timeout_span;
     profile_session = config.profile_session;
   }
 
-let wait_until_effect ?(timeout_ms = 8_000L) ?(interval_ms = 50) predicate =
+let wait_until_effect ?(timeout_span = Ptime_util.span_of_ms 8_000L)
+    ?(interval_span = Ptime_util.span_of_ms 50L) predicate =
   let open Cli_effect in
   let deadline =
-    Cli_unix.gettimeofday () +. (Int64.to_float timeout_ms /. 1000.)
+    Option.value
+      (Ptime.add_span (Ptime_util.now ()) timeout_span)
+      ~default:Ptime.max
   in
   let rec loop () =
     bind (predicate ()) (function
       | Some _ as result -> pure result
       | None ->
-          if Cli_unix.gettimeofday () >= deadline then pure None
-          else (
-            Cli_unix.sleepf (float_of_int interval_ms /. 1000.);
-            loop ()))
+          if Ptime.compare (Ptime_util.now ()) deadline >= 0 then pure None
+          else bind (sleep interval_span) (fun () -> loop ()))
   in
   loop ()
 
@@ -537,7 +538,7 @@ let ensure_server config repo ~create_empty_db =
         (Ok
            {
              Transport.base_url;
-             timeout_ms = config.timeout_ms;
+             timeout_span = config.timeout_span;
              profile_session = config.profile_session;
            })
   | None ->
@@ -569,7 +570,7 @@ let shutdown_server server =
             url = server.base_url ^ "/v1/shutdown";
             headers = [ ("Content-Type", "application/json") ];
             body = Some "{}";
-            timeout_ms = Some 1_000L;
+            timeout_span = Some (Ptime_util.span_of_ms 1_000L);
           }))
     (fun _ -> Cli_effect.pure false)
 
@@ -592,10 +593,14 @@ let stop_server config repo =
                   (Edn_util.keyword_t "server-owned-by-other")
                   "server is owned by another process"))
         else
+          let shutdown_timeout_span = Ptime_util.span_of_ms 5_000L in
+          let shutdown_interval_span = Ptime_util.span_of_ms 200L in
+          let kill_timeout_span = Ptime_util.span_of_ms 1_000L in
+          let kill_interval_span = Ptime_util.span_of_ms 100L in
           bind (shutdown_server server) (fun _ ->
               bind
-                (wait_until_effect ~timeout_ms:5_000L ~interval_ms:200
-                   (fun () ->
+                (wait_until_effect ~timeout_span:shutdown_timeout_span
+                   ~interval_span:shutdown_interval_span (fun () ->
                      map
                        (function None -> Some () | Some _ -> None)
                        (find_repo_server config repo)))
@@ -607,8 +612,8 @@ let stop_server config repo =
                            Cli_unix.kill server.pid Sys.sigterm
                        with _ -> ());
                       bind
-                        (wait_until_effect ~timeout_ms:1_000L ~interval_ms:100
-                           (fun () ->
+                        (wait_until_effect ~timeout_span:kill_timeout_span
+                           ~interval_span:kill_interval_span (fun () ->
                              map
                                (function None -> Some () | Some _ -> None)
                                (find_repo_server config repo)))
