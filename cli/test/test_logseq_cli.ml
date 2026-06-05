@@ -464,16 +464,14 @@ let try_http_get url =
     let authority, target =
       match String.index_opt rest '/' with
       | Some idx ->
-          ( String.sub rest 0 idx,
-            String.sub rest idx (String.length rest - idx) )
+          (String.sub rest 0 idx, String.sub rest idx (String.length rest - idx))
       | None -> (rest, "/")
     in
     let host, port =
       match String.rindex_opt authority ':' with
       | Some idx ->
           ( String.sub authority 0 idx,
-            String.sub authority (idx + 1)
-              (String.length authority - idx - 1)
+            String.sub authority (idx + 1) (String.length authority - idx - 1)
             |> int_of_string )
       | None -> (authority, 80)
     in
@@ -491,8 +489,12 @@ let try_http_get url =
             close_out_noerr oc)
           (fun () ->
             Printf.fprintf oc
-              "GET %s HTTP/1.1\r\nHost: %s:%d\r\nAccept: \
-               text/plain\r\nConnection: close\r\n\r\n%!"
+              "GET %s HTTP/1.1\r\n\
+               Host: %s:%d\r\n\
+               Accept: text/plain\r\n\
+               Connection: close\r\n\
+               \r\n\
+               %!"
               target host port;
             input_line ic |> trim_cr |> starts_with ~prefix:"HTTP/1.1 2"))
   with _ -> false
@@ -6620,7 +6622,7 @@ process.exit(0);
           (match callback_status with
           | Unix.WEXITED 0 -> ()
           | _ -> failf "login callback server did not accept callback");
-          (match login_result with
+          match login_result with
           | Error err ->
               failf "login failed: %s:%s"
                 (Edn_util.keyword_to_string err.Error.code)
@@ -6629,7 +6631,8 @@ process.exit(0);
               let result =
                 "ok:" ^ result.Auth_state.authorize_url ^ ":"
                 ^ string_of_bool result.opened
-                ^ ":" ^ Option.value result.email ~default:""
+                ^ ":"
+                ^ Option.value result.email ~default:""
               in
               assert_contains ~name:"login authorize endpoint"
                 "https://logseq-prod.auth.us-east-1.amazoncognito.com/oauth2/authorize"
@@ -6647,7 +6650,7 @@ process.exit(0);
               assert_contains ~name:"login persisted access token"
                 "access-login" auth_file;
               assert_contains ~name:"login persisted refresh token"
-                "refresh-login" auth_file)));
+                "refresh-login" auth_file));
 
   check "Cli.run executes logout through typed action and deletes auth file"
     (fun () ->
