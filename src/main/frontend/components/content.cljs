@@ -55,10 +55,12 @@
 
      (shui/dropdown-menu-sub
       {:open set-icon-sub-menu-open?
-       :onOpenChange (fn [v]
-                       (when (not= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
-                         (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
-                         (set-icon-sub-menu-open v)))}
+       :onOpenChange (fn [v event-details]
+                       (if (= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
+                         (some-> event-details (.cancel))
+                         (do
+                           (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
+                           (set-icon-sub-menu-open v))))}
       (shui/dropdown-menu-sub-trigger
        (t :context-menu/set-icon))
       (shui/dropdown-menu-sub-content
@@ -237,10 +239,12 @@
 
          (shui/dropdown-menu-sub
           {:open set-icon-sub-menu-open?
-           :onOpenChange (fn [v]
-                           (when (not= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
-                             (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
-                             (set-icon-sub-menu-open v)))}
+           :onOpenChange (fn [v event-details]
+                           (if (= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
+                             (some-> event-details (.cancel))
+                             (do
+                               (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
+                               (set-icon-sub-menu-open v))))}
           (shui/dropdown-menu-sub-trigger
            (t :context-menu/set-icon))
           (shui/dropdown-menu-sub-content
