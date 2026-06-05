@@ -647,6 +647,9 @@
 (def ^:private menu-content-selector
   ".ui__dropdown-menu-content, .ui__dropdown-menu-sub-content, .ui__context-menu-content, .ui__context-menu-sub-content")
 
+(def ^:private submenu-content-selector
+  ".ui__dropdown-menu-sub-content, .ui__context-menu-sub-content")
+
 (def ^:private submenu-internal-close-reasons
   #{"trigger-hover" "focus-out"})
 
@@ -655,37 +658,53 @@
   (let [event (some-> event-details (.-event))
         native-event (or (some-> event (.-nativeEvent)) event)]
     (or (some-> event (.-relatedTarget))
-        (some-> native-event (.-relatedTarget)))))
+        (some-> native-event (.-relatedTarget))
+        (some-> event (.-toElement))
+        (some-> native-event (.-toElement)))))
+
+(defn- content-target?
+  [selector target]
+  (and (instance? js/Element target)
+       (some? (.closest target selector))))
 
 (defn- menu-content-target?
   [target]
-  (and (instance? js/Element target)
-       (some? (.closest target menu-content-selector))))
+  (content-target? menu-content-selector target))
 
-(defn- controlled-submenu-internal-close?
-  [^js props open? ^js event-details]
-  (and (gobj/containsKey props "open")
-       (false? open?)
-       (contains? submenu-internal-close-reasons (some-> event-details (.-reason)))
-       (menu-content-target? (event-related-target event-details))))
+(defn- submenu-content-target?
+  [target]
+  (content-target? submenu-content-selector target))
 
-(defn- controlled-menu-sub
+(defn- submenu-retained-target?
+  [reason target]
+  (case reason
+    "trigger-hover" (submenu-content-target? target)
+    "focus-out" (menu-content-target? target)
+    false))
+
+(defn- submenu-internal-close?
+  [open? ^js event-details]
+  (let [reason (some-> event-details (.-reason))]
+    (and (false? open?)
+         (contains? submenu-internal-close-reasons reason)
+         (submenu-retained-target? reason (event-related-target event-details)))))
+
+(defn- menu-sub
   [component]
   (react/forwardRef
    (fn [^js props ref]
      (let [props' (copy-props props)
            on-open-change (prop props "onOpenChange")]
        (when ref (set-prop! props' "ref" ref))
-       (when (gobj/containsKey props "open")
-         (set-prop! props' "onOpenChange"
-                    (fn [open? event-details]
-                      (if (controlled-submenu-internal-close? props open? event-details)
-                        (some-> event-details (.cancel))
-                        (when (fn? on-open-change)
-                          (on-open-change open? event-details))))))
+       (set-prop! props' "onOpenChange"
+                  (fn [open? event-details]
+                    (if (submenu-internal-close? open? event-details)
+                      (some-> event-details (.cancel))
+                      (when (fn? on-open-change)
+                        (on-open-change open? event-details)))))
        (react/createElement component props')))))
 
-(def DropdownMenuSub (controlled-menu-sub MenuSubmenuRootPart))
+(def DropdownMenuSub (menu-sub MenuSubmenuRootPart))
 (def DropdownMenuRadioGroup MenuRadioGroupPart)
 (def DropdownMenuContent
   (composed-popup MenuPortalPart MenuPositionerPart MenuPopupPart
@@ -745,7 +764,7 @@
 (def ContextMenuTrigger (forward-part ContextMenuTriggerPart nil))
 (def ContextMenuGroup (forward-part ContextMenuGroupPart nil))
 (def ContextMenuPortal ContextMenuPortalPart)
-(def ContextMenuSub (controlled-menu-sub ContextMenuSubmenuRootPart))
+(def ContextMenuSub (menu-sub ContextMenuSubmenuRootPart))
 (def ContextMenuRadioGroup ContextMenuRadioGroupPart)
 (def ContextMenuContent
   (composed-popup ContextMenuPortalPart ContextMenuPositionerPart ContextMenuPopupPart
