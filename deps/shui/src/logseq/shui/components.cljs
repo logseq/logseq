@@ -306,6 +306,38 @@
     (clean-props! props "onSelect"))
   props)
 
+(defn- native-event
+  [^js event]
+  (or (some-> event (.-nativeEvent)) event))
+
+(defn- event-target
+  [^js event]
+  (let [^js native-event (native-event event)]
+    (or (some-> event (.-target))
+        (some-> native-event (.-target))
+        (some-> event (.-currentTarget))
+        (some-> native-event (.-currentTarget)))))
+
+(defn- input-target?
+  [target]
+  (and (instance? js/Element target)
+       (or (instance? js/HTMLInputElement target)
+           (instance? js/HTMLTextAreaElement target)
+           (instance? js/HTMLSelectElement target)
+           (some? (.closest target "[contenteditable='true']")))))
+
+(defn- prevent-base-ui-handler!
+  [^js event]
+  (when (fn? (.-preventBaseUIHandler event))
+    (.preventBaseUIHandler event)))
+
+(defn- popup-key-down-handler
+  [handler]
+  (fn [^js event]
+    (some-> handler (apply [event]))
+    (when (input-target? (event-target event))
+      (prevent-base-ui-handler! event))))
+
 (defn- popup-normal-style
   []
   (doto #js {:fontSize "1rem"
@@ -361,11 +393,13 @@
            popup-props (with-class-props props
                          (cn base-class "outline-none focus:outline-none focus-visible:outline-none")
                          (some-> extra-class-fn (apply [props])))
+           on-key-down (prop popup-props "onKeyDown")
            children (prop props "children")]
        (set-prop! positioner-props "style"
                   (merge-object-props! #js {:zIndex 99999} (prop positioner-props "style")))
        (set-prop! popup-props "style"
                   (merge-object-props! (popup-normal-style) (prop popup-props "style")))
+       (set-prop! popup-props "onKeyDown" (popup-key-down-handler on-key-down))
        (adapt-focus-props! popup-props)
        (clean-radix-popup-props! popup-props)
        (when ref (set-prop! popup-props "ref" ref))
@@ -586,7 +620,49 @@
 (def DropdownMenuArrow (forward-part MenuArrowPart nil))
 (def DropdownMenuGroup (forward-part MenuGroupPart nil))
 (def DropdownMenuPortal MenuPortalPart)
-(def DropdownMenuSub MenuSubmenuRootPart)
+
+(def ^:private menu-content-selector
+  ".ui__dropdown-menu-content, .ui__dropdown-menu-sub-content, .ui__context-menu-content, .ui__context-menu-sub-content")
+
+(def ^:private submenu-internal-close-reasons
+  #{"trigger-hover" "focus-out"})
+
+(defn- event-related-target
+  [^js event-details]
+  (let [event (some-> event-details (.-event))
+        native-event (or (some-> event (.-nativeEvent)) event)]
+    (or (some-> event (.-relatedTarget))
+        (some-> native-event (.-relatedTarget)))))
+
+(defn- menu-content-target?
+  [target]
+  (and (instance? js/Element target)
+       (some? (.closest target menu-content-selector))))
+
+(defn- controlled-submenu-internal-close?
+  [^js props open? ^js event-details]
+  (and (gobj/containsKey props "open")
+       (false? open?)
+       (contains? submenu-internal-close-reasons (some-> event-details (.-reason)))
+       (menu-content-target? (event-related-target event-details))))
+
+(defn- controlled-menu-sub
+  [component]
+  (react/forwardRef
+   (fn [^js props ref]
+     (let [props' (copy-props props)
+           on-open-change (prop props "onOpenChange")]
+       (when ref (set-prop! props' "ref" ref))
+       (when (gobj/containsKey props "open")
+         (set-prop! props' "onOpenChange"
+                    (fn [open? event-details]
+                      (if (controlled-submenu-internal-close? props open? event-details)
+                        (some-> event-details (.cancel))
+                        (when (fn? on-open-change)
+                          (on-open-change open? event-details))))))
+       (react/createElement component props')))))
+
+(def DropdownMenuSub (controlled-menu-sub MenuSubmenuRootPart))
 (def DropdownMenuRadioGroup MenuRadioGroupPart)
 (def DropdownMenuContent
   (composed-popup MenuPortalPart MenuPositionerPart MenuPopupPart
@@ -646,7 +722,7 @@
 (def ContextMenuTrigger (forward-part ContextMenuTriggerPart nil))
 (def ContextMenuGroup (forward-part ContextMenuGroupPart nil))
 (def ContextMenuPortal ContextMenuPortalPart)
-(def ContextMenuSub ContextMenuSubmenuRootPart)
+(def ContextMenuSub (controlled-menu-sub ContextMenuSubmenuRootPart))
 (def ContextMenuRadioGroup ContextMenuRadioGroupPart)
 (def ContextMenuContent
   (composed-popup ContextMenuPortalPart ContextMenuPositionerPart ContextMenuPopupPart

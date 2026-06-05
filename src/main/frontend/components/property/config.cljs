@@ -325,18 +325,23 @@
                       item-props)
         [sub-open? set-sub-open!] (hooks/use-state false)
         toggle? (boolean? toggle-checked?)
-        id1 (str (or id (random-uuid)))
+        id1 (hooks/use-memo #(str (or id (random-uuid))) [id])
         id2 (str "d2-" id1)
-        or-close-menu-sub! (fn []
-                             (when (and (not (shui-popup/get-popup :ls-icon-picker))
-                                        (not (shui-popup/get-popup :ls-base-edit-form))
-                                        (not (shui-popup/get-popup :ls-node-tags-sub-pane)))
-                               (set-sub-open! false)
-                               (restore-root-highlight-item! id1)))
+        or-close-menu-sub! (fn [event-details]
+                             (if (or (shui-popup/get-popup :ls-icon-picker)
+                                     (shui-popup/get-popup :ls-base-edit-form)
+                                     (shui-popup/get-popup :ls-node-tags-sub-pane))
+                               (some-> event-details (.cancel))
+                               (do
+                                 (set-sub-open! false)
+                                 (restore-root-highlight-item! id1))))
         wrap-menuitem (if submenu-content
-                        #(shui/dropdown-menu-sub
-                          {:open sub-open?
-                           :on-open-change (fn [v] (if v (set-sub-open! true) (or-close-menu-sub!)))}
+                          #(shui/dropdown-menu-sub
+                            {:open sub-open?
+                           :on-open-change (fn [v event-details]
+                                             (if v
+                                               (set-sub-open! true)
+                                               (or-close-menu-sub! event-details)))}
                           (shui/dropdown-menu-sub-trigger (merge {:id id1} item-props') %)
                           (shui/dropdown-menu-sub-content
                            sub-content-props
