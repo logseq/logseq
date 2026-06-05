@@ -825,12 +825,12 @@
                                              (prop props "portalProps"))
            positioner-props (merge-object-props! (copy-named-props props positioner-prop-names)
                                                  (prop props "positionerProps"))
-           popup-props (with-class-props props "ui__select-content relative z-[60] max-h-96 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md" nil)
+           popup-props (with-class-props props "ui__select-content relative z-[99999] max-h-96 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md" nil)
            children (prop props "children")]
        (when ref (set-prop! popup-props "ref" ref))
-       (set-prop! positioner-props "className" (cn "z-[60]" (prop positioner-props "className")))
-       (set-prop! positioner-props "style" (js/Object.assign #js {} #js {:zIndex 60} (prop positioner-props "style")))
-       (set-prop! popup-props "style" (js/Object.assign #js {} (prop popup-props "style") #js {:zIndex 60}))
+       (set-prop! positioner-props "className" (cn "z-[99999]" (prop positioner-props "className")))
+       (set-prop! positioner-props "style" (js/Object.assign #js {} #js {:zIndex 99999} (prop positioner-props "style")))
+       (set-prop! popup-props "style" (js/Object.assign #js {} (prop popup-props "style") #js {:zIndex 99999}))
        (doseq [k (concat portal-prop-names
                          positioner-prop-names
                          ["portalProps" "positionerProps"
