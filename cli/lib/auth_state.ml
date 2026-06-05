@@ -602,11 +602,6 @@ let redirect_path = "/auth/callback"
 let callback_host = "localhost"
 let callback_port = 8765
 
-let trim_cr value =
-  let len = String.length value in
-  if len > 0 && value.[len - 1] = '\r' then String.sub value 0 (len - 1)
-  else value
-
 let split_once c value =
   match String.index_opt value c with
   | None -> (value, "")
@@ -651,193 +646,58 @@ let query_params query =
         let key, value = split_once '=' part in
         Some (url_decode key, url_decode value))
 
-let send_text_response oc status body =
-  Printf.fprintf oc "HTTP/1.1 %d OK\r\n" status;
-  Printf.fprintf oc "Content-Type: text/plain; charset=utf-8\r\n";
-  Printf.fprintf oc "Content-Length: %d\r\n" (String.length body);
-  Printf.fprintf oc "Connection: close\r\n\r\n%s%!" body
+let login_callback_response status body : Cli_platform.login_callback_response =
+  { status; body }
 
-let read_headers ic =
-  let rec loop () =
-    match input_line ic |> trim_cr with
-    | "" -> ()
-    | _ -> loop ()
-    | exception End_of_file -> ()
-  in
-  loop ()
-
-let wait_login_callback socket ~state ~timeout_span =
-  let timeout = Ptime_util.span_to_seconds_float timeout_span in
-  match Cli_unix.select [ socket ] [] [] timeout with
-  | [], _, _ ->
-      Error
-        (Error.make
-           (Edn_util.keyword_t "login-timeout")
-           "login callback timed out")
-  | _ ->
-      let client, _addr = Cli_unix.accept socket in
-      let ic = Cli_unix.in_channel_of_descr client in
-      let oc = Cli_unix.out_channel_of_descr client in
-      Fun.protect
-        ~finally:(fun () ->
-          close_in_noerr ic;
-          close_out_noerr oc)
-        (fun () ->
-          let request_line = input_line ic |> trim_cr in
-          read_headers ic;
-          match String.split_on_char ' ' request_line with
-          | _method :: target :: _ -> (
-              let path, query = split_once '?' target in
-              let params = query_params query in
-              let param key = List.assoc_opt key params in
-              match (path, param "error", param "state", param "code") with
-              | path, _, _, _ when path <> redirect_path ->
-                  send_text_response oc 404 "Not found";
-                  Error
-                    (Error.make
-                       (Edn_util.keyword_t "login-callback-not-found")
-                       "login callback path not found")
-              | _, Some oauth_error, _, _ ->
-                  send_text_response oc 400
-                    "Login failed. You can return to the CLI.";
-                  Error
-                    (Error.make
-                       ~context:
-                         (Edn_util.map
-                            [
-                              ( Edn_util.keyword ":oauth-error",
-                                Edn_util.string oauth_error );
-                            ])
-                       (Edn_util.keyword_t "login-callback-error")
-                       "login callback returned oauth error")
-              | _, _, Some callback_state, _ when callback_state <> state ->
-                  send_text_response oc 400
-                    "Login failed due to state mismatch. Return to the CLI and \
-                     retry.";
-                  Error
-                    (Error.make
-                       (Edn_util.keyword_t "invalid-callback-state")
-                       "login callback state mismatch")
-              | _, _, _, Some code when String.trim code <> "" ->
-                  send_text_response oc 200
-                    "Login successful. You can return to the CLI.";
-                  Ok code
-              | _ ->
-                  send_text_response oc 400
-                    "Login failed because the callback did not include a code.";
-                  Error
-                    (Error.make
-                       (Edn_util.keyword_t "missing-callback-code")
-                       "missing authorization code"))
-          | _ ->
-              send_text_response oc 400 "Invalid request";
-              Error
-                (Error.make
-                   (Edn_util.keyword_t "invalid-callback-request")
-                   "invalid login callback request"))
-
-module Js_runtime = struct
-  type t
-
-  external string : string -> t = "caml_js_from_string"
-  external to_string : t -> string = "caml_js_to_string"
-  external variable : string -> t = "caml_js_var"
-  external get : 'a -> 'b -> 'c = "caml_js_get"
-  external fun_call : 'a -> t array -> 'b = "caml_js_fun_call"
-  external meth_call : 'a -> string -> t array -> 'b = "caml_js_meth_call"
-  external obj : (string * t) array -> t = "caml_js_object"
-  external callback : ('a -> 'b) -> t = "caml_js_wrap_callback"
-  external eval_string : string -> t = "caml_js_eval_string"
-  external inject : 'a -> t = "%identity"
-
-  let number value =
-    fun_call
-      (eval_string "(function(value) { return Number(value); })")
-      [| string (string_of_int value) |]
-end
-
-let node_require name =
-  Js_runtime.fun_call
-    (Js_runtime.eval_string
-       {|
-(function(name) {
-  if (globalThis.process && typeof globalThis.process.getBuiltinModule === "function") {
-    return globalThis.process.getBuiltinModule(name);
-  }
-  if (typeof module !== "undefined" && module.require) {
-    return module.require(name);
-  }
-  throw new Error("Node builtin module is unavailable: " + name);
-})
-       |})
-    [| Js_runtime.string name |]
-
-let js_error_message error =
-  try
-    let message : Js_runtime.t = Js_runtime.get error "message" in
-    let text = Js_runtime.to_string message in
-    if String.trim text = "" then "JavaScript error" else text
-  with _ -> "JavaScript error"
-
-let send_text_response_js response status body =
-  let headers =
-    Js_runtime.obj
-      [|
-        ("Content-Type", Js_runtime.string "text/plain; charset=utf-8");
-        ( "Content-Length",
-          Js_runtime.string (string_of_int (String.length body)) );
-        ("Connection", Js_runtime.string "close");
-      |]
-  in
-  ignore
-    (Js_runtime.meth_call response "writeHead"
-       [| Js_runtime.number status; headers |]
-      : Js_runtime.t);
-  ignore
-    (Js_runtime.meth_call response "end" [| Js_runtime.string body |]
-      : Js_runtime.t)
-
-let callback_result_of_target ~state target =
-  let path, query = split_once '?' target in
-  let params = query_params query in
-  let param key = List.assoc_opt key params in
-  match (path, param "error", param "state", param "code") with
-  | path, _, _, _ when path <> redirect_path ->
-      ( 404,
-        "Not found",
+let callback_result_of_target ~state = function
+  | None ->
+      ( login_callback_response 400 "Invalid request",
         Error
           (Error.make
-             (Edn_util.keyword_t "login-callback-not-found")
-             "login callback path not found") )
-  | _, Some oauth_error, _, _ ->
-      ( 400,
-        "Login failed. You can return to the CLI.",
-        Error
-          (Error.make
-             ~context:
-               (Edn_util.map
-                  [
-                    ( Edn_util.keyword ":oauth-error",
-                      Edn_util.string oauth_error );
-                  ])
-             (Edn_util.keyword_t "login-callback-error")
-             "login callback returned oauth error") )
-  | _, _, Some callback_state, _ when callback_state <> state ->
-      ( 400,
-        "Login failed due to state mismatch. Return to the CLI and retry.",
-        Error
-          (Error.make
-             (Edn_util.keyword_t "invalid-callback-state")
-             "login callback state mismatch") )
-  | _, _, _, Some code when String.trim code <> "" ->
-      (200, "Login successful. You can return to the CLI.", Ok code)
-  | _ ->
-      ( 400,
-        "Login failed because the callback did not include a code.",
-        Error
-          (Error.make
-             (Edn_util.keyword_t "missing-callback-code")
-             "missing authorization code") )
+             (Edn_util.keyword_t "invalid-callback-request")
+             "invalid login callback request") )
+  | Some target -> (
+      let path, query = split_once '?' target in
+      let params = query_params query in
+      let param key = List.assoc_opt key params in
+      match (path, param "error", param "state", param "code") with
+      | path, _, _, _ when path <> redirect_path ->
+          ( login_callback_response 404 "Not found",
+            Error
+              (Error.make
+                 (Edn_util.keyword_t "login-callback-not-found")
+                 "login callback path not found") )
+      | _, Some oauth_error, _, _ ->
+          ( login_callback_response 400
+              "Login failed. You can return to the CLI.",
+            Error
+              (Error.make
+                 ~context:
+                   (Edn_util.map
+                      [
+                        ( Edn_util.keyword ":oauth-error",
+                          Edn_util.string oauth_error );
+                      ])
+                 (Edn_util.keyword_t "login-callback-error")
+                 "login callback returned oauth error") )
+      | _, _, Some callback_state, _ when callback_state <> state ->
+          ( login_callback_response 400
+              "Login failed due to state mismatch. Return to the CLI and retry.",
+            Error
+              (Error.make
+                 (Edn_util.keyword_t "invalid-callback-state")
+                 "login callback state mismatch") )
+      | _, _, _, Some code when String.trim code <> "" ->
+          ( login_callback_response 200
+              "Login successful. You can return to the CLI.",
+            Ok code )
+      | _ ->
+          ( login_callback_response 400
+              "Login failed because the callback did not include a code.",
+            Error
+              (Error.make
+                 (Edn_util.keyword_t "missing-callback-code")
+                 "missing authorization code") ))
 
 let open_browser config url =
   if
@@ -852,123 +712,6 @@ let open_browser config url =
       (Error.make
          (Edn_util.keyword_t "browser-open-failed")
          "failed to open browser")
-
-let wait_login_callback_js config authorize_url ~state ~timeout_span =
-  let task, wake = Lwt.task () in
-  let settled = ref false in
-  let timeout_handle = ref None in
-  let server_ref = ref None in
-  let opened_ref = ref false in
-  let close_server () =
-    match !server_ref with
-    | None -> ()
-    | Some server -> (
-        try ignore (Js_runtime.meth_call server "close" [||] : Js_runtime.t)
-        with _ -> ())
-  in
-  let clear_timeout () =
-    match !timeout_handle with
-    | None -> ()
-    | Some handle -> (
-        try
-          ignore
-            (Js_runtime.fun_call
-               (Js_runtime.variable "clearTimeout")
-               [| handle |]
-              : Js_runtime.t)
-        with _ -> ())
-  in
-  let finish result =
-    if not !settled then (
-      settled := true;
-      clear_timeout ();
-      close_server ();
-      Lwt.wakeup wake result)
-  in
-  let timeout () =
-    finish
-      (Error
-         (Error.make
-            (Edn_util.keyword_t "login-timeout")
-            "login callback timed out"));
-    Js_runtime.inject ()
-  in
-  let on_request request response =
-    let target =
-      try
-        let url : Js_runtime.t = Js_runtime.get request "url" in
-        Js_runtime.to_string url
-      with _ -> ""
-    in
-    let status, body, result = callback_result_of_target ~state target in
-    send_text_response_js response status body;
-    finish (Result.map (fun code -> (!opened_ref, code)) result);
-    Js_runtime.inject ()
-  in
-  let on_error error =
-    finish
-      (Error
-         (Error.make
-            ~context:
-              (Edn_util.map
-                 [
-                   ( Edn_util.keyword ":error",
-                     Edn_util.string (js_error_message error) );
-                 ])
-            (Edn_util.keyword_t "login-callback-server-start-failed")
-            "failed to start login callback server"));
-    error
-  in
-  let on_listen () =
-    let opened = open_browser config authorize_url in
-    (match opened with
-    | Error err -> finish (Error err)
-    | Ok opened ->
-        opened_ref := opened;
-        timeout_handle :=
-          Some
-            (Js_runtime.fun_call
-               (Js_runtime.variable "setTimeout")
-               [|
-                 Js_runtime.callback timeout;
-                 Js_runtime.number
-                   (int_of_float (Ptime_util.span_to_ms_float timeout_span));
-               |]);
-        ());
-    Js_runtime.inject ()
-  in
-  (try
-     let http = node_require "http" in
-     let server =
-       Js_runtime.meth_call http "createServer"
-         [| Js_runtime.callback on_request |]
-     in
-     server_ref := Some server;
-     ignore
-       (Js_runtime.meth_call server "on"
-          [| Js_runtime.string "error"; Js_runtime.callback on_error |]
-         : Js_runtime.t);
-     ignore
-       (Js_runtime.meth_call server "listen"
-          [|
-            Js_runtime.number callback_port;
-            Js_runtime.string callback_host;
-            Js_runtime.callback on_listen;
-          |]
-         : Js_runtime.t)
-   with exn ->
-     finish
-       (Error
-          (Error.make
-             ~context:
-               (Edn_util.map
-                  [
-                    ( Edn_util.keyword ":error",
-                      Edn_util.string (Printexc.to_string exn) );
-                  ])
-             (Edn_util.keyword_t "login-callback-server-start-failed")
-             "failed to start login callback server")));
-  task
 
 let resolve_auth config =
   match config_auth config with
@@ -1062,50 +805,60 @@ let login config =
                                updated_at = data.updated_at;
                              })))
           in
-          if Cli_unix.js_backend () then
-            Cli_effect.bind
-              (Cli_effect.of_lwt
-                 (wait_login_callback_js config authorize_url ~state
-                    ~timeout_span:config.login_timeout_span))
-              (function
-                | Error err -> Cli_effect.pure (Error err)
-                | Ok (opened, code) -> finish_login opened code)
-          else
-            let socket =
-              Cli_unix.socket Cli_unix.PF_INET Cli_unix.SOCK_STREAM 0
-            in
-            Fun.protect
-              ~finally:(fun () ->
-                try Cli_unix.close socket with Cli_unix.Cli_unix_error _ -> ())
-              (fun () ->
-                try
-                  Cli_unix.setsockopt socket Cli_unix.SO_REUSEADDR true;
-                  Cli_unix.bind socket
-                    (Cli_unix.ADDR_INET
-                       (Cli_unix.inet_addr_loopback, callback_port));
-                  Cli_unix.listen socket 1;
-                  match open_browser config authorize_url with
-                  | Error err -> Cli_effect.pure (Error err)
-                  | Ok opened -> (
-                      match
-                        wait_login_callback socket ~state
-                          ~timeout_span:config.login_timeout_span
-                      with
-                      | Error err -> Cli_effect.pure (Error err)
-                      | Ok code -> finish_login opened code)
-                with exn ->
-                  Cli_effect.pure
-                    (Error
-                       (Error.make
-                          ~context:
-                            (Edn_util.map
-                               [
-                                 ( Edn_util.keyword ":error",
-                                   Edn_util.string (Printexc.to_string exn) );
-                               ])
-                          (Edn_util.keyword_t
-                             "login-callback-server-start-failed")
-                          "failed to start login callback server"))))
+          let opened_ref = ref false in
+          let browser_open_error = ref None in
+          let on_listen () =
+            match open_browser config authorize_url with
+            | Ok opened ->
+                opened_ref := opened;
+                Cli_effect.pure (Ok ())
+            | Error err ->
+                browser_open_error := Some err;
+                Cli_effect.pure (Error err.Error.message)
+          in
+          let handle_request request =
+            callback_result_of_target ~state request.Cli_platform.target
+          in
+          Cli_effect.bind
+            (Cli_platform.login_callback_server ~host:callback_host
+               ~port:callback_port ~timeout_span:config.login_timeout_span
+               ~on_listen ~handle_request) (function
+            | Ok (Ok code) -> finish_login !opened_ref code
+            | Ok (Error err) -> Cli_effect.pure (Error err)
+            | Error Cli_platform.Login_callback_timeout ->
+                Cli_effect.pure
+                  (Error
+                     (Error.make
+                        (Edn_util.keyword_t "login-timeout")
+                        "login callback timed out"))
+            | Error (Cli_platform.Login_callback_server_aborted message) -> (
+                match !browser_open_error with
+                | Some err -> Cli_effect.pure (Error err)
+                | None ->
+                    Cli_effect.pure
+                      (Error
+                         (Error.make
+                            ~context:
+                              (Edn_util.map
+                                 [
+                                   ( Edn_util.keyword ":error",
+                                     Edn_util.string message );
+                                 ])
+                            (Edn_util.keyword_t
+                               "login-callback-server-start-failed")
+                            "failed to start login callback server")))
+            | Error (Cli_platform.Login_callback_server_start_failed message) ->
+                Cli_effect.pure
+                  (Error
+                     (Error.make
+                        ~context:
+                          (Edn_util.map
+                             [
+                               ( Edn_util.keyword ":error",
+                                 Edn_util.string message );
+                             ])
+                        (Edn_util.keyword_t "login-callback-server-start-failed")
+                        "failed to start login callback server"))))
 
 let logout config =
   let path = auth_path config in
