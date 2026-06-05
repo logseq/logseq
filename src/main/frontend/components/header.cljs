@@ -131,23 +131,23 @@
                    (db/entity [:block/uuid (uuid current-page)])))
         ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
         working-page? (if config/publishing? (not (state/use-sub :db/restoring?)) true)
-        page-menu (if (and working-page? (ldb/page? page))
-                    (page-menu/page-menu page)
-                    (when-not config/publishing?
-                      (let [block-id-str (str (:block/uuid page))
-                            favorited? (page-handler/favorited? block-id-str)]
-                        [{:title   (if favorited?
-                                     (t :page/unfavorite)
-                                     (t :page/add-to-favorites))
-                          :options {:on-click
-                                    (fn []
-                                      (if favorited?
-                                        (page-handler/<unfavorite-page! block-id-str)
-                                        (page-handler/<favorite-page! block-id-str)))}}
-                         {:title   (t :publish/dialog-title)
-                          :options {:on-click #(shui/dialog-open! (fn [] (page-menu/publish-page-dialog page))
-                                                                  {:class "w-auto max-w-md"})}}])))
-        page-menu-and-hr (concat page-menu [{:hr true}])
+        page-menu-items (fn []
+                          (if (and working-page? (ldb/page? (or (some-> page :db/id db/entity) page)))
+                            (page-menu/page-menu page)
+                            (when-not config/publishing?
+                              (let [block-id-str (str (:block/uuid page))
+                                    favorited? (page-handler/favorited? block-id-str)]
+                                [{:title   (if favorited?
+                                             (t :page/unfavorite)
+                                             (t :page/add-to-favorites))
+                                  :options {:on-click
+                                            (fn []
+                                              (if favorited?
+                                                (page-handler/<unfavorite-page! block-id-str)
+                                                (page-handler/<favorite-page! block-id-str)))}}
+                                 {:title   (t :publish/dialog-title)
+                                  :options {:on-click #(shui/dialog-open! (fn [] (page-menu/publish-page-dialog page))
+                                                                          {:class "w-auto max-w-md"})}}]))))
         login? (and (state/use-sub :auth/id-token) (user-handler/logged-in?))
         items (fn []
                 (->>
@@ -200,7 +200,7 @@
                              (ui/icon "logout")]]
                      :options {:on-click #(user-handler/logout)
                                :class "w-full"}})]
-                 (concat page-menu-and-hr)
+                 (concat (page-menu-items) [{:hr true}])
                  (remove nil?)))]
 
     (ui/tooltip
