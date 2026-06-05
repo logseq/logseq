@@ -211,6 +211,12 @@
     (js/Object.assign props source))
   props)
 
+(defn- apply-default-collision-avoidance!
+  [^js props]
+  (set-prop! props "collisionAvoidance"
+             (merge-object-props! #js {:fallbackAxisSide "none"}
+                                  (prop props "collisionAvoidance"))))
+
 (defn- prop-name
   [v]
   (cond
@@ -426,6 +432,7 @@
            children (prop props "children")]
        (set-prop! positioner-props "style"
                   (merge-object-props! #js {:zIndex 99999} (prop positioner-props "style")))
+       (apply-default-collision-avoidance! positioner-props)
        (set-prop! popup-props "style"
                   (merge-object-props! (popup-normal-style) (prop popup-props "style")))
        (set-prop! popup-props "onKeyDown" (popup-key-down-handler on-key-down))
@@ -886,6 +893,7 @@
        (when ref (set-prop! popup-props "ref" ref))
        (set-prop! positioner-props "className" (cn "z-[99999]" (prop positioner-props "className")))
        (set-prop! positioner-props "style" (js/Object.assign #js {} #js {:zIndex 99999} (prop positioner-props "style")))
+       (apply-default-collision-avoidance! positioner-props)
        (set-prop! popup-props "style"
                   (js/Object.assign #js {}
                                     popup-scroll-style
@@ -944,6 +952,7 @@
            children (prop props "children")]
        (set-prop! positioner-props "style"
                   (merge-object-props! #js {:zIndex 99999} (prop positioner-props "style")))
+       (apply-default-collision-avoidance! positioner-props)
        (set-prop! popup-props "style"
                   (merge-object-props! #js {} popup-scroll-style (prop popup-props "style")))
        (adapt-focus-props! popup-props)
