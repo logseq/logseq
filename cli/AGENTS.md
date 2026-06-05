@@ -3,3 +3,5 @@
 - This repository implements only the CLI portion. It does not include the db-worker-node server, and should use the existing cljs version of the db-worker-node server.
 - MUST not use magic methods to cast types.
 - Platform-specific code must only appear under `lib/platform/`.
+- Only keep test cases related to business logic.
+- Do not keep temporary tests added during refactoring, and do not keep test cases that assert internal implementation details.

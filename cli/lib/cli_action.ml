@@ -49,7 +49,12 @@ let command_id = function
       | Upsert_asset _ -> Upsert_asset
       | Upsert_tag _ -> Upsert_tag
       | Upsert_property _ -> Upsert_property)
-  | Remove _ -> Remove_block
+  | Remove action -> (
+      match action with
+      | Remove.Remove_block _ -> Remove_block
+      | Remove_page _ -> Remove_page
+      | Remove_tag _ -> Remove_tag
+      | Remove_property _ -> Remove_property)
   | Search action -> action.Search.command
   | Query _ -> Query
   | Show _ -> Show
