@@ -389,6 +389,13 @@
       ;; after dropping page, 4 remain, max-visible 4 => no overflow
       (is (false? (:overflow? result)))))
 
+  (testing "single middle segment is shown instead of folded into overflow"
+    (let [segs (make-segs 3)
+          result (model/build-breadcrumb-view segs {:max-visible 2 :nearest-count 1 :show-page? true})]
+      (is (false? (:overflow? result)))
+      (is (= segs (concat (:visible-prefix result) (:visible-suffix result))))
+      (is (= [] (:hidden result)))))
+
   (testing "search-result variant: max-visible 3, nearest-count 1"
     (let [segs (make-segs 5)
           opts (model/variant-options :search-result)
