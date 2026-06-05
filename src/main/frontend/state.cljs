@@ -438,7 +438,7 @@
           :ui/hide-empty-properties? false}))
 
 ;; State that most user config is dependent on
-(declare get-current-repo set-state!)
+(declare get-current-repo)
 
 (defn merge-configs
   "Merges user configs in given orders. All values are overridden except for maps
