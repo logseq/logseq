@@ -339,8 +339,7 @@
                            :on-open-change (fn [v] (if v (set-sub-open! true) (or-close-menu-sub!)))}
                           (shui/dropdown-menu-sub-trigger (merge {:id id1} item-props') %)
                           (shui/dropdown-menu-sub-content
-                           (merge {:hideWhenDetached true
-                                   :onEscapeKeyDown or-close-menu-sub!} sub-content-props)
+                           sub-content-props
                            (if (fn? submenu-content)
                              (submenu-content {:set-sub-open! set-sub-open! :id id1}) submenu-content)))
                         #(shui/dropdown-menu-item
@@ -360,7 +359,7 @@
         (fn? desc)
         (desc)
         (boolean? toggle-checked?)
-        [:span.scale-90.flex.items-center
+        [:span.flex.items-center
          (let [f (if checkbox? shui/checkbox shui/switch)]
            (f {:id id2 :size "sm" :checked toggle-checked?
                :disabled disabled? :on-click #(util/stop-propagation %)
