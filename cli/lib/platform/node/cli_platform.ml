@@ -5,6 +5,7 @@ module JS = struct
   type value = Js.Unsafe.any
 
   let string value = Js.Unsafe.inject (Js.string value)
+  let number value = Js.Unsafe.inject (Js.number_of_float (float_of_int value))
   let to_string value = Js.to_string (Js.Unsafe.coerce value)
 
   let to_int value =
@@ -33,21 +34,146 @@ module JS = struct
 end
 
 let node_builtin_module name =
-  let process = JS.get JS.global "process" in
-  let get_builtin_module = JS.get process "getBuiltinModule" in
-  let module_ = JS.get JS.global "module" in
-  let require = JS.get module_ "require" in
-  if JS.is_function get_builtin_module then
-    JS.fun_call get_builtin_module [| JS.string name |]
-  else if JS.is_function require then
-    JS.meth_call module_ "require" [| JS.string name |]
-  else failwith "Node module loader is not available"
+  JS.fun_call
+    (Js.Unsafe.pure_js_expr
+       {|
+(function(name) {
+  if (globalThis.process && typeof globalThis.process.getBuiltinModule === "function") {
+    return globalThis.process.getBuiltinModule(name);
+  }
+  if (typeof module !== "undefined" && module.require) {
+    return module.require(name);
+  }
+  throw new Error("Node builtin module is unavailable: " + name);
+})
+       |})
+    [| JS.string name |]
 
 let hostname () =
   let os = node_builtin_module "os" in
   let hostname = JS.get os "hostname" in
   if JS.is_function hostname then JS.fun_call hostname [||] |> JS.to_string
   else failwith "os.hostname is not available"
+
+type login_callback_request = { target : string option }
+type login_callback_response = { status : int; body : string }
+
+type login_callback_server_error =
+  | Login_callback_timeout
+  | Login_callback_server_start_failed of string
+  | Login_callback_server_aborted of string
+
+let js_error_message error =
+  try
+    let text = JS.get error "message" |> JS.to_string in
+    if String.trim text = "" then "JavaScript error" else text
+  with _ -> "JavaScript error"
+
+let send_text_response response body =
+  let headers =
+    JS.obj
+      [|
+        ("Content-Type", JS.string "text/plain; charset=utf-8");
+        ("Content-Length", JS.string (string_of_int (String.length body.body)));
+        ("Connection", JS.string "close");
+      |]
+  in
+  ignore
+    (JS.meth_call response "writeHead"
+       [| JS.number body.status; Js.Unsafe.inject headers |]
+      : JS.value);
+  ignore (JS.meth_call response "end" [| JS.string body.body |] : JS.value)
+
+let clear_timeout = JS.require_global_function "clearTimeout"
+let set_timeout = JS.require_global_function "setTimeout"
+
+let login_callback_server ~host ~port ~timeout_span ~on_listen ~handle_request =
+  let task, wake = Lwt.task () in
+  let settled = ref false in
+  let timeout_handle = ref None in
+  let server_ref = ref None in
+  let close_server () =
+    match !server_ref with
+    | None -> ()
+    | Some server -> (
+        try ignore (JS.meth_call server "close" [||] : JS.value) with _ -> ())
+  in
+  let clear_server_timeout () =
+    match !timeout_handle with
+    | None -> ()
+    | Some handle -> (
+        try ignore (JS.fun_call clear_timeout [| handle |] : JS.value)
+        with _ -> ())
+  in
+  let finish result =
+    if not !settled then (
+      settled := true;
+      clear_server_timeout ();
+      close_server ();
+      Lwt.wakeup wake result)
+  in
+  let timeout () =
+    finish (Error Login_callback_timeout);
+    JS.null
+  in
+  let install_timeout () =
+    timeout_handle :=
+      Some
+        (JS.fun_call set_timeout
+           [|
+             JS.callback timeout;
+             JS.number
+               (int_of_float (Ptime.Span.to_float_s timeout_span *. 1000.));
+           |])
+  in
+  let on_request request response =
+    let target =
+      try Some (JS.get request "url" |> JS.to_string) with _ -> None
+    in
+    let body, result = handle_request { target } in
+    send_text_response response body;
+    finish (Ok result);
+    JS.null
+  in
+  let on_error error =
+    finish (Error (Login_callback_server_start_failed (js_error_message error)));
+    error
+  in
+  let on_listen_js () =
+    Lwt.async (fun () ->
+        Lwt.catch
+          (fun () ->
+            Cli_effect.to_lwt (on_listen ()) >>= function
+            | Ok () ->
+                install_timeout ();
+                Lwt.return_unit
+            | Error message ->
+                finish (Error (Login_callback_server_aborted message));
+                Lwt.return_unit)
+          (fun exn ->
+            finish
+              (Error
+                 (Login_callback_server_start_failed (Printexc.to_string exn)));
+            Lwt.return_unit));
+    JS.null
+  in
+  (try
+     let http = node_builtin_module "http" in
+     let server =
+       JS.meth_call http "createServer" [| JS.callback on_request |]
+     in
+     server_ref := Some server;
+     ignore
+       (JS.meth_call server "on" [| JS.string "error"; JS.callback on_error |]
+         : JS.value);
+     ignore
+       (JS.meth_call server "listen"
+          [| JS.number port; JS.string host; JS.callback on_listen_js |]
+         : JS.value)
+   with exn ->
+     finish
+       (Error (Login_callback_server_start_failed (Printexc.to_string exn))));
+  Cli_effect.of_lwt task
 
 module HTTP = struct
   let js_error_message error =
