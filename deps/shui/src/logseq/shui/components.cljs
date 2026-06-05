@@ -361,6 +361,30 @@
   [children]
   (first (array-seq (child-array children))))
 
+(defn- own-prop?
+  [^js props k]
+  (and props (gobj/containsKey props k)))
+
+(defn- select-item-entry
+  [^js props]
+  (doto #js {}
+    (set-prop! "value" (prop props "value"))
+    (set-prop! "label" (prop props "children"))))
+
+(defn- infer-select-items
+  [children]
+  (letfn [(infer [children]
+            (mapcat
+             (fn [child]
+               (if (react/isValidElement child)
+                 (let [props (prop child "props")]
+                   (if (own-prop? props "value")
+                     [(select-item-entry props)]
+                     (infer (prop props "children"))))
+                 []))
+             (array-seq (child-array children))))]
+    (seq (infer children))))
+
 (defn- as-child?
   [^js props]
   (true? (or (prop props "asChild")
@@ -808,7 +832,15 @@
        (when ref (set-prop! props' "ref" ref))
        (react/createElement Button props')))))
 
-(def Select (forward-part SelectRootPart nil))
+(def Select
+  (react/forwardRef
+   (fn [^js props ref]
+     (let [props' (copy-props props)]
+       (when ref (set-prop! props' "ref" ref))
+       (when-not (own-prop? props' "items")
+         (when-let [items (infer-select-items (prop props "children"))]
+           (set-prop! props' "items" (to-array items))))
+       (react/createElement SelectRootPart props')))))
 (def SelectGroup (forward-part SelectGroupPart nil))
 (def SelectValue (forward-part SelectValuePart nil))
 (def SelectTrigger (forward-part SelectTriggerPart "ui__select-trigger flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1"))
