@@ -110,11 +110,14 @@
 (defn- popup-content-target?
   [target]
   (and (element? target)
-       (some? (.closest target ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content"))))
+       (some? (.closest target ".ui__dropdown-menu-content, .ui__dropdown-menu-sub-content, .ui__popover-content, .ui__context-menu-content"))))
 
 (defn- popup-focus-retained?
   [targets]
   (some popup-content-target? targets))
+
+(def ^:private menu-transition-close-reasons
+  #{"trigger-hover" "trigger-focus" "list-navigation" "sibling-open"})
 
 (defn- input-target?
   [target]
@@ -309,11 +312,15 @@
                                         target-toggle? (some #(same-popup-target? target %) targets)
                                         focus-retained? (and (= reason "focus-out")
                                                              (popup-focus-retained? targets))
+                                        menu-transition? (and use-menu?
+                                                              (contains? menu-transition-close-reasons reason))
                                         handler (case reason
                                                   "escape-key" (:onEscapeKeyDown content-props)
                                                   "outside-press" (:onPointerDownOutside content-props)
                                                   nil)]
-                                    (if (or target-toggle? focus-retained?)
+                                    (if (or target-toggle?
+                                            focus-retained?
+                                            menu-transition?)
                                       (some-> e (.cancel))
                                       (when-not (close-canceled? handler e)
                                         (hide! id 1 {:event native-event}))))))]
