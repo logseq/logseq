@@ -356,9 +356,11 @@
        (fn []
          (selection/action-bar))
        {:id :selection-action-bar
+        :focus-trigger? false
         :force-popover? true
         :root-props {:modal false}
         :content-props {:side "top"
+                        :onCloseAutoFocus #(.preventDefault %)
                         :class "!w-max !max-w-none !overflow-visible !py-0 !px-0 !border-none"}
         :auto-side? false
         :align :start}))))
