@@ -166,7 +166,6 @@
   :electron {:target :node-script
              :output-to "static/electron.js"
              :main electron.core/main
-             :prepend "globalThis.shadow_esm_import = specifier => import(specifier);\n"
              :devtools {:before-load electron.core/stop
                         :after-load electron.core/start}
              :build-hooks [(shadow.hooks/build-metadata-hook "--long --always --dirty")]

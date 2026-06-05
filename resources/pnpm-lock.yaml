@@ -51,8 +51,8 @@ importers:
         specifier: ^11.3.4
         version: 11.3.4
       https-proxy-agent:
-        specifier: 8.0.0
-        version: 8.0.0
+        specifier: 7.0.6
+        version: 7.0.6
       keytar:
         specifier: ^7.9.0
         version: 7.9.0
@@ -78,8 +78,8 @@ importers:
         specifier: 7.7.4
         version: 7.7.4
       socks-proxy-agent:
-        specifier: 9.0.0
-        version: 9.0.0
+        specifier: 8.0.5
+        version: 8.0.5
       string-width:
         specifier: 8.2.0
         version: 8.2.0

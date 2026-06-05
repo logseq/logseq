@@ -11,8 +11,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
             [logseq.common.graph-dir :as graph-dir]
-            [promesa.core :as p]
-            [shadow.esm :refer [dynamic-import]]))
+            [promesa.core :as p]))
 
 (defonce *win (atom nil)) ;; The main window
 
@@ -24,21 +23,11 @@
 
 (defonce dev? (not prod?))
 (defonce *fetchAgent (atom nil))
-(defonce *proxy-agent-ctors (atom nil))
 (defonce extract-zip (js/require "extract-zip"))
+(defonce https-proxy-agent (js/require "https-proxy-agent"))
+(defonce socks-proxy-agent (js/require "socks-proxy-agent"))
 
 (declare <resolve-fetch-proxy)
-
-(defn- <ensure-proxy-agent-ctors
-  "Load ESM-only proxy agent packages once and cache their constructors."
-  []
-  (or @*proxy-agent-ctors
-      (reset! *proxy-agent-ctors
-              (p/let [https-module (dynamic-import "https-proxy-agent")
-                      socks-module (dynamic-import "socks-proxy-agent")
-                      ctors {:http   (.-HttpsProxyAgent ^js https-module)
-                             :socks5 (.-SocksProxyAgent ^js socks-module)}]
-                ctors))))
 
 (defn open
   ([target] (open target nil))
@@ -50,9 +39,11 @@
 (defn- <build-fetch-agent
   [{:keys [protocol host port]}]
   (when (and protocol host port (contains? #{"http" "socks5"} protocol))
-    (p/let [ctors (<ensure-proxy-agent-ctors)
-            proxy-url (str protocol "://" host ":" port)]
-      (if-let [ctor (get ctors (keyword protocol))]
+    (let [proxy-url (str protocol "://" host ":" port)]
+      (if-let [ctor (case protocol
+                     "http" (.-HttpsProxyAgent ^js https-proxy-agent)
+                     "socks5" (.-SocksProxyAgent ^js socks-proxy-agent)
+                     nil)]
         (new ctor proxy-url)
         (do
           (logger/error "Unknown proxy protocol:" protocol)
