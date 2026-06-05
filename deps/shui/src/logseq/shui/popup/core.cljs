@@ -1,6 +1,7 @@
 (ns logseq.shui.popup.core
   (:require [dommy.core :as d]
             [io.factorhouse.hsx.core :as hsx]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.util :as util :refer [use-atom]]
             [medley.core :as medley]))
 
@@ -34,6 +35,7 @@
 (defonce ^:private *id (atom 0))
 (defonce ^:private gen-id #(reset! *id (inc @*id)))
 (defonce ^:private *recent-toggle-close (atom nil))
+(defonce ^:private *last-pointer-target (atom nil))
 (def *opened-sub-menus (atom #{}))
 
 (defn get-popup
@@ -100,10 +102,10 @@
 (defn- event-target
   [^js event]
   (let [^js native-event (native-event event)]
-    (or (some-> event (.-currentTarget))
-        (some-> native-event (.-currentTarget))
-        (some-> event (.-target))
-        (some-> native-event (.-target)))))
+    (or (some-> event (.-target))
+        (some-> native-event (.-target))
+        (some-> event (.-currentTarget))
+        (some-> native-event (.-currentTarget)))))
 
 (defn- stop-toggle-event!
   [^js event]
@@ -127,6 +129,31 @@
   (reset! *recent-toggle-close {:target target
                                 :time (js/Date.now)}))
 
+(defn- consume-toggle-event!
+  [^js event]
+  (stop-toggle-event! event)
+  (clear-selection!))
+
+(defn- remember-and-consume-toggle-close!
+  [target ^js event]
+  (when target
+    (remember-toggle-close! target))
+  (consume-toggle-event! event))
+
+(defn- remember-pointer-target!
+  [^js event]
+  (reset! *last-pointer-target {:target (event-target event)
+                                :time (js/Date.now)}))
+
+(defn- recent-pointer-target
+  []
+  (when-let [{:keys [target time]} @*last-pointer-target]
+    (if (> (- (js/Date.now) time) 1000)
+      (do
+        (reset! *last-pointer-target nil)
+        nil)
+      target)))
+
 (defn- suppress-toggle-open?
   [target]
   (when-let [{recent-target :target time :time} @*recent-toggle-close]
@@ -139,10 +166,9 @@
         true))))
 
 (defn- transient-close-reason?
-  [^js event-details force-popover?]
-  (let [reason (when event-details (.-reason event-details))]
-    (or (contains? #{"trigger-hover" "cancel-open"} reason)
-        (and force-popover? (= reason "focus-out")))))
+  [^js event-details]
+  (contains? #{"trigger-hover" "cancel-open"}
+             (when event-details (.-reason event-details))))
 
 (defn- close-prevented?
   [handler-result ^js event-details ^js native-event]
@@ -210,16 +236,11 @@
                      (open-popup-by-target target)))]
       (cond
         suppressed-open?
-        (do
-          (stop-toggle-event! event)
-          (clear-selection!))
+        (consume-toggle-event! event)
 
         config
         (do
-          (when target
-            (remember-toggle-close! target))
-          (stop-toggle-event! event)
-          (clear-selection!)
+          (remember-and-consume-toggle-close! target event)
           (hide! (:id config) 0 {:event event})
           (:id config))
 
@@ -294,20 +315,20 @@
           handle-pointer-outside! (fn [^js e]
                                     (let [native-event (or (some-> e (.-event)) e)]
                                       (when (same-popup-target? target (event-target native-event))
-                                        (remember-toggle-close! target)
-                                        (stop-toggle-event! native-event)
-                                        (clear-selection!))
+                                        (remember-and-consume-toggle-close! target native-event))
                                       (when-not (false? (some-> content-props (:onPointerDownOutside) (apply [e])))
                                         (hide! id 1 {:event native-event}))))
           handle-open-change! (fn [open? ^js e]
-                                (if (and (not open?) (transient-close-reason? e force-popover?))
+                                (if (and (not open?) (transient-close-reason? e))
                                   (some-> e (.cancel))
                                   (do
                                     (some-> root-props (:onOpenChange) (apply [open? e]))
                                     (when-not open?
                                       (let [native-event (.-event e)
-                                            toggle-close? (same-popup-target? target (event-target native-event))
                                             reason (.-reason e)
+                                            toggle-close? (or (same-popup-target? target (event-target native-event))
+                                                              (and (= reason "focus-out")
+                                                                   (same-popup-target? target (recent-pointer-target))))
                                             prevented? (case reason
                                                          "escape-key"
                                                          (do
@@ -322,9 +343,7 @@
                                                          false)]
                                         (when-not prevented?
                                           (when toggle-close?
-                                            (remember-toggle-close! target)
-                                            (stop-toggle-event! native-event)
-                                            (clear-selection!))
+                                            (remember-and-consume-toggle-close! target native-event))
                                           (hide! id 1 {:event native-event})))))))]
       (popup-root
        (merge root-props {:open open?
@@ -332,10 +351,13 @@
        (popup-trigger
         {:as-child true}
         (button {:class "overflow-hidden fixed p-0 opacity-0"
+                 :tabIndex -1
+                 :aria-hidden true
                  :style {:height (if (and (number? height)
                                           (> height 0))
                                    height 1)
                          :width 1
+                         :pointer-events "none"
                          :top y
                          :left x}} ""))
        (let [content-props (cond-> (merge content-props {:onEscapeKeyDown handle-key-escape!
@@ -360,6 +382,11 @@
 (hsx/defc install-popups
   []
   (let [[popups _set-popups!] (use-atom *popups)]
+    (hooks/use-effect!
+     (fn []
+       (.addEventListener js/window "pointerdown" remember-pointer-target! true)
+       #(.removeEventListener js/window "pointerdown" remember-pointer-target! true))
+     [])
     [:<>
      (for [config popups
            :when (and (map? config) (:id config) (not (:all? config)))]
