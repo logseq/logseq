@@ -505,18 +505,10 @@
 (defn toggle
   ([on? on-click] (toggle on? on-click false))
   ([on? on-click small?]
-   [:a.ui__toggle {:on-click on-click
-                   :class (if small? "is-small" "")
-                   :tab-index "0"
-                   :on-key-down (fn [e] (when (and e (= (.-key e) "Enter"))
-                                          (util/stop e)
-                                          (on-click e)))}
-    [:span.wrapper.transition-colors.ease-in-out.duration-200
-     {:aria-checked (if on? "true" "false"), :tab-index "0", :role "checkbox"
-      :class        (if on? "ui__toggle-background-on" "ui__toggle-background-off")}
-     [:span.switcher.transform.transition.ease-in-out.duration-200
-      {:class       (if on? "is-on" "is-off")
-       :aria-hidden "true"}]]]))
+   (shui/switch
+    (cond-> {:checked (boolean on?)
+             :on-click on-click}
+      small? (assoc :size "sm")))))
 
 (defn keyboard-shortcut-from-config [shortcut-name & {:keys [pick-first?]}]
   (let [binding (shortcut-dh/shortcut-binding shortcut-name)]

@@ -550,11 +550,20 @@
 (def Switch
   (react/forwardRef
    (fn [^js props ref]
-     (let [props' (with-class-props props "ui__switch peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[checked]:bg-primary data-[unchecked]:bg-input" nil)]
+     (let [size (or (prop-name (prop props "size")) "default")
+           small? (= size "sm")
+           props' (with-class-props props
+                    (cn "ui__switch peer inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[checked]:justify-end data-[checked]:bg-primary data-[unchecked]:justify-start data-[unchecked]:bg-input"
+                        (if small? "h-4 w-8" "h-6 w-11"))
+                    nil)]
+       (clean-props! props' "size")
        (when ref (set-prop! props' "ref" ref))
        (react/createElement
         SwitchRootPart props'
-        (react/createElement SwitchThumbPart #js {:className "pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[checked]:translate-x-5 data-[unchecked]:translate-x-0"}))))))
+        (react/createElement SwitchThumbPart #js {:className (cn "pointer-events-none block rounded-full bg-background shadow-lg ring-0 transition-transform"
+                                                                 (if small?
+                                                                   "h-3 w-3"
+                                                                   "h-5 w-5"))}))))))
 
 (def RadioGroup (forward-part RadioGroupPrimitive "ui__radio-group grid gap-2"))
 (def RadioGroupItem

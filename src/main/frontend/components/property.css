@@ -401,10 +401,6 @@ a.control-link {
     & + svg {
       @apply opacity-30;
     }
-
-    .ui__switch {
-      @apply relative top-[1px];
-    }
   }
 }
 
