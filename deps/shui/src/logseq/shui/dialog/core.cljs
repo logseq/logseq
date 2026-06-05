@@ -110,8 +110,11 @@
         config (cond-> config
                  (fn? content)
                  (assoc :content (content config)))]
-    (upsert-dialog! (assoc-in config [:content-props :onOpenAutoFocus]
-                             #(.preventDefault %)))))
+    (upsert-dialog! (update config :content-props
+                            (fn [content-props]
+                              (merge {:onOpenAutoFocus #(.preventDefault %)
+                                      :onCloseAutoFocus #(.preventDefault %)}
+                                     content-props))))))
 
 (defn alert!
   [content-or-config & config']

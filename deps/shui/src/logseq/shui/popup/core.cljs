@@ -249,9 +249,12 @@
           (when (element? target)
             (d/set-attr! target "data-popup-active" (if (keyword? id) (name id) (str id))))
           (let [on-before-hide (fn [^js e]
-                                 (when-let [^js trigger (and (not (false? focus-trigger?))
-                                                             (some-> target (.closest "[tabindex='0']")))]
-                                   (js/setTimeout #(.focus trigger) 16))
+                                 (when (and (not (false? focus-trigger?))
+                                            (some? target)
+                                            (= js/document (.-ownerDocument target))
+                                            (.-isConnected target)
+                                            (fn? (.-focus target)))
+                                   (js/setTimeout #(.focus target) 16))
                                  (some-> on-before-hide (apply [e])))]
             (upsert-popup!
              (merge opts

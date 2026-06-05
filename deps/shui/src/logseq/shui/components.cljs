@@ -298,6 +298,12 @@
     (set-prop! props' "className" (cn base-class extra-class (prop props "className")))
     props'))
 
+(defn- popup-normal-style
+  []
+  (doto #js {:fontSize "1rem"
+             :lineHeight 1.5}
+    (set-prop! "--ls-page-title-size" "1rem")))
+
 (defn- forward-dom
   ([tag base-class]
    (forward-dom tag base-class nil))
@@ -348,6 +354,8 @@
            children (prop props "children")]
        (set-prop! positioner-props "style"
                   (merge-object-props! #js {:zIndex 99999} (prop positioner-props "style")))
+       (set-prop! popup-props "style"
+                  (merge-object-props! (popup-normal-style) (prop popup-props "style")))
        (adapt-focus-props! popup-props)
        (clean-radix-popup-props! popup-props)
        (when ref (set-prop! popup-props "ref" ref))
@@ -617,10 +625,10 @@
 (def ContextMenuRadioGroup ContextMenuRadioGroupPart)
 (def ContextMenuContent
   (composed-popup ContextMenuPortalPart ContextMenuPositionerPart ContextMenuPopupPart
-                  "ui__context-menu-content z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"))
+                  "ui__context-menu-content z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md outline-none focus:outline-none focus-visible:outline-none"))
 (def ContextMenuSubContent
   (composed-popup ContextMenuPortalPart ContextMenuPositionerPart ContextMenuPopupPart
-                  "ui__context-menu-sub-content z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg"))
+                  "ui__context-menu-sub-content z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg outline-none focus:outline-none focus-visible:outline-none"))
 (def ContextMenuItem (forward-part ContextMenuItemPart "ui__context-menu-item relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50"))
 (def ContextMenuCheckboxItem (forward-part ContextMenuCheckboxItemPart "ui__context-menu-checkbox-item relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50"))
 (def ContextMenuRadioItem (forward-part ContextMenuRadioItemPart "ui__context-menu-radio-item relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50"))

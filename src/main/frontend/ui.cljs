@@ -150,6 +150,7 @@
        (for [color built-in-colors]
          [:a
           {:key (str "key-" color)
+           :class "inline-flex items-center justify-center w-[30px] h-[30px]"
            :title (t (keyword "color" color))
            :on-click #(add-bgcolor-fn color)}
           [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")
@@ -157,6 +158,7 @@
                                                   active-ring)}}]])
        [:a
         {:title (t :ui/remove-background)
+         :class "inline-flex items-center justify-center w-[30px] h-[30px]"
          :on-click rm-bgcolor-fn}
         [:div.heading-bg.remove {:style {:box-shadow (when (and known-color? (nil? current-color))
                                                        active-ring)}} "-"]]]])))
@@ -903,34 +905,52 @@
   ([add-heading-fn auto-heading-fn rm-heading-fn]
    (menu-heading nil add-heading-fn auto-heading-fn rm-heading-fn))
   ([heading add-heading-fn auto-heading-fn rm-heading-fn]
-   [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
-    [:div.flex.flex-row.justify-between.flex-1.px-1
-     (for [i (range 1 7)]
-       ^{:key (str "key-h-" i)}
-       [button
+   (let [font-icon-props {:font? true
+                          :style {:align-items "center"
+                                  :display "inline-flex"
+                                  :font-size 18
+                                  :height 18
+                                  :justify-content "center"
+                                  :line-height 1
+                                  :width 18}}
+         heading-button-style {:box-sizing "border-box"
+                               :height 30
+                               :padding 0
+                               :width 30}]
+     [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
+      [:div.flex.flex-row.items-center.justify-between.flex-1.mx-2
+       (for [i (range 1 7)]
+         ^{:key (str "key-h-" i)}
+         [button
+          ""
+          :icon (str "h-" i)
+          :title (t :editor/heading i)
+          :class (util/classnames ["to-heading-button" {:is-active (= heading i)}])
+          :icon-props font-icon-props
+          :on-click #(add-heading-fn i)
+          :style heading-button-style
+          :variant (when-not (= heading i) :ghost)
+          :size :icon])
+       (button
         ""
-        :icon (str "h-" i)
-        :title (t :editor/heading i)
-        :class (util/classnames ["to-heading-button" {:is-active (= heading i)}])
-        :on-click #(add-heading-fn i)
-        :variant (when-not (= heading i) :ghost)
-        :small? true])
-     (button
-      ""
-      :icon "h-auto"
-      :class (util/classnames ["to-heading-button" {:is-active (true? heading)}])
-      :title (t :editor/auto-heading)
-      :on-click auto-heading-fn
-      :variant (when-not (true? heading) :ghost)
-      :small? true)
-     (button
-      ""
-      :icon "heading-off"
-      :class (util/classnames ["to-heading-button" {:is-active (false? heading)}])
-      :title (t :editor/remove-heading)
-      :on-click rm-heading-fn
-      :variant (when-not (false? heading) :ghost)
-      :small? true)]]))
+        :icon "h-auto"
+        :class (util/classnames ["to-heading-button" {:is-active (true? heading)}])
+        :title (t :editor/auto-heading)
+        :icon-props {:extension? true}
+        :on-click auto-heading-fn
+        :style heading-button-style
+        :variant (when-not (true? heading) :ghost)
+        :size :icon)
+       (button
+        ""
+        :icon "heading-off"
+        :class "to-heading-button"
+        :title (t :editor/remove-heading)
+        :icon-props {:extension? true}
+        :on-click rm-heading-fn
+        :style heading-button-style
+        :variant :ghost
+        :size :icon)]])))
 
 (hsx/defc tooltip
   [trigger tooltip-content & {:keys [portal? root-props trigger-props content-props]}]

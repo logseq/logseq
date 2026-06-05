@@ -321,7 +321,7 @@ li p:last-child,
 }
 
 .to-heading-button {
-  @apply px-1 text-lg;
+  @apply p-0 text-lg w-[30px] h-[30px];
 }
 
 /** endregion **/

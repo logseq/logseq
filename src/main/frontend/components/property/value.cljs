@@ -1408,6 +1408,7 @@
                                            {:align "start"
                                             :as-dropdown? true
                                             :auto-focus? (not (false? popup-auto-focus-trigger?))
+                                            :force-popover? true
                                             :trigger-id trigger-id}
                                             (some? popup-focus-trigger?)
                                             (assoc :focus-trigger? popup-focus-trigger?)))))]
