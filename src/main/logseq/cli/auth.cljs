@@ -17,6 +17,7 @@
 (def ^:private logout-complete-path "/logout-complete")
 (def ^:private callback-host "localhost")
 (def ^:private callback-port 8765)
+(def ^:private callback-bind-address "127.0.0.1")
 (def ^:private auth-provider "cognito")
 (def ^:private default-scope "email openid phone")
 (def ^:private token-endpoint-path "/oauth2/token")
@@ -258,7 +259,7 @@
                               (reject (ex-info "failed to start login callback server"
                                                {:code :login-callback-server-start-failed}
                                                error))))
-       (.listen server callback-port callback-host
+       (.listen server callback-port callback-bind-address
                 (fn []
                   (let [address (.address server)
                         port (.-port address)
@@ -308,7 +309,7 @@
                               (reject (ex-info "failed to start logout callback server"
                                                {:code :logout-callback-server-start-failed}
                                                error))))
-       (.listen server callback-port callback-host
+       (.listen server callback-port callback-bind-address
                 (fn []
                   (resolve {:logout-uri (logout-complete-uri)
                             :wait! (fn []
