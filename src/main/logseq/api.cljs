@@ -201,6 +201,7 @@
 
 ;; db based graph APIs
 (def ^:export get_property db-based-api/get-property)
+(def ^:export db_transact db-based-api/transact)
 (def ^:export upsert_property db-based-api/upsert-property)
 (def ^:export remove_property db-based-api/remove-property)
 (def ^:export get_all_tags db-based-api/get-all-tags)

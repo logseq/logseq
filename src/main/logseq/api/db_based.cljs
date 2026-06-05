@@ -1,11 +1,13 @@
 (ns logseq.api.db-based
   "DB version related fns"
   (:require ["@emoji-mart/data" :as emoji-data]
+            [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [cljs.reader]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as db-conn]
@@ -14,6 +16,8 @@
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.handler.page :as page-handler]
             [frontend.modules.layout.core]
             [frontend.state :as state]
@@ -128,29 +132,29 @@
 
 (defn- upsert-property-aux
   [this k schema opts]
-  (p/let [k' (api-block/sanitize-user-property-name k)
-          property-ident (api-block/get-db-ident-from-property-name k' this)
-          _ (api-block/ensure-property-upsert-control this property-ident k')
-          schema (or (some-> schema
-                             (update-keys #(if (contains? #{:public} %)
-                                             (keyword (str (name %) "?")) %)))
-                     {})
-          _ (when (:type schema)
-              (schema-type-check! (keyword (:type schema))))
-          schema (cond-> schema
-                   (string? (:cardinality schema))
-                   (-> (assoc :db/cardinality (->cardinality (:cardinality schema)))
-                     (dissoc :cardinality))
+  (let [k' (api-block/sanitize-user-property-name k)
+        property-ident (api-block/get-db-ident-from-property-name k' this)
+        _ (api-block/ensure-property-upsert-control this property-ident k')
+        schema (or (some-> schema
+                           (update-keys #(if (contains? #{:public} %)
+                                           (keyword (str (name %) "?")) %)))
+                   {})
+        _ (when (:type schema)
+            (schema-type-check! (keyword (:type schema))))
+        schema (cond-> schema
+                 (string? (:cardinality schema))
+                 (-> (assoc :db/cardinality (->cardinality (:cardinality schema)))
+                   (dissoc :cardinality))
 
-                   (boolean? (:hide schema))
-                   (-> (assoc :logseq.property/hide? (:hide schema))
-                     (dissoc :hide))
+                 (boolean? (:hide schema))
+                 (-> (assoc :logseq.property/hide? (:hide schema))
+                   (dissoc :hide))
 
-                   (string? (:type schema))
-                   (-> (assoc :logseq.property/type (keyword (:type schema)))
-                     (dissoc :type)))
-          p (db-property-handler/upsert-property! property-ident schema
-                                                  (assoc opts :property-name k'))]
+                 (string? (:type schema))
+                 (-> (assoc :logseq.property/type (keyword (:type schema)))
+                   (dissoc :type)))
+        p (db-property-handler/upsert-property! property-ident schema
+                                                (assoc opts :property-name k'))]
     (db/entity (:db/id p))))
 
 (defn upsert-property
@@ -186,6 +190,243 @@
                         {key schema})
               :reset-property-values reset-property-values}]
     (api-block/db-based-save-block-properties! block {key' value} opts)))
+
+(defn- normalize-js-data
+  [input]
+  (some->> (js->clj input :keywordize-keys true)
+           (walk/postwalk
+            (fn [node]
+              (if (map? node)
+                (into {}
+                      (map (fn [[k v]]
+                             [(if (keyword? k)
+                                (csk/->kebab-case-keyword k)
+                                k)
+                              v]))
+                      node)
+                node)))))
+
+(defn- resolve-block!
+  [block-or-id]
+  (let [block (cond
+                (de/entity? block-or-id)
+                block-or-id
+
+                (map? block-or-id)
+                (or (when-let [db-id (:db/id block-or-id)]
+                      (db/entity db-id))
+                    (when-let [block-uuid (:block/uuid block-or-id)]
+                      (db/entity [:block/uuid block-uuid])))
+
+                (number? block-or-id)
+                (db/entity block-or-id)
+
+                (uuid? block-or-id)
+                (db/entity [:block/uuid block-or-id])
+
+                (util/uuid-string? block-or-id)
+                (db/entity [:block/uuid (uuid block-or-id)])
+
+                :else nil)]
+    (when-not block
+      (throw (ex-info "Block not found" {:input block-or-id})))
+    block))
+
+(defn- resolve-page-uuid!
+  [page]
+  (cond
+    (de/entity? page)
+    (:block/uuid page)
+
+    (map? page)
+    (or (let [page-uuid (:block/uuid page)]
+          (cond
+            (uuid? page-uuid)
+            page-uuid
+
+            (util/uuid-string? page-uuid)
+            (uuid page-uuid)
+
+            :else nil))
+        (some-> (:db/id page) db/entity :block/uuid)
+        (throw (ex-info "Page not found" {:input page})))
+
+    (uuid? page)
+    page
+
+    (util/uuid-string? page)
+    (uuid page)
+
+    (string? page)
+    (or (some-> (db/get-page page) :block/uuid)
+        (throw (ex-info "Page not found" {:input page})))
+
+    :else
+    (throw (ex-info "Page not found" {:input page}))))
+
+(defn- resolve-transaction-outliner-op
+  [actions]
+  (if (= 1 (count actions))
+    (case (:type (first actions))
+      "createPage" :create-page
+      "renamePage" :rename-page
+      "deletePage" :delete-page
+      "upsertProperty" :upsert-property
+      "removeProperty" :delete-page
+      "rawTx" :transact
+      :save-block)
+    :plugin-transact))
+
+(defn- blank-input?
+  [value]
+  (or (nil? value)
+      (and (string? value) (string/blank? value))))
+
+(defn- normalize-create-page-options
+  [options]
+  (let [options' (or options {})]
+    (cond-> options'
+      (contains? options' :persist-op)
+      (-> (assoc :persist-op? (:persist-op options'))
+        (dissoc :persist-op))
+
+      (contains? options' :class)
+      (-> (assoc :class? (:class options'))
+        (dissoc :class))
+
+      (contains? options' :journal)
+      (-> (assoc :journal? (:journal options'))
+        (dissoc :journal))
+
+      (contains? options' :today-journal)
+      (-> (assoc :today-journal? (:today-journal options'))
+        (dissoc :today-journal))
+
+      (contains? options' :split-namespace)
+      (-> (assoc :split-namespace? (:split-namespace options'))
+        (dissoc :split-namespace))
+
+      (util/uuid-string? (:uuid options'))
+      (update :uuid uuid)
+
+      (sequential? (:tags options'))
+      (update :tags (fn [tags]
+                      (mapv (fn [tag]
+                              (if (util/uuid-string? tag)
+                                (uuid tag)
+                                tag))
+                            tags))))))
+
+(defn- remove-property!*
+  [this k]
+  (when-let [property (-get-property this k)]
+    (when-let [property-uuid (and (api-block/plugin-property-key? (:db/ident property))
+                                  (:block/uuid property))]
+      (outliner-op/delete-page! property-uuid {}))))
+
+(defn- run-transaction-action!
+  [this action]
+  (case (:type action)
+    "updateBlock"
+    (let [{:keys [block content properties schema reset-property-values]} action
+          block-entity (resolve-block! block)]
+      (when (and (nil? content) (empty? properties))
+        (throw (ex-info "updateBlock requires content and/or properties" {:action action})))
+      (when (seq properties)
+        (api-block/db-based-save-block-properties! block-entity properties {:plugin this
+                                                                            :schema schema
+                                                                            :reset-property-values reset-property-values}))
+      (when (some? content)
+        (when-not (string? content)
+          (throw (ex-info "updateBlock content must be a string" {:action action})))
+        (editor-handler/save-block! (state/get-current-repo) (:block/uuid block-entity) content {})))
+
+    "createPage"
+    (let [{:keys [page-name options]} action]
+      (when (blank-input? page-name)
+        (throw (ex-info "createPage pageName must not be blank" {:action action})))
+      (outliner-op/create-page! page-name (normalize-create-page-options options)))
+
+    "renamePage"
+    (let [{:keys [page new-name]} action]
+      (when (blank-input? new-name)
+        (throw (ex-info "renamePage newName must not be blank" {:action action})))
+      (outliner-op/rename-page! (resolve-page-uuid! page) new-name))
+
+    "deletePage"
+    (let [{:keys [page options]} action]
+      (outliner-op/delete-page! (resolve-page-uuid! page) (or options {})))
+
+    "upsertProperty"
+    (let [{:keys [key schema options]} action]
+      (when (blank-input? key)
+        (throw (ex-info "upsertProperty key must not be blank" {:action action})))
+      (upsert-property-aux this key schema (or options {})))
+
+    "removeProperty"
+    (let [{:keys [key]} action]
+      (when (blank-input? key)
+        (throw (ex-info "removeProperty key must not be blank" {:action action})))
+      (remove-property!* this key))
+
+    "upsertBlockProperty"
+    (let [{:keys [block key value options]} action
+          block-entity (resolve-block! block)]
+      (when (blank-input? key)
+        (throw (ex-info "upsertBlockProperty key must not be blank" {:action action})))
+      (upsert-block-property this
+                             block-entity
+                             key
+                             value
+                             {:schema (:schema options)
+                              :reset-property-values (:reset options)}))
+
+    "removeBlockProperty"
+    (let [{:keys [block key]} action]
+      (when (blank-input? key)
+        (throw (ex-info "removeBlockProperty key must not be blank" {:action action})))
+      (let [block-entity (resolve-block! block)
+            property-ident (api-block/get-db-ident-from-property-name key this)]
+        (outliner-op/remove-block-property! (:db/id block-entity) property-ident)))
+
+    "rawTx"
+    (let [{:keys [tx-data tx-meta]} action]
+      (when-not (seq tx-data)
+        (throw (ex-info "rawTx txData must not be empty" {:action action})))
+      (outliner-op/transact! tx-data tx-meta))
+
+    (throw (ex-info "Unsupported DB transaction action"
+                    {:action-type (:type action)
+                     :action action}))))
+
+(defn transact
+  [^js actions ^js opts]
+  (this-as
+   this
+   (let [actions' (vec (or (normalize-js-data actions) []))]
+     (when-not (seq actions')
+       (throw (ex-info "DB.transact requires at least one action" {})))
+     (let [opts' (or (normalize-js-data opts) {})
+           tx-id (random-uuid)
+           persist-op? (if (contains? opts' :persist-op)
+                         (boolean (:persist-op opts'))
+                         true)
+           undo-group (:undo-group opts')
+           outliner-op (resolve-transaction-outliner-op actions')]
+       (ui-outliner-tx/transact!
+        {:db-sync/tx-id tx-id
+         :outliner-op outliner-op
+         :persist-op? persist-op?
+         :undo-group undo-group}
+        (doseq [action actions']
+          (run-transaction-action! this action)))
+       (sdk-utils/result->js
+        (cond-> {:tx-id tx-id
+                 :outliner-op outliner-op
+                 :action-count (count actions')
+                 :persist-op persist-op?}
+          (some? undo-group)
+          (assoc :undo-group undo-group)))))))
 
 (defn get-all-tags
   []

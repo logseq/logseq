@@ -295,7 +295,38 @@ logseq.DB.onBlockChanged(uuid, (block, txData) => {
 // File operations
 await logseq.DB.getFileContent('logseq/custom.css')
 await logseq.DB.setFileContent('logseq/custom.js', 'console.log("hi")')
+
+// DB graph semantic transaction
+await logseq.DB.transact([
+  {
+    type: 'updateBlock',
+    block: currentBlock.uuid,
+    content: 'Updated in one tx',
+  },
+  {
+    type: 'upsertBlockProperty',
+    block: currentBlock.uuid,
+    key: 'status',
+    value: 'ready',
+  },
+], {
+  persistOp: true,
+  undoGroup: 'command:example',
+})
 ```
+
+`logseq.DB.transact(...)` is a **DB-graph-only**, **semantic-first** transaction API for batching multiple DB changes into:
+
+- one atomic batch
+- one local tx
+- one undo step per call
+
+Prefer it when one user action needs multiple block/property/page changes. Prefer semantic actions over low-level tx-data so undo/replay stays understandable.
+
+See also:
+
+- `libs/guides/db_transaction_guide.md`
+- `libs/_docs/001_db_transaction.md`
 
 ### `logseq.UI` - UI Utilities
 

@@ -361,6 +361,113 @@ export type PropertySchema = {
   public: boolean
 }
 
+export type DBTransactionOptions = {
+  /**
+   * Whether this transaction should be persisted for db-sync/client-op replay.
+   * Defaults to `true`.
+   */
+  persistOp?: boolean
+  /**
+   * Optional history grouping metadata for future command/runtime integration.
+   */
+  undoGroup?: string
+}
+
+export type DBTransactionUpdateBlockAction = {
+  type: 'updateBlock'
+  block: BlockIdentity | EntityID
+  content?: string
+  properties?: Record<string, any>
+  schema?: Record<string, Partial<PropertySchema>>
+  resetPropertyValues?: boolean
+}
+
+export type DBTransactionCreatePageAction = {
+  type: 'createPage'
+  pageName: BlockPageName
+  options?: Partial<{
+    uuid: string
+    tags: Array<BlockIdentity>
+    properties: Record<string, any>
+    persistOp: boolean
+    class: boolean
+    journal: boolean
+    todayJournal: boolean
+    splitNamespace: boolean
+    classIdentNamespace: string
+    format: BlockEntity['format']
+  }>
+}
+
+export type DBTransactionRenamePageAction = {
+  type: 'renamePage'
+  page: PageIdentity | EntityID
+  newName: string
+}
+
+export type DBTransactionDeletePageAction = {
+  type: 'deletePage'
+  page: PageIdentity | EntityID
+  options?: Record<string, any>
+}
+
+export type DBTransactionUpsertPropertyAction = {
+  type: 'upsertProperty'
+  key: string
+  schema?: Partial<PropertySchema>
+  options?: { name?: string }
+}
+
+export type DBTransactionRemovePropertyAction = {
+  type: 'removeProperty'
+  key: string
+}
+
+export type DBTransactionUpsertBlockPropertyAction = {
+  type: 'upsertBlockProperty'
+  block: BlockIdentity | EntityID
+  key: string
+  value: any
+  options?: Partial<{
+    schema: Partial<PropertySchema>
+    reset: boolean
+  }>
+}
+
+export type DBTransactionRemoveBlockPropertyAction = {
+  type: 'removeBlockProperty'
+  block: BlockIdentity | EntityID
+  key: string
+}
+
+export type DBTransactionRawTxAction = {
+  /**
+   * Experimental escape hatch for low-level tx-data. Prefer semantic actions.
+   */
+  type: 'rawTx'
+  txData: Array<any>
+  txMeta?: Record<string, any>
+}
+
+export type DBTransactionAction =
+  | DBTransactionUpdateBlockAction
+  | DBTransactionCreatePageAction
+  | DBTransactionRenamePageAction
+  | DBTransactionDeletePageAction
+  | DBTransactionUpsertPropertyAction
+  | DBTransactionRemovePropertyAction
+  | DBTransactionUpsertBlockPropertyAction
+  | DBTransactionRemoveBlockPropertyAction
+  | DBTransactionRawTxAction
+
+export type DBTransactionResult = {
+  txId: string
+  outlinerOp: string
+  actionCount: number
+  persistOp: boolean
+  undoGroup?: string
+}
+
 export interface IPluginSearchServiceHooks {
   name: string
   options?: Record<string, any>
@@ -987,6 +1094,17 @@ export interface IDBProxy {
    */
   setFileContent: (path: string, content: string) => Promise<void>
   getFileContent: (path: string) => Promise<string | null>
+
+  /**
+   * Execute multiple semantic DB actions as one atomic transaction and one undo step.
+   *
+   * This API is DB-graph only. Prefer semantic actions over `rawTx` so undo/replay
+   * metadata stays meaningful.
+   */
+  transact: (
+    actions: Array<DBTransactionAction>,
+    opts?: DBTransactionOptions
+  ) => Promise<DBTransactionResult>
 }
 
 /**

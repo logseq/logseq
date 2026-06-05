@@ -657,6 +657,14 @@ const editor: Partial<IEditorProxy> = {
 }
 
 const db: Partial<IDBProxy> = {
+  transact(
+    this: LSPluginUser,
+    actions: Array<any>,
+    opts?: Record<string, any>
+  ) {
+    return this._execCallableAPIAsync('db_transact', actions, opts)
+  },
+
   onBlockChanged(
     this: LSPluginUser,
     uuid: BlockUUID,
