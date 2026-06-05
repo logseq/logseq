@@ -457,7 +457,7 @@
    :intent "link"
    :target "_blank"))
 
-(hsx/defc user-proxy-settings-container
+(hsx/defc ^:large-vars/cleanup-todo user-proxy-settings-container
   [{:keys [protocol type] :as agent-opts}]
   (let [selected-type    (or (not-empty (:type agent-opts)) (not-empty protocol) (not-empty type) "system")
         [opts set-opts!] (hooks/use-state agent-opts)
