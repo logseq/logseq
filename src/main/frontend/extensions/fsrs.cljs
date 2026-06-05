@@ -2,7 +2,6 @@
   "Flashcards functions based on FSRS, only works in db-based graphs"
   (:require [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.common.missionary :as c.m]
             [frontend.components.block :as component-block]
             [frontend.components.macro :as component-macro]
             [frontend.context.i18n :refer [t]]
@@ -22,7 +21,6 @@
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [open-spaced-repetition.cljc-fsrs.core :as fsrs.core]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]
@@ -409,24 +407,20 @@
            [:p (t :flashcard.review/finished)]))])))
 
 (defonce ^:private *last-update-due-cards-count-canceler (atom nil))
-(def ^:private new-task--update-due-cards-count
-  "Return a task that update `:srs/cards-due-count` periodically."
-  (m/sp
-    (let [repo (state/get-current-repo)]
-      (m/?
-       (m/reduce
-        (fn [_ _]
-          (p/let [due-cards (<get-due-card-block-ids repo nil)]
-            (state/set-state! :srs/cards-due-count (count due-cards))))
-        (c.m/clock (* 3600 1000)))))))
+(defn- update-due-cards-count!
+  []
+  (let [repo (state/get-current-repo)]
+    (p/let [due-cards (<get-due-card-block-ids repo nil)]
+      (state/set-state! :srs/cards-due-count (count due-cards)))))
 
 (defn update-due-cards-count
   []
   (when-let [canceler @*last-update-due-cards-count-canceler]
     (canceler)
     (reset! *last-update-due-cards-count-canceler nil))
-  (let [canceler (c.m/run-task :update-due-cards-count
-                   new-task--update-due-cards-count)]
+  (update-due-cards-count!)
+  (let [interval-id (js/setInterval update-due-cards-count! (* 3600 1000))
+        canceler #(js/clearInterval interval-id)]
     (reset! *last-update-due-cards-count-canceler canceler)
     nil))
 

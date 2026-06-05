@@ -28,3 +28,19 @@
           {:pending-asset-ops 0
            :asset-transfer-counts {:upload 0
                                    :download 0}}))))
+
+(deftest detail-info-state-is-closed-without-rtc-lock
+  (is (= :close
+         (:rtc-state (indicator/rtc-state->detail-info {})))))
+
+(deftest indicator-button-class-is-space-separated
+  (let [class-name (indicator/indicator-button-class
+                    {:online? true
+                     :rtc-state :open
+                     :pending-local-ops 0
+                     :pending-asset-ops 0
+                     :pending-server-ops 0})]
+    (is (string? class-name))
+    (is (not (re-find #"," class-name)))
+    (is (= #{"cloud" "on" "idle"}
+           (set (.split class-name " "))))))
