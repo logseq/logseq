@@ -490,6 +490,7 @@
                            (shui/popup-show! (.-target e)
                                              (fn [] (choice-base-edit-form property block owner-block))
                                              {:id :ls-base-edit-form
+                                              :force-popover? true
                                               :align "start"}))
                :title value}
       value]
@@ -579,6 +580,7 @@
                            (add-existing-values property values' opts)
                            (choice-base-edit-form property {:create? true} owner-block))))
                      {:id :ls-base-edit-form
+                      :force-popover? true
                       :align "start"})))
 
 (defn- add-choice-menuitem
@@ -587,7 +589,8 @@
    {:icon :plus
     :title (t :property/add-choice)
     :item-props
-    {:on-click
+    {:close-on-click false
+     :on-click
      (fn [^js e]
        (p/let [values (db-async/<get-property-values (:db/ident property) {})
                existing-values (seq (:property/closed-values property))
@@ -983,10 +986,9 @@
           :item-props {:class "opacity-60 focus:!text-red-rx-09 focus:opacity-100"
                        :on-select (fn [^js e]
                                     (util/stop e)
-                                    (-> (p/do!
-                                         (handle-delete-property! owner-block property {:class-schema? class-schema?})
-                                         (shui/popup-hide-all!))
-                                        (p/catch (fn [] (restore-root-highlight-item! :delete-property)))))}}))
+                                    (shui/popup-hide-all!)
+                                    (-> (handle-delete-property! owner-block property {:class-schema? class-schema?})
+                                        (p/catch (fn [] nil))))}}))
       (when debug?
         [:<>
          (shui/dropdown-menu-separator)
