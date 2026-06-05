@@ -2,7 +2,6 @@
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.colors :as colors]
-            [frontend.common.missionary :as c.m]
             [frontend.components.assets :as assets]
             [frontend.components.shortcut :as shortcut]
             [frontend.components.svg :as svg]
@@ -35,7 +34,6 @@
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [io.factorhouse.hsx.core :as hsx]))
@@ -1184,10 +1182,10 @@
                            (when graph-uuid
                              (rtc-handler/<rtc-invite-email graph-uuid invite-email)))))]
     (hooks/use-effect!
-     #(c.m/run-task*
-       (m/sp
-         (c.m/<? (rtc-handler/<rtc-get-users-info))
-         (set-loading! false)))
+     #(do
+        (p/let [_ (rtc-handler/<rtc-get-users-info)]
+          (set-loading! false))
+        nil)
      [])
     [:div.flex.flex-col.gap-2.mt-4
      {:on-key-press (fn [e]

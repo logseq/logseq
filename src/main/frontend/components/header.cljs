@@ -54,12 +54,13 @@
 
 (defn current-local-uploadable-graph
   []
-  (let [current-repo (state/get-current-repo)]
-    (some (fn [{:keys [url] :as graph}]
-            (when (and (= current-repo url)
-                       (repo/local-uploadable-graph? graph))
-              graph))
-          (state/get-repos))))
+  (when-not (ldb/get-graph-rtc-uuid (db/get-db))
+    (let [current-repo (state/get-current-repo)]
+      (some (fn [{:keys [url] :as graph}]
+              (when (and (= current-repo url)
+                         (repo/local-uploadable-graph? graph))
+                graph))
+            (state/get-repos)))))
 
 (defn local-graph-sync-button
   [graph]
@@ -87,15 +88,18 @@
        (when (seq online-users)
          (for [{user-email :user/email
                 user-name :user/name
-                user-uuid :user/uuid} online-users]
-           (when user-name
-             (avatar/user-avatar
-              {:class "w-5 h-5"
-               :style {:app-region "no-drag"}
-               :title user-email
-               :name user-name
-               :uuid user-uuid
-               :fallback-props {:style {:font-size 11}}}))))])))
+                user-uuid :user/uuid} online-users
+               :when user-name
+               :let [key (str "rtc-user-" (or user-uuid user-email user-name))]]
+           ^{:key key}
+           [:<>
+            (avatar/user-avatar
+             {:class "w-5 h-5"
+              :style {:app-region "no-drag"}
+              :title user-email
+              :name user-name
+              :uuid user-uuid
+              :fallback-props {:style {:font-size 11}}})]))])))
 
 (hsx/defc left-menu-button
   [{:keys [on-click]}]

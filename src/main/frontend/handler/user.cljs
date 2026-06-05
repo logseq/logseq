@@ -8,7 +8,6 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [electron.ipc :as ipc]
-            [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -21,7 +20,6 @@
             [goog.crypt.Hmac]
             [goog.crypt.Sha256]
             [goog.crypt.base64 :as base64]
-            [missionary.core :as m]
             [promesa.core :as p]))
 
 ;;; userinfo, token, login/logout, ...
@@ -334,20 +332,21 @@
                   (-> (state/get-auth-id-token) parse-jwt expired?))
           (ex-info "empty or expired token and refresh failed" {:anom :expired-token}))))))
 
-(def task--ensure-id&access-token
-  (m/sp
-    (let [id-token (state/get-auth-id-token)]
-      (when (or (nil? id-token)
-                (-> id-token parse-jwt almost-expired-or-expired?))
+(defn <ensure-id&access-token!
+  []
+  (let [id-token (state/get-auth-id-token)]
+    (if (or (nil? id-token)
+            (-> id-token parse-jwt almost-expired-or-expired?))
+      (p/let [_ (<refresh-id-token&access-token)]
         (prn (str "refresh tokens... " (tc/to-string (t/now))))
-        (c.m/<? (<refresh-id-token&access-token))
         (when (or (nil? (state/get-auth-id-token))
                   (-> (state/get-auth-id-token) parse-jwt expired?))
-          (throw (ex-info "empty or expired token and refresh failed" {:type :expired-token})))))))
+          (throw (ex-info "empty or expired token and refresh failed" {:type :expired-token}))))
+      (p/resolved nil))))
 
 (def-thread-api :thread-api/ensure-id&access-token
   []
-  (p/let [_ (js/Promise. task--ensure-id&access-token)]
+  (p/let [_ (<ensure-id&access-token!)]
     {:id-token (state/get-auth-id-token)}))
 
 ;;; user groups
@@ -387,20 +386,18 @@
     [repo]
     (= (get-user-type repo) "member"))
 
-(defn new-task--upload-user-avatar
+(defn <upload-user-avatar
   [avatar-str]
-  (m/sp
-    (when-let [token (state/get-auth-id-token)]
-      (let [{:keys [status body] :as resp}
-            (c.m/<?
-             (http/post
-              (str "https://" config/API-DOMAIN "/logseq/get_presigned_user_avatar_put_url")
-              {:oauth-token token
-               :with-credentials? false}))]
-        (when-not (http/unexceptional-status? status)
-          (throw (ex-info "failed to get presigned url" {:resp resp})))
-        (let [presigned-url (:presigned-url body)
-              {:keys [status]} (c.m/<? (http/put presigned-url {:body avatar-str :with-credentials? false}))]
+  (when-let [token (state/get-auth-id-token)]
+    (p/let [{:keys [status body] :as resp}
+            (http/post
+             (str "https://" config/API-DOMAIN "/logseq/get_presigned_user_avatar_put_url")
+             {:oauth-token token
+              :with-credentials? false})]
+      (when-not (http/unexceptional-status? status)
+        (throw (ex-info "failed to get presigned url" {:resp resp})))
+      (let [presigned-url (:presigned-url body)]
+        (p/let [{:keys [status]} (http/put presigned-url {:body avatar-str :with-credentials? false})]
           (when-not (http/unexceptional-status? status)
             (throw (ex-info "failed to upload avatar" {:resp resp}))))))))
 

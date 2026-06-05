@@ -984,23 +984,23 @@
                        (string/includes? className "year")))]
     [:div.months-years-nav {:class className}
      (if year?
-	       (shui/input
-	        {:on-change (fn [v]
-	                      (when v
-	                        (onChange (day-picker-change-event v))))
-	         :class "h-8 !w-20 !px-3 !py-0"
-	         :value value
-	         :type "number"
-	         :min 1
-	         :max 9999})
+               (shui/input
+                {:on-change (fn [v]
+                              (when v
+                                (onChange (day-picker-change-event v))))
+                 :class "h-8 !w-20 !px-3 !py-0"
+                 :value value
+                 :type "number"
+                 :min 1
+                 :max 9999})
 
        (shui/dropdown-menu
-	        (shui/dropdown-menu-trigger
-	         {:as-child true}
-	         (shui/button {:variant :ghost
-	                       :class "!px-3 !py-0 h-8 !w-24 justify-start border border-input rounded-md"
-	                       :size :sm}
-	                      (get-month-label value)))
+                (shui/dropdown-menu-trigger
+                 {:as-child true}
+                 (shui/button {:variant :ghost
+                               :class "!px-3 !py-0 h-8 !w-24 justify-start border border-input rounded-md"
+                               :size :sm}
+                              (get-month-label value)))
         (shui/dropdown-menu-content
          (for [[idx _month] (medley/indexed month-values)
                :let [label (get-month-label idx)]]
@@ -1111,7 +1111,7 @@
         (set! (.. el -style -backgroundImage)
               (util/format "conic-gradient(var(--ls-pie-fg-color) %s%, var(--ls-pie-bg-color) %s%)" percentage percentage)))
      [percentage])
-    [:span.cp__file-sync-indicator-progress-pie {:ref *el}]))
+    [:span.cp__rtc-sync-indicator-progress-pie {:ref *el}]))
 
 (comment
   (hsx/defc emoji-picker

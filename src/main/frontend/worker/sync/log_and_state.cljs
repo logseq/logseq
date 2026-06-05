@@ -32,7 +32,7 @@
   nil)
 
 ;;; subscribe-logs, push to frontend
-;;; TODO: refactor by using c.m/run-background-task
+;;; TODO: refactor background log subscription
 (defn- subscribe-logs
   []
   (remove-watch *rtc-log :subscribe-logs)

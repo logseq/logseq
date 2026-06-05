@@ -40,10 +40,7 @@
        (vswap! *profile update qkw inc)
        (if-let [f (@*thread-apis qkw)]
          (let [result (apply f (ldb/read-transit-str args-transit-str))
-               result-promise
-               (if (fn? result) ;; missionary task is a fn
-                 (js/Promise. result)
-                 result)]
+               result-promise result]
            (->
             (p/let [result' result-promise]
               (write-transit-str-with-catch result' qualified-kw-str))

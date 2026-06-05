@@ -2,7 +2,6 @@
   "RTC events"
   (:require-macros [frontend.handler.events.macros :refer [defevent!]])
   (:require [frontend.common.crypt :as crypt]
-            [frontend.common.missionary :as c.m]
             [frontend.components.e2ee :as e2ee]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -13,7 +12,6 @@
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [promesa.core :as p]))
 
 (defn- rtc-collaborators-dialog?
@@ -67,45 +65,45 @@
 (defevent! :rtc/graph-count-exceed-limit [[_]]
   (notification/show! (t :sync/graph-count-exceed-limit) :warning false))
 
+(defonce ^:private *sync-app-state-cancel! (atom nil))
+
 (defn- sync-app-state!
   []
-  (let [state-flow
-        (->> (m/latest
-              (fn [current-repo config id-token access-token refresh-token oauth-token-url oauth-domain oauth-client-id user-info]
-                (cond-> (common-util/remove-nils-non-nested
-                         {:git/current-repo current-repo
-                          :config config
-                          :auth/id-token id-token
-                          :auth/access-token access-token
-                          :auth/refresh-token refresh-token
-                          :auth/oauth-token-url oauth-token-url
-                          :auth/oauth-domain oauth-domain
-                          :auth/oauth-client-id oauth-client-id
-                          :user/info user-info})
-                  (seq config/OAUTH-DOMAIN)
-                  (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
-
-                  (seq config/COGNITO-CLIENT-ID)
-                  (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID)))
-              flows/current-repo-flow
-              (flows/sub-flow [:config])
-              (flows/sub-flow [:auth/id-token])
-              (flows/sub-flow [:auth/access-token])
-              (flows/sub-flow [:auth/refresh-token])
-              (flows/sub-flow [:auth/oauth-token-url])
-              (flows/sub-flow [:auth/oauth-domain])
-              (flows/sub-flow [:auth/oauth-client-id])
-              (flows/sub-flow [:user/info]))
-             (m/eduction (dedupe)))
+  (when-let [cancel! @*sync-app-state-cancel!]
+    (cancel!))
+  (let [state-atoms {:git/current-repo flows/current-repo
+                     :config (flows/sub-atom [:config])
+                     :auth/id-token (flows/sub-atom [:auth/id-token])
+                     :auth/access-token (flows/sub-atom [:auth/access-token])
+                     :auth/refresh-token (flows/sub-atom [:auth/refresh-token])
+                     :auth/oauth-token-url (flows/sub-atom [:auth/oauth-token-url])
+                     :auth/oauth-domain (flows/sub-atom [:auth/oauth-domain])
+                     :auth/oauth-client-id (flows/sub-atom [:auth/oauth-client-id])
+                     :user/info (flows/sub-atom [:user/info])}
         <init-sync-done? (p/deferred)
-        task (m/reduce
-              (constantly nil)
-              (m/ap
-                (let [m (m/?> (m/relieve state-flow))]
-                  (when (:git/current-repo m)
-                    (c.m/<? (state/<invoke-db-worker :thread-api/sync-app-state m)))
-                  (p/resolve! <init-sync-done?))))]
-    (c.m/run-task* task)
+        last-state (atom ::not-set)
+        app-state (fn []
+                    (cond-> (common-util/remove-nils-non-nested
+                             (update-vals state-atoms deref))
+                      (seq config/OAUTH-DOMAIN)
+                      (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
+
+                      (seq config/COGNITO-CLIENT-ID)
+                      (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID)))
+        sync! (fn []
+                (let [m (app-state)]
+                  (when-not (= @last-state m)
+                    (reset! last-state m)
+                    (p/let [_ (when (:git/current-repo m)
+                                (state/<invoke-db-worker :thread-api/sync-app-state m))]
+                      (p/resolve! <init-sync-done?)))))]
+    (doseq [[k atom'] state-atoms]
+      (add-watch atom' [::sync-app-state k] (fn [_ _ _ _] (sync!))))
+    (sync!)
+    (reset! *sync-app-state-cancel!
+            (fn []
+              (doseq [[k atom'] state-atoms]
+                (remove-watch atom' [::sync-app-state k]))))
     <init-sync-done?))
 
 (defevent! :rtc/sync-app-state [[_]]
