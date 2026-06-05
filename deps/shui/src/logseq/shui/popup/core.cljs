@@ -94,6 +94,28 @@
         (some-> event (.-currentTarget))
         (some-> native-event (.-currentTarget)))))
 
+(defn- event-related-target [^js event]
+  (let [^js native-event (native-event event)]
+    (or (some-> event (.-relatedTarget))
+        (some-> native-event (.-relatedTarget)))))
+
+(defn- close-targets
+  [^js event-details]
+  (let [event (some-> event-details (.-event))]
+    (remove nil?
+            [(some-> event-details (.-trigger))
+             (event-related-target event)
+             (event-target event)])))
+
+(defn- popup-content-target?
+  [target]
+  (and (element? target)
+       (some? (.closest target ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content"))))
+
+(defn- popup-focus-retained?
+  [targets]
+  (some popup-content-target? targets))
+
 (defn- input-target?
   [target]
   (and (element? target)
@@ -283,12 +305,15 @@
                                 (when-not open?
                                   (let [native-event (some-> e (.-event))
                                         reason (some-> e (.-reason))
-                                        target-toggle? (same-popup-target? target (event-target native-event))
+                                        targets (close-targets e)
+                                        target-toggle? (some #(same-popup-target? target %) targets)
+                                        focus-retained? (and (= reason "focus-out")
+                                                             (popup-focus-retained? targets))
                                         handler (case reason
                                                   "escape-key" (:onEscapeKeyDown content-props)
                                                   "outside-press" (:onPointerDownOutside content-props)
                                                   nil)]
-                                    (if target-toggle?
+                                    (if (or target-toggle? focus-retained?)
                                       (some-> e (.cancel))
                                       (when-not (close-canceled? handler e)
                                         (hide! id 1 {:event native-event}))))))]
