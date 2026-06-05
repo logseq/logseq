@@ -50,38 +50,6 @@
   max-height: none;
 }
 
-.ui__toggle {
-  .wrapper {
-    @apply relative flex-shrink-0
-    h-6 w-11 border-2 border-transparent flex
-    rounded-full cursor-pointer focus:outline-none;
-  }
-
-  .switcher {
-    @apply inline-block h-5 w-5 rounded-full bg-white shadow;
-
-    translate: 0 0;
-
-    &.is-on {
-      translate: 1.25rem 0;
-    }
-  }
-
-  &.is-small {
-    .wrapper {
-      @apply h-4 w-8;
-    }
-
-    .switcher {
-      @apply h-3 w-3;
-
-      &.is-on {
-        translate: 1rem 0;
-      }
-    }
-  }
-}
-
 .ui__dialog-content {
   &[label=flashcards__cp] {
     @apply px-5 pt-6 pb-4;
@@ -224,14 +192,6 @@ html.is-native-iphone-without-notch {
 
 .ui__radio-list {
   @apply grid grid-flow-col gap-2;
-}
-
-.ui__toggle-background-on {
-  @apply bg-primary;
-}
-
-.ui__toggle-background-off {
-  background: var(--lx-gray-08, rgb(212, 212, 212));
 }
 
 input[type='range'] {
