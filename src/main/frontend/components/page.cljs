@@ -240,7 +240,7 @@
          :on-click (fn [e]
                      (state/pub-event! [:editor/new-property {:property-key "Icon"
                                                               :block page
-                                                              :target (.-target e)}]))}
+                                                              :target (.-currentTarget e)}]))}
         (t :command.editor/add-property-icon)))
 
     (shui/button
@@ -249,15 +249,15 @@
        :class "px-2 py-0 h-6 text-xs text-muted-foreground"
        :on-click (fn [e]
                    (if (ldb/property? page)
-                     (shui/popup-show!
-                      (.-target e)
+                   (shui/popup-show!
+                      (.-currentTarget e)
                       (fn []
                         [:div.ls-property-dropdown
                          (property-config/property-dropdown page nil {})])
                       {:align :center
                        :as-dropdown? true
                        :dropdown-menu? true})
-                     (let [opts (cond-> {:block page :target (.-target e)}
+                     (let [opts (cond-> {:block page :target (.-currentTarget e)}
                                   (ldb/class? page)
                                   (assoc :class-schema? true))]
                        (state/pub-event! [:editor/new-property opts]))))}
