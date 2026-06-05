@@ -382,8 +382,13 @@
         property-db-ids (->> (keys properties')
                              (map #(vector % (new-db-id)))
                              (into {}))
+        ;; build-property-tx needs the full properties map (not properties') for
+        ;; type lookup in :build/properties — otherwise a surviving property def
+        ;; that references a filtered-out property's value can't resolve the value
+        ;; to a property-value block and the raw value falls through to the
+        ;; transaction as an unresolved string tempid (e.g. URL strings).
         new-properties-tx (vec
-                           (mapcat (partial build-property-tx properties' page-uuids all-idents property-db-ids class-property-orders options)
+                           (mapcat (partial build-property-tx properties page-uuids all-idents property-db-ids class-property-orders options)
                                    properties'))
         ;; Apply the topological :block/order to properties that already exist in
         ;; the target DB (e.g. built-ins) so per-class property order survives a
