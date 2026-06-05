@@ -59,9 +59,35 @@
 (defonce ^:private event-definitions
   (atom {}))
 
+(defn- capture-event-error!
+  [event error]
+  (log/error :event-error error :event (first event))
+  (let [type :handle-system-events/failed]
+    (state/pub-event! [:capture-error {:error error
+                                       :payload {:type type
+                                                 :payload event}}])))
+
+(defn- handle-rfx-event
+  [handler _coeffects event]
+  (try
+    (let [result (-> (p/resolved (handler event))
+                     (p/catch (fn [error]
+                                (capture-event-error! event error)
+                                (p/rejected error))))]
+      {::rfx/result result})
+    (catch :default error
+      (capture-event-error! event error)
+      {::rfx/error error})))
+
+(defn- register-rfx-handler!
+  [event-id handler]
+  (rfx/reg-event-fx! event-id (fn [coeffects event]
+                                (handle-rfx-event handler coeffects event))))
+
 (defn register-event-definition!
   [event-id handler]
   (swap! event-definitions assoc event-id handler)
+  (register-rfx-handler! event-id handler)
   nil)
 
 (defonce ^:private *search-index-build-timeout (atom nil))
@@ -428,31 +454,10 @@
                   (db-async/<get-block (state/get-current-repo) id
                                        {:skip-refresh? false})) ids))))
 
-(defn- capture-event-error!
-  [event error]
-  (log/error :event-error error :event (first event))
-  (let [type :handle-system-events/failed]
-    (state/pub-event! [:capture-error {:error error
-                                       :payload {:type type
-                                                 :payload event}}])))
-
-(defn- handle-rfx-event
-  [handler _coeffects event]
-  (try
-    (let [result (-> (p/resolved (handler event))
-                     (p/catch (fn [error]
-                                (capture-event-error! event error)
-                                (p/rejected error))))]
-      {::rfx/result result})
-    (catch :default error
-      (capture-event-error! event error)
-      {::rfx/error error})))
-
 (defn- register-rfx-handlers!
   []
   (doseq [[event-id handler] @event-definitions]
-    (rfx/reg-event-fx! event-id (fn [coeffects event]
-                                  (handle-rfx-event handler coeffects event)))))
+    (register-rfx-handler! event-id handler)))
 
 (defn run!
   []

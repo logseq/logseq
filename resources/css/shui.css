@@ -250,7 +250,11 @@ div[data-radix-popper-content-wrapper] {
 }
 
 .ui__dialog-content {
-  @apply outline-none m-4;
+  @apply outline-none m-0;
+
+  &:not([data-auto-width]) {
+    width: calc(100% - 2rem);
+  }
 
   &[data-auto-width] {
     @apply max-w-[90vw] w-max sm:max-w-[960px];

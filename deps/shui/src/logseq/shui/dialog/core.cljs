@@ -215,8 +215,12 @@
 
 (hsx/defc alert-inner
   [config & [nested-child]]
-  (let [{:keys [id title description content footer deferred open? ok-label]} config
-        props (dissoc config :id :title :description :content :footer :deferred :open? :alert? :ok-label)
+  (let [{:keys [id title description content footer deferred open? ok-label
+                root-props content-props]} config
+        props (dissoc config
+                      :id :title :description :content :footer :deferred :open? :alert? :ok-label
+                      :close :on-close :root-props :content-props
+                      :outside-cancel? :cancel-label :data-reminder :data-reminder-label)
         ok-label (or ok-label "OK")]
 
     (hooks/use-effect!
@@ -227,10 +231,11 @@
      [open?])
 
     (alert-dialog
-     {:key (str "alert-" id)
-      :open open?
-      :on-open-change #(update-dialog! id :open? %)}
-     (alert-dialog-content props
+     (merge root-props
+            {:key (str "alert-" id)
+             :open open?
+             :on-open-change #(update-dialog! id :open? %)})
+     (alert-dialog-content (merge props content-props)
                            (when (or title description)
                              (alert-dialog-header
                               {:class "ui__alert-dialog-header"}
