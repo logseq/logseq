@@ -14,10 +14,12 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AddCircle
+import androidx.compose.material.icons.outlined.AddReaction
 import androidx.compose.material.icons.outlined.DataArray
 import androidx.compose.material.icons.outlined.KeyboardCommandKey
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.CheckBox
@@ -82,6 +84,8 @@ object MaterialIconResolver {
             "bookmark" -> Icons.Filled.Bookmarks
             "sync" -> Icons.Outlined.Equalizer
             "cloud", "cloud-upload", "icloud-and-arrow-up" -> Icons.Filled.CloudUpload
+            "paperclip" -> Icons.Outlined.AttachFile
+            "face-smiling" -> Icons.Outlined.AddReaction
             else -> null
         }
     }

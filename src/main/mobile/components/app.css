@@ -13,6 +13,12 @@ html.is-native-ios,
 html.is-ios {
   font-size: calc(var(--ls-mobile-font-size) * var(--ls-mobile-font-scale, 1));
 }
+html.is-native-android {
+  #app-container-wrapper {
+    padding-top: 66px;
+    padding-bottom: 36px;
+  }
+}
 
 #app-container-wrapper, #app-container, #main-container {
     @apply w-full h-full;
@@ -23,12 +29,6 @@ html.is-ios {
     padding-bottom: env(safe-area-inset-bottom);
 }
 
-html.is-native-android {
-  #app-container-wrapper {
-    padding-top: 56px;
-    padding-bottom: 36px;
-  }
-}
 html.is-native-ios body,
 html.is-native-ios textarea,
 html.is-native-ios input,
