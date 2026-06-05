@@ -194,9 +194,10 @@
       (is (not (string/includes? hooks-source "add-watch"))))
 
     (testing "DB query refresh writes query results into RFX state"
-      (is (string/includes? react-source "[frontend.rfx :as rfx]"))
+      (is (string/includes? react-source "[frontend.state :as state]"))
       (is (string/includes? react-source "sync-query-result!"))
-      (is (string/includes? react-source "[:db/query-results k]")))
+      (is (string/includes? react-source "(state/set-state! :db/query-results"))
+      (is (string/includes? react-source ":nested-path [k]")))
 
     (testing "DB query render path does not write RFX state"
       (is (not (string/includes? react-source "(doto (set-query-key! result-atom k)"))
@@ -210,10 +211,10 @@
         user-source (source-for "src/main/frontend/handler/user.cljs")]
     (testing "frontend.flows derives app state streams from RFX app-db"
       (is (string/includes? flows-source "[frontend.rfx :as rfx]"))
-      (is (string/includes? flows-source "sub-flow"))
-      (is (string/includes? flows-source "(sub-flow [:git/current-repo])"))
-      (is (string/includes? flows-source "(sub-flow [:auth/current-login-user])"))
-      (is (string/includes? flows-source "(sub-flow [:network/online?])"))
+      (is (string/includes? flows-source "sub-atom"))
+      (is (string/includes? flows-source "(sub-atom [:git/current-repo])"))
+      (is (string/includes? flows-source "(sub-atom [:auth/current-login-user])"))
+      (is (string/includes? flows-source "(sub-atom [:network/online?])"))
       (is (not (re-find #"\(def\s+\*current-(?:repo|login-user)" flows-source)))
       (is (not (string/includes? flows-source "*network-online?"))))
 
