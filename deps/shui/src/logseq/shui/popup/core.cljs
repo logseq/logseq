@@ -321,8 +321,8 @@
                                                   nil)]
                                     ;; (prn :debug :id id :reason reason)
                                     (if (or target-toggle?
-                                            focus-retained?
-                                            menu-transition?)
+                                            menu-transition?
+                                            focus-retained?)
                                       (some-> e (.cancel))
                                       (when-not (close-canceled? handler e)
                                         (hide! id 1 {:event native-event}))))))]
