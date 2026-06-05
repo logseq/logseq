@@ -130,4 +130,5 @@
 
 (defn select-blocks
   [n]
-  (util/repeat-keyboard n "Shift+ArrowUp"))
+  (util/repeat-keyboard n "Shift+ArrowUp")
+  (util/wait-timeout 200))
