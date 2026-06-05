@@ -192,7 +192,7 @@
                    event
                    :else [0 0])]
     (let [target @*target
-          suppressed-open? (and pointer-event? target (suppress-toggle-open? target))
+          suppressed-open? (and target (suppress-toggle-open? target))
           config (when (and target (not suppressed-open?))
                    (if specified-id
                      (some-> (get-popup specified-id)
@@ -207,6 +207,8 @@
 
         config
         (do
+          (when target
+            (remember-toggle-close! target))
           (stop-toggle-event! event)
           (hide! (:id config) 0 {:event event})
           (:id config))
@@ -262,7 +264,7 @@
            _on-before-hide _on-after-hide]
     :as _props}]
   (when-let [[x y _ height] position]
-    (let [use-menu? (and as-dropdown? (not force-popover?))
+    (let [use-menu? (not force-popover?)
           popup-root (if use-menu? dropdown-menu popover)
           popup-trigger (if use-menu? dropdown-menu-trigger popover-trigger)
           popup-content (if use-menu? dropdown-menu-content popover-content)
@@ -325,8 +327,12 @@
                              as-mask?
                              (assoc :data-as-mask true)
 
-                             (not use-menu?)
-                             (assoc :on-key-down (:on-key-down content-props)))
+                             (and (not force-popover?)
+                                  (not as-dropdown?))
+                             (assoc :on-key-down (fn [^js e]
+                                                   (some-> content-props :on-key-down (apply [e]))
+                                                   (set! (. e -defaultPrevented) true))
+                                    :on-pointer-move #(set! (. % -defaultPrevented) true)))
              content (if (fn? content)
                        (content (cond-> {:id id}
                                   as-content?
