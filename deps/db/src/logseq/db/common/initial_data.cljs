@@ -270,42 +270,6 @@
      0
      with-alias)))
 
-(defn get-block-refs-counts
-  [db ids]
-  (let [ids (vec ids)
-        hidden-eid? (hidden-eid-pred db)
-        id->hidden-ref? (->> ids
-                             distinct
-                             (map (fn [id] [id (hidden-ref-id-pred db id hidden-eid?)]))
-                             (into {}))
-        alias->ids (reduce
-                    (fn [result id]
-                      (reduce (fn [result alias-id]
-                                (update result alias-id (fnil conj []) id))
-                              result
-                              (->> (get-block-alias-ids db id)
-                                   (cons id)
-                                   distinct)))
-                    {}
-                    (distinct ids))
-        counts (reduce (fn [result id] (assoc result id 0)) {} ids)
-        counts (reduce-kv
-                (fn [counts alias-id target-ids]
-                  (reduce
-                   (fn [counts datom]
-                     (reduce
-                      (fn [counts target-id]
-                        (if ((get id->hidden-ref? target-id) (:e datom))
-                          counts
-                          (update counts target-id (fnil inc 0))))
-                      counts
-                      target-ids))
-                   counts
-                   (d/datoms db :avet :block/refs alias-id)))
-                counts
-                alias->ids)]
-    (mapv #(get counts % 0) ids)))
-
 (defn ^:large-vars/cleanup-todo get-block-and-children
   [db id-or-page-name {:keys [children? properties include-collapsed-children?]
                        :or {include-collapsed-children? false}}]
