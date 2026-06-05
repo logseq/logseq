@@ -91,6 +91,11 @@ Prefer older single-purpose APIs when:
 
 Use for batched block content + property updates in one transaction call.
 
+Schema rule:
+
+- passing a schema for an already-existing property is allowed when it matches the existing property schema
+- if you want to change an existing property definition, call `upsertProperty` first
+
 ### `createPage`
 
 ```ts

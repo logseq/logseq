@@ -185,11 +185,17 @@
 
 (defn upsert-block-property
   [this block key' value {:keys [schema reset-property-values]}]
-  (let [opts {:plugin this
-              :schema (when schema
-                        {key schema})
+  (let [opts {:schema (when schema
+                        {key' schema})
               :reset-property-values reset-property-values}]
-    (api-block/db-based-save-block-properties! block {key' value} opts)))
+    (save-block-properties! this block {key' value} opts)))
+
+(defn- save-block-properties!
+  [this block properties {:keys [schema reset-property-values]}]
+  (when (seq properties)
+    (api-block/db-based-save-block-properties! block properties {:plugin this
+                                                                 :schema schema
+                                                                 :reset-property-values reset-property-values})))
 
 (defn- normalize-js-data
   [input]
@@ -332,10 +338,8 @@
           block-entity (resolve-block! block)]
       (when (and (nil? content) (empty? properties))
         (throw (ex-info "updateBlock requires content and/or properties" {:action action})))
-      (when (seq properties)
-        (api-block/db-based-save-block-properties! block-entity properties {:plugin this
-                                                                            :schema schema
-                                                                            :reset-property-values reset-property-values}))
+      (save-block-properties! this block-entity properties {:schema schema
+                                                            :reset-property-values reset-property-values})
       (when (some? content)
         (when-not (string? content)
           (throw (ex-info "updateBlock content must be a string" {:action action})))

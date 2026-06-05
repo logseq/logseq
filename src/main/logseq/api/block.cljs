@@ -122,6 +122,39 @@
     (map? value) :json
     :else :default))
 
+(defn- requested-schema->db-schema
+  [schema]
+  (cond-> {}
+    (some? (:type schema))
+    (assoc :logseq.property/type (keyword (:type schema)))
+
+    (some? (:cardinality schema))
+    (assoc :db/cardinality
+           (case (:cardinality schema)
+             "one" :db.cardinality/one
+             "many" :db.cardinality/many
+             :db.cardinality/one :db.cardinality/one
+             :db.cardinality/many :db.cardinality/many
+             (:cardinality schema)))
+
+    (contains? schema :hide)
+    (assoc :logseq.property/hide? (boolean (:hide schema)))
+
+    (contains? schema :public)
+    (assoc :logseq.property/public? (boolean (:public schema)))
+
+    (contains? schema :public?)
+    (assoc :logseq.property/public? (boolean (:public? schema)))
+
+    (contains? schema :hide?)
+    (assoc :logseq.property/hide? (boolean (:hide? schema)))))
+
+(defn- property-schema-change?
+  [property requested-schema]
+  (some (fn [[k v]]
+          (not= v (get property k)))
+        requested-schema))
+
 (defn- set-block-properties!
   [plugin block-id properties {:keys [reset-property-values]}]
   (ui-outliner-tx/transact!
@@ -148,6 +181,7 @@
                        :property-ident property-ident
                        :schema schema
                        :value value}
+           requested-schema (requested-schema->db-schema schema)
            schema' {:logseq.property/type property-type
                     :db/cardinality cardinality}
            many? (= cardinality :db.cardinality/many)
@@ -155,7 +189,7 @@
                     (when value [value])
                     value)]
 
-       (when (and property schema)
+       (when (and property (seq requested-schema) (property-schema-change? property requested-schema))
          (throw (ex-info "Use `upsert_property` to modify existing property's schema"
                          error-data)))
 

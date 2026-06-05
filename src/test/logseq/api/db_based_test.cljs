@@ -78,6 +78,55 @@
          (is (= created-page (db/get-page "Transaction Final")))
          (is (= nil (db/get-page "Transaction Draft"))))))))
 
+(deftest transact-allows-existing-matching-property-schema-test
+  (let [[page first-block] (take 2 (test-helper/initial-test-page-and-blocks))
+        repo test-helper/test-db
+        conn (conn/get-db repo false)]
+    (db/transact! repo [page first-block])
+    (db-based-api/upsert-property "rating" #js {:type "number"} #js {})
+    (listen-tx-reports
+     conn
+     (fn [reports]
+       (let [result (js->clj (db-based-api/transact
+                              (clj->js [{:type "updateBlock"
+                                         :block (str (:block/uuid first-block))
+                                         :content "updated with existing schema"
+                                         :properties {"rating" 5}
+                                         :schema {"rating" {:type "number"}}}])
+                              #js {}))
+             rating-ident (api-block/get-db-ident-from-property-name "rating" nil)
+             updated-block (db/entity [:block/uuid (:block/uuid first-block)])]
+         (is (= 1 (count @reports)))
+         (is (= "saveBlock" (get result "outlinerOp")))
+         (is (= "updated with existing schema" (:block/title updated-block)))
+         (is (= 5 (get (api-block/into-readable-db-properties (:block/properties updated-block)) (str rating-ident)))))))))
+
+(deftest transact-still-rejects-existing-schema-changes-test
+  (let [[page first-block] (take 2 (test-helper/initial-test-page-and-blocks))
+        repo test-helper/test-db
+        conn (conn/get-db repo false)]
+    (db/transact! repo [page first-block])
+    (db-based-api/upsert-property "rating" #js {:type "number"} #js {})
+    (listen-tx-reports
+     conn
+     (fn [reports]
+       (let [error (try
+                     (db-based-api/transact
+                      (clj->js [{:type "updateBlock"
+                                 :block (str (:block/uuid first-block))
+                                 :properties {"rating" 5}
+                                 :schema {"rating" {:type "date"}}}])
+                      #js {})
+                     nil
+                     (catch :default e
+                       e))
+             block-after (db/entity [:block/uuid (:block/uuid first-block)])]
+         (is error)
+         (is (= "Use `upsert_property` to modify existing property's schema"
+                (ex-message error)))
+         (is (nil? (api-block/into-readable-db-properties (:block/properties block-after))))
+         (is (empty? @reports)))))))
+
 (deftest transact-fails-atomically-when-a-later-action-errors-test
   (let [[page first-block] (take 2 (test-helper/initial-test-page-and-blocks))
         repo test-helper/test-db
