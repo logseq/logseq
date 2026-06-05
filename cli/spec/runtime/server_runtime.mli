@@ -45,13 +45,13 @@ val db_worker_runtime_script_path : unit -> Cli_primitive.path
 val ensure_server :
   Cli_config.t ->
   Cli_primitive.repo ->
-  create_empty_db : bool ->
+  create_empty_db:bool ->
   Transport.invoke_config Error.build_result Cli_effect.t
 
 val start_server :
   Cli_config.t ->
   Cli_primitive.repo ->
-  create_empty_db : bool ->
+  create_empty_db:bool ->
   start_result Error.build_result Cli_effect.t
 
 val stop_server :

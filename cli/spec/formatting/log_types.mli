@@ -2,7 +2,7 @@ type preview = { preview : string; length : int; truncated : bool }
 type level = Debug | Info | Warn | Error
 
 type record = {
-  time : Cli_primitive.timestamp_ms option;
+  time : Ptime.t option;
   level : level;
   logger : string option;
   message : string;

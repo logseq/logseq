@@ -153,7 +153,8 @@ let execute action config mode =
         | Error err ->
             pure (Output_mode.error ~command:Command_id.Server_cleanup mode err))
   | Server_start { repo; _ } ->
-      bind (Server_runtime.start_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.start_server config repo ~create_empty_db:false)
+        (function
         | Ok result ->
             pure
               (Cli_result.ok ~command:Command_id.Server_start mode

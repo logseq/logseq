@@ -3,10 +3,10 @@ type auth_data = {
   id_token : string option;
   access_token : string option;
   refresh_token : string option;
-  expires_at : Cli_primitive.timestamp_ms option;
+  expires_at : Ptime.t option;
   sub : string option;
   email : Cli_primitive.email option;
-  updated_at : Cli_primitive.timestamp_ms;
+  updated_at : Ptime.t;
 }
 
 type login_result = {
@@ -15,7 +15,7 @@ type login_result = {
   opened : bool;
   email : Cli_primitive.email option;
   sub : string option;
-  updated_at : Cli_primitive.timestamp_ms;
+  updated_at : Ptime.t;
 }
 
 type logout_result = {
@@ -25,8 +25,6 @@ type logout_result = {
   opened : bool;
   logout_completed : bool;
 }
-
-let now_ms () = Int64.of_float (Cli_unix.gettimeofday () *. 1000.)
 
 let default_auth_path () =
   Filename.concat
@@ -76,16 +74,20 @@ let add_opt_string key value fields =
 let add_opt_int key value fields =
   match value with Some value -> json_int key value :: fields | None -> fields
 
+let add_opt_time key value fields =
+  add_opt_int key (Option.map Ptime_util.time_to_epoch_ms value) fields
+
 let auth_json data =
   []
   |> add_opt_string "email" data.email
   |> add_opt_string "sub" data.sub
-  |> add_opt_int "expires-at" data.expires_at
+  |> add_opt_time "expires-at" data.expires_at
   |> add_opt_string "refresh-token" data.refresh_token
   |> add_opt_string "access-token" data.access_token
   |> add_opt_string "id-token" data.id_token
   |> fun fields ->
-  json_int "updated-at" data.updated_at :: fields |> fun fields ->
+  json_int "updated-at" (Ptime_util.time_to_epoch_ms data.updated_at) :: fields
+  |> fun fields ->
   json_string "provider" data.provider :: fields
   |> List.rev |> String.concat ","
   |> fun body -> "{" ^ body ^ "}\n"
@@ -174,7 +176,9 @@ let json_int_field text keys =
 
 let parse_auth_json text =
   let id_token = json_string_field text [ "id-token"; "id_token" ] in
-  let access_token = json_string_field text [ "access-token"; "access_token" ] in
+  let access_token =
+    json_string_field text [ "access-token"; "access_token" ]
+  in
   let refresh_token =
     json_string_field text [ "refresh-token"; "refresh_token" ]
   in
@@ -182,7 +186,9 @@ let parse_auth_json text =
   match (provider, id_token, access_token, refresh_token) with
   | None, None, None, None ->
       Error
-        (Error.make (Edn_util.keyword_t "invalid-auth-file") "invalid auth file")
+        (Error.make
+           (Edn_util.keyword_t "invalid-auth-file")
+           "invalid auth file")
   | _, _, _, _ ->
       let provider = Option.value provider ~default:"cognito" in
       Ok
@@ -191,13 +197,16 @@ let parse_auth_json text =
           id_token;
           access_token;
           refresh_token;
-          expires_at = json_int_field text [ "expires-at"; "expires_at" ];
+          expires_at =
+            Option.map Ptime_util.time_of_epoch_ms
+              (json_int_field text [ "expires-at"; "expires_at" ]);
           sub = json_string_field text [ "sub" ];
           email = json_string_field text [ "email" ];
           updated_at =
             Option.value
-              (json_int_field text [ "updated-at"; "updated_at" ])
-              ~default:0L;
+              (Option.map Ptime_util.time_of_epoch_ms
+                 (json_int_field text [ "updated-at"; "updated_at" ]))
+              ~default:Ptime.epoch;
         }
 
 let base64url_index = function
@@ -243,7 +252,7 @@ let claims_of_id_token id_token =
         ( json_string_field payload [ "sub" ],
           json_string_field payload [ "email" ],
           Option.map
-            (fun exp -> Int64.mul exp 1_000L)
+            (fun exp -> Ptime_util.time_of_epoch_ms (Int64.mul exp 1_000L))
             (json_int_field payload [ "exp" ]) ))
 
 let auth_path_context path =
@@ -292,7 +301,7 @@ let delete_auth_file config =
 
 let expired_auth auth =
   match auth.expires_at with
-  | Some expires_at -> expires_at <= now_ms ()
+  | Some expires_at -> Ptime.compare expires_at (Ptime_util.now ()) <= 0
   | None -> true
 
 let missing_auth config message =
@@ -316,7 +325,7 @@ let config_auth config =
         expires_at = None;
         sub = None;
         email = None;
-        updated_at = now_ms ();
+        updated_at = Ptime_util.now ();
       }
   else None
 
@@ -462,7 +471,7 @@ let refreshed_auth_of_body current body =
               expires_at;
               sub;
               email;
-              updated_at = now_ms ();
+              updated_at = Ptime_util.now ();
             })
 
 let refresh_auth config data =
@@ -499,7 +508,7 @@ let refresh_auth config data =
                     ("Accept", "application/json");
                   ];
                 body = Some (form_body fields);
-                timeout_ms = Some config.timeout_ms;
+                timeout_span = Some config.timeout_span;
               }
           in
           Cli_effect.catch
@@ -555,7 +564,7 @@ let auth_code_exchange config ~code ~redirect_uri ~code_verifier =
                 ("Accept", "application/json");
               ];
             body = Some (form_body fields);
-            timeout_ms = Some config.timeout_ms;
+            timeout_span = Some config.timeout_span;
           }
       in
       Cli_effect.catch
@@ -570,7 +579,7 @@ let auth_code_exchange config ~code ~redirect_uri ~code_verifier =
                  expires_at = None;
                  sub = None;
                  email = None;
-                 updated_at = now_ms ();
+                 updated_at = Ptime_util.now ();
                }
                response.Transport.body)
            request)
@@ -657,8 +666,8 @@ let read_headers ic =
   in
   loop ()
 
-let wait_login_callback socket ~state ~timeout_ms =
-  let timeout = Int64.to_float timeout_ms /. 1000. in
+let wait_login_callback socket ~state ~timeout_span =
+  let timeout = Ptime_util.span_to_seconds_float timeout_span in
   match Cli_unix.select [ socket ] [] [] timeout with
   | [], _, _ ->
       Error
@@ -844,7 +853,7 @@ let open_browser config url =
          (Edn_util.keyword_t "browser-open-failed")
          "failed to open browser")
 
-let wait_login_callback_js config authorize_url ~state ~timeout_ms =
+let wait_login_callback_js config authorize_url ~state ~timeout_span =
   let task, wake = Lwt.task () in
   let settled = ref false in
   let timeout_handle = ref None in
@@ -922,7 +931,8 @@ let wait_login_callback_js config authorize_url ~state ~timeout_ms =
                (Js_runtime.variable "setTimeout")
                [|
                  Js_runtime.callback timeout;
-                 Js_runtime.number (Int64.to_int timeout_ms);
+                 Js_runtime.number
+                   (int_of_float (Ptime_util.span_to_ms_float timeout_span));
                |]);
         ());
     Js_runtime.inject ()
@@ -1056,7 +1066,7 @@ let login config =
             Cli_effect.bind
               (Cli_effect.of_lwt
                  (wait_login_callback_js config authorize_url ~state
-                    ~timeout_ms:config.login_timeout_ms))
+                    ~timeout_span:config.login_timeout_span))
               (function
                 | Error err -> Cli_effect.pure (Error err)
                 | Ok (opened, code) -> finish_login opened code)
@@ -1079,7 +1089,7 @@ let login config =
                   | Ok opened -> (
                       match
                         wait_login_callback socket ~state
-                          ~timeout_ms:config.login_timeout_ms
+                          ~timeout_span:config.login_timeout_span
                       with
                       | Error err -> Cli_effect.pure (Error err)
                       | Ok code -> finish_login opened code)
