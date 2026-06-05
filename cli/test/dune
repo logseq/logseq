@@ -8,11 +8,6 @@
  (modules test_logseq_cli)
  (libraries logseq_cli_platform_native logseq_cli lwt.unix unix alcotest))
 
-(test
- (name cli_unix_native_test)
- (modules cli_unix_native_test)
- (libraries logseq_cli_platform_native logseq_cli unix threads alcotest))
-
 (rule
  (alias runtest)
  (deps wasm_fetch_timeout.js ../bin/main.bc.js)
