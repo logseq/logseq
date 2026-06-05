@@ -3,6 +3,7 @@
   (:require ["fs" :as fs]
             ["http" :as http]
             ["https" :as https]
+            [cljs.pprint :as pprint]
             [cljs.reader :as reader]
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
@@ -256,10 +257,13 @@
     {:close! close!}))
 
 (defn write-output
-  [{:keys [format path data]}]
+  [{:keys [format path data pretty?]}]
   (case format
     :edn
-    (fs/writeFileSync path (pr-str data))
+    (fs/writeFileSync path
+                      (if pretty?
+                        (with-out-str (pprint/pprint data))
+                        (pr-str data)))
 
     :db
     (let [buffer (if (instance? js/Buffer data)
