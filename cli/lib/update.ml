@@ -714,7 +714,8 @@ let resolve_optional_target_uuid invoke_config action =
 
 let execute action config mode =
   let open Cli_effect in
-  bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false) (function
+  bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
+    (function
     | Error err ->
         pure (Cli_result.error ~command:Command_id.Upsert_block mode err)
     | Ok invoke_config ->

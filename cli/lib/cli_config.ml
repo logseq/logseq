@@ -1,9 +1,9 @@
 type env = string -> string option
 
 type defaults = {
-  timeout_ms : Cli_primitive.duration_ms;
-  login_timeout_ms : Cli_primitive.duration_ms;
-  logout_timeout_ms : Cli_primitive.duration_ms;
+  timeout_span : Ptime.span;
+  login_timeout_span : Ptime.span;
+  logout_timeout_span : Ptime.span;
   list_title_max_display_width : int;
   root_dir : Cli_primitive.path;
   ws_url : Cli_primitive.url;
@@ -15,9 +15,9 @@ type t = {
   repo : Cli_primitive.repo option;
   root_dir : Cli_primitive.path;
   config_path : Cli_primitive.path;
-  timeout_ms : Cli_primitive.duration_ms;
-  login_timeout_ms : Cli_primitive.duration_ms;
-  logout_timeout_ms : Cli_primitive.duration_ms;
+  timeout_span : Ptime.span;
+  login_timeout_span : Ptime.span;
+  logout_timeout_span : Ptime.span;
   list_title_max_display_width : int;
   output_format : Output.Mode.packed option;
   verbose : bool;
@@ -45,9 +45,9 @@ let default_config_path root_dir = Filename.concat root_dir "cli.edn"
 
 let defaults () =
   {
-    timeout_ms = 10_000L;
-    login_timeout_ms = 300_000L;
-    logout_timeout_ms = 120_000L;
+    timeout_span = Ptime_util.span_of_ms 10_000L;
+    login_timeout_span = Ptime_util.span_of_ms 300_000L;
+    logout_timeout_span = Ptime_util.span_of_ms 120_000L;
     list_title_max_display_width = 40;
     root_dir = default_root_dir ();
     ws_url = "wss://api.logseq.io/sync/%s";
@@ -81,6 +81,7 @@ let graph_to_repo graph =
 let repo_to_graph repo =
   Cli_primitive.create_graph
     (strip_db_version_prefix (Cli_primitive.string_of_repo repo))
+
 let value_of_edn edn = edn
 
 let edn_string_escape value =
@@ -222,6 +223,8 @@ let first_some values = List.find_map (fun value -> value) values
 let positive_or_default value default =
   match value with Some value when value > 0 -> value | _ -> default
 
+let span_option_of_ms value = Option.map Ptime_util.span_of_ms value
+
 let resolve ~(defaults : defaults) ~env (globals : Global_opts.t) =
   let env_config = Edn_util.any (env_config env) in
   let initial_root_dir =
@@ -252,7 +255,8 @@ let resolve ~(defaults : defaults) ~env (globals : Global_opts.t) =
         |> Option.map Cli_primitive.create_graph
       in
       let env_graph =
-        value_string ":graph" env_config |> Option.map Cli_primitive.create_graph
+        value_string ":graph" env_config
+        |> Option.map Cli_primitive.create_graph
       in
       let root_dir =
         first_some
@@ -304,33 +308,36 @@ let resolve ~(defaults : defaults) ~env (globals : Global_opts.t) =
             Option.bind raw_file_config (value_output ":output");
           ]
       in
-      let timeout_ms =
+      let timeout_span =
         first_some
           [
-            globals.timeout_ms;
-            value_int64 ":timeout-ms" env_config;
-            Option.bind raw_file_config (value_int64 ":timeout-ms");
-            Some defaults.timeout_ms;
+            globals.timeout_span;
+            span_option_of_ms (value_int64 ":timeout-ms" env_config);
+            span_option_of_ms
+              (Option.bind raw_file_config (value_int64 ":timeout-ms"));
+            Some defaults.timeout_span;
           ]
-        |> Option.value ~default:defaults.timeout_ms
+        |> Option.value ~default:defaults.timeout_span
       in
-      let login_timeout_ms =
+      let login_timeout_span =
         first_some
           [
-            value_int64 ":login-timeout-ms" env_config;
-            Option.bind raw_file_config (value_int64 ":login-timeout-ms");
-            Some defaults.login_timeout_ms;
+            span_option_of_ms (value_int64 ":login-timeout-ms" env_config);
+            span_option_of_ms
+              (Option.bind raw_file_config (value_int64 ":login-timeout-ms"));
+            Some defaults.login_timeout_span;
           ]
-        |> Option.value ~default:defaults.login_timeout_ms
+        |> Option.value ~default:defaults.login_timeout_span
       in
-      let logout_timeout_ms =
+      let logout_timeout_span =
         first_some
           [
-            value_int64 ":logout-timeout-ms" env_config;
-            Option.bind raw_file_config (value_int64 ":logout-timeout-ms");
-            Some defaults.logout_timeout_ms;
+            span_option_of_ms (value_int64 ":logout-timeout-ms" env_config);
+            span_option_of_ms
+              (Option.bind raw_file_config (value_int64 ":logout-timeout-ms"));
+            Some defaults.logout_timeout_span;
           ]
-        |> Option.value ~default:defaults.logout_timeout_ms
+        |> Option.value ~default:defaults.logout_timeout_span
       in
       let list_title_max_display_width =
         positive_or_default
@@ -344,9 +351,9 @@ let resolve ~(defaults : defaults) ~env (globals : Global_opts.t) =
           repo;
           root_dir;
           config_path;
-          timeout_ms;
-          login_timeout_ms;
-          logout_timeout_ms;
+          timeout_span;
+          login_timeout_span;
+          logout_timeout_span;
           list_title_max_display_width;
           output_format;
           verbose = globals.verbose;

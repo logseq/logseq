@@ -6,8 +6,8 @@ type page_filter = {
   include_built_in : bool;
   include_journal : bool;
   journal_only : bool;
-  created_after : Cli_primitive.timestamp_ms option;
-  updated_after : Cli_primitive.timestamp_ms option;
+  created_after : Ptime.t option;
+  updated_after : Ptime.t option;
 }
 
 type node_filter = {

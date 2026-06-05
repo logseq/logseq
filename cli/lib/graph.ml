@@ -137,11 +137,10 @@ let validate_parsed = function
   | _ -> Ok ()
 
 let utc_timestamp () =
-  let tm = Cli_unix.gmtime (Cli_unix.time ()) in
-  Printf.sprintf "%04d%02d%02dT%02d%02d%02dZ"
-    (tm.Cli_unix.tm_year + 1900)
-    (tm.Cli_unix.tm_mon + 1) tm.Cli_unix.tm_mday tm.Cli_unix.tm_hour
-    tm.Cli_unix.tm_min tm.Cli_unix.tm_sec
+  let (year, month, day), ((hour, minute, second), _) =
+    Ptime.to_date_time ~tz_offset_s:0 (Ptime_util.now ())
+  in
+  Printf.sprintf "%04d%02d%02dT%02d%02d%02dZ" year month day hour minute second
 
 let safe_backup_part value =
   let buffer = Buffer.create (String.length value) in
@@ -167,7 +166,9 @@ let tmp_sqlite_counter = ref 0
 
 let tmp_sqlite_path dir =
   incr tmp_sqlite_counter;
-  let stamp = int_of_float (Sys.time () *. 1_000_000.) in
+  let stamp =
+    int_of_float (Ptime.to_float_s (Ptime_util.now ()) *. 1_000_000.)
+  in
   Filename.concat dir
     ("db." ^ string_of_int stamp ^ "."
     ^ string_of_int !tmp_sqlite_counter
@@ -516,8 +517,10 @@ let default_sqlite_export_path config repo =
     Filename.concat (graph_path config (Cli_config.repo_to_graph repo)) "export"
   in
   ensure_dir export_root;
-  let timestamp_seconds = int_of_float (Cli_unix.time ()) in
-  let graph_name = Cli_config.repo_to_graph repo |> Cli_primitive.string_of_graph in
+  let timestamp_seconds = int_of_float (Ptime.to_float_s (Ptime_util.now ())) in
+  let graph_name =
+    Cli_config.repo_to_graph repo |> Cli_primitive.string_of_graph
+  in
   Filename.concat export_root
     (graph_name ^ "_" ^ string_of_int timestamp_seconds ^ ".sqlite")
 
@@ -659,7 +662,7 @@ let graph_info_datetime_value : type a.
   | Output.Mode.Human, Some then_seconds ->
       Edn_util.string
         (Humanize.datetime
-           ~now:(Int64.of_float (Cli_unix.gettimeofday ()))
+           ~now:(Ptime_util.time_to_epoch_seconds (Ptime_util.now ()))
            then_seconds)
   | _ -> value
 
@@ -821,7 +824,7 @@ let reserve_backup_target config graph base_name =
 
 let write_backup_metadata dir ~backup_name ~repo ~db_path =
   let repo = Cli_primitive.string_of_repo repo in
-  let created_at_ms = Int64.of_float (Cli_unix.time () *. 1000.) in
+  let created_at_ms = Ptime_util.time_to_epoch_ms (Ptime_util.now ()) in
   write_file (backup_metadata_path dir)
     ("{:schema-version 1 :name \"" ^ String.escaped backup_name ^ "\" :repo \""
    ^ String.escaped repo ^ "\" :source :cli :created-at-ms "
@@ -833,7 +836,8 @@ let graph_backup_create_result mode config graph repo name backup_name =
   let base_name =
     Option.value backup_name ~default:(build_backup_name repo name)
   in
-  bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+  bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+    (function
     | Error err ->
         pure (Cli_result.error ~command:Command_id.Graph_backup_create mode err)
     | Ok invoke_config ->
@@ -843,8 +847,7 @@ let graph_backup_create_result mode config graph repo name backup_name =
         let tmp_path = tmp_sqlite_path dir in
         bind
           (Transport.thread_api_backup_db_sqlite invoke_config ~repo
-             ~path:tmp_path)
-          (fun _ ->
+             ~path:tmp_path) (fun _ ->
             if Sys.file_exists tmp_path then (
               Sys.rename tmp_path db_path;
               write_backup_metadata dir ~backup_name ~repo ~db_path;
@@ -888,7 +891,8 @@ let graph_create_enable_sync_result mode _config graph repo create_result
 
 let execute_graph_create_invoke mode graph repo config =
   let open Cli_effect in
-  bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+  bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+    (function
     | Error err ->
         pure (Cli_result.error ~command:Command_id.Graph_create mode err)
     | Ok invoke_config ->
@@ -956,7 +960,8 @@ let execute_graph_export mode graph repo opts config =
     | None, Sqlite -> default_sqlite_export_path config repo
     | None, Edn -> ""
   in
-  bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+  bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+    (function
     | Error err ->
         pure (Cli_result.error ~command:Command_id.Graph_export mode err)
     | Ok invoke_config -> (
@@ -982,8 +987,8 @@ let execute_graph_export mode graph repo opts config =
         | Sqlite ->
             bind
               (Transport.thread_api_backup_db_sqlite invoke_config ~repo
-                 ~path:output_path)
-              (fun _ -> pure (graph_export_message mode config output_path))))
+                 ~path:output_path) (fun _ ->
+                pure (graph_export_message mode config output_path))))
 
 let execute_graph_import mode graph repo opts config =
   let open Cli_effect in
@@ -997,7 +1002,9 @@ let execute_graph_import mode graph repo opts config =
           pure (Cli_result.error ~command:Command_id.Graph_import mode err)
       | Ok input_data ->
           let import_after_stop () =
-            bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+            bind
+              (Server_runtime.ensure_server config repo ~create_empty_db:false)
+              (function
               | Error err ->
                   pure
                     (Cli_result.error ~command:Command_id.Graph_import mode err)
@@ -1047,7 +1054,8 @@ let execute_graph_backup_restore mode source_graph dst_graph dst_repo src config
 
 let execute_graph_validate mode repo fix config =
   let open Cli_effect in
-  bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+  bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+    (function
     | Error err ->
         pure (Cli_result.error ~command:Command_id.Graph_validate mode err)
     | Ok invoke_config ->
@@ -1058,7 +1066,8 @@ let execute_graph_validate mode repo fix config =
 
 let execute_graph_info mode graph repo config =
   let open Cli_effect in
-  bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+  bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+    (function
     | Error err ->
         pure (Cli_result.error ~command:Command_id.Graph_info mode err)
     | Ok invoke_config ->
@@ -1082,7 +1091,8 @@ let execute_graph_switch mode graph repo config =
       (Cli_result.error ~command:Command_id.Graph_switch mode
          (Error.make (Edn_util.keyword_t "graph-not-exists") "graph not exists"))
   else
-    bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+    bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+      (function
       | Error err ->
           pure (Cli_result.error ~command:Command_id.Graph_switch mode err)
       | Ok _ ->

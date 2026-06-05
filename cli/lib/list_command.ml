@@ -15,8 +15,8 @@ type page_opts = {
   include_journal : bool option;
   journal_only : bool;
   include_hidden : bool;
-  updated_after : string option;
-  created_after : string option;
+  updated_after : Ptime.t option;
+  created_after : Ptime.t option;
 }
 
 type tag_opts = {
@@ -346,7 +346,9 @@ let postprocess_items kind options items =
 
 let status_query invoke_config repo =
   Transport.thread_api_q invoke_config ~repo
-    ~query:(Edn_util.vector_t [ Edn_util.any Task_status.status_closed_values_query ])
+    ~query:
+      (Edn_util.vector_t
+         [ Edn_util.any Task_status.status_closed_values_query ])
 
 let kw value = Edn_util.keyword value
 let sym value = Edn_util.string ("~$" ^ value)
@@ -409,12 +411,14 @@ let pull_tag_by_uuid config repo uuid =
 
 let pull_property_by_ident config repo ident =
   Transport.thread_api_pull config ~repo
-    ~selector:(Edn_util.expect_vector_t "list property selector" property_selector)
+    ~selector:
+      (Edn_util.expect_vector_t "list property selector" property_selector)
     ~lookup:(vector [ kw ":db/ident"; kw ident ])
 
 let pull_property_by_id config repo id =
   Transport.thread_api_pull config ~repo
-    ~selector:(Edn_util.expect_vector_t "list property selector" property_selector)
+    ~selector:
+      (Edn_util.expect_vector_t "list property selector" property_selector)
     ~lookup:(Edn_util.int64 id)
 
 let pull_asset_tag config repo =
@@ -768,9 +772,13 @@ let options_of_parsed = function
       |> add_bool ":journal-only" opts.journal_only
       |> add_bool ":include-hidden" opts.include_hidden
       |> add_optional ":updated-after"
-           (Option.map (fun value -> Edn_util.string value) opts.updated_after)
+           (Option.map
+              (fun value -> Edn_util.int64 (Ptime_util.time_to_epoch_ms value))
+              opts.updated_after)
       |> add_optional ":created-after"
-           (Option.map (fun value -> Edn_util.string value) opts.created_after)
+           (Option.map
+              (fun value -> Edn_util.int64 (Ptime_util.time_to_epoch_ms value))
+              opts.created_after)
       |> fun fields -> Edn_util.map (List.rev fields)
   | Parsed_tag opts ->
       common_options opts.common
@@ -825,7 +833,8 @@ let items_value items =
 
 let execute action config mode =
   let open Cli_effect in
-  bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false) (function
+  bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
+    (function
     | Error err -> pure (Output_mode.error ~command:action.command mode err)
     | Ok invoke_config ->
         let options =

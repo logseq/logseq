@@ -290,7 +290,7 @@ let validate_query query =
       else Ok query
   | _ -> Error (Error.invalid_options "query must be a vector")
 
-let now_ms () = Int64.of_float (Cli_unix.gettimeofday () *. 1000.)
+let current_epoch_ms () = Ptime_util.time_to_epoch_ms (Ptime_util.now ())
 
 let normalize_task_search_inputs (entry : query_entry option) inputs =
   match entry with
@@ -336,9 +336,10 @@ let normalize_inputs entry inputs =
               let default =
                 match spec.default with
                 | Some value when Edn_util.as_keyword value = Some ":now-ms" ->
-                    Edn_util.int64 (now_ms ())
+                    Edn_util.int64 (current_epoch_ms ())
                 | Some value -> value
-                | None when spec.name = "?now-ms" -> Edn_util.int64 (now_ms ())
+                | None when spec.name = "?now-ms" ->
+                    Edn_util.int64 (current_epoch_ms ())
                 | None -> Edn_util.nil
               in
               fill (default :: acc) rest []
@@ -505,7 +506,8 @@ let execute action config mode =
                        (List.map query_entry_value (list_queries config)) );
                  ])))
   | Run { repo; query; inputs; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Output_mode.error ~command:Command_id.Query mode err)
         | Ok invoke_config ->

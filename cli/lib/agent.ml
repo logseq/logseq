@@ -44,8 +44,9 @@ let default_master_prompt =
       "Do not operate outside the target graph.";
       "Only the master agent may write task results back into the target graph.";
       "Subagents may read graph context but must not write graph content.";
-      "When dispatching a subagent for a task, write the subagent Codex session \
-       id to the task block's `:logseq.property.agent/session-id` property.";
+      "When dispatching a subagent for a task, write the subagent Codex \
+       session id to the task block's `:logseq.property.agent/session-id` \
+       property.";
     ]
 
 let graph_scope_line = "Do not operate outside the target graph."
@@ -155,7 +156,7 @@ let resolve_agent_name config hostname =
       match Option.bind hostname trim_non_empty with
       | Some agent_name -> Ok agent_name
       | None -> (
-          match trim_non_empty (Cli_unix.gethostname ()) with
+          match trim_non_empty (Cli_platform.hostname ()) with
           | Some agent_name -> Ok agent_name
           | None ->
               Error
@@ -326,12 +327,7 @@ let agent_bridge_process_once config =
     ~default:false
 
 let codex_command_prefix config =
-  [
-    codex_bin config;
-    "--sandbox";
-    "danger-full-access";
-    "exec";
-  ]
+  [ codex_bin config; "--sandbox"; "danger-full-access"; "exec" ]
 
 let build_codex_command config prompt =
   codex_command_prefix config @ [ "--json"; "--skip-git-repo-check"; prompt ]
@@ -344,14 +340,12 @@ let shell_env () = Cli_unix.environment ()
 
 let run_command_capture command =
   match command with
-  | [] ->
-      { Cli_unix.status = 1; stdout = ""; stderr = "missing command" }
+  | [] -> { Cli_unix.status = 1; stdout = ""; stderr = "missing command" }
   | bin :: args -> Cli_unix.run_process_capture bin args (shell_env ())
 
 let start_command_capture_session_line command =
   match command with
-  | [] ->
-      { Cli_unix.status = 1; stdout = ""; stderr = "missing command" }
+  | [] -> { Cli_unix.status = 1; stdout = ""; stderr = "missing command" }
   | bin :: args ->
       Cli_unix.start_process_capture_session_line bin args (shell_env ())
 
@@ -407,10 +401,7 @@ let parse_json_quoted_string line start =
 let skip_json_space line start =
   let rec loop i =
     if i >= String.length line then i
-    else
-      match line.[i] with
-      | ' ' | '\n' | '\r' | '\t' -> loop (i + 1)
-      | _ -> i
+    else match line.[i] with ' ' | '\n' | '\r' | '\t' -> loop (i + 1) | _ -> i
   in
   loop start
 
@@ -421,11 +412,11 @@ let parse_json_string_field line field =
       let after_field = idx + String.length field + 2 in
       match String.index_from_opt line after_field ':' with
       | None -> None
-      | Some colon -> (
+      | Some colon ->
           let start = skip_json_space line (colon + 1) in
           if start < String.length line && line.[start] = '"' then
             parse_json_quoted_string line start
-          else None))
+          else None)
 
 let json_object_substring line start =
   if start >= String.length line || line.[start] <> '{' then None
@@ -440,7 +431,8 @@ let json_object_substring line start =
         | true, false, _ -> loop (i + 1) depth true false
         | false, _, '"' -> loop (i + 1) depth true false
         | false, _, '{' -> loop (i + 1) (depth + 1) false false
-        | false, _, '}' when depth = 1 -> Some (String.sub line start (i - start + 1))
+        | false, _, '}' when depth = 1 ->
+            Some (String.sub line start (i - start + 1))
         | false, _, '}' -> loop (i + 1) (depth - 1) false false
         | false, _, _ -> loop (i + 1) depth false false
     in
@@ -457,32 +449,28 @@ let parse_json_nested_string_field line object_field nested_field =
           let start = skip_json_space line (colon + 1) in
           match json_object_substring line start with
           | None -> None
-          | Some object_text -> parse_json_string_field object_text nested_field))
+          | Some object_text -> parse_json_string_field object_text nested_field
+          ))
 
 let parse_codex_session_id stdout =
   stdout |> String.split_on_char '\n'
   |> List.find_map (fun line ->
-         match
-           [
-             "session-id";
-             "session_id";
-             "thread-id";
-             "thread_id";
-           ]
-           |> List.find_map (parse_json_string_field line)
-         with
-         | Some session_id -> Some session_id
-         | None ->
-             [
-               ("session", "id");
-               ("session", "session-id");
-               ("session", "session_id");
-               ("thread", "id");
-               ("thread", "thread-id");
-               ("thread", "thread_id");
-             ]
-             |> List.find_map (fun (object_field, nested_field) ->
-                    parse_json_nested_string_field line object_field nested_field))
+      match
+        [ "session-id"; "session_id"; "thread-id"; "thread_id" ]
+        |> List.find_map (parse_json_string_field line)
+      with
+      | Some session_id -> Some session_id
+      | None ->
+          [
+            ("session", "id");
+            ("session", "session-id");
+            ("session", "session_id");
+            ("thread", "id");
+            ("thread", "thread-id");
+            ("thread", "thread_id");
+          ]
+          |> List.find_map (fun (object_field, nested_field) ->
+              parse_json_nested_string_field line object_field nested_field))
 
 let start_codex config command =
   let result = start_command_capture_session_line command in
@@ -524,8 +512,8 @@ let inherited_task_session_lines = function
          launching a new subagent.";
       ]
 
-let build_master_task_dispatch_prompt config ~graph ~agent_name ?inherited_session
-    ?tree_text block =
+let build_master_task_dispatch_prompt config ~graph ~agent_name
+    ?inherited_session ?tree_text block =
   let uuid = Option.value (block_uuid block) ~default:"" in
   String.concat "\n"
     ([
@@ -567,8 +555,9 @@ let dispatch_task_to_master config ~graph ~agent_name ~master_session
   in
   start_codex config (build_codex_resume_command config master_session prompt)
 
-let build_master_comment_dispatch_prompt config ~graph ~agent_name ~comment_block
-    ~target_tree_texts ~comments_area_tree_text ~comment_tree_text =
+let build_master_comment_dispatch_prompt config ~graph ~agent_name
+    ~comment_block ~target_tree_texts ~comments_area_tree_text
+    ~comment_tree_text =
   let uuid = Option.value (block_uuid comment_block) ~default:"" in
   String.concat "\n"
     ([
@@ -580,9 +569,7 @@ let build_master_comment_dispatch_prompt config ~graph ~agent_name ~comment_bloc
      ]
     @ project_dir_line config
     @ [ ""; graph_scope_line; comment_completion_line ]
-    @ graph_report_lines
-    @ [ "" ]
-    @ comment_reply_instruction_lines
+    @ graph_report_lines @ [ "" ] @ comment_reply_instruction_lines
     @ [
         "";
         "Comment UUID: " ^ uuid;
@@ -599,10 +586,12 @@ let build_master_comment_dispatch_prompt config ~graph ~agent_name ~comment_bloc
       ])
 
 let dispatch_comment_to_master config ~graph ~agent_name ~master_session
-    ~target_tree_texts ~comments_area_tree_text ~comment_tree_text comment_block =
+    ~target_tree_texts ~comments_area_tree_text ~comment_tree_text comment_block
+    =
   let prompt =
-    build_master_comment_dispatch_prompt config ~graph ~agent_name ~comment_block
-      ~target_tree_texts ~comments_area_tree_text ~comment_tree_text
+    build_master_comment_dispatch_prompt config ~graph ~agent_name
+      ~comment_block ~target_tree_texts ~comments_area_tree_text
+      ~comment_tree_text
   in
   start_codex config (build_codex_resume_command config master_session prompt)
 
@@ -621,15 +610,13 @@ let sym value = Edn_util.string ("~$" ^ value)
 let vector values = Edn_util.vector values
 let list values = Edn_util.list values
 let empty_rules = vector []
-
 let agent_bridge_registry_page = "AgentBridge"
 let master_prompt_wrapper_title = "AgentBridge master prompt"
 let task_prompt_template_title = "Task prompt template"
 let comment_prompt_template_title = "Comment prompt template"
 
 let page_name_sanity_lc value =
-  value |> String.trim |> String.lowercase_ascii
-  |> String.to_seq
+  value |> String.trim |> String.lowercase_ascii |> String.to_seq
   |> Seq.filter (function ' ' | '\t' | '\n' | '\r' -> false | _ -> true)
   |> String.of_seq
 
@@ -654,8 +641,7 @@ let order_key value =
 let child_blocks block =
   let values =
     match
-      ( Edn_util.get block ":block/children",
-        Edn_util.get block ":block/_parent" )
+      (Edn_util.get block ":block/children", Edn_util.get block ":block/_parent")
     with
     | Some value, _ | None, Some value ->
         Option.value (Edn_util.as_seq value) ~default:[]
@@ -665,7 +651,9 @@ let child_blocks block =
   |> List.sort (fun a b -> String.compare (order_key a) (order_key b))
 
 let rec block_title_tree block =
-  let title = Option.value (Edn_util.get_string block ":block/title") ~default:"" in
+  let title =
+    Option.value (Edn_util.get_string block ":block/title") ~default:""
+  in
   title :: List.concat_map block_title_tree (child_blocks block)
 
 let code_block_tag tag =
@@ -679,10 +667,7 @@ let extract_code_blocks text =
   let len = String.length text in
   let rec loop acc index =
     if index + 3 > len then List.rev acc
-    else if
-      index + 3 <= len
-      && String.sub text index 3 = "```"
-    then
+    else if index + 3 <= len && String.sub text index 3 = "```" then
       match String.index_from_opt text (index + 3) '\n' with
       | None -> loop acc (index + 3)
       | Some body_start -> (
@@ -753,15 +738,16 @@ let prompt_template_from_block kind block =
   let renderable =
     templates
     |> List.filter (fun body ->
-           validate_prompt_template ((prompt_template_for_kind kind) body)
-           = Ok ())
+        validate_prompt_template ((prompt_template_for_kind kind) body) = Ok ())
   in
   match renderable with
   | [ body ] -> Ok body
   | _ -> (
       match templates with
-      | [ body ] ->
-          (match validate_prompt_template ((prompt_template_for_kind kind) body) with
+      | [ body ] -> (
+          match
+            validate_prompt_template ((prompt_template_for_kind kind) body)
+          with
           | Ok () -> Ok body
           | Error err -> Error err)
       | _ ->
@@ -1035,7 +1021,7 @@ let routable_task_query agent_name =
                 vector
                   [ sym "?assignee-ref"; kw ":block/title"; sym "?agent-name" ];
               ] );
-      ];
+        ];
       Edn_util.string agent_name;
       empty_rules;
     ]
@@ -1099,8 +1085,7 @@ let comments_area_selector =
         [ (kw ":block/tags", vector [ kw ":db/ident"; kw ":block/title" ]) ];
       Edn_util.map
         [
-          ( kw ":logseq.property.comments/blocks",
-            comment_target_block_selector );
+          (kw ":logseq.property.comments/blocks", comment_target_block_selector);
         ];
     ]
 
@@ -1110,7 +1095,8 @@ let reaction_query target_uuid emoji_id =
       Edn_util.map
         [
           (kw ":find", list [ sym "?r"; sym "." ]);
-          (kw ":in", list [ sym "$"; sym "?target-uuid"; sym "?emoji-id"; sym "%" ]);
+          ( kw ":in",
+            list [ sym "$"; sym "?target-uuid"; sym "?emoji-id"; sym "%" ] );
           ( kw ":where",
             vector
               [
@@ -1135,7 +1121,7 @@ let reaction_query target_uuid emoji_id =
                     kw ":logseq.property/created-by-ref";
                   ];
               ] );
-      ];
+        ];
       Edn_util.uuid target_uuid;
       Edn_util.string emoji_id;
       empty_rules;
@@ -1153,13 +1139,8 @@ let task_status_query block_uuid =
               [
                 vector [ sym "?block"; kw ":block/uuid"; sym "?block-uuid" ];
                 vector
-                  [
-                    sym "?block";
-                    kw ":logseq.property/status";
-                    sym "?status";
-                  ];
-                vector
-                  [ sym "?status"; kw ":db/ident"; sym "?status-ident" ];
+                  [ sym "?block"; kw ":logseq.property/status"; sym "?status" ];
+                vector [ sym "?status"; kw ":db/ident"; sym "?status-ident" ];
               ] );
         ];
       Edn_util.uuid block_uuid;
@@ -1174,8 +1155,7 @@ let unquote_transit_value = function
   | Edn_ocaml.Any (Edn_ocaml.Tagged (("transit/quote" | "'"), value)) -> value
   | value -> value
 
-let keyword_string value =
-  value |> unquote_transit_value |> Edn_util.as_keyword
+let keyword_string value = value |> unquote_transit_value |> Edn_util.as_keyword
 
 let bridge_result_value (result : bridge_result) =
   Edn_util.map
@@ -1238,10 +1218,7 @@ let create_page invoke_config repo title =
   apply_outliner_ops invoke_config repo
     [
       vector
-        [
-          kw ":create-page";
-          vector [ Edn_util.string title; Edn_util.map [] ];
-        ];
+        [ kw ":create-page"; vector [ Edn_util.string title; Edn_util.map [] ] ];
     ]
 
 let ensure_registry_page invoke_config repo =
@@ -1249,7 +1226,8 @@ let ensure_registry_page invoke_config repo =
   bind (pull_registry_page invoke_config repo) (function
     | Some page -> pure page
     | None ->
-        bind (create_page invoke_config repo agent_bridge_registry_page) (fun _ ->
+        bind (create_page invoke_config repo agent_bridge_registry_page)
+          (fun _ ->
             bind (pull_registry_page invoke_config repo) (function
               | Some page -> pure page
               | None ->
@@ -1277,8 +1255,9 @@ let master_prompt_from_block block =
         child_blocks block
         |> List.filter block_has_code_tag
         |> List.filter_map (fun child ->
-               Option.bind (Edn_util.get_string child ":block/title")
-                 trim_non_empty)
+            Option.bind
+              (Edn_util.get_string child ":block/title")
+              trim_non_empty)
       in
       match prompts with
       | [ prompt ] -> Ok prompt
@@ -1309,14 +1288,13 @@ let hex_digest_prefix byte_count seed =
   loop 0 []
 
 let insert_default_master_prompt invoke_config repo agent_page_uuid =
-  let nonce = Printf.sprintf "%.17g" (Cli_unix.gettimeofday ()) in
+  let nonce = Printf.sprintf "%.17g" (Ptime.to_float_s (Ptime_util.now ())) in
   let block_uuid =
     "00000000-0000-4000-8000-"
     ^ hex_digest_prefix 6 (agent_page_uuid ^ ":" ^ nonce)
   in
   let code_uuid =
-    "00000000-0000-4000-8001-"
-    ^ hex_digest_prefix 6 (block_uuid ^ ":" ^ nonce)
+    "00000000-0000-4000-8001-" ^ hex_digest_prefix 6 (block_uuid ^ ":" ^ nonce)
   in
   let code_block =
     Edn_util.map
@@ -1367,15 +1345,14 @@ let insert_default_master_prompt invoke_config repo agent_page_uuid =
                   (kw ":bottom?", Edn_util.bool false);
                   (kw ":keep-uuid?", Edn_util.bool true);
                 ];
-          ];
+            ];
         ];
     ]
 
 let insert_default_master_prompt_code invoke_config repo wrapper_uuid =
-  let nonce = Printf.sprintf "%.17g" (Cli_unix.gettimeofday ()) in
+  let nonce = Printf.sprintf "%.17g" (Ptime.to_float_s (Ptime_util.now ())) in
   let code_uuid =
-    "00000000-0000-4000-8001-"
-    ^ hex_digest_prefix 6 (wrapper_uuid ^ ":" ^ nonce)
+    "00000000-0000-4000-8001-" ^ hex_digest_prefix 6 (wrapper_uuid ^ ":" ^ nonce)
   in
   let code_block =
     Edn_util.map
@@ -1410,7 +1387,7 @@ let insert_default_master_prompt_code invoke_config repo wrapper_uuid =
 let repairable_missing_master_prompt_code block =
   Edn_util.get_string block ":block/title" = Some master_prompt_wrapper_title
   && Option.is_some (Edn_util.get_string block ":block/uuid")
-  && (child_blocks block |> List.filter block_has_code_tag) = []
+  && child_blocks block |> List.filter block_has_code_tag = []
 
 let ensure_agent_master_prompt invoke_config repo agent_name =
   let open Cli_effect in
@@ -1418,7 +1395,8 @@ let ensure_agent_master_prompt invoke_config repo agent_name =
     | None -> error (Failure "agent bridge agent page not found")
     | Some page -> (
         match
-          (Edn_util.get_int64 page ":db/id", Edn_util.get_string page ":block/uuid")
+          ( Edn_util.get_int64 page ":db/id",
+            Edn_util.get_string page ":block/uuid" )
         with
         | None, _ -> error (Failure "agent bridge agent page id not found")
         | _, None -> error (Failure "agent bridge agent page uuid not found")
@@ -1432,7 +1410,7 @@ let ensure_agent_master_prompt invoke_config repo agent_name =
                 match
                   values_of_query_result blocks
                   |> List.sort (fun a b ->
-                         String.compare (order_key a) (order_key b))
+                      String.compare (order_key a) (order_key b))
                   |> first_live_entity
                 with
                 | Some block -> (
@@ -1444,8 +1422,8 @@ let ensure_agent_master_prompt invoke_config repo agent_name =
                           | Some wrapper_uuid ->
                               bind
                                 (insert_default_master_prompt_code invoke_config
-                                   repo wrapper_uuid)
-                                (fun _ -> pure default_master_prompt)
+                                   repo wrapper_uuid) (fun _ ->
+                                  pure default_master_prompt)
                           | None -> error (Failure err.Error.message)
                         else error (Failure err.Error.message))
                 | None ->
@@ -1457,7 +1435,8 @@ let ensure_prompt_templates invoke_config repo =
   let open Cli_effect in
   bind (ensure_registry_page invoke_config repo) (fun page ->
       match
-        (Edn_util.get_int64 page ":db/id", Edn_util.get_string page ":block/uuid")
+        ( Edn_util.get_int64 page ":db/id",
+          Edn_util.get_string page ":block/uuid" )
       with
       | None, _ -> error (Failure "agent bridge registry page id not found")
       | _, None -> error (Failure "agent bridge registry page uuid not found")
@@ -1527,7 +1506,9 @@ let show_task_tree config repo graph block =
         }
       in
       bind (Show.execute action config Output.Mode.Human) (fun result ->
-          match Option.bind (Cli_result.data_value result) Edn_util.as_string with
+          match
+            Option.bind (Cli_result.data_value result) Edn_util.as_string
+          with
           | Some text when String.trim text <> "" -> pure text
           | _ -> pure (block_title block))
 
@@ -1557,15 +1538,15 @@ let has_tag predicate block =
 let ref_titles block =
   value_list (Edn_util.get block ":block/refs")
   |> List.filter_map (fun ref ->
-         Option.bind (Edn_util.get_string ref ":block/title") trim_non_empty)
+      Option.bind (Edn_util.get_string ref ":block/title") trim_non_empty)
 
 let comment_block_matches block agent_name =
   Option.is_some (block_uuid block)
   && has_tag comment_tag block
   &&
   let title = block_title block in
-  (string_contains ~needle:("[[" ^ agent_name ^ "]]") title
-  || List.mem agent_name (ref_titles block))
+  string_contains ~needle:("[[" ^ agent_name ^ "]]") title
+  || List.mem agent_name (ref_titles block)
 
 let comments_area_block block = has_tag comments_area_tag block
 
@@ -1582,8 +1563,9 @@ let pull_comment_block invoke_config repo block_id =
 
 let pull_comments_area invoke_config repo comment_block =
   let open Cli_effect in
-  match Option.bind (parent_block comment_block) (fun parent ->
-            Edn_util.get_int64 parent ":db/id")
+  match
+    Option.bind (parent_block comment_block) (fun parent ->
+        Edn_util.get_int64 parent ":db/id")
   with
   | None -> error (Failure "comment block parent is missing")
   | Some parent_id ->
@@ -1621,9 +1603,8 @@ let process_comment invoke_config repo graph agent_name config master_session
     match
       dispatch_comment_to_master config
         ~graph:(Cli_primitive.string_of_graph graph)
-        ~agent_name ~master_session
-        ~target_tree_texts ~comments_area_tree_text ~comment_tree_text
-        comment_block
+        ~agent_name ~master_session ~target_tree_texts ~comments_area_tree_text
+        ~comment_tree_text comment_block
     with
     | Error err -> error (Failure err.Error.message)
     | Ok session ->
@@ -1656,11 +1637,10 @@ let comment_title_datom datom agent_name =
          || string_contains ~needle:"[[" title)
   | None -> false
 
-let sync_payload_tx_data payload =
-  value_list (Edn_util.get payload ":tx-data")
+let sync_payload_tx_data payload = value_list (Edn_util.get payload ":tx-data")
 
-let route_comment_datom invoke_config repo graph agent_name config master_session
-    datom =
+let route_comment_datom invoke_config repo graph agent_name config
+    master_session datom =
   let open Cli_effect in
   let ( let* ) = bind in
   match datom_entity_id datom with
@@ -1675,8 +1655,8 @@ let route_comment_datom invoke_config repo graph agent_name config master_sessio
         pure (Some routed)
       else pure None
 
-let route_comment_datoms invoke_config repo graph agent_name config master_session
-    payload =
+let route_comment_datoms invoke_config repo graph agent_name config
+    master_session payload =
   let open Cli_effect in
   let datoms =
     sync_payload_tx_data payload
@@ -1687,10 +1667,9 @@ let route_comment_datoms invoke_config repo graph agent_name config master_sessi
     | datom :: rest ->
         bind
           (route_comment_datom invoke_config repo graph agent_name config
-             master_session datom)
-          (function
-            | Some routed -> loop (routed :: acc) rest
-            | None -> loop acc rest)
+             master_session datom) (function
+          | Some routed -> loop (routed :: acc) rest
+          | None -> loop acc rest)
   in
   loop [] datoms
 
@@ -1761,42 +1740,41 @@ let mark_task_started invoke_config repo block =
                     (fun _ -> pure ())
               | _ -> pure ()))
 
-let process_task invoke_config repo graph agent_name config master_session block =
+let process_task invoke_config repo graph agent_name config master_session block
+    =
   let open Cli_effect in
   bind (show_task_tree config repo graph block) (fun tree_text ->
-      bind
-        (nearest_ancestor_task_session invoke_config repo block)
+      bind (nearest_ancestor_task_session invoke_config repo block)
         (fun inherited_session ->
           match
             dispatch_task_to_master config
               ~graph:(Cli_primitive.string_of_graph graph)
-              ~agent_name ~master_session
-              ?inherited_session ~tree_text block
+              ~agent_name ~master_session ?inherited_session ~tree_text block
           with
           | Error err -> error (Failure err.Error.message)
           | Ok session ->
               bind (mark_task_started invoke_config repo block) (fun () ->
                   pure { block; session = Some session })))
 
-let process_tasks invoke_config repo graph agent_name config master_session tasks =
+let process_tasks invoke_config repo graph agent_name config master_session
+    tasks =
   let open Cli_effect in
   let rec loop acc = function
     | [] -> pure (List.rev acc)
     | block :: rest ->
         bind
-          (process_task invoke_config repo graph agent_name config master_session
-             block)
-          (fun routed -> loop (routed :: acc) rest)
+          (process_task invoke_config repo graph agent_name config
+             master_session block) (fun routed -> loop (routed :: acc) rest)
   in
   loop [] tasks
 
-let bridge_log_line message = Cli_unix.iso_now () ^ " " ^ message
+let bridge_log_line message =
+  Ptime_util.rfc3339_millis (Ptime_util.now ()) ^ " " ^ message
 
 let emit_bridge_log : type a. a Output.Mode.t -> string -> unit =
  fun mode message ->
   match mode with
-  | Output.Mode.Human ->
-      Cli_unix.write_stdout (bridge_log_line message ^ "\n")
+  | Output.Mode.Human -> Cli_unix.write_stdout (bridge_log_line message ^ "\n")
   | Output.Mode.Json | Output.Mode.Edn -> ()
 
 let command_preview command =
@@ -1805,8 +1783,10 @@ let command_preview command =
       if index >= String.length value then true
       else
         match value.[index] with
-        | 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '.' | '_' | ':' | '/' | '='
-        | '-' ->
+        | 'A' .. 'Z'
+        | 'a' .. 'z'
+        | '0' .. '9'
+        | '.' | '_' | ':' | '/' | '=' | '-' ->
             loop (index + 1)
         | _ -> false
     in
@@ -1819,8 +1799,10 @@ let command_preview command =
   String.concat " " (List.map quote command)
 
 let is_uri_component_unescaped = function
-  | 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '-' | '_' | '.' | '!' | '~' | '*'
-  | '\'' | '(' | ')' ->
+  | 'A' .. 'Z'
+  | 'a' .. 'z'
+  | '0' .. '9'
+  | '-' | '_' | '.' | '!' | '~' | '*' | '\'' | '(' | ')' ->
       true
   | _ -> false
 
@@ -1830,11 +1812,11 @@ let encode_uri_component value =
   String.iter
     (fun c ->
       if is_uri_component_unescaped c then Buffer.add_char buffer c
-      else (
+      else
         let code = Char.code c in
         Buffer.add_char buffer '%';
         Buffer.add_char buffer hex.[code lsr 4];
-        Buffer.add_char buffer hex.[code land 0x0F]))
+        Buffer.add_char buffer hex.[code land 0x0F])
     value;
   Buffer.contents buffer
 
@@ -1864,12 +1846,10 @@ let edn_string_escape value =
 
 let bridge_lock_owner graph agent_name =
   let graph = Cli_primitive.string_of_graph graph in
-  Printf.sprintf
-    "{:pid %d :graph \"%s\" :agent \"%s\" :started-at \"%s\"}\n"
-    (Cli_unix.getpid ())
-    (edn_string_escape graph)
+  Printf.sprintf "{:pid %d :graph \"%s\" :agent \"%s\" :started-at \"%s\"}\n"
+    (Cli_unix.getpid ()) (edn_string_escape graph)
     (edn_string_escape agent_name)
-    (Printf.sprintf "%.3f" (Cli_unix.time ()))
+    (Printf.sprintf "%.3f" (Ptime.to_float_s (Ptime_util.now ())))
 
 let bridge_lock_error graph agent_name =
   let graph = Cli_primitive.string_of_graph graph in
@@ -1906,7 +1886,8 @@ let acquire_bridge_lock config graph agent_name =
       match Cli_unix.mkdir_exclusive lock_dir 0o755 with
       | Cli_unix.Created -> (
           try
-            Cli_unix.write_text_file (bridge_lock_owner_path lock_dir)
+            Cli_unix.write_text_file
+              (bridge_lock_owner_path lock_dir)
               (bridge_lock_owner graph agent_name);
             Ok lock_dir
           with exn ->
@@ -1937,20 +1918,24 @@ let with_bridge_lock config (graph : Cli_primitive.graph) agent_name mode body =
           release_bridge_lock lock_dir;
           pure ())
 
-let route_current_tasks invoke_config repo (graph : Cli_primitive.graph) agent_name
-    config master_session =
+let route_current_tasks invoke_config repo (graph : Cli_primitive.graph)
+    agent_name config master_session =
   let open Cli_effect in
   let ( let* ) = bind in
   let* tasks = list_routable_tasks invoke_config repo agent_name in
   process_tasks invoke_config repo graph agent_name config master_session tasks
 
-let execute_bridge_once repo (graph : Cli_primitive.graph) agent_name config mode =
+let execute_bridge_once repo (graph : Cli_primitive.graph) agent_name config
+    mode =
   let open Cli_effect in
   let ( let* ) = bind in
-  let* server = Server_runtime.ensure_server config repo ~create_empty_db:false in
+  let* server =
+    Server_runtime.ensure_server config repo ~create_empty_db:false
+  in
   match server with
-  | Error err -> pure (Output_mode.error ~command:Command_id.Agent_bridge mode err)
-  | Ok invoke_config ->
+  | Error err ->
+      pure (Output_mode.error ~command:Command_id.Agent_bridge mode err)
+  | Ok invoke_config -> (
       let* () = register_agent_bridge invoke_config repo agent_name in
       let* master_prompt =
         ensure_agent_master_prompt invoke_config repo agent_name
@@ -1974,7 +1959,7 @@ let execute_bridge_once repo (graph : Cli_primitive.graph) agent_name config mod
           in
           pure
             (Cli_result.ok ~command:Command_id.Agent_bridge mode
-               (Raw (bridge_result_value result)))
+               (Raw (bridge_result_value result))))
 
 let sync_db_changes_event_type = Edn_util.keyword_t ":sync-db-changes"
 
@@ -1982,18 +1967,21 @@ let wait_forever () =
   let task, _resolver = Lwt.wait () in
   Cli_effect.of_lwt task
 
-let execute_bridge_forever repo (graph : Cli_primitive.graph) agent_name config mode =
+let execute_bridge_forever repo (graph : Cli_primitive.graph) agent_name config
+    mode =
   let open Cli_effect in
   let ( let* ) = bind in
   emit_bridge_log mode "checking the environment ...";
-  emit_bridge_log mode
-    ("using graph: " ^ Cli_primitive.string_of_graph graph);
+  emit_bridge_log mode ("using graph: " ^ Cli_primitive.string_of_graph graph);
   emit_bridge_log mode ("using agent name: " ^ agent_name);
   emit_bridge_log mode "checking codex cli ...";
-  let* server = Server_runtime.ensure_server config repo ~create_empty_db:false in
+  let* server =
+    Server_runtime.ensure_server config repo ~create_empty_db:false
+  in
   match server with
-  | Error err -> pure (Output_mode.error ~command:Command_id.Agent_bridge mode err)
-  | Ok invoke_config ->
+  | Error err ->
+      pure (Output_mode.error ~command:Command_id.Agent_bridge mode err)
+  | Ok invoke_config -> (
       emit_bridge_log mode "registering agent bridge ...";
       let* () = register_agent_bridge invoke_config repo agent_name in
       emit_bridge_log mode "checking master prompt ...";
@@ -2033,7 +2021,7 @@ let execute_bridge_forever repo (graph : Cli_primitive.graph) agent_name config 
             route_current_tasks invoke_config repo graph agent_name config
               master_session
           in
-          wait_forever ()
+          wait_forever ())
 
 let execute (Agent_bridge { repo; graph }) config mode =
   let open Cli_effect in

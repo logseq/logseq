@@ -16,3 +16,4 @@ val catch : 'a t -> (exn -> 'a t) -> 'a t
 val finally : 'a t -> (unit -> unit t) -> 'a t
 val of_lwt : 'a Lwt.t -> 'a t
 val to_lwt : 'a t -> 'a Lwt.t
+val sleep : Ptime.span -> unit t

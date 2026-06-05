@@ -15,8 +15,8 @@ type page_opts = {
   include_journal : bool option;
   journal_only : bool;
   include_hidden : bool;
-  updated_after : string option;
-  created_after : string option;
+  updated_after : Ptime.t option;
+  created_after : Ptime.t option;
 }
 
 type tag_opts = {

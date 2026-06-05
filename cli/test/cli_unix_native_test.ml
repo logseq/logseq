@@ -35,22 +35,6 @@ let filesystem_case () =
   Cli_unix.rmdir dir;
   Alcotest.(check bool) "rmdir removes directory" false (Sys.file_exists dir)
 
-let time_case () =
-  let before = Unix.gettimeofday () in
-  let actual = Cli_unix.gettimeofday () in
-  let after = Unix.gettimeofday () in
-  Alcotest.(check bool)
-    "gettimeofday in native range" true
-    (actual >= before && actual <= after +. 0.1);
-  Cli_unix.sleepf 0.001;
-  Alcotest.(check bool) "time aliases gettimeofday" true (Cli_unix.time () > 0.)
-
-let environment_case () =
-  let env = Cli_unix.environment () |> Array.to_list in
-  Alcotest.(check bool) "environment returns entries" true (env <> []);
-  Alcotest.(check string)
-    "gethostname matches Unix" (Unix.gethostname ()) (Cli_unix.gethostname ())
-
 let process_case () =
   let pid = Cli_unix.create_process_env "true" [| "true" |] [||] 0 1 2 in
   Alcotest.(check bool) "create_process_env returns pid" true (pid > 0);
@@ -96,9 +80,7 @@ let () =
     [
       ( "native backend",
         [
-          Alcotest.test_case "time" `Quick time_case;
           Alcotest.test_case "filesystem" `Quick filesystem_case;
-          Alcotest.test_case "environment" `Quick environment_case;
           Alcotest.test_case "process" `Quick process_case;
           Alcotest.test_case "socket" `Quick socket_case;
         ] );
