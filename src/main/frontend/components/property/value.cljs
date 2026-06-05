@@ -2056,23 +2056,23 @@
                            (delete-block-property! block property)
                            :dune))
           :class "flex flex-1 flex-row items-center flex-wrap gap-1"}
-	         (let [items' (vec items)
-	               not-empty-value? (not= (map :db/ident items') [:logseq.property/empty-placeholder])]
-	           (if (and (seq items) not-empty-value?)
-	             (if (= type :asset)
-	               (for [item items']
-	                 ^{:key (or (:block/uuid item) (str item))}
-	                 [asset-value-content item])
-	               (concat
-	                (for [[idx item] (map-indexed vector items')]
-	                  ^{:key (str "value-" (or (:block/uuid item) item) "-" idx)}
-	                  [:<>
-	                   [select-item property type item (assoc opts :show-popup! show-popup!)]
-	                   (when (< idx (dec (count items')))
-	                     [:span.opacity-50.-ml-1 ","])])
-	                (when date?
-	                  [^{:key "empty-date-picker"}
-	                   (property-value-date-picker block property nil {:toggle-fn toggle-fn})])))
+                 (let [items' (vec items)
+                       not-empty-value? (not= (map :db/ident items') [:logseq.property/empty-placeholder])]
+                   (if (and (seq items) not-empty-value?)
+                     (if (= type :asset)
+                       (for [item items']
+                         ^{:key (or (:block/uuid item) (str item))}
+                         [asset-value-content item])
+                       (concat
+                        (for [[idx item] (map-indexed vector items')]
+                          ^{:key (str "value-" (or (:block/uuid item) item) "-" idx)}
+                          [:<>
+                           [select-item property type item (assoc opts :show-popup! show-popup!)]
+                           (when (< idx (dec (count items')))
+                             [:span.opacity-50.-ml-1 ","])])
+                        (when date?
+                          [^{:key "empty-date-picker"}
+                           (property-value-date-picker block property nil {:toggle-fn toggle-fn})])))
              (if date?
                (property-value-date-picker block property nil {:toggle-fn toggle-fn})
                (if (= type :asset)
@@ -2171,7 +2171,7 @@
           (if show-tooltip?
             (shui/tooltip-provider
              (shui/tooltip
-              {:delayDuration 1200}
+              {:delay 1200}
               (shui/tooltip-trigger
                {:onFocusCapture #(util/stop-propagation %)
                 :as-child true}
