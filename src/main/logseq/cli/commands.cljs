@@ -435,8 +435,7 @@
   [summary {:keys [command opts args cmds spec long-desc examples]}]
   (let [opts (-> opts
                  command-core/normalize-opts
-                 (#(list-command/normalize-options command %))
-                 (#(graph-command/normalize-options command %)))
+                 (#(list-command/normalize-options command %)))
         args (vec args)
         cmd-summary (command-core/command-summary {:cmds cmds
                                                    :spec spec
