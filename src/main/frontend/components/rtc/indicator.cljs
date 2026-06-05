@@ -2,7 +2,6 @@
   "RTC state indicator"
   (:require [clojure.pprint :as pprint]
             [clojure.string :as string]
-            [frontend.common.missionary :as c.m]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
@@ -14,7 +13,6 @@
             [frontend.util :as util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [io.factorhouse.hsx.core :as hsx]))
 
 (comment
@@ -30,46 +28,40 @@
          :remote-tx nil
          :local-checksum nil
          :remote-checksum nil
-         :rtc-state :open
+         :rtc-state :close
          :download-logs nil
          :upload-logs nil
          :misc-logs nil}))
 
-(defonce ^:private *update-detail-info-canceler (atom nil))
-(defn- run-task--update-detail-info
-  []
-  (when-let [canceler @*update-detail-info-canceler]
-    (canceler)
-    (reset! *update-detail-info-canceler nil))
-  (letfn [(update-log-task [flow k]
-            (m/reduce
-             (fn [_ log]
-               (when log
-                 (swap! *detail-info update k (fn [logs] (take 5 (conj logs log))))))
-             flow))]
-    (let [canceler (c.m/run-task ::update-detail-info
-                     (m/join
-                      (constantly nil)
-                      (update-log-task rtc-flows/rtc-download-log-flow :download-logs)
-                      (update-log-task rtc-flows/rtc-upload-log-flow :upload-logs)
-                      (update-log-task rtc-flows/rtc-misc-log-flow :misc-logs)
-                      (m/reduce (fn [_ state]
-                                  (swap! *detail-info assoc
-                                         :pending-local-ops (:unpushed-block-update-count state)
-                                         :pending-asset-ops (:pending-asset-ops-count state)
-                                         :pending-server-ops (or (:pending-server-ops-count state)
-                                                                 (when (and (number? (:remote-tx state))
-                                                                            (number? (:local-tx state)))
-                                                                   (max 0 (- (:remote-tx state) (:local-tx state)))))
-                                         :graph-uuid (:graph-uuid state)
-                                         :local-tx (:local-tx state)
-                                         :remote-tx (:remote-tx state)
-                                         :local-checksum (:local-checksum state)
-                                         :remote-checksum (:remote-checksum state)
-                                         :rtc-state (if (:rtc-lock state) :open :close)))
-                                rtc-flows/rtc-state-flow)))]
-      (reset! *update-detail-info-canceler canceler))))
-(run-task--update-detail-info)
+(defn rtc-state->detail-info
+  [state]
+  {:pending-local-ops (:unpushed-block-update-count state)
+   :pending-asset-ops (:pending-asset-ops-count state)
+   :pending-server-ops (or (:pending-server-ops-count state)
+                           (when (and (number? (:remote-tx state))
+                                      (number? (:local-tx state)))
+                             (max 0 (- (:remote-tx state) (:local-tx state)))))
+   :graph-uuid (:graph-uuid state)
+   :local-tx (:local-tx state)
+   :remote-tx (:remote-tx state)
+   :local-checksum (:local-checksum state)
+   :remote-checksum (:remote-checksum state)
+   :rtc-state (if (:rtc-lock state) :open :close)})
+
+(defn- update-detail-log!
+  [k log]
+  (when log
+    (swap! *detail-info update k (fn [logs] (take 5 (conj logs log))))))
+
+(add-watch rtc-flows/rtc-download-log ::update-detail-download-log
+           (fn [_ _ _ log] (update-detail-log! :download-logs log)))
+(add-watch rtc-flows/rtc-upload-log ::update-detail-upload-log
+           (fn [_ _ _ log] (update-detail-log! :upload-logs log)))
+(add-watch rtc-flows/rtc-misc-log ::update-detail-misc-log
+           (fn [_ _ _ log] (update-detail-log! :misc-logs log)))
+(add-watch rtc-flows/rtc-state ::update-detail-state
+           (fn [_ _ _ state]
+             (swap! *detail-info merge (rtc-state->detail-info state))))
 
 (defn asset-transfer-counts
   [progress]
@@ -101,6 +93,22 @@
       (pos? (or download 0))
       (conj {:count download
              :label-key :sync/assets-downloading}))))
+
+(defn indicator-button-class
+  [{:keys [online? rtc-state pending-local-ops pending-asset-ops pending-server-ops]}]
+  (let [open? (and online? (= :open rtc-state))
+        syncing? (and open? (pos? (or pending-server-ops 0)))
+        idle? (and open?
+                   (zero? (or pending-local-ops 0))
+                   (zero? (or pending-asset-ops 0))
+                   (zero? (or pending-server-ops 0)))
+        queuing? (or (pos? (or pending-local-ops 0))
+                     (pos? (or pending-asset-ops 0)))]
+    (string/join " " (cond-> ["cloud"]
+                       open? (conj "on")
+                       syncing? (conj "syncing")
+                       idle? (conj "idle")
+                       queuing? (conj "queuing")))))
 
 (defn- asset-status-label
   [label-key]
@@ -157,7 +165,7 @@
         show-checksums? (or config/dev? util/node-test?)
         {:keys [graph-uuid local-tx remote-tx local-checksum remote-checksum rtc-state
                 download-logs upload-logs misc-logs pending-local-ops pending-asset-ops pending-server-ops]}
-        (hooks/use-flow-state (m/watch *detail-info))
+        (hooks/use-atom-value *detail-info)
         asset-rows (asset-status-rows {:pending-asset-ops pending-asset-ops
                                        :asset-transfer-counts (asset-transfer-counts asset-progress)})]
     [:div.rtc-info.flex.flex-col.gap-1.p-2.text-gray-11
@@ -202,7 +210,7 @@
 
 (hsx/defc indicator
   []
-  (let [detail-info                 (hooks/use-flow-state (m/watch *detail-info))
+  (let [detail-info                 (hooks/use-atom-value *detail-info)
         _                           (rfx/use-sub [:auth/current-login-user])
         online?                     (rfx/use-sub [:network/online?])
         rtc-state                   (:rtc-state detail-info)
@@ -218,51 +226,36 @@
                                                             (details)
                                                             {:align "end"
                                                              :dropdown-menu? true})
-                               :class (util/classnames [{:cloud true
-                                                         :on (and online? (= :open rtc-state))
-                                                         :syncing (and online?
-                                                                       (= :open rtc-state)
-                                                                       (pos? (or pending-server-ops 0)))
-                                                         :idle (and online?
-                                                                    (= :open rtc-state)
-                                                                    (zero? unpushed-block-update-count)
-                                                                    (zero? pending-asset-ops)
-                                                                    (zero? (or pending-server-ops 0)))
-                                                         :queuing (or (pos? unpushed-block-update-count)
-                                                                      (pos? pending-asset-ops))}])})]]))
+                               :class (indicator-button-class
+                                       {:online? online?
+                                        :rtc-state rtc-state
+                                        :pending-local-ops unpushed-block-update-count
+                                        :pending-asset-ops pending-asset-ops
+                                        :pending-server-ops pending-server-ops})})]]))
 
 (def ^:private *accumulated-download-logs (atom []))
 (when-not config/publishing?
-  (c.m/run-background-task
-   ::update-accumulated-download-logs
-   (m/reduce
-    (fn [_ log]
-      (when log
-        (if (= :download-completed (:sub-type log))
-          (reset! *accumulated-download-logs [])
-          (swap! *accumulated-download-logs (fn [logs] (take 20 (conj logs log)))))))
-    rtc-flows/rtc-download-log-flow)))
+  (add-watch rtc-flows/rtc-download-log ::update-accumulated-download-logs
+             (fn [_ _ _ log]
+               (when log
+                 (if (= :download-completed (:sub-type log))
+                   (reset! *accumulated-download-logs [])
+                   (swap! *accumulated-download-logs (fn [logs] (take 20 (conj logs log)))))))))
 
 (def ^:private *accumulated-upload-logs (atom []))
 (when-not config/publishing?
-  (c.m/run-background-task
-   ::update-accumulated-upload-logs
-   (m/reduce
-    (fn [_ log]
-      (when log
-        (if (= :upload-completed (:sub-type log))
-          (reset! *accumulated-upload-logs [])
-          (swap! *accumulated-upload-logs (fn [logs] (take 20 (conj logs log)))))))
-    rtc-flows/rtc-upload-log-flow)))
+  (add-watch rtc-flows/rtc-upload-log ::update-accumulated-upload-logs
+             (fn [_ _ _ log]
+               (when log
+                 (if (= :upload-completed (:sub-type log))
+                   (reset! *accumulated-upload-logs [])
+                   (swap! *accumulated-upload-logs (fn [logs] (take 20 (conj logs log)))))))))
 
-(defn- accumulated-logs-flow
-  [*acc-logs]
-  (->> (m/watch *acc-logs)
-       (m/eduction
-        (map (fn [logs]
-               (when-let [first-log (first logs)]
-                 (let [graph-uuid (:graph-uuid first-log)]
-                   (take-while (fn [log] (= (str graph-uuid) (str (:graph-uuid log)))) logs))))))))
+(defn- current-graph-logs
+  [logs]
+  (when-let [first-log (first logs)]
+    (let [graph-uuid (:graph-uuid first-log)]
+      (take-while (fn [log] (= (str graph-uuid) (str (:graph-uuid log)))) logs))))
 
 (defn- log-row-key
   [prefix idx log]
@@ -270,8 +263,7 @@
 
 (hsx/defc downloading-logs
   []
-  (let [download-logs-flow (accumulated-logs-flow *accumulated-download-logs)
-        download-logs (hooks/use-flow-state download-logs-flow)]
+  (let [download-logs (current-graph-logs (hooks/use-atom-value *accumulated-download-logs))]
     (when (seq download-logs)
       [:div.flex.flex-col.gap-1
        (for [[idx log] (map-indexed vector download-logs)]
@@ -280,22 +272,21 @@
 
 (hsx/defc uploading-logs
   []
-  (let [upload-logs-flow (accumulated-logs-flow *accumulated-upload-logs)
-        upload-logs (hooks/use-flow-state upload-logs-flow)]
+  (let [upload-logs (current-graph-logs (hooks/use-atom-value *accumulated-upload-logs))]
     (when (seq upload-logs)
       [:div.capitalize.flex.flex-col.gap-1
        (for [[idx log] (map-indexed vector (reverse upload-logs))]
          ^{:key (log-row-key "upload" idx log)}
          [:div (:message log)])])))
 
-(def ^:private downloading?-flow
-  (->> rtc-flows/rtc-download-log-flow
-       (m/eduction (map (fn [log] (not= :download-completed (:sub-type log)))))
-       (c.m/continue-flow false)))
+(def ^:private *downloading? (atom false))
+(add-watch rtc-flows/rtc-download-log ::update-downloading?
+           (fn [_ _ _ log]
+             (reset! *downloading? (not= :download-completed (:sub-type log)))))
 
 (hsx/defc downloading-detail
   []
-  (when (true? (hooks/use-flow-state downloading?-flow))
+  (when (true? (hooks/use-atom-value *downloading?))
     (shui/button
      {:class   "opacity-50"
       :variant :ghost
@@ -305,22 +296,24 @@
                                    {:align "end"})}
      (t :sync/downloading))))
 
-(def ^:private upload?-flow
-  (->> rtc-flows/rtc-upload-log-flow
-       (m/eduction (map (fn [log] (not= :upload-completed (:sub-type log)))))
-       (c.m/continue-flow false)))
+(def ^:private *uploading? (atom false))
+(add-watch rtc-flows/rtc-upload-log ::update-uploading?
+           (fn [_ _ _ log]
+             (reset! *uploading? (not= :upload-completed (:sub-type log)))))
 
 (defn on-upload-finished-task
   [on-success]
-  (let [task (->> rtc-flows/rtc-upload-log-flow
-                  (m/reduce (fn [_ log]
-                              (when (= :upload-completed (:sub-type log))
-                                (on-success)))))]
-    (task (fn []) (fn []))))
+  (let [watch-key (random-uuid)]
+    (add-watch rtc-flows/rtc-upload-log watch-key
+               (fn [_ _ _ log]
+                 (when (= :upload-completed (:sub-type log))
+                   (remove-watch rtc-flows/rtc-upload-log watch-key)
+                   (on-success))))
+    #(remove-watch rtc-flows/rtc-upload-log watch-key)))
 
 (hsx/defc uploading-detail
   []
-  (when (true? (hooks/use-flow-state upload?-flow))
+  (when (true? (hooks/use-atom-value *uploading?))
     (shui/button
      {:class   "opacity-50"
       :variant :ghost
