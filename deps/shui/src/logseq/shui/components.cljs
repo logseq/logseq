@@ -298,6 +298,14 @@
     (set-prop! props' "className" (cn base-class extra-class (prop props "className")))
     props'))
 
+(defn- adapt-menu-item-props!
+  [^js props]
+  (when-let [on-select (prop props "onSelect")]
+    (when (nil? (prop props "onClick"))
+      (set-prop! props "onClick" on-select))
+    (clean-props! props "onSelect"))
+  props)
+
 (defn- popup-normal-style
   []
   (doto #js {:fontSize "1rem"
@@ -350,7 +358,9 @@
                                              (prop props "portalProps"))
            positioner-props (merge-object-props! (copy-named-props props positioner-prop-names)
                                                  (prop props "positionerProps"))
-           popup-props (with-class-props props base-class (some-> extra-class-fn (apply [props])))
+           popup-props (with-class-props props
+                         (cn base-class "outline-none focus:outline-none focus-visible:outline-none")
+                         (some-> extra-class-fn (apply [props])))
            children (prop props "children")]
        (set-prop! positioner-props "style"
                   (merge-object-props! #js {:zIndex 99999} (prop positioner-props "style")))
@@ -575,7 +585,13 @@
 (def DropdownMenuSubContent
   (composed-popup MenuPortalPart MenuPositionerPart MenuPopupPart
                   "ui__dropdown-menu-sub-content z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg data-[open]:animate-in"))
-(def DropdownMenuItem (forward-part MenuItemPart "ui__dropdown-menu-item relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50"))
+(def DropdownMenuItem
+  (react/forwardRef
+   (fn [^js props ref]
+     (let [props' (with-class-props props "ui__dropdown-menu-item relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50" nil)]
+       (adapt-menu-item-props! props')
+       (when ref (set-prop! props' "ref" ref))
+       (react/createElement MenuItemPart props')))))
 (def DropdownMenuCheckboxItem
   (react/forwardRef
    (fn [^js props ref]
