@@ -192,6 +192,30 @@
   []
   @!app-db)
 
+(defn- sync-wrapper-state!
+  [prev-db next-db changed-path started-at store-ms]
+  (reset! !app-db next-db)
+  (let [notify-started-at (now-ms)
+        path-listeners (affected-state-path-listeners @!state-path-listeners
+                                                      @!state-path-listener-paths
+                                                      changed-path)
+        checked-listeners (count path-listeners)
+        notified-listeners (volatile! 0)]
+    (doseq [listener (vals @!state-listeners)]
+      (listener next-db))
+    (doseq [{:keys [path listener]} path-listeners
+            :when (not= (get-in prev-db path)
+                        (get-in next-db path))]
+      (vswap! notified-listeners inc)
+      (listener))
+    (profile-state-write! {:path changed-path
+                           :total-ms (- (now-ms) started-at)
+                           :store-ms store-ms
+                           :notify-ms (- (now-ms) notify-started-at)
+                           :checked-listeners checked-listeners
+                           :notified-listeners @notified-listeners})
+    next-db))
+
 (defn- fast-state-path?
   [path]
   (contains? fast-state-sub-ids (first path)))
@@ -204,42 +228,16 @@
          prev-db (snapshot)
          store-started-at (now-ms)
          next-db (if (fast-state-path? changed-path)
-                   (do
-                     (reset! !app-db db)
-                     db)
+                   db
                    (let [next-db (store/next-state! (:store (context)) db)]
-                     (reset! !app-db next-db)
                      next-db))
-         store-ms (- (now-ms) store-started-at)
-         notify-started-at (now-ms)
-         path-listeners (affected-state-path-listeners @!state-path-listeners
-                                                       @!state-path-listener-paths
-                                                       changed-path)
-         checked-listeners (count path-listeners)
-         notified-listeners (volatile! 0)]
-     (doseq [listener (vals @!state-listeners)]
-       (listener next-db))
-     (doseq [{:keys [path listener]} path-listeners
-             :when (not= (get-in prev-db path)
-                         (get-in next-db path))]
-       (vswap! notified-listeners inc)
-       (listener))
-     (profile-state-write! {:path changed-path
-                            :total-ms (- (now-ms) started-at)
-                            :store-ms store-ms
-                            :notify-ms (- (now-ms) notify-started-at)
-                            :checked-listeners checked-listeners
-                            :notified-listeners @notified-listeners})
-     next-db)))
+         store-ms (- (now-ms) store-started-at)]
+     (sync-wrapper-state! prev-db next-db changed-path started-at store-ms))))
 
 (defn listen!
   [listener-id f]
   (swap! !state-listeners assoc listener-id f)
   #(swap! !state-listeners dissoc listener-id))
-
-(defn update-state!
-  [f & args]
-  (replace-state! (apply f (snapshot) args)))
 
 (defn snapshot-sub
   [sub]
@@ -249,7 +247,12 @@
 
 (defn dispatch-sync!
   [event]
-  (rfx/dispatch-sync (context) event))
+  (let [ctx (context)
+        result (rfx/dispatch-sync ctx event)
+        next-db (store/snapshot (:store ctx))]
+    (when-not (= (snapshot) next-db)
+      (sync-wrapper-state! (snapshot) next-db nil (now-ms) 0))
+    result))
 
 (defn use-sub
   [sub]
