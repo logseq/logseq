@@ -25,7 +25,6 @@
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [promesa.core :as p]))
 
 (defonce *profile-state (volatile! {}))
@@ -57,11 +56,14 @@
                     :en)
                 name)))))
 
-(def db-worker-ready-flow
+(def db-worker-ready?
   "`<invoke-db-worker` throws err if `*db-worker` not ready yet.
-  Use this flow to wait till db-worker ready."
-  (->> (m/watch *db-worker)
-       (m/eduction (map fn?))))
+  Use this atom to wait till db-worker ready."
+  (let [ready? (atom (fn? @*db-worker))]
+    (add-watch *db-worker ::db-worker-ready?
+               (fn [_ _ _ worker]
+                 (reset! ready? (fn? worker))))
+    ready?))
 
 (defn <invoke-db-worker
   "invoke db-worker thread api"
@@ -88,7 +90,7 @@
       :reactive/custom-queries               (async/chan 1000)
       :instrument/disabled?                  (storage/get "instrument-disabled")
       ;; TODO: how to detect the network reliably?
-      ;; NOTE: prefer to use flows/network-online-event-flow
+      ;; NOTE: prefer to use flows/network-online?
       :network/online?         true
       :me                      nil
       :git/current-repo        current-graph
@@ -303,8 +305,7 @@
       ;; graph-uuid -> ...
       :rtc/state                             {}
       :rtc/loading-graphs?                   nil
-      ;; only latest rtc-log stored here, when a log stream is needed,
-      ;; use missionary to create a rtc-log-flow, use (missionary.core/watch <atom>)
+      ;; only latest rtc-log stored here, derive a log stream from state when needed.
       :rtc/log                               nil
       :rtc/uploading?                        false
       :rtc/downloading-graph-uuid            nil

@@ -1,7 +1,6 @@
 (ns mobile.components.settings
   "Mobile settings"
   (:require [clojure.string :as string]
-            [frontend.common.missionary :as c.m]
             [frontend.components.dnd :as dnd]
             [frontend.components.user.login :as login]
             [frontend.config :as config]
@@ -18,7 +17,6 @@
             [logseq.common.version :as build-version]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [mobile.bottom-tabs :as bottom-tabs]
             [mobile.state :as mobile-state]
             [mobile.tabs :as mobile-tabs]
@@ -88,9 +86,10 @@
         [show-worker-log? set-show-worker-log!] (hooks/use-state false)
         [worker-records set-worker-records!] (hooks/use-state [])]
     (hooks/use-effect!
-     #(c.m/run-task*
-       (m/sp
-        (set-worker-records! (c.m/<? (state/<invoke-db-worker :thread-api/mobile-logs)))))
+     #(do
+        (p/let [records (state/<invoke-db-worker :thread-api/mobile-logs)]
+          (set-worker-records! records))
+        nil)
      [])
     [:div.flex.flex-col.gap-1.p-2.ls-debug-log
      [:div.flex.flex-row.justify-between

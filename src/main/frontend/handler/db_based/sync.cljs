@@ -201,7 +201,7 @@
 
 (defn- <sync-auth-state-to-db-worker!
   []
-  (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+  (p/let [_ (user-handler/<ensure-id&access-token!)
           payload (sync-app-state-payload)]
     (state/<invoke-db-worker :thread-api/sync-app-state payload)))
 
@@ -235,7 +235,7 @@
     (let [base (http-base)
           repo (state/get-current-repo)]
       (if base
-        (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+        (p/let [_ (user-handler/<ensure-id&access-token!)
                 resp (fetch-json (str base "/graphs/" graph-uuid "/members")
                                  {:method "GET"}
                                  {:response-schema :graph-members/list})
@@ -264,7 +264,7 @@
   [graph-uuid _schema-version]
   (let [base (http-base)]
     (if (and graph-uuid base)
-      (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)]
+      (p/let [_ (user-handler/<ensure-id&access-token!)]
         (fetch-json (str base "/graphs/" graph-uuid)
                     {:method "DELETE"}
                     {:response-schema :graphs/delete}))
@@ -289,7 +289,7 @@
        (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
              base (http-base)]
          (-> (if (and graph-uuid base)
-               (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+               (p/let [_ (user-handler/<ensure-id&access-token!)
                        graph (str config/db-version-prefix graph-name)
                        _ (<ensure-download-runtime-bound! graph)
                        _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
@@ -311,7 +311,7 @@
     (if-not base
       (p/resolved [])
       (-> (p/let [_ (state/set-state! :rtc/loading-graphs? true)
-                  _ (js/Promise. user-handler/task--ensure-id&access-token)
+                  _ (user-handler/<ensure-id&access-token!)
                   resp (fetch-json (str base "/graphs")
                                    {:method "GET"}
                                    {:response-schema :graphs/list})
@@ -348,7 +348,7 @@
         graph-uuid (str graph-uuid)]
     (if (and base (string? graph-uuid) (string? email))
       (->
-       (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+       (p/let [_ (user-handler/<ensure-id&access-token!)
                body (coerce-http-request :graph-members/create
                                          {:email email
                                           :role "member"})
@@ -388,7 +388,7 @@
         graph-uuid (some-> graph-uuid str)
         member-id (some-> member-id str)]
     (if (and base (string? graph-uuid) (string? member-id))
-      (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)]
+      (p/let [_ (user-handler/<ensure-id&access-token!)]
         (fetch-json (str base "/graphs/" graph-uuid "/members/" member-id)
                     {:method "DELETE"}
                     {:response-schema :graph-members/delete}))

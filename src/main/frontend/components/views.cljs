@@ -9,7 +9,6 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
-            [frontend.common.missionary :as c.m]
             [frontend.components.dnd :as dnd]
             [frontend.components.icon :as icon-component]
             [frontend.components.property.config :as property-config]
@@ -45,7 +44,6 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
-            [missionary.core :as m]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
@@ -2040,12 +2038,12 @@
                 :skip-transact? true
                 :skip-refresh? true})]
     (hooks/use-effect!
-     #(c.m/run-task*
-       (m/sp
-         (when (and db-id (not item) (not scrolling?))
-           (let [block (c.m/<? (db-async/<get-block (state/get-current-repo) db-id opts))
-                 block' (if list-or-gallery? (db/entity db-id) block)]
-             (set-item! block')))))
+     #(do
+        (when (and db-id (not item) (not scrolling?))
+          (p/let [block (db-async/<get-block (state/get-current-repo) db-id opts)]
+            (let [block' (if list-or-gallery? (db/entity db-id) block)]
+              (set-item! block'))))
+        nil)
      [db-id scrolling?])
     (let [item' (cond (map? item) item (number? item) {:db/id item})]
       (item-render item'))))
@@ -2899,37 +2897,33 @@
   [view-entity view-parent {:keys [query? query query-entity-ids sorting filters input
                                    view-feature-type group-by-property-ident
                                    set-data! set-ref-pages-count! set-ref-matched-children-ids! set-properties! set-loading!]}]
-  (c.m/run-task*
-   (m/sp
-     (let [need-query? (and query? (seq query-entity-ids) (or sorting filters (not (string/blank? input))))]
-       (cond
-         (and query? (empty? query-entity-ids))
-         (set-data! nil)
-         (and query? (not (or sorting filters)) (string/blank? input))
-         (set-data! query-entity-ids)
-         :else
-         (when (or (not query?) need-query?)
-           (try
-             (let [opts (cond->
-                         {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
-                                           (:db/id view-parent))
-                          :view-feature-type view-feature-type
-                          :group-by-property-ident group-by-property-ident
-                          :input input
-                          :filters filters
-                          :sorting sorting}
-                          query?
-                          (assoc :query-entity-ids query-entity-ids
-                                 :query query))
-                   {:keys [data ref-pages-count ref-matched-children-ids properties]}
-                   (c.m/<? (<load-view-data view-entity opts))]
-               (set-data! data)
-               (when ref-pages-count
-                 (set-ref-pages-count! ref-pages-count)
-                 (set-ref-matched-children-ids! ref-matched-children-ids))
-               (set-properties! properties))
-             (finally
-               (set-loading! false)))))))))
+  (let [need-query? (and query? (seq query-entity-ids) (or sorting filters (not (string/blank? input))))]
+    (cond
+      (and query? (empty? query-entity-ids))
+      (set-data! nil)
+      (and query? (not (or sorting filters)) (string/blank? input))
+      (set-data! query-entity-ids)
+      :else
+      (when (or (not query?) need-query?)
+        (let [opts (cond->
+                    {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
+                                      (:db/id view-parent))
+                     :view-feature-type view-feature-type
+                     :group-by-property-ident group-by-property-ident
+                     :input input
+                     :filters filters
+                     :sorting sorting}
+                     query?
+                     (assoc :query-entity-ids query-entity-ids
+                            :query query))]
+          (-> (p/let [{:keys [data ref-pages-count ref-matched-children-ids properties]}
+                      (<load-view-data view-entity opts)]
+                (set-data! data)
+                (when ref-pages-count
+                  (set-ref-pages-count! ref-pages-count)
+                  (set-ref-matched-children-ids! ref-matched-children-ids))
+                (set-properties! properties))
+              (p/finally #(set-loading! false))))))))
 
 (hsx/defc view-aux
   [view-entity {:keys [config view-parent view-feature-type data query-entity-ids query set-view-entity!] :as option}]
@@ -3045,29 +3039,28 @@
         [view-entity set-view-entity!] (hooks/use-state view-entity*)
         query? (= view-feature-type :query-result)]
     (hooks/use-effect!
-     #(c.m/run-task*
-       (m/sp
-         (when-not query?
-           (let [repo (state/get-current-repo)]
-             (set-views! nil)
-             (set-view-entity! view-entity*)
-             (when-not view-entity*
-               (let [views (get-views view-parent view-feature-type)]
-                 (if-let [v (first views)]
-                   (do
-                     (set-views! views)
-                     (when-not view-entity* (set-view-entity! v)))
-                   (do
-                     (c.m/<? (db-async/<get-views repo (:db/id view-parent) view-feature-type))
-                     (let [views (get-views view-parent view-feature-type)]
-                       (if-let [v (first views)]
-                         (do
-                           (set-views! views)
-                           (set-view-entity! v))
-                         (when (and view-parent view-feature-type (not view-entity*))
-                           (let [new-view (c.m/<? (create-view! view-parent view-feature-type {:auto-triggered? true}))]
-                             (set-views! (concat views [new-view]))
-                             (set-view-entity! new-view)))))))))))))
+     #(do
+        (when-not query?
+          (let [repo (state/get-current-repo)]
+            (set-views! nil)
+            (set-view-entity! view-entity*)
+            (when-not view-entity*
+              (let [views (get-views view-parent view-feature-type)]
+                (if-let [v (first views)]
+                  (do
+                    (set-views! views)
+                    (when-not view-entity* (set-view-entity! v)))
+                  (p/let [_ (db-async/<get-views repo (:db/id view-parent) view-feature-type)]
+                    (let [views (get-views view-parent view-feature-type)]
+                      (if-let [v (first views)]
+                        (do
+                          (set-views! views)
+                          (set-view-entity! v))
+                        (when (and view-parent view-feature-type (not view-entity*))
+                          (p/let [new-view (create-view! view-parent view-feature-type {:auto-triggered? true})]
+                            (set-views! (concat views [new-view]))
+                            (set-view-entity! new-view)))))))))))
+        nil)
      [(:db/id view-parent) view-feature-type (:db/id view-entity*) query?])
     (when view-entity
       (let [option' (assoc option

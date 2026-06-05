@@ -24,7 +24,6 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [mobile.components.settings :as mobile-settings]
             [mobile.components.ui :as ui-component]
             [mobile.state :as mobile-state]
@@ -309,7 +308,7 @@
         native-ios-graphs? (and (mobile-util/native-ios?) (= tab "graphs"))
         page-route? (and (= route-name :page) (not native-ios-graphs?))
         [*configure-top-bar-f _] (hooks/use-state (atom nil))
-        detail-info (hooks/use-flow-state (m/watch rtc-indicator/*detail-info))
+        detail-info (hooks/use-atom-value rtc-indicator/*detail-info)
         _ (rfx/use-sub [:auth/current-login-user])
         online? (rfx/use-sub [:network/online?])
         rtc-state (:rtc-state detail-info)
