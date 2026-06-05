@@ -116,6 +116,12 @@
       (when (fn? (.-stopImmediatePropagation e))
         (.stopImmediatePropagation e)))))
 
+(defn- clear-selection!
+  []
+  (some-> js/window
+          (.getSelection)
+          (.removeAllRanges)))
+
 (defn- remember-toggle-close!
   [target]
   (reset! *recent-toggle-close {:target target
@@ -132,10 +138,11 @@
         (reset! *recent-toggle-close nil)
         true))))
 
-(defn- hover-close-reason?
-  [^js event-details]
-  (contains? #{"trigger-hover" "cancel-open"}
-             (when event-details (.-reason event-details))))
+(defn- transient-close-reason?
+  [^js event-details force-popover?]
+  (let [reason (when event-details (.-reason event-details))]
+    (or (contains? #{"trigger-hover" "cancel-open"} reason)
+        (and force-popover? (= reason "focus-out")))))
 
 (defn- close-prevented?
   [handler-result ^js event-details ^js native-event]
@@ -203,13 +210,16 @@
                      (open-popup-by-target target)))]
       (cond
         suppressed-open?
-        (stop-toggle-event! event)
+        (do
+          (stop-toggle-event! event)
+          (clear-selection!))
 
         config
         (do
           (when target
             (remember-toggle-close! target))
           (stop-toggle-event! event)
+          (clear-selection!)
           (hide! (:id config) 0 {:event event})
           (:id config))
 
@@ -282,10 +292,15 @@
                                (when-not (false? (some-> content-props (:onEscapeKeyDown) (apply [e])))
                                  (hide! id 1 {:event e})))
           handle-pointer-outside! (fn [^js e]
-                                    (when-not (false? (some-> content-props (:onPointerDownOutside) (apply [e])))
-                                      (hide! id 1 {:event e})))
+                                    (let [native-event (or (some-> e (.-event)) e)]
+                                      (when (same-popup-target? target (event-target native-event))
+                                        (remember-toggle-close! target)
+                                        (stop-toggle-event! native-event)
+                                        (clear-selection!))
+                                      (when-not (false? (some-> content-props (:onPointerDownOutside) (apply [e])))
+                                        (hide! id 1 {:event native-event}))))
           handle-open-change! (fn [open? ^js e]
-                                (if (and (not open?) (hover-close-reason? e))
+                                (if (and (not open?) (transient-close-reason? e force-popover?))
                                   (some-> e (.cancel))
                                   (do
                                     (some-> root-props (:onOpenChange) (apply [open? e]))
@@ -308,7 +323,8 @@
                                         (when-not prevented?
                                           (when toggle-close?
                                             (remember-toggle-close! target)
-                                            (stop-toggle-event! native-event))
+                                            (stop-toggle-event! native-event)
+                                            (clear-selection!))
                                           (hide! id 1 {:event native-event})))))))]
       (popup-root
        (merge root-props {:open open?

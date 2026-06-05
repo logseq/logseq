@@ -353,6 +353,7 @@
        (fn []
          (selection/action-bar))
        {:id :selection-action-bar
+        :force-popover? true
         :root-props {:modal false}
         :content-props {:side "top"
                         :class "!w-max !max-w-none !overflow-visible !py-0 !px-0 !border-none"}
