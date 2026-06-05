@@ -217,7 +217,7 @@
 (hsx/defc ^:large-vars/cleanup-todo sidebar-navigations
   [{:keys [default-home route-match route-name srs-open?]}]
   (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
-        _preferred-language (state/use-sub [:preferred-language])
+        _preferred-language (rfx/use-sub [:preferred-language])
         [checked-navs set-checked-navs!] (hooks/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:flashcards :all-pages :graph-view]))]
 
