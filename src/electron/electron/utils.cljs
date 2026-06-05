@@ -8,7 +8,6 @@
             [clojure.string :as string]
             [electron.configs :as cfgs]
             [electron.logger :as logger]
-            [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
             [logseq.common.graph-dir :as graph-dir]
@@ -29,27 +28,6 @@
 (defonce extract-zip (js/require "extract-zip"))
 
 (declare <resolve-fetch-proxy)
-
-(def shadow-esm-import-runtime
-  (do
-    ;; node-script builds compile shadow.esm/dynamic-import to shadow_esm_import(...)
-    ;; but Electron's main-process runtime does not define that helper for us.
-    ;; The helper must be compiled through Node's native CommonJS loader because
-    ;; this namespace runs under vm.runInThisContext, where bare import() has no
-    ;; dynamic import callback.
-    (let [Module (js/require "module")
-          helper-module (js/Reflect.construct Module #js ["__logseq_dynamic_import__" js/module])
-          _ (set! (.-filename helper-module)
-                  (.join node-path js/__dirname "__logseq_dynamic_import__.cjs"))
-          _ (set! (.-paths helper-module) (.-paths js/module))
-          _ (._compile helper-module
-                       "exports.dynamicImport = function dynamicImport(specifier) { return import(specifier); };"
-                       (.-filename helper-module))
-          dynamic-import' (.. helper-module -exports -dynamicImport)]
-      (when-not dynamic-import'
-        (throw (js/Error. "Dynamic import helper is unavailable")))
-      (gobj/set js/globalThis "shadow_esm_import" dynamic-import'))
-    true))
 
 (defn- <ensure-proxy-agent-ctors
   "Load ESM-only proxy agent packages once and cache their constructors."
