@@ -460,11 +460,9 @@ let execute_remove_block_uuid mode invoke_config repo uuid =
 let execute_remove_block_ids mode invoke_config repo ids =
   let open Cli_effect in
   let entity_effects =
-    List.map
-      (fun id -> pull invoke_config repo block_selector (Edn_util.int64 id))
-      ids
+    map_s (fun id -> pull invoke_config repo block_selector (Edn_util.int64 id)) ids
   in
-  bind (all entity_effects) (fun entities ->
+  bind entity_effects (fun entities ->
       let id_entities = List.combine ids entities in
       let deleted_ids =
         id_entities
@@ -649,6 +647,7 @@ let execute action config mode =
            (Error.make
               (Edn_util.keyword_t "missing-target")
               "block is required"))
+
   | Remove_page { repo; id = Some id; _ } ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
         (function
