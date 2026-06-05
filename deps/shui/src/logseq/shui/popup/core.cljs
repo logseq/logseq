@@ -287,6 +287,10 @@
                           (:positionMethod content-props)
                           "fixed")}))
 
+(defn- anchor-height
+  [height]
+  (if (and (number? height) (> height 0)) height 1))
+
 (hsx/defc x-popup
   [{:keys [id open? content position as-dropdown? as-content? force-popover?
            auto-side? as-mask? _auto-focus? target root-props content-props
@@ -298,6 +302,7 @@
           popup-content (if use-menu? dropdown-menu-content popover-content)
           auto-side-fn (fn []
                          (let [vh js/window.innerHeight
+                               height (anchor-height height)
                                [th bh] [y (- vh (+ y height))]]
                            (if (> bh 280)
                              "bottom"
