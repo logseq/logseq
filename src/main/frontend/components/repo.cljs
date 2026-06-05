@@ -527,6 +527,7 @@
                                            (shui/popup-show! (.closest (.-target e) "a")
                                                              (fn [{:keys [id]}] (repos-dropdown-content {:contentid id}))
                                                              {:as-dropdown? true
+                                                              :focus-trigger? false
                                                               :content-props {:class "repos-list"}
                                                               :align :start}))}
                         (and (util/electron?) (:root current-repo'))

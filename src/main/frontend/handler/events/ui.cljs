@@ -146,6 +146,7 @@
        (fn []
          (settings/appearance))
        {:id popup-id
+        :focus-trigger? false
         :align :end}))))
 
 (defevent! :plugin/consume-updates [[_ id prev-pending? updated?]]

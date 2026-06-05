@@ -28,8 +28,7 @@
    ["react-hook-form" :refer [Controller FormProvider useForm useFormContext]]
    ["yup" :as yup]
    [clojure.string :as string]
-   [goog.object :as gobj]
-   [io.factorhouse.hsx.core :as hsx]))
+   [goog.object :as gobj]))
 
 (defn- primitive-part
   [primitive k]

@@ -237,6 +237,7 @@
                                                     #js {:key (str key)})))))
                                            {:align "end"
                                             :as-dropdown? true
+                                            :focus-trigger? false
                                             :content-props {:class "w-64"
                                                             :align-offset -32}}))})
      (t :header/more)
