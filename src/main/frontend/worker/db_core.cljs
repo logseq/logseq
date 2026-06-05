@@ -1111,7 +1111,7 @@
        :initial-data (vec (d/datoms @conn :eavt))}
       (common-initial-data/get-initial-data @conn))))
 
-(def-thread-api :thread-api/export-publishing-db
+(def-thread-api :thread-api/build-publishing-html
   [repo options]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (publish-html/build-html @conn options)))

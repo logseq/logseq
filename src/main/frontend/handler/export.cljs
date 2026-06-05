@@ -32,7 +32,7 @@
   "download public pages as html"
   [repo]
   (p/let [{:keys [asset-filenames html]}
-          (state/<invoke-db-worker :thread-api/export-publishing-db repo (publishing-export-options repo))]
+          (state/<invoke-db-worker :thread-api/build-publishing-html repo (publishing-export-options repo))]
     (when html
       (let [html-str (str "data:text/html;charset=UTF-8,"
                           (js/encodeURIComponent html))]
