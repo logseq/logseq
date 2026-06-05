@@ -395,6 +395,7 @@
   (let [electron-mac? (and util/mac? (util/electron?))
         rtc-graphs (state/use-sub :rtc/graphs)
         default-home-page (state/use-sub-default-home-page)
+        electron-server (state/use-sub :electron/server)
         left-menu (left-menu-button {:on-click (fn []
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
@@ -470,7 +471,7 @@
           (plugins/updates-notifications)])
 
        (when (state/feature-http-server-enabled?)
-         (server/server-indicator (state/use-sub :electron/server)))
+         (server/server-indicator electron-server))
 
        (when (util/electron?)
          (back-and-forward))
