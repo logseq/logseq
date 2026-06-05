@@ -263,7 +263,8 @@
     (for [[idx {:keys [title icon href on-click] :as item}] (medley/indexed help-menu-items)]
       (case item
         :hr
-        [:hr.my-2 {:key idx}]
+        [:hr {:class "!my-2"
+              :key idx}]
 
         ;; default
         [:a.it.flex.items-center.px-4.py-1.select-none
