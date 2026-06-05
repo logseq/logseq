@@ -329,11 +329,14 @@ let candidate_of_entity entity =
   | Some id -> Some { Error.id = Some id; name = entity_name entity }
   | None -> None
 
+let plural_label = function "property" -> "properties" | label -> label ^ "s"
+
 let ambiguous_error code label name matches =
   Error.make
     ~candidates:(List.filter_map candidate_of_entity matches)
     code
-    ("multiple " ^ label ^ "s match name: " ^ name ^ "; rerun with --id")
+    ("multiple " ^ plural_label label ^ " match name: " ^ name
+   ^ "; rerun with --id")
 
 let tag_entity value =
   match Option.bind (Edn_util.get value ":block/tags") Edn_util.as_seq with
@@ -621,18 +624,21 @@ let execute action config mode =
   let open Cli_effect in
   match action with
   | Remove_block { repo; id = Some id; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Remove_block mode err)
         | Ok invoke_config -> execute_remove_block_id mode invoke_config repo id)
   | Remove_block { repo; ids; multi_id = true; _ } when ids <> [] ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Remove_block mode err)
         | Ok invoke_config ->
             execute_remove_block_ids mode invoke_config repo ids)
   | Remove_block { repo; uuid = Some uuid; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Remove_block mode err)
         | Ok invoke_config ->
@@ -644,12 +650,14 @@ let execute action config mode =
               (Edn_util.keyword_t "missing-target")
               "block is required"))
   | Remove_page { repo; id = Some id; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Remove_page mode err)
         | Ok invoke_config -> execute_remove_page_id mode invoke_config repo id)
   | Remove_page { repo; page = Some page; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Remove_page mode err)
         | Ok invoke_config ->
@@ -661,7 +669,8 @@ let execute action config mode =
               (Edn_util.keyword_t "missing-page-name")
               "page name or id is required"))
   | Remove_tag { repo; id; name; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Remove_tag mode err)
         | Ok invoke_config ->
@@ -672,7 +681,8 @@ let execute action config mode =
               ~ambiguous_code:(Edn_util.keyword_t "ambiguous-tag-name")
               ~label:"tag" ~validate:validate_tag_target ~id ~name)
   | Remove_property { repo; id; name; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Remove_property mode err)
         | Ok invoke_config ->

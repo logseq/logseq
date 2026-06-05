@@ -6,8 +6,8 @@ type page_filter = {
   include_built_in : bool;
   include_journal : bool;
   journal_only : bool;
-  created_after : Cli_primitive.timestamp_ms option;
-  updated_after : Cli_primitive.timestamp_ms option;
+  created_after : Ptime.t option;
+  updated_after : Ptime.t option;
 }
 
 type node_filter = {
@@ -60,6 +60,9 @@ let bool_field key value =
   match Edn_util.get_bool value key with Some true -> true | _ -> false
 
 let int_field key value = Edn_util.get_int64 value key
+
+let time_field key value =
+  Option.map Ptime_util.time_of_epoch_ms (int_field key value)
 
 let tags_of_value value =
   match Edn_util.get value ":block/tags" with
@@ -114,9 +117,9 @@ let with_entity_raw raw kind =
     entity with
     kind;
     tags = tags_of_value raw;
-    created_at = int_field ":block/created-at" raw;
-    updated_at = int_field ":block/updated-at" raw;
-    deleted_at = int_field ":logseq.property/deleted-at" raw;
+    created_at = time_field ":block/created-at" raw;
+    updated_at = time_field ":block/updated-at" raw;
+    deleted_at = time_field ":logseq.property/deleted-at" raw;
   }
 
 let entity_with_output raw kind ~expand =
@@ -129,8 +132,9 @@ let include_after key cutoff value =
   | None -> true
   | Some cutoff -> (
       match Edn_util.get_int64 value key with
-      | Some actual -> Int64.compare actual cutoff > 0
-      | None -> Int64.compare 0L cutoff > 0)
+      | Some actual ->
+          Ptime.compare (Ptime_util.time_of_epoch_ms actual) cutoff > 0
+      | None -> Ptime.compare Ptime.epoch cutoff > 0)
 
 let list_pages db filter =
   db |> values_of_collection

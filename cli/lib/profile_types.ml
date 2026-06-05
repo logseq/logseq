@@ -1,21 +1,21 @@
 type span = {
   stage : string;
   span_id : int;
-  started_ms : Cli_primitive.timestamp_ms;
-  ended_ms : Cli_primitive.timestamp_ms;
-  elapsed_ms : Cli_primitive.duration_ms;
+  start_time : Ptime.t;
+  end_time : Ptime.t;
+  elapsed_span : Ptime.span;
 }
 
 type stage_summary = {
   stage : string;
   count : int;
-  total_ms : Cli_primitive.duration_ms;
-  avg_ms : Cli_primitive.duration_ms;
+  total_span : Ptime.span;
+  avg_span : Ptime.span;
 }
 
 type session = {
   enabled : bool;
-  started_ms : Cli_primitive.timestamp_ms;
+  start_time : Ptime.t;
   mutable spans : span list;
   mutable next_span_id : int;
 }
@@ -23,16 +23,15 @@ type session = {
 type report = {
   command : string;
   status : Cli_primitive.keyword;
-  total_ms : Cli_primitive.duration_ms;
+  total_span : Ptime.span;
   spans : span list;
   stages : stage_summary list;
 }
 
-let now_ms () = Int64.of_float (Cli_unix.gettimeofday () *. 1000.)
-
 let create_session enabled =
   if enabled then
-    Some { enabled; started_ms = now_ms (); spans = []; next_span_id = 0 }
+    Some
+      { enabled; start_time = Ptime_util.now (); spans = []; next_span_id = 0 }
   else None
 
 let next_span_id session =
@@ -41,23 +40,23 @@ let next_span_id session =
 
 let record_span (s : session) span = s.spans <- span :: s.spans
 
-let record_timed_span session stage span_id started_ms ended_ms =
-  let elapsed_ms = Int64.max 0L (Int64.sub ended_ms started_ms) in
-  record_span session { stage; span_id; started_ms; ended_ms; elapsed_ms }
+let record_timed_span session stage span_id start_time end_time =
+  let elapsed_span = Ptime_util.non_negative_diff ~start_time ~end_time in
+  record_span session { stage; span_id; start_time; end_time; elapsed_span }
 
 let time session stage f =
   match session with
   | None -> f ()
   | Some session -> (
-      let started_ms = now_ms () in
+      let start_time = Ptime_util.now () in
       let span_id = next_span_id session in
       let finish () =
-        record_timed_span session stage span_id started_ms (now_ms ());
+        record_timed_span session stage span_id start_time (Ptime_util.now ());
         Cli_effect.pure ()
       in
       try Cli_effect.finally (f ()) finish
       with exn ->
-        record_timed_span session stage span_id started_ms (now_ms ());
+        record_timed_span session stage span_id start_time (Ptime_util.now ());
         raise exn)
 
 let summarize_stages spans =
@@ -66,26 +65,29 @@ let summarize_stages spans =
   List.iter
     (fun (span : span) ->
       if not (Hashtbl.mem table span.stage) then order := span.stage :: !order;
-      let count, total_ms =
-        Option.value (Hashtbl.find_opt table span.stage) ~default:(0, 0L)
+      let count, total_span =
+        Option.value
+          (Hashtbl.find_opt table span.stage)
+          ~default:(0, Ptime.Span.zero)
       in
       Hashtbl.replace table span.stage
-        (count + 1, Int64.add total_ms span.elapsed_ms))
+        (count + 1, Ptime.Span.add total_span span.elapsed_span))
     spans;
   List.rev !order
   |> List.map (fun stage ->
-      let count, total_ms = Hashtbl.find table stage in
+      let count, total_span = Hashtbl.find table stage in
       {
         stage;
         count;
-        total_ms;
-        avg_ms =
-          (if count > 0 then Int64.div total_ms (Int64.of_int count) else 0L);
+        total_span;
+        avg_span = Ptime_util.avg_span total_span count;
       })
 
 let report (s : session) ~command ~status =
-  let ended_ms = now_ms () in
-  let total_ms = Int64.max 0L (Int64.sub ended_ms s.started_ms) in
+  let end_time = Ptime_util.now () in
+  let total_span =
+    Ptime_util.non_negative_diff ~start_time:s.start_time ~end_time
+  in
   let spans : span list = List.rev s.spans in
   let spans =
     if List.exists (fun (span : span) -> span.stage = "cli.total") spans then
@@ -96,46 +98,43 @@ let report (s : session) ~command ~status =
           {
             stage = "cli.total";
             span_id = 0;
-            started_ms = s.started_ms;
-            ended_ms;
-            elapsed_ms = total_ms;
+            start_time = s.start_time;
+            end_time;
+            elapsed_span = total_span;
           };
         ]
   in
-  { command; status; total_ms; spans; stages = summarize_stages spans }
+  { command; status; total_span; spans; stages = summarize_stages spans }
 
 type stage_node = {
   label : string;
-  elapsed_ms : int64;
-  started_ms : int64;
-  ended_ms : int64;
+  elapsed_span : Ptime.span;
+  start_time : Ptime.t;
+  end_time : Ptime.t;
   mutable children : stage_node list;
 }
 
 let span_contains outer inner =
-  outer.started_ms <= inner.started_ms && outer.ended_ms >= inner.ended_ms
+  Ptime.compare outer.start_time inner.start_time <= 0
+  && Ptime.compare outer.end_time inner.end_time >= 0
 
 let node_of_span (span : span) =
   {
     label = span.stage;
-    elapsed_ms = span.elapsed_ms;
-    started_ms = span.started_ms;
-    ended_ms = span.ended_ms;
+    elapsed_span = span.elapsed_span;
+    start_time = span.start_time;
+    end_time = span.end_time;
     children = [];
   }
 
 let sort_spans spans =
   List.sort
     (fun (left : span) (right : span) ->
-      let duration_left =
-        Int64.max 0L (Int64.sub left.ended_ms left.started_ms)
-      in
-      let duration_right =
-        Int64.max 0L (Int64.sub right.ended_ms right.started_ms)
-      in
-      match Int64.compare left.started_ms right.started_ms with
+      let duration_left = left.elapsed_span in
+      let duration_right = right.elapsed_span in
+      match Ptime.compare left.start_time right.start_time with
       | 0 -> (
-          match Int64.compare duration_right duration_left with
+          match Ptime.Span.compare duration_right duration_left with
           | 0 -> compare left.span_id right.span_id
           | value -> value)
       | value -> value)
@@ -177,7 +176,7 @@ let rec collect_rows prefix rows = function
              let branch = if last then "└── " else "├── " in
              let next_prefix = prefix ^ if last then "    " else "│   " in
              let rows =
-               rows @ [ (Some node.elapsed_ms, prefix ^ branch ^ node.label) ]
+               rows @ [ (Some node.elapsed_span, prefix ^ branch ^ node.label) ]
              in
              collect_rows next_prefix rows node.children)
            rows
@@ -189,7 +188,7 @@ let pad_right value width =
 let render_lines report =
   let rows =
     [
-      ( Some report.total_ms,
+      ( Some report.total_span,
         "command=" ^ report.command ^ " status=" ^ status_text report.status );
       (None, "stages");
     ]
@@ -197,7 +196,9 @@ let render_lines report =
   in
   let duration_text =
     List.map
-      (function Some ms, _ -> Int64.to_string ms ^ "ms" | None, _ -> "")
+      (function
+        | Some span, _ -> Int64.to_string (Ptime_util.span_to_ms span) ^ "ms"
+        | None, _ -> "")
       rows
   in
   let width =

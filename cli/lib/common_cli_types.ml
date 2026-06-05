@@ -11,4 +11,5 @@ let expand_home path =
 let unlink_graph ?graphs_dir repo =
   match graphs_dir with
   | None -> Ok None
-  | Some dir -> Ok (Some (Filename.concat dir (Cli_primitive.string_of_repo repo)))
+  | Some dir ->
+      Ok (Some (Filename.concat dir (Cli_primitive.string_of_repo repo)))

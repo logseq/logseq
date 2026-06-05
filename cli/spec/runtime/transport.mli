@@ -3,14 +3,14 @@ type request = {
   url : Cli_primitive.url;
   headers : (string * string) list;
   body : string option;
-  timeout_ms : Cli_primitive.duration_ms option;
+  timeout_span : Ptime.span option;
 }
 
 type response = { status : int; body : string }
 
 type invoke_config = {
   base_url : Cli_primitive.url;
-  timeout_ms : Cli_primitive.duration_ms;
+  timeout_span : Ptime.span;
   profile_session : Profile_types.session option;
 }
 

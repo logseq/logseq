@@ -69,11 +69,13 @@ let parse_tokens argv =
 
 let globals_of_options options =
   Global_opts.create
-    ?graph:(Option.map Cli_primitive.create_graph (option_value "graph" options))
+    ?graph:
+      (Option.map Cli_primitive.create_graph (option_value "graph" options))
     ?root_dir:(option_value "root-dir" options)
     ?config_path:(option_value "config" options)
-    ?timeout_ms:
-      (Option.bind (option_value "timeout-ms" options) Int64.of_string_opt)
+    ?timeout_span:
+      (Option.map Ptime_util.span_of_ms
+         (Option.bind (option_value "timeout-ms" options) Int64.of_string_opt))
     ?output_format:
       (Option.bind (option_value "output" options) Output.Mode.of_string)
     ~verbose:(option_present "verbose" options)
@@ -89,6 +91,9 @@ let int_option key options =
 
 let int64_option key options =
   Option.bind (option_value key options) Int64.of_string_opt
+
+let time_option key options =
+  Option.bind (option_value key options) Ptime_util.parse_time
 
 let bool_option_value key options =
   match option_value key options with
@@ -315,6 +320,12 @@ let validate_csv_member_option key values options =
       | None -> Ok ())
   | None -> Ok ()
 
+let validate_time_option key options =
+  match option_value key options with
+  | Some value when Option.is_none (Ptime_util.parse_time value) ->
+      Error (invalid_value key value "Expected RFC3339 datetime or epoch ms")
+  | _ -> Ok ()
+
 let list_page_sort_values =
   [ "id"; "ident"; "title"; "uuid"; "created-at"; "updated-at" ]
 
@@ -396,7 +407,10 @@ let validate_option_values path options =
   match path with
   | [ "graph"; "export" ] -> validate_graph_export_values options
   | [ "list"; "page" ] ->
-      validate_list_common_values list_page_sort_values options
+      Error.bind (validate_list_common_values list_page_sort_values options)
+        (fun () ->
+          Error.bind (validate_time_option "updated-after" options) (fun () ->
+              validate_time_option "created-after" options))
   | [ "list"; "tag" ] ->
       validate_list_common_values list_tag_sort_values options
   | [ "list"; "property" ] ->
@@ -409,8 +423,11 @@ let validate_option_values path options =
   | [ "list"; "asset" ] ->
       validate_list_common_values list_asset_sort_values options
   | [ "show" ] -> validate_integer_option "level" options
-  | [ "upsert"; "block" ] | [ "upsert"; "task" ] | [ "upsert"; "asset" ] ->
-      validate_pos_value options
+  | [ "upsert"; "task" ] ->
+      Error.bind (validate_pos_value options) (fun () ->
+          Error.bind (validate_time_option "scheduled" options) (fun () ->
+              validate_time_option "deadline" options))
+  | [ "upsert"; "block" ] | [ "upsert"; "asset" ] -> validate_pos_value options
   | _ -> Ok ()
 
 let validate_options path options =
@@ -538,8 +555,8 @@ let parsed_upsert_command ?(args = []) options = function
                     Block.position_of_string;
                 status = option_value "status" options;
                 priority = option_value "priority" options;
-                scheduled = option_value "scheduled" options;
-                deadline = option_value "deadline" options;
+                scheduled = time_option "scheduled" options;
+                deadline = time_option "deadline" options;
                 no_status = option_present "no-status" options;
                 no_priority = option_present "no-priority" options;
                 no_scheduled = option_present "no-scheduled" options;
@@ -585,8 +602,8 @@ let parsed_list_command options = function
                 include_journal = optional_flag "include-journal" options;
                 journal_only = option_present "journal-only" options;
                 include_hidden = option_present "include-hidden" options;
-                updated_after = option_value "updated-after" options;
-                created_after = option_value "created-after" options;
+                updated_after = time_option "updated-after" options;
+                created_after = time_option "created-after" options;
               }))
   | "tag" ->
       Some

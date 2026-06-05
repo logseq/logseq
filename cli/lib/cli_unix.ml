@@ -10,16 +10,6 @@ type inet_addr = string
 type file_descr = int
 type sockaddr = ADDR_INET of inet_addr * int
 type host_entry = { h_addr_list : inet_addr array }
-
-type tm = {
-  tm_sec : int;
-  tm_min : int;
-  tm_hour : int;
-  tm_mday : int;
-  tm_mon : int;
-  tm_year : int;
-}
-
 type stats = { st_size : int; st_mtime : float }
 type process_result = { status : int; stdout : string; stderr : string }
 type mkdir_result = Created | Already_exists
@@ -90,109 +80,6 @@ let wrap_unix op detail f =
     raise
       (Cli_unix_error (unix_error err, op, if arg = "" then detail else arg))
 
-let gettimeofday () =
-  if js_backend () then
-    float_of_string
-      (js_call_string
-         {|
-(function() {
-  return String(Date.now() / 1000);
-})
-         |}
-         [||])
-  else Unix.gettimeofday ()
-
-let time () = gettimeofday ()
-
-let iso_now () =
-  if js_backend () then
-    js_call_string
-      {|
-(function() {
-  return new Date().toISOString();
-})
-      |}
-      [||]
-  else
-    let tm = Unix.gmtime (Unix.gettimeofday ()) in
-    Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ"
-      (tm.Unix.tm_year + 1900)
-      (tm.Unix.tm_mon + 1)
-      tm.Unix.tm_mday tm.Unix.tm_hour tm.Unix.tm_min tm.Unix.tm_sec 0
-
-let floor_div a b =
-  let q = a / b in
-  let r = a mod b in
-  if r <> 0 && r < 0 <> (b < 0) then q - 1 else q
-
-let civil_from_days days =
-  let z = days + 719468 in
-  let era = floor_div (if z >= 0 then z else z - 146096) 146097 in
-  let doe = z - (era * 146097) in
-  let yoe = (doe - (doe / 1460) + (doe / 36524) - (doe / 146096)) / 365 in
-  let y = yoe + (era * 400) in
-  let doy = doe - ((365 * yoe) + (yoe / 4) - (yoe / 100)) in
-  let mp = ((5 * doy) + 2) / 153 in
-  let d = doy - (((153 * mp) + 2) / 5) + 1 in
-  let m = mp + if mp < 10 then 3 else -9 in
-  let y = y + if m <= 2 then 1 else 0 in
-  (y, m, d)
-
-let gmtime seconds =
-  let whole = int_of_float (floor seconds) in
-  let days = floor_div whole 86400 in
-  let second_of_day = whole - (days * 86400) in
-  let y, m, d = civil_from_days days in
-  {
-    tm_year = y - 1900;
-    tm_mon = m - 1;
-    tm_mday = d;
-    tm_hour = second_of_day / 3600;
-    tm_min = second_of_day mod 3600 / 60;
-    tm_sec = second_of_day mod 60;
-  }
-
-let localtime seconds =
-  if js_backend () then
-    match
-      String.split_on_char '\n'
-        (js_call_string
-           {|
-(function(seconds) {
-  const date = new Date(Number(seconds) * 1000);
-  return [
-    date.getSeconds(),
-    date.getMinutes(),
-    date.getHours(),
-    date.getDate(),
-    date.getMonth(),
-    date.getFullYear() - 1900
-  ].join("\n");
-})
-           |}
-           [| string_of_float seconds |])
-    with
-    | [ sec; min; hour; mday; mon; year ] ->
-        {
-          tm_sec = int_of_string sec;
-          tm_min = int_of_string min;
-          tm_hour = int_of_string hour;
-          tm_mday = int_of_string mday;
-          tm_mon = int_of_string mon;
-          tm_year = int_of_string year;
-        }
-    | _ -> gmtime seconds
-  else
-    let tm = Unix.localtime seconds in
-    {
-      tm_sec = tm.Unix.tm_sec;
-      tm_min = tm.tm_min;
-      tm_hour = tm.tm_hour;
-      tm_mday = tm.tm_mday;
-      tm_mon = tm.tm_mon;
-      tm_year = tm.tm_year;
-    }
-
 let mkdir path perm =
   if js_backend () then
     js_call_ok
@@ -253,8 +140,7 @@ let mkdir_exclusive path perm =
               String.sub message (index + 1) (String.length message - index - 1)
         in
         raise
-          (Cli_unix_error
-             (EPERM, "mkdir", if detail = "" then path else detail))
+          (Cli_unix_error (EPERM, "mkdir", if detail = "" then path else detail))
   else
     try
       Unix.mkdir path perm;
@@ -313,8 +199,7 @@ let write_text_file path content =
   }
 })
       |}
-      [| path; content |]
-      "write" path
+      [| path; content |] "write" path
   else
     wrap_unix "write" path (fun () ->
         let oc = open_out_bin path in
@@ -449,35 +334,40 @@ let access path permissions =
         Unix.access path (List.map permission permissions))
 
 let stat path =
-  let fallback () =
-    let size =
-      if Sys.file_exists path && not (Sys.is_directory path) then
-        let ic = open_in_bin path in
-        Fun.protect
-          ~finally:(fun () -> close_in_noerr ic)
-          (fun () -> in_channel_length ic)
-      else 0
-    in
-    { st_size = size; st_mtime = gettimeofday () }
-  in
   if js_backend () then
-    try
+    let parse () =
       match
         String.split_on_char '\n'
           (js_call_string
              {|
 (function(path) {
-  const fs = require("fs");
-  const stat = fs.statSync(path);
-  return String(stat.size) + "\n" + String(stat.mtimeMs / 1000);
+  try {
+    const fs = require("fs");
+    const stat = fs.statSync(path);
+    return "ok\n" + String(stat.size) + "\n" + String(stat.mtimeMs / 1000);
+  } catch (error) {
+    const code = error && error.code ? error.code : "";
+    const message = error && error.message ? error.message : String(error);
+    return "error\n" + code + "\n" + message;
+  }
 })
            |}
              [| path |])
       with
-      | size :: mtime :: _ ->
+      | "ok" :: size :: mtime :: _ ->
           { st_size = int_of_string size; st_mtime = float_of_string mtime }
-      | _ -> fallback ()
-    with _ -> fallback ()
+      | "error" :: code :: message :: _ ->
+          let error =
+            if code = "ENOENT" || code = "ESRCH" then ESRCH else EPERM
+          in
+          raise
+            (Cli_unix_error
+               (error, "stat", if message = "" then path else message))
+      | _ -> raise (Cli_unix_error (EPERM, "stat", path))
+    in
+    try parse () with
+    | Cli_unix_error _ as exn -> raise exn
+    | _ -> raise (Cli_unix_error (EPERM, "stat", path))
   else
     wrap_unix "stat" path (fun () ->
         let stat = Unix.stat path in
@@ -891,14 +781,6 @@ let open_url url =
       = "ok"
     with _ -> false
   else false
-
-let sleepf seconds =
-  if js_backend () then
-    let deadline = gettimeofday () +. seconds in
-    while gettimeofday () < deadline do
-      ()
-    done
-  else Unix.sleepf seconds
 
 let write_stdout text =
   if js_backend () then

@@ -12,7 +12,8 @@ let status_closed_values_query =
       vector [ sym "?status-ident"; sym "..." ];
       kw ":where";
       vector [ sym "?property"; kw ":db/ident"; kw ":logseq.property/status" ];
-      vector [ sym "?value"; kw ":block/closed-value-property"; sym "?property" ];
+      vector
+        [ sym "?value"; kw ":block/closed-value-property"; sym "?property" ];
       vector [ sym "?value"; kw ":db/ident"; sym "?status-ident" ];
     ]
 

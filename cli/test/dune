@@ -1,92 +1,101 @@
 (test
  (name human_output_test)
  (modules human_output_test)
- (libraries logseq_cli alcotest))
+ (libraries logseq_cli_platform_native logseq_cli alcotest))
 
 (test
  (name test_logseq_cli)
  (modules test_logseq_cli)
- (libraries logseq_cli lwt.unix unix alcotest))
+ (libraries logseq_cli_platform_native logseq_cli lwt.unix unix alcotest))
 
 (test
  (name cli_unix_native_test)
  (modules cli_unix_native_test)
- (libraries logseq_cli unix threads alcotest))
+ (libraries logseq_cli_platform_native logseq_cli unix threads alcotest))
 
 (rule
  (alias runtest)
- (deps wasm_fetch_timeout.js ../bin/main.bc.wasm.js)
+ (deps wasm_fetch_timeout.js ../bin/main.bc.js)
  (action
-  (run node wasm_fetch_timeout.js %{dep:../bin/main.bc.wasm.js})))
+  (run node wasm_fetch_timeout.js %{dep:../bin/main.bc.js})))
 
 (rule
  (alias runtest)
- (deps wasm_graph_info.js ../bin/main.bc.wasm.js)
+ (deps js_node_http_uses_fetch_without_xhr.js ../bin/main.bc.js)
  (action
-  (run node wasm_graph_info.js %{dep:../bin/main.bc.wasm.js})))
+  (run node js_node_http_uses_fetch_without_xhr.js %{dep:../bin/main.bc.js})))
 
 (rule
  (alias runtest)
- (deps wasm_login.js ../bin/main.bc.wasm.js)
+ (deps wasm_graph_info.js ../bin/main.bc.js)
  (action
-  (run node wasm_login.js %{dep:../bin/main.bc.wasm.js})))
+  (run node wasm_graph_info.js %{dep:../bin/main.bc.js})))
 
 (rule
  (alias runtest)
- (deps wasm_list_page_human_time.js ../bin/main.bc.wasm.js)
+ (deps wasm_login.js ../bin/main.bc.js)
  (action
-  (run node wasm_list_page_human_time.js %{dep:../bin/main.bc.wasm.js})))
+  (run node wasm_login.js %{dep:../bin/main.bc.js})))
 
 (rule
  (alias runtest)
- (deps wasm_list_page_human_ragged.js ../bin/main.bc.wasm.js)
+ (deps wasm_list_page_human_time.js ../bin/main.bc.js)
  (action
-  (run node wasm_list_page_human_ragged.js %{dep:../bin/main.bc.wasm.js})))
+  (run node wasm_list_page_human_time.js %{dep:../bin/main.bc.js})))
 
 (rule
  (alias runtest)
- (deps wasm_sync_progress.js ../bin/main.bc.wasm.js)
+ (deps wasm_list_page_human_ragged.js ../bin/main.bc.js)
  (action
-  (run node wasm_sync_progress.js %{dep:../bin/main.bc.wasm.js})))
+  (run node wasm_list_page_human_ragged.js %{dep:../bin/main.bc.js})))
 
 (rule
  (alias runtest)
- (deps wasm_sync_progress_stream.js ../bin/main.bc.wasm.js)
+ (deps wasm_sync_progress.js ../bin/main.bc.js)
  (action
-  (run node wasm_sync_progress_stream.js %{dep:../bin/main.bc.wasm.js})))
+  (run node wasm_sync_progress.js %{dep:../bin/main.bc.js})))
 
 (rule
  (alias runtest)
- (deps wasm_sync_progress_disconnect.js ../bin/main.bc.wasm.js)
+ (deps wasm_sync_progress_stream.js ../bin/main.bc.js)
  (action
-  (run node wasm_sync_progress_disconnect.js %{dep:../bin/main.bc.wasm.js})))
+  (run node wasm_sync_progress_stream.js %{dep:../bin/main.bc.js})))
 
 (rule
  (alias runtest)
- (deps wasm_upsert_asset.js ../bin/main.bc.wasm.js)
+ (deps wasm_sync_progress_disconnect.js ../bin/main.bc.js)
  (action
-  (run node wasm_upsert_asset.js %{dep:../bin/main.bc.wasm.js})))
+  (run node wasm_sync_progress_disconnect.js %{dep:../bin/main.bc.js})))
 
 (rule
  (alias runtest)
- (deps wasm_graph_backup.js ../bin/main.bc.wasm.js)
+ (deps wasm_upsert_asset.js ../bin/main.bc.js)
  (action
-  (run node wasm_graph_backup.js %{dep:../bin/main.bc.wasm.js})))
+  (run node wasm_upsert_asset.js %{dep:../bin/main.bc.js})))
 
 (rule
  (alias runtest)
- (deps wasm_show_human_tree.js ../bin/main.bc.wasm.js)
+ (deps wasm_graph_backup.js ../bin/main.bc.js)
  (action
-  (run node wasm_show_human_tree.js %{dep:../bin/main.bc.wasm.js})))
+  (run node wasm_graph_backup.js %{dep:../bin/main.bc.js})))
 
 (rule
  (alias runtest)
- (deps wasm_show_human_properties.js ../bin/main.bc.wasm.js)
+ (deps wasm_show_human_tree.js ../bin/main.bc.js)
  (action
-  (run node wasm_show_human_properties.js %{dep:../bin/main.bc.wasm.js})))
+  (run node wasm_show_human_tree.js %{dep:../bin/main.bc.js})))
 
 (rule
  (alias runtest)
- (deps wasm_agent_bridge_codex_lifecycle.js ../bin/main.bc.wasm.js)
+ (deps wasm_show_human_properties.js ../bin/main.bc.js)
  (action
-  (run node wasm_agent_bridge_codex_lifecycle.js %{dep:../bin/main.bc.wasm.js})))
+  (run node wasm_show_human_properties.js %{dep:../bin/main.bc.js})))
+
+(rule
+ (alias runtest)
+ (deps wasm_agent_bridge_codex_lifecycle.js ../bin/main.bc.js)
+ (action
+  (run
+   node
+   wasm_agent_bridge_codex_lifecycle.js
+   %{dep:../bin/main.bc.js})))

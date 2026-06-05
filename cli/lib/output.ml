@@ -32,7 +32,6 @@ module Human_output = struct
   }
 
   let create ?headers ?footer ~rows () = { headers; rows; footer }
-  let now_ms () = Int64.of_float (Cli_unix.gettimeofday () *. 1000.)
 
   let has_suffix ~suffix value =
     let suffix_len = String.length suffix in
@@ -45,17 +44,20 @@ module Human_output = struct
     has_suffix ~suffix:"created-at" header
     || has_suffix ~suffix:"updated-at" header
 
-  let display_cell ~now_ms ?header value =
+  let display_cell ~now_time ?header value =
     let value = if value = "" then "-" else value in
     match header with
     | Some header when is_datetime_header header -> (
         match Int64.of_string_opt value with
-        | Some then_ms -> Humanize_types.relative_datetime ~then_ms ~now_ms
+        | Some epoch_ms ->
+            Humanize_types.relative_datetime
+              ~then_time:(Ptime_util.time_of_epoch_ms epoch_ms)
+              ~now_time
         | None -> value)
     | _ -> value
 
   let display_rows t =
-    let now_ms = now_ms () in
+    let now_time = Ptime_util.now () in
     let headers = Option.value t.headers ~default:[] in
     List.map
       (fun row ->
@@ -70,7 +72,7 @@ module Human_output = struct
                   List.nth_opt row 0
               | header -> header
             in
-            display_cell ~now_ms ?header value)
+            display_cell ~now_time ?header value)
           row)
       t.rows
 
