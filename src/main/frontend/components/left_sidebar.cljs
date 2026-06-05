@@ -313,7 +313,9 @@
 
 (hsx/defc sidebar-favorites
   []
-  (let [_favorites-updated? (rfx/use-sub [:favorites/updated?])
+  (let [_current-repo (rfx/use-sub [:git/current-repo])
+        _db-restoring? (rfx/use-sub [:db/restoring?])
+        _favorites-updated? (rfx/use-sub [:favorites/updated?])
         favorite-entities (page-handler/get-favorites)]
     (sidebar-content-group
      [:a.wrap-th
@@ -339,7 +341,10 @@
 
 (hsx/defc sidebar-recent-pages
   []
-  (let [pages (recent-handler/get-recent-pages)]
+  (let [current-repo (rfx/use-sub [:git/current-repo])
+        _db-restoring? (rfx/use-sub [:db/restoring?])
+        _recent-page-ids (rfx/use-sub [:ui/recent-pages current-repo])
+        pages (recent-handler/get-recent-pages)]
        (sidebar-content-group
         [:a.wrap-th [:strong.flex-1 (t :sidebar.left/recent-pages)]]
 
