@@ -2088,16 +2088,6 @@
       (when comment-thread
         (open-comment-thread! (:block/uuid block) comment-thread)))))
 
-(defn- editing-user-for-block
-  [block-uuid online-users current-user-uuid]
-  (when (and block-uuid (seq online-users))
-    (some (fn [{:user/keys [editing-block-uuid uuid] :as user}]
-            (when (and (string? editing-block-uuid)
-                       (= editing-block-uuid (str block-uuid))
-                       (not= uuid current-user-uuid))
-              user))
-          online-users)))
-
 (defn- editing-user-avatar
   [{:user/keys [name uuid]}]
   (let [user-name (or name uuid)]
@@ -2115,10 +2105,7 @@
   (let [*bullet-dragging? (hooks/use-memo #(atom false) [])
         doc-mode? (rfx/use-sub [:document/mode?])
         [control-show?] (hooks/use-atom *control-show?)
-        rtc-state (rfx/use-sub [:rtc/state])
-        online-users (:online-users rtc-state)
-        current-user-uuid (user-handler/user-uuid)
-        editing-user (editing-user-for-block uuid online-users current-user-uuid)
+        editing-user (rfx/use-sub [:rtc/editing-users-by-block (str uuid)])
         ref? (:ref? config)
         container-id (:container-id config)
         empty-content? (block-content-empty? block)

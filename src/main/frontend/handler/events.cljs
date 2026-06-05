@@ -35,6 +35,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.shell :as shell-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.outliner.pipeline :as pipeline]
@@ -390,8 +391,35 @@
                                  (db/entity [:block/uuid (:block/uuid db-block)])))]
        (js/setTimeout #(editor-handler/edit-block! converted-block :max) 100)))))
 
+(defn- editing-users-by-block
+  [online-users current-user-uuid]
+  (reduce (fn [result {:user/keys [editing-block-uuid uuid] :as user}]
+            (if (and (string? editing-block-uuid)
+                     (not= uuid current-user-uuid)
+                     (not (contains? result editing-block-uuid)))
+              (assoc result editing-block-uuid user)
+              result))
+          {}
+          online-users))
+
+(defn- sync-editing-users-by-block!
+  [online-users]
+  (let [current-user-uuid (user-handler/user-uuid)
+        old-users-by-block (or (state/get-state :rtc/editing-users-by-block) {})
+        new-users-by-block (editing-users-by-block online-users current-user-uuid)
+        affected-block-ids (into (set (keys old-users-by-block))
+                                 (keys new-users-by-block))]
+    (doseq [block-id affected-block-ids
+            :let [old-user (get old-users-by-block block-id)
+                  new-user (get new-users-by-block block-id)]
+            :when (not= old-user new-user)]
+      (state/set-state! :rtc/editing-users-by-block new-user :nested-path block-id))))
+
 (defevent! :rtc/sync-state [[_ state]]
-  (state/update-state! :rtc/state (fn [old] (merge old state))))
+  (when (contains? state :online-users)
+    (sync-editing-users-by-block! (:online-users state)))
+  (doseq [[k value] state]
+    (state/set-state! :rtc/state value :nested-path k)))
 
 (defevent! :rtc/presence-update [[_ {:keys [editing-block-uuid]}]]
   (rtc-handler/<rtc-update-presence! editing-block-uuid))
