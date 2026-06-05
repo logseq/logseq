@@ -1412,9 +1412,8 @@
 	        (if (seq items)
 	          (for [[group-name group-key _group-count group-items] items]
 	            (let [title (string/capitalize group-name)]
-	              (with-meta
-	                (result-group state title group-key group-items first-item sidebar?)
-	                {:key (str "cmdk-group-" (name group-key))})))
+                ^{:key (str "cmdk-group-" (name group-key))}
+                [result-group state title group-key group-items first-item sidebar?]))
           [:div.flex.flex-col.p-4.opacity-50
            (when-not (string/blank? @*input)
              (t :search/no-result))]))]

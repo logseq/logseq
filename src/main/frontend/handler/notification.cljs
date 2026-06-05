@@ -45,7 +45,7 @@
                             (not (false? clear?)))]
      (shui/toast!
       {:id (toast-id uid)
-       :title content
+       :description content
        :variant status
        :duration (if auto-dismiss? (or timeout 2000) 0)
        :icon (status-icon status)
