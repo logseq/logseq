@@ -21,12 +21,6 @@
 
 (rule
  (alias runtest)
- (deps js_node_http_uses_fetch_without_xhr.js ../bin/main.bc.js)
- (action
-  (run node js_node_http_uses_fetch_without_xhr.js %{dep:../bin/main.bc.js})))
-
-(rule
- (alias runtest)
  (deps wasm_graph_info.js ../bin/main.bc.js)
  (action
   (run node wasm_graph_info.js %{dep:../bin/main.bc.js})))

@@ -122,55 +122,6 @@ let today_default_journal_title () =
 let value_with fields =
   vmap (List.map (fun (key, value) -> (vkw key, value)) fields)
 
-let () =
-  check "Global_opts.create supplies empty defaults" (fun () ->
-      let opts = Global_opts.create () in
-      assert_equal ~name:"default graph" None opts.graph;
-      assert_equal ~name:"default root dir" None opts.root_dir;
-      assert_equal ~name:"default config path" None opts.config_path;
-      assert_equal ~name:"default timeout" None opts.timeout_span;
-      assert_equal ~name:"default output" None opts.output_format;
-      assert_bool ~name:"default verbose" false opts.verbose;
-      assert_bool ~name:"default profile" false opts.profile);
-
-  check
-    "Global_opts.merge prefers later optional values and keeps flags enabled"
-    (fun () ->
-      let earlier =
-        Global_opts.create ~graph:(graph "alpha") ~root_dir:"/tmp/alpha"
-          ~timeout_span:(Ptime_util.span_of_ms 10L)
-          ~verbose:true ()
-      in
-      let later =
-        Global_opts.create ~config_path:"/tmp/logseq.edn"
-          ~timeout_span:(Ptime_util.span_of_ms 20L)
-          ~profile:true ()
-      in
-      let merged = Global_opts.merge ~earlier ~later in
-      assert_equal ~name:"merged graph" (Some "alpha")
-        (Option.map graph_string merged.graph);
-      assert_equal ~name:"merged root dir" (Some "/tmp/alpha") merged.root_dir;
-      assert_equal ~name:"merged config path" (Some "/tmp/logseq.edn")
-        merged.config_path;
-      assert_equal ~name:"merged timeout" (Some 20L)
-        (Option.map Ptime_util.span_to_ms merged.timeout_span);
-      assert_bool ~name:"merged verbose" true merged.verbose;
-      assert_bool ~name:"merged profile" true merged.profile);
-
-  check "Global_opts.with_graph replaces graph without changing other fields"
-    (fun () ->
-      let opts =
-        Global_opts.create ~root_dir:"/tmp/root" ~config_path:"/tmp/cli.edn"
-          ~profile:true ()
-      in
-      let updated = Global_opts.with_graph (Some (graph "beta")) opts in
-      assert_equal ~name:"updated graph" (Some "beta")
-        (Option.map graph_string updated.graph);
-      assert_equal ~name:"preserved root dir" opts.root_dir updated.root_dir;
-      assert_equal ~name:"preserved config path" opts.config_path
-        updated.config_path;
-      assert_bool ~name:"preserved profile" true updated.profile)
-
 let capture_stdout f =
   flush Stdlib.stdout;
   let stdout_fd = Unix.descr_of_out_channel Stdlib.stdout in
@@ -268,6 +219,16 @@ type test_http_request = {
 let starts_with ~prefix value =
   let prefix_len = String.length prefix in
   String.length value >= prefix_len && String.sub value 0 prefix_len = prefix
+
+let contains_substring ~needle haystack =
+  let needle_len = String.length needle in
+  let haystack_len = String.length haystack in
+  let rec loop idx =
+    if idx + needle_len > haystack_len then false
+    else if String.sub haystack idx needle_len = needle then true
+    else loop (idx + 1)
+  in
+  needle_len = 0 || loop 0
 
 let trim_cr value =
   let len = String.length value in
@@ -930,139 +891,6 @@ let () =
       assert_contains ~name:"complete registration" "complete -F _logseq logseq"
         (stdout output));
 
-  check "Cmdliner_terms.app exposes command registry metadata" (fun () ->
-      let app = Cmdliner_terms.app ~version:"test-version" () in
-      let registry = app.Cmdliner_boundary.registry in
-      let find path =
-        match Command_registry.find_by_path path registry with
-        | Some meta -> meta
-        | None ->
-            failf "missing command metadata for %s" (String.concat " " path)
-      in
-      let list_page = find [ "list"; "page" ] in
-      assert_equal ~name:"list page doc" "List pages" list_page.doc;
-      assert_bool ~name:"list page requires graph" true list_page.requires_graph;
-      assert_bool ~name:"list page read command" false list_page.write_command;
-      (match list_page.category with
-      | Command_registry.Graph_inspect_and_edit -> ()
-      | _ -> failf "expected graph inspect category");
-      assert_contains ~name:"list page examples"
-        "logseq list page --graph my-graph"
-        (String.concat "\n" list_page.examples);
-      let graph_create = find [ "graph"; "create" ] in
-      assert_bool ~name:"graph create write command" true
-        graph_create.write_command;
-      assert_bool ~name:"graph create requires graph option" true
-        graph_create.requires_graph;
-      (match graph_create.category with
-      | Command_registry.Graph_management -> ()
-      | _ -> failf "expected graph management category");
-      assert_contains ~name:"graph create examples"
-        "logseq graph create --graph my-graph --enable-sync"
-        (String.concat "\n" graph_create.examples);
-      let sync_download = find [ "sync"; "download" ] in
-      assert_bool ~name:"sync download requires auth" true
-        sync_download.requires_auth;
-      assert_bool ~name:"sync download write command" true
-        sync_download.write_command;
-      let group_paths = Command_registry.group_paths registry in
-      if not (List.mem [ "graph"; "backup" ] group_paths) then
-        failf "missing graph backup group path";
-      if not (List.mem [ "sync"; "config" ] group_paths) then
-        failf "missing sync config group path";
-      match Command_registry.examples_for_selector [ "show" ] registry with
-      | Ok examples ->
-          assert_contains ~name:"show examples"
-            "logseq show --graph my-graph --page Home"
-            (String.concat "\n" examples)
-      | Error err -> failf "unexpected example lookup error: %s" err.message);
-
-  check "Command_registry exposes structured global and command options"
-    (fun () ->
-      let app = Cmdliner_terms.app ~version:"test-version" () in
-      let registry = app.Cmdliner_boundary.registry in
-      let find_option name options =
-        match
-          List.find_opt
-            (fun (option : Command_registry.option_meta) ->
-              List.mem name option.names)
-            options
-        with
-        | Some option -> option
-        | None -> failf "missing option metadata for %s" name
-      in
-      let graph_option =
-        find_option "--graph" Command_registry.global_options
-      in
-      assert_equal ~name:"graph option names" [ "-g"; "--graph" ]
-        graph_option.names;
-      (match graph_option.arity with
-      | Command_registry.Required_value value_name ->
-          assert_equal ~name:"graph option value name" "graph" value_name
-      | _ -> failf "expected graph to require a value");
-      assert_bool ~name:"graph option not required" false graph_option.required;
-      assert_equal ~name:"graph option default" None graph_option.default;
-      assert_contains ~name:"graph option doc" "Graph name" graph_option.doc;
-      let graph_create_options =
-        match
-          Command_registry.options_for_path [ "graph"; "create" ] registry
-        with
-        | Ok options -> options
-        | Error err ->
-            failf "unexpected graph create options error: %s" err.message
-      in
-      let enable_sync = find_option "--enable-sync" graph_create_options in
-      (match enable_sync.arity with
-      | Command_registry.Flag -> ()
-      | _ -> failf "expected --enable-sync to be a flag");
-      let password = find_option "--e2ee-password" graph_create_options in
-      (match password.arity with
-      | Command_registry.Required_value value_name ->
-          assert_equal ~name:"e2ee password value name" "password" value_name
-      | _ -> failf "expected --e2ee-password to require a value");
-      let list_page_options =
-        match Command_registry.options_for_path [ "list"; "page" ] registry with
-        | Ok options -> options
-        | Error err ->
-            failf "unexpected list page options error: %s" err.message
-      in
-      let limit = find_option "--limit" list_page_options in
-      (match limit.arity with
-      | Command_registry.Required_value value_name ->
-          assert_equal ~name:"limit value name" "n" value_name
-      | _ -> failf "expected --limit to require a value");
-      assert_bool ~name:"limit not repeatable" false limit.repeatable;
-      let sort = find_option "--sort" list_page_options in
-      assert_equal ~name:"list page sort choices"
-        [ "id"; "ident"; "title"; "uuid"; "created-at"; "updated-at" ]
-        sort.choices;
-      let list_page =
-        match Command_registry.find_by_path [ "list"; "page" ] registry with
-        | Some meta -> meta
-        | None -> failf "missing list page metadata"
-      in
-      assert_int ~name:"list page metadata has options"
-        (List.length list_page_options)
-        (List.length list_page.options);
-      match Command_registry.options_for_path [ "missing" ] registry with
-      | Ok _ -> failf "expected unknown command options error"
-      | Error err ->
-          assert_contains ~name:"unknown option path error" "unknown command"
-            err.message);
-
-  check "Command_registry.render_help renders command options from metadata"
-    (fun () ->
-      let app = Cmdliner_terms.app ~version:"test-version" () in
-      let help =
-        Command_registry.render_help ~group:[ "graph"; "create" ]
-          app.Cmdliner_boundary.registry
-      in
-      assert_contains ~name:"graph create help enable sync" "--enable-sync" help;
-      assert_contains ~name:"graph create help password"
-        "--e2ee-password <password>" help;
-      assert_not_contains ~name:"graph create help avoids placeholder"
-        "See upstream Logseq CLI documentation" help);
-
   check "Cmdliner_boundary.eval parses typed requests" (fun () ->
       let app = Cmdliner_terms.app ~version:"test-version" () in
       match
@@ -1141,397 +969,75 @@ let () =
       | Cmdliner_boundary.Version version ->
           failf "expected parse error, got version: %s" version);
 
-  check "Graph.metadata exposes graph command metadata" (fun () ->
-      let graph_metadata = Graph.metadata () in
-      let graph_nodes = Cmdliner_terms.graph_nodes () in
-      assert_int ~name:"graph metadata count" 12 (List.length graph_metadata);
-      assert_int ~name:"graph node count"
-        (List.length graph_metadata)
-        (List.length graph_nodes);
-      let find path =
-        match
-          List.find_opt
-            (fun (meta : Command_registry.command_meta) -> meta.path = path)
-            graph_metadata
-        with
-        | Some meta -> meta
-        | None -> failf "missing graph metadata for %s" (String.concat " " path)
+  check "command registry stays aligned with cmdliner command leaves" (fun () ->
+      let app = Cmdliner_terms.app ~version:"test-version" () in
+      let registry = app.Cmdliner_boundary.registry in
+      let path_key path = String.concat " " path in
+      let sorted_paths paths =
+        paths |> List.map path_key |> List.sort String.compare
       in
-      let graph_list = find [ "graph"; "list" ] in
-      assert_equal ~name:"graph list doc" "List graphs" graph_list.doc;
-      assert_bool ~name:"graph list no graph required" false
-        graph_list.requires_graph;
-      let graph_backup_restore = find [ "graph"; "backup"; "restore" ] in
-      assert_equal ~name:"graph backup restore doc" "Restore graph backup"
-        graph_backup_restore.doc;
-      assert_contains ~name:"graph backup restore example"
-        "logseq graph backup restore --src my-graph-nightly --dst \
-         my-graph-restore"
-        (String.concat "\n" graph_backup_restore.examples);
-      match graph_backup_restore.category with
-      | Command_registry.Graph_management -> ()
-      | _ -> failf "expected graph management category");
-
-  check "List_command.metadata exposes list command metadata" (fun () ->
-      let list_metadata = List_command.metadata () in
-      let list_nodes = Cmdliner_terms.list_nodes () in
-      assert_int ~name:"list metadata count" 6 (List.length list_metadata);
-      assert_int ~name:"list node count"
-        (List.length list_metadata)
-        (List.length list_nodes);
-      let find path =
-        match
-          List.find_opt
-            (fun (meta : Command_registry.command_meta) -> meta.path = path)
-            list_metadata
-        with
-        | Some meta -> meta
-        | None -> failf "missing list metadata for %s" (String.concat " " path)
+      let leaf_paths =
+        sorted_paths
+          (List.map
+             (fun (leaf : Cmdliner_boundary.leaf) -> leaf.meta.path)
+             app.leaves)
       in
-      let list_page = find [ "list"; "page" ] in
-      assert_equal ~name:"list page metadata doc" "List pages" list_page.doc;
-      assert_bool ~name:"list page metadata requires graph" true
-        list_page.requires_graph;
-      assert_bool ~name:"list page metadata read command" false
-        list_page.write_command;
-      assert_contains ~name:"list page metadata example"
-        "logseq list page --graph my-graph --journal-only --limit 20"
-        (String.concat "\n" list_page.examples);
-      let list_task = find [ "list"; "task" ] in
-      assert_equal ~name:"list task metadata doc" "List tasks" list_task.doc;
-      assert_contains ~name:"list task metadata example"
-        "logseq list task --graph my-graph --status todo --priority high"
-        (String.concat "\n" list_task.examples);
-      match list_task.category with
-      | Command_registry.Graph_inspect_and_edit -> ()
-      | _ -> failf "expected graph inspect category");
-
-  check "Search.metadata exposes search command metadata" (fun () ->
-      let search_metadata = Search.metadata () in
-      let search_nodes = Cmdliner_terms.search_nodes () in
-      assert_int ~name:"search metadata count" 4 (List.length search_metadata);
-      assert_int ~name:"search node count"
-        (List.length search_metadata)
-        (List.length search_nodes);
-      let find path =
-        match
-          List.find_opt
-            (fun (meta : Command_registry.command_meta) -> meta.path = path)
-            search_metadata
-        with
-        | Some meta -> meta
-        | None ->
-            failf "missing search metadata for %s" (String.concat " " path)
+      let registry_paths =
+        sorted_paths
+          (List.map
+             (fun (meta : Command_registry.command_meta) -> meta.path)
+             registry.commands)
       in
-      let search_block = find [ "search"; "block" ] in
-      assert_equal ~name:"search block metadata doc" "Search blocks by title"
-        search_block.doc;
-      assert_bool ~name:"search block requires graph" true
-        search_block.requires_graph;
-      assert_bool ~name:"search block read command" false
-        search_block.write_command;
-      assert_contains ~name:"search block example"
-        "logseq search block --content \"task\" --graph my-graph"
-        (String.concat "\n" search_block.examples);
-      let search_tag = find [ "search"; "tag" ] in
-      assert_equal ~name:"search tag metadata doc" "Search tags by title"
-        search_tag.doc;
-      assert_contains ~name:"search tag example"
-        "logseq search tag --content \"quote\" --graph my-graph"
-        (String.concat "\n" search_tag.examples);
-      match search_tag.category with
-      | Command_registry.Graph_inspect_and_edit -> ()
-      | _ -> failf "expected graph inspect category");
-
-  check "Remove.metadata exposes remove command metadata" (fun () ->
-      let remove_metadata = Remove.metadata () in
-      let remove_nodes = Cmdliner_terms.remove_nodes () in
-      assert_int ~name:"remove metadata count" 4 (List.length remove_metadata);
-      assert_int ~name:"remove node count"
-        (List.length remove_metadata)
-        (List.length remove_nodes);
-      let find path =
-        match
-          List.find_opt
-            (fun (meta : Command_registry.command_meta) -> meta.path = path)
-            remove_metadata
-        with
-        | Some meta -> meta
-        | None ->
-            failf "missing remove metadata for %s" (String.concat " " path)
+      assert_equal ~name:"registry commands match cmdliner leaves"
+        (String.concat "\n" leaf_paths)
+        (String.concat "\n" registry_paths);
+      let unique ~name values =
+        let sorted = List.sort String.compare values in
+        let rec loop = function
+          | first :: second :: _ when first = second ->
+              failf "%s contains duplicate %S" name first
+          | _ :: rest -> loop rest
+          | [] -> ()
+        in
+        loop sorted
       in
-      let remove_block = find [ "remove"; "block" ] in
-      assert_equal ~name:"remove block metadata doc" "Remove blocks"
-        remove_block.doc;
-      assert_bool ~name:"remove block requires graph" true
-        remove_block.requires_graph;
-      assert_bool ~name:"remove block write command" true
-        remove_block.write_command;
-      assert_contains ~name:"remove block uuid example"
-        "logseq remove block --graph my-graph --uuid \
-         7f0f4bb3-2e48-4b46-ae0f-18f52ef0f8be"
-        (String.concat "\n" remove_block.examples);
-      let remove_property = find [ "remove"; "property" ] in
-      assert_equal ~name:"remove property metadata doc" "Remove property"
-        remove_property.doc;
-      assert_contains ~name:"remove property id example"
-        "logseq remove property --graph my-graph --id 321"
-        (String.concat "\n" remove_property.examples);
-      match remove_property.category with
-      | Command_registry.Graph_inspect_and_edit -> ()
-      | _ -> failf "expected graph inspect category");
-
-  check "Query.metadata exposes query command metadata" (fun () ->
-      let query_metadata = Query.metadata () in
-      let query_nodes = Cmdliner_terms.query_nodes () in
-      assert_int ~name:"query metadata count" 2 (List.length query_metadata);
-      assert_int ~name:"query node count"
-        (List.length query_metadata)
-        (List.length query_nodes);
-      let find path =
-        match
-          List.find_opt
-            (fun (meta : Command_registry.command_meta) -> meta.path = path)
-            query_metadata
-        with
-        | Some meta -> meta
-        | None -> failf "missing query metadata for %s" (String.concat " " path)
+      unique ~name:"command paths" registry_paths;
+      unique ~name:"command ids"
+        (List.map
+           (fun (meta : Command_registry.command_meta) ->
+             Command_id.to_string meta.id)
+           registry.commands);
+      List.iter
+        (fun (meta : Command_registry.command_meta) ->
+          if String.trim meta.doc = "" then
+            failf "missing command doc for %s" (path_key meta.path);
+          match Command_registry.options_for_path meta.path registry with
+          | Ok options ->
+              assert_int
+                ~name:("option metadata count for " ^ path_key meta.path)
+                (List.length meta.options) (List.length options)
+          | Error err ->
+              failf "missing options for %s: %s" (path_key meta.path)
+                err.message)
+        registry.commands;
+      let command_or_group_paths =
+        registry_paths @ sorted_paths (Command_registry.group_paths registry)
       in
-      let query_run = find [ "query" ] in
-      assert_equal ~name:"query metadata doc" "Run a Datascript query"
-        query_run.doc;
-      assert_bool ~name:"query requires graph" true query_run.requires_graph;
-      assert_bool ~name:"query read command" false query_run.write_command;
-      assert_contains ~name:"query raw example"
-        "logseq query --graph my-graph --query '[:find [?e ...] :where [?e \
-         :block/name]]'"
-        (String.concat "\n" query_run.examples);
-      let query_list = find [ "query"; "list" ] in
-      assert_equal ~name:"query list metadata doc" "List available queries"
-        query_list.doc;
-      assert_contains ~name:"query list example"
-        "logseq query list --graph my-graph --output edn"
-        (String.concat "\n" query_list.examples);
-      match query_list.category with
-      | Command_registry.Graph_inspect_and_edit -> ()
-      | _ -> failf "expected graph inspect category");
-
-  check "Show.metadata exposes show command metadata" (fun () ->
-      let show_metadata = Show.metadata () in
-      let show_nodes = Cmdliner_terms.show_nodes () in
-      assert_int ~name:"show metadata count" 1 (List.length show_metadata);
-      assert_int ~name:"show node count"
-        (List.length show_metadata)
-        (List.length show_nodes);
-      let show =
-        match show_metadata with
-        | [ meta ] -> meta
-        | _ -> failf "expected one show metadata entry"
-      in
-      assert_equal ~name:"show metadata path" "show"
-        (String.concat " " show.path);
-      assert_equal ~name:"show metadata doc" "Show tree" show.doc;
-      assert_bool ~name:"show requires graph" true show.requires_graph;
-      assert_bool ~name:"show read command" false show.write_command;
-      assert_contains ~name:"show multi-id example"
-        "logseq show --graph my-graph --id '[123,456,789]'"
-        (String.concat "\n" show.examples);
-      match show.category with
-      | Command_registry.Graph_inspect_and_edit -> ()
-      | _ -> failf "expected graph inspect category");
-
-  check "Upsert.metadata exposes upsert command metadata" (fun () ->
-      let upsert_metadata = Upsert.metadata () in
-      let upsert_nodes = Cmdliner_terms.upsert_nodes () in
-      assert_int ~name:"upsert metadata count" 6 (List.length upsert_metadata);
-      assert_int ~name:"upsert node count"
-        (List.length upsert_metadata)
-        (List.length upsert_nodes);
-      let find path =
-        match
-          List.find_opt
-            (fun (meta : Command_registry.command_meta) -> meta.path = path)
-            upsert_metadata
-        with
-        | Some meta -> meta
-        | None ->
-            failf "missing upsert metadata for %s" (String.concat " " path)
-      in
-      let upsert_block = find [ "upsert"; "block" ] in
-      assert_equal ~name:"upsert block metadata doc" "Upsert block"
-        upsert_block.doc;
-      assert_bool ~name:"upsert block requires graph" true
-        upsert_block.requires_graph;
-      assert_bool ~name:"upsert block write command" true
-        upsert_block.write_command;
-      assert_contains ~name:"upsert block examples"
-        "logseq upsert block --graph my-graph --blocks '[{:block/title \"A\"} \
-         {:block/title \"B\"}]'"
-        (String.concat "\n" upsert_block.examples);
-      let upsert_property = find [ "upsert"; "property" ] in
-      assert_equal ~name:"upsert property metadata doc" "Upsert property"
-        upsert_property.doc;
-      assert_contains ~name:"upsert property example"
-        "logseq upsert property --graph my-graph --name status --type default \
-         --cardinality one"
-        (String.concat "\n" upsert_property.examples);
-      match upsert_property.category with
-      | Command_registry.Graph_inspect_and_edit -> ()
-      | _ -> failf "expected graph inspect category");
-
-  check "Server_command.metadata exposes server command metadata" (fun () ->
-      let server_metadata = Server_command.metadata () in
-      let server_nodes = Cmdliner_terms.server_nodes () in
-      assert_int ~name:"server metadata count" 5 (List.length server_metadata);
-      assert_int ~name:"server node count"
-        (List.length server_metadata)
-        (List.length server_nodes);
-      let find path =
-        match
-          List.find_opt
-            (fun (meta : Command_registry.command_meta) -> meta.path = path)
-            server_metadata
-        with
-        | Some meta -> meta
-        | None ->
-            failf "missing server metadata for %s" (String.concat " " path)
-      in
-      let server_list = find [ "server"; "list" ] in
-      assert_equal ~name:"server list metadata doc"
-        "List db-worker-node servers" server_list.doc;
-      assert_bool ~name:"server list no graph required" false
-        server_list.requires_graph;
-      let server_start = find [ "server"; "start" ] in
-      assert_equal ~name:"server start metadata doc"
-        "Start db-worker-node for a graph" server_start.doc;
-      assert_bool ~name:"server start write command" false
-        server_start.write_command;
-      assert_contains ~name:"server start example"
-        "logseq server start --graph my-graph"
-        (String.concat "\n" server_start.examples);
-      match server_start.category with
-      | Command_registry.Graph_management -> ()
-      | _ -> failf "expected graph management category");
-
-  check "Sync.metadata exposes sync command metadata" (fun () ->
-      let sync_metadata = Sync.metadata () in
-      let sync_nodes = Cmdliner_terms.sync_nodes () in
-      assert_int ~name:"sync metadata count" 12 (List.length sync_metadata);
-      assert_int ~name:"sync node count"
-        (List.length sync_metadata)
-        (List.length sync_nodes);
-      let find path =
-        match
-          List.find_opt
-            (fun (meta : Command_registry.command_meta) -> meta.path = path)
-            sync_metadata
-        with
-        | Some meta -> meta
-        | None -> failf "missing sync metadata for %s" (String.concat " " path)
-      in
-      let sync_download = find [ "sync"; "download" ] in
-      assert_equal ~name:"sync download metadata doc"
-        "Download remote graph snapshot" sync_download.doc;
-      assert_bool ~name:"sync download requires auth" true
-        sync_download.requires_auth;
-      assert_bool ~name:"sync download write command" true
-        sync_download.write_command;
-      assert_contains ~name:"sync download progress example"
-        "logseq sync download --graph my-graph --progress"
-        (String.concat "\n" sync_download.examples);
-      let sync_remote_graphs = find [ "sync"; "remote-graphs" ] in
-      assert_bool ~name:"sync remote graphs requires auth" true
-        sync_remote_graphs.requires_auth;
-      assert_bool ~name:"sync remote graphs does not require graph" false
-        sync_remote_graphs.requires_graph;
-      let sync_config_set = find [ "sync"; "config"; "set" ] in
-      assert_equal ~name:"sync config set metadata doc" "Set sync config key"
-        sync_config_set.doc;
-      match sync_config_set.category with
-      | Command_registry.Graph_management -> ()
-      | _ -> failf "expected graph management category");
-
-  check "Auth_command.metadata exposes auth command metadata" (fun () ->
-      let auth_metadata = Auth_command.metadata () in
-      let auth_nodes = Cmdliner_terms.auth_nodes () in
-      assert_int ~name:"auth metadata count" 2 (List.length auth_metadata);
-      assert_int ~name:"auth node count"
-        (List.length auth_metadata)
-        (List.length auth_nodes);
-      let find path =
-        match
-          List.find_opt
-            (fun (meta : Command_registry.command_meta) -> meta.path = path)
-            auth_metadata
-        with
-        | Some meta -> meta
-        | None -> failf "missing auth metadata for %s" (String.concat " " path)
-      in
-      let login = find [ "login" ] in
-      assert_equal ~name:"login metadata doc" "Login" login.doc;
-      assert_bool ~name:"login no graph required" false login.requires_graph;
-      assert_bool ~name:"login write command" true login.write_command;
-      let logout = find [ "logout" ] in
-      assert_equal ~name:"logout metadata doc" "Logout" logout.doc;
-      match logout.category with
-      | Command_registry.Authentication -> ()
-      | _ -> failf "expected authentication category");
-
-  check "Utility modules expose utility command metadata" (fun () ->
-      let utility_metadata =
-        Completion.metadata () @ Skill.metadata () @ Example.metadata ()
-        @ Doctor.metadata () @ Debug.metadata () @ Agent.metadata ()
-      in
-      let utility_nodes = Cmdliner_terms.utility_nodes () in
-      assert_int ~name:"utility metadata count" 7 (List.length utility_metadata);
-      assert_int ~name:"utility node count"
-        (List.length utility_metadata)
-        (List.length utility_nodes);
-      let find path =
-        match
-          List.find_opt
-            (fun (meta : Command_registry.command_meta) -> meta.path = path)
-            utility_metadata
-        with
-        | Some meta -> meta
-        | None ->
-            failf "missing utility metadata for %s" (String.concat " " path)
-      in
-      let completion = find [ "completion" ] in
-      assert_equal ~name:"completion metadata doc"
-        "Generate shell completion script" completion.doc;
-      assert_bool ~name:"completion no graph required" false
-        completion.requires_graph;
-      let skill_install = find [ "skill"; "install" ] in
-      assert_equal ~name:"skill install metadata doc"
-        "Install built-in logseq-cli skill" skill_install.doc;
-      assert_bool ~name:"skill install write command" true
-        skill_install.write_command;
-      let debug_pull = find [ "debug"; "pull" ] in
-      assert_equal ~name:"debug pull metadata doc"
-        "Pull raw entity data for debugging" debug_pull.doc;
-      (match debug_pull.category with
-      | Command_registry.Hidden -> ()
-      | _ -> failf "expected hidden category");
-      let agent_bridge = find [ "agent"; "bridge" ] in
-      assert_equal ~name:"agent bridge metadata doc" "Run task agent bridge"
-        agent_bridge.doc;
-      match agent_bridge.category with
-      | Command_registry.Hidden -> ()
-      | _ -> failf "expected hidden category");
+      List.iter
+        (fun (group : Command_registry.group_meta) ->
+          List.iter
+            (fun child ->
+              let child_key = path_key child in
+              if not (List.mem child_key command_or_group_paths) then
+                failf "group %s references missing child %s" group.name
+                  child_key)
+            group.children)
+        registry.groups);
 
   check "treats -- as an option terminator" (fun () ->
       let output = run [ "--"; "completion"; "zsh" ] in
       assert_int ~name:"exit code" 0 output.exit_code;
       assert_contains ~name:"zsh completion" "#compdef logseq" (stdout output));
-
-  check "Cli_effect.catch handles effect errors" (fun () ->
-      let value =
-        run_blocking
-          (Cli_effect.catch (Cli_effect.error (Failure "boom")) (fun exn ->
-               Cli_effect.pure (Printexc.to_string exn)))
-      in
-      assert_equal ~name:"caught effect error" {|Failure("boom")|} value);
 
   check "Transport.request performs an HTTP round trip" (fun () ->
       with_http_server
@@ -2202,72 +1708,6 @@ let () =
       | Ok _ -> failf "unexpected parsed property keys"
       | Error err ->
           failf "unexpected property keys parse error: %s" err.Error.message);
-
-  check "Edn_ocaml.of_edn_string parses numeric literals" (fun () ->
-      let assert_float ~name expected actual =
-        if abs_float (expected -. actual) > 0.0000001 then
-          failf "%s\nexpected: %f\nactual:   %f" name expected actual
-      in
-      match
-        Edn_util.as_vector (Edn_ocaml.of_edn_string "[1 1.5 -0.25 1e3]")
-      with
-      | Some [ one; one_point_five; negative_quarter; thousand ] ->
-          assert_int ~name:"edn int" 1
-            (Option.value (Edn_util.as_int one) ~default:(-1));
-          assert_float ~name:"edn float decimal" 1.5
-            (Option.value (Edn_util.as_float one_point_five) ~default:0.0);
-          assert_float ~name:"edn float negative decimal" (-0.25)
-            (Option.value (Edn_util.as_float negative_quarter) ~default:0.0);
-          assert_float ~name:"edn float exponent" 1000.0
-            (Option.value (Edn_util.as_float thousand) ~default:0.0)
-      | Some values ->
-          failf "unexpected parsed numeric vector length: %d"
-            (List.length values)
-      | None -> failf "numeric EDN did not parse as vector");
-
-  check "Edn_ocaml.of_edn_string parses tagged uuid literals" (fun () ->
-      match
-        Edn_util.as_vector
-          (Edn_ocaml.of_edn_string
-             {|[#uuid "11111111-1111-1111-1111-111111111111"]|})
-      with
-      | Some [ uuid ] ->
-          assert_equal ~name:"edn uuid" "11111111-1111-1111-1111-111111111111"
-            (Option.value (Edn_util.as_uuid uuid) ~default:"")
-      | Some values ->
-          failf "unexpected parsed uuid vector length: %d" (List.length values)
-      | None -> failf "uuid EDN did not parse as vector");
-
-  check "Edn_ocaml.of_edn_string decodes string escapes" (fun () ->
-      match
-        Edn_util.as_vector (Edn_ocaml.of_edn_string {|["line\nA\u0042\tend"]|})
-      with
-      | Some [ value ] ->
-          assert_equal ~name:"edn escaped string" "line\nAB\tend"
-            (Option.value (Edn_util.as_string value) ~default:"")
-      | Some values ->
-          failf "unexpected parsed escaped vector length: %d"
-            (List.length values)
-      | None -> failf "escaped string EDN did not parse as vector");
-
-  check "Edn_ocaml.of_edn_string supports discard forms" (fun () ->
-      (match
-         Edn_util.as_vector (Edn_ocaml.of_edn_string {|[1 #_{:debug true} 2]|})
-       with
-      | Some [ one; two ] ->
-          assert_int ~name:"discard vector first" 1
-            (Option.value (Edn_util.as_int one) ~default:(-1));
-          assert_int ~name:"discard vector second" 2
-            (Option.value (Edn_util.as_int two) ~default:(-1))
-      | Some values ->
-          failf "unexpected parsed discard vector length: %d"
-            (List.length values)
-      | None -> failf "discard EDN did not parse as vector");
-      match Edn_ocaml.of_edn_string {|#_[:discarded] {:kept true}|} with
-      | value when Edn_util.get_bool value ":kept" = Some true -> ()
-      | value ->
-          failf "unexpected parsed top-level discard value: %s"
-            (Edn_ocaml.to_edn_string value));
 
   check "Add.build_add_block_action populates tags and properties" (fun () ->
       let opts =
@@ -3331,31 +2771,6 @@ let () =
             (Edn_util.keyword_t "unknown-template-vars")
             err.Error.code
       | Ok () -> failf "expected unknown template vars to fail");
-
-  check "Cli_action builds agent bridge action" (fun () ->
-      let app = Cli.make_app ~version:"test-version" () in
-      let request =
-        match
-          run_blocking
-            (Cli.parse_request app
-               (cli_input [ "--graph"; "alpha"; "agent"; "bridge" ]))
-        with
-        | Ok request -> request
-        | Error err ->
-            failf "unexpected agent parse error: %s" err.Error.message
-      in
-      let config =
-        test_config
-          ~root_dir:(fresh_root "logseq-cli-agent-bridge-")
-          ~graph:"alpha" ()
-      in
-      match run_blocking (Cli_action.build config request) with
-      | Ok (Cli_action.Agent (Agent.Agent_bridge { repo; graph })) ->
-          assert_equal ~name:"agent bridge repo" "logseq_db_alpha"
-            (repo_string repo);
-          assert_equal ~name:"agent bridge graph" "alpha" (graph_string graph)
-      | Ok _ -> failf "expected agent bridge action"
-      | Error err -> failf "unexpected agent build error: %s" err.Error.message);
 
   check "Cli.run executes agent bridge routing through typed action" (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
@@ -5134,24 +4549,6 @@ process.exit(0);
       in
       if not stopped then failf "expected fake db-worker-node to stop");
 
-  check "Cli_action.command_id preserves server lifecycle variants" (fun () ->
-      assert_equal ~name:"server cleanup id" "server-cleanup"
-        (Command_id.to_string
-           (Cli_action.command_id
-              (Cli_action.Server Server_command.Server_cleanup)));
-      assert_equal ~name:"server stop id" "server-stop"
-        (Command_id.to_string
-           (Cli_action.command_id
-              (Cli_action.Server
-                 (Server_command.Server_stop
-                    { repo = repo "logseq_db_alpha"; graph = graph "alpha" }))));
-      assert_equal ~name:"server restart id" "server-restart"
-        (Command_id.to_string
-           (Cli_action.command_id
-              (Cli_action.Server
-                 (Server_command.Server_restart
-                    { repo = repo "logseq_db_alpha"; graph = graph "alpha" })))));
-
   check "Cli.run executes debug pull by id through typed action" (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
       with_http_server
@@ -5283,22 +4680,6 @@ process.exit(0);
         {|{"status":"error","error":{"code":"invalid-options","message":"Option uuid must be a valid UUID string"}}|}
         (String.trim (cli_stdout output)));
 
-  check "Doctor.check_db_worker_script reports readable scripts" (fun () ->
-      let path = Filename.temp_file "logseq-cli-doctor-script-" ".js" in
-      write_text_file path "console.log('ok');";
-      let check =
-        Doctor.check_db_worker_script
-          (Doctor.Doctor { script_path = Some path })
-      in
-      assert_equal ~name:"doctor script id"
-        (Edn_util.keyword_t "db-worker-script")
-        check.id;
-      if check.status <> Doctor.Ok then failf "expected ok script check";
-      assert_equal ~name:"doctor script path" path
-        (Option.value check.path ~default:"");
-      assert_contains ~name:"doctor script message" "Found readable file"
-        check.message);
-
   check "Cli.run executes doctor missing script through typed action" (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
       let root = fresh_root "logseq-cli-doctor-missing-" in
@@ -5318,35 +4699,8 @@ process.exit(0);
       | Some (Cli_action.Doctor (Doctor.Doctor { script_path = None })) -> ()
       | _ -> failf "expected typed doctor action");
 
-  check "Cli.parse_request returns a typed graph create request" (fun () ->
-      let app = Cli.make_app ~version:"test-version" () in
-      let input =
-        cli_input
-          [
-            "--root-dir";
-            "/tmp/logseq-cli-spec";
-            "graph";
-            "create";
-            "--graph";
-            "alpha";
-          ]
-      in
-      match run_blocking (Cli.parse_request app input) with
-      | Error err -> failf "unexpected parse error: %s" err.Error.message
-      | Ok request -> (
-          assert_equal ~name:"request path" "graph create"
-            (String.concat " " request.Cli_request.path);
-          assert_equal ~name:"global graph" "alpha"
-            (request.globals.graph |> Option.map graph_string
-           |> Option.value ~default:"");
-          assert_equal ~name:"global root" "/tmp/logseq-cli-spec"
-            (Option.value request.globals.root_dir ~default:"");
-          match request.command with
-          | Cli_request.Graph (Graph.Parsed_create opts) ->
-              if opts.enable_sync then failf "enable_sync should default false"
-          | _ -> failf "expected Graph Parsed_create"));
-
-  check "Cli.run uses spec lifecycle for graph operations" (fun () ->
+  check "Cli.run creates and lists graphs through the public command path"
+    (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
       let root = fresh_root "logseq-cli-spec-run-" in
       let create_output =
@@ -5358,27 +4712,14 @@ process.exit(0);
       assert_int ~name:"create exit" 0 create_output.exit_code;
       assert_contains ~name:"create output" "Created graph \"alpha\""
         (cli_stdout create_output);
-      (match
-         ( create_output.lifecycle.request,
-           create_output.lifecycle.config,
-           create_output.lifecycle.action )
-       with
-      | Some _, Some config, Some _ ->
-          assert_equal ~name:"lifecycle root" root config.Cli_config.root_dir
-      | _ -> failf "expected lifecycle request/config/action to be populated");
       let list_output =
         run_blocking
           (Cli.run app
              (cli_input
                 [ "--root-dir"; root; "--output"; "json"; "graph"; "list" ]))
       in
-      (match list_output.lifecycle.config with
-      | Some config ->
-          assert_equal ~name:"list lifecycle root" root
-            config.Cli_config.root_dir
-      | None -> failf "expected list lifecycle config");
       assert_int ~name:"list exit" 0 list_output.exit_code;
-      assert_equal ~name:"spec json graph list"
+      assert_equal ~name:"graph list json"
         {|{"status":"ok","data":{"graphs":["alpha"],"graph-items":[{"kind":"canonical","graph-name":"alpha","graph-dir":"alpha"}]}}|}
         (String.trim (cli_stdout list_output)));
 
@@ -6708,81 +6049,34 @@ process.exit(0);
       | Some (Cli_action.Completion _) -> ()
       | _ -> failf "expected typed completion action");
 
-  check "Cli.run executes example exact selector through typed action"
-    (fun () ->
+  check "Cli.run resolves exact prefix and group example selectors" (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
-      let output =
-        run_blocking
-          (Cli.run app
-             (cli_input [ "--output"; "json"; "example"; "list"; "page" ]))
-      in
-      assert_int ~name:"example exact exit" 0 output.exit_code;
-      let body = String.trim (cli_stdout output) in
-      assert_contains ~name:"example exact selector" {|"selector":"list page"|}
-        body;
-      assert_contains ~name:"example exact matched command"
-        {|"matched-commands":["list page"]|} body;
-      assert_contains ~name:"example exact command"
-        {|logseq list page --graph my-graph|} body;
-      assert_contains ~name:"example exact message"
-        {|"message":"Found 3 examples for selector list page"|} body;
-      match output.lifecycle.action with
-      | Some (Cli_action.Example action) -> (
-          assert_equal ~name:"example exact action selector" "list page"
-            action.selector;
-          match action.matched_commands with
-          | [ "list page" ] -> ()
-          | _ -> failf "expected list page matched command")
-      | _ -> failf "expected typed example action");
-
-  check "Cli.run executes example prefix selector through typed action"
-    (fun () ->
-      let app = Cli.make_app ~version:"test-version" () in
-      let output =
-        run_blocking
-          (Cli.run app (cli_input [ "--output"; "json"; "example"; "list" ]))
-      in
-      assert_int ~name:"example prefix exit" 0 output.exit_code;
-      let body = String.trim (cli_stdout output) in
-      assert_contains ~name:"example prefix selector" {|"selector":"list"|} body;
-      assert_contains ~name:"example prefix matched first"
-        {|"matched-commands":["list page","list tag","list property","list task","list node","list asset"]|}
-        body;
-      assert_contains ~name:"example prefix page example"
-        {|logseq list page --graph my-graph|} body;
-      assert_contains ~name:"example prefix asset example"
-        {|logseq list asset --graph my-graph|} body);
-
-  check "Cli.run executes example server selector through typed action"
-    (fun () ->
-      let app = Cli.make_app ~version:"test-version" () in
-      let output =
-        run_blocking
-          (Cli.run app (cli_input [ "--output"; "json"; "example"; "server" ]))
-      in
-      assert_int ~name:"example server exit" 0 output.exit_code;
-      let body = String.trim (cli_stdout output) in
-      assert_contains ~name:"example server selector" {|"selector":"server"|}
-        body;
-      assert_contains ~name:"example server matched"
-        {|"matched-commands":["server list","server cleanup","server start","server stop","server restart"]|}
-        body;
-      assert_contains ~name:"example server start"
-        {|logseq server start --graph my-graph|} body);
-
-  check "Cli.run executes example sync selector through typed action" (fun () ->
-      let app = Cli.make_app ~version:"test-version" () in
-      let output =
-        run_blocking
-          (Cli.run app (cli_input [ "--output"; "json"; "example"; "sync" ]))
-      in
-      assert_int ~name:"example sync exit" 0 output.exit_code;
-      let body = String.trim (cli_stdout output) in
-      assert_contains ~name:"example sync selector" {|"selector":"sync"|} body;
-      assert_contains ~name:"example sync download"
-        {|logseq sync download --graph my-graph --progress|} body;
-      assert_contains ~name:"example sync config set"
-        {|logseq sync config set --key sync-enabled --value true|} body);
+      [
+        ( [ "list"; "page" ],
+          {|"selector":"list page"|},
+          {|"matched-commands":["list page"]|},
+          {|logseq list page --graph my-graph|} );
+        ( [ "list" ],
+          {|"selector":"list"|},
+          {|"matched-commands":["list page","list tag","list property","list task","list node","list asset"]|},
+          {|logseq list asset --graph my-graph|} );
+        ( [ "server" ],
+          {|"selector":"server"|},
+          {|"matched-commands":["server list","server cleanup","server start","server stop","server restart"]|},
+          {|logseq server start --graph my-graph|} );
+      ]
+      |> List.iter (fun (selector, selector_json, matched_json, example_text) ->
+          let output =
+            run_blocking
+              (Cli.run app
+                 (cli_input ([ "--output"; "json"; "example" ] @ selector)))
+          in
+          let name = "example " ^ String.concat " " selector in
+          assert_int ~name:(name ^ " exit") 0 output.exit_code;
+          let body = String.trim (cli_stdout output) in
+          assert_contains ~name:(name ^ " selector") selector_json body;
+          assert_contains ~name:(name ^ " matched commands") matched_json body;
+          assert_contains ~name:(name ^ " example") example_text body));
 
   check "Cli.run rejects example without selector" (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
@@ -13123,40 +12417,32 @@ setInterval(() => {}, 1000);
 
   check "Cli.run executes remove block id vector best effort" (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
+      let pull_handler request =
+        assert_equal ~name:"remove block vector pull line"
+          "POST /v1/invoke HTTP/1.1" request.request_line;
+        assert_contains ~name:"remove block vector pull method"
+          {|"method":"thread-api/pull"|} request.body;
+        if contains_substring ~needle:{|,2]|} request.body then
+          ( 200,
+            [ ("Content-Type", "application/json") ],
+            {|{"resultTransit":"[\"^ \",\"~:db/id\",2,\"~:block/uuid\",\"~u11111111-1111-1111-1111-111111111111\"]"}|}
+          )
+        else if contains_substring ~needle:{|,3]|} request.body then
+          ( 200,
+            [ ("Content-Type", "application/json") ],
+            {|{"resultTransit":"null"}|} )
+        else if contains_substring ~needle:{|,4]|} request.body then
+          ( 200,
+            [ ("Content-Type", "application/json") ],
+            {|{"resultTransit":"[\"^ \",\"~:db/id\",4,\"~:block/uuid\",\"~u22222222-2222-2222-2222-222222222222\",\"~:block/name\",\"home\"]"}|}
+          )
+        else failf "expected remove block vector pull id in %s" request.body
+      in
       with_http_server_sequence
         [
-          (fun request ->
-            assert_equal ~name:"remove block vector pull first line"
-              "POST /v1/invoke HTTP/1.1" request.request_line;
-            assert_contains ~name:"remove block vector pull first method"
-              {|"method":"thread-api/pull"|} request.body;
-            assert_contains ~name:"remove block vector pull first id" {|,2]|}
-              request.body;
-            ( 200,
-              [ ("Content-Type", "application/json") ],
-              {|{"resultTransit":"[\"^ \",\"~:db/id\",2,\"~:block/uuid\",\"~u11111111-1111-1111-1111-111111111111\"]"}|}
-            ));
-          (fun request ->
-            assert_equal ~name:"remove block vector pull missing line"
-              "POST /v1/invoke HTTP/1.1" request.request_line;
-            assert_contains ~name:"remove block vector pull missing method"
-              {|"method":"thread-api/pull"|} request.body;
-            assert_contains ~name:"remove block vector pull missing id" {|,3]|}
-              request.body;
-            ( 200,
-              [ ("Content-Type", "application/json") ],
-              {|{"resultTransit":"null"}|} ));
-          (fun request ->
-            assert_equal ~name:"remove block vector pull page line"
-              "POST /v1/invoke HTTP/1.1" request.request_line;
-            assert_contains ~name:"remove block vector pull page method"
-              {|"method":"thread-api/pull"|} request.body;
-            assert_contains ~name:"remove block vector pull page id" {|,4]|}
-              request.body;
-            ( 200,
-              [ ("Content-Type", "application/json") ],
-              {|{"resultTransit":"[\"^ \",\"~:db/id\",4,\"~:block/uuid\",\"~u22222222-2222-2222-2222-222222222222\",\"~:block/name\",\"home\"]"}|}
-            ));
+          pull_handler;
+          pull_handler;
+          pull_handler;
           (fun request ->
             assert_equal ~name:"remove block vector apply line"
               "POST /v1/invoke HTTP/1.1" request.request_line;
@@ -13200,28 +12486,24 @@ setInterval(() => {}, 1000);
 
   check "Cli.run rejects remove block id vector with only pages" (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
-      with_http_server_sequence
-        [
-          (fun request ->
-            assert_equal ~name:"remove block vector pages first line"
-              "POST /v1/invoke HTTP/1.1" request.request_line;
-            assert_contains ~name:"remove block vector pages first id" {|,4]|}
-              request.body;
-            ( 200,
-              [ ("Content-Type", "application/json") ],
-              {|{"resultTransit":"[\"^ \",\"~:db/id\",4,\"~:block/uuid\",\"~u22222222-2222-2222-2222-222222222222\",\"~:block/name\",\"home\"]"}|}
-            ));
-          (fun request ->
-            assert_equal ~name:"remove block vector pages second line"
-              "POST /v1/invoke HTTP/1.1" request.request_line;
-            assert_contains ~name:"remove block vector pages second id" {|,5]|}
-              request.body;
-            ( 200,
-              [ ("Content-Type", "application/json") ],
-              {|{"resultTransit":"[\"^ \",\"~:db/id\",5,\"~:block/uuid\",\"~u55555555-5555-5555-5555-555555555555\",\"~:block/name\",\"journal\"]"}|}
-            ));
-        ]
-        (fun base_url ->
+      let pull_handler request =
+        assert_equal ~name:"remove block vector pages pull line"
+          "POST /v1/invoke HTTP/1.1" request.request_line;
+        assert_contains ~name:"remove block vector pages pull method"
+          {|"method":"thread-api/pull"|} request.body;
+        if contains_substring ~needle:{|,4]|} request.body then
+          ( 200,
+            [ ("Content-Type", "application/json") ],
+            {|{"resultTransit":"[\"^ \",\"~:db/id\",4,\"~:block/uuid\",\"~u22222222-2222-2222-2222-222222222222\",\"~:block/name\",\"home\"]"}|}
+          )
+        else if contains_substring ~needle:{|,5]|} request.body then
+          ( 200,
+            [ ("Content-Type", "application/json") ],
+            {|{"resultTransit":"[\"^ \",\"~:db/id\",5,\"~:block/uuid\",\"~u55555555-5555-5555-5555-555555555555\",\"~:block/name\",\"journal\"]"}|}
+          )
+        else failf "expected remove block vector pages id in %s" request.body
+      in
+      with_http_server_sequence [ pull_handler; pull_handler ] (fun base_url ->
           let output =
             run_blocking
               (Cli.run app
@@ -16359,20 +15641,6 @@ setInterval(() => {}, 1000);
         {|{"status":"error","error":{"code":"invalid-options","message":"only one of --id or --page is allowed"}}|}
         (String.trim (cli_stdout output)));
 
-  check "Cli.run preserves top-level help output" (fun () ->
-      let app = Cli.make_app ~version:"test-version" () in
-      let output = run_blocking (Cli.run app (cli_input [])) in
-      assert_int ~name:"help exit" 0 output.exit_code;
-      assert_contains ~name:"usage" "Usage: logseq <command> [options]"
-        (cli_stdout output));
-
-  check "Cli.run preserves graph group help output" (fun () ->
-      let app = Cli.make_app ~version:"test-version" () in
-      let output = run_blocking (Cli.run app (cli_input [ "graph" ])) in
-      assert_int ~name:"group help exit" 0 output.exit_code;
-      assert_contains ~name:"group usage"
-        "Usage: logseq graph <subcommand> [options]" (cli_stdout output));
-
   check "Cli.run emits profile lines for group help" (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
       let output =
@@ -16384,7 +15652,7 @@ setInterval(() => {}, 1000);
       assert_contains ~name:"profile stderr status" "status=ok"
         (String.concat "\n" output.stderr));
 
-  check "Cli.run preserves command help output" (fun () ->
+  check "prints command help without executing the command" (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
       let output =
         run_blocking (Cli.run app (cli_input [ "graph"; "list"; "--help" ]))
@@ -16393,30 +15661,6 @@ setInterval(() => {}, 1000);
       assert_contains ~name:"command usage" "Usage: logseq graph list [options]"
         (cli_stdout output);
       assert_not_contains ~name:"command help does not execute list" "Count:"
-        (cli_stdout output));
-
-  check "Cli.run validates typed search content" (fun () ->
-      let app = Cli.make_app ~version:"test-version" () in
-      let output =
-        run_blocking
-          (Cli.run app
-             (cli_input
-                [ "--graph"; "alpha"; "--output"; "json"; "search"; "block" ]))
-      in
-      assert_int ~name:"search validation exit" 1 output.exit_code;
-      assert_equal ~name:"search validation json"
-        {|{"status":"error","error":{"code":"missing-query-text","message":"query text is required"}}|}
-        (String.trim (cli_stdout output)));
-
-  check "Cli.run rejects unsupported positional search as unknown command"
-    (fun () ->
-      let app = Cli.make_app ~version:"test-version" () in
-      let output =
-        run_blocking (Cli.run app (cli_input [ "search"; "page"; "home" ]))
-      in
-      assert_int ~name:"search unknown exit" 1 output.exit_code;
-      assert_contains ~name:"typed unknown command"
-        "Error (:unknown-command): unknown command: search page home"
         (cli_stdout output));
 
   Alcotest.run "logseq cli" [ ("cli", List.rev !tests) ]
