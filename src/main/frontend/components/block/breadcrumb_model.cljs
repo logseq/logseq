@@ -276,7 +276,7 @@
 
    Options:
      :show-page?     - include the page segment (default true)
-     :max-visible    - max total visible segments (default 4)
+     :max-visible    - max visible segments before middle overflow (default 4)
      :nearest-count  - always show this many nearest-parent segments (default 2)
 
    Returns:
@@ -305,7 +305,12 @@
             prefix (vec (take keep-first segs))
             suffix (vec (take-last suffix-count segs))
             hidden (vec (subvec segs keep-first (- total suffix-count)))]
-        {:visible-prefix prefix
-         :hidden hidden
-         :visible-suffix suffix
-         :overflow? true}))))
+        (if (= 1 (count hidden))
+          {:visible-prefix (into prefix hidden)
+           :hidden []
+           :visible-suffix suffix
+           :overflow? false}
+          {:visible-prefix prefix
+           :hidden hidden
+           :visible-suffix suffix
+           :overflow? true})))))

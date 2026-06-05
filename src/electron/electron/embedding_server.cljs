@@ -2,6 +2,7 @@
   (:require ["child_process" :as child-process]
             ["fs-extra" :as fs]
             ["path" :as node-path]
+            [clojure.string :as string]
             [promesa.core :as p]))
 
 (def ^:private default-host "127.0.0.1")
@@ -9,8 +10,8 @@
 (def ^:private embedding-url-env "LOGSEQ_EMBEDDINGS_URL")
 (def ^:private runtime-dir-name "embedding-server")
 (def ^:private venv-name ".venv")
-(def ^:private dependency "sentence-transformers")
-(def ^:private deps-stamp-name "deps-v1.ok")
+(def ^:private dependencies ["sentence-transformers" "httpx[socks]"])
+(def ^:private deps-stamp-name "deps-v2.ok")
 (def ^:private log-file-name "embedding-server.log")
 (def ^:private ready-timeout-ms 120000)
 (def ^:private ready-poll-ms 100)
@@ -198,10 +199,10 @@
                 (run-command-fn python-command ["-m" "venv" venv-name] {:cwd runtime-dir
                                                                          :logger logger}))
             _ (when needs-deps?
-                (run-command-fn venv-python ["-m" "pip" "install" dependency] {:cwd runtime-dir
-                                                                               :logger logger}))]
+                (run-command-fn venv-python (into ["-m" "pip" "install"] dependencies) {:cwd runtime-dir
+                                                                                        :logger logger}))]
       (when needs-deps?
-        (write-file! deps-stamp (str dependency "\n")))
+        (write-file! deps-stamp (str (string/join "\n" dependencies) "\n")))
       cfg)))
 
 (defn start!
