@@ -7,8 +7,8 @@ module HTTP = struct
     Cohttp.Header.add_unless_exists headers "connection" "close"
 
   let timeout_seconds = function
-    | Some timeout_span
-      when Ptime.Span.compare timeout_span Ptime.Span.zero > 0 ->
+    | Some timeout_span when Ptime.Span.compare timeout_span Ptime.Span.zero > 0
+      ->
         Some (Ptime.Span.to_float_s timeout_span)
     | _ -> None
 
@@ -27,8 +27,7 @@ module HTTP = struct
     let headers = request_headers headers in
     let operation () =
       Lwt.pause () >>= fun () ->
-      Cohttp_lwt_unix.Client.call ~ctx ~headers ~body ~chunked:false
-        meth uri
+      Cohttp_lwt_unix.Client.call ~ctx ~headers ~body ~chunked:false meth uri
     in
     Cli_effect.of_lwt (with_timeout timeout_span operation)
 end
