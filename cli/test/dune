@@ -89,7 +89,4 @@
  (alias runtest)
  (deps wasm_agent_bridge_codex_lifecycle.js ../bin/main.bc.js)
  (action
-  (run
-   node
-   wasm_agent_bridge_codex_lifecycle.js
-   %{dep:../bin/main.bc.js})))
+  (run node wasm_agent_bridge_codex_lifecycle.js %{dep:../bin/main.bc.js})))

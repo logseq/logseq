@@ -288,15 +288,15 @@ let request req =
   let uri = uri_of_url req.url in
   let headers = Cohttp.Header.of_list req.headers in
   let body =
-    req.body
-    |> Option.value ~default:""
-    |> Cohttp_lwt.Body.of_string
+    req.body |> Option.value ~default:"" |> Cohttp_lwt.Body.of_string
   in
   Cli_effect.bind
     (Cli_platform.HTTP.request ?timeout_span:req.timeout_span
-       (method_of_string req.method_) uri ~headers ~body)
+       (method_of_string req.method_)
+       uri ~headers ~body)
     (fun (response, body) ->
-      Cli_effect.bind (Cli_effect.of_lwt (Cohttp_lwt.Body.to_string body))
+      Cli_effect.bind
+        (Cli_effect.of_lwt (Cohttp_lwt.Body.to_string body))
         (fun body ->
           let status =
             Cohttp.Response.status response |> Cohttp.Code.code_of_status
@@ -799,7 +799,8 @@ let connect_events_fetch config on_event =
   let controller =
     try
       Some
-        (Js_runtime.new_obj (Js_runtime.eval_string "globalThis.AbortController")
+        (Js_runtime.new_obj
+           (Js_runtime.eval_string "globalThis.AbortController")
            [||])
     with _ -> None
   in

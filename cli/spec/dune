@@ -10,7 +10,15 @@
 (library
  (name logseq_cli_spec)
  (wrapped false)
- (libraries cmdliner lwt edn_ocaml ptime cohttp cohttp-lwt uri logseq_cli_platform)
+ (libraries
+  cmdliner
+  lwt
+  edn_ocaml
+  ptime
+  cohttp
+  cohttp-lwt
+  uri
+  logseq_cli_platform)
  (modules
   (:standard \ Cli_effect Cli_platform))
  (modules_without_implementation Command_spec)
