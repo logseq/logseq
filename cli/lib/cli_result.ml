@@ -75,13 +75,13 @@ let is_updated_at_field label =
 let is_datetime_field label =
   is_created_at_field label || is_updated_at_field label
 
-let now_ms () = Int64.of_float (Cli_unix.gettimeofday () *. 1000.)
-
 let field_value_text label value =
   let text = value_text value in
   match Int64.of_string_opt text with
-  | Some then_ms when is_datetime_field label ->
-      Humanize_types.relative_datetime ~then_ms ~now_ms:(now_ms ())
+  | Some epoch_ms when is_datetime_field label ->
+      Humanize_types.relative_datetime
+        ~then_time:(Ptime_util.time_of_epoch_ms epoch_ms)
+        ~now_time:(Ptime_util.now ())
   | _ -> text
 
 let parse_positive_int64 text =
@@ -104,7 +104,7 @@ let graph_info_field_value_text label value =
   match graph_info_timestamp_seconds value with
   | Some then_seconds when is_datetime_field label ->
       Humanize.datetime
-        ~now:(Int64.of_float (Cli_unix.gettimeofday ()))
+        ~now:(Ptime_util.time_to_epoch_seconds (Ptime_util.now ()))
         then_seconds
   | _ -> value_text value
 

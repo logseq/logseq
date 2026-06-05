@@ -157,7 +157,8 @@ let fetch_uuid_entities config repo uuids =
     |> List.map lower_uuid |> unique_preserve_order
   in
   let open Cli_effect in
-  bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+  bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+    (function
     | Error _ -> pure []
     | Ok invoke_config ->
         let rec pull acc = function

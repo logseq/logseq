@@ -10,3 +10,4 @@ let catch value handler = Lwt.catch (fun () -> value) handler
 let finally value f = Lwt.finalize (fun () -> value) f
 let of_lwt value = value
 let to_lwt value = value
+let sleep span = Js_of_ocaml_lwt.Lwt_js.sleep (Ptime.Span.to_float_s span)

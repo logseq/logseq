@@ -581,8 +581,7 @@ let linked_ref_ids value =
 
 let fetch_linked_references config repo root_id =
   let open Cli_effect in
-  bind
-    (Transport.thread_api_get_block_refs config ~repo ~block_id:root_id)
+  bind (Transport.thread_api_get_block_refs config ~repo ~block_id:root_id)
     (fun refs ->
       let rec pull_blocks acc = function
         | [] -> pure (List.rev acc)
@@ -686,7 +685,8 @@ let pull_link_target config repo link =
   | Some lookup ->
       bind
         (Transport.thread_api_pull config ~repo
-           ~selector:(Edn_util.expect_vector_t "show pull selector" pull_selector)
+           ~selector:
+             (Edn_util.expect_vector_t "show pull selector" pull_selector)
            ~lookup)
         (fun target ->
           if missing_entity target then
@@ -1346,8 +1346,7 @@ let fetch_breadcrumb_line invoke_config (action : action) root =
   | Some root_id when ordinary_block_root root ->
       bind
         (Transport.thread_api_get_block_parents invoke_config ~repo:action.repo
-           ~block_id:root_id)
-        (fun value ->
+           ~block_id:root_id) (fun value ->
           let parents = Option.value (Edn_util.as_seq value) ~default:[] in
           pure (render_breadcrumb_line parents))
   | _ -> pure None
@@ -1454,7 +1453,8 @@ let multi_tree_message mode config action root linked_references footer metadata
 
 let build_tree_data config action =
   let open Cli_effect in
-  bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false) (function
+  bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
+    (function
     | Error _ ->
         pure
           {
@@ -1494,7 +1494,8 @@ let render_tree_text data _ = Option.value (Block.label data.root) ~default:""
 
 let execute_single mode action config target =
   let open Cli_effect in
-  bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false) (function
+  bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
+    (function
     | Error err -> pure (Cli_result.error ~command:Command_id.Show mode err)
     | Ok invoke_config ->
         bind (pull_entity invoke_config action.repo target) (fun value ->
@@ -1541,7 +1542,9 @@ let execute action config mode =
     match action.target with
     | By_ids ids ->
         let open Cli_effect in
-        bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false) (function
+        bind
+          (Server_runtime.ensure_server config action.repo
+             ~create_empty_db:false) (function
           | Error err ->
               pure (Cli_result.error ~command:Command_id.Show mode err)
           | Ok invoke_config ->

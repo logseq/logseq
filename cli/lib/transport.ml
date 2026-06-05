@@ -3,14 +3,14 @@ type request = {
   url : Cli_primitive.url;
   headers : (string * string) list;
   body : string option;
-  timeout_ms : Cli_primitive.duration_ms option;
+  timeout_span : Ptime.span option;
 }
 
 type response = { status : int; body : string }
 
 type invoke_config = {
   base_url : Cli_primitive.url;
-  timeout_ms : Cli_primitive.duration_ms;
+  timeout_span : Ptime.span;
   profile_session : Profile_types.session option;
 }
 
@@ -34,11 +34,6 @@ module Js_runtime = struct
   external callback : ('a -> 'b) -> t = "caml_js_wrap_callback"
   external eval_string : string -> t = "caml_js_eval_string"
   external inject : 'a -> t = "%identity"
-
-  let number value =
-    fun_call
-      (eval_string "(function(value) { return Number(value); })")
-      [| string (Printf.sprintf "%.0f" value) |]
 
   let bool value =
     fun_call
@@ -210,41 +205,6 @@ let read_all ic =
    with End_of_file -> ());
   Buffer.contents buffer
 
-let read_chunked_body ic =
-  let buffer = Buffer.create 256 in
-  let rec loop () =
-    let size_line = input_line ic |> trim_cr in
-    let size_text =
-      match String.index_opt size_line ';' with
-      | Some idx -> String.sub size_line 0 idx
-      | None -> size_line
-    in
-    let size = int_of_string ("0x" ^ String.trim size_text) in
-    if size = 0 then (
-      ignore (input_line ic);
-      Buffer.contents buffer)
-    else
-      let bytes = Bytes.create size in
-      really_input ic bytes 0 size;
-      Buffer.add_string buffer (Bytes.to_string bytes);
-      ignore (input_line ic);
-      loop ()
-  in
-  loop ()
-
-let read_body ic headers =
-  match List.assoc_opt "transfer-encoding" headers with
-  | Some value when String.lowercase_ascii value = "chunked" ->
-      read_chunked_body ic
-  | _ -> (
-      match List.assoc_opt "content-length" headers with
-      | Some value ->
-          let len = int_of_string value in
-          let bytes = Bytes.create len in
-          really_input ic bytes 0 len;
-          Bytes.to_string bytes
-      | None -> read_all ic)
-
 let parse_status line =
   match String.split_on_char ' ' line with
   | _http :: code :: _ -> int_of_string code
@@ -319,189 +279,31 @@ let http_error_message status body =
   | None ->
       Option.value (json_string_field_from "message" body) ~default:fallback
 
-let timeout_seconds = function
-  | Some timeout_ms when Int64.compare timeout_ms 0L > 0 ->
-      Some (Int64.to_float timeout_ms /. 1000.)
-  | _ -> None
+let method_of_string method_ =
+  method_ |> String.uppercase_ascii |> Cohttp.Code.method_of_string
 
-let apply_socket_timeout socket timeout_ms =
-  match timeout_seconds timeout_ms with
-  | None -> ()
-  | Some seconds ->
-      Cli_unix.setsockopt_float socket Cli_unix.SO_RCVTIMEO seconds;
-      Cli_unix.setsockopt_float socket Cli_unix.SO_SNDTIMEO seconds
-
-let is_timeout_error = function
-  | Cli_unix.EAGAIN | Cli_unix.EWOULDBLOCK | Cli_unix.ETIMEDOUT -> true
-  | _ -> false
-
-let request_blocking req =
-  try
-    let url = parse_http_url req.url in
-    let sockaddr =
-      Cli_unix.ADDR_INET
-        ((Cli_unix.gethostbyname url.host).Cli_unix.h_addr_list.(0), url.port)
-    in
-    let socket = Cli_unix.socket Cli_unix.PF_INET Cli_unix.SOCK_STREAM 0 in
-    Fun.protect
-      ~finally:(fun () ->
-        try Cli_unix.close socket with Cli_unix.Cli_unix_error _ -> ())
-      (fun () ->
-        apply_socket_timeout socket req.timeout_ms;
-        Cli_unix.connect socket sockaddr;
-        let ic = Cli_unix.in_channel_of_descr socket in
-        let oc = Cli_unix.out_channel_of_descr socket in
-        let body = Option.value req.body ~default:"" in
-        let headers =
-          [
-            ("Host", url.host ^ ":" ^ string_of_int url.port);
-            ("Connection", "close");
-            ("Content-Length", string_of_int (String.length body));
-          ]
-          @ req.headers
-        in
-        Printf.fprintf oc "%s %s HTTP/1.1\r\n" req.method_ url.path;
-        List.iter
-          (fun (key, value) -> Printf.fprintf oc "%s: %s\r\n" key value)
-          headers;
-        Printf.fprintf oc "\r\n%s%!" body;
-        let status = input_line ic |> trim_cr |> parse_status in
-        let headers = read_headers ic in
-        let body = read_body ic headers in
-        if status >= 200 && status <= 299 then { status; body }
-        else failwith (http_error_message status body))
-  with
-  | Cli_unix.Cli_unix_error (code, _, _) when is_timeout_error code ->
-      failwith "request timeout"
-  | Sys_blocked_io when Option.is_some (timeout_seconds req.timeout_ms) ->
-      failwith "request timeout"
-
-let js_error_message error =
-  try
-    let text : Js_runtime.t = Js_runtime.meth_call error "toString" [||] in
-    Js_runtime.to_string text
-  with _ -> "fetch failed"
-
-let request_fetch req =
-  let task, resolver = Lwt.wait () in
-  let timeout_handle = ref None in
-  let clear_timeout () =
-    match !timeout_handle with
-    | None -> ()
-    | Some handle -> (
-        timeout_handle := None;
-        try
-          let clear_timeout = Js_runtime.variable "clearTimeout" in
-          ignore
-            (Js_runtime.fun_call clear_timeout [| Js_runtime.inject handle |]
-              : Js_runtime.t)
-        with _ -> ())
-  in
-  let wake value =
-    if Lwt.is_sleeping task then (
-      clear_timeout ();
-      Lwt.wakeup resolver value)
-  in
-  let wake_exn exn =
-    if Lwt.is_sleeping task then (
-      clear_timeout ();
-      Lwt.wakeup_exn resolver exn)
-  in
-  let string value = Js_runtime.inject (Js_runtime.string value) in
-  let headers =
-    Js_runtime.obj
-      (Array.of_list
-         (List.map (fun (key, value) -> (key, string value)) req.headers))
-  in
-  let timeout_fields, install_timeout =
-    match timeout_seconds req.timeout_ms with
-    | None -> ([], fun () -> ())
-    | Some _ ->
-        let controller =
-          try
-            Some
-              (Js_runtime.new_obj (Js_runtime.variable "AbortController") [||])
-          with _ -> None
-        in
-        let fields =
-          match controller with
-          | None -> []
-          | Some controller ->
-              let signal : Js_runtime.t = Js_runtime.get controller "signal" in
-              [ ("signal", Js_runtime.inject signal) ]
-        in
-        let install () =
-          try
-            let set_timeout = Js_runtime.variable "setTimeout" in
-            let on_timeout () =
-              (match controller with
-              | None -> ()
-              | Some controller -> (
-                  try
-                    ignore
-                      (Js_runtime.meth_call controller "abort" [||]
-                        : Js_runtime.t)
-                  with _ -> ()));
-              wake_exn (Failure "request timeout");
-              Js_runtime.inject ()
-            in
-            let handle : Js_runtime.t =
-              Js_runtime.fun_call set_timeout
-                [|
-                  Js_runtime.callback on_timeout;
-                  Js_runtime.number
-                    (Int64.to_float (Option.value req.timeout_ms ~default:0L));
-                |]
-            in
-            timeout_handle := Some handle
-          with _ -> ()
-        in
-        (fields, install)
-  in
-  let fields =
-    [ ("method", string req.method_); ("headers", Js_runtime.inject headers) ]
-    @ timeout_fields
-    @ match req.body with None -> [] | Some body -> [ ("body", string body) ]
-  in
-  let options = Js_runtime.obj (Array.of_list fields) in
-  let fetch = Js_runtime.variable "fetch" in
-  install_timeout ();
-  let promise =
-    Js_runtime.fun_call fetch [| string req.url; Js_runtime.inject options |]
-  in
-  let on_text status text =
-    let body = Js_runtime.to_string text in
-    if status >= 200 && status <= 299 then wake { status; body }
-    else wake_exn (Failure (http_error_message status body));
-    text
-  in
-  let on_response response =
-    let status : int = Js_runtime.get response "status" in
-    let text_promise = Js_runtime.meth_call response "text" [||] in
-    ignore
-      (Js_runtime.meth_call text_promise "then"
-         [| Js_runtime.callback (on_text status) |]);
-    response
-  in
-  let on_error error =
-    wake_exn (Failure (js_error_message error));
-    error
-  in
-  ignore
-    (Js_runtime.meth_call promise "then"
-       [| Js_runtime.callback on_response; Js_runtime.callback on_error |]);
-  task
+let uri_of_url = Uri.of_string
 
 let request req =
-  if js_backend () then
-    try Cli_effect.of_lwt (request_fetch req) with exn -> Cli_effect.error exn
-  else
-    try Cli_effect.pure (request_blocking req)
-    with exn ->
-      let message = Printexc.to_string exn in
-      if starts_with ~prefix:"Failure(\"Error: caml_unix_" message then
-        Cli_effect.of_lwt (request_fetch req)
-      else Cli_effect.error exn
+  let uri = uri_of_url req.url in
+  let headers = Cohttp.Header.of_list req.headers in
+  let body =
+    req.body
+    |> Option.value ~default:""
+    |> Cohttp_lwt.Body.of_string
+  in
+  Cli_effect.bind
+    (Cli_platform.HTTP.request ?timeout_span:req.timeout_span
+       (method_of_string req.method_) uri ~headers ~body)
+    (fun (response, body) ->
+      Cli_effect.bind (Cli_effect.of_lwt (Cohttp_lwt.Body.to_string body))
+        (fun body ->
+          let status =
+            Cohttp.Response.status response |> Cohttp.Code.code_of_status
+          in
+          if status >= 200 && status <= 299 then
+            Cli_effect.pure { status; body }
+          else Cli_effect.error (Failure (http_error_message status body))))
 
 let method_name method_ =
   let method_ = Edn_util.keyword_to_string method_ |> String.trim in
@@ -688,13 +490,14 @@ let invoke config method_ args =
                  ("Accept", "application/json");
                ];
              body = Some (invoke_body method_ args);
-             timeout_ms = Some config.timeout_ms;
+             timeout_span = Some config.timeout_span;
            }))
 
 let repo_value repo = Edn_util.string (Cli_primitive.string_of_repo repo)
 
 let thread_api_apply_outliner_ops config ~(repo : Cli_primitive.repo)
-    ~(ops : Edn_ocaml.vector Edn_ocaml.t) ~(options : Edn_ocaml.map Edn_ocaml.t) =
+    ~(ops : Edn_ocaml.vector Edn_ocaml.t) ~(options : Edn_ocaml.map Edn_ocaml.t)
+    =
   invoke config
     (thread_api_method "apply-outliner-ops")
     [ repo_value repo; Edn_util.any ops; Edn_util.any options ]
@@ -740,8 +543,8 @@ let thread_api_create_or_open_db config ~(repo : Cli_primitive.repo)
     (thread_api_method "create-or-open-db")
     [ repo_value repo; Edn_util.any options ]
 
-let thread_api_db_sync_download_graph_by_id config
-    ~(repo : Cli_primitive.repo) ~graph_id ~graph_e2ee =
+let thread_api_db_sync_download_graph_by_id config ~(repo : Cli_primitive.repo)
+    ~graph_id ~graph_e2ee =
   invoke config
     (thread_api_method "db-sync-download-graph-by-id")
     [ repo_value repo; Edn_util.string graph_id; Edn_util.bool graph_e2ee ]
@@ -777,9 +580,7 @@ let thread_api_db_sync_stop config =
   invoke config (thread_api_method "db-sync-stop") []
 
 let thread_api_db_sync_upload_graph config ~(repo : Cli_primitive.repo) =
-  invoke config
-    (thread_api_method "db-sync-upload-graph")
-    [ repo_value repo ]
+  invoke config (thread_api_method "db-sync-upload-graph") [ repo_value repo ]
 
 let thread_api_export_edn config ~(repo : Cli_primitive.repo)
     ~(options : Edn_ocaml.map Edn_ocaml.t) =
@@ -803,25 +604,19 @@ let thread_api_get_e2ee_password config ~refresh_token =
     [ Edn_util.string refresh_token ]
 
 let thread_api_import_db_binary config ~(repo : Cli_primitive.repo) ~data =
-  invoke config
-    (thread_api_method "import-db-binary")
-    [ repo_value repo; data ]
+  invoke config (thread_api_method "import-db-binary") [ repo_value repo; data ]
 
 let thread_api_import_edn config ~(repo : Cli_primitive.repo) ~data =
-  invoke config
-    (thread_api_method "import-edn")
-    [ repo_value repo; data ]
+  invoke config (thread_api_method "import-edn") [ repo_value repo; data ]
 
 let thread_api_pull config ~(repo : Cli_primitive.repo)
     ~(selector : Edn_ocaml.vector Edn_ocaml.t) ~lookup =
-  invoke config
-    (thread_api_method "pull")
+  invoke config (thread_api_method "pull")
     [ repo_value repo; Edn_util.any selector; lookup ]
 
 let thread_api_q config ~(repo : Cli_primitive.repo)
     ~(query : Edn_ocaml.vector Edn_ocaml.t) =
-  invoke config (thread_api_method "q")
-    [ repo_value repo; Edn_util.any query ]
+  invoke config (thread_api_method "q") [ repo_value repo; Edn_util.any query ]
 
 let thread_api_set_db_sync_config config ~config:sync_config =
   invoke config
@@ -914,14 +709,14 @@ let decode_event event_text =
           when event_type <> "rtc-log"
                && String.length data > max_non_progress_event_decode_bytes ->
             Some (keyword_from_string event_type, Edn_util.nil)
-        | _ ->
+        | _ -> (
             let event = value_of_json data in
             let decoded_payload =
               match value_get_string_key "payload" event with
               | Some payload -> decode_event_payload payload
               | None -> Edn_util.nil
             in
-            (match Edn_util.as_vector decoded_payload with
+            match Edn_util.as_vector decoded_payload with
             | Some [ event_type_value; payload ] -> (
                 match Edn_util.as_keyword_t event_type_value with
                 | Some event_type -> Some (event_type, payload)
@@ -1002,7 +797,10 @@ let connect_events_fetch config on_event =
     with _ -> ()
   in
   let controller =
-    try Some (Js_runtime.new_obj (Js_runtime.variable "AbortController") [||])
+    try
+      Some
+        (Js_runtime.new_obj (Js_runtime.eval_string "globalThis.AbortController")
+           [||])
     with _ -> None
   in
   let cancel_reader reader =
@@ -1012,8 +810,7 @@ let connect_events_fetch config on_event =
     with _ -> ()
   in
   let abort_controller controller =
-    try
-      ignore (Js_runtime.meth_call controller "abort" [||] : Js_runtime.t)
+    try ignore (Js_runtime.meth_call controller "abort" [||] : Js_runtime.t)
     with _ -> ()
   in
   let close () =
@@ -1044,21 +841,19 @@ let connect_events_fetch config on_event =
       let promise = Js_runtime.meth_call reader "read" [||] in
       promise_then promise
         ~ok:(fun result ->
-          if not !closed then (
-            let done_ =
-              Js_runtime.to_bool (Js_runtime.get result "done")
-            in
-            if not done_ then (
-              let value : Js_runtime.t = Js_runtime.get result "value" in
-              let options =
-                Js_runtime.obj [| ("stream", Js_runtime.bool true) |]
-              in
-              let chunk : Js_runtime.t =
-                Js_runtime.meth_call decoder "decode"
-                  [| Js_runtime.inject value; Js_runtime.inject options |]
-              in
-              consume_chunk_text (Js_runtime.to_string chunk);
-              read_loop reader decoder));
+          (if not !closed then
+             let done_ = Js_runtime.to_bool (Js_runtime.get result "done") in
+             if not done_ then (
+               let value : Js_runtime.t = Js_runtime.get result "value" in
+               let options =
+                 Js_runtime.obj [| ("stream", Js_runtime.bool true) |]
+               in
+               let chunk : Js_runtime.t =
+                 Js_runtime.meth_call decoder "decode"
+                   [| Js_runtime.inject value; Js_runtime.inject options |]
+               in
+               consume_chunk_text (Js_runtime.to_string chunk);
+               read_loop reader decoder));
           result)
         ~error:on_error
   in
@@ -1077,7 +872,9 @@ let connect_events_fetch config on_event =
     if ok then
       try
         let body : Js_runtime.t = Js_runtime.get response "body" in
-        let reader : Js_runtime.t = Js_runtime.meth_call body "getReader" [||] in
+        let reader : Js_runtime.t =
+          Js_runtime.meth_call body "getReader" [||]
+        in
         let decoder : Js_runtime.t =
           Js_runtime.new_obj (Js_runtime.variable "TextDecoder") [||]
         in
@@ -1088,14 +885,9 @@ let connect_events_fetch config on_event =
     else wake_subscription ();
     response
   in
-  let headers =
-    Js_runtime.obj [| ("Accept", string "text/event-stream") |]
-  in
+  let headers = Js_runtime.obj [| ("Accept", string "text/event-stream") |] in
   let fields =
-    [
-      ("method", string "GET");
-      ("headers", Js_runtime.inject headers);
-    ]
+    [ ("method", string "GET"); ("headers", Js_runtime.inject headers) ]
     @
     match controller with
     | Some controller ->
@@ -1104,13 +896,12 @@ let connect_events_fetch config on_event =
     | None -> []
   in
   let options = Js_runtime.obj (Array.of_list fields) in
-  let fetch = Js_runtime.variable "fetch" in
+  let fetch = Js_runtime.eval_string "globalThis.fetch" in
   let promise =
     Js_runtime.fun_call fetch
       [| string (base_url ^ "/v1/events"); Js_runtime.inject options |]
   in
-  ignore
-    (promise_then promise ~ok:on_response ~error:on_error);
+  ignore (promise_then promise ~ok:on_response ~error:on_error);
   wake_subscription ();
   Cli_effect.of_lwt task
 

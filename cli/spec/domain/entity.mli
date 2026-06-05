@@ -8,9 +8,9 @@ type t = {
   title : string option;
   kind : kind;
   tags : Cli_primitive.keyword list;
-  created_at : Cli_primitive.timestamp_ms option;
-  updated_at : Cli_primitive.timestamp_ms option;
-  deleted_at : Cli_primitive.timestamp_ms option;
+  created_at : Ptime.t option;
+  updated_at : Ptime.t option;
+  deleted_at : Ptime.t option;
   raw : Edn_ocaml.any;
 }
 

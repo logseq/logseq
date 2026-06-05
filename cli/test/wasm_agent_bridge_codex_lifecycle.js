@@ -135,7 +135,7 @@ server.listen(0, "127.0.0.1", () => {
     stderr += chunk;
   });
 
-  const deadline = Date.now() + 5000;
+  let remainingAttempts = 50;
   const interval = setInterval(() => {
     if (fs.existsSync(markerPath)) {
       clearInterval(interval);
@@ -152,7 +152,7 @@ server.listen(0, "127.0.0.1", () => {
         console.error(error.message);
         finish(1, child);
       }
-    } else if (Date.now() > deadline) {
+    } else if (--remainingAttempts <= 0) {
       clearInterval(interval);
       console.error(`fake codex did not stay alive long enough to write marker\nstdout:\n${stdout}\nstderr:\n${stderr}`);
       finish(1, child);

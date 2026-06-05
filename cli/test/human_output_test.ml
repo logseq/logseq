@@ -89,9 +89,9 @@ let test_config () =
     repo = None;
     root_dir = defaults.root_dir;
     config_path = Cli_config.default_config_path defaults.root_dir;
-    timeout_ms = defaults.timeout_ms;
-    login_timeout_ms = defaults.login_timeout_ms;
-    logout_timeout_ms = defaults.logout_timeout_ms;
+    timeout_span = defaults.timeout_span;
+    login_timeout_span = defaults.login_timeout_span;
+    logout_timeout_span = defaults.logout_timeout_span;
     list_title_max_display_width = defaults.list_title_max_display_width;
     output_format = None;
     verbose = false;
@@ -140,7 +140,8 @@ let cases () =
 
   assert_equal ~name:"humanize relative datetime uses natural language"
     "1 hour ago"
-    (Humanize_types.relative_datetime ~then_ms:0L ~now_ms:3_600_000L);
+    (Humanize_types.relative_datetime ~then_time:Ptime.epoch
+       ~now_time:(Ptime_util.time_of_epoch_ms 3_600_000L));
 
   let many_items = List.init 1000 (fun index -> Edn_util.int (index + 1)) in
   let result = Cli_result.ok Output.Mode.Human (Cli_result.Items many_items) in

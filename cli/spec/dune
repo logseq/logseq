@@ -1,15 +1,23 @@
 (include_subdirs unqualified)
 
 (library
+ (name logseq_cli_platform)
+ (wrapped false)
+ (libraries lwt ptime cohttp cohttp-lwt uri)
+ (modules Cli_effect Cli_platform)
+ (virtual_modules Cli_effect Cli_platform))
+
+(library
  (name logseq_cli_spec)
  (wrapped false)
- (libraries cmdliner lwt edn_ocaml)
+ (libraries cmdliner lwt edn_ocaml ptime cohttp cohttp-lwt uri logseq_cli_platform)
+ (modules
+  (:standard \ Cli_effect Cli_platform))
  (modules_without_implementation Command_spec)
  (virtual_modules
   ; core
   Cli_primitive
   Error
-  Cli_effect
   Output
   ; domain
   Selector

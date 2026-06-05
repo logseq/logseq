@@ -1,7 +1,16 @@
 (library
  (name logseq_cli)
  (implements logseq_cli_spec)
- (libraries cmdliner lwt transit edn_ocaml humanize unix)
+ (libraries
+  cmdliner
+  lwt
+  transit
+  edn_ocaml
+  humanize
+  ptime
+  ptime.clock
+  logseq_cli_platform
+  unix)
  (foreign_stubs
   (language c)
   (names js_bytecode_stubs)))
