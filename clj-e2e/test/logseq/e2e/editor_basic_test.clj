@@ -10,7 +10,8 @@
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.page :as p]
    [logseq.e2e.util :as util]
-   [wally.main :as w]))
+   [wally.main :as w]
+   [wally.repl :as repl]))
 
 (use-fixtures :once fixtures/open-page)
 

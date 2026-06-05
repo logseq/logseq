@@ -259,6 +259,7 @@
    :editor/add-property                     {:binding (if mac? "mod+p" "ctrl+alt+p")
                                              :fn      (fn [e]
                                                         (when e (util/stop e))
+                                                        (state/pub-event! [:editor/hide-action-bar])
                                                         (state/pub-event! [:editor/new-property {}]))}
    :editor/set-tags                         {:binding "p t"
                                              :selection? true

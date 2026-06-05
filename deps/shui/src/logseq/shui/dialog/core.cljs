@@ -5,7 +5,8 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.util :as util]
             [medley.core :as medley]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.shui.popup.core :as popup-core]))
 
 ;; provider
 (def dialog (util/ui-wrap "Dialog"))

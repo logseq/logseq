@@ -46,7 +46,8 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.shui.dialog.core :as shui-dialog]))
 
 (defn- <asset-file-ready?
   [asset file-name]
@@ -347,7 +348,8 @@
 (defevent! :editor/show-action-bar []
   (let [selection (state/get-selection-blocks)
         first-visible-block (some #(when (util/el-visible-in-viewport? % true) %) selection)]
-    (when first-visible-block
+    (when (and first-visible-block
+               (not (shui-dialog/has-dialog?)))
       (hide-action-bar!)
       (shui/popup-show!
        first-visible-block
