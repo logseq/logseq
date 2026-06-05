@@ -96,7 +96,9 @@
 (defn- event-related-target [^js event]
   (let [^js native-event (native-event event)]
     (or (some-> event (.-relatedTarget))
-        (some-> native-event (.-relatedTarget)))))
+        (some-> native-event (.-relatedTarget))
+        (some-> event (.-toElement))
+        (some-> native-event (.-toElement)))))
 
 (defn- close-targets
   [^js event-details]
@@ -109,7 +111,7 @@
 (defn- popup-content-target?
   [target]
   (and (element? target)
-       (some? (.closest target ".ui__dropdown-menu-content, .ui__dropdown-menu-sub-content, .ui__popover-content, .ui__context-menu-content"))))
+       (some? (.closest target ".ui__dropdown-menu-content, .ui__dropdown-menu-sub-content, .ui__popover-content, .ui__context-menu-content, .ui__context-menu-sub-content"))))
 
 (defn- popup-focus-retained?
   [targets]
