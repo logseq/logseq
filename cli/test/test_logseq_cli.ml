@@ -3,6 +3,20 @@ let check name f = tests := Alcotest.test_case name `Quick f :: !tests
 let failf = Alcotest.failf
 let run_blocking value = Lwt_main.run (Cli_effect.to_lwt value)
 
+let run_http_request ?timeout_span method_ url ~headers ~body =
+  run_blocking
+    (Cli_effect.bind
+       (Cli_platform.HTTP.request ?timeout_span method_ (Uri.of_string url)
+          ~headers:(Cohttp.Header.of_list headers)
+          ~body:(Cohttp_lwt.Body.of_string body))
+       (fun (response, body) ->
+         Cli_effect.bind
+           (Cli_effect.of_lwt (Cohttp_lwt.Body.to_string body))
+           (fun body ->
+             Cli_effect.pure
+               ( Cohttp.Response.status response |> Cohttp.Code.code_of_status,
+                 body ))))
+
 let test_sleep_span span =
   Lwt_unix.sleep (Ptime_util.span_to_seconds_float span)
 
@@ -1041,51 +1055,39 @@ let () =
       assert_int ~name:"exit code" 0 output.exit_code;
       assert_contains ~name:"zsh completion" "#compdef logseq" (stdout output));
 
-  check "Transport.request performs an HTTP round trip" (fun () ->
+  check "Cli_platform.HTTP.request performs an HTTP round trip" (fun () ->
       with_http_server
         (fun request ->
           assert_equal ~name:"request line" "GET /healthz HTTP/1.1"
             request.request_line;
           (200, [ ("Content-Type", "application/json") ], {|{"status":"ready"}|}))
         (fun base_url ->
-          let response =
-            run_blocking
-              (Transport.request
-                 {
-                   method_ = "GET";
-                   url = base_url ^ "/healthz";
-                   headers = [ ("Accept", "application/json") ];
-                   body = None;
-                   timeout_span = Some (Ptime_util.span_of_ms 1000L);
-                 })
+          let status, body =
+            run_http_request `GET (base_url ^ "/healthz")
+              ~headers:[ ("Accept", "application/json") ]
+              ~body:""
+              ~timeout_span:(Ptime_util.span_of_ms 1000L)
           in
-          assert_int ~name:"http status" 200 response.Transport.status;
-          assert_equal ~name:"http body" {|{"status":"ready"}|}
-            response.Transport.body));
+          assert_int ~name:"http status" 200 status;
+          assert_equal ~name:"http body" {|{"status":"ready"}|} body));
 
-  check "Transport.request decodes chunked HTTP responses" (fun () ->
+  check "Cli_platform.HTTP.request decodes chunked HTTP responses" (fun () ->
       with_http_server
         (fun _request ->
           ( 200,
             [ ("Transfer-Encoding", "chunked") ],
             "12\r\n{\"status\":\"ready\"}\r\n0\r\n\r\n" ))
         (fun base_url ->
-          let response =
-            run_blocking
-              (Transport.request
-                 {
-                   method_ = "GET";
-                   url = base_url ^ "/healthz";
-                   headers = [ ("Accept", "application/json") ];
-                   body = None;
-                   timeout_span = Some (Ptime_util.span_of_ms 1000L);
-                 })
+          let status, body =
+            run_http_request `GET (base_url ^ "/healthz")
+              ~headers:[ ("Accept", "application/json") ]
+              ~body:""
+              ~timeout_span:(Ptime_util.span_of_ms 1000L)
           in
-          assert_int ~name:"chunked status" 200 response.Transport.status;
-          assert_equal ~name:"chunked body" {|{"status":"ready"}|}
-            response.Transport.body));
+          assert_int ~name:"chunked status" 200 status;
+          assert_equal ~name:"chunked body" {|{"status":"ready"}|} body));
 
-  check "Transport.request surfaces API error messages" (fun () ->
+  check "Transport thread API wrapper surfaces API error messages" (fun () ->
       with_http_server
         (fun _request ->
           ( 400,
@@ -1096,20 +1098,22 @@ let () =
             try
               ignore
                 (run_blocking
-                   (Transport.request
+                   (Transport.thread_api_q
                       {
-                        method_ = "GET";
-                        url = base_url ^ "/healthz";
-                        headers = [ ("Accept", "application/json") ];
-                        body = None;
-                        timeout_span = Some (Ptime_util.span_of_ms 1000L);
-                      }));
+                        base_url;
+                        timeout_span = Ptime_util.span_of_ms 1000L;
+                        profile_session = None;
+                      }
+                      ~repo:(repo "alpha")
+                      ~query:
+                        (Edn_util.vector_t [ Edn_util.keyword ":block/title" ])));
               failf "expected transport request to fail"
             with Failure message -> message
           in
           assert_equal ~name:"api error message" "invalid graph" message));
 
-  check "Transport.request times out while waiting for a response" (fun () ->
+  check "Transport thread API wrapper times out while waiting for a response"
+    (fun () ->
       with_http_server
         (fun _request ->
           sleep_ms 50L;
@@ -1119,15 +1123,35 @@ let () =
             try
               ignore
                 (run_blocking
-                   (Transport.request
+                   (Transport.thread_api_q
                       {
-                        method_ = "GET";
-                        url = base_url ^ "/slow";
-                        headers = [ ("Accept", "text/plain") ];
-                        body = None;
-                        timeout_span = Some (Ptime_util.span_of_ms 10L);
-                      }));
+                        base_url;
+                        timeout_span = Ptime_util.span_of_ms 10L;
+                        profile_session = None;
+                      }
+                      ~repo:(repo "alpha")
+                      ~query:
+                        (Edn_util.vector_t [ Edn_util.keyword ":block/title" ])));
               failf "expected transport request to time out"
+            with Failure message -> message
+          in
+          assert_equal ~name:"timeout message" "request timeout" message));
+
+  check "Cli_platform.HTTP.request times out while waiting for a response"
+    (fun () ->
+      with_http_server
+        (fun _request ->
+          sleep_ms 50L;
+          (200, [ ("Content-Type", "text/plain") ], "late"))
+        (fun base_url ->
+          let message =
+            try
+              ignore
+                (run_http_request `GET (base_url ^ "/slow")
+                   ~headers:[ ("Accept", "text/plain") ]
+                   ~body:""
+                   ~timeout_span:(Ptime_util.span_of_ms 10L));
+              failf "expected platform request to time out"
             with Failure message -> message
           in
           assert_equal ~name:"timeout message" "request timeout" message));
