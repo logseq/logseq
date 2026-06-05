@@ -2034,7 +2034,7 @@ should be done through this fn in order to get global config and config defaults
     ;; Older saved proxy settings may only have :protocol.
     (let [proxy-type (or type protocol)]
       (when (and (contains? #{"http" "socks5"} proxy-type)
-                 (every? not-empty [protocol host port]))
+                 (every? not-empty [proxy-type host port]))
         (str proxy-type "://" host ":" port)))))
 
 (defn get-current-pdf
