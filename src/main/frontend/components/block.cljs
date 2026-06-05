@@ -3243,9 +3243,11 @@
                         (handle-breadcrumb-activate! config block opts e))}
    label])
 
-(hsx/defc breadcrumb-separator
-  []
+(defn- breadcrumb-separator
+  [& [k]]
   [:span.opacity-50.px-1
+   (cond-> {}
+     k (assoc :key k))
    "/"])
 
 (hsx/defc breadcrumb-segment-label
@@ -3329,6 +3331,15 @@
   [seg]
   (when (:db/id seg)
     (db/entity (:db/id seg))))
+
+(defn- breadcrumb-segment-key
+  [seg fallback]
+  (str (or (:block/uuid seg)
+           (:db/id seg)
+           (:full-text seg)
+           (:text seg)
+           (:type seg)
+           fallback)))
 
 (defn- missing-breadcrumb-ref-ids
   [segments]
@@ -3435,39 +3446,48 @@
         config (assoc config
                       :breadcrumb? true
                       :disable-preview? true)
-        render-seg (fn [seg]
+        render-seg (fn [group idx seg]
                      (let [entity (breadcrumb-segment-entity seg)
                            label (breadcrumb-segment-label seg entity)
                            nav-block (or entity
                                          {:db/id (:db/id seg)
                                           :block/uuid (:block/uuid seg)})]
-                       ^{:key (str (:block/uuid seg))}
+                       ^{:key (str group "-seg-" (breadcrumb-segment-key seg idx))}
                        [:<> (if (or disabled? (= effective-variant :search-result))
                               label
-                              (breadcrumb-fragment config nav-block label opts))]))]
+                              (breadcrumb-fragment config nav-block label opts))]))
+        render-segs (fn [group segs]
+                      (mapcat (fn [idx seg]
+                                (if (zero? idx)
+                                  [(render-seg group idx seg)]
+                                  [(breadcrumb-separator (str group "-sep-" idx))
+                                   (render-seg group idx seg)]))
+                              (cljs.core/range)
+                              segs))]
     (when (or (seq visible-prefix-raw) (seq visible-suffix-raw))
       [:div.breadcrumb.block-parents
        {:class (str " breadcrumb--" (name effective-variant)
                     (when-not (or (:search? config) (:list-view? config)) " my-2")
                     (when indent? " ml-4"))}
        (when (and (false? (:top-level? config)) (seq parents))
-         (breadcrumb-separator))
+         (breadcrumb-separator "leading-sep"))
        ;; visible prefix (page + early ancestors)
-       (interpose (breadcrumb-separator) (map render-seg visible-prefix-raw))
+       (render-segs "prefix" visible-prefix-raw)
        ;; overflow indicator
        (when overflow?
-         (list
-          (breadcrumb-separator)
-          (if (= effective-variant :search-result)
-            (breadcrumb-search-overflow-tooltip full-title)
-            (breadcrumb-overflow-dropdown
-             config repo target-entity from-property hidden opts vopts show-page?))))
+         (concat
+          [(breadcrumb-separator "overflow-sep")]
+          [^{:key "overflow"}
+           [:<> (if (= effective-variant :search-result)
+                  (breadcrumb-search-overflow-tooltip full-title)
+                  (breadcrumb-overflow-dropdown
+                   config repo target-entity from-property hidden opts vopts show-page?))]]))
        ;; visible suffix (nearest parents)
        (when (seq visible-suffix-raw)
-         (list
-          (breadcrumb-separator)
-          (interpose (breadcrumb-separator) (map render-seg visible-suffix-raw))))
-       (when end-separator? (breadcrumb-separator))])))
+         (concat
+          [(breadcrumb-separator "suffix-leading-sep")]
+          (render-segs "suffix" visible-suffix-raw)))
+       (when end-separator? (breadcrumb-separator "end-sep"))])))
 
 (hsx/defc breadcrumb
   [config repo block-id {:keys [_show-page? _indent? _end-separator? _navigating-block _disabled? variant header?]

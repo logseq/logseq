@@ -677,8 +677,9 @@
   (react/forwardRef
    (fn [^js props ref]
      (let [overlay-props (or (prop props "overlayProps") #js {})
-           popup-props (with-class-props props "ui__alert-dialog-content fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg" nil)]
+           popup-props (with-class-props props "ui__alert-dialog-content fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg" nil)]
        (adapt-focus-props! popup-props)
+       (set-prop! popup-props "style" (js/Object.assign #js {} (prop popup-props "style") #js {:transform "translate(-50%, -50%)"}))
        (when ref (set-prop! popup-props "ref" ref))
        (clean-props! popup-props "overlayProps")
        (react/createElement
