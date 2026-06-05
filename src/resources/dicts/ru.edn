@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Повреждённый плагин \"{1}\" удалён."
 
  :plugin.proxy/direct "Прямое подключение"
+ :plugin.proxy/host-port-required "Хост и порт обязательны"
  :plugin.proxy/system "Система"
  :plugin.proxy/test-url "Проверить URL"
  :plugin.proxy/testing "Проверка"

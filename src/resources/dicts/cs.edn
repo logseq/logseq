@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Poškozený plugin „{1}“ byl odstraněn."
 
  :plugin.proxy/direct "Přímé"
+ :plugin.proxy/host-port-required "Hostitel a port jsou povinné"
  :plugin.proxy/system "Systém"
  :plugin.proxy/test-url "Otestovat URL"
  :plugin.proxy/testing "Testování"

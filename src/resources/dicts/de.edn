@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Defektes Plugin „{1}“ entfernt."
 
  :plugin.proxy/direct "Direkt"
+ :plugin.proxy/host-port-required "Host und Port sind erforderlich"
  :plugin.proxy/system "System"
  :plugin.proxy/test-url "Test-URL"
  :plugin.proxy/testing "Wird getestet"

@@ -1,13 +1,14 @@
 (ns electron.utils
-  (:require ["electron" :refer [app BrowserWindow]]
+  (:require ["electron" :refer [app BrowserWindow session]]
+            ["fs-extra" :as fs]
             ["node-fetch" :default node-fetch]
             ["open" :as open-external]
-            ["fs-extra" :as fs]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.configs :as cfgs]
             [electron.logger :as logger]
+            [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
             [logseq.common.graph-dir :as graph-dir]
@@ -27,6 +28,29 @@
 (defonce *proxy-agent-ctors (atom nil))
 (defonce extract-zip (js/require "extract-zip"))
 
+(declare <resolve-fetch-proxy)
+
+(def shadow-esm-import-runtime
+  (do
+    ;; node-script builds compile shadow.esm/dynamic-import to shadow_esm_import(...)
+    ;; but Electron's main-process runtime does not define that helper for us.
+    ;; The helper must be compiled through Node's native CommonJS loader because
+    ;; this namespace runs under vm.runInThisContext, where bare import() has no
+    ;; dynamic import callback.
+    (let [Module (js/require "module")
+          helper-module (js/Reflect.construct Module #js ["__logseq_dynamic_import__" js/module])
+          _ (set! (.-filename helper-module)
+                  (.join node-path js/__dirname "__logseq_dynamic_import__.cjs"))
+          _ (set! (.-paths helper-module) (.-paths js/module))
+          _ (._compile helper-module
+                       "exports.dynamicImport = function dynamicImport(specifier) { return import(specifier); };"
+                       (.-filename helper-module))
+          dynamic-import' (.. helper-module -exports -dynamicImport)]
+      (when-not dynamic-import'
+        (throw (js/Error. "Dynamic import helper is unavailable")))
+      (gobj/set js/globalThis "shadow_esm_import" dynamic-import'))
+    true))
+
 (defn- <ensure-proxy-agent-ctors
   "Load ESM-only proxy agent packages once and cache their constructors."
   []
@@ -45,10 +69,68 @@
      (open-external target (bean/->js options))
      (open-external target))))
 
+(defn- <build-fetch-agent
+  [{:keys [protocol host port]}]
+  (when (and protocol host port (contains? #{"http" "socks5"} protocol))
+    (p/let [ctors (<ensure-proxy-agent-ctors)
+            proxy-url (str protocol "://" host ":" port)]
+      (if-let [ctor (get ctors (keyword protocol))]
+        (new ctor proxy-url)
+        (do
+          (logger/error "Unknown proxy protocol:" protocol)
+          nil)))))
+
+(defn- <resolve-fetch-agent
+  [url options]
+  (let [options (or options {})]
+    (cond
+      (contains? options :agent)
+      (:agent options)
+
+      (contains? options :proxy)
+      (p/let [proxy (<resolve-fetch-proxy url (:proxy options))]
+        (<build-fetch-agent proxy))
+
+      :else
+      @*fetchAgent)))
+
+(defn- ->proxy-config
+  [{:keys [type protocol host port] :or {type "system"}}]
+  (let [type (or type protocol)
+        ->proxy-rules (fn [proxy-type proxy-host proxy-port]
+                        (cond
+                          (= proxy-type "http")
+                          (str "http=" proxy-host ":" proxy-port ";https=" proxy-host ":" proxy-port)
+                          (= proxy-type "socks5")
+                          (str "http=socks5://" proxy-host ":" proxy-port ";https=socks5://" proxy-host ":" proxy-port)
+                          (or (= proxy-type "socks") (= proxy-type "socks4"))
+                          (str "http=socks://" proxy-host ":" proxy-port ";https=socks://" proxy-host ":" proxy-port)
+                          (= proxy-type "direct")
+                          "direct://"
+                          :else
+                          nil))]
+    (cond
+      (= type "system")
+      #js {:mode "system"}
+
+      (= type "direct")
+      #js {:mode "direct"}
+
+      (or (= type "socks5") (= type "http"))
+      #js {:mode "fixed_servers"
+           :proxyRules (->proxy-rules type host port)
+           :proxyBypassRules "<local>"}
+
+      :else
+      #js {:mode "system"})))
+
 (defn fetch
   ([url] (fetch url nil))
   ([url options]
-   (node-fetch url (bean/->js (merge options {:agent @*fetchAgent})))))
+   (let [options (or options {})]
+     (p/let [agent (<resolve-fetch-agent url options)]
+       (node-fetch url (bean/->js (cond-> (dissoc options :proxy)
+                                    (some? agent) (assoc :agent agent))))))))
 
 (defn fix-win-path!
   [path]
@@ -87,45 +169,17 @@
 (defn- set-fetch-agent-proxy
   "Set proxy for fetch agent(plugin system)
   protocol: http | socks5"
-  [{:keys [protocol host port]}]
-  (if (and protocol host port (or (= protocol "http") (= protocol "socks5")))
-    (p/let [ctors (<ensure-proxy-agent-ctors)
-            proxy-url (str protocol "://" host ":" port)]
-      (if-let [ctor (get ctors (keyword protocol))]
-        (reset! *fetchAgent (new ctor proxy-url))
-        (logger/error "Unknown proxy protocol:" protocol)))
+  [proxy]
+  (if proxy
+    (p/let [agent (<build-fetch-agent proxy)]
+      (reset! *fetchAgent agent))
     (reset! *fetchAgent nil)))
 
 (defn <set-electron-proxy
   "Set proxy for electron
   type: system | direct | socks5 | http"
   ([{:keys [type host port] :or {type "system"}}]
-   (let [->proxy-rules (fn [type host port]
-                         (cond
-                           (= type "http")
-                           (str "http=" host ":" port ";https=" host ":" port)
-                           (= type "socks5")
-                           (str "http=socks5://" host ":" port ";https=socks5://" host ":" port)
-                           (or (= type "socks") (= type "socks4"))
-                           (str "http=socks://" host ":" port ";https=socks://" host ":" port)
-                           (= type "direct")
-                           "direct://"
-                           :else
-                           nil))
-         config (cond
-                  (= type "system")
-                  #js {:mode "system"}
-
-                  (= type "direct")
-                  #js {:mode "direct"}
-
-                  (or (= type "socks5") (= type "http"))
-                  #js {:mode "fixed_servers"
-                       :proxyRules (->proxy-rules type host port)
-                       :proxyBypassRules "<local>"}
-
-                  :else
-                  #js {:mode "system"})
+   (let [config (->proxy-config {:type type :host host :port port})
          sess (.. ^js @*win -webContents -session)]
      (if sess
        (p/do!
@@ -153,17 +207,51 @@
         (logger/warn "Unknown PAC rule:" line)
         nil))))
 
+(defn- <resolve-session-proxy
+  [^js sess for-url]
+  (p/let [proxy (.resolveProxy sess for-url)
+          pac-opts (->> (string/split proxy #";")
+                        (map parse-pac-rule)
+                        (remove nil?))]
+    (when (seq pac-opts)
+      (first pac-opts))))
+
 (defn <get-system-proxy
   "Get system proxy for url, requires proxy to be set to system"
   ([] (<get-system-proxy "https://www.google.com"))
   ([for-url]
    (when-let [sess (.. ^js @*win -webContents -session)]
-     (p/let [proxy (.resolveProxy sess for-url)
-             pac-opts (->> (string/split proxy #";")
-                        (map parse-pac-rule)
-                        (remove nil?))]
-       (when (seq pac-opts)
-         (first pac-opts))))))
+     (<resolve-session-proxy sess for-url))))
+
+(defn- <resolve-temporary-system-proxy
+  [for-url]
+  (let [session-partition (str "logseq-system-proxy-" (random-uuid))
+        ^js sess (.fromPartition session session-partition)]
+    (p/do!
+     (.setProxy sess #js {:mode "system"})
+     (.forceReloadProxyConfig sess)
+     (<resolve-session-proxy sess for-url))))
+
+(defn- <resolve-fetch-proxy
+  [url {:keys [type protocol host port] :as proxy}]
+  (let [type (or type protocol)]
+    (cond
+      (string/blank? type)
+      nil
+
+      (= type "system")
+      (<resolve-temporary-system-proxy url)
+
+      (= type "direct")
+      nil
+
+      (contains? #{"http" "socks5"} type)
+      {:protocol type :host host :port port}
+
+      :else
+      (do
+        (logger/warn "Unknown fetch proxy type:" proxy)
+        nil))))
 
 (defn <set-proxy
   "Set proxy for electron, fetch"
