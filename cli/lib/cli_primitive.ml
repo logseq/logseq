@@ -7,14 +7,11 @@ type path = string
 type url = string
 type email = string
 type shell = Bash | Zsh
-type timestamp_ms = int64
-type duration_ms = int64
 type port = int
 type pid = int
 type owner_source = Cli | Electron | Unknown | Other of string
 
 let trim = String.trim
-
 let db_version_prefix = "logseq_db_"
 
 let starts_with ~prefix value =

@@ -5,10 +5,7 @@ type category =
   | Utilities
   | Hidden
 
-type option_arity =
-  | Flag
-  | Required_value of string
-  | Optional_value of string
+type option_arity = Flag | Required_value of string | Optional_value of string
 
 type option_meta = {
   names : string list;
@@ -26,7 +23,7 @@ type command_meta = {
   doc : string;
   long_doc : string option;
   examples : string list;
-  options: option_meta list;
+  options : option_meta list;
   category : category;
   requires_graph : bool;
   requires_auth : bool;

@@ -28,8 +28,7 @@ let encode_graph_dir_name graph_name =
 
 let graph_dir_name_of_repo repo =
   Cli_config.repo_to_graph repo
-  |> Cli_primitive.string_of_graph
-  |> encode_graph_dir_name
+  |> Cli_primitive.string_of_graph |> encode_graph_dir_name
 
 let hex_value = function
   | '0' .. '9' as c -> Some (Char.code c - Char.code '0')

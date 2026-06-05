@@ -210,7 +210,10 @@ let generated_uuid_counter = ref 0
 
 let generate_uuid () =
   incr generated_uuid_counter;
-  let seed = Hashtbl.hash (Sys.time (), !generated_uuid_counter) land max_int in
+  let seed =
+    Hashtbl.hash (Ptime.to_float_s (Ptime_util.now ()), !generated_uuid_counter)
+    land max_int
+  in
   let first =
     Printf.sprintf "%04x%04x" ((seed lsr 16) land 0xffff) (seed land 0xffff)
   in
@@ -648,7 +651,8 @@ let resolve_tags config repo tags =
   | [] -> Cli_effect.pure []
   | _ ->
       let open Cli_effect in
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err -> failwith err.message
         | Ok invoke_config ->
             all (List.map (resolve_tag_entity invoke_config repo) tags))
@@ -692,7 +696,8 @@ let resolve_properties config repo properties =
   | [] -> Cli_effect.pure []
   | _ ->
       let open Cli_effect in
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err -> failwith err.message
         | Ok invoke_config ->
             all
@@ -790,7 +795,8 @@ let metadata_ops block_uuids status tags properties =
 
 let execute_add_block action config mode =
   let open Cli_effect in
-  bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false) (function
+  bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
+    (function
     | Error err ->
         pure (Cli_result.error ~command:Command_id.Upsert_block mode err)
     | Ok invoke_config ->

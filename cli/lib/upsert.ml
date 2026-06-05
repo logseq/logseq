@@ -36,8 +36,8 @@ type task_opts = {
   pos : Block.position option;
   status : string option;
   priority : string option;
-  scheduled : string option;
-  deadline : string option;
+  scheduled : Ptime.t option;
+  deadline : Ptime.t option;
   no_status : bool;
   no_priority : bool;
   no_scheduled : bool;
@@ -299,8 +299,6 @@ let invalid_options = function
       let target_page = nonempty_trimmed opts.target_page in
       let status = nonempty_trimmed opts.status in
       let priority = nonempty_trimmed opts.priority in
-      let scheduled = nonempty_trimmed opts.scheduled in
-      let deadline = nonempty_trimmed opts.deadline in
       let selectors = [ Option.map Int64.to_string opts.id; uuid; page ] in
       let target_selectors =
         [
@@ -336,9 +334,9 @@ let invalid_options = function
         Some "--status and --no-status are mutually exclusive"
       else if Option.is_some priority && opts.no_priority then
         Some "--priority and --no-priority are mutually exclusive"
-      else if Option.is_some scheduled && opts.no_scheduled then
+      else if Option.is_some opts.scheduled && opts.no_scheduled then
         Some "--scheduled and --no-scheduled are mutually exclusive"
-      else if Option.is_some deadline && opts.no_deadline then
+      else if Option.is_some opts.deadline && opts.no_deadline then
         Some "--deadline and --no-deadline are mutually exclusive"
       else None
   | _ -> None
@@ -369,16 +367,12 @@ let ordinal value =
     match value mod 100 with
     | 11 | 12 | 13 -> "th"
     | _ -> (
-        match value mod 10 with
-        | 1 -> "st"
-        | 2 -> "nd"
-        | 3 -> "rd"
-        | _ -> "th")
+        match value mod 10 with 1 -> "st" | 2 -> "nd" | 3 -> "rd" | _ -> "th")
   in
   string_of_int value ^ suffix
 
 let default_journal_title () =
-  let tm = Cli_unix.localtime (Cli_unix.time ()) in
+  let year, month, day = Ptime_util.local_date (Ptime_util.now ()) in
   let months =
     [|
       "Jan";
@@ -395,11 +389,7 @@ let default_journal_title () =
       "Dec";
     |]
   in
-  months.(tm.Cli_unix.tm_mon)
-  ^ " "
-  ^ ordinal tm.tm_mday
-  ^ ", "
-  ^ string_of_int (tm.tm_year + 1900)
+  months.(month - 1) ^ " " ^ ordinal day ^ ", " ^ string_of_int year
 
 let block_target_of_parts target_id target_uuid target_page =
   match
@@ -843,25 +833,25 @@ let build_task repo graph (opts : task_opts) =
           | None -> properties
         in
         let properties =
-          match Option.bind opts.scheduled normalize_content with
+          match opts.scheduled with
           | Some scheduled ->
               {
                 Property.key =
                   Property.Key_ident
                     (Edn_util.keyword_t ":logseq.property/scheduled");
-                value = Edn_util.string scheduled;
+                value = Edn_util.string (Ptime_util.rfc3339_millis scheduled);
               }
               :: properties
           | None -> properties
         in
         let properties =
-          match Option.bind opts.deadline normalize_content with
+          match opts.deadline with
           | Some deadline ->
               {
                 Property.key =
                   Property.Key_ident
                     (Edn_util.keyword_t ":logseq.property/deadline");
-                value = Edn_util.string deadline;
+                value = Edn_util.string (Ptime_util.rfc3339_millis deadline);
               }
               :: properties
           | None -> properties
@@ -1847,7 +1837,8 @@ let result_ids_of_create_result result =
 
 let execute_create_asset mode config repo path create_action =
   let open Cli_effect in
-  bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+  bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+    (function
     | Error err ->
         pure (Cli_result.error ~command:Command_id.Upsert_asset mode err)
     | Ok invoke_config -> (
@@ -1956,7 +1947,9 @@ let ok_task_ids mode ids =
 
 let status_query invoke_config repo =
   Transport.thread_api_q invoke_config ~repo
-    ~query:(Edn_util.vector_t [ Edn_util.any Task_status.status_closed_values_query ])
+    ~query:
+      (Edn_util.vector_t
+         [ Edn_util.any Task_status.status_closed_values_query ])
 
 let resolve_task_status invoke_config repo = function
   | None -> Cli_effect.pure (Ok None)
@@ -2294,7 +2287,9 @@ let execute_create_block mode action config =
                     (Edn_util.keyword_t "add-id-resolution-failed")
                     "unable to resolve created ids"))
         | Some ids ->
-            bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false) (function
+            bind
+              (Server_runtime.ensure_server config action.repo
+                 ~create_empty_db:false) (function
               | Error err ->
                   pure
                     (Cli_result.error ~command:Command_id.Upsert_block mode err)
@@ -2336,12 +2331,14 @@ let execute action config mode =
         (Cli_result.with_command Command_id.Upsert_block)
         (Update.execute (update_action_of_block_update action) config mode)
   | Upsert_tag { repo; mode = Create; name = Some name; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_tag mode err)
         | Ok invoke_config -> execute_create_tag mode invoke_config repo name)
   | Upsert_tag { repo; mode = Update; id = Some id; name; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_tag mode err)
         | Ok invoke_config -> execute_update_tag mode invoke_config repo id name)
@@ -2352,13 +2349,15 @@ let execute action config mode =
               (Edn_util.keyword_t "not-implemented")
               "upsert tag is not implemented"))
   | Upsert_page { repo; mode = Create; page = Some page; plan; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_page mode err)
         | Ok invoke_config ->
             execute_create_page mode invoke_config repo page plan)
   | Upsert_page { repo; mode = Update; id = Some id; plan; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_page mode err)
         | Ok invoke_config ->
@@ -2370,13 +2369,15 @@ let execute action config mode =
               (Edn_util.keyword_t "not-implemented")
               "upsert page is not implemented"))
   | Upsert_property { repo; mode = Create; name = Some name; schema; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_property mode err)
         | Ok invoke_config ->
             execute_create_property mode invoke_config repo name schema)
   | Upsert_property { repo; mode = Update; id = Some id; schema; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_property mode err)
         | Ok invoke_config ->
@@ -2388,7 +2389,8 @@ let execute action config mode =
               (Edn_util.keyword_t "not-implemented")
               "upsert property is not implemented"))
   | Upsert_asset { repo; mode = Update; id; uuid; content; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_asset mode err)
         | Ok invoke_config ->
@@ -2418,7 +2420,8 @@ let execute action config mode =
         clear_properties;
         _;
       } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_task mode err)
         | Ok invoke_config ->
@@ -2435,7 +2438,8 @@ let execute action config mode =
         clear_properties;
         _;
       } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_task mode err)
         | Ok invoke_config ->
@@ -2452,7 +2456,8 @@ let execute action config mode =
         clear_properties;
         _;
       } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false) (function
+      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
+        (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_task mode err)
         | Ok invoke_config ->

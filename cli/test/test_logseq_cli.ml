@@ -3,6 +3,12 @@ let check name f = tests := Alcotest.test_case name `Quick f :: !tests
 let failf = Alcotest.failf
 let run_blocking value = Lwt_main.run (Cli_effect.to_lwt value)
 
+let test_sleep_span span =
+  Lwt_unix.sleep (Ptime_util.span_to_seconds_float span)
+
+let sleep_ms ms = Lwt_main.run (test_sleep_span (Ptime_util.span_of_ms ms))
+let sleep_lwt_ms ms = test_sleep_span (Ptime_util.span_of_ms ms)
+
 let assert_equal ~name expected actual =
   if expected <> actual then
     Alcotest.failf "%s\nexpected and actual differ" name
@@ -89,16 +95,12 @@ let ordinal value =
     match value mod 100 with
     | 11 | 12 | 13 -> "th"
     | _ -> (
-        match value mod 10 with
-        | 1 -> "st"
-        | 2 -> "nd"
-        | 3 -> "rd"
-        | _ -> "th")
+        match value mod 10 with 1 -> "st" | 2 -> "nd" | 3 -> "rd" | _ -> "th")
   in
   string_of_int value ^ suffix
 
 let today_default_journal_title () =
-  let tm = Cli_unix.localtime (Cli_unix.time ()) in
+  let year, month, day = Ptime_util.local_date (Ptime_util.now ()) in
   let months =
     [|
       "Jan";
@@ -115,11 +117,7 @@ let today_default_journal_title () =
       "Dec";
     |]
   in
-  months.(tm.Cli_unix.tm_mon)
-  ^ " "
-  ^ ordinal tm.tm_mday
-  ^ ", "
-  ^ string_of_int (tm.tm_year + 1900)
+  months.(month - 1) ^ " " ^ ordinal day ^ ", " ^ string_of_int year
 
 let value_with fields =
   vmap (List.map (fun (key, value) -> (vkw key, value)) fields)
@@ -130,7 +128,7 @@ let () =
       assert_equal ~name:"default graph" None opts.graph;
       assert_equal ~name:"default root dir" None opts.root_dir;
       assert_equal ~name:"default config path" None opts.config_path;
-      assert_equal ~name:"default timeout" None opts.timeout_ms;
+      assert_equal ~name:"default timeout" None opts.timeout_span;
       assert_equal ~name:"default output" None opts.output_format;
       assert_bool ~name:"default verbose" false opts.verbose;
       assert_bool ~name:"default profile" false opts.profile);
@@ -140,10 +138,12 @@ let () =
     (fun () ->
       let earlier =
         Global_opts.create ~graph:(graph "alpha") ~root_dir:"/tmp/alpha"
-          ~timeout_ms:10L ~verbose:true ()
+          ~timeout_span:(Ptime_util.span_of_ms 10L)
+          ~verbose:true ()
       in
       let later =
-        Global_opts.create ~config_path:"/tmp/logseq.edn" ~timeout_ms:20L
+        Global_opts.create ~config_path:"/tmp/logseq.edn"
+          ~timeout_span:(Ptime_util.span_of_ms 20L)
           ~profile:true ()
       in
       let merged = Global_opts.merge ~earlier ~later in
@@ -152,7 +152,8 @@ let () =
       assert_equal ~name:"merged root dir" (Some "/tmp/alpha") merged.root_dir;
       assert_equal ~name:"merged config path" (Some "/tmp/logseq.edn")
         merged.config_path;
-      assert_equal ~name:"merged timeout" (Some 20L) merged.timeout_ms;
+      assert_equal ~name:"merged timeout" (Some 20L)
+        (Option.map Ptime_util.span_to_ms merged.timeout_span);
       assert_bool ~name:"merged verbose" true merged.verbose;
       assert_bool ~name:"merged profile" true merged.profile);
 
@@ -251,7 +252,7 @@ let rec wait_until attempts predicate =
   attempts > 0
   && (predicate ()
      ||
-     (Unix.sleepf 0.01;
+     (sleep_ms 10L;
       wait_until (attempts - 1) predicate))
 
 let rec waitpid_noeintr flags pid =
@@ -357,7 +358,7 @@ let with_http_server handler f =
         if attempts <= 0 then false
         else if child_finished () then true
         else (
-          Unix.sleepf 0.01;
+          sleep_ms 10L;
           wait_for_child (attempts - 1))
       in
       let cleanup () =
@@ -448,7 +449,7 @@ let with_http_server_sequence handlers f =
         if attempts <= 0 then false
         else if child_finished () then true
         else (
-          Unix.sleepf 0.01;
+          sleep_ms 10L;
           wait_for_child (attempts - 1))
       in
       let cleanup () =
@@ -494,17 +495,45 @@ let with_invoke_server f =
 
 let try_http_get url =
   try
-    ignore
-      (run_blocking
-         (Transport.request
-            {
-              method_ = "GET";
-              url;
-              headers = [ ("Accept", "text/plain") ];
-              body = None;
-              timeout_ms = Some 1000L;
-            }));
-    true
+    let rest =
+      if starts_with ~prefix:"http://" url then
+        String.sub url 7 (String.length url - 7)
+      else invalid_arg "expected http URL"
+    in
+    let authority, target =
+      match String.index_opt rest '/' with
+      | Some idx ->
+          ( String.sub rest 0 idx,
+            String.sub rest idx (String.length rest - idx) )
+      | None -> (rest, "/")
+    in
+    let host, port =
+      match String.rindex_opt authority ':' with
+      | Some idx ->
+          ( String.sub authority 0 idx,
+            String.sub authority (idx + 1)
+              (String.length authority - idx - 1)
+            |> int_of_string )
+      | None -> (authority, 80)
+    in
+    let socket = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+    Fun.protect
+      ~finally:(fun () -> try Unix.close socket with Unix.Unix_error _ -> ())
+      (fun () ->
+        let addr = (Unix.gethostbyname host).Unix.h_addr_list.(0) in
+        Unix.connect socket (Unix.ADDR_INET (addr, port));
+        let ic = Unix.in_channel_of_descr socket in
+        let oc = Unix.out_channel_of_descr socket in
+        Fun.protect
+          ~finally:(fun () ->
+            close_in_noerr ic;
+            close_out_noerr oc)
+          (fun () ->
+            Printf.fprintf oc
+              "GET %s HTTP/1.1\r\nHost: %s:%d\r\nAccept: \
+               text/plain\r\nConnection: close\r\n\r\n%!"
+              target host port;
+            input_line ic |> trim_cr |> starts_with ~prefix:"HTTP/1.1 2"))
   with _ -> false
 
 let write_text_file path content =
@@ -975,7 +1004,9 @@ let () =
       assert_equal ~name:"graph option default" None graph_option.default;
       assert_contains ~name:"graph option doc" "Graph name" graph_option.doc;
       let graph_create_options =
-        match Command_registry.options_for_path [ "graph"; "create" ] registry with
+        match
+          Command_registry.options_for_path [ "graph"; "create" ] registry
+        with
         | Ok options -> options
         | Error err ->
             failf "unexpected graph create options error: %s" err.message
@@ -992,7 +1023,8 @@ let () =
       let list_page_options =
         match Command_registry.options_for_path [ "list"; "page" ] registry with
         | Ok options -> options
-        | Error err -> failf "unexpected list page options error: %s" err.message
+        | Error err ->
+            failf "unexpected list page options error: %s" err.message
       in
       let limit = find_option "--limit" list_page_options in
       (match limit.arity with
@@ -1025,8 +1057,7 @@ let () =
         Command_registry.render_help ~group:[ "graph"; "create" ]
           app.Cmdliner_boundary.registry
       in
-      assert_contains ~name:"graph create help enable sync" "--enable-sync"
-        help;
+      assert_contains ~name:"graph create help enable sync" "--enable-sync" help;
       assert_contains ~name:"graph create help password"
         "--e2ee-password <password>" help;
       assert_not_contains ~name:"graph create help avoids placeholder"
@@ -1053,9 +1084,8 @@ let () =
           assert_equal ~name:"cmdliner eval path" "graph create"
             (String.concat " " request.Cli_request.path);
           assert_equal ~name:"cmdliner eval graph" "alpha"
-            (request.globals.graph
-            |> Option.map graph_string
-            |> Option.value ~default:"");
+            (request.globals.graph |> Option.map graph_string
+           |> Option.value ~default:"");
           assert_equal ~name:"cmdliner eval root" "/tmp/logseq-cmdliner"
             (Option.value request.globals.root_dir ~default:"");
           match request.command with
@@ -1518,7 +1548,7 @@ let () =
                    url = base_url ^ "/healthz";
                    headers = [ ("Accept", "application/json") ];
                    body = None;
-                   timeout_ms = Some 1000L;
+                   timeout_span = Some (Ptime_util.span_of_ms 1000L);
                  })
           in
           assert_int ~name:"http status" 200 response.Transport.status;
@@ -1540,7 +1570,7 @@ let () =
                    url = base_url ^ "/healthz";
                    headers = [ ("Accept", "application/json") ];
                    body = None;
-                   timeout_ms = Some 1000L;
+                   timeout_span = Some (Ptime_util.span_of_ms 1000L);
                  })
           in
           assert_int ~name:"chunked status" 200 response.Transport.status;
@@ -1564,7 +1594,7 @@ let () =
                         url = base_url ^ "/healthz";
                         headers = [ ("Accept", "application/json") ];
                         body = None;
-                        timeout_ms = Some 1000L;
+                        timeout_span = Some (Ptime_util.span_of_ms 1000L);
                       }));
               failf "expected transport request to fail"
             with Failure message -> message
@@ -1574,7 +1604,7 @@ let () =
   check "Transport.request times out while waiting for a response" (fun () ->
       with_http_server
         (fun _request ->
-          Unix.sleepf 0.05;
+          sleep_ms 50L;
           (200, [ ("Content-Type", "text/plain") ], "late"))
         (fun base_url ->
           let message =
@@ -1587,7 +1617,7 @@ let () =
                         url = base_url ^ "/slow";
                         headers = [ ("Accept", "text/plain") ];
                         body = None;
-                        timeout_ms = Some 10L;
+                        timeout_span = Some (Ptime_util.span_of_ms 10L);
                       }));
               failf "expected transport request to time out"
             with Failure message -> message
@@ -1612,7 +1642,11 @@ let () =
           let result =
             run_blocking
               (Transport.thread_api_q
-                 { base_url; timeout_ms = 1000L; profile_session = None }
+                 {
+                   base_url;
+                   timeout_span = Ptime_util.span_of_ms 1000L;
+                   profile_session = None;
+                 }
                  ~repo:(repo "alpha")
                  ~query:(Edn_util.vector_t [ Edn_util.keyword ":block/title" ]))
           in
@@ -1626,7 +1660,8 @@ let () =
               | _ -> failf "expected decoded items vector")
           | None -> failf "expected decoded invoke map"));
 
-  check "Transport thread API wrapper escapes Transit special string prefixes" (fun () ->
+  check "Transport thread API wrapper escapes Transit special string prefixes"
+    (fun () ->
       with_http_server
         (fun request ->
           assert_contains ~name:"escaped tilde string" {|\"~~literal\"|}
@@ -1644,7 +1679,11 @@ let () =
           ignore
             (run_blocking
                (Transport.thread_api_apply_outliner_ops
-                  { base_url; timeout_ms = 1000L; profile_session = None }
+                  {
+                    base_url;
+                    timeout_span = Ptime_util.span_of_ms 1000L;
+                    profile_session = None;
+                  }
                   ~repo:(repo "~literal")
                   ~ops:(Edn_util.vector_t [ Edn_util.string "^literal" ])
                   ~options:
@@ -1654,8 +1693,9 @@ let () =
                          (Edn_util.keyword ":tilde", Edn_util.string "~literal");
                        ])))));
 
-  check "Transport thread API wrapper decodes escaped Transit special string prefixes"
-    (fun () ->
+  check
+    "Transport thread API wrapper decodes escaped Transit special string \
+     prefixes" (fun () ->
       with_http_server
         (fun _request ->
           ( 200,
@@ -1666,8 +1706,11 @@ let () =
           let result =
             run_blocking
               (Transport.thread_api_db_sync_stop
-                 { base_url; timeout_ms = 1000L; profile_session = None }
-              )
+                 {
+                   base_url;
+                   timeout_span = Ptime_util.span_of_ms 1000L;
+                   profile_session = None;
+                 })
           in
           match Edn_util.as_seq result with
           | Some [ first; second; third ]
@@ -1679,7 +1722,8 @@ let () =
               failf
                 "expected escaped Transit strings to decode to plain strings"));
 
-  check "Transport thread API wrapper decodes Transit list tag cache and cache keys"
+  check
+    "Transport thread API wrapper decodes Transit list tag cache and cache keys"
     (fun () ->
       with_http_server
         (fun _request ->
@@ -1691,8 +1735,11 @@ let () =
           let result =
             run_blocking
               (Transport.thread_api_db_sync_stop
-                 { base_url; timeout_ms = 1000L; profile_session = None }
-              )
+                 {
+                   base_url;
+                   timeout_span = Ptime_util.span_of_ms 1000L;
+                   profile_session = None;
+                 })
           in
           match Edn_util.as_seq result with
           | Some [ first; second ]
@@ -1709,7 +1756,8 @@ let () =
               | _ -> failf "expected second title")
           | _ -> failf "expected decoded transit list of maps"));
 
-  check "Transport thread API wrapper decodes Transit base-44 cache codes" (fun () ->
+  check "Transport thread API wrapper decodes Transit base-44 cache codes"
+    (fun () ->
       with_http_server
         (fun _request ->
           ( 200,
@@ -1720,8 +1768,11 @@ let () =
           let result =
             run_blocking
               (Transport.thread_api_db_sync_stop
-                 { base_url; timeout_ms = 1000L; profile_session = None }
-              )
+                 {
+                   base_url;
+                   timeout_span = Ptime_util.span_of_ms 1000L;
+                   profile_session = None;
+                 })
           in
           match Edn_util.as_seq result with
           | Some [ _; second ] when Option.is_some (Edn_util.as_map second) -> (
@@ -1730,7 +1781,8 @@ let () =
               | _ -> failf "expected base-44 cache code to decode :k10")
           | _ -> failf "expected decoded transit list of maps"));
 
-  check "Transport thread API wrapper decodes Transit JSON object map keys" (fun () ->
+  check "Transport thread API wrapper decodes Transit JSON object map keys"
+    (fun () ->
       with_http_server
         (fun _request ->
           ( 200,
@@ -1741,8 +1793,11 @@ let () =
           let result =
             run_blocking
               (Transport.thread_api_db_sync_stop
-                 { base_url; timeout_ms = 1000L; profile_session = None }
-              )
+                 {
+                   base_url;
+                   timeout_span = Ptime_util.span_of_ms 1000L;
+                   profile_session = None;
+                 })
           in
           match Edn_util.as_map result with
           | Some _ -> (
@@ -1754,7 +1809,8 @@ let () =
               | _ -> failf "expected object map title")
           | None -> failf "expected decoded transit object map"));
 
-  check "Transport thread API wrapper decodes Transit pull response with UUID tags"
+  check
+    "Transport thread API wrapper decodes Transit pull response with UUID tags"
     (fun () ->
       with_http_server
         (fun _request ->
@@ -1766,8 +1822,11 @@ let () =
           let result =
             run_blocking
               (Transport.thread_api_db_sync_stop
-                 { base_url; timeout_ms = 1000L; profile_session = None }
-              )
+                 {
+                   base_url;
+                   timeout_span = Ptime_util.span_of_ms 1000L;
+                   profile_session = None;
+                 })
           in
           match Edn_util.as_map result with
           | Some _ -> (
@@ -1785,7 +1844,8 @@ let () =
               | _ -> failf "expected decoded uuid")
           | None -> failf "expected decoded pull map"));
 
-  check "Transport thread API wrapper decodes verbose Transit composites" (fun () ->
+  check "Transport thread API wrapper decodes verbose Transit composites"
+    (fun () ->
       with_http_server
         (fun _request ->
           ( 200,
@@ -1795,8 +1855,11 @@ let () =
           let result =
             run_blocking
               (Transport.thread_api_db_sync_stop
-                 { base_url; timeout_ms = 1000L; profile_session = None }
-              )
+                 {
+                   base_url;
+                   timeout_span = Ptime_util.span_of_ms 1000L;
+                   profile_session = None;
+                 })
           in
           match Edn_util.as_seq result with
           | Some [ first; second ]
@@ -1828,7 +1891,11 @@ let () =
           let subscription =
             run_blocking
               (Transport.connect_events
-                 { base_url; timeout_ms = 1000L; profile_session = None }
+                 {
+                   base_url;
+                   timeout_span = Ptime_util.span_of_ms 1000L;
+                   profile_session = None;
+                 }
                  (fun event_type payload ->
                    events := !events @ [ (event_type, payload) ];
                    Cli_effect.pure ()))
@@ -2277,7 +2344,8 @@ let () =
         }
       in
       match
-        Add.build_add_block_action opts [ "Ship"; "release" ] (repo "logseq_db_alpha")
+        Add.build_add_block_action opts [ "Ship"; "release" ]
+          (repo "logseq_db_alpha")
       with
       | Ok action -> (
           match action.blocks with
@@ -2306,7 +2374,8 @@ let () =
         }
       in
       match
-        Add.build_add_block_action opts [ "Ignored"; "args" ] (repo "logseq_db_alpha")
+        Add.build_add_block_action opts [ "Ignored"; "args" ]
+          (repo "logseq_db_alpha")
       with
       | Ok action -> (
           match action.blocks with
@@ -2981,8 +3050,8 @@ let () =
           include_built_in = false;
           include_journal = false;
           journal_only = false;
-          created_after = Some 50L;
-          updated_after = Some 150L;
+          created_after = Some (Ptime_util.time_of_epoch_ms 50L);
+          updated_after = Some (Ptime_util.time_of_epoch_ms 150L);
         }
       in
       match Db_worker_types.list_pages pages filter with
@@ -3288,8 +3357,7 @@ let () =
       | Ok _ -> failf "expected agent bridge action"
       | Error err -> failf "unexpected agent build error: %s" err.Error.message);
 
-  check "Cli.run executes agent bridge routing through typed action"
-    (fun () ->
+  check "Cli.run executes agent bridge routing through typed action" (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
       let root = fresh_root "logseq-cli-agent-bridge-run-" in
       ensure_test_dir root;
@@ -3307,11 +3375,12 @@ if (process.argv.includes("--version")) process.exit(0);
 const isResume = process.argv.includes("resume");
 console.log(JSON.stringify({session_id: isResume ? "dispatch-session-1" : "master-session-1"}));
 process.exit(0);
-|});
+|}
+        );
       Unix.chmod codex_bin 0o755;
       write_text_file config_path
-        ("{:agent-name \"agent-a\" :agent-bridge-process-once? true :codex-bin \""
-        ^ codex_bin ^ "\"}");
+        ("{:agent-name \"agent-a\" :agent-bridge-process-once? true :codex-bin \
+          \"" ^ codex_bin ^ "\"}");
       let routable =
         {|{\"~:db/id\":7,\"~:block/uuid\":\"~u11111111-1111-1111-1111-111111111111\",\"~:block/title\":\"Ship CLI\",\"~:block/tags\":[{\"~:db/ident\":\"~:logseq.class/Task\"}],\"~:logseq.property/status\":{\"~:db/ident\":\"~:logseq.property/status.todo\"},\"~:logseq.property/assignee\":[{\"~:block/title\":\"agent-a\"}]}|}
       in
@@ -3397,12 +3466,10 @@ process.exit(0);
             assert_contains ~name:"agent bridge assignee" {|agent-a|}
               request.body;
             assert_contains ~name:"agent bridge q args are not double nested"
-              {|\"logseq_db_alpha\",[[\"^ \",\"~:find\"|}
-              request.body;
+              {|\"logseq_db_alpha\",[[\"^ \",\"~:find\"|} request.body;
             assert_not_contains
               ~name:"agent bridge q args do not wrap query input vector"
-              {|\"logseq_db_alpha\",[[[\"^ \",\"~:find\"|}
-              request.body;
+              {|\"logseq_db_alpha\",[[[\"^ \",\"~:find\"|} request.body;
             assert_contains ~name:"agent bridge q includes rules var"
               {|\"~$%\"|} request.body;
             assert_contains ~name:"agent bridge q sends empty rules"
@@ -3430,8 +3497,8 @@ process.exit(0);
           (fun request ->
             assert_contains ~name:"agent bridge show breadcrumb"
               {|"method":"thread-api/get-block-parents"|} request.body;
-            assert_contains ~name:"agent bridge show breadcrumb block id"
-              {|7|} request.body;
+            assert_contains ~name:"agent bridge show breadcrumb block id" {|7|}
+              request.body;
             ( 200,
               [ ("Content-Type", "application/json") ],
               {|{"resultTransit":"[]"}|} ));
@@ -3498,10 +3565,7 @@ process.exit(0);
                       "agent";
                       "bridge";
                     ]
-                    ~env:
-                      [
-                        ("LOGSEQ_CLI_BASE_URL", base_url);
-                      ]))
+                    ~env:[ ("LOGSEQ_CLI_BASE_URL", base_url) ]))
           in
           assert_int ~name:"agent bridge exit" 0 output.exit_code;
           let body = String.trim (cli_stdout output) in
@@ -3525,8 +3589,7 @@ process.exit(0);
           assert_contains ~name:"agent bridge dispatch prompt kind"
             {|Request kind: task|} codex_calls;
           assert_contains ~name:"agent bridge dispatch prompt block"
-            {|Block UUID: 11111111-1111-1111-1111-111111111111|}
-            codex_calls;
+            {|Block UUID: 11111111-1111-1111-1111-111111111111|} codex_calls;
           match output.lifecycle.action with
           | Some (Cli_action.Agent (Agent.Agent_bridge { repo; graph })) ->
               assert_equal ~name:"agent run repo" "logseq_db_alpha"
@@ -3534,8 +3597,7 @@ process.exit(0);
               assert_equal ~name:"agent run graph" "alpha" (graph_string graph)
           | _ -> failf "expected typed agent action"));
 
-  check "Cli.run listens for agent bridge graph changes"
-    (fun () ->
+  check "Cli.run listens for agent bridge graph changes" (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
       let root = fresh_root "logseq-cli-agent-bridge-listen-" in
       ensure_test_dir root;
@@ -3553,7 +3615,8 @@ if (process.argv.includes("--version")) process.exit(0);
 const isResume = process.argv.includes("resume");
 console.log(JSON.stringify({session_id: isResume ? "dispatch-session-event" : "master-session-event"}));
 process.exit(0);
-|});
+|}
+        );
       Unix.chmod codex_bin 0o755;
       write_text_file config_path
         ("{:agent-name \"agent-a\" :codex-bin \"" ^ codex_bin ^ "\"}");
@@ -3611,7 +3674,9 @@ process.exit(0);
           (fun request ->
             assert_contains ~name:"agent listen template blocks"
               {|block/_parent|} request.body;
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"[]"}|}));
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"[]"}|} ));
           (fun request ->
             assert_equal ~name:"agent listen events request"
               "GET /v1/events HTTP/1.1" request.request_line;
@@ -3619,7 +3684,9 @@ process.exit(0);
           (fun request ->
             assert_contains ~name:"agent listen initial task query"
               {|"method":"thread-api/q"|} request.body;
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"[]"}|}));
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"[]"}|} ));
           (fun request ->
             assert_contains ~name:"agent listen event task query"
               {|"method":"thread-api/q"|} request.body;
@@ -3641,11 +3708,15 @@ process.exit(0);
           (fun request ->
             assert_contains ~name:"agent listen show breadcrumb"
               {|"method":"thread-api/get-block-parents"|} request.body;
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"[]"}|}));
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"[]"}|} ));
           (fun request ->
             assert_contains ~name:"agent listen reaction query" {|eyes|}
               request.body;
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"null"}|}));
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"null"}|} ));
           (fun request ->
             assert_contains ~name:"agent listen toggle reaction"
               {|toggle-reaction|} request.body;
@@ -3672,22 +3743,22 @@ process.exit(0);
                 Lwt_main.run
                   (Lwt.pick
                      [
-                       (Cli_effect.to_lwt
-                          (Cli.run app
-                             (cli_input
-                                [
-                                  "--config";
-                                  config_path;
-                                  "--root-dir";
-                                  root;
-                                  "--graph";
-                                  "alpha";
-                                  "agent";
-                                  "bridge";
-                                ]
-                                ~env:[ ("LOGSEQ_CLI_BASE_URL", base_url) ]))
-                       |> Lwt.map (fun _ -> ()));
-                       Lwt_unix.sleep 0.5;
+                       Cli_effect.to_lwt
+                         (Cli.run app
+                            (cli_input
+                               [
+                                 "--config";
+                                 config_path;
+                                 "--root-dir";
+                                 root;
+                                 "--graph";
+                                 "alpha";
+                                 "agent";
+                                 "bridge";
+                               ]
+                               ~env:[ ("LOGSEQ_CLI_BASE_URL", base_url) ]))
+                       |> Lwt.map (fun _ -> ());
+                       sleep_lwt_ms 2000L;
                      ]))
           in
           let codex_calls = read_text_file codex_log in
@@ -3697,8 +3768,8 @@ process.exit(0);
             "Codex master command prepared" bridge_stdout;
           assert_contains ~name:"agent listen stdout ready"
             "listening graph changes" bridge_stdout;
-          assert_contains ~name:"agent listen starts master" "master-session-event"
-            codex_calls;
+          assert_contains ~name:"agent listen starts master"
+            "master-session-event" codex_calls;
           assert_contains ~name:"agent listen dispatches event task" "resume"
             codex_calls;
           assert_contains ~name:"agent listen dispatch prompt" "Event task"
@@ -3723,7 +3794,8 @@ if (process.argv.includes("--version")) process.exit(0);
 const isResume = process.argv.includes("resume");
 console.log(JSON.stringify({session_id: isResume ? "dispatch-comment-session" : "master-comment-session"}));
 process.exit(0);
-|});
+|}
+        );
       Unix.chmod codex_bin 0o755;
       write_text_file config_path
         ("{:agent-name \"agent-a\" :codex-bin \"" ^ codex_bin ^ "\"}");
@@ -3740,15 +3812,13 @@ process.exit(0);
       let comments_area_uuid = "44444444-4444-4444-8444-444444444444" in
       let target_uuid = "55555555-5555-4555-8555-555555555555" in
       let comment_block =
-        {|{\"~:db/id\":30,\"~:block/uuid\":\"~u|}
-        ^ comment_uuid
+        {|{\"~:db/id\":30,\"~:block/uuid\":\"~u|} ^ comment_uuid
         ^ {|\",\"~:block/title\":\"Please check this [[agent-a]]\",\"~:block/tags\":[{\"~:db/ident\":\"~:logseq.class/Comment\"}],\"~:block/refs\":[{\"~:db/id\":101,\"~:block/title\":\"agent-a\",\"~:block/name\":\"agent-a\"}],\"~:block/parent\":{\"~:db/id\":40,\"~:block/uuid\":\"~u|}
         ^ comments_area_uuid
         ^ {|\",\"~:block/title\":\"Comments\",\"~:block/tags\":[{\"~:db/ident\":\"~:logseq.class/Comments\"}]}}|}
       in
       let comments_area =
-        {|{\"~:db/id\":40,\"~:block/uuid\":\"~u|}
-        ^ comments_area_uuid
+        {|{\"~:db/id\":40,\"~:block/uuid\":\"~u|} ^ comments_area_uuid
         ^ {|\",\"~:block/title\":\"Comments\",\"~:block/tags\":[{\"~:db/ident\":\"~:logseq.class/Comments\"}],\"~:logseq.property.comments/blocks\":[{\"~:db/id\":50,\"~:block/uuid\":\"~u|}
         ^ target_uuid
         ^ {|\",\"~:block/title\":\"Target task context\",\"~:logseq.property/assignee\":[{\"~:block/title\":\"agent-a\"}]}]}|}
@@ -3792,7 +3862,9 @@ process.exit(0);
           (fun request ->
             assert_contains ~name:"agent comment template blocks"
               {|block/_parent|} request.body;
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"[]"}|}));
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"[]"}|} ));
           (fun request ->
             assert_equal ~name:"agent comment events request"
               "GET /v1/events HTTP/1.1" request.request_line;
@@ -3801,11 +3873,17 @@ process.exit(0);
             assert_contains ~name:"agent comment pulls comment"
               {|"method":"thread-api/pull"|} request.body;
             assert_contains ~name:"agent comment pull id" {|30|} request.body;
-            assert_contains ~name:"agent comment pull selector"
-              {|block/refs|} request.body;
+            assert_contains ~name:"agent comment pull selector" {|block/refs|}
+              request.body;
             ( 200,
               [ ("Content-Type", "application/json") ],
               {|{"resultTransit":"|} ^ comment_block ^ {|" }|} ));
+          (fun request ->
+            assert_contains ~name:"agent comment event task scan"
+              {|"method":"thread-api/q"|} request.body;
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"[]"}|} ));
           (fun request ->
             assert_contains ~name:"agent comment pulls area"
               {|"method":"thread-api/pull"|} request.body;
@@ -3816,8 +3894,8 @@ process.exit(0);
               [ ("Content-Type", "application/json") ],
               {|{"resultTransit":"|} ^ comments_area ^ {|" }|} ));
           (fun request ->
-            assert_contains ~name:"agent comment shows target"
-              target_uuid request.body;
+            assert_contains ~name:"agent comment shows target" target_uuid
+              request.body;
             ( 200,
               [ ("Content-Type", "application/json") ],
               {|{"resultTransit":"{\"~:db/id\":50,\"~:block/uuid\":\"~u|}
@@ -3836,10 +3914,12 @@ process.exit(0);
           (fun request ->
             assert_contains ~name:"agent comment target breadcrumb"
               {|"method":"thread-api/get-block-parents"|} request.body;
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"[]"}|}));
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"[]"}|} ));
           (fun request ->
-            assert_contains ~name:"agent comment shows area"
-              comments_area_uuid request.body;
+            assert_contains ~name:"agent comment shows area" comments_area_uuid
+              request.body;
             ( 200,
               [ ("Content-Type", "application/json") ],
               {|{"resultTransit":"{\"~:db/id\":40,\"~:block/uuid\":\"~u|}
@@ -3858,10 +3938,12 @@ process.exit(0);
           (fun request ->
             assert_contains ~name:"agent comment area breadcrumb"
               {|"method":"thread-api/get-block-parents"|} request.body;
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"[]"}|}));
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"[]"}|} ));
           (fun request ->
-            assert_contains ~name:"agent comment shows comment"
-              comment_uuid request.body;
+            assert_contains ~name:"agent comment shows comment" comment_uuid
+              request.body;
             ( 200,
               [ ("Content-Type", "application/json") ],
               {|{"resultTransit":"{\"~:db/id\":30,\"~:block/uuid\":\"~u|}
@@ -3880,13 +3962,17 @@ process.exit(0);
           (fun request ->
             assert_contains ~name:"agent comment breadcrumb"
               {|"method":"thread-api/get-block-parents"|} request.body;
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"[]"}|}));
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"[]"}|} ));
           (fun request ->
             assert_contains ~name:"agent comment reaction query" {|eyes|}
               request.body;
             assert_contains ~name:"agent comment reaction uuid" comment_uuid
               request.body;
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"null"}|}));
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"null"}|} ));
           (fun request ->
             assert_contains ~name:"agent comment toggle reaction"
               {|toggle-reaction|} request.body;
@@ -3896,50 +3982,49 @@ process.exit(0);
               [ ("Content-Type", "application/json") ],
               {|{"resultTransit":"{\"~:ok\":true}"}|} ));
           (fun request ->
-            assert_contains ~name:"agent comment event task scan"
-              {|"method":"thread-api/q"|} request.body;
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"[]"}|}));
-          (fun request ->
             assert_contains ~name:"agent comment initial task scan"
               {|"method":"thread-api/q"|} request.body;
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"[]"}|}));
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"[]"}|} ));
         ]
         (fun base_url ->
           Lwt_main.run
             (Lwt.pick
                [
-                 (Cli_effect.to_lwt
-                    (Cli.run app
-                       (cli_input
-                          [
-                            "--config";
-                            config_path;
-                            "--root-dir";
-                            root;
-                            "--graph";
-                            "alpha";
-                            "--output";
-                            "json";
-                            "agent";
-                            "bridge";
-                          ]
-                          ~env:[ ("LOGSEQ_CLI_BASE_URL", base_url) ]))
-                 |> Lwt.map (fun _ -> ()));
-                 Lwt_unix.sleep 0.5;
+                 Cli_effect.to_lwt
+                   (Cli.run app
+                      (cli_input
+                         [
+                           "--config";
+                           config_path;
+                           "--root-dir";
+                           root;
+                           "--graph";
+                           "alpha";
+                           "--output";
+                           "json";
+                           "agent";
+                           "bridge";
+                         ]
+                         ~env:[ ("LOGSEQ_CLI_BASE_URL", base_url) ]))
+                 |> Lwt.map (fun _ -> ());
+                 sleep_lwt_ms 2000L;
                ]);
           let codex_calls = read_text_file codex_log in
           assert_contains ~name:"agent comment starts master"
             "master-comment-session" codex_calls;
           assert_contains ~name:"agent comment resumes master" "resume"
             codex_calls;
-          assert_contains ~name:"agent comment prompt kind" "Request kind: comment"
-            codex_calls;
+          assert_contains ~name:"agent comment prompt kind"
+            "Request kind: comment" codex_calls;
           assert_contains ~name:"agent comment prompt title"
             "Please check this [[agent-a]]" codex_calls;
           assert_contains ~name:"agent comment prompt target context"
             "Target task context" codex_calls));
 
-  check "Cli.run aligns agent bridge initialization and task prompts with upstream"
+  check
+    "Cli.run aligns agent bridge initialization and task prompts with upstream"
     (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
       let root = fresh_root "logseq-cli-agent-bridge-upstream-" in
@@ -3958,11 +4043,12 @@ if (process.argv.includes("--version")) process.exit(0);
 const isResume = process.argv.includes("resume");
 console.log(JSON.stringify({session: {id: isResume ? "dispatch-session-2" : "master-session-2"}}));
 process.exit(0);
-|});
+|}
+        );
       Unix.chmod codex_bin 0o755;
       write_text_file config_path
-        ("{:agent-name \"agent-a\" :agent-bridge-process-once? true :codex-bin \""
-        ^ codex_bin ^ "\"}");
+        ("{:agent-name \"agent-a\" :agent-bridge-process-once? true :codex-bin \
+          \"" ^ codex_bin ^ "\"}");
       let registry_page =
         {|{\"~:db/id\":100,\"~:block/uuid\":\"~uaaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"~:block/name\":\"agentbridge\",\"~:block/title\":\"AgentBridge\"}|}
       in
@@ -3988,21 +4074,18 @@ process.exit(0);
       let task_uuid = "11111111-1111-1111-1111-111111111111" in
       let parent_uuid = "99999999-9999-4999-8999-999999999999" in
       let routable =
-        {|{\"~:db/id\":7,\"~:block/uuid\":\"~u|}
-        ^ task_uuid
+        {|{\"~:db/id\":7,\"~:block/uuid\":\"~u|} ^ task_uuid
         ^ {|\",\"~:block/title\":\"Child task root\",\"~:block/tags\":[{\"~:db/ident\":\"~:logseq.class/Task\"}],\"~:logseq.property/status\":{\"~:db/ident\":\"~:logseq.property/status.todo\"},\"~:logseq.property/assignee\":[{\"~:block/title\":\"agent-a\"}],\"~:block/parent\":{\"~:db/id\":70}}|}
       in
       let show_root =
-        {|{\"~:db/id\":7,\"~:block/uuid\":\"~u|}
-        ^ task_uuid
+        {|{\"~:db/id\":7,\"~:block/uuid\":\"~u|} ^ task_uuid
         ^ {|\",\"~:block/title\":\"Child task root\",\"~:block/order\":1,\"~:block/page\":{\"~:db/id\":200},\"~:block/tags\":[{\"~:db/ident\":\"~:logseq.class/Task\"}],\"~:logseq.property/status\":{\"~:db/ident\":\"~:logseq.property/status.todo\"}}|}
       in
       let show_child =
         {|{\"~:db/id\":8,\"~:block/uuid\":\"~u88888888-8888-4888-8888-888888888888\",\"~:block/title\":\"Child task detail line\",\"~:block/order\":2,\"~:block/parent\":{\"~:db/id\":7},\"~:block/page\":{\"~:db/id\":200}}|}
       in
       let parent_task =
-        {|{\"~:db/id\":70,\"~:block/uuid\":\"~u|}
-        ^ parent_uuid
+        {|{\"~:db/id\":70,\"~:block/uuid\":\"~u|} ^ parent_uuid
         ^ {|\",\"~:block/title\":\"Parent task\",\"~:block/tags\":[{\"~:db/ident\":\"~:logseq.class/Task\"}],\"~:logseq.property.agent/session-id\":\"inherited-session-1\"}|}
       in
       with_http_server_sequence
@@ -4067,8 +4150,8 @@ process.exit(0);
               request.body;
             ( 200,
               [ ("Content-Type", "application/json") ],
-              {|{"resultTransit":"[|} ^ show_root ^ {|,|} ^ show_child
-              ^ {|]"}|} ));
+              {|{"resultTransit":"[|} ^ show_root ^ {|,|} ^ show_child ^ {|]"}|}
+            ));
           (fun request ->
             assert_contains ~name:"agent upstream show breadcrumb"
               {|"method":"thread-api/get-block-parents"|} request.body;
@@ -4137,9 +4220,11 @@ process.exit(0);
           assert_contains ~name:"agent upstream inherited session prompt"
             "Inherited subagent session id: inherited-session-1" codex_calls;
           assert_contains ~name:"agent upstream inherited parent prompt"
-            ("Inherited parent task UUID: " ^ parent_uuid) codex_calls));
+            ("Inherited parent task UUID: " ^ parent_uuid)
+            codex_calls));
 
-  check "Cli.run creates default agent bridge master prompt with flattened children"
+  check
+    "Cli.run creates default agent bridge master prompt with flattened children"
     (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
       let root = fresh_root "logseq-cli-agent-bridge-default-prompt-" in
@@ -4157,11 +4242,12 @@ fs.appendFileSync(logPath, JSON.stringify(process.argv.slice(2)) + "\n");
 if (process.argv.includes("--version")) process.exit(0);
 console.log(JSON.stringify({session_id: "master-session-3"}));
 process.exit(0);
-|});
+|}
+        );
       Unix.chmod codex_bin 0o755;
       write_text_file config_path
-        ("{:agent-name \"agent-a\" :agent-bridge-process-once? true :codex-bin \""
-        ^ codex_bin ^ "\"}");
+        ("{:agent-name \"agent-a\" :agent-bridge-process-once? true :codex-bin \
+          \"" ^ codex_bin ^ "\"}");
       let registry_page =
         {|{\"~:db/id\":100,\"~:block/uuid\":\"~uaaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"~:block/name\":\"agentbridge\",\"~:block/title\":\"AgentBridge\"}|}
       in
@@ -4189,9 +4275,11 @@ process.exit(0);
               [ ("Content-Type", "application/json") ],
               {|{"resultTransit":"[|} ^ agent_page ^ {|]"}|} ));
           (fun request ->
-            assert_contains ~name:"agent default prompt query"
-              {|block/_parent|} request.body;
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"[]"}|}));
+            assert_contains ~name:"agent default prompt query" {|block/_parent|}
+              request.body;
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"[]"}|} ));
           (fun request ->
             assert_contains ~name:"agent default prompt insert method"
               {|"method":"thread-api/apply-outliner-ops"|} request.body;
@@ -4199,8 +4287,9 @@ process.exit(0);
               {|insert-blocks|} request.body;
             assert_not_contains ~name:"agent default prompt flattens children"
               {|block/children|} request.body;
-            assert_not_contains ~name:"agent default prompt avoids lookup parent"
-              {|block/parent|} request.body;
+            assert_not_contains
+              ~name:"agent default prompt avoids lookup parent" {|block/parent|}
+              request.body;
             assert_contains ~name:"agent default prompt code tag"
               {|logseq.class/Code-block|} request.body;
             assert_contains ~name:"agent default prompt keeps uuid"
@@ -4217,11 +4306,15 @@ process.exit(0);
           (fun request ->
             assert_contains ~name:"agent default prompt loads templates"
               {|block/_parent|} request.body;
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"[]"}|}));
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"[]"}|} ));
           (fun request ->
-            assert_contains ~name:"agent default prompt lists tasks"
-              {|agent-a|} request.body;
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"[]"}|}));
+            assert_contains ~name:"agent default prompt lists tasks" {|agent-a|}
+              request.body;
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"[]"}|} ));
         ]
         (fun base_url ->
           let output =
@@ -4244,7 +4337,8 @@ process.exit(0);
           in
           assert_int ~name:"agent default prompt exit" 0 output.exit_code;
           let body = String.trim (cli_stdout output) in
-          assert_contains ~name:"agent default prompt status" {|"status":"ok"|} body;
+          assert_contains ~name:"agent default prompt status" {|"status":"ok"|}
+            body;
           assert_contains ~name:"agent default prompt no routed tasks"
             {|"routed":[]|} body));
 
@@ -4266,11 +4360,12 @@ fs.appendFileSync(logPath, JSON.stringify(process.argv.slice(2)) + "\n");
 if (process.argv.includes("--version")) process.exit(0);
 console.log(JSON.stringify({session_id: "master-session-repaired"}));
 process.exit(0);
-|});
+|}
+        );
       Unix.chmod codex_bin 0o755;
       write_text_file config_path
-        ("{:agent-name \"agent-a\" :agent-bridge-process-once? true :codex-bin \""
-        ^ codex_bin ^ "\"}");
+        ("{:agent-name \"agent-a\" :agent-bridge-process-once? true :codex-bin \
+          \"" ^ codex_bin ^ "\"}");
       let registry_page =
         {|{\"~:db/id\":100,\"~:block/uuid\":\"~uaaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"~:block/name\":\"agentbridge\",\"~:block/title\":\"AgentBridge\"}|}
       in
@@ -4289,8 +4384,8 @@ process.exit(0);
               [ ("Content-Type", "application/json") ],
               {|{"resultTransit":"[|} ^ registry_page ^ {|]"}|} ));
           (fun request ->
-            assert_contains ~name:"agent repair prompt checks agent"
-              {|agent-a|} request.body;
+            assert_contains ~name:"agent repair prompt checks agent" {|agent-a|}
+              request.body;
             ( 200,
               [ ("Content-Type", "application/json") ],
               {|{"resultTransit":"[|} ^ agent_page ^ {|]"}|} ));
@@ -4301,8 +4396,8 @@ process.exit(0);
               [ ("Content-Type", "application/json") ],
               {|{"resultTransit":"[|} ^ agent_page ^ {|]"}|} ));
           (fun request ->
-            assert_contains ~name:"agent repair prompt query"
-              {|block/_parent|} request.body;
+            assert_contains ~name:"agent repair prompt query" {|block/_parent|}
+              request.body;
             ( 200,
               [ ("Content-Type", "application/json") ],
               {|{"resultTransit":"[|} ^ broken_master_block ^ {|]"}|} ));
@@ -4313,7 +4408,8 @@ process.exit(0);
               {|logseq.class/Code-block|} request.body;
             assert_contains ~name:"agent repair prompt targets wrapper"
               {|cccccccc-cccc-4ccc-8ccc-cccccccccccc|} request.body;
-            assert_not_contains ~name:"agent repair prompt does not insert wrapper"
+            assert_not_contains
+              ~name:"agent repair prompt does not insert wrapper"
               {|AgentBridge master prompt|} request.body;
             ( 200,
               [ ("Content-Type", "application/json") ],
@@ -4327,11 +4423,15 @@ process.exit(0);
           (fun request ->
             assert_contains ~name:"agent repair prompt loads templates"
               {|block/_parent|} request.body;
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"[]"}|}));
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"[]"}|} ));
           (fun request ->
-            assert_contains ~name:"agent repair prompt lists tasks"
-              {|agent-a|} request.body;
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"[]"}|}));
+            assert_contains ~name:"agent repair prompt lists tasks" {|agent-a|}
+              request.body;
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"[]"}|} ));
         ]
         (fun base_url ->
           let output =
@@ -4360,8 +4460,7 @@ process.exit(0);
           assert_contains ~name:"agent repair prompt uses default master prompt"
             {|AgentBridge Master Agent|} codex_calls));
 
-  check "Cli.run refuses agent bridge when a live bridge lock exists"
-    (fun () ->
+  check "Cli.run refuses agent bridge when a live bridge lock exists" (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
       let root = fresh_root "logseq-cli-agent-bridge-live-lock-" in
       ensure_test_dir root;
@@ -4375,8 +4474,8 @@ process.exit(0);
 |};
       Unix.chmod codex_bin 0o755;
       write_text_file config_path
-        ("{:agent-name \"agent-a\" :agent-bridge-process-once? true :codex-bin \""
-        ^ codex_bin ^ "\"}");
+        ("{:agent-name \"agent-a\" :agent-bridge-process-once? true :codex-bin \
+          \"" ^ codex_bin ^ "\"}");
       let lock_dir =
         Filename.concat
           (Filename.concat root "agent-bridge-locks")
@@ -4415,8 +4514,7 @@ process.exit(0);
       assert_contains ~name:"agent live lock agent"
         {|AgentBridge name 'agent-a'|} body);
 
-  check "Cli.run replaces stale agent bridge locks"
-    (fun () ->
+  check "Cli.run replaces stale agent bridge locks" (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
       let root = fresh_root "logseq-cli-agent-bridge-stale-lock-" in
       ensure_test_dir root;
@@ -4433,11 +4531,12 @@ fs.appendFileSync(logPath, JSON.stringify(process.argv.slice(2)) + "\n");
 if (process.argv.includes("--version")) process.exit(0);
 console.log(JSON.stringify({session_id: "master-session-stale"}));
 process.exit(0);
-|});
+|}
+        );
       Unix.chmod codex_bin 0o755;
       write_text_file config_path
-        ("{:agent-name \"agent-a\" :agent-bridge-process-once? true :codex-bin \""
-        ^ codex_bin ^ "\"}");
+        ("{:agent-name \"agent-a\" :agent-bridge-process-once? true :codex-bin \
+          \"" ^ codex_bin ^ "\"}");
       let lock_dir =
         Filename.concat
           (Filename.concat root "agent-bridge-locks")
@@ -4480,9 +4579,13 @@ process.exit(0);
               [ ("Content-Type", "application/json") ],
               {|{"resultTransit":"[|} ^ registry_page ^ {|]"}|} ));
           (fun _request ->
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"[]"}|}));
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"[]"}|} ));
           (fun _request ->
-            (200, [ ("Content-Type", "application/json") ], {|{"resultTransit":"[]"}|}));
+            ( 200,
+              [ ("Content-Type", "application/json") ],
+              {|{"resultTransit":"[]"}|} ));
         ]
         (fun base_url ->
           let output =
@@ -4599,7 +4702,11 @@ process.exit(0);
             (Filename.concat root "server-list")
             (string_of_int (Unix.getpid ()) ^ " " ^ string_of_int port ^ "\n");
           let config = test_config ~root_dir:root ~graph:"alpha" () in
-          match run_blocking (Server_runtime.ensure_server config (repo "alpha") ~create_empty_db:false) with
+          match
+            run_blocking
+              (Server_runtime.ensure_server config (repo "alpha")
+                 ~create_empty_db:false)
+          with
           | Ok invoke_config ->
               assert_equal ~name:"invoke base url" base_url
                 invoke_config.Transport.base_url
@@ -4667,7 +4774,8 @@ process.exit(0);
       let config = test_config ~root_dir:root ~graph:"foo/bar" () in
       match
         run_blocking
-          (Server_runtime.start_server config (repo "logseq_db_foo/bar") ~create_empty_db:false)
+          (Server_runtime.start_server config (repo "logseq_db_foo/bar")
+             ~create_empty_db:false)
       with
       | Ok _ ->
           failf "expected missing script after encoded repo dir is prepared"
@@ -5091,8 +5199,7 @@ process.exit(0);
             ->
               assert_equal ~name:"debug pull repo" "logseq_db_alpha"
                 (repo_string repo);
-              assert_equal ~name:"debug pull graph" "alpha"
-                (graph_string graph)
+              assert_equal ~name:"debug pull graph" "alpha" (graph_string graph)
           | _ -> failf "expected typed debug pull action"));
 
   check "Cli.run executes debug pull by uuid through typed action" (fun () ->
@@ -5230,9 +5337,8 @@ process.exit(0);
           assert_equal ~name:"request path" "graph create"
             (String.concat " " request.Cli_request.path);
           assert_equal ~name:"global graph" "alpha"
-            (request.globals.graph
-            |> Option.map graph_string
-            |> Option.value ~default:"");
+            (request.globals.graph |> Option.map graph_string
+           |> Option.value ~default:"");
           assert_equal ~name:"global root" "/tmp/logseq-cli-spec"
             (Option.value request.globals.root_dir ~default:"");
           match request.command with
@@ -6812,9 +6918,12 @@ process.exit(0);
             (config.repo |> Option.map repo_string |> Option.value ~default:"");
           assert_equal ~name:"env root" root config.root_dir;
           assert_equal ~name:"env config path" config_path config.config_path;
-          assert_int64 ~name:"env timeout" 500L config.timeout_ms;
-          assert_int64 ~name:"env login timeout" 600L config.login_timeout_ms;
-          assert_int64 ~name:"env logout timeout" 700L config.logout_timeout_ms;
+          assert_int64 ~name:"env timeout" 500L
+            (Ptime_util.span_to_ms config.timeout_span);
+          assert_int64 ~name:"env login timeout" 600L
+            (Ptime_util.span_to_ms config.login_timeout_span);
+          assert_int64 ~name:"env logout timeout" 700L
+            (Ptime_util.span_to_ms config.logout_timeout_span);
           assert_int ~name:"file list width remains" 44
             config.list_title_max_display_width;
           assert_equal ~name:"env output" "json"
@@ -6843,8 +6952,8 @@ process.exit(0);
       in
       let globals =
         Global_opts.create ~graph:(graph "argv-graph") ~root_dir:argv_root
-          ~timeout_ms:900L ~output_format:(Output.Mode.Packed Output.Mode.Edn)
-          ()
+          ~timeout_span:(Ptime_util.span_of_ms 900L)
+          ~output_format:(Output.Mode.Packed Output.Mode.Edn) ()
       in
       match
         run_blocking
@@ -6855,13 +6964,12 @@ process.exit(0);
       | Ok resolved ->
           let config = resolved.Cli_config.config in
           assert_equal ~name:"argv graph" "argv-graph"
-            (config.graph
-            |> Option.map graph_string
-            |> Option.value ~default:"");
+            (config.graph |> Option.map graph_string |> Option.value ~default:"");
           assert_equal ~name:"argv repo" "logseq_db_argv-graph"
             (config.repo |> Option.map repo_string |> Option.value ~default:"");
           assert_equal ~name:"argv root" argv_root config.root_dir;
-          assert_int64 ~name:"argv timeout" 900L config.timeout_ms;
+          assert_int64 ~name:"argv timeout" 900L
+            (Ptime_util.span_to_ms config.timeout_span);
           assert_equal ~name:"argv output" "edn"
             (Option.map Output_mode.to_string config.output_format
             |> Option.value ~default:""));
@@ -6908,15 +7016,16 @@ process.exit(0);
       | Ok resolved ->
           let config = resolved.Cli_config.config in
           assert_equal ~name:"file graph" "file-graph"
-            (config.graph
-            |> Option.map graph_string
-            |> Option.value ~default:"");
+            (config.graph |> Option.map graph_string |> Option.value ~default:"");
           assert_equal ~name:"file repo" "logseq_db_file-graph"
             (config.repo |> Option.map repo_string |> Option.value ~default:"");
           assert_equal ~name:"file root" file_root config.root_dir;
-          assert_int64 ~name:"file timeout" 321L config.timeout_ms;
-          assert_int64 ~name:"file login timeout" 654L config.login_timeout_ms;
-          assert_int64 ~name:"file logout timeout" 987L config.logout_timeout_ms;
+          assert_int64 ~name:"file timeout" 321L
+            (Ptime_util.span_to_ms config.timeout_span);
+          assert_int64 ~name:"file login timeout" 654L
+            (Ptime_util.span_to_ms config.login_timeout_span);
+          assert_int64 ~name:"file logout timeout" 987L
+            (Ptime_util.span_to_ms config.logout_timeout_span);
           assert_int ~name:"file list width" 55
             config.list_title_max_display_width;
           assert_equal ~name:"file output" "edn"
@@ -6941,9 +7050,7 @@ process.exit(0);
       | Ok resolved ->
           let config = resolved.Cli_config.config in
           assert_equal ~name:"current graph wins" "beta"
-            (config.graph
-            |> Option.map graph_string
-            |> Option.value ~default:"");
+            (config.graph |> Option.map graph_string |> Option.value ~default:"");
           assert_equal ~name:"current graph repo" "logseq_db_beta"
             (config.repo |> Option.map repo_string |> Option.value ~default:""));
 
@@ -6971,10 +7078,10 @@ process.exit(0);
           id_token = Some "id-token";
           access_token = Some "access-token";
           refresh_token = Some "refresh-token";
-          expires_at = Some 4102444800000L;
+          expires_at = Some (Ptime_util.time_of_epoch_ms 4102444800000L);
           sub = Some "sub-1";
           email = Some "user@example.com";
-          updated_at = 1700000000000L;
+          updated_at = Ptime_util.time_of_epoch_ms 1700000000000L;
         }
       in
       (match run_blocking (Auth_state.write_auth_file config data) with
@@ -7069,10 +7176,10 @@ process.exit(0);
               id_token = Some "old-id";
               access_token = Some "old-access";
               refresh_token = Some "old-refresh";
-              expires_at = Some 1L;
+              expires_at = Some (Ptime_util.time_of_epoch_ms 1L);
               sub = Some "old-sub";
               email = Some "old@example.com";
-              updated_at = 1L;
+              updated_at = Ptime_util.time_of_epoch_ms 1L;
             }
           in
           match run_blocking (Auth_state.refresh_auth config current) with
@@ -7089,7 +7196,9 @@ process.exit(0);
               assert_equal ~name:"refreshed email" "fresh@example.com"
                 (Option.value refreshed.email ~default:"");
               assert_int64 ~name:"refreshed expires" 4102444800000L
-                (Option.value refreshed.expires_at ~default:0L)));
+                (Option.value
+                   (Option.map Ptime_util.time_to_epoch_ms refreshed.expires_at)
+                   ~default:0L)));
 
   check
     "Auth_state.resolve_auth refreshes expired persisted auth and writes it \
@@ -7177,7 +7286,6 @@ process.exit(0);
         (fun http_base ->
           let root = fresh_root "logseq-cli-auth-login-" in
           let auth_path = Filename.concat root "auth.json" in
-          let result_path = Filename.concat root "login-result" in
           let config_path = Filename.concat root "cli.edn" in
           ensure_test_dir root;
           write_text_file config_path
@@ -7186,48 +7294,49 @@ process.exit(0);
            ^ "/oauth2/token\" :oauth-state \"state-1\" :oauth-code-verifier \
               \"verifier-1\" :oauth-code-challenge \"challenge-1\" \
               :open-browser false}");
-          match Unix.fork () with
-          | 0 -> (
-              let globals = Global_opts.create ~config_path ~root_dir:root () in
-              let config =
-                match
-                  run_blocking
-                    (Cli_config.resolve ~defaults:(Cli_config.defaults ())
-                       ~env:(fun _ -> None)
-                       globals)
-                with
-                | Ok resolved -> resolved.Cli_config.config
-                | Error err ->
-                    write_text_file result_path
-                      ("config-error:" ^ err.Error.message);
-                    exit 2
+          let callback_url =
+            "http://localhost:8765/auth/callback?code=callback-code&state=state-1"
+          in
+          let callback_pid =
+            match Unix.fork () with
+            | 0 ->
+                let rec loop attempts =
+                  if attempts <= 0 then exit 2
+                  else if try_http_get callback_url then exit 0
+                  else (
+                    ignore (Unix.select [] [] [] 0.01);
+                    loop (attempts - 1))
+                in
+                loop 200
+            | pid -> pid
+          in
+          let globals = Global_opts.create ~config_path ~root_dir:root () in
+          let config =
+            match
+              run_blocking
+                (Cli_config.resolve ~defaults:(Cli_config.defaults ())
+                   ~env:(fun _ -> None)
+                   globals)
+            with
+            | Ok resolved -> resolved.Cli_config.config
+            | Error err -> failf "config-error: %s" err.Error.message
+          in
+          let login_result = run_blocking (Auth_state.login config) in
+          let _, callback_status = waitpid_noeintr [] callback_pid in
+          (match callback_status with
+          | Unix.WEXITED 0 -> ()
+          | _ -> failf "login callback server did not accept callback");
+          (match login_result with
+          | Error err ->
+              failf "login failed: %s:%s"
+                (Edn_util.keyword_to_string err.Error.code)
+                err.message
+          | Ok result ->
+              let result =
+                "ok:" ^ result.Auth_state.authorize_url ^ ":"
+                ^ string_of_bool result.opened
+                ^ ":" ^ Option.value result.email ~default:""
               in
-              match run_blocking (Auth_state.login config) with
-              | Ok result ->
-                  write_text_file result_path
-                    ("ok:" ^ result.Auth_state.authorize_url ^ ":"
-                    ^ string_of_bool result.opened
-                    ^ ":"
-                    ^ Option.value result.email ~default:"");
-                  exit 0
-              | Error err ->
-                  write_text_file result_path
-                    ("error:"
-                    ^ Edn_util.keyword_to_string err.Error.code
-                    ^ ":" ^ err.message);
-                  exit 3)
-          | pid ->
-              let callback_url =
-                "http://localhost:8765/auth/callback?code=callback-code&state=state-1"
-              in
-              if not (wait_until 200 (fun () -> try_http_get callback_url)) then
-                failf "login callback server did not accept callback";
-              let _, status = waitpid_noeintr [] pid in
-              (match status with
-              | Unix.WEXITED 0 -> ()
-              | _ ->
-                  failf "login child failed: %s" (read_binary_file result_path));
-              let result = read_binary_file result_path in
               assert_contains ~name:"login authorize endpoint"
                 "https://logseq-prod.auth.us-east-1.amazoncognito.com/oauth2/authorize"
                 result;
@@ -7244,7 +7353,7 @@ process.exit(0);
               assert_contains ~name:"login persisted access token"
                 "access-login" auth_file;
               assert_contains ~name:"login persisted refresh token"
-                "refresh-login" auth_file));
+                "refresh-login" auth_file)));
 
   check "Cli.run executes logout through typed action and deletes auth file"
     (fun () ->
@@ -8009,8 +8118,8 @@ process.exit(0);
       with_http_server_sequence
         [
           (fun request ->
-            assert_equal ~name:"sync upload auth line" "POST /v1/invoke HTTP/1.1"
-              request.request_line;
+            assert_equal ~name:"sync upload auth line"
+              "POST /v1/invoke HTTP/1.1" request.request_line;
             assert_contains ~name:"sync upload auth method"
               {|"method":"thread-api/sync-app-state"|} request.body;
             assert_contains ~name:"sync upload auth id token" {|auth/id-token|}
@@ -8086,7 +8195,7 @@ process.exit(0);
           (fun request ->
             assert_contains ~name:"sync upload timeout upload method"
               {|"method":"thread-api/db-sync-upload-graph"|} request.body;
-            Unix.sleepf 0.1;
+            sleep_ms 100L;
             ( 200,
               [ ("Content-Type", "application/json") ],
               {|{"resultTransit":"true"}|} ));
@@ -8278,14 +8387,7 @@ process.exit(0);
               (Cli.run app
                  (cli_input
                     ~env:[ ("LOGSEQ_CLI_BASE_URL", base_url) ]
-                    [
-                      "--graph";
-                      "alpha";
-                      "--output";
-                      "json";
-                      "sync";
-                      "upload";
-                    ]))
+                    [ "--graph"; "alpha"; "--output"; "json"; "sync"; "upload" ]))
           in
           assert_int ~name:"sync upload worker error exit" 1 output.exit_code;
           assert_equal ~name:"sync upload worker error json"
@@ -8796,12 +8898,15 @@ process.exit(0);
       let app = Cli.make_app ~version:"test-version" () in
       let cwd = fresh_root "logseq-cli-sync-download-worker-cwd-" in
       let root = fresh_root "logseq-cli-sync-download-worker-root-" in
+      let config_path = Filename.concat root "cli.edn" in
+      let auth_path = Filename.concat root "auth.json" in
       let static_dir = Filename.concat cwd "static" in
       let script_path = Filename.concat static_dir "db-worker-node.js" in
       let argv_log = Filename.concat root "worker-argv.log" in
       ensure_test_dir cwd;
       ensure_test_dir root;
       ensure_test_dir static_dir;
+      write_text_file config_path ("{:auth-path \"" ^ auth_path ^ "\"}");
       write_text_file script_path
         {|
 const fs = require("fs");
@@ -8905,6 +9010,8 @@ setInterval(() => {}, 1000);
           (Cli.run app
              (cli_input ~cwd
                 [
+                  "--config";
+                  config_path;
                   "--root-dir";
                   root;
                   "--graph";
@@ -8938,7 +9045,8 @@ setInterval(() => {}, 1000);
       assert_contains ~name:"sync download worker create empty db"
         "--create-empty-db" argv_log);
 
-  check "Cli.run rejects sync download when local graph already exists" (fun () ->
+  check "Cli.run rejects sync download when local graph already exists"
+    (fun () ->
       let app = Cli.make_app ~version:"test-version" () in
       let root = fresh_root "logseq-cli-sync-download-existing-" in
       ensure_test_dir root;
@@ -9028,7 +9136,8 @@ setInterval(() => {}, 1000);
           (fun request ->
             assert_contains ~name:"sync download e2ee empty db method"
               {|"method":"thread-api/q"|} request.body;
-            assert_contains ~name:"sync download e2ee empty db queries block names"
+            assert_contains
+              ~name:"sync download e2ee empty db queries block names"
               {|block/name|} request.body;
             ( 200,
               [ ("Content-Type", "application/json") ],
@@ -9099,7 +9208,8 @@ setInterval(() => {}, 1000);
           (fun request ->
             assert_contains ~name:"sync download timeout empty db method"
               {|"method":"thread-api/q"|} request.body;
-            assert_contains ~name:"sync download timeout empty db queries block names"
+            assert_contains
+              ~name:"sync download timeout empty db queries block names"
               {|block/name|} request.body;
             ( 200,
               [ ("Content-Type", "application/json") ],
@@ -9110,7 +9220,7 @@ setInterval(() => {}, 1000);
               request.body;
             assert_contains ~name:"sync download timeout graph id" graph_id
               request.body;
-            Unix.sleepf 0.1;
+            sleep_ms 100L;
             ( 200,
               [ ("Content-Type", "application/json") ],
               {|{"resultTransit":"true"}|} ));
@@ -9135,8 +9245,7 @@ setInterval(() => {}, 1000);
                     ]))
           in
           if output.exit_code <> 0 then
-            failf "sync download timeout exit\nstdout: %S"
-              (cli_stdout output);
+            failf "sync download timeout exit\nstdout: %S" (cli_stdout output);
           assert_equal ~name:"sync download timeout json"
             {|{"status":"ok","data":{"result":true}}|}
             (String.trim (cli_stdout output))));
@@ -9221,7 +9330,8 @@ setInterval(() => {}, 1000);
               "POST /v1/invoke HTTP/1.1" request.request_line;
             assert_contains ~name:"sync download progress empty db method"
               {|"method":"thread-api/q"|} request.body;
-            assert_contains ~name:"sync download progress empty db queries block names"
+            assert_contains
+              ~name:"sync download progress empty db queries block names"
               {|block/name|} request.body;
             ( 200,
               [ ("Content-Type", "application/json") ],
@@ -14846,14 +14956,13 @@ setInterval(() => {}, 1000);
               "POST /v1/invoke HTTP/1.1" request.request_line;
             assert_contains ~name:"upsert task default journal page q method"
               {|"method":"thread-api/q"|} request.body;
-            assert_contains ~name:"upsert task default journal page name" today_name
-              request.body;
+            assert_contains ~name:"upsert task default journal page name"
+              today_name request.body;
             ( 200,
               [ ("Content-Type", "application/json") ],
               Printf.sprintf
                 {|{"resultTransit":"[[\"^ \",\"~:db/id\",4,\"~:block/uuid\",\"~u22222222-2222-2222-2222-222222222222\",\"~:block/title\",\"%s\",\"~:block/name\",\"%s\"]]"}|}
-                today today_name
-            ));
+                today today_name ));
           (fun request ->
             assert_equal ~name:"upsert task default journal insert line"
               "POST /v1/invoke HTTP/1.1" request.request_line;
@@ -14872,7 +14981,8 @@ setInterval(() => {}, 1000);
           (fun request ->
             assert_equal ~name:"upsert task default journal pull created line"
               "POST /v1/invoke HTTP/1.1" request.request_line;
-            assert_contains ~name:"upsert task default journal pull created uuid"
+            assert_contains
+              ~name:"upsert task default journal pull created uuid"
               {|~u33333333-3333-3333-3333-333333333333|} request.body;
             ( 200,
               [ ("Content-Type", "application/json") ],
@@ -14885,8 +14995,8 @@ setInterval(() => {}, 1000);
               {|"method":"thread-api/apply-outliner-ops"|} request.body;
             assert_contains ~name:"upsert task default journal apply set op"
               {|\"~:batch-set-property\"|} request.body;
-            assert_contains ~name:"upsert task default journal apply tag id" {|,12,|}
-              request.body;
+            assert_contains ~name:"upsert task default journal apply tag id"
+              {|,12,|} request.body;
             assert_contains ~name:"upsert task default journal status value"
               {|\"~:logseq.property/status.todo\"|} request.body;
             ( 200,
@@ -14912,8 +15022,7 @@ setInterval(() => {}, 1000);
                       "todo";
                     ]))
           in
-          assert_int ~name:"upsert task default journal exit" 0
-            output.exit_code;
+          assert_int ~name:"upsert task default journal exit" 0 output.exit_code;
           assert_equal ~name:"upsert task default journal json"
             {|{"status":"ok","data":{"result":[8]}}|}
             (String.trim (cli_stdout output));
@@ -15493,14 +15602,13 @@ setInterval(() => {}, 1000);
               "POST /v1/invoke HTTP/1.1" request.request_line;
             assert_contains ~name:"upsert block default journal page q method"
               {|"method":"thread-api/q"|} request.body;
-            assert_contains ~name:"upsert block default journal page name" today_name
-              request.body;
+            assert_contains ~name:"upsert block default journal page name"
+              today_name request.body;
             ( 200,
               [ ("Content-Type", "application/json") ],
               Printf.sprintf
                 {|{"resultTransit":"[[\"^ \",\"~:db/id\",4,\"~:block/uuid\",\"~u22222222-2222-2222-2222-222222222222\",\"~:block/title\",\"%s\",\"~:block/name\",\"%s\"]]"}|}
-                today today_name
-            ));
+                today today_name ));
           (fun request ->
             assert_equal ~name:"upsert block default journal apply line"
               "POST /v1/invoke HTTP/1.1" request.request_line;
@@ -15519,7 +15627,8 @@ setInterval(() => {}, 1000);
           (fun request ->
             assert_equal ~name:"upsert block default journal pull created line"
               "POST /v1/invoke HTTP/1.1" request.request_line;
-            assert_contains ~name:"upsert block default journal pull created uuid"
+            assert_contains
+              ~name:"upsert block default journal pull created uuid"
               {|~u33333333-3333-3333-3333-333333333333|} request.body;
             ( 200,
               [ ("Content-Type", "application/json") ],
@@ -15551,8 +15660,8 @@ setInterval(() => {}, 1000);
           match output.lifecycle.action with
           | Some
               (Cli_action.Upsert
-                 (Upsert.Upsert_block (Upsert.Block_create action))) ->
-              (match action.target with
+                 (Upsert.Upsert_block (Upsert.Block_create action))) -> (
+              match action.target with
               | Upsert.Target_page page when page = today -> ()
               | _ -> failf "expected today journal target page")
           | _ -> failf "expected typed upsert block create action"));

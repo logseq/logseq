@@ -122,11 +122,13 @@ let parse_tokens argv =
 
 let globals_of_options options =
   Global_opts.create
-    ?graph:(Option.map Cli_primitive.create_graph (option_value "graph" options))
+    ?graph:
+      (Option.map Cli_primitive.create_graph (option_value "graph" options))
     ?root_dir:(option_value "root-dir" options)
     ?config_path:(option_value "config" options)
-    ?timeout_ms:
-      (Option.bind (option_value "timeout-ms" options) Int64.of_string_opt)
+    ?timeout_span:
+      (Option.map Ptime_util.span_of_ms
+         (Option.bind (option_value "timeout-ms" options) Int64.of_string_opt))
     ?output_format:
       (Option.bind (option_value "output" options) Output_mode.of_string)
     ~verbose:(option_present "verbose" options)
@@ -175,7 +177,8 @@ let ensure_root_config config =
 let graph_exists_error graph =
   let graph_name = Cli_primitive.string_of_graph graph in
   Error.make
-    ~context:(Edn_util.map [ (Edn_util.keyword ":graph", Edn_util.string graph_name) ])
+    ~context:
+      (Edn_util.map [ (Edn_util.keyword ":graph", Edn_util.string graph_name) ])
     (Edn_util.keyword_t "graph-exists")
     ("graph already exists: " ^ graph_name)
 
@@ -291,11 +294,11 @@ let run app input =
     let packed_result =
       let pack (Output.Mode.Packed mode) =
         Result
-          (Cli_result.error
-             ~command:(Cli_request.command_id request)
-             mode err)
+          (Cli_result.error ~command:(Cli_request.command_id request) mode err)
       in
-      pack (Option.value config.Cli_config.output_format ~default:Output_mode.default)
+      pack
+        (Option.value config.Cli_config.output_format
+           ~default:Output_mode.default)
     in
     let* output = format_result_effect packed_result config in
     finish ~config (Some request)

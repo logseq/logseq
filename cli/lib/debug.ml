@@ -87,13 +87,15 @@ let build ?registry:_ config _globals (Parsed_pull opts) =
 
 let execute (Debug_pull action) config mode =
   let open Cli_effect in
-  bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false) (function
+  bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
+    (function
     | Error err ->
         pure (Output_mode.error ~command:Command_id.Debug_pull mode err)
     | Ok invoke_config ->
         bind
           (Transport.thread_api_pull invoke_config ~repo:action.repo
-             ~selector:(Edn_util.expect_vector_t "debug pull selector" action.selector)
+             ~selector:
+               (Edn_util.expect_vector_t "debug pull selector" action.selector)
              ~lookup:(selector_value action.lookup))
           (fun entity ->
             if Edn_util.is_null entity then
