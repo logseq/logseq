@@ -121,28 +121,24 @@ let isolated_config () =
     config_path = Cli_config.default_config_path root;
   }
 
-let cases () =
+let humanize_values () =
   assert_equal ~name:"humanize count uses grouped digits" "12,345"
     (Humanize_types.format_count 12345);
-
   assert_equal ~name:"humanize pluralizes non-trivial nouns" "parties"
     (Humanize_types.pluralize_noun 2 "party");
-
   assert_equal ~name:"humanize count with noun uses grouped digits and plural"
     "12,345 parties"
     (Humanize_types.format_count_with_noun 12345 "party");
-
   assert_equal ~name:"humanize filesize uses readable units" "3.0KB"
     (Humanize_types.format_filesize (Some 3000L));
-
   assert_equal ~name:"humanize missing filesize remains a dash" "-"
     (Humanize_types.format_filesize None);
-
   assert_equal ~name:"humanize relative datetime uses natural language"
     "1 hour ago"
     (Humanize_types.relative_datetime ~then_time:Ptime.epoch
-       ~now_time:(Ptime_util.time_of_epoch_ms 3_600_000L));
+       ~now_time:(Ptime_util.time_of_epoch_ms 3_600_000L))
 
+let generic_human_tables () =
   let many_items = List.init 1000 (fun index -> Edn_util.int (index + 1)) in
   let result = Cli_result.ok Output.Mode.Human (Cli_result.Items many_items) in
   assert_contains ~name:"large human count footers are humanized" "Count: 1,000"
@@ -198,8 +194,9 @@ let cases () =
     ~name:"field value created-at rows do not use fallback ms text" "ms ago"
     field_value_time_output;
   assert_not_contains ~name:"field value time rows do not render raw integers"
-    "1700000000" field_value_time_output;
+    "1700000000" field_value_time_output
 
+let command_human_output_shapes () =
   let list_page_value =
     Edn_util.map
       [
@@ -487,7 +484,10 @@ let () =
     [
       ( "formatting",
         [
-          Alcotest.test_case "cases" `Quick cases;
+          Alcotest.test_case "humanize values" `Quick humanize_values;
+          Alcotest.test_case "generic human tables" `Quick generic_human_tables;
+          Alcotest.test_case "command human output shapes" `Quick
+            command_human_output_shapes;
           Alcotest.test_case "CJK table aligns by display width" `Quick
             cjk_table_aligns_by_display_width;
           Alcotest.test_case "list page title truncates by display width" `Quick
