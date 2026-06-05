@@ -40,6 +40,20 @@ necessary db filtering"
         (string/join " " (map html v))
         :else (str v)))
 
+(def ^:private publishing-runtime-js-files
+  ;; Keep this aligned with the :publishing browser globals in shadow-cljs.edn
+  ;; and the browser global bundles produced by gulpfile.js.
+  ["react.production.min.js"
+   "react-dom.production.min.js"
+   "react-dom-client.production.min.js"
+   "react-jsx-runtime.production.min.js"
+   "ui.js"
+   "tabler-icons-react.min.js"
+   "tabler.ext.js"])
+
+(defn- js-script [filename]
+  [:script {:src (str "static/js/" filename)}])
+
 (defn- ^:large-vars/html publishing-html
   [transit-db app-state options]
   (let [{name' :name :keys [icon alias title description url]} options
@@ -121,9 +135,7 @@ necessary db filtering"
         }
       }(window.location))"]
             ;; TODO: should make this configurable
-            [:script {:src "static/js/react.production.min.js"}]
-            [:script {:src "static/js/react-dom.production.min.js"}]
-            [:script {:src "static/js/ui.js"}]
+            (map js-script publishing-runtime-js-files)
             [:script {:src "static/js/main.js"}]
             ;; Deferring scripts above results in errors
             [:script {:defer true :src "static/js/interact.min.js"}]
