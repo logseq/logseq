@@ -65,10 +65,9 @@
 
 (defn- add-missing-built-in-block-timestamps
   [db]
-  (let [tx-data (->> (d/datoms db :avet :block/title)
+  (let [tx-data (->> (d/datoms db :avet :logseq.property/built-in? true)
                      (map :e)
                      (map #(d/entity db %))
-                     (filter :logseq.property/built-in?)
                      (mapcat
                       (fn [entity]
                         (let [created-at (or (:block/created-at entity)
