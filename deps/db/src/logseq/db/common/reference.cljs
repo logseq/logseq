@@ -245,6 +245,27 @@
       {:included included-pages
        :excluded excluded-pages})))
 
+(defn- linked-reference-top-block-ids
+  [db ids class-ids]
+  (->> ids
+       (mapcat (fn [pid] (:block/_refs (d/entity db pid))))
+       (remove (fn [ref]
+                 (or
+                  (when class-ids
+                    (some class-ids (map :db/id (:block/tags ref))))
+                  (entity-util/hidden? ref)
+                  (entity-util/hidden? (:block/page ref)))))
+       (map :db/id)
+       set))
+
+(defn- linked-reference-result
+  [db id include-ref-pages-count? has-filters? ref-blocks children-ids]
+  (cond->
+   {:ref-blocks ref-blocks
+    :ref-matched-children-ids (when has-filters? children-ids)}
+    include-ref-pages-count?
+    (assoc :ref-pages-count (get-ref-pages-count db id ref-blocks children-ids))))
+
 (defn get-linked-references
   ([db id]
    (get-linked-references db id {:include-ref-pages-count? true}))
@@ -261,17 +282,7 @@
                        (let [class-children (db-class/get-structured-children db id)]
                          (set (conj class-children id))))
         ;; Collect all top ref blocks that directly reference the page (or any alias).
-        full-ref-block-ids
-        (->> ids
-             (mapcat (fn [pid] (:block/_refs (d/entity db pid))))
-             (remove (fn [ref]
-                       (or
-                        (when class-ids
-                          (some class-ids (map :db/id (:block/tags ref))))
-                        (entity-util/hidden? ref)
-                        (entity-util/hidden? (:block/page ref)))))
-             (map :db/id)
-             set)
+        full-ref-block-ids (linked-reference-top-block-ids db ids class-ids)
         ;; matched can be top or child ids
         matched-ref-block-ids
         (when has-filters?
@@ -293,11 +304,7 @@
             (->> ref-blocks
                  (mapcat (fn [ref] (ldb/get-block-children-ids db (:db/id ref))))
                  set)))]
-    (cond->
-     {:ref-blocks ref-blocks
-      :ref-matched-children-ids (when has-filters? children-ids)}
-      include-ref-pages-count?
-      (assoc :ref-pages-count (get-ref-pages-count db id ref-blocks children-ids))))))
+    (linked-reference-result db id include-ref-pages-count? has-filters? ref-blocks children-ids))))
 
 (defn get-unlinked-references
   [db id]
