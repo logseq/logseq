@@ -317,17 +317,33 @@
               (ipc/ipc :userAppCfgs :auto-update (not enabled?))))))
 
 (defn language-row [t preferred-language]
-  (let [on-change (fn [e]
-                    (let [lang-code (util/evalue e)]
-                      (state/set-preferred-language! lang-code)
-                      (state/pub-event! [:init/commands])
-                      (ui-handler/re-render-root!)))
-        action [:select.form-select.is-small {:value     preferred-language
-                                              :on-change on-change}
-                (for [language dicts/languages]
-                  (let [lang-code (name (:value language))
-                        lang-label (:label language)]
-                    [:option {:key lang-code :value lang-code} lang-label]))]]
+  (let [selected-language (some-> preferred-language name)
+        language-items (mapv (fn [language]
+                               {:value (name (:value language))
+                                :label (:label language)})
+                             dicts/languages)
+        language-labels (into {} (map (juxt :value :label)) language-items)
+        on-value-change (fn [lang-code]
+                          (when lang-code
+                            (state/set-preferred-language! lang-code)
+                            (state/pub-event! [:init/commands])
+                            (ui-handler/re-render-root!)))
+        action (shui/select
+                {:value selected-language
+                 :items language-items
+                 :on-value-change on-value-change}
+                (shui/select-trigger
+                 {:class "w-64 h-8"}
+                 (shui/select-value
+                  (fn [value]
+                    (get language-labels value value))))
+                (shui/select-content
+                 {:container (.-body js/document)
+                  :class "z-[99999]"
+                  :positioner-props {:style {:z-index 99999}}}
+                 (shui/select-group
+                  (for [{:keys [value label]} language-items]
+                    (shui/select-item {:key value :value value} label)))))]
     (row-with-button-action {:left-label (t :settings.general/language)
                              :-for       "preferred_language"
                              :action     action})))
