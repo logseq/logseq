@@ -536,14 +536,12 @@
                                                     :content-props {:on-click (fn [] (shui/popup-hide!))
                                                                     :class "w-60"}}))))]
     [:div.cp__graphs-selector.flex.items-center.justify-between
-     (ui/tooltip
-      [:a.item.flex.items-center.gap-1.select-none
-       selector-opts
-       [:span.thumb
-        (shui/tabler-icon (if remote? "cloud" "topology-star") {:size 16})]
-       [:strong short-repo-name]
-       (shui/tabler-icon "selector" {:size 18})]
-      current-repo)]))
+     [:a.item.flex.items-center.gap-1.select-none
+      selector-opts
+      [:span.thumb
+       (shui/tabler-icon (if remote? "cloud" "topology-star") {:size 16})]
+      [:strong short-repo-name]
+      (shui/tabler-icon "selector" {:size 18})]]))
 
 ;; Update invalid-graph-name-warning if characters change
 (def multiplatform-reserved-chars ":\\*\\?\"<>|\\#\\\\")
