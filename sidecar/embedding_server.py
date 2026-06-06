@@ -34,10 +34,18 @@ def load_model(model_name):
     return _MODELS[model_name]
 
 
+def encode_texts(model, texts):
+    return model.encode(
+        texts,
+        normalize_embeddings=True,
+        show_progress_bar=False,
+    )
+
+
 def warm_model(model_name):
     logging.info("Warming embedding model: %s", model_name)
     model = load_model(model_name)
-    model.encode([WARMUP_INPUT], normalize_embeddings=True)
+    encode_texts(model, [WARMUP_INPUT])
     logging.info("Embedding model warmup finished: %s", model_name)
 
 
@@ -70,7 +78,7 @@ class EmbeddingHandler(BaseHTTPRequestHandler):
             model_name = payload.get("model") or self.server.default_model
             texts = normalize_input(payload.get("input"))
             model = load_model(model_name)
-            vectors = model.encode(texts, normalize_embeddings=True).tolist()
+            vectors = encode_texts(model, texts).tolist()
             self.send_json(
                 {
                     "object": "list",
