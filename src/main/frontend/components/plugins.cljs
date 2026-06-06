@@ -1469,7 +1469,7 @@
                        {:title [auto-check-for-updates-control]}])
                      (remove nil?)))]
 
-    [:div.toolbar-plugins-manager
+    [:div.toolbar-plugins-manager.flex.items-center
      {:on-click
       (fn [^js e]
         (shui/popup-show! (.-target e)
