@@ -291,7 +291,14 @@
   [sub]
   (cond
     (contains? @!state-sub-ids (first sub))
-    (let [path (vec sub)]
+    (let [path (vec sub)
+          ;; React's useSyncExternalStore compares snapshots with Object.is.
+          ;; (get-in (snapshot) path) may return a non-Object.is-stable value
+          ;; for the same logical data (e.g. cljs-bean lazy Bean / ArrayVector
+          ;; wrappers reconstructed on every property access), which would
+          ;; cause an infinite re-render loop. Cache the last value and reuse
+          ;; the previous reference whenever the new value is cljs `=` to it.
+          *last-snapshot (react/useRef js/undefined)]
       (react/useSyncExternalStore
        (fn subscribe-to-state-path! [listener]
          (let [id (str (gensym "state-path-listener"))]
@@ -299,7 +306,12 @@
            (fn []
              (remove-state-path-listener path id))))
        (fn get-state-path-snapshot []
-         (get-in (snapshot) path))))
+         (let [v (get-in (snapshot) path)
+               prev (.-current *last-snapshot)]
+           (if (and (not (identical? prev js/undefined))
+                    (= prev v))
+             prev
+             (do (set! (.-current *last-snapshot) v) v))))))
 
     :else
     (rfx/use-sub sub)))
