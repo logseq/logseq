@@ -1095,7 +1095,8 @@ DROP TRIGGER IF EXISTS blocks_au;
                                 (seq matched-result)))
            fuzzy-result (when-not skip-fuzzy?
                           (search-blocks-fuzzy-aux search-db q page limit))
-           vector-result (when-not page-only?
+           vector-result (when (and (not page-only?)
+                                    (:feature/enable-semantic-search? option))
                            (vector-search-blocks vector-index {:limit limit-p
                                                                :page page
                                                                :query-embedding (:query-embedding option)}))

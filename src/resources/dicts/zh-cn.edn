@@ -1692,6 +1692,8 @@
  :settings.features/markdown-mirror-regenerate-success "Markdown 镜像已重新生成"
  :settings.features/page-not-found "页面“{1}”尚不存在。请先创建该页面，然后再试一次。"
  :settings.features/plugin-system "插件系统"
+ :settings.features/semantic-search "语义搜索"
+ :settings.features/semantic-search-desc "在搜索结果中包含语义匹配。适用于 macOS Apple 芯片设备。"
 
  :settings.general/accent-color "高亮色"
  :settings.general/accent-color-alert "选择高亮色可能会影响你选择的自定义主题。"

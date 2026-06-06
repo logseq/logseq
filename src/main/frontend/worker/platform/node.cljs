@@ -221,7 +221,6 @@
     (wrap-node-sqlite-db (new DatabaseSync path) write-guard-fn)))
 
 (def ^:private default-embedding-model "all-MiniLM-L6-v2")
-(def ^:private default-embedding-endpoint "http://127.0.0.1:8765/v1/embeddings")
 (def ^:private embedding-fetch-timeout-ms 120000)
 (def ^:private embedding-fetch-retry-ms 250)
 (def ^:private embedding-model-dimensions
@@ -232,8 +231,7 @@
 (defn- resolve-embedding-endpoint
   [configured-endpoint]
   (or configured-endpoint
-      (gobj/get (.-env js/process) "LOGSEQ_EMBEDDINGS_URL")
-      default-embedding-endpoint))
+      (gobj/get (.-env js/process) "LOGSEQ_EMBEDDINGS_URL")))
 
 (defn- resolve-embedding-model-id
   [configured-model-id]
@@ -688,15 +686,20 @@
         data-dir (db-lock/graphs-dir root-dir)
         owner-source (db-lock/normalize-owner-source owner-source)
         embedding-endpoint (resolve-embedding-endpoint embedding-endpoint)
-        embedding-model-id (resolve-embedding-model-id embedding-model-id)
-        embedding-dimension (resolve-embedding-dimension embedding-model-id)
+        vector-embedding-enabled? (boolean
+                                   (and (macos-arm64?)
+                                        (seq embedding-endpoint)))
+        embedding-model-id (when vector-embedding-enabled?
+                             (resolve-embedding-model-id embedding-model-id))
+        embedding-dimension (when vector-embedding-enabled?
+                              (resolve-embedding-dimension embedding-model-id))
         open-vector-index-fn (or open-vector-index-fn open-vector-index)
-        kv (kv-store root-dir)
-        vector-embedding-enabled? (macos-arm64?)]
+        kv (kv-store root-dir)]
     (p/do!
      (ensure-dir! root-dir)
      (ensure-dir! data-dir)
      (log/info :db-worker-node-platform {:root-dir root-dir
+                                          :vector-embedding-enabled? vector-embedding-enabled?
                                           :embedding-endpoint embedding-endpoint
                                           :embedding-model-id embedding-model-id})
      (cond->
