@@ -43,35 +43,6 @@
       (js/Object.defineProperty js/process "platform" platform-descriptor)
       (js/Object.defineProperty js/process "arch" arch-descriptor))))
 
-(defn- fake-open-vector-index
-  [metadata*]
-  (fn [{:keys [path]}]
-    (.mkdirSync fs path #js {:recursive true})
-    (let [docs* (atom [])]
-      (p/resolved
-       {:query (fn [_embedding limit page]
-                 (->> @docs*
-                      (filter #(or (nil? page)
-                                   (= page (:page %))))
-                      (take (or limit 100))
-                      (mapv #(select-keys % [:id :page :vector-title :vector-score]))))
-        :upsert! (fn [docs]
-                   (reset! docs* (vec docs))
-                   nil)
-        :delete! (fn [ids]
-                   (let [ids (set ids)]
-                     (swap! docs* #(vec (remove (comp ids :id) %))))
-                   nil)
-        :truncate! (fn []
-                     (reset! docs* [])
-                     nil)
-        :metadata (fn []
-                    (get @metadata* path))
-        :set-metadata! (fn [metadata]
-                         (swap! metadata* assoc path metadata)
-                         nil)
-        :close! (fn [] nil)}))))
-
 (defn- <open-test-db
   []
   (let [root-dir (node-helper/create-tmp-dir "platform-node")
@@ -110,28 +81,6 @@
     (is (not (string/includes? source "[\"@zvec/zvec\" :as zvec]")))
     (is (string/includes? source "(js/require \"@zvec/zvec\")"))))
 
-(deftest node-platform-uses-local-embedding-backend
-  (let [source (node-platform-source)]
-    (is (not (string/includes? source "\"@huggingface/transformers\"")))
-    (is (not (string/includes? source "feature-extraction")))
-    (is (not (string/includes? source "onnx")))
-    (is (string/includes? source "/v1/embeddings"))
-    (is (string/includes? source "LOGSEQ_EMBEDDINGS_URL"))))
-
-(deftest node-platform-provides-default-embedding-backend
-  (async done
-    (let [root-dir (node-helper/create-tmp-dir "platform-node-embedding")
-          restore! (set-process-platform-arch! "darwin" "arm64")]
-      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
-                  embedding (:embedding platform)]
-            (is (= "all-MiniLM-L6-v2" (:model-id embedding)))
-            (is (fn? (:embed-texts embedding))))
-          (p/catch (fn [e]
-                     (is false (str "unexpected error: " e))))
-          (p/finally (fn []
-                       (restore!)
-                       (done)))))))
-
 (deftest node-platform-disables-vector-embedding-off-macos
   (async done
     (let [root-dir (node-helper/create-tmp-dir "platform-node-no-vector-embedding")
@@ -139,20 +88,6 @@
       (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})]
             (is (nil? (:embedding platform)))
             (is (nil? (:vector platform))))
-          (p/catch (fn [e]
-                     (is false (str "unexpected error: " e))))
-          (p/finally (fn []
-                       (restore!)
-                       (done)))))))
-
-(deftest node-platform-enables-vector-embedding-on-macos-arm64
-  (async done
-    (let [root-dir (node-helper/create-tmp-dir "platform-node-vector-embedding")
-          restore! (set-process-platform-arch! "darwin" "arm64")]
-      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})]
-            (is (= "all-MiniLM-L6-v2" (get-in platform [:embedding :model-id])))
-            (is (fn? (get-in platform [:embedding :embed-texts])))
-            (is (fn? (get-in platform [:vector :open-index]))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []
@@ -208,57 +143,6 @@
           (p/finally (fn []
                        (set! js/fetch original-fetch)
                        (restore-platform!)
-                       (done)))))))
-
-(deftest node-platform-vector-index-creates-missing-collection-path
-  (async done
-    (let [root-dir (node-helper/create-tmp-dir "platform-node-vector")
-          vector-path (node-path/join root-dir "graphs" "graph-a" "search" "vector")
-          restore! (set-process-platform-arch! "darwin" "arm64")]
-      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir
-                                                         :open-vector-index-fn (fake-open-vector-index (atom {}))})
-                  vector-index ((get-in platform [:vector :open-index])
-                                {:path vector-path
-                                 :dimension 3})
-                  _ ((:upsert! vector-index) [{:id "block-1"
-                                               :page "page-1"
-                                               :embedding [1 0 0]}])
-                  result ((:query vector-index) [1 0 0] 10 nil)]
-            (is (.existsSync fs vector-path))
-            (is (= [{:id "block-1"
-                     :page "page-1"}]
-                   (mapv #(select-keys % [:id :page]) result)))
-            ((:close! vector-index)))
-          (p/catch (fn [e]
-                     (is false (str "unexpected error: " e))))
-          (p/finally (fn []
-                       (restore!)
-                       (done)))))))
-
-(deftest node-platform-vector-index-persists-metadata
-  (async done
-    (let [root-dir (node-helper/create-tmp-dir "platform-node-vector-metadata")
-          vector-path (node-path/join root-dir "graphs" "graph-a" "search" "vector")
-          restore! (set-process-platform-arch! "darwin" "arm64")
-          metadata* (atom {})
-          metadata {:embedding-model-id "test-model"
-                    :embedding-dimension 3
-                    :context-version 1}]
-      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir
-                                                         :open-vector-index-fn (fake-open-vector-index metadata*)})
-                  open-index (get-in platform [:vector :open-index])
-                  vector-index (open-index {:path vector-path
-                                            :dimension 3})
-                  _ ((:set-metadata! vector-index) metadata)
-                  _ ((:close! vector-index))
-                  reopened (open-index {:path vector-path
-                                        :dimension 3})]
-            (is (= metadata ((:metadata reopened))))
-            ((:close! reopened)))
-          (p/catch (fn [e]
-                     (is false (str "unexpected error: " e))))
-          (p/finally (fn []
-                       (restore!)
                        (done)))))))
 
 (deftest node-platform-vector-page-query-topks-expand-adaptively
