@@ -140,6 +140,22 @@
      :graph ["--type" "--file"]}},
    :tags [:graph],
    :extends :non-sync/graph-json-env}
+  {:id "graph-export-edn",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page ExportOptionsHome >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph export --graph {{graph-arg}} --type edn --file {{export-path-arg}} --edn-options '{:export-type :graph-human}' --pretty-print"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths {[:status] "ok"},
+    :stdout-contains ["{{export-path}}"]},
+   :covers
+   {:commands ["graph export"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :graph ["--type" "--file" "--edn-options" "--pretty-print"]}},
+   :tags [:graph],
+   :extends :non-sync/graph-json-env}
   {:tags [:graph],
    :extends :non-sync/source-graph-json-env,
    :expect
