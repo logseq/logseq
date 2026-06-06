@@ -2,25 +2,29 @@
   "Backend of DB based graph"
   (:require [electron.ipc :as ipc]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db.transact :as db-transact]
-            [frontend.handler.graph-failover :as graph-failover]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.worker :as worker-handler]
             [frontend.persist-db.browser :as browser]
             [frontend.persist-db.protocol :as protocol]
             [frontend.persist-db.remote :as remote]
-            [frontend.handler.worker :as worker-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.text :as text-util]
             [lambdaisland.glogi :as log]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
-(def max-db-worker-request-failures 3)
+(def db-worker-recovery-failure-threshold 1)
 
 (defonce opfs-db (browser/->InBrowser))
 (defonce remote-db (atom nil))
 (defonce remote-repo (atom nil))
 (defonce remote-runtime-state (atom nil))
+
+(declare <ensure-remote!)
 
 (defn- clear-remote-runtime!
   []
@@ -39,9 +43,9 @@
     (if-let [remote-client @remote-db]
       (-> (remote/stop! remote-client)
           (p/finally
-           (fn []
-             (when (same-remote-repo? repo @remote-repo)
-               (clear-remote-runtime!)))))
+            (fn []
+              (when (same-remote-repo? repo @remote-repo)
+                (clear-remote-runtime!)))))
       (do
         (clear-remote-runtime!)
         (p/resolved true)))
@@ -53,7 +57,7 @@
                                 :client client
                                 :session-id session-id
                                 :request-failures 0
-                                :failover-triggered? false})
+                                :recovery-triggered? false})
   (reset! remote-db client)
   (reset! remote-repo repo)
   (reset! state/*db-worker (:wrapped-worker client)))
@@ -62,6 +66,11 @@
   [state repo session-id]
   (and (same-remote-repo? repo (:repo state))
        (= session-id (:session-id state))))
+
+(defn- active-runtime-client?
+  [state repo session-id client]
+  (and (active-runtime-session? state repo session-id)
+       (identical? client (:client state))))
 
 (defn- reset-active-request-failures!
   [repo session-id]
@@ -82,20 +91,58 @@
         (= :network-error code)
         (= 0 status))))
 
-(defn- trigger-db-worker-failover!
-  [repo remote-client]
-  (when remote-client
-    (-> (remote/stop! remote-client)
-        (p/catch (fn [error]
-                   (log/warn :db-worker-failover-stop-error {:repo repo
-                                                             :error error})))))
-  (when (same-remote-repo? repo @remote-repo)
-    (clear-remote-runtime!))
-  (-> (ipc/ipc "releaseDbWorkerRuntime" repo)
+(defn- event-stream-error-loggable?
+  [failure-count]
+  (and (pos-int? failure-count)
+       (or (and (<= failure-count 64)
+                (zero? (bit-and failure-count (dec failure-count))))
+           (and (> failure-count 64)
+                (zero? (mod failure-count 64))))))
+
+(defn- <release-active-runtime!
+  [repo remote-client session-id]
+  (if (active-runtime-client? @remote-runtime-state repo session-id remote-client)
+    (p/let [_ (do
+                (clear-remote-runtime!)
+                (ipc/ipc "releaseDbWorkerRuntime" repo))]
+      true)
+    (do
+      (log/info :event :db-worker-runtime-recovery-skipped
+                :repo repo
+                :reason :runtime-changed)
+      (p/resolved false))))
+
+(defn- <trigger-db-worker-runtime-recovery!
+  [repo remote-client session-id]
+  (log/warn :event :db-worker-runtime-recovering :repo repo)
+  (-> (p/do!
+       (when remote-client
+         (-> (remote/stop! remote-client)
+             (p/catch (fn [error]
+                        (log/warn :event :db-worker-runtime-stop-error
+                                  :repo repo
+                                  :error error))))))
+      (p/then (fn [_]
+                (<release-active-runtime! repo remote-client session-id)))
+      (p/then (fn [released?]
+                (if (and released?
+                         (same-remote-repo? repo (state/get-current-repo)))
+                  (<ensure-remote! repo {:only-if-current? true})
+                  (when-not released?
+                    (log/info :event :db-worker-runtime-recovery-skipped
+                              :repo repo
+                              :reason :release-skipped)))))
+      (p/then (fn [client]
+                (when client
+                  (log/info :event :db-worker-runtime-recovered :repo repo))))
       (p/catch (fn [error]
-                 (log/warn :db-worker-failover-release-runtime-error {:repo repo
-                                                                       :error error}))))
-  (graph-failover/switch-away-from-current-repo! repo {:reason :db-worker-request-failed}))
+                 (log/error :event :db-worker-runtime-recovery-failed
+                            :repo repo
+                            :error error)
+                 (notification/show!
+                  (t :graph/db-worker-recovery-failed-error
+                     (text-util/get-graph-name-from-path repo))
+                  :error)))))
 
 (defn- record-active-request-failure!
   [repo session-id error]
@@ -105,19 +152,20 @@
       (swap! remote-runtime-state
              (fn [state]
                (if (and (active-runtime-session? state repo session-id)
-                        (not (:failover-triggered? state)))
+                        (not (:recovery-triggered? state)))
                  (let [failures (inc (or (:request-failures state) 0))]
-                   (if (>= failures max-db-worker-request-failures)
+                   (if (>= failures db-worker-recovery-failure-threshold)
                      (do
                        (reset! triggered? true)
                        (reset! remote-client (:client state))
                        (assoc state
                               :request-failures failures
-                              :failover-triggered? true))
+                              :recovery-triggered? true))
                      (assoc state :request-failures failures)))
                  state)))
       (when @triggered?
-        (trigger-db-worker-failover! repo @remote-client)))))
+        (<trigger-db-worker-runtime-recovery! repo @remote-client session-id))
+      nil)))
 
 (defn- node-runtime?
   []
@@ -169,36 +217,87 @@
   nil)
 
 (defn- <ensure-remote!
-  [repo]
-  (if (or (nil? repo) (same-remote-repo? repo @remote-repo))
-    (p/resolved @remote-db)
-    (let [session-id (str (random-uuid))]
-      (p/let [_ (when @remote-db
-                  (remote/stop! @remote-db))
-              runtime (ipc/ipc "db-worker-runtime" repo)
-              client (remote/start! (assoc runtime
-                                           :repo repo
-                                           :event-handler worker-handler/handle
-                                           :on-invoke-success (fn [_method _args _result]
-                                                                (reset-active-request-failures! repo session-id))
-                                           :on-invoke-failure (fn [_method _args error]
-                                                                (record-active-request-failure! repo session-id error))
-                                           :on-event-error (fn [error]
-                                                             (record-active-request-failure! repo session-id error))))]
-        (set-remote-runtime! repo client session-id)
-        (p/let [_ (state/<invoke-db-worker :thread-api/set-db-sync-config
-                                           (current-db-sync-config))
-                _ (<sync-markdown-mirror-setting! repo)]
-          (sync-markdown-mirror-setting-watch!)
-          nil)
-        (ldb/register-transact-fn!
-         (fn remote-transact!
-           [repo tx-data tx-meta]
-           (db-transact/transact browser/transact!
-                                 (if (string? repo) repo (state/get-current-repo))
-                                 tx-data
-                                 (assoc tx-meta :client-id (:client-id @state/state)))))
-        client))))
+  ([repo] (<ensure-remote! repo nil))
+  ([repo {:keys [only-if-current?]}]
+   (let [current-for-repo? #(same-remote-repo? repo (state/get-current-repo))]
+     (cond
+       (nil? repo)
+       (p/resolved @remote-db)
+
+       (and only-if-current? (not (current-for-repo?)))
+       (do
+         (log/warn :event :db-worker-ensure-remote-stale
+                   :repo repo :phase :before-stop)
+         (p/resolved nil))
+
+       (same-remote-repo? repo @remote-repo)
+       (p/resolved @remote-db)
+
+       :else
+       (let [session-id (str (random-uuid))
+             event-stream-failures (atom 0)]
+         (p/let [_ (when @remote-db
+                     (remote/stop! @remote-db))]
+           (if (and only-if-current? (not (current-for-repo?)))
+             (do
+               (log/warn :event :db-worker-ensure-remote-stale
+                         :repo repo :phase :before-runtime)
+               nil)
+             (p/let [runtime (ipc/ipc "db-worker-runtime" repo)
+                     client (remote/start! (assoc runtime
+                                                  :repo repo
+                                                  :event-handler worker-handler/handle
+                                                  :on-invoke-success (fn [_method _args _result]
+                                                                       (reset-active-request-failures! repo session-id))
+                                                  :on-invoke-failure (fn [_method _args error]
+                                                                       (record-active-request-failure! repo session-id error))
+                                                  :on-event-error (fn [error]
+                                                                    (let [failure-count (swap! event-stream-failures inc)]
+                                                                      (when (event-stream-error-loggable? failure-count)
+                                                                        (log/warn :event :db-worker-event-stream-error
+                                                                                  :repo repo
+                                                                                  :failures failure-count
+                                                                                  :error error))
+                                                                      (record-active-request-failure!
+                                                                       repo
+                                                                       session-id
+                                                                       (ex-info "db-worker event stream unavailable"
+                                                                                {:code :db-worker-unavailable
+                                                                                 :event-stream? true
+                                                                                 :cause error}))))))]
+               (if (and only-if-current? (not (current-for-repo?)))
+                 (do
+                   (log/warn :event :db-worker-ensure-remote-stale
+                             :repo repo :phase :after-start)
+                   (-> (remote/stop! client)
+                       (p/catch (fn [e]
+                                  (log/warn :event :db-worker-stale-client-stop-error
+                                            :repo repo :error e)))
+                       (p/then (fn [_]
+                                 (p/let [_ (if (same-remote-repo? repo @remote-repo)
+                                             (log/info :event :db-worker-stale-release-skipped
+                                                       :repo repo
+                                                       :reason :runtime-changed)
+                                             (ipc/ipc "releaseDbWorkerRuntime" repo))]
+                                   nil)))
+                       (p/catch (fn [e]
+                                  (log/warn :event :db-worker-stale-release-error
+                                            :repo repo :error e)))))
+                 (do
+                   (set-remote-runtime! repo client session-id)
+                   (p/let [_ (state/<invoke-db-worker :thread-api/set-db-sync-config
+                                                      (current-db-sync-config))
+                           _ (<sync-markdown-mirror-setting! repo)]
+                     (sync-markdown-mirror-setting-watch!)
+                     nil)
+                   (ldb/register-transact-fn!
+                    (fn remote-transact!
+                      [repo tx-data tx-meta]
+                      (db-transact/transact browser/transact!
+                                            (if (string? repo) repo (state/get-current-repo))
+                                            tx-data
+                                            (assoc tx-meta :client-id (:client-id @state/state)))))
+                   client))))))))))
 
 (defn <start-runtime!
   []
@@ -284,11 +383,11 @@
       (log/debug :event :backup-db :graph repo)
       (->
        (p/do!
-         (ipc/ipc :db-export repo true)
-         (when succ-notification?
-           (state/pub-event!
-            [:notification/show {:content "DB backup successfully."
-                                 :status :success}])))
+        (ipc/ipc :db-export repo true)
+        (when succ-notification?
+          (state/pub-event!
+           [:notification/show {:content "DB backup successfully."
+                                :status :success}])))
        (p/catch (fn [^js error]
                   (log/error :event :db-backup-failed :graph repo :error error)
                   (state/pub-event!
