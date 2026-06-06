@@ -5,8 +5,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.util :as util]
             [medley.core :as medley]
-            [promesa.core :as p]
-            [logseq.shui.popup.core :as popup-core]))
+            [promesa.core :as p]))
 
 ;; provider
 (def dialog (util/ui-wrap "Dialog"))
@@ -51,6 +50,10 @@
   (when id
     (some->> (medley/indexed @*dialogs)
              (filter #(= id (:id (second %)))) (first))))
+
+(defn- open-dialogs
+  []
+  (filter :open? @*dialogs))
 
 (defn update-dialog!
   [id ks val & {:keys [closing?]}]
@@ -113,8 +116,7 @@
                  (assoc :content (content config)))]
     (upsert-dialog! (update config :content-props
                             (fn [content-props]
-                              (merge {:onOpenAutoFocus #(.preventDefault %)
-                                      :onCloseAutoFocus #(.preventDefault %)}
+                              (merge {:onCloseAutoFocus #(.preventDefault %)}
                                      content-props))))))
 
 (defn alert!
@@ -130,11 +132,21 @@
 
 (defn get-last-dialog-id
   []
-  (some-> (last @*dialogs) (:id)))
+  (some-> (last (open-dialogs)) (:id)))
 
 (defn get-first-dialog-id
   []
-  (some-> (first @*dialogs) (:id)))
+  (some-> (first (open-dialogs)) (:id)))
+
+(defn- top-dialog?
+  [id]
+  (= id (get-last-dialog-id)))
+
+(defn- prevent-dismiss!
+  [^js event-details]
+  (some-> event-details (.-event) (.preventDefault))
+  (some-> event-details (.cancel))
+  true)
 
 (defn close!
   ([] (close! (get-last-dialog-id)))
@@ -146,7 +158,7 @@
 
 ;; components
 (hsx/defc dialog-inner
-  [config & [nested-child]]
+  [config]
   (let [{:keys [id title description content footer on-open-change align open?
                 auto-width? close-btn? root-props content-props
                 onEscapeKeyDown onPointerDownOutside]} config
@@ -174,14 +186,18 @@
                                      pointer-handler (or (:onPointerDownOutside content-props)
                                                          onPointerDownOutside)
                                      prevented? (when (false? v)
-                                                  (case reason
-                                                    "escape-key"
+                                                  (cond
+                                                     (and (contains? #{"escape-key" "outside-press"} reason)
+                                                         (not (top-dialog? id)))
+                                                    (prevent-dismiss! e)
+
+                                                    (= reason "escape-key")
                                                     (call-close-handler! escape-handler e)
 
-                                                    "outside-press"
+                                                    (= reason "outside-press")
                                                     (call-close-handler! pointer-handler e)
 
-                                                    false))]
+                                                    :else false))]
                                  (when-not prevented?
                                    (if (fn? on-open-change)
                                      (on-open-change {:value v :set-open! set-open!})
@@ -189,14 +205,18 @@
      (let [onPointerDownOutside (:onPointerDownOutside content-props)
            onEscapeKeyDown (:onEscapeKeyDown content-props)
            handle-key-escape! (fn [^js e]
-                                (if (fn? onEscapeKeyDown)
-                                  (onEscapeKeyDown e)
-                                  (do
-                                    (.preventDefault e)
-                                    (close! id))))
+                                (if (top-dialog? id)
+                                  (if (fn? onEscapeKeyDown)
+                                    (onEscapeKeyDown e)
+                                    (do
+                                      (.preventDefault e)
+                                      (close! id)))
+                                  (.preventDefault e)))
            handle-pointer-down-outside! (fn [^js e]
-                                          (when (fn? onPointerDownOutside)
-                                            (onPointerDownOutside e)))
+                                          (if (top-dialog? id)
+                                            (when (fn? onPointerDownOutside)
+                                              (onPointerDownOutside e))
+                                            (.preventDefault e)))
            content-props (-> content-props
                              (dissoc :onEscapeKeyDown :onPointerDownOutside)
                              (assoc :onEscapeKeyDown handle-key-escape!
@@ -214,11 +234,10 @@
           [:div.ui__dialog-main-content content])
 
         (when footer
-          (dialog-footer footer))))
-     nested-child)))
+          (dialog-footer footer)))))))
 
 (hsx/defc alert-inner
-  [config & [nested-child]]
+  [config]
   (let [{:keys [id title description content footer deferred open? ok-label
                 root-props content-props]} config
         props (dissoc config
@@ -238,7 +257,13 @@
      (merge root-props
             {:key (str "alert-" id)
              :open open?
-             :on-open-change #(update-dialog! id :open? %)})
+             :on-open-change (fn [v e]
+                               (let [reason (some-> e (.-reason))]
+                                 (if (and (false? v)
+                                          (= reason "escape-key")
+                                          (not (top-dialog? id)))
+                                   (prevent-dismiss! e)
+                                   (update-dialog! id :open? v))))})
      (alert-dialog-content (merge props content-props)
                            (when (or title description)
                              (alert-dialog-header
@@ -258,10 +283,10 @@
                                 {:key "ok"
                                  :on-click #(do (close!) (p/resolve! deferred true))
                                  :size :sm} ok-label)])))
-     nested-child)))
+     )))
 
 (hsx/defc confirm-inner
-  [config & [nested-child]]
+  [config]
   (let [{:keys [id deferred outside-cancel? data-reminder data-reminder-label
                 cancel-label ok-label]} config
         reminder? (boolean (and id data-reminder))
@@ -319,29 +344,30 @@
               :data-mode :confirm
               :overlay-props
               {:on-click #(when outside-cancel? (close!) (p/reject! deferred nil))}
-              :footer footer)
-       nested-child))))
+              :footer footer)))))
 
-(defn- render-dialog-tree
+(defn- render-dialog
+  [config]
+  (let [id (:id config)
+        alert? (:alert? config)
+        config (interpret-vals config
+                               [:title :description :content :footer]
+                               {:id id})]
+    (case alert?
+      :default
+      (alert-inner config)
+
+      :confirm
+      (confirm-inner config)
+
+      (dialog-inner config))))
+
+(defn- render-dialogs
   [configs]
-  (when-let [configs (seq (drop-while (complement map?) configs))]
-    (let [config (first configs)
-          id (:id config)
-          alert? (:alert? config)
-          config (interpret-vals config
-                                 [:title :description :content :footer]
-                                 {:id id})
-          nested-child (render-dialog-tree (rest configs))]
-      (case alert?
-        :default
-        (alert-inner config nested-child)
-
-        :confirm
-        (confirm-inner config nested-child)
-
-        (dialog-inner config nested-child)))))
+  (when-let [configs (seq (filter map? configs))]
+    (into [:<>] (map render-dialog configs))))
 
 (hsx/defc install-dialogs
   []
   (let [[dialogs _set-dialogs!] (util/use-atom *dialogs)]
-    (render-dialog-tree dialogs)))
+    (render-dialogs dialogs)))
