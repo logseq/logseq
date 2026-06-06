@@ -1704,6 +1704,8 @@
  :settings.features/markdown-mirror-regenerate-success "Markdown Mirror regenerated"
  :settings.features/page-not-found "The page \"{1}\" doesn't exist yet. Please create that page first, and then try again."
  :settings.features/plugin-system "Plugins"
+ :settings.features/semantic-search "Semantic search"
+ :settings.features/semantic-search-desc "Include semantic matches in search results. Available on macOS Apple silicon."
 
  :settings.general/accent-color "Accent color"
  :settings.general/accent-color-alert "Choosing an accent color may override any theme you have selected."
