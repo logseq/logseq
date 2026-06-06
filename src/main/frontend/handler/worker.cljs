@@ -39,8 +39,7 @@
   (log/log name level data))
 
 (defmethod handle :add-repo [_ _worker data]
-  (state/add-repo! {:url (:repo data)})
-  (state/pub-event! [:graph/switch (:repo data) {:rtc-download? true}]))
+  (state/add-repo! {:url (:repo data)}))
 
 (defmethod handle :rtc-sync-state [_ _worker data]
   (let [state data]
