@@ -17,7 +17,7 @@
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
-(def max-db-worker-request-failures 3)
+(def db-worker-recovery-failure-threshold 1)
 
 (defonce opfs-db (browser/->InBrowser))
 (defonce remote-db (atom nil))
@@ -154,7 +154,7 @@
                (if (and (active-runtime-session? state repo session-id)
                         (not (:recovery-triggered? state)))
                  (let [failures (inc (or (:request-failures state) 0))]
-                   (if (>= failures max-db-worker-request-failures)
+                   (if (>= failures db-worker-recovery-failure-threshold)
                      (do
                        (reset! triggered? true)
                        (reset! remote-client (:client state))
@@ -257,7 +257,14 @@
                                                                         (log/warn :event :db-worker-event-stream-error
                                                                                   :repo repo
                                                                                   :failures failure-count
-                                                                                  :error error))))))]
+                                                                                  :error error))
+                                                                      (record-active-request-failure!
+                                                                       repo
+                                                                       session-id
+                                                                       (ex-info "db-worker event stream unavailable"
+                                                                                {:code :db-worker-unavailable
+                                                                                 :event-stream? true
+                                                                                 :cause error}))))))]
                (if (and only-if-current? (not (current-for-repo?)))
                  (do
                    (log/warn :event :db-worker-ensure-remote-stale

@@ -956,7 +956,7 @@
                             (restore-electron-failover-test-env! originals)
                             (done)))))))
 
-(deftest electron-sse-errors-reconnect-without-runtime-recovery
+(deftest electron-sse-error-triggers-runtime-recovery
   (async done
     (let [results (atom [])
           events (atom [])
@@ -979,17 +979,14 @@
                   _ (is (fn? on-error))
                   _ (on-error (js/Error. "connect ECONNREFUSED"))
                   _ (is (= [] @events))
-                  _ (is (= 1 (count @(:scheduled sse))))
-                  _ (on-error (js/Error. "connect ECONNREFUSED"))
-                  _ (is (= [] @events))
-                  _ (is (= 2 (count @(:scheduled sse))))
-                  _ (on-error (js/Error. "connect ECONNREFUSED"))]
+                  _ (p/delay 50)]
             (is (= [] @current-repo-updates))
             (is (= [] @events))
             (is (= [] @notifications))
             (is (= 1 @(:close-count sse)))
-            (is (= 3 (count @(:scheduled sse))))
-            (is (= [["db-worker-runtime" "logseq_db_graph_a"]]
+            (is (= [["db-worker-runtime" "logseq_db_graph_a"]
+                    ["releaseDbWorkerRuntime" "logseq_db_graph_a"]
+                    ["db-worker-runtime" "logseq_db_graph_a"]]
                    @ipc-calls)))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
@@ -997,9 +994,43 @@
                        (restore-electron-failover-test-env! originals)
                        (done)))))))
 
-(deftest electron-list-db-success-resets-server-unavailable-failure-count
+(deftest electron-list-db-success-does-not-trigger-runtime-recovery
   (async done
-         (let [results (atom [:transport-error :success :transport-error :transport-error :transport-error])
+         (let [results (atom [:success :transport-error])
+               events (atom [])
+               current-repo-updates (atom [])
+               notifications (atom [])
+               ipc-calls (atom [])
+               originals (install-electron-failover-test-env!
+                          {:current-repo "logseq_db_graph_a"
+                           :repos (graph-repos "logseq_db_graph_a" "logseq_db_graph_b")
+                           :results results
+                           :events events
+                           :current-repo-updates current-repo-updates
+                           :notifications notifications
+                           :ipc-calls ipc-calls})]
+           (-> (p/let [success-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :resolved (:status success-result)))
+                       _ (is (= [] @events))
+                       failure-result (<capture-result (persist-db/<list-db))
+                       _ (p/delay 50)]
+                 (is (= :rejected (:status failure-result)))
+                 (is (= [] @events))
+                 (is (= [] @current-repo-updates))
+                 (is (= [] @notifications))
+                 (is (= [["db-worker-runtime" "logseq_db_graph_a"]
+                         ["releaseDbWorkerRuntime" "logseq_db_graph_a"]
+                         ["db-worker-runtime" "logseq_db_graph_a"]]
+                        @ipc-calls)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (restore-electron-failover-test-env! originals)
+                            (done)))))))
+
+(deftest electron-list-db-app-level-errors-do-not-trigger-runtime-recovery
+  (async done
+         (let [results (atom [:app-error :app-error :app-error :transport-error])
                events (atom [])
                current-repo-updates (atom [])
                notifications (atom [])
@@ -1014,9 +1045,6 @@
                            :ipc-calls ipc-calls})]
            (-> (p/let [first-result (<capture-result (persist-db/<list-db))
                        _ (is (= :rejected (:status first-result)))
-                       success-result (<capture-result (persist-db/<list-db))
-                       _ (is (= :resolved (:status success-result)))
-                       _ (is (= [] @events))
                        second-result (<capture-result (persist-db/<list-db))
                        _ (is (= :rejected (:status second-result)))
                        third-result (<capture-result (persist-db/<list-db))
@@ -1038,52 +1066,9 @@
                             (restore-electron-failover-test-env! originals)
                             (done)))))))
 
-(deftest electron-list-db-app-level-errors-do-not-count-toward-failover
+(deftest electron-list-db-server-unavailable-recovery-keeps-current-repo
   (async done
-         (let [results (atom [:app-error :app-error :app-error :transport-error :transport-error :transport-error])
-               events (atom [])
-               current-repo-updates (atom [])
-               notifications (atom [])
-               ipc-calls (atom [])
-               originals (install-electron-failover-test-env!
-                          {:current-repo "logseq_db_graph_a"
-                           :repos (graph-repos "logseq_db_graph_a" "logseq_db_graph_b")
-                           :results results
-                           :events events
-                           :current-repo-updates current-repo-updates
-                           :notifications notifications
-                           :ipc-calls ipc-calls})]
-           (-> (p/let [first-result (<capture-result (persist-db/<list-db))
-                       _ (is (= :rejected (:status first-result)))
-                       second-result (<capture-result (persist-db/<list-db))
-                       _ (is (= :rejected (:status second-result)))
-                       third-result (<capture-result (persist-db/<list-db))
-                       _ (is (= :rejected (:status third-result)))
-                       _ (is (= [] @events))
-                       fourth-result (<capture-result (persist-db/<list-db))
-                       _ (is (= :rejected (:status fourth-result)))
-                       fifth-result (<capture-result (persist-db/<list-db))
-                       _ (is (= :rejected (:status fifth-result)))
-                       _ (is (= [] @events))
-                       sixth-result (<capture-result (persist-db/<list-db))
-                       _ (p/delay 50)]
-                 (is (= :rejected (:status sixth-result)))
-                 (is (= [] @events))
-                 (is (= [] @current-repo-updates))
-                 (is (= [] @notifications))
-                 (is (= [["db-worker-runtime" "logseq_db_graph_a"]
-                         ["releaseDbWorkerRuntime" "logseq_db_graph_a"]
-                         ["db-worker-runtime" "logseq_db_graph_a"]]
-                        @ipc-calls)))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (restore-electron-failover-test-env! originals)
-                            (done)))))))
-
-(deftest electron-list-db-server-unavailable-without-fallback-keeps-current-repo
-  (async done
-         (let [results (atom [:transport-error :transport-error :transport-error])
+         (let [results (atom [:transport-error])
                events (atom [])
                current-repo-updates (atom [])
                notifications (atom [])
@@ -1098,16 +1083,14 @@
                            :ipc-calls ipc-calls})]
            (-> (p/let [first-result (<capture-result (persist-db/<list-db))
                        _ (is (= :rejected (:status first-result)))
-                       second-result (<capture-result (persist-db/<list-db))
-                       _ (is (= :rejected (:status second-result)))
-                       third-result (<capture-result (persist-db/<list-db))
                        _ (p/delay 50)]
-                 (is (= :rejected (:status third-result)))
                  (is (= [] @current-repo-updates))
                  (is (= [] @events))
                  (is (= [] @notifications))
                  (is (= "logseq_db_graph_a" (state/get-current-repo)))
-                 (is (= [["db-worker-runtime" "logseq_db_graph_a"]]
+                 (is (= [["db-worker-runtime" "logseq_db_graph_a"]
+                         ["releaseDbWorkerRuntime" "logseq_db_graph_a"]
+                         ["db-worker-runtime" "logseq_db_graph_a"]]
                         @ipc-calls)))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -1138,7 +1121,7 @@
            (reset! persist-db/remote-runtime-state {:repo "logseq_db_graph_a"
                                                     :client remote-client
                                                     :session-id session-id
-                                                    :request-failures 3
+                                                    :request-failures 1
                                                     :recovery-triggered? true})
            (set! ipc/ipc (fn [channel repo]
                            (swap! ipc-calls conj [channel repo])
@@ -1211,7 +1194,7 @@
            (reset! persist-db/remote-runtime-state {:repo "logseq_db_graph_a"
                                                     :client old-client
                                                     :session-id session-id
-                                                    :request-failures 3
+                                                    :request-failures 1
                                                     :recovery-triggered? true})
            (set! ipc/ipc (fn [channel repo]
                            (swap! ipc-calls conj [channel repo])
@@ -1291,7 +1274,7 @@
            (reset! persist-db/remote-runtime-state {:repo "logseq_db_graph_a"
                                                     :client old-client
                                                     :session-id old-session-id
-                                                    :request-failures 3
+                                                    :request-failures 1
                                                     :recovery-triggered? true})
            (set! ipc/ipc (fn [channel repo]
                            (swap! ipc-calls conj [channel repo])
@@ -1340,10 +1323,9 @@
                             (reset-runtime-state!)
                             (done)))))))
 
-(deftest electron-active-request-failure-count-ignores-app-errors-and-resets-on-success
+(deftest electron-active-request-failure-ignores-app-errors
   (async done
          (let [record-failure! #'persist-db/record-active-request-failure!
-               reset-failures! #'persist-db/reset-active-request-failures!
                repo "logseq_db_graph_a"
                session-id "session-a"
                ipc-calls (atom [])
@@ -1388,13 +1370,6 @@
            (-> (p/let [_ (record-failure! repo session-id app-error)
                        _ (record-failure! repo session-id app-error)
                        _ (record-failure! repo session-id app-error)
-                       _ (p/delay 0)
-                       _ (is (= [] @ipc-calls))
-                       _ (record-failure! repo session-id transport-error)
-                       _ (record-failure! repo session-id transport-error)
-                       _ (reset-failures! repo session-id)
-                       _ (record-failure! repo session-id transport-error)
-                       _ (record-failure! repo session-id transport-error)
                        _ (p/delay 0)
                        _ (is (= [] @ipc-calls))
                        _ (record-failure! repo session-id transport-error)
