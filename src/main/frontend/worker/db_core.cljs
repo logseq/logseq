@@ -77,6 +77,7 @@
 (def ^:private vector-embedding-parallelism 2)
 (def ^:private vector-embedding-max-batch-chars (* vector-embedding-batch-size 2048))
 (def ^:private vector-embedding-max-title-length 2048)
+(def ^:private query-embedding-timeout-ms 50)
 (def ^:private search-index-build-time-budget-ms 8)
 (def ^:private search-index-build-idle-status-ttl-ms 2000)
 (def ^:private search-index-build-pause-ms 300)
@@ -995,10 +996,12 @@
   [repo q option]
   (let [vector-index (worker-state/get-vector-index repo)]
     (if (and vector-index
+             (:feature/enable-semantic-search? option)
              (not (:page-only? option))
              (not (:query-embedding option))
              (not (string/blank? q)))
-      (-> (p/let [embeddings (platform/embed-texts (platform/current) [q])
+      (-> (p/let [embeddings (-> (platform/embed-texts (platform/current) [q])
+                                  (p/timeout query-embedding-timeout-ms))
                   _ (validate-embedding-count! [{:title q}] embeddings)]
             (search-blocks repo q (assoc option :query-embedding (first embeddings))))
           (p/catch (fn [error]
