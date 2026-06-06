@@ -267,3 +267,5 @@ jobs:
 
       - name: Export a created DB graph
         run: node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph properties-graph --timeout-ms 3000 graph export --type edn --file scripts/properties.edn
+      - name: Import an exported graph to confirm the export is working
+        run: node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph properties-graph-roundtrip --timeout-ms 20000 graph import --type edn --input scripts/properties.edn

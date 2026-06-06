@@ -136,10 +136,10 @@
     (testing "export-spec :file has :complete :file"
       (is (= :file (get-in export-entry [:spec :file :complete]))))
     (testing "export-spec includes EDN-only options"
-      (is (= :boolean (get-in export-entry [:spec :include-timestamps :coerce])))
-      (is (= :boolean (get-in export-entry [:spec :exclude-built-in-pages :coerce])))
-      (is (= "Namespaces to exclude from properties and classes"
-             (get-in export-entry [:spec :exclude-namespaces :desc]))))
+      (is (= :edn (get-in export-entry [:spec :edn-options :coerce])))
+      (is (= :e (get-in export-entry [:spec :edn-options :alias])))
+      (is (= :boolean (get-in export-entry [:spec :pretty-print :coerce])))
+      (is (= :p (get-in export-entry [:spec :pretty-print :alias]))))
     (testing "import-spec :type has :validate set"
       (is (= #{"edn" "sqlite"} (get-in import-entry [:spec :type :validate]))))
     (testing "import-spec :input has :complete :file"
@@ -304,9 +304,8 @@
     (testing "output ends with compdef _logseq logseq"
       (is (string/includes? output "compdef _logseq logseq")))
     (testing "graph export completion includes EDN-only options"
-      (is (re-find #"(?s)_logseq_graph_export\(\).*--include-timestamps" output))
-      (is (re-find #"(?s)_logseq_graph_export\(\).*--exclude-built-in-pages" output))
-      (is (re-find #"(?s)_logseq_graph_export\(\).*--exclude-namespaces" output)))
+      (is (re-find #"(?s)_logseq_graph_export\(\).*--edn-options" output))
+      (is (re-find #"(?s)_logseq_graph_export\(\).*--pretty-print" output)))
     (testing "graph create completion includes sync enablement options"
       (is (re-find #"(?s)_logseq_graph_create\(\).*--enable-sync" output))
       (is (re-find #"(?s)_logseq_graph_create\(\).*--e2ee-password" output)))
@@ -465,9 +464,8 @@
     (testing "graph export case includes --type, --file, and EDN-only options"
       (is (string/includes? output "--type"))
       (is (string/includes? output "--file"))
-      (is (string/includes? output "--include-timestamps"))
-      (is (string/includes? output "--exclude-built-in-pages"))
-      (is (string/includes? output "--exclude-namespaces")))
+      (is (string/includes? output "--edn-options"))
+      (is (string/includes? output "--pretty-print")))
     (testing "graph backup options include --name, --src, and --dst"
       (is (string/includes? output "--name"))
       (is (string/includes? output "--src"))

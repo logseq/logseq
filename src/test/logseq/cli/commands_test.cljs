@@ -2291,7 +2291,7 @@
       (is (string/includes? (strip-ansi (get-in result [:error :message]))
                             "--e2ee-password requires --enable-sync")))))
 
-(deftest test-verb-subcommand-parse-graph-import-export
+(deftest ^:large-vars/cleanup-todo test-verb-subcommand-parse-graph-import-export
   (testing "graph export parses with type and file"
     (let [result (commands/parse-args ["graph" "export"
                                        "--type" "edn"
@@ -2301,18 +2301,28 @@
       (is (= "edn" (get-in result [:options :type])))
       (is (= "export.edn" (get-in result [:options :file])))))
 
-  (testing "graph export parses EDN-only options"
+  (testing "graph export parses --edn-options as an EDN map and --pretty-print"
     (let [result (commands/parse-args ["graph" "export"
                                        "--type" "edn"
                                        "--file" "export.edn"
-                                       "--include-timestamps"
-                                       "--exclude-built-in-pages"
-                                       "--exclude-namespaces" "user,project"])]
+                                       "--edn-options" "{:export-type :graph-human :include-timestamps? true}"
+                                       "--pretty-print"])]
       (is (true? (:ok? result)))
       (is (= :graph-export (:command result)))
-      (is (= true (get-in result [:options :include-timestamps])))
-      (is (= true (get-in result [:options :exclude-built-in-pages])))
-      (is (= "user,project" (get-in result [:options :exclude-namespaces])))))
+      (is (= {:export-type :graph-human :include-timestamps? true}
+             (get-in result [:options :edn-options])))
+      (is (= true (get-in result [:options :pretty-print])))))
+
+  (testing "graph export accepts -e and -p short aliases"
+    (let [result (commands/parse-args ["graph" "export"
+                                       "--type" "edn"
+                                       "--file" "export.edn"
+                                       "-e" "{:include-timestamps? true}"
+                                       "-p"])]
+      (is (true? (:ok? result)))
+      (is (= {:include-timestamps? true}
+             (get-in result [:options :edn-options])))
+      (is (= true (get-in result [:options :pretty-print])))))
 
   (testing "graph import parses with type, input, and repo"
     (let [result (commands/parse-args ["graph" "import"
@@ -2325,15 +2335,26 @@
       (is (= "import.sqlite" (get-in result [:options :input])))
       (is (= "demo" (get-in result [:options :graph])))))
 
-  (testing "graph export rejects EDN-only options for sqlite"
+  (testing "graph export rejects --edn-options and --pretty-print for sqlite"
     (let [result (commands/parse-args ["graph" "export"
                                        "--type" "sqlite"
                                        "--file" "export.sqlite"
-                                       "--include-timestamps"
-                                       "--exclude-built-in-pages"
-                                       "--exclude-namespaces" "user,project"])]
+                                       "--edn-options" "{:include-timestamps? true}"
+                                       "--pretty-print"])]
       (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (string/includes? (strip-ansi (get-in result [:error :message]))
+                            "--edn-options or --pretty-print"))))
+
+  (testing "graph export rejects non-map --edn-options"
+    (let [result (commands/parse-args ["graph" "export"
+                                       "--type" "edn"
+                                       "--file" "export.edn"
+                                       "--edn-options" "[:not :a :map]"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (string/includes? (strip-ansi (get-in result [:error :message]))
+                            "must be an EDN map"))))
 
   (testing "graph export requires type"
     (let [result (commands/parse-args ["graph" "export" "--file" "export.edn"])]
@@ -2525,7 +2546,7 @@
       (is (true? (:ok? result)))
       (is (= "json" (get-in result [:options :output]))))))
 
-(deftest test-build-action-graph
+(deftest ^:large-vars/cleanup-todo test-build-action-graph
   (testing "graph-list uses list-db"
     (let [parsed {:ok? true :command :graph-list :options {}}
           result (commands/build-action parsed {})]
@@ -2593,28 +2614,35 @@
       (is (true? (:ok? result)))
       (is (= :graph-info (get-in result [:action :type])))))
 
-  (testing "graph export uses config repo"
+  (testing "graph export uses config repo and defaults edn-export-type to :graph"
     (let [parsed {:ok? true
                   :command :graph-export
                   :options {:type "edn" :file "export.edn"}}
           result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
-      (is (= :graph-export (get-in result [:action :type])))))
+      (is (= :graph-export (get-in result [:action :type])))
+      (is (= :graph (get-in result [:action :edn-export-type])))
+      (is (nil? (get-in result [:action :graph-options])))
+      (is (false? (get-in result [:action :pretty?])))))
 
-  (testing "graph export builds normalized EDN graph-options"
+  (testing "graph export forwards :export-type and :graph-options from --edn-options"
     (let [parsed {:ok? true
                   :command :graph-export
                   :options {:type "edn"
                             :file "export.edn"
-                            :include-timestamps true
-                            :exclude-built-in-pages true
-                            :exclude-namespaces " user, project ,,user "}}
+                            :edn-options {:export-type :graph-human
+                                          :include-timestamps? true
+                                          :exclude-built-in-pages? true
+                                          :exclude-namespaces #{:user :project}}
+                            :pretty-print true}}
           result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
+      (is (= :graph-human (get-in result [:action :edn-export-type])))
       (is (= {:include-timestamps? true
               :exclude-built-in-pages? true
               :exclude-namespaces #{:user :project}}
-             (get-in result [:action :graph-options])))))
+             (get-in result [:action :graph-options])))
+      (is (true? (get-in result [:action :pretty?])))))
 
   (testing "graph import requires repo"
     (let [parsed {:ok? true
@@ -4252,12 +4280,21 @@
                                                        :repo "logseq_db_demo"
                                                        :graph "demo"
                                                        :export-type "edn"
+                                                       :edn-export-type :graph-human
                                                        :graph-options {:include-timestamps? true
                                                                        :exclude-built-in-pages? true
                                                                        :exclude-namespaces #{:user :project}}
+                                                       :pretty? true
                                                        :file "/tmp/export.edn"
                                                        :allow-missing-graph true}
                                                       {})
+                         edn-default-result (commands/execute {:type :graph-export
+                                                               :repo "logseq_db_demo"
+                                                               :graph "demo"
+                                                               :export-type "edn"
+                                                               :file "/tmp/export-default.edn"
+                                                               :allow-missing-graph true}
+                                                              {})
                          sqlite-result (commands/execute {:type :graph-export
                                                           :repo "logseq_db_demo"
                                                           :graph "demo"
@@ -4272,17 +4309,19 @@
                                                                   :allow-missing-graph true}
                                                                  {:root-dir "/tmp/logseq"})]
                    (is (= :ok (:status edn-result)))
+                   (is (= :ok (:status edn-default-result)))
                    (is (= :ok (:status sqlite-result)))
                    (is (= :ok (:status sqlite-default-result)))
                    (is (= "edn" (get-in edn-result [:context :export-type])))
                    (is (= "/tmp/export.edn" (get-in edn-result [:context :file])))
                    (is (= "sqlite" (get-in sqlite-result [:context :export-type])))
                    (is (= "/tmp/export.sqlite" (get-in sqlite-result [:context :file])))
-                   (let [default-sqlite-path (get-in @invoke-calls [2 1 1])]
-                     (is (= [[:thread-api/export-edn ["logseq_db_demo" {:export-type :graph
+                   (let [default-sqlite-path (get-in @invoke-calls [3 1 1])]
+                     (is (= [[:thread-api/export-edn ["logseq_db_demo" {:export-type :graph-human
                                                                         :graph-options {:include-timestamps? true
                                                                                         :exclude-built-in-pages? true
                                                                                         :exclude-namespaces #{:user :project}}}]]
+                             [:thread-api/export-edn ["logseq_db_demo" {:export-type :graph}]]
                              [:thread-api/backup-db-sqlite ["logseq_db_demo" "/tmp/export.sqlite"]]
                              [:thread-api/backup-db-sqlite ["logseq_db_demo" default-sqlite-path]]]
                             @invoke-calls))
@@ -4290,11 +4329,17 @@
                      (is (string/ends-with? default-sqlite-path ".sqlite"))
                      (is (= (str "wrote " default-sqlite-path)
                             (get-in sqlite-default-result [:data :message]))))
-                   (is (= 1 (count @write-calls)))
+                   (is (= 2 (count @write-calls)))
                    (is (= {:format :edn
                            :path "/tmp/export.edn"
-                           :data {:exported true}}
-                          (first @write-calls)))))
+                           :data {:exported true}
+                           :pretty? true}
+                          (first @write-calls)))
+                   (is (= {:format :edn
+                           :path "/tmp/export-default.edn"
+                           :data {:exported true}
+                           :pretty? nil}
+                          (second @write-calls)))))
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
