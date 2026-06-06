@@ -2291,7 +2291,7 @@
       (is (string/includes? (strip-ansi (get-in result [:error :message]))
                             "--e2ee-password requires --enable-sync")))))
 
-(deftest test-verb-subcommand-parse-graph-import-export
+(deftest ^:large-vars/cleanup-todo test-verb-subcommand-parse-graph-import-export
   (testing "graph export parses with type and file"
     (let [result (commands/parse-args ["graph" "export"
                                        "--type" "edn"
@@ -2546,7 +2546,7 @@
       (is (true? (:ok? result)))
       (is (= "json" (get-in result [:options :output]))))))
 
-(deftest test-build-action-graph
+(deftest ^:large-vars/cleanup-todo test-build-action-graph
   (testing "graph-list uses list-db"
     (let [parsed {:ok? true :command :graph-list :options {}}
           result (commands/build-action parsed {})]
