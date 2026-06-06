@@ -21,6 +21,7 @@
 (defonce ^:private *endpoint-promise (atom nil))
 (defonce ^:private *endpoint (atom nil))
 (defonce ^:private *endpoint-ready? (atom false))
+(defonce ^:private *endpoint-env-published? (atom false))
 
 (declare find-port! run-command! spawn-server! wait-ready! stop!)
 
@@ -79,6 +80,7 @@
      :exists? (or (:exists? opts) #(fs/existsSync %))
      :ensure-dir! (or (:ensure-dir! opts) #(fs/ensureDirSync %))
      :remove-dir! (or (:remove-dir! opts) #(fs/removeSync %))
+     :delete-env! (or (:delete-env! opts) #(js-delete js/process.env %))
      :write-file! (or (:write-file! opts) #(.writeFileSync fs %1 %2 "utf8"))
      :logger (:logger opts)
      :find-port! (or (:find-port! opts) find-port!)
@@ -140,6 +142,7 @@
   (let [endpoint-url (embedding-endpoint host port)]
     (reset! *endpoint endpoint-url)
     (reset! *endpoint-ready? true)
+    (reset! *endpoint-env-published? true)
     (set-env! embedding-url-env endpoint-url)
     endpoint-url))
 
@@ -149,6 +152,15 @@
     (reset! *endpoint endpoint-url)
     (reset! *endpoint-ready? false)
     endpoint-url))
+
+(defn- clear-endpoint!
+  [delete-env!]
+  (when @*endpoint-env-published?
+    (delete-env! embedding-url-env))
+  (reset! *endpoint-promise nil)
+  (reset! *endpoint nil)
+  (reset! *endpoint-ready? false)
+  (reset! *endpoint-env-published? false))
 
 (defn- allocate-port!
   [{:keys [host port] :as cfg}]
@@ -172,12 +184,13 @@
       (poll!))))
 
 (defn- attach-exit-handler!
-  [^js proc logger]
+  [^js proc {:keys [logger delete-env!]}]
   (when (and proc (fn? (.-on proc)))
     (.on proc "exit"
          (fn [code signal]
            (when (identical? proc @*server-process)
-             (reset! *server-process nil))
+             (reset! *server-process nil)
+             (clear-endpoint! delete-env!))
            ((:info logger) :embedding-server/exited {:code code
                                                      :signal signal})))))
 
@@ -261,7 +274,7 @@
                                  proc ((:spawn-server! cfg) cfg)
                                  _ (do
                                      (reset! *server-process proc)
-                                     (attach-exit-handler! proc (:logger cfg)))
+                                     (attach-exit-handler! proc cfg))
                                  _ ((:wait-ready! cfg) (embedding-health-endpoint (:host cfg) (:port cfg)))
                                  _ (publish-endpoint! cfg)]
                            :started)
@@ -301,14 +314,8 @@
 
 (defn stop!
   []
-  (let [endpoint @*endpoint]
-    (when (and endpoint
-               (= endpoint (aget js/process.env embedding-url-env)))
-      (js-delete js/process.env embedding-url-env)))
   (reset! *startup-promise nil)
-  (reset! *endpoint-promise nil)
-  (reset! *endpoint nil)
-  (reset! *endpoint-ready? false)
+  (clear-endpoint! #(js-delete js/process.env %))
   (when-let [^js proc @*server-process]
     (reset! *server-process nil)
     (when (fn? (.-kill proc))
