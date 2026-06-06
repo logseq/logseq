@@ -21,13 +21,15 @@
           :alias :t
           :validate #{"edn" "sqlite"}}
    :file {:desc "Export file path"
+          :alias :f
           :coerce common-graph/expand-home
           :complete :file}
-   :include-timestamps {:desc "Include timestamps in export"
-                        :coerce :boolean}
-   :exclude-built-in-pages {:desc "Exclude built-in pages"
-                            :coerce :boolean}
-   :exclude-namespaces {:desc "Namespaces to exclude from properties and classes"}})
+   :edn-options {:desc "EDN map of export options. :export-type overrides the default :graph; remaining keys are forwarded as :graph-options"
+                 :alias :e
+                 :coerce :edn}
+   :pretty-print {:desc "Pretty-print the exported EDN file with clojure.pprint"
+                  :alias :p
+                  :coerce :boolean}})
 
 (def ^:private graph-import-spec
   {:type {:desc "Import type"
@@ -78,7 +80,8 @@
    (core/command-entry ["graph" "info"] :graph-info "Graph metadata" {}
                        {:examples ["logseq graph info --graph my-graph"]})
    (core/command-entry ["graph" "export"] :graph-export "Export graph" graph-export-spec
-                       {:examples ["logseq graph export --graph my-graph --type edn --file /tmp/my-graph.edn --include-timestamps --exclude-built-in-pages --exclude-namespaces user,project"
+                       {:examples ["logseq graph export --graph my-graph --type edn --file /tmp/my-graph.edn"
+                                   "logseq graph export --graph my-graph --type edn --file /tmp/my-graph.edn --edn-options '{:export-type :graph-human :include-timestamps? true :exclude-built-in-pages? true :exclude-namespaces #{:user :project}}' --pretty-print"
                                    "logseq graph export --graph my-graph --type sqlite --file /tmp/my-graph.sqlite"]})
    (core/command-entry ["graph" "import"] :graph-import "Import graph" graph-import-spec
                        {:examples ["logseq graph import --graph my-graph --type edn --input /tmp/my-graph.edn"]})
@@ -105,27 +108,7 @@
   (some-> value string/lower-case string/trim))
 
 (def ^:private graph-export-edn-only-option-keys
-  #{:include-timestamps :exclude-built-in-pages :exclude-namespaces})
-
-(defn- parse-csv-option
-  [value]
-  (when (some? value)
-    (->> (string/split (str value) #",")
-         (map string/trim)
-         (remove string/blank?)
-         vec)))
-
-(defn- normalize-csv-option
-  [value]
-  (when-let [values (seq (parse-csv-option value))]
-    (string/join "," values)))
-
-(defn normalize-options
-  [command opts]
-  (if (= command :graph-export)
-    (cond-> opts
-      (contains? opts :exclude-namespaces) (update :exclude-namespaces normalize-csv-option))
-    opts))
+  #{:edn-options :pretty-print})
 
 (defn invalid-options?
   [command opts]
@@ -140,28 +123,15 @@
       (and (= command :graph-export)
            (= export-type "sqlite")
            edn-only-options-specified?)
-      "graph export --type sqlite does not accept --include-timestamps, --exclude-built-in-pages, or --exclude-namespaces"
+      "graph export --type sqlite does not accept --edn-options or --pretty-print"
 
       (and (= command :graph-export)
-           (= export-type "edn")
-           (contains? opts :exclude-namespaces)
-           (not (seq (:exclude-namespaces opts))))
-      "graph export --exclude-namespaces must include at least one non-empty value"
+           (contains? opts :edn-options)
+           (not (map? (:edn-options opts))))
+      "graph export --edn-options must be an EDN map"
 
       :else
       nil)))
-
-(defn- graph-export-options
-  [{:keys [include-timestamps exclude-built-in-pages exclude-namespaces]}]
-  (let [exclude-namespaces' (some->> exclude-namespaces
-                                     parse-csv-option
-                                     (map keyword)
-                                     set
-                                     not-empty)]
-    (cond-> {}
-      include-timestamps (assoc :include-timestamps? true)
-      exclude-built-in-pages (assoc :exclude-built-in-pages? true)
-      exclude-namespaces' (assoc :exclude-namespaces exclude-namespaces'))))
 
 (defn- missing-graph-error
   []
@@ -314,14 +284,19 @@
     {:ok? false
      :error {:code :missing-repo
              :message "repo is required for export"}}
-    {:ok? true
-     :action (cond-> {:type :graph-export
-                      :repo repo
-                      :graph (core/repo->graph repo)
-                      :export-type export-type
-                      :file file}
-               (= export-type "edn")
-               (assoc :graph-options (graph-export-options options)))}))
+    (let [edn-options (:edn-options options)
+          edn-export-type (:export-type edn-options :graph)
+          graph-options (not-empty (dissoc edn-options :export-type))]
+      {:ok? true
+       :action (cond-> {:type :graph-export
+                        :repo repo
+                        :graph (core/repo->graph repo)
+                        :export-type export-type
+                        :file file}
+                 (= export-type "edn")
+                 (assoc :edn-export-type edn-export-type
+                        :graph-options graph-options
+                        :pretty? (boolean (:pretty-print options))))})))
 
 (defn build-import-action
   [repo import-type input]
@@ -559,7 +534,7 @@
               file (or (:file action)
                        (when (= export-type "sqlite")
                          (default-sqlite-export-path config (:repo action))))
-              payload (cond-> {:export-type :graph}
+              payload (cond-> {:export-type (:edn-export-type action :graph)}
                         (seq (:graph-options action))
                         (assoc :graph-options (:graph-options action)))
               export-result (when (= export-type "edn")
@@ -570,7 +545,8 @@
                   "edn"
                   (transport/write-output {:format :edn
                                            :path file
-                                           :data export-result})
+                                           :data export-result
+                                           :pretty? (:pretty? action)})
                   "sqlite"
                   (transport/invoke cfg
                                     :thread-api/backup-db-sqlite
