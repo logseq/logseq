@@ -31,10 +31,11 @@
     (if graph-e2ee? "lock" "cloud")))
 
 (defn local-uploadable-graph?
-  [{:keys [root remote?]}]
+  [{:keys [root remote? rtc-graph?]}]
   (and (or root
            (mobile-util/native-platform?))
        (not remote?)
+       (not rtc-graph?)
        (user-handler/logged-in?)
        (user-handler/rtc-group?)))
 

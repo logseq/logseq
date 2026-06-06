@@ -57,7 +57,9 @@
   (let [current-repo (state/get-current-repo)]
     (some (fn [{:keys [url] :as graph}]
             (when (and (= current-repo url)
-                       (repo/local-uploadable-graph? graph))
+                       (repo/local-uploadable-graph?
+                        (assoc graph :rtc-graph?
+                               (boolean (ldb/get-graph-rtc-uuid (db/get-db current-repo))))))
               graph))
           (state/get-repos))))
 
