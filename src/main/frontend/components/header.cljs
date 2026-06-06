@@ -130,7 +130,8 @@
                  (when (util/uuid-string? current-page)
                    (db/entity [:block/uuid (uuid current-page)])))
         ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
-        working-page? (if config/publishing? (not (state/use-sub :db/restoring?)) true)
+        db-storing? (state/use-sub :db/restoring?)
+        working-page? (if config/publishing? (not db-storing?) true)
         page-menu (if (and working-page? (ldb/page? page))
                     (page-menu/page-menu page)
                     (when-not config/publishing?
@@ -399,7 +400,8 @@
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
-                               (= default-home-page (state/get-current-page)))]
+                               (= default-home-page (state/get-current-page)))
+        electron-server (state/use-sub :electron/server)]
     [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -470,7 +472,7 @@
           (plugins/updates-notifications)])
 
        (when (state/feature-http-server-enabled?)
-         (server/server-indicator (state/use-sub :electron/server)))
+         (server/server-indicator electron-server))
 
        (when (util/electron?)
          (back-and-forward))
