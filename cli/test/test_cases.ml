@@ -915,7 +915,7 @@ let () =
                                     "thread-api/db-sync-download-graph-by-id"
                                   !body ->
                           set_timeout
-                            (fun[@u] () ->
+                            (fun () ->
                               write_json res 200 (json_response result_transit))
                             100
                       | Some result_transit ->
@@ -1014,7 +1014,7 @@ let () =
           \\\",\\\"~:type\\\",\\\"~:rtc.log/download\\\",\\\"~:graph-uuid\\\",\\\"~u"
        ^ sync_graph_id
        ^ "\\\",\\\"~:message\\\",\\\"download started\\\"]]\"}\n\n");
-      set_timeout (fun[@u] () -> res_destroy res) 20)
+      set_timeout (fun () -> res_destroy res) 20)
     (fun _stdout -> ());
 
   test_promise "agent bridge keeps codex alive and forwards worker env"
@@ -1170,7 +1170,7 @@ let () =
                           %s"
                          !stdout !stderr)))
               in
-              interval := Some (set_interval (fun[@u] () -> tick ()) 100);
+              interval := Some (set_interval (fun () -> tick ()) 100);
               child_on_exit child "exit" (fun[@u] code ->
                   if (not !finished) && not (Node.Fs.existsSync marker_path)
                   then (
@@ -1202,7 +1202,7 @@ let () =
                       write_json res 400 (error_response "unexpected request")
                     else
                       set_timeout
-                        (fun[@u] () -> write_json res 200 (json_response "[]"))
+                        (fun () -> write_json res 200 (json_response "[]"))
                         500))
           in
           server_listen server 0 "127.0.0.1" (fun[@u] () ->

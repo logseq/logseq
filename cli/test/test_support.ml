@@ -1,4 +1,3 @@
-external decode_uri_component : string -> string = "decodeURIComponent"
 external tmpdir : unit -> string = "tmpdir" [@@mel.module "os"]
 
 external mkdir_sync : string -> Js.Json.t Js.Dict.t -> unit = "mkdirSync"
@@ -10,19 +9,19 @@ external rm_sync : string -> Js.Json.t Js.Dict.t -> unit = "rmSync"
 [@@mel.module "fs"]
 
 external chmod_sync : string -> int -> unit = "chmodSync" [@@mel.module "fs"]
-external parse_json : string -> Js.Json.t = "parse" [@@mel.scope "JSON"]
 
 external promise_error_message : Js.Promise.error -> string option = "message"
 [@@mel.get] [@@mel.return { undefined_to_opt }]
 
-external set_timeout : ((unit -> unit)[@u]) -> int -> unit = "setTimeout"
+let decode_uri_component = Js.Global.decodeURIComponent
+let parse_json = Js.Json.parseExn
+let set_timeout f ms = ignore (Js.Global.setTimeout ~f ms : Js.Global.timeoutId)
 
-type timer
+type timer = Js.Global.intervalId
 
-external set_timeout_id : ((unit -> unit)[@u]) -> int -> timer = "setTimeout"
-external clear_timeout : timer -> unit = "clearTimeout"
-external set_interval : ((unit -> unit)[@u]) -> int -> timer = "setInterval"
-external clear_interval : timer -> unit = "clearInterval"
+let set_interval f ms = Js.Global.setInterval ~f ms
+let clear_interval = Js.Global.clearInterval
+
 external current_dirname : string = "__dirname"
 
 type request
@@ -92,9 +91,6 @@ external string_match : string -> Js.Re.t -> < index : int > Js.t Js.null
 [@@mel.send]
 
 external chars_of_string : string -> string array = "from" [@@mel.scope "Array"]
-
-external code_point_at : string -> int -> int Js.undefined = "codePointAt"
-[@@mel.send]
 
 type spawn_options = < encoding : string ; env : string Js.Dict.t > Js.t
 
@@ -328,7 +324,7 @@ let display_width text =
   chars_of_string text
   |> Array.fold_left
        (fun width ch ->
-         match Js.Undefined.toOption (code_point_at ch 0) with
+         match Js.String.codePointAt ~index:0 ch with
          | Some code -> width + char_width code
          | None -> width)
        0
