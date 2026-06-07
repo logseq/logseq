@@ -16,6 +16,7 @@ depends: [
   "melange-fetch"
   "melange-transit"
   "melange-edn"
+  "melange-jest"
   "humanize"
   "odoc" {with-doc}
 ]
