@@ -20,10 +20,10 @@
   (is (false? (video/provider-supports? :vimeo :timestamp?)))
   (is (false? (video/provider-supports? :loom :timestamp?))))
 
-(deftest matched-video-aspect-ratio-detects-youtube-shorts
+(deftest matched-video-aspect-ratio-uses-provider-defaults
   (are [url ratio] (= ratio
                       (video/matched-video-aspect-ratio
                        (text-util/get-matched-video url)))
     "https://www.youtube.com/watch?v=xu9p5ynlhZk" [16 9]
-    "https://www.youtube.com/shorts/xu9p5ynlhZk" [9 16]
+    "https://www.youtube.com/shorts/xu9p5ynlhZk" [16 9]
     "https://www.bilibili.com/video/BV1xx411c7mD" [16 9]))

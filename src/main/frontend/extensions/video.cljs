@@ -5,8 +5,7 @@
   {:youtube  {:timestamp? true
               :current-time? true
               :seek? true
-              :default-aspect-ratio [16 9]
-              :short-aspect-ratio [9 16]}
+              :default-aspect-ratio [16 9]}
    :bilibili {:timestamp? false
               :default-aspect-ratio [16 9]}
    :vimeo    {:timestamp? false
@@ -37,16 +36,9 @@
   [provider capability]
   (true? (get-in provider-capabilities [provider capability])))
 
-(defn youtube-shorts-match?
-  [match]
-  (and (= :youtube (matched-video-provider match))
-       (= "/shorts/" (nth match 4 nil))))
-
 (defn matched-video-aspect-ratio
   [match]
   (let [provider (matched-video-provider match)]
     (or
-     (when (youtube-shorts-match? match)
-       (get-in provider-capabilities [:youtube :short-aspect-ratio]))
      (get-in provider-capabilities [provider :default-aspect-ratio])
      [16 9])))
