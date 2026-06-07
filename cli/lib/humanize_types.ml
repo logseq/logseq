@@ -1,5 +1,4 @@
 let format_count = Humanize.intcomma
-
 let pluralize_noun = Humanize.pluralize_noun
 
 let format_count_with_noun count noun =

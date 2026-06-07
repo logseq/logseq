@@ -37,7 +37,8 @@ let auth_path config =
   Option.value config.Cli_config.auth_path ~default:(default_auth_path ())
 
 let rec mkdir_p path =
-  if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then ()
+  if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then
+    ()
   else (
     mkdir_p (Filename.dirname path);
     Cli_unix.mkdir path 0o755)
@@ -66,8 +67,8 @@ let http_error_message status body =
   else
     "http request failed (" ^ string_of_int status ^ ")\nhttp response: " ^ body
 
-let http_request ~(method_ : Fetch.requestMethod) ~url ~headers ~body ~timeout_span
-    =
+let http_request ~(method_ : Fetch.requestMethod) ~url ~headers ~body
+    ~timeout_span =
   Cli_effect.bind
     (Cli_platform.HTTP.request ?timeout_span method_ url ~headers ~body)
     (fun (response, body) ->

@@ -89,7 +89,8 @@ let as_vector = function
   | _ -> None
 
 let as_vector_t = function
-  | Melange_edn.Any (Melange_edn.Vector values) -> Some (Melange_edn.Vector values)
+  | Melange_edn.Any (Melange_edn.Vector values) ->
+      Some (Melange_edn.Vector values)
   | _ -> None
 
 let as_set = function

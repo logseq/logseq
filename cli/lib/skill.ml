@@ -70,7 +70,8 @@ let installed_skill_targets ~cwd ~home_dir =
 let read_file = Cli_unix.read_text_file
 
 let rec mkdir_p path =
-  if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then ()
+  if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then
+    ()
   else (
     mkdir_p (Filename.dirname path);
     Cli_unix.mkdir path 0o755)

@@ -1,7 +1,4 @@
-type 'a state =
-  | Pending
-  | Resolved of 'a
-  | Rejected of exn
+type 'a state = Pending | Resolved of 'a | Rejected of exn
 
 type 'a t = {
   mutable state : 'a state;
@@ -126,8 +123,7 @@ let finally value f =
   on_state value finish;
   result
 
-let async f =
-  ignore (catch (f ()) (fun _ -> pure ()) : unit t)
+let async f = ignore (catch (f ()) (fun _ -> pure ()) : unit t)
 
 let on_any task on_ok on_error =
   on_state task (function
@@ -138,8 +134,6 @@ let on_any task on_ok on_error =
 let sleep span =
   let task, resolver = wait () in
   ignore
-    (Js.Global.setTimeout
-       ~f:(fun () -> wakeup resolver ())
-       (int_of_float span)
+    (Js.Global.setTimeout ~f:(fun () -> wakeup resolver ()) (int_of_float span)
       : Js.Global.timeoutId);
   task
