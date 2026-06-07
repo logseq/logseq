@@ -84,9 +84,8 @@
            (register-player id (hooks/deref *iframe-ref)))))
      [id])
     [:div.video-embed-shell
-     {:style {:width width}}
      [:div.video-embed-frame
-      {:style {:width "100%"
+      {:style {:width width
                :aspect-ratio (str width " / " height)}}
       [:iframe
        {:id                (str "youtube-player-" id)

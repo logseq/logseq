@@ -1842,19 +1842,24 @@ html.is-mac {
 }
 
 .video-embed-shell {
-  display: block;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 4px;
   max-width: 100%;
   margin: 0.25rem 0;
+  vertical-align: top;
 
   .video-embed-frame {
+    flex: 0 1 auto;
+    min-width: 0;
     margin: 0;
   }
 }
 
 .video-embed-actions {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 4px;
+  flex: 0 0 auto;
+  align-items: center;
 }
 
 .video-timestamp-button {
