@@ -308,7 +308,11 @@
     (if (seq tx-data)
       (try
         (ldb/transact! conn tx-data (cond-> {:op :apply-client-tx}
-                                      outliner-op (assoc :outliner-op outliner-op)))
+                                      outliner-op
+                                      (assoc :outliner-op outliner-op)
+                                      (= outliner-op :db-migrate)
+                                      (assoc :db-migrate? true
+                                             :skip-validate-db? true)))
         true
         (catch :default e
           ;; Rebase/fix txs are inferred from local history and can become stale

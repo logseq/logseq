@@ -1140,6 +1140,33 @@
                       (catch :default e
                         e)))))))))
 
+(deftest apply-remote-txs-applies-db-migration-entry-test
+  (testing "pulled db migration txs apply with migration transact semantics"
+    (let [conn (db-test/create-conn)
+          client-ops-conn (new-client-ops-db)
+          block-uuid (random-uuid)
+          tx-data [[:db/add -1 :block/uuid block-uuid]
+                   [:db/add -1 :block/title "remote-migration-only"]]
+          tx-metas (atom [])]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (d/listen! conn ::capture-remote-db-migrate-tx-meta
+                     (fn [tx-report]
+                       (swap! tx-metas conj (:tx-meta tx-report))))
+          (try
+            (#'sync-apply/apply-remote-txs! test-repo nil [{:tx-data tx-data
+                                                            :outliner-op :db-migrate}])
+            (finally
+              (d/unlisten! conn ::capture-remote-db-migrate-tx-meta)))
+          (is (some (fn [tx-meta]
+                      (and (:db-migrate? tx-meta)
+                           (:skip-validate-db? tx-meta)))
+                    @tx-metas))
+          (is (= "remote-migration-only"
+                 (:block/title (first (d/q '[:find [(pull ?e [:block/title]) ...]
+                                          :where [?e :block/title "remote-migration-only"]]
+                                        @conn))))))))))
+
 (deftest apply-remote-txs-preserves-many-page-property-values-test
   (testing "remote txs keep both values when a new page-many property is created and then assigned twice"
     (let [graph {:pages-and-blocks
@@ -1401,6 +1428,22 @@
                              (= :logseq.property.reaction/emoji-id (nth tx 2 nil))
                              (= "+1" (nth tx 3 nil))))
                       txs))))))))
+
+(deftest db-migration-tx-enqueues-db-migrate-pending-op-test
+  (testing "db migration txs keep a sync-visible marker"
+    (let [conn (db-test/create-conn)
+          client-ops-conn (new-client-ops-db)
+          block-uuid (random-uuid)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (ldb/transact! conn
+                         [[:db/add -1 :block/uuid block-uuid]
+                          [:db/add -1 :block/title "migration-only"]]
+                         {:db-migrate? true
+                          :skip-validate-db? true})
+          (let [pending (#'sync-apply/pending-txs test-repo)]
+            (is (= 1 (count pending)))
+            (is (= :db-migrate (:outliner-op (first pending))))))))))
 
 (deftest rename-page-enqueues-canonical-save-block-pending-op-test
   (testing "rename-page is persisted as canonical save-block op"

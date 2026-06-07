@@ -354,10 +354,9 @@
                    _ (when (and graph-e2ee? (nil? aes-key))
                        (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
                    remote-txs* (if aes-key
-                                 (p/all (mapv (fn [{:keys [t tx-data]}]
+                                 (p/all (mapv (fn [{:keys [tx-data] :as remote-tx}]
                                                 (p/let [tx-data* (sync-crypt/<decrypt-tx-data aes-key tx-data)]
-                                                  {:t t
-                                                   :tx-data tx-data*}))
+                                                  (assoc remote-tx :tx-data tx-data*)))
                                               remote-txs))
                                  (p/resolved remote-txs))]
              (try
