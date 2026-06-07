@@ -6,6 +6,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
+            [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.page :as outliner-page]))
 
@@ -283,4 +284,30 @@
       (is (some? (db-test/find-block-by-content @conn "auto [[Target Page]]")))
       (finally
         ;; return global fn back to previous behavior
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest import-tx-skips-property-history-recording-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "task block"}]}]})
+        block (db-test/find-block-by-content @conn "task block")
+        history-count #(count (d/q '[:find ?e :where [?e :logseq.property.history/property]] @conn))]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (testing "Baseline: a normal status change records property history"
+        (let [before (history-count)]
+          (ldb/transact! conn [[:db/add (:db/id block)
+                                :logseq.property/status :logseq.property/status.todo]])
+          (is (= (inc before) (history-count))
+              "One :logseq.property.history entry is recorded for a user-driven status change")))
+
+      (testing "Import: setting a history-enabled property with ::sqlite-export/imported-data? does not record history"
+        (let [before (history-count)]
+          (ldb/transact! conn
+                         [[:db/add (:db/id block)
+                           :logseq.property/status :logseq.property/status.doing]]
+                         {::sqlite-export/imported-data? true})
+          (is (= before (history-count))
+              "No :logseq.property.history entries are added for an imported transaction")))
+      (finally
         (ldb/register-transact-pipeline-fn! identity)))))

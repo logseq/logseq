@@ -78,6 +78,7 @@
 (def ^:private vector-embedding-parallelism 2)
 (def ^:private vector-embedding-max-batch-chars (* vector-embedding-batch-size 2048))
 (def ^:private vector-embedding-max-title-length 2048)
+(def ^:private query-embedding-timeout-ms 50)
 (def ^:private search-index-build-time-budget-ms 8)
 (def ^:private search-index-build-idle-status-ttl-ms 2000)
 (def ^:private search-index-build-pause-ms 300)
@@ -996,10 +997,12 @@
   [repo q option]
   (let [vector-index (worker-state/get-vector-index repo)]
     (if (and vector-index
+             (:feature/enable-semantic-search? option)
              (not (:page-only? option))
              (not (:query-embedding option))
              (not (string/blank? q)))
-      (-> (p/let [embeddings (platform/embed-texts (platform/current) [q])
+      (-> (p/let [embeddings (-> (platform/embed-texts (platform/current) [q])
+                                  (p/timeout query-embedding-timeout-ms))
                   _ (validate-embedding-count! [{:title q}] embeddings)]
             (search-blocks repo q (assoc option :query-embedding (first embeddings))))
           (p/catch (fn [error]
@@ -1520,7 +1523,11 @@
       (throw (ex-info "graph not opened" {:code :graph-not-opened :repo repo})))
     (let [{:keys [init-tx block-props-tx misc-tx]} (sqlite-export/build-import export-edn @conn {})
           tx-data (vec (concat init-tx block-props-tx misc-tx))
-          tx-meta {::sqlite-export/imported-data? true}]
+          tx-meta (cond-> {::sqlite-export/imported-data? true}
+                    ;; :datoms format imports imports all datoms including built-in ones. Add :initial-db?
+                    ;; to keep pipeline from reverting their import
+                    (= :datoms (::sqlite-export/graph-format export-edn))
+                    (assoc :initial-db? true))]
       (ldb/transact! conn tx-data tx-meta)
       {:tx-count (count tx-data)})))
 

@@ -7,6 +7,7 @@
             [frontend.worker.db-core :as db-core]
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.export :as worker-export]
+            [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.platform :as platform]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
@@ -25,6 +26,8 @@
             [logseq.db.common.view :as db-view]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db.sqlite.export :as sqlite-export]
             [promesa.core :as p]
             [shadow.resource :as rc]))
 
@@ -1974,3 +1977,36 @@
          (is (= [:p-link] ((get-thread-api :thread-api/get-bidirectional-properties) repo {:target-id "b1"})))
          (is (= {:nodes 1} ((get-thread-api :thread-api/build-graph) repo {:depth 1})))
          (is (some #(= [:update-local-checksum repo "new-checksum"] %) @calls)))))))
+
+;; When source and dest built-in eids differ, a :graph (datom) import would trip
+;; the pipeline's revert-disallowed-changes, which sees the moved :db/ident as a
+;; disallowed built-in edit and emits a conflicting revert. import-edn must
+;; short-circuit the pipeline (e.g. via :initial-db?) for datom imports.
+(deftest import-edn-datom-format-with-shifted-builtin-eids-test
+  (restoring-worker-state
+   (fn []
+     (let [;; Source: shift built-in eids by one relative to a freshly seeded dest
+           source-conn (d/create-conn db-schema/schema)
+           _ (d/transact! source-conn [{:block/uuid (random-uuid)}])
+           _ (d/transact! source-conn (sqlite-create-graph/build-db-initial-data "{}"))
+           export-edn (sqlite-export/build-export @source-conn {:export-type :graph})
+           source-purple-eid (some (fn [[e a v]]
+                                     (when (and (= a :db/ident)
+                                                (= v :logseq.property/color.purple))
+                                       e))
+                                   (:datoms export-edn))
+           dest-conn (sqlite-export/create-conn)
+           dest-purple-eid (:db/id (d/entity @dest-conn :logseq.property/color.purple))]
+       (assert (= :datoms (::sqlite-export/graph-format export-edn))
+               "Test relies on a datom-format export")
+       (assert (and source-purple-eid dest-purple-eid (not= source-purple-eid dest-purple-eid))
+               "Test relies on shifted built-in eids between source and dest")
+       (reset! worker-state/*datascript-conns {test-repo dest-conn})
+       (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+       (try
+         ((get-thread-api :thread-api/import-edn) test-repo export-edn)
+         (is (= :logseq.property/color.purple
+                (:db/ident (d/entity @dest-conn :logseq.property/color.purple)))
+             "color.purple ident is preserved after datom import despite eid shift")
+         (finally
+           (ldb/register-transact-pipeline-fn! identity)))))))
