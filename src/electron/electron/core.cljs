@@ -457,6 +457,7 @@
     (let [privileges {:standard        true
                       :secure          true
                       :bypassCSP       true
+                      :corsEnabled     true
                       :supportFetchAPI true}]
       (.registerSchemesAsPrivileged
        protocol (bean/->js [{:scheme     LSP_SCHEME
