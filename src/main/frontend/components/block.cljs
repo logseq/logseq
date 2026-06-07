@@ -1635,7 +1635,7 @@
       (when-not (string/blank? id)
         (let [width (min (- (util/get-width) 96)
                          560)
-              height (int (* width (/ 360 560)))]
+              height (int (* width (/ 315 560)))]
           (video-iframe
            {:allowfullscreen true
             :framespacing "0"
@@ -1644,7 +1644,7 @@
             :scrolling "no"
             :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")}
            width
-           (max 500 height)))))))
+           height))))))
 
 (defn- macro-video-cp
   [_config arguments]
@@ -1680,9 +1680,7 @@
             (youtube/youtube-video (last src) opts))
           (when src
             (let [width (min (- (util/get-width) 96) 560)
-                  height (int (* width (/ (if (string/includes? src "player.bilibili.com")
-                                            360 315)
-                                          560)))]
+                  height (int (* width (/ 315 560)))]
               (video-iframe
                {:allow-full-screen true
                 :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
