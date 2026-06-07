@@ -1,101 +1,25 @@
-(rule
- (alias runtest)
- (deps (alias ../bin/melange) melange_smoke.js ../bin/logseq_cli_melange/bin/main.js)
- (action
-  (run node melange_smoke.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
+(melange.emit
+ (target jest)
+ (modules test_support test_cases fake_codex)
+ (module_systems commonjs)
+ (libraries melange-jest.jest melange.node)
+ (preprocess
+  (pps melange.ppx)))
 
 (rule
  (alias runtest)
- (deps (alias ../bin/melange) wasm_fetch_timeout.js ../bin/logseq_cli_melange/bin/main.js)
+ (deps
+  (alias ../bin/melange)
+  (alias ./melange)
+  jest/test/test_cases.js
+  jest/test/fake_codex.js
+  ../bin/logseq_cli_melange/bin/main.js)
  (action
-  (run node wasm_fetch_timeout.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
-
-(rule
- (alias runtest)
- (deps (alias ../bin/melange) wasm_graph_info.js ../bin/logseq_cli_melange/bin/main.js)
- (action
-  (run node wasm_graph_info.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
-
-(rule
- (alias runtest)
- (deps (alias ../bin/melange) wasm_graph_unicode_name.js ../bin/logseq_cli_melange/bin/main.js)
- (action
-  (run node wasm_graph_unicode_name.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
-
-(rule
- (alias runtest)
- (deps (alias ../bin/melange) wasm_login.js ../bin/logseq_cli_melange/bin/main.js)
- (action
-  (run node wasm_login.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
-
-(rule
- (alias runtest)
- (deps (alias ../bin/melange) wasm_list_page_human_time.js ../bin/logseq_cli_melange/bin/main.js)
- (action
-  (run node wasm_list_page_human_time.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
-
-(rule
- (alias runtest)
- (deps (alias ../bin/melange) wasm_list_page_human_ragged.js ../bin/logseq_cli_melange/bin/main.js)
- (action
-  (run node wasm_list_page_human_ragged.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
-
-(rule
- (alias runtest)
- (deps (alias ../bin/melange) wasm_list_asset_human_columns.js ../bin/logseq_cli_melange/bin/main.js)
- (action
-  (run node wasm_list_asset_human_columns.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
-
-(rule
- (alias runtest)
- (deps (alias ../bin/melange) wasm_sync_progress.js ../bin/logseq_cli_melange/bin/main.js)
- (action
-  (run node wasm_sync_progress.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
-
-(rule
- (alias runtest)
- (deps (alias ../bin/melange) wasm_sync_download_require_graph.js ../bin/logseq_cli_melange/bin/main.js)
- (action
-  (run node wasm_sync_download_require_graph.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
-
-(rule
- (alias runtest)
- (deps (alias ../bin/melange) wasm_sync_progress_stream.js ../bin/logseq_cli_melange/bin/main.js)
- (action
-  (run node wasm_sync_progress_stream.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
-
-(rule
- (alias runtest)
- (deps (alias ../bin/melange) wasm_sync_progress_disconnect.js ../bin/logseq_cli_melange/bin/main.js)
- (action
-  (run node wasm_sync_progress_disconnect.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
-
-(rule
- (alias runtest)
- (deps (alias ../bin/melange) wasm_upsert_asset.js ../bin/logseq_cli_melange/bin/main.js)
- (action
-  (run node wasm_upsert_asset.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
-
-(rule
- (alias runtest)
- (deps (alias ../bin/melange) wasm_graph_backup.js ../bin/logseq_cli_melange/bin/main.js)
- (action
-  (run node wasm_graph_backup.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
-
-(rule
- (alias runtest)
- (deps (alias ../bin/melange) wasm_show_human_tree.js ../bin/logseq_cli_melange/bin/main.js)
- (action
-  (run node wasm_show_human_tree.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
-
-(rule
- (alias runtest)
- (deps (alias ../bin/melange) wasm_show_human_properties.js ../bin/logseq_cli_melange/bin/main.js)
- (action
-  (run node wasm_show_human_properties.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
-
-(rule
- (alias runtest)
- (deps (alias ../bin/melange) wasm_agent_bridge_codex_lifecycle.js ../bin/logseq_cli_melange/bin/main.js)
- (action
-  (run node wasm_agent_bridge_codex_lifecycle.js %{dep:../bin/logseq_cli_melange/bin/main.js})))
+  (setenv LOGSEQ_CLI_MELANGE_ENTRYPOINT bin/logseq_cli_melange/bin/main.js
+   (chdir
+    %{workspace_root}
+    (run
+     npx
+     jest
+     --testMatch
+     **/_build/default/test/jest/test/test_cases.js)))))
