@@ -1841,6 +1841,13 @@ html.is-mac {
   }
 }
 
+.asset-video {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.25rem 0;
+}
+
 .ls-filters {
     div[data-testid='virtuoso-item-list'] button {
         @apply mb-2;

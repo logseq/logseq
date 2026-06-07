@@ -211,6 +211,14 @@
             (on-dimensions (.-naturalWidth img) (.-naturalHeight img))))
     (set! (.-src img) url)))
 
+(defn measure-video! [url on-dimensions]
+  (let [video (js/document.createElement "video")]
+    (set! (.-preload video) "metadata")
+    (set! (.-onloadedmetadata video)
+          (fn []
+            (on-dimensions (.-videoWidth video) (.-videoHeight video))))
+    (set! (.-src video) url)))
+
 (defn- normalize-asset-align
   [asset-align]
   (cond
@@ -470,6 +478,48 @@
          :m4a [:audio opts [:source {:src src :type "audio/mp4"}]]
          [:audio (assoc opts :src src)])))))
 
+(defn- asset-video-style
+  [metadata asset-width asset-height]
+  (let [width (or (:width metadata) asset-width)
+        height (or (:height metadata) asset-height)
+        max-width (min (- (util/get-width) 96) 560)
+        max-height 557]
+    (if (and (number? width) (number? height) (pos? width) (pos? height))
+      (let [width' (min width max-width)
+            height' (* width' (/ height width))
+            [width' height'] (if (> height' max-height)
+                               [(* max-height (/ width height)) max-height]
+                               [width' height'])]
+        {:width width'
+         :height height'})
+      {:max-width max-width})))
+
+(hsx/defc asset-video
+  [config src metadata]
+  (let [asset-block (:asset-block config)
+        asset-width (:logseq.property.asset/width asset-block)
+        asset-height (:logseq.property.asset/height asset-block)
+        metadata (block-image/effective-image-metadata config asset-block metadata)]
+    (hooks/use-effect!
+     (fn []
+       (when (and (seq src) (:block/uuid asset-block))
+         (when-not (or asset-width asset-height)
+           (measure-video!
+            src
+            (fn [width height]
+              (when (and (pos? width)
+                         (pos? height)
+                         (nil? (:logseq.property.asset/width asset-block)))
+                (property-handler/set-block-properties! (:block/uuid asset-block)
+                                                        {:logseq.property.asset/width width
+                                                         :logseq.property.asset/height height}))))))
+       (fn []))
+     [src (:block/uuid asset-block)])
+    [:video.asset-video
+     {:src src
+      :controls true
+      :style (asset-video-style metadata asset-width asset-height)}]))
+
 (defn- open-pdf-file
   [e block href]
   (let [href (if-let [url (:logseq.property.asset/external-url block)]
@@ -544,8 +594,7 @@
           (audio-cp src ext)
 
           (contains? config/video-formats ext)
-          [:video {:src src
-                   :controls true}]
+          (asset-video config src metadata)
 
           (contains? (common-config/img-formats) ext)
           (resizable-image config title src metadata full_text true)
@@ -1071,8 +1120,7 @@
      (cond
        ;; https://en.wikipedia.org/wiki/HTML5_video
        (contains? config/video-formats (keyword ext-name))
-       [:video {:src real-path-url
-                :controls true}]
+       (asset-video config real-path-url nil)
 
        :else
        [:a.asset-ref {:target "_blank" :href real-path-url}
