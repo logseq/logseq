@@ -79,17 +79,18 @@
            (<! (load-youtube-api))
            (register-player id (hooks/deref *iframe-ref)))))
      [id])
-    [:iframe.aspect-video
-     {:id                (str "youtube-player-" id)
-      :ref               *iframe-ref
-      :allow-full-screen "allowfullscreen"
-      :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-      :referrer-policy   "strict-origin-when-cross-origin"
-      :referer           "https://logseq.com"
-      :frame-border      "0"
-      :src               url
-      :height            height
-      :width             width}]))
+    [:div.video-embed-frame
+     {:style {:width width
+              :aspect-ratio (str width " / " height)}}
+     [:iframe
+      {:id                (str "youtube-player-" id)
+       :ref               *iframe-ref
+       :allow-full-screen "allowfullscreen"
+       :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+       :referrer-policy   "strict-origin-when-cross-origin"
+       :referer           "https://logseq.com"
+       :frame-border      "0"
+       :src               url}]]))
 
 (defn seconds->display [seconds]
   (let [seconds (int seconds)

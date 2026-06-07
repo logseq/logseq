@@ -1553,6 +1553,13 @@
      [:span.warning
       (util/format "{{function %s}}" (first arguments))])))
 
+(defn- video-iframe
+  [attrs width height]
+  [:div.video-embed-frame
+   {:style {:width width
+            :aspect-ratio (str width " / " height)}}
+   [:iframe attrs]])
+
 (defn- macro-vimeo-cp
   [_config arguments]
   (when-let [url (first arguments)]
@@ -1561,14 +1568,13 @@
         (let [width (min (- (util/get-width) 96)
                          560)
               height (int (* width (/ 315 560)))]
-          [:iframe
+          (video-iframe
            {:allow-full-screen "allowfullscreen"
-            :allow
-            "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+            :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
             :frame-border "0"
-            :src (str "https://player.vimeo.com/video/" vimeo-id)
-            :height height
-            :width width}])))))
+            :src (str "https://player.vimeo.com/video/" vimeo-id)}
+           width
+           height))))))
 
 (defn- macro-bilibili-cp
   [_config arguments]
@@ -1581,15 +1587,15 @@
         (let [width (min (- (util/get-width) 96)
                          560)
               height (int (* width (/ 360 560)))]
-          [:iframe
+          (video-iframe
            {:allowfullscreen true
             :framespacing "0"
             :frameborder "no"
             :border "0"
             :scrolling "no"
-            :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
-            :width width
-            :height (max 500 height)}])))))
+            :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")}
+           width
+           (max 500 height)))))))
 
 (defn- macro-video-cp
   [_config arguments]
@@ -1627,16 +1633,16 @@
                   height (int (* width (/ (if (string/includes? src "player.bilibili.com")
                                             360 315)
                                           560)))]
-              [:iframe
+              (video-iframe
                {:allow-full-screen true
                 :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
                 :framespacing "0"
                 :frame-border "no"
                 :border "0"
                 :scrolling "no"
-                :src src
-                :width width
-                :height height}]))))
+                :src src}
+               width
+               height)))))
       [:span.warning.mr-1 {:title (t :block/invalid-url)}
        (macro->text "video" arguments)])
     [:span.warning.mr-1 {:title (t :block/empty-url)}
