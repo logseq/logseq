@@ -1,33 +1,33 @@
-let any value = Edn_ocaml.Any value
+let any value = Melange_edn.Any value
 
 let keyword_name value =
   if String.length value > 0 && value.[0] = ':' then
     String.sub value 1 (String.length value - 1)
   else value
 
-let keyword_t value = Edn_ocaml.Keyword (keyword_name value)
+let keyword_t value = Melange_edn.Keyword (keyword_name value)
 
-let keyword_to_string (value : Edn_ocaml.keyword Edn_ocaml.t) =
+let keyword_to_string (value : Melange_edn.keyword Melange_edn.t) =
   match value with
-  | Edn_ocaml.Keyword value -> ":" ^ keyword_name value
+  | Melange_edn.Keyword value -> ":" ^ keyword_name value
   | _ -> assert false
 
 let keyword_any value = any (keyword_t value)
-let list_t values = Edn_ocaml.List (Iarray.of_list values)
-let vector_t values = Edn_ocaml.Vector (Iarray.of_list values)
-let set_t values = Edn_ocaml.Set (Iarray.of_list values)
-let map_t fields = Edn_ocaml.Map (Iarray.of_list fields)
-let nil = any Edn_ocaml.Nil
-let bool value = any (Edn_ocaml.Bool value)
-let int value = any (Edn_ocaml.Int (Int64.of_int value))
-let int64 value = any (Edn_ocaml.Int value)
-let float value = any (Edn_ocaml.Float value)
-let string value = any (Edn_ocaml.String value)
+let list_t values = Melange_edn.List (Iarray.of_list values)
+let vector_t values = Melange_edn.Vector (Iarray.of_list values)
+let set_t values = Melange_edn.Set (Iarray.of_list values)
+let map_t fields = Melange_edn.Map (Iarray.of_list fields)
+let nil = any Melange_edn.Nil
+let bool value = any (Melange_edn.Bool value)
+let int value = any (Melange_edn.Int (Int64.of_int value))
+let int64 value = any (Melange_edn.Int value)
+let float value = any (Melange_edn.Float value)
+let string value = any (Melange_edn.String value)
 let keyword value = any (keyword_t value)
-let uuid value = any (Edn_ocaml.Tagged ("uuid", string value))
+let uuid value = any (Melange_edn.Tagged ("uuid", string value))
 
 let bytes value =
-  any (Edn_ocaml.Tagged ("bytes", string (Bytes.to_string value)))
+  any (Melange_edn.Tagged ("bytes", string (Bytes.to_string value)))
 
 let list values = any (list_t values)
 let vector values = any (vector_t values)
@@ -44,64 +44,64 @@ let int64_to_int_opt value =
   if Int64.of_int int_value = value then Some int_value else None
 
 let as_bool = function
-  | Edn_ocaml.Any (Edn_ocaml.Bool value) -> Some value
+  | Melange_edn.Any (Melange_edn.Bool value) -> Some value
   | _ -> None
 
 let as_int = function
-  | Edn_ocaml.Any (Edn_ocaml.Int value) -> int64_to_int_opt value
+  | Melange_edn.Any (Melange_edn.Int value) -> int64_to_int_opt value
   | _ -> None
 
 let as_int64 = function
-  | Edn_ocaml.Any (Edn_ocaml.Int value) -> Some value
+  | Melange_edn.Any (Melange_edn.Int value) -> Some value
   | _ -> None
 
 let as_float = function
-  | Edn_ocaml.Any (Edn_ocaml.Float value) -> Some value
+  | Melange_edn.Any (Melange_edn.Float value) -> Some value
   | _ -> None
 
 let as_string = function
-  | Edn_ocaml.Any (Edn_ocaml.String value) -> Some value
+  | Melange_edn.Any (Melange_edn.String value) -> Some value
   | _ -> None
 
 let as_keyword = function
-  | Edn_ocaml.Any (Edn_ocaml.Keyword value) -> Some (keyword_text value)
+  | Melange_edn.Any (Melange_edn.Keyword value) -> Some (keyword_text value)
   | _ -> None
 
 let as_keyword_t = function
-  | Edn_ocaml.Any (Edn_ocaml.Keyword value) -> Some (keyword_t value)
+  | Melange_edn.Any (Melange_edn.Keyword value) -> Some (keyword_t value)
   | _ -> None
 
-let rec as_uuid = function
-  | Edn_ocaml.Any (Edn_ocaml.Tagged ("uuid", value)) -> as_string value
+let as_uuid = function
+  | Melange_edn.Any (Melange_edn.Tagged ("uuid", value)) -> as_string value
   | _ -> None
 
-let rec as_bytes = function
-  | Edn_ocaml.Any (Edn_ocaml.Tagged ("bytes", value)) ->
+let as_bytes = function
+  | Melange_edn.Any (Melange_edn.Tagged ("bytes", value)) ->
       Option.map Bytes.of_string (as_string value)
   | _ -> None
 
 let as_list = function
-  | Edn_ocaml.Any (Edn_ocaml.List values) -> Some (iarray_to_list values)
+  | Melange_edn.Any (Melange_edn.List values) -> Some (iarray_to_list values)
   | _ -> None
 
 let as_vector = function
-  | Edn_ocaml.Any (Edn_ocaml.Vector values) -> Some (iarray_to_list values)
+  | Melange_edn.Any (Melange_edn.Vector values) -> Some (iarray_to_list values)
   | _ -> None
 
 let as_vector_t = function
-  | Edn_ocaml.Any (Edn_ocaml.Vector values) -> Some (Edn_ocaml.Vector values)
+  | Melange_edn.Any (Melange_edn.Vector values) -> Some (Melange_edn.Vector values)
   | _ -> None
 
 let as_set = function
-  | Edn_ocaml.Any (Edn_ocaml.Set values) -> Some (iarray_to_list values)
+  | Melange_edn.Any (Melange_edn.Set values) -> Some (iarray_to_list values)
   | _ -> None
 
 let as_map = function
-  | Edn_ocaml.Any (Edn_ocaml.Map fields) -> Some (iarray_to_list fields)
+  | Melange_edn.Any (Melange_edn.Map fields) -> Some (iarray_to_list fields)
   | _ -> None
 
 let as_map_t = function
-  | Edn_ocaml.Any (Edn_ocaml.Map fields) -> Some (Edn_ocaml.Map fields)
+  | Melange_edn.Any (Melange_edn.Map fields) -> Some (Melange_edn.Map fields)
   | _ -> None
 
 let expect_vector_t label value =
@@ -114,7 +114,7 @@ let expect_map_t label value =
   | Some value -> value
   | None -> invalid_arg (label ^ " must be an EDN map")
 
-let is_null = function Edn_ocaml.Any Edn_ocaml.Nil -> true | _ -> false
+let is_null = function Melange_edn.Any Melange_edn.Nil -> true | _ -> false
 
 let as_seq value =
   match (as_list value, as_vector value, as_set value) with

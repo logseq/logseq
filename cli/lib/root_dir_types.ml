@@ -21,7 +21,7 @@ let normalize_root_dir root =
 let graphs_dir root_dir = Filename.concat root_dir "graphs"
 
 let rec mkdir_p path =
-  if path = "" || path = Filename.dirname path || Sys.file_exists path then ()
+  if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then ()
   else (
     mkdir_p (Filename.dirname path);
     Cli_unix.mkdir path 0o755)
@@ -36,7 +36,7 @@ let ensure_root_dir root =
   let path = normalize_root_dir root in
   try
     mkdir_p path;
-    if not (Sys.is_directory path) then
+    if not (Cli_unix.is_directory path) then
       Error (root_dir_error path ("root-dir is not a directory: " ^ path))
     else (
       Cli_unix.access path [ Cli_unix.R_OK; Cli_unix.W_OK ];

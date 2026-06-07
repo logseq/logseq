@@ -15,8 +15,8 @@ type page_opts = {
   include_journal : bool option;
   journal_only : bool;
   include_hidden : bool;
-  updated_after : Ptime.t option;
-  created_after : Ptime.t option;
+  updated_after : Js.Date.t option;
+  created_after : Js.Date.t option;
 }
 
 type tag_opts = {
@@ -65,7 +65,7 @@ type action = {
   command : Command_id.t;
   repo : Cli_primitive.repo;
   graph : Cli_primitive.graph;
-  options : Edn_ocaml.any;
+  options : Melange_edn.any;
 }
 
 type list_result = { items : Entity.t list }
@@ -200,7 +200,7 @@ let field_map_of_kind = function
 
 let value_rank value =
   match value with
-  | Edn_ocaml.Any Edn_ocaml.Nil -> 0
+  | Melange_edn.Any Melange_edn.Nil -> 0
   | Any (Bool _) -> 1
   | Any (Int _ | Bigint _ | Float _ | Decimal _) -> 2
   | Any (String _ | Symbol _ | Keyword _ | Tagged ("uuid", _)) -> 3
@@ -238,7 +238,7 @@ let compare_value a b =
       let rank = Int.compare (value_rank a) (value_rank b) in
       if rank <> 0 then rank
       else
-        String.compare (Edn_ocaml.to_edn_string a) (Edn_ocaml.to_edn_string b)
+        String.compare (Melange_edn.to_edn_string a) (Melange_edn.to_edn_string b)
 
 let compare_item_by keyword a b =
   let value_of key item =
@@ -709,11 +709,14 @@ let prepare_property_item options item =
   if fields_include options "description" then item
   else Edn_util.remove ":logseq.property/description" item
 
+let prepare_page_item item = Edn_util.remove ":logseq.property/type" item
+
 let prepare_items kind options items =
   match kind with
+  | Page -> List.map prepare_page_item items
   | Tag -> List.map (prepare_tag_item options) items
   | Property -> List.map (prepare_property_item options) items
-  | Page | Task | Node | Asset -> items
+  | Task | Node | Asset -> items
 
 let visible_title_fields = function
   | Node ->
@@ -773,11 +776,11 @@ let options_of_parsed = function
       |> add_bool ":include-hidden" opts.include_hidden
       |> add_optional ":updated-after"
            (Option.map
-              (fun value -> Edn_util.int64 (Ptime_util.time_to_epoch_ms value))
+              (fun value -> Edn_util.int64 (Time.time_to_epoch_ms value))
               opts.updated_after)
       |> add_optional ":created-after"
            (Option.map
-              (fun value -> Edn_util.int64 (Ptime_util.time_to_epoch_ms value))
+              (fun value -> Edn_util.int64 (Time.time_to_epoch_ms value))
               opts.created_after)
       |> fun fields -> Edn_util.map (List.rev fields)
   | Parsed_tag opts ->

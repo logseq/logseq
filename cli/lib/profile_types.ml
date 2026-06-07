@@ -1,21 +1,21 @@
 type span = {
   stage : string;
   span_id : int;
-  start_time : Ptime.t;
-  end_time : Ptime.t;
-  elapsed_span : Ptime.span;
+  start_time : Js.Date.t;
+  end_time : Js.Date.t;
+  elapsed_span : float;
 }
 
 type stage_summary = {
   stage : string;
   count : int;
-  total_span : Ptime.span;
-  avg_span : Ptime.span;
+  total_span : float;
+  avg_span : float;
 }
 
 type session = {
   enabled : bool;
-  start_time : Ptime.t;
+  start_time : Js.Date.t;
   mutable spans : span list;
   mutable next_span_id : int;
 }
@@ -23,7 +23,7 @@ type session = {
 type report = {
   command : string;
   status : Cli_primitive.keyword;
-  total_span : Ptime.span;
+  total_span : float;
   spans : span list;
   stages : stage_summary list;
 }
@@ -31,7 +31,7 @@ type report = {
 let create_session enabled =
   if enabled then
     Some
-      { enabled; start_time = Ptime_util.now (); spans = []; next_span_id = 0 }
+      { enabled; start_time = Time.now (); spans = []; next_span_id = 0 }
   else None
 
 let next_span_id session =
@@ -41,22 +41,22 @@ let next_span_id session =
 let record_span (s : session) span = s.spans <- span :: s.spans
 
 let record_timed_span session stage span_id start_time end_time =
-  let elapsed_span = Ptime_util.non_negative_diff ~start_time ~end_time in
+  let elapsed_span = Time.non_negative_diff ~start_time ~end_time in
   record_span session { stage; span_id; start_time; end_time; elapsed_span }
 
 let time session stage f =
   match session with
   | None -> f ()
   | Some session -> (
-      let start_time = Ptime_util.now () in
+      let start_time = Time.now () in
       let span_id = next_span_id session in
       let finish () =
-        record_timed_span session stage span_id start_time (Ptime_util.now ());
+        record_timed_span session stage span_id start_time (Time.now ());
         Cli_effect.pure ()
       in
       try Cli_effect.finally (f ()) finish
       with exn ->
-        record_timed_span session stage span_id start_time (Ptime_util.now ());
+        record_timed_span session stage span_id start_time (Time.now ());
         raise exn)
 
 let summarize_stages spans =
@@ -68,10 +68,10 @@ let summarize_stages spans =
       let count, total_span =
         Option.value
           (Hashtbl.find_opt table span.stage)
-          ~default:(0, Ptime.Span.zero)
+          ~default:(0, Time.zero_span)
       in
       Hashtbl.replace table span.stage
-        (count + 1, Ptime.Span.add total_span span.elapsed_span))
+        (count + 1, Time.add_span_value total_span span.elapsed_span))
     spans;
   List.rev !order
   |> List.map (fun stage ->
@@ -80,13 +80,13 @@ let summarize_stages spans =
         stage;
         count;
         total_span;
-        avg_span = Ptime_util.avg_span total_span count;
+        avg_span = Time.avg_span total_span count;
       })
 
 let report (s : session) ~command ~status =
-  let end_time = Ptime_util.now () in
+  let end_time = Time.now () in
   let total_span =
-    Ptime_util.non_negative_diff ~start_time:s.start_time ~end_time
+    Time.non_negative_diff ~start_time:s.start_time ~end_time
   in
   let spans : span list = List.rev s.spans in
   let spans =
@@ -108,15 +108,15 @@ let report (s : session) ~command ~status =
 
 type stage_node = {
   label : string;
-  elapsed_span : Ptime.span;
-  start_time : Ptime.t;
-  end_time : Ptime.t;
+  elapsed_span : float;
+  start_time : Js.Date.t;
+  end_time : Js.Date.t;
   mutable children : stage_node list;
 }
 
 let span_contains outer inner =
-  Ptime.compare outer.start_time inner.start_time <= 0
-  && Ptime.compare outer.end_time inner.end_time >= 0
+  Time.compare_time outer.start_time inner.start_time <= 0
+  && Time.compare_time outer.end_time inner.end_time >= 0
 
 let node_of_span (span : span) =
   {
@@ -132,9 +132,9 @@ let sort_spans spans =
     (fun (left : span) (right : span) ->
       let duration_left = left.elapsed_span in
       let duration_right = right.elapsed_span in
-      match Ptime.compare left.start_time right.start_time with
+      match Time.compare_time left.start_time right.start_time with
       | 0 -> (
-          match Ptime.Span.compare duration_right duration_left with
+          match Time.compare_span duration_right duration_left with
           | 0 -> compare left.span_id right.span_id
           | value -> value)
       | value -> value)
@@ -173,8 +173,13 @@ let rec collect_rows prefix rows = function
       |> List.fold_left
            (fun rows (idx, node) ->
              let last = idx = total - 1 in
-             let branch = if last then "└── " else "├── " in
-             let next_prefix = prefix ^ if last then "    " else "│   " in
+             let branch =
+               if last then Cli_platform.Symbols.tree_last
+               else Cli_platform.Symbols.tree_middle
+             in
+             let next_prefix =
+               prefix ^ if last then "    " else Cli_platform.Symbols.tree_pipe
+             in
              let rows =
                rows @ [ (Some node.elapsed_span, prefix ^ branch ^ node.label) ]
              in
@@ -197,7 +202,7 @@ let render_lines report =
   let duration_text =
     List.map
       (function
-        | Some span, _ -> Int64.to_string (Ptime_util.span_to_ms span) ^ "ms"
+        | Some span, _ -> Int64.to_string (Time.span_to_ms span) ^ "ms"
         | None, _ -> "")
       rows
   in

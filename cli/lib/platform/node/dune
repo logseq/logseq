@@ -1,4 +1,7 @@
 (library
  (name logseq_cli_platform_node)
- (implements logseq_cli_platform)
- (libraries lwt ptime cohttp cohttp-lwt js_of_ocaml js_of_ocaml-lwt))
+ (implements logseq_cli_platform_spec)
+ (modes melange)
+ (preprocess
+  (pps melange.ppx))
+ (libraries melange-fetch melange.js melange.node))

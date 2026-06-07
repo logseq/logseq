@@ -51,13 +51,13 @@ module Human_output = struct
         match Int64.of_string_opt value with
         | Some epoch_ms ->
             Humanize_types.relative_datetime
-              ~then_time:(Ptime_util.time_of_epoch_ms epoch_ms)
+              ~then_time:(Time.time_of_epoch_ms epoch_ms)
               ~now_time
         | None -> value)
     | _ -> value
 
   let display_rows t =
-    let now_time = Ptime_util.now () in
+    let now_time = Time.now () in
     let headers = Option.value t.headers ~default:[] in
     List.map
       (fun row ->
@@ -111,17 +111,10 @@ module Human_output = struct
     let lines = List.map (render_row widths) table_rows in
     match t.footer with Some footer -> lines @ [ footer ] | None -> lines
 
-  let pp fmt t = Format.pp_print_string fmt (String.concat "\n" (lines t))
+  let to_string t = String.concat "\n" (lines t)
 end
 
 type _ t =
   | Human : Human_output.t -> human t
-  | Edn : Edn_ocaml.any -> edn t
-  | Json : Edn_ocaml.any -> json t
-
-let output : type a. Edn_ocaml.any -> a Mode.t -> a t =
- fun data -> function
-  | Mode.Human ->
-      Human (Human_output.create ~rows:[ [ Edn_ocaml.to_edn_string data ] ] ())
-  | Mode.Json -> Json data
-  | Mode.Edn -> Edn data
+  | Edn : Melange_edn.any -> edn t
+  | Json : Melange_edn.any -> json t

@@ -12,7 +12,7 @@ type server = {
   root_dir : Cli_primitive.path option;
   owner_source : Cli_primitive.owner_source;
   owned : bool;
-  raw : Edn_ocaml.any option;
+  raw : Melange_edn.any option;
 }
 
 type start_result = {

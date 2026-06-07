@@ -1,16 +1,16 @@
 type span = {
   stage : string;
   span_id : int;
-  start_time : Ptime.t;
-  end_time : Ptime.t;
-  elapsed_span : Ptime.span;
+  start_time : Time.date;
+  end_time : Time.date;
+  elapsed_span : Time.span;
 }
 
 type stage_summary = {
   stage : string;
   count : int;
-  total_span : Ptime.span;
-  avg_span : Ptime.span;
+  total_span : Time.span;
+  avg_span : Time.span;
 }
 
 type session
@@ -18,7 +18,7 @@ type session
 type report = {
   command : string;
   status : Cli_primitive.keyword;
-  total_span : Ptime.span;
+  total_span : Time.span;
   spans : span list;
   stages : stage_summary list;
 }
