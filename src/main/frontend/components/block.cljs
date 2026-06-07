@@ -2643,6 +2643,16 @@
   [target]
   (boolean (util/rec-get-node target "ls-comments-area")))
 
+(defn- video-embed-target?
+  [target block-dom-element]
+  (boolean
+   (or
+    (dom/closest target ".video-embed-shell")
+    (dom/closest target ".video-embed-frame")
+    (and block-dom-element
+         (dom/closest target ".block-content-inner")
+         (seq (dom/sel block-dom-element ".video-embed-frame"))))))
+
 (defn- block-content-on-pointer-down
   [e block block-id edit-input-id content config]
   (when-not @(:ui/scrolling? @state/state)
@@ -2668,7 +2678,9 @@
                 button (gobj/get e "buttons")
                 shift? (gobj/get e "shiftKey")
                 meta? (util/meta-key? e)
-                forbidden-edit? (target-forbidden-edit? target)
+                video-embed? (video-embed-target? target block-dom-element)
+                forbidden-edit? (and (not video-embed?)
+                                     (target-forbidden-edit? target))
                 get-cursor-range #(some-> block-dom-element
                                           (dom/by-class "block-content-inner")
                                           first
@@ -2705,33 +2717,37 @@
                   (state/set-selection-start-block! block-dom-element))
 
                 :else
-                (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
-                  (mobile-util/mobile-focus-hidden-input)
-                  (editor-handler/clear-selection!)
-                  (editor-handler/unhighlight-blocks!)
-                  (when-let [editing-block (state/get-edit-block)]
-                    (when-not (= (:block/uuid editing-block) (:block/uuid block))
-                      (editor-handler/save-current-block!)))
-                  (p/do!
-                   (state/pub-event! [:editor/save-code-editor])
+                (if video-embed?
+                  (do
+                    (util/stop e)
+                    (editor-handler/edit-block! block :max {:container-id (:container-id config)}))
+                  (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
+                    (mobile-util/mobile-focus-hidden-input)
+                    (editor-handler/clear-selection!)
+                    (editor-handler/unhighlight-blocks!)
+                    (when-let [editing-block (state/get-edit-block)]
+                      (when-not (= (:block/uuid editing-block) (:block/uuid block))
+                        (editor-handler/save-current-block!)))
+                    (p/do!
+                     (state/pub-event! [:editor/save-code-editor])
 
-                   (when-not (:block.temp/load-status (db/entity (:db/id block)))
-                     (db-async/<get-block (state/get-current-repo) (:db/id block) {:children? false}))
+                     (when-not (:block.temp/load-status (db/entity (:db/id block)))
+                       (db-async/<get-block (state/get-current-repo) (:db/id block) {:children? false}))
 
-                   (let [cursor-range (if mobile? mobile-range (get-cursor-range))
-                         block (db/entity (:db/id block))
-                         content (:block/title block)]
+                     (let [cursor-range (if mobile? mobile-range (get-cursor-range))
+                           block (db/entity (:db/id block))
+                           content (:block/title block)]
 
-                     (state/set-editing!
-                      edit-input-id
-                      content
-                      block
-                      cursor-range
-                      {:db (db/get-db)
-                       :move-cursor? false
-                       :container-id (:container-id config)}))
+                       (state/set-editing!
+                        edit-input-id
+                        content
+                        block
+                        cursor-range
+                        {:db (db/get-db)
+                         :move-cursor? false
+                         :container-id (:container-id config)}))
 
-                   (state/set-selection-start-block! block-dom-element)))))))))))
+                     (state/set-selection-start-block! block-dom-element))))))))))))
 
 (hsx/defc dnd-separator-wrapper
   [_block block-id top?]
