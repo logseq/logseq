@@ -219,6 +219,7 @@
       :electron/auto-updater-downloaded      false
       :electron/updater-pending?             false
       :electron/updater                      {}
+      :electron/app-base-info                nil
       :electron/user-cfgs                    nil
       :electron/server                       nil
       :electron/window-maximized?            false
@@ -590,6 +591,10 @@ should be done through this fn in order to get global config and config defaults
 (defn enable-search-remove-accents?
   []
   (:feature/enable-search-remove-accents? (get-config)))
+
+(defn enable-semantic-search?
+  []
+  (true? (get-in @state [:electron/user-cfgs :feature/enable-semantic-search?])))
 
 ;; State subscription helpers
 ;; ==========================
@@ -1370,6 +1375,13 @@ should be done through this fn in order to get global config and config defaults
                     (:electron/user-cfgs @state))
              cfgs (if (object? cfgs) (bean/->clj cfgs) cfgs)]
        (set-state! :electron/user-cfgs cfgs)))))
+
+(defn load-electron-app-base-info
+  []
+  (when (util/electron?)
+    (p/let [info (ipc/ipc :getAppBaseInfo)
+            info (if (object? info) (bean/->clj info) info)]
+      (set-state! :electron/app-base-info info))))
 
 (defn setup-electron-updater!
   []

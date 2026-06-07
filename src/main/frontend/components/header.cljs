@@ -54,13 +54,14 @@
 
 (defn current-local-uploadable-graph
   []
-  (when-not (ldb/get-graph-rtc-uuid (db/get-db))
-    (let [current-repo (state/get-current-repo)]
-      (some (fn [{:keys [url] :as graph}]
-              (when (and (= current-repo url)
-                         (repo/local-uploadable-graph? graph))
-                graph))
-            (state/get-repos)))))
+  (let [current-repo (state/get-current-repo)]
+    (some (fn [{:keys [url] :as graph}]
+            (when (and (= current-repo url)
+                       (repo/local-uploadable-graph?
+                        (assoc graph :rtc-graph?
+                               (boolean (ldb/get-graph-rtc-uuid (db/get-db current-repo))))))
+              graph))
+          (state/get-repos))))
 
 (defn local-graph-sync-button
   [graph]
@@ -412,7 +413,8 @@
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
-                               (= default-home-page (state/get-current-page)))]
+                               (= default-home-page (state/get-current-page)))
+        electron-server (state/use-sub :electron/server)]
     [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)

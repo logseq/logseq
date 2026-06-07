@@ -46,6 +46,10 @@
   []
   (ensure-cfg))
 
+(defn semantic-search-enabled?
+  []
+  (true? (get-item :feature/enable-semantic-search?)))
+
 (defn- read-edn-file
   [path]
   (try

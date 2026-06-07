@@ -239,11 +239,14 @@
 (defmethod handle :db-worker-runtime [^js window [_ repo]]
   (if (string/blank? repo)
     (p/rejected (ex-info "repo is required" {:code :missing-repo}))
-    (p/let [embedding-endpoint (embedding-server/ensure-endpoint! app)]
+    (p/let [embedding-endpoint (when (cfgs/semantic-search-enabled?)
+                                 (embedding-server/ensure-endpoint! app))]
       (db-worker/ensure-runtime! (canonical-repo repo)
                                  (.-id window)
-                                 {:embedding-endpoint embedding-endpoint
-                                  :embedding-model-id (.-LOGSEQ_EMBEDDING_MODEL js/process.env)}))))
+                                 (cond-> {}
+                                   embedding-endpoint
+                                   (assoc :embedding-endpoint embedding-endpoint
+                                          :embedding-model-id (.-LOGSEQ_EMBEDDING_MODEL js/process.env)))))))
 
 (defmethod handle :releaseDbWorkerRuntime [^js window [_ repo]]
   (if (string/blank? repo)
@@ -330,6 +333,9 @@
         (do (cfgs/set-item! k v)
             (when (= k :spell-check)
               (spell-check/apply-window-spellcheck! window (spell-check/session-spellcheck-enabled? v)))
+            (when (and (= k :feature/enable-semantic-search?)
+                       (false? v))
+              (embedding-server/stop!))
             (state/set-state! [:config k] v)
             nil)
         (cfgs/get-item k))
@@ -337,7 +343,9 @@
 
 (defmethod handle :getAppBaseInfo [^js win [_ _opts]]
   {:isFullScreen (.isFullScreen win)
-   :isMaximized (.isMaximized win)})
+   :isMaximized (.isMaximized win)
+   :platform (.-platform js/process)
+   :arch (.-arch js/process)})
 
 (defmethod handle :getAssetsFiles [^js win [_ {:keys [exts]}]]
   (when-let [graph-path (state/get-window-graph-path win)]

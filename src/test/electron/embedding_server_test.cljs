@@ -15,7 +15,8 @@
 
 (defn- fake-runtime
   [{:keys [existing-paths allocated-port run-command! wait-ready!]}]
-  (let [ensured-dirs (atom [])
+  (let [existing-paths* (atom existing-paths)
+        ensured-dirs (atom [])
         commands (atom [])
         writes (atom [])
         spawns (atom [])
@@ -30,7 +31,7 @@
                :dirname "/repo/static"
                :resources-path "/app/Contents/Resources"
                :python-command "python3"
-               :exists? #(contains? existing-paths %)
+               :exists? #(contains? @existing-paths* %)
                :ensure-dir! #(swap! ensured-dirs conj %)
                :find-port! (fn [_host]
                              (p/resolved (or allocated-port 54321)))
@@ -46,6 +47,13 @@
                                     (swap! commands conj {:cmd cmd
                                                           :args args
                                                           :cwd (:cwd opts)})
+                                    (when (and (= "python3" cmd)
+                                               (= ["-m" "venv" ".venv"] args))
+                                      (swap! existing-paths* conj
+                                             (node-path/join (:cwd opts)
+                                                             ".venv"
+                                                             "bin"
+                                                             "python")))
                                     (p/resolved nil)))
                :wait-ready! (or wait-ready!
                                 (fn [endpoint]
@@ -137,9 +145,9 @@
           app (fake-app "/users/me/logseq" false)]
       (-> (p/let [result (embedding-server/start! app runtime)]
             (is (= :started result))
-            (is (= [[:set-env "LOGSEQ_EMBEDDINGS_URL" "http://127.0.0.1:56789/v1/embeddings"]
-                    [:spawn-server 56789]
-                    [:wait-ready "http://127.0.0.1:56789/healthz"]]
+            (is (= [[:spawn-server 56789]
+                    [:wait-ready "http://127.0.0.1:56789/healthz"]
+                    [:set-env "LOGSEQ_EMBEDDINGS_URL" "http://127.0.0.1:56789/v1/embeddings"]]
                    @events))
             (is (= {"LOGSEQ_EMBEDDINGS_URL" "http://127.0.0.1:56789/v1/embeddings"}
                    @env))
@@ -148,7 +156,7 @@
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
-(deftest start-publishes-embedding-env-before-setup-completes
+(deftest start-does-not-publish-embedding-env-before-setup-completes
   (async done
     (embedding-server/stop!)
     (let [{:keys [runtime env spawns]} (fake-runtime {:existing-paths #{}
@@ -160,8 +168,7 @@
           (p/then (fn [_]
                     (is false "start should fail")))
           (p/catch (fn [_]
-                     (is (= {"LOGSEQ_EMBEDDINGS_URL" "http://127.0.0.1:56789/v1/embeddings"}
-                            @env))
+                     (is (= {} @env))
                      (is (empty? @spawns))))
           (p/finally done)))))
 
