@@ -1,0 +1,361 @@
+external decode_uri_component : string -> string = "decodeURIComponent"
+external tmpdir : unit -> string = "tmpdir" [@@mel.module "os"]
+external mkdir_sync : string -> Js.Json.t Js.Dict.t -> unit = "mkdirSync"
+[@@mel.module "fs"]
+external mkdtemp_sync : string -> string = "mkdtempSync" [@@mel.module "fs"]
+external rm_sync : string -> Js.Json.t Js.Dict.t -> unit = "rmSync"
+[@@mel.module "fs"]
+external chmod_sync : string -> int -> unit = "chmodSync" [@@mel.module "fs"]
+external parse_json : string -> Js.Json.t = "parse" [@@mel.scope "JSON"]
+external promise_error_message : Js.Promise.error -> string option = "message"
+[@@mel.get] [@@mel.return { undefined_to_opt }]
+external set_timeout : ((unit -> unit)[@u]) -> int -> unit = "setTimeout"
+type timer
+external set_timeout_id : ((unit -> unit)[@u]) -> int -> timer = "setTimeout"
+external clear_timeout : timer -> unit = "clearTimeout"
+external set_interval : ((unit -> unit)[@u]) -> int -> timer = "setInterval"
+external clear_interval : timer -> unit = "clearInterval"
+external current_dirname : string = "__dirname"
+
+type request
+type response
+type server
+type stream
+type child =
+  < stdout : stream
+  ; stderr : stream >
+  Js.t
+
+type cli_output =
+  { code : int
+  ; stdout : string
+  ; stderr : string
+  }
+
+external create_server : ((request -> response -> unit)[@u]) -> server = "createServer"
+[@@mel.module "http"]
+external req_method : request -> string = "method" [@@mel.get]
+external req_url : request -> string = "url" [@@mel.get]
+external req_set_encoding : request -> string -> unit = "setEncoding" [@@mel.send]
+external req_on_data : request -> string -> ((string -> unit)[@u]) -> unit = "on"
+[@@mel.send]
+external req_on_end : request -> string -> ((unit -> unit)[@u]) -> unit = "on"
+[@@mel.send]
+external res_write_head : response -> int -> string Js.Dict.t -> unit = "writeHead" [@@mel.send]
+external res_write : response -> string -> unit = "write" [@@mel.send]
+external res_end : response -> string -> unit = "end" [@@mel.send]
+external res_destroy : response -> unit = "destroy" [@@mel.send]
+external server_listen : server -> int -> string -> ((unit -> unit)[@u]) -> unit = "listen"
+[@@mel.send]
+external server_address : server -> < port : int > Js.t = "address" [@@mel.send]
+external server_close : server -> ((unit -> unit)[@u]) -> unit = "close" [@@mel.send]
+external spawn_async : string -> string array -> < env : string Js.Dict.t > Js.t -> child = "spawn"
+[@@mel.module "child_process"]
+external stream_set_encoding : stream -> string -> unit = "setEncoding" [@@mel.send]
+external stream_on_data : stream -> string -> ((string -> unit)[@u]) -> unit = "on"
+[@@mel.send]
+external child_on_exit : child -> string -> ((int -> unit)[@u]) -> unit = "on"
+[@@mel.send]
+external child_on_error : child -> string -> ((exn -> unit)[@u]) -> unit = "on"
+[@@mel.send]
+external child_kill : child -> string -> unit = "kill" [@@mel.send]
+external string_split : string -> string -> string array = "split" [@@mel.send]
+external string_trim_end : string -> string = "trimEnd" [@@mel.send]
+external string_match : string -> Js.Re.t -> < index : int > Js.t Js.null = "match" [@@mel.send]
+external chars_of_string : string -> string array = "from" [@@mel.scope "Array"]
+external code_point_at : string -> int -> int Js.undefined = "codePointAt" [@@mel.send]
+
+type spawn_options =
+  < encoding : string
+  ; env : string Js.Dict.t >
+  Js.t
+
+type spawn_result =
+  < status : int Js.null
+  ; stdout : string
+  ; stderr : string >
+  Js.t
+
+external spawn_sync : string -> string array -> spawn_options -> spawn_result = "spawnSync"
+[@@mel.module "child_process"]
+
+let ( let* ) promise callback =
+  Js.Promise.then_ callback promise
+
+let fail_test message =
+  raise (Failure message)
+
+let entrypoint =
+  match Js.Dict.get Node.Process.process##env "LOGSEQ_CLI_MELANGE_ENTRYPOINT" with
+  | Some value -> value
+  | None -> failwith "missing LOGSEQ_CLI_MELANGE_ENTRYPOINT"
+
+let run_cli args =
+  let command = String.concat " " ("node" :: entrypoint :: args) in
+  Node.Child_process.execSync command (Node.Child_process.option ~encoding:"utf8" ())
+
+let clone_env extra =
+  let env = Js.Dict.fromArray (Js.Dict.entries Node.Process.process##env) in
+  Array.iter (fun (key, value) -> Js.Dict.set env key value) extra;
+  env
+
+let spawn_cli ?(env = [||]) args =
+  spawn_sync
+    Node.Process.argv.(0)
+    (Array.of_list (entrypoint :: args))
+    [%obj { encoding = "utf8"; env = clone_env env }]
+
+let spawn_cli_async ?(env = [||]) args =
+  spawn_async
+    Node.Process.argv.(0)
+    (Array.of_list (entrypoint :: args))
+    [%obj { env = clone_env env }]
+
+let result_status result =
+  match Js.Null.toOption result##status with
+  | Some status -> status
+  | None -> -1
+
+let assert_includes name text needle =
+  ignore name;
+  Jest.Expect.toContainString needle (Jest.Expect.expect text)
+
+let assert_not_includes name text needle =
+  ignore name;
+  Jest.Expect.toContainString needle (Jest.Expect.not_ (Jest.Expect.expect text))
+
+let assert_exit_zero name result =
+  let status = result_status result in
+  if status = 0 then
+    Jest.pass
+  else
+    fail_test
+      (Printf.sprintf
+         "%s: expected exit 0, got %d\n%s\n%s"
+         name
+         status
+         result##stdout
+         result##stderr)
+
+let assert_exit_non_zero name result =
+  if result_status result = 0 then
+    fail_test
+      (Printf.sprintf
+         "%s: expected non-zero exit\n%s\n%s"
+         name
+         result##stdout
+         result##stderr)
+  else
+    Jest.pass
+
+let temp_dir prefix =
+  mkdtemp_sync (Node.Path.join [| tmpdir (); prefix |])
+
+let remove_tree path =
+  rm_sync
+    path
+    (Js.Dict.fromArray
+       [| ("recursive", Js.Json.boolean true); ("force", Js.Json.boolean true) |])
+
+let write_file path text =
+  Node.Fs.writeFileAsUtf8Sync path text
+
+let read_file path =
+  Node.Fs.readFileAsUtf8Sync path
+
+let mkdir_p path =
+  mkdir_sync path (Js.Dict.fromArray [| ("recursive", Js.Json.boolean true) |])
+
+let json_response result_transit =
+  "{\"resultTransit\":" ^ Js.Json.stringify (Js.Json.string result_transit) ^ "}"
+
+let error_response message =
+  "{\"error\":{\"message\":" ^ Js.Json.stringify (Js.Json.string message) ^ "}}"
+
+let write_json res status body =
+  res_write_head res status (Js.Dict.fromArray [| ("Content-Type", "application/json") |]);
+  res_end res body
+
+let run_cli_p ?(env = [||]) args =
+  Js.Promise.make
+    (fun ~resolve ~reject ->
+      let child = spawn_cli_async ~env args in
+      let stdout = ref "" in
+      let stderr = ref "" in
+      stream_set_encoding child##stdout "utf8";
+      stream_set_encoding child##stderr "utf8";
+      stream_on_data child##stdout "data" (fun [@u] chunk -> stdout := !stdout ^ chunk);
+      stream_on_data child##stderr "data" (fun [@u] chunk -> stderr := !stderr ^ chunk);
+      child_on_error child "error" (fun [@u] exn -> reject exn [@u]);
+      child_on_exit child "exit" (fun [@u] code ->
+          resolve { code; stdout = !stdout; stderr = !stderr } [@u]))
+
+let invoke_server response_for_body =
+  create_server
+    (fun [@u] req res ->
+      let body = ref "" in
+      req_set_encoding req "utf8";
+      req_on_data req "data" (fun [@u] chunk -> body := !body ^ chunk);
+      req_on_end req "end" (fun [@u] () ->
+          if req_method req <> "POST" || req_url req <> "/v1/invoke" then
+            write_json res 404 (error_response "not found")
+          else
+            try write_json res 200 (json_response (response_for_body !body))
+            with exn -> write_json res 400 (error_response (Printexc.to_string exn))))
+
+let with_server server run =
+  Js.Promise.make
+    (fun ~resolve ~reject ->
+      server_listen server 0 "127.0.0.1" (fun [@u] () ->
+          let port = (server_address server)##port in
+          let base_url = Printf.sprintf "http://127.0.0.1:%d" port in
+          let finish resolve_or_reject value =
+            server_close server (fun [@u] () -> resolve_or_reject value [@u])
+          in
+          let promise =
+            try run base_url
+            with exn ->
+              server_close server (fun [@u] () -> reject exn [@u]);
+              Js.Promise.reject exn
+          in
+          ignore
+            (Js.Promise.then_
+               (fun result ->
+                 finish resolve result;
+                 Js.Promise.resolve ())
+               promise);
+          ignore
+            (Js.Promise.catch
+               (fun error ->
+                 let message =
+                   Option.value
+                     (promise_error_message error)
+                     ~default:"JavaScript promise rejected"
+                 in
+                 finish reject (Failure message);
+                 Js.Promise.resolve Jest.pass)
+               promise)))
+
+let assert_cli_exit_zero name output =
+  if output.code = 0 then Jest.pass
+  else
+    fail_test
+      (Printf.sprintf
+         "%s: expected exit 0, got %d\n%s\n%s"
+         name
+         output.code
+         output.stdout
+         output.stderr)
+
+let assert_line_starts_with name text prefix =
+  let lines = string_split (string_trim_end text) "\n" in
+  if Array.exists (fun line -> Js.String.startsWith ~prefix line) lines then Jest.pass
+  else fail_test (Printf.sprintf "%s: missing line starting with %S in %S" name prefix text)
+
+let headers_from stdout =
+  match Array.to_list (string_split (String.trim stdout) "\n") with
+  | [] -> [||]
+  | first :: _ -> string_split (String.trim first) " " |> Array.to_list |> List.filter (( <> ) "") |> Array.of_list
+
+let array_prefix array length =
+  Array.sub array 0 length
+
+let array_suffix array length =
+  Array.sub array (Array.length array - length) length
+
+let string_array_equal left right =
+  Array.length left = Array.length right
+  && Array.for_all2 ( = ) left right
+
+let char_width code =
+  if
+    code = 0
+    || code < 32
+    || (code >= 0x7f && code < 0xa0)
+    || (code >= 0x0300 && code <= 0x036f)
+    || (code >= 0x1ab0 && code <= 0x1aff)
+    || (code >= 0x1dc0 && code <= 0x1dff)
+    || (code >= 0x20d0 && code <= 0x20ff)
+    || (code >= 0xfe20 && code <= 0xfe2f)
+  then
+    0
+  else if
+    code >= 0x1100
+    && (code <= 0x115f
+        || code = 0x2329
+        || code = 0x232a
+        || (code >= 0x2e80 && code <= 0xa4cf && code <> 0x303f)
+        || (code >= 0xac00 && code <= 0xd7a3)
+        || (code >= 0xf900 && code <= 0xfaff)
+        || (code >= 0xfe10 && code <= 0xfe19)
+        || (code >= 0xfe30 && code <= 0xfe6f)
+        || (code >= 0xff00 && code <= 0xff60)
+        || (code >= 0xffe0 && code <= 0xffe6))
+  then
+    2
+  else
+    1
+
+let display_width text =
+  chars_of_string text
+  |> Array.fold_left
+       (fun width ch ->
+         match Js.Undefined.toOption (code_point_at ch 0) with
+         | Some code -> width + char_width code
+         | None -> width)
+       0
+
+let assert_created_at_column_aligned stdout =
+  let lines = string_split (string_trim_end stdout) "\n" in
+  match Array.to_list lines with
+  | [] -> fail_test "missing list page output"
+  | header :: rows ->
+    let created_index =
+      match Js.String.indexOf ~search:"block/created-at" header with
+      | -1 -> raise (Failure ("missing block/created-at header:\n" ^ stdout))
+      | index -> index
+    in
+    let expected = display_width (String.sub header 0 created_index) in
+    rows
+    |> List.rev
+    |> List.tl
+    |> List.rev
+    |> List.iter (fun line ->
+      match Js.Null.toOption (string_match line (Js.Re.fromString "\\d+ [A-Za-z]+ ago")) with
+      | None -> raise (Failure ("missing relative created-at cell in line: " ^ line ^ "\n" ^ stdout))
+      | Some match_ ->
+        let actual = display_width (String.sub line 0 match_##index) in
+        if actual <> expected then
+          raise
+            (Failure
+               (Printf.sprintf
+                  "created-at column mismatch: expected %d, got %d\n%s"
+                  expected
+                  actual
+                  stdout)));
+    Jest.pass
+
+let extract_snapshot_path body =
+  let marker = "logseq_db_alpha\\\",\\\"" in
+  let start = Js.String.indexOf ~search:marker body in
+  if start < 0 then
+    raise (Failure ("missing snapshot path marker in " ^ body));
+  let value_start = start + String.length marker in
+  let end_ = Js.String.indexOf ~search:"\\\"" ~start:value_start body in
+  if end_ < 0 then
+    raise (Failure ("unterminated snapshot path in " ^ body));
+  Js.String.slice ~start:value_start ~end_ body
+
+let expect_graph_in_json_list output graph =
+  match Js.Json.decodeObject (parse_json output) with
+  | None -> fail_test ("json graph list: expected object in " ^ output)
+  | Some root -> (
+    match Option.bind (Js.Dict.get root "data") Js.Json.decodeObject with
+    | None -> fail_test ("json graph list: expected data object in " ^ output)
+    | Some data -> (
+      match Option.bind (Js.Dict.get data "graphs") Js.Json.decodeArray with
+      | None -> fail_test ("json graph list: expected graphs array in " ^ output)
+      | Some graphs ->
+        let names = graphs |> Array.to_list |> List.filter_map Js.Json.decodeString in
+        if List.mem graph names then Jest.pass
+        else fail_test ("json graph list: missing graph in " ^ output)))
