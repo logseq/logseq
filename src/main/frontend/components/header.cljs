@@ -414,7 +414,7 @@
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
                                (= default-home-page (state/get-current-page)))
-        electron-server (state/use-sub :electron/server)]
+        electron-server (rfx/use-sub [:electron/server])]
     [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
