@@ -12,10 +12,8 @@ type login_callback_server_error =
 let timeout_ms span = if Float.compare span 0. > 0 then int_of_float span else 0
 
 module Timer = struct
-  type timeout_handle
-
-  external set_timeout : (unit -> unit) -> int -> timeout_handle = "setTimeout"
-  external clear_timeout : timeout_handle -> unit = "clearTimeout"
+  let set_timeout f ms = Js.Global.setTimeout ~f ms
+  let clear_timeout = Js.Global.clearTimeout
 end
 
 module Http_server = struct
