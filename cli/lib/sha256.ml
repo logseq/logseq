@@ -208,6 +208,4 @@ let base64url_of_string text =
   loop 0
 
 let base64url text = raw text |> base64url_of_string
-
-let file_hex path =
-  Cli_unix.read_binary_file path |> hex
+let file_hex path = Cli_unix.read_binary_file path |> hex

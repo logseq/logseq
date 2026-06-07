@@ -238,7 +238,9 @@ let compare_value a b =
       let rank = Int.compare (value_rank a) (value_rank b) in
       if rank <> 0 then rank
       else
-        String.compare (Melange_edn.to_edn_string a) (Melange_edn.to_edn_string b)
+        String.compare
+          (Melange_edn.to_edn_string a)
+          (Melange_edn.to_edn_string b)
 
 let compare_item_by keyword a b =
   let value_of key item =

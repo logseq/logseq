@@ -212,8 +212,7 @@ let generate_uuid () =
   incr generated_uuid_counter;
   let seed =
     Hashtbl.hash
-      ( Time.time_to_epoch_seconds_float (Time.now ()),
-        !generated_uuid_counter )
+      (Time.time_to_epoch_seconds_float (Time.now ()), !generated_uuid_counter)
     land max_int
   in
   let first =
@@ -275,8 +274,7 @@ let parse_blocks_edn ~label text =
                (Edn_util.keyword_t "invalid-blocks")
                "blocks must be a vector")))
 
-let read_file path =
-  Cli_unix.read_text_file path
+let read_file path = Cli_unix.read_text_file path
 
 let read_blocks (opts : opts) args =
   match

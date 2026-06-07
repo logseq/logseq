@@ -278,6 +278,7 @@ let entries_for registry =
 
 let matching_entries entries selector =
   match selector with
+  | [] -> List.filter (fun entry -> entry.examples <> []) entries
   | [ group ] ->
       List.filter
         (fun entry ->
@@ -287,17 +288,16 @@ let matching_entries entries selector =
 
 let resolve_selector registry selector =
   match selector with
-  | [] ->
-      Error
-        (Error.make
-           (Edn_util.keyword_t "missing-example-selector")
-           "example selector is required")
   | _ ->
       let entries = entries_for registry in
       let matches = matching_entries entries selector in
-      let selector = label selector in
+      let selector_label =
+        match selector with [] -> "all" | _ -> label selector
+      in
       if matches = [] then
-        Error (Error.unknown_command ("unknown example selector: " ^ selector))
+        Error
+          (Error.unknown_command
+             ("unknown example selector: " ^ selector_label))
       else
         let missing =
           matches
@@ -319,8 +319,8 @@ let resolve_selector registry selector =
           let count = List.length examples in
           Ok
             {
-              selector;
-              selector_path = String.split_on_char ' ' selector;
+              selector = selector_label;
+              selector_path = selector;
               matched_commands;
               examples;
               message =
@@ -328,7 +328,7 @@ let resolve_selector registry selector =
                 ^ Humanize_types.format_count count
                 ^ " "
                 ^ Humanize_types.pluralize_noun count "example"
-                ^ " for selector " ^ selector;
+                ^ " for selector " ^ selector_label;
             }
 
 let build ?registry _ _ = function
