@@ -464,10 +464,7 @@
                             {:scheme     FILE_LSP_SCHEME
                              :privileges privileges}
                             {:scheme     FILE_ASSETS_SCHEME
-                             :privileges {:standard        false
-                                          :secure          false
-                                          :bypassCSP       false
-                                          :supportFetchAPI false}}]))
+                             :privileges (assoc privileges :stream true)}]))
 
       (register-default-protocol-client! app)
       (set-app-menu!)
