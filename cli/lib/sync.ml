@@ -77,14 +77,14 @@ type remote_graph = {
   graph_id : Cli_primitive.uuid;
   graph_name : Cli_primitive.graph;
   graph_e2ee : bool;
-  raw : Edn_ocaml.any;
+  raw : Melange_edn.any;
 }
 
 type sync_status = {
   ws_state : Cli_primitive.keyword option;
   graph_id : Cli_primitive.uuid option;
-  last_error : Edn_ocaml.any option;
-  raw : Edn_ocaml.any;
+  last_error : Melange_edn.any option;
+  raw : Melange_edn.any;
 }
 
 let config_key_of_string = function
@@ -162,7 +162,16 @@ let require_email = function
   | Some value when String.trim value <> "" -> Ok (String.trim value)
   | _ -> Error (Error.invalid_options "--email is required")
 
-let build ?registry:_ config _globals = function
+let explicit_graph_and_repo globals =
+  let graph =
+    Option.bind globals.Global_opts.graph (fun graph ->
+        graph |> Cli_primitive.string_of_graph
+        |> Cli_primitive.non_empty
+        |> Option.map Cli_primitive.create_graph)
+  in
+  (graph, Option.map Cli_config.graph_to_repo graph)
+
+let build ?registry:_ config globals = function
   | Parsed_status ->
       action_with_repo config
         (fun repo graph -> Sync_status { repo; graph })
@@ -182,19 +191,21 @@ let build ?registry:_ config _globals = function
           Sync_upload { repo; graph; e2ee_password = opts.e2ee_password })
         "repo is required for sync-upload"
   | Parsed_download opts ->
-      action_with_repo config
-        (fun repo graph ->
-          Sync_download
-            {
-              repo;
-              graph;
-              progress = Option.value opts.progress ~default:false;
-              progress_explicit = Option.is_some opts.progress;
-              e2ee_password = opts.e2ee_password;
-              allow_missing_graph = true;
-              require_missing_graph = true;
-            })
-        "repo is required for sync-download"
+      let graph, repo = explicit_graph_and_repo globals in
+      (match (graph, repo) with
+      | Some graph, Some repo ->
+          Ok
+            (Sync_download
+               {
+                 repo;
+                 graph;
+                 progress = Option.value opts.progress ~default:false;
+                 progress_explicit = Option.is_some opts.progress;
+                 e2ee_password = opts.e2ee_password;
+                 allow_missing_graph = true;
+                 require_missing_graph = true;
+               })
+      | _ -> Error (Error.missing_graph ()))
   | Parsed_asset_download opts -> (
       match (config.Cli_config.repo, opts.id, opts.uuid) with
       | None, _, _ ->
@@ -339,7 +350,7 @@ let prepare_worker_runtime invoke_config config =
         (fun _ -> set_sync_config ())
 
 let unquote_transit_value = function
-  | Edn_ocaml.Any (Edn_ocaml.Tagged (("transit/quote" | "'"), value)) -> value
+  | Melange_edn.Any (Melange_edn.Tagged (("transit/quote" | "'"), value)) -> value
   | value -> value
 
 let result_value result =
@@ -433,7 +444,7 @@ let graphs_value graphs =
 
 let tagged_error_value value =
   match unquote_transit_value value with
-  | Edn_ocaml.Any (Edn_ocaml.Tagged ("error", value)) -> Some value
+  | Melange_edn.Any (Melange_edn.Tagged ("error", value)) -> Some value
   | _ -> None
 
 let remote_graphs_error graphs =
@@ -648,7 +659,7 @@ type local_asset_status =
 
 let local_asset_status config repo asset =
   let path = asset_file_path config repo asset in
-  if not (Sys.file_exists path) then Local_missing
+  if not (Cli_unix.file_exists path) then Local_missing
   else
     match
       ( file_sha256 path,
@@ -659,7 +670,7 @@ let local_asset_status config repo asset =
     | _ -> Local_mismatch path
 
 let remove_local_asset path =
-  if Sys.file_exists path && not (Sys.is_directory path) then Sys.remove path
+  if Cli_unix.file_exists path && not (Cli_unix.is_directory path) then Cli_unix.remove_tree path
 
 let ensure_keys_args ~upload_keys ~e2ee_password =
   if not upload_keys then None
@@ -786,8 +797,8 @@ let sync_start_timeout_error repo status =
 let wait_sync_start_ready config invoke_config repo =
   let deadline =
     Option.value
-      (Ptime.add_span (Ptime_util.now ()) config.Cli_config.timeout_span)
-      ~default:Ptime.max
+      (Time.add_span (Time.now ()) config.Cli_config.timeout_span)
+      ~default:Time.max_time
   in
   let rec loop () =
     Cli_effect.bind (Transport.thread_api_db_sync_status invoke_config ~repo)
@@ -796,11 +807,11 @@ let wait_sync_start_ready config invoke_config repo =
         | Some "open", Some last_error ->
             Cli_effect.pure (Error (runtime_error repo status last_error))
         | Some "open", _ -> Cli_effect.pure (Ok status)
-        | _ when Ptime.compare (Ptime_util.now ()) deadline >= 0 ->
+        | _ when Time.compare_time (Time.now ()) deadline >= 0 ->
             Cli_effect.pure (Error (sync_start_timeout_error repo status))
         | _ ->
             Cli_effect.bind
-              (Cli_effect.sleep (Ptime_util.span_of_ms 100L))
+              (Cli_effect.sleep (Time.span_of_ms 100L))
               (fun () -> loop ()))
   in
   loop ()
@@ -834,14 +845,14 @@ let execute_stop mode config repo =
                   (Cli_result.ok ~command:Command_id.Sync_stop mode
                      (Raw (result_value result))))))
 
-let sync_download_timeout_span = Ptime_util.span_of_ms 1_800_000L
+let sync_download_timeout_span = Time.span_of_ms 1_800_000L
 
 let sync_download_invoke_config invoke_config =
   {
     invoke_config with
     Transport.timeout_span =
       (if
-         Ptime.Span.compare invoke_config.Transport.timeout_span
+         Time.compare_span invoke_config.Transport.timeout_span
            sync_download_timeout_span
          >= 0
        then invoke_config.Transport.timeout_span

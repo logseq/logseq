@@ -2,7 +2,7 @@ type t = {
   graph : Cli_primitive.graph option;
   root_dir : Cli_primitive.path option;
   config_path : Cli_primitive.path option;
-  timeout_span : Ptime.span option;
+  timeout_span : float option;
   output_format : Output.Mode.packed option;
   verbose : bool;
   profile : bool;

@@ -1,6 +1,6 @@
-type 'a term = 'a Cmdliner.Term.t
-type 'a cmd = 'a Cmdliner.Cmd.t
-type 'a conv = 'a Cmdliner.Arg.conv
+type 'a term = 'a
+type 'a cmd = { name : string; term : 'a term }
+type 'a conv = (string -> ('a, [ `Msg of string ]) result) * (Format.formatter -> 'a -> unit)
 type request_term = Cli_request.t term
 type request_cmd = Cli_request.t cmd
 
@@ -32,46 +32,37 @@ type eval_result =
   | Parse_error of Error.t
 
 let output_format_conv =
-  Cmdliner.Arg.conv
-    ( (fun s ->
-        match Output.Mode.of_string s with
-        | Some v -> Ok v
-        | None -> Error (`Msg "invalid output format")),
-      fun fmt (Output.Mode.Packed mode) ->
-        Format.pp_print_string fmt (Output.Mode.to_string mode) )
+  ( (fun s ->
+      match Output.Mode.of_string s with
+      | Some v -> Ok v
+      | None -> Error (`Msg "invalid output format")),
+    fun fmt (Output.Mode.Packed mode) ->
+      Format.pp_print_string fmt (Output.Mode.to_string mode) )
 
 let shell_conv =
-  Cmdliner.Arg.conv
-    ( (fun s ->
-        match Cli_primitive.shell_of_string s with
-        | Some v -> Ok v
-        | None -> Error (`Msg "invalid shell")),
-      fun fmt s -> Format.pp_print_string fmt (Cli_primitive.string_of_shell s)
-    )
+  ( (fun s ->
+      match Cli_primitive.shell_of_string s with
+      | Some v -> Ok v
+      | None -> Error (`Msg "invalid shell")),
+    fun fmt s -> Format.pp_print_string fmt (Cli_primitive.string_of_shell s) )
 
 let position_conv =
-  Cmdliner.Arg.conv
-    ( (fun s ->
-        match Block.position_of_string s with
-        | Some v -> Ok v
-        | None -> Error (`Msg "invalid position")),
-      fun fmt p -> Format.pp_print_string fmt (Block.string_of_position p) )
+  ( (fun s ->
+      match Block.position_of_string s with
+      | Some v -> Ok v
+      | None -> Error (`Msg "invalid position")),
+    fun fmt p -> Format.pp_print_string fmt (Block.string_of_position p) )
 
 let keyword_conv =
-  Cmdliner.Arg.conv
-    ( (fun s -> Ok (Edn_util.keyword_t s)),
-      fun fmt keyword ->
-        Format.pp_print_string fmt (Edn_util.keyword_to_string keyword) )
+  ( (fun s -> Ok (Edn_util.keyword_t s)),
+    fun fmt keyword ->
+      Format.pp_print_string fmt (Edn_util.keyword_to_string keyword) )
 
-let uuid_conv = Cmdliner.Arg.string
-let global_opts_term = Cmdliner.Term.const (Global_opts.create ())
+let uuid_conv = ((fun s -> Ok s), Format.pp_print_string)
+let global_opts_term = Global_opts.create ()
 
 let make_leaf meta term =
-  {
-    meta;
-    term;
-    cmd = Cmdliner.Cmd.v (Cmdliner.Cmd.info (String.concat "-" meta.path)) term;
-  }
+  { meta; term; cmd = { name = String.concat "-" meta.path; term } }
 
 let make_group ?meta ~name ~doc children = Group { name; doc; meta; children }
 
@@ -90,8 +81,7 @@ let make_app ?version:_ nodes =
       ~command:Cli_request.Version ~raw_args:[]
   in
   ({
-     root =
-       Cmdliner.Cmd.v (Cmdliner.Cmd.info "logseq") (Cmdliner.Term.const dummy);
+     root = { name = "logseq"; term = dummy };
      registry;
      leaves;
    }

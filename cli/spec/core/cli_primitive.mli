@@ -1,6 +1,6 @@
 (** Shared primitive aliases used by every layer. *)
 
-type keyword = Edn_ocaml.(keyword t)
+type keyword = Melange_edn.(keyword t)
 type graph = private string
 type repo = private string
 type db_id = int64

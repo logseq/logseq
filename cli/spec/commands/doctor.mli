@@ -9,8 +9,8 @@ type check = {
   code : Cli_primitive.keyword option;
   message : string;
   path : Cli_primitive.path option;
-  servers : Edn_ocaml.any list;
-  raw : Edn_ocaml.any option;
+  servers : Melange_edn.any list;
+  raw : Melange_edn.any option;
 }
 
 type report = { status : check_status; checks : check list }

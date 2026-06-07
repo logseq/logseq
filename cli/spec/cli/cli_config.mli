@@ -1,9 +1,9 @@
 type env = string -> string option
 
 type defaults = {
-  timeout_span : Ptime.span;
-  login_timeout_span : Ptime.span;
-  logout_timeout_span : Ptime.span;
+  timeout_span : Time.span;
+  login_timeout_span : Time.span;
+  logout_timeout_span : Time.span;
   list_title_max_display_width : int;
   root_dir : Cli_primitive.path;
   ws_url : Cli_primitive.url;
@@ -15,9 +15,9 @@ type t = {
   repo : Cli_primitive.repo option;
   root_dir : Cli_primitive.path;
   config_path : Cli_primitive.path;
-  timeout_span : Ptime.span;
-  login_timeout_span : Ptime.span;
-  logout_timeout_span : Ptime.span;
+  timeout_span : Time.span;
+  login_timeout_span : Time.span;
+  logout_timeout_span : Time.span;
   list_title_max_display_width : int;
   output_format : Output.Mode.packed option;
   verbose : bool;
@@ -31,7 +31,7 @@ type t = {
   base_url : Cli_primitive.url option;
   owner_source : Cli_primitive.owner_source;
   project_dir : Cli_primitive.path option;
-  raw_file_config : Edn_ocaml.any option;
+  raw_file_config : Melange_edn.any option;
   profile_session : Profile_types.session option;
 }
 
@@ -43,10 +43,10 @@ val default_config_path : Cli_primitive.path -> Cli_primitive.path
 val defaults : unit -> defaults
 
 val read_config_file :
-  Cli_primitive.path -> Edn_ocaml.any option Error.build_result
+  Cli_primitive.path -> Melange_edn.any option Error.build_result
 
-val env_config : env -> Edn_ocaml.map Edn_ocaml.t
-val sanitize_file_config : Edn_ocaml.any -> Edn_ocaml.any
+val env_config : env -> Melange_edn.map Melange_edn.t
+val sanitize_file_config : Melange_edn.any -> Melange_edn.any
 
 val resolve :
   defaults:defaults ->
@@ -56,8 +56,8 @@ val resolve :
 
 val update_config :
   t ->
-  Edn_ocaml.any ->
-  Edn_ocaml.map Edn_ocaml.t Error.build_result Cli_effect.t
+  Melange_edn.any ->
+  Melange_edn.map Melange_edn.t Error.build_result Cli_effect.t
 
 val graph_to_repo : Cli_primitive.graph -> Cli_primitive.repo
 val repo_to_graph : Cli_primitive.repo -> Cli_primitive.graph

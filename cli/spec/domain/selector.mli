@@ -25,11 +25,11 @@ type entity =
   | Entity_ident of Cli_primitive.keyword
   | Entity_name of string
 
-val block_to_lookup : block -> Edn_ocaml.any
-val page_to_lookup : page -> Edn_ocaml.any
-val property_to_lookup : property -> Edn_ocaml.any
-val tag_to_lookup : tag -> Edn_ocaml.any
-val entity_to_lookup : entity -> Edn_ocaml.any
+val block_to_lookup : block -> Melange_edn.any
+val page_to_lookup : page -> Melange_edn.any
+val property_to_lookup : property -> Melange_edn.any
+val tag_to_lookup : tag -> Melange_edn.any
+val entity_to_lookup : entity -> Melange_edn.any
 val parse_entity_token : string -> entity option
 val parse_property_token : string -> property option
 val parse_tag_token : string -> tag option
