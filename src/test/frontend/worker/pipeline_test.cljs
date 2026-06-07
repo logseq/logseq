@@ -8,7 +8,9 @@
             [logseq.db.common.order :as db-order]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
-            [logseq.outliner.page :as outliner-page]))
+            [logseq.outliner.op :as outliner-op]
+            [logseq.outliner.page :as outliner-page]
+            [logseq.outliner.recycle :as outliner-recycle]))
 
 (deftest test-built-in-page-updates-that-should-be-reverted
   (let [conn (db-test/create-conn-with-blocks
@@ -110,6 +112,73 @@
             "Tagging an existing empty child block with #Comments should target its parent"))
       (finally
         ;; return global fn back to previous behavior
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest permanent-delete-recycled-page-with-transact-pipeline-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "b1"}]}])
+        page (ldb/get-page @conn "page1")
+        block (db-test/find-block-by-content @conn "b1")
+        page-uuid (:block/uuid page)
+        block-uuid (:block/uuid block)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (outliner-page/delete! conn page-uuid {})
+      (is (true? (ldb/recycled? (d/entity @conn [:block/uuid page-uuid]))))
+      (outliner-op/apply-ops! conn [[:recycle-delete-permanently [page-uuid]]] {})
+      (is (nil? (d/entity @conn [:block/uuid page-uuid])))
+      (is (nil? (d/entity @conn [:block/uuid block-uuid])))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest permanent-delete-recycled-page-removes-blocks-parented-by-page-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}}
+               {:page {:block/title "page2"}}])
+        page1 (ldb/get-page @conn "page1")
+        page2 (ldb/get-page @conn "page2")
+        block-uuid (random-uuid)
+        now (common-util/time-ms)]
+    (d/transact! conn [{:block/uuid block-uuid
+                        :block/title "parented by page1"
+                        :block/created-at now
+                        :block/updated-at now
+                        :block/parent (:db/id page1)
+                        :block/page (:db/id page2)
+                        :block/order "a0"}])
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (ldb/transact! conn
+                     (outliner-recycle/recycle-page-tx-data @conn page1 {})
+                     {:outliner-op :delete-page})
+      (is (true? (ldb/recycled? (d/entity @conn (:db/id page1)))))
+      (is (true? (outliner-recycle/permanently-delete! conn (:block/uuid page1))))
+      (is (nil? (d/entity @conn [:block/uuid block-uuid])))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest permanent-delete-recycled-block-with-transact-pipeline-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "parent"
+                          :build/children [{:block/title "child"}]}]}])
+        parent (db-test/find-block-by-content @conn "parent")
+        child (db-test/find-block-by-content @conn "child")
+        parent-uuid (:block/uuid parent)
+        child-uuid (:block/uuid child)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (ldb/transact! conn
+                     (outliner-recycle/recycle-blocks-tx-data @conn [parent] {})
+                     {:outliner-op :delete-blocks})
+      (is (true? (ldb/recycled? (d/entity @conn [:block/uuid parent-uuid]))))
+      (outliner-op/apply-ops! conn
+                              [[:recycle-delete-permanently [parent-uuid]]]
+                              {:db-sync/tx-id (random-uuid)})
+      (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
+      (is (nil? (d/entity @conn [:block/uuid child-uuid])))
+      (finally
         (ldb/register-transact-pipeline-fn! identity)))))
 
 (deftest code-block-tag-addition-preserves-explicit-code-lang-test
