@@ -549,6 +549,30 @@
     (is (= (expand-properties (:properties original-data)) (:properties imported-ontology)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-ontology)))))
 
+(deftest import-with-url-property-should-be-idempotent
+  (let [about-uuid (random-uuid)
+        export-edn
+        {:properties
+         {:user.property/url {:db/cardinality :db.cardinality/one
+                              :logseq.property/type :url
+                              :block/title "url"}
+          :user.property/about {:db/cardinality :db.cardinality/one
+                                :logseq.property/type :node
+                                :block/title "about"
+                                :block/uuid about-uuid
+                                :build/keep-uuid? true
+                                :build/properties {:user.property/url "https://example.com/about"}}}}
+        conn (db-test/create-conn-with-blocks {:properties (:properties export-edn)})
+        {:keys [init-tx block-props-tx misc-tx]}
+        (sqlite-export/build-import export-edn @conn {})]
+    (d/transact! conn (concat init-tx block-props-tx misc-tx))
+    (validate-db @conn)
+    (is (= "https://example.com/about"
+           (some-> (d/entity @conn :user.property/about)
+                   :user.property/url
+                   :block/title))
+        "URL value materializes as a property-value block")))
+
 (deftest export-graph-ontology-ignores-legacy-internal-class-properties
   (let [legacy-property :logseq.property.embedding/hnsw-label-updated-at
         original-data

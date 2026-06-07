@@ -4,6 +4,7 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
+            [logseq.outliner.op :as outliner-op]
             [logseq.outliner.recycle :as recycle]))
 
 (deftest restore-recycled-page-removes-recycle-parent
@@ -33,6 +34,40 @@
     (is (nil? (d/entity @conn [:block/uuid page-uuid])))
     (is (nil? (d/entity @conn [:block/uuid block-uuid])))))
 
+(deftest permanently-delete-recycled-page-removes-blocks-parented-by-page
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}}
+               {:page {:block/title "page2"}}])
+        page1 (ldb/get-page @conn "page1")
+        page2 (ldb/get-page @conn "page2")
+        block-uuid (random-uuid)
+        now (common-util/time-ms)]
+    (d/transact! conn [{:block/uuid block-uuid
+                        :block/title "parented by page1"
+                        :block/created-at now
+                        :block/updated-at now
+                        :block/parent (:db/id page1)
+                        :block/page (:db/id page2)
+                        :block/order "a0"}])
+    (ldb/transact! conn (recycle/recycle-page-tx-data @conn page1 {}) {:outliner-op :delete-page})
+    (is (true? (ldb/recycled? (d/entity @conn (:db/id page1)))))
+    (is (true? (recycle/permanently-delete! conn (:block/uuid page1))))
+    (is (nil? (d/entity @conn [:block/uuid block-uuid])))))
+
+(deftest apply-ops-permanently-delete-recycled-page-removes-page-and-descendants
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "b1"}]}])
+        page (ldb/get-page @conn "page1")
+        block (db-test/find-block-by-content @conn "b1")
+        page-uuid (:block/uuid page)
+        block-uuid (:block/uuid block)]
+    (ldb/transact! conn (recycle/recycle-page-tx-data @conn page {}) {:outliner-op :delete-page})
+    (is (true? (ldb/recycled? (d/entity @conn [:block/uuid page-uuid]))))
+    (outliner-op/apply-ops! conn [[:recycle-delete-permanently [page-uuid]]] {})
+    (is (nil? (d/entity @conn [:block/uuid page-uuid])))
+    (is (nil? (d/entity @conn [:block/uuid block-uuid])))))
+
 (deftest permanently-delete-recycled-block-removes-subtree-only
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -47,6 +82,21 @@
     (is (true? (ldb/recycled? (d/entity @conn [:block/uuid parent-uuid]))))
     (is (true? (recycle/permanently-delete! conn parent-uuid)))
     (is (some? (d/entity @conn [:block/uuid (:block/uuid page)])))
+    (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
+    (is (nil? (d/entity @conn [:block/uuid child-uuid])))))
+
+(deftest apply-ops-permanently-delete-recycled-block-removes-subtree-only
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "parent"
+                          :build/children [{:block/title "child"}]}]}])
+        parent (db-test/find-block-by-content @conn "parent")
+        child (db-test/find-block-by-content @conn "child")
+        parent-uuid (:block/uuid parent)
+        child-uuid (:block/uuid child)]
+    (ldb/transact! conn (recycle/recycle-blocks-tx-data @conn [parent] {}) {:outliner-op :delete-blocks})
+    (is (true? (ldb/recycled? (d/entity @conn [:block/uuid parent-uuid]))))
+    (outliner-op/apply-ops! conn [[:recycle-delete-permanently [parent-uuid]]] {})
     (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
     (is (nil? (d/entity @conn [:block/uuid child-uuid])))))
 

@@ -731,6 +731,7 @@
  :graph/create-error "Create graph failed."
  :graph/create-new "Create a new graph"
  :graph/creating "Creating graph"
+ :graph/db-worker-recovery-failed-error "Unable to reconnect to the database worker for graph \"{1}\". Please try again or reopen the graph."
  :graph/delete-local-action "Delete local graph"
  :graph/delete-local-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
  :graph/delete-server-action "Delete from server"
@@ -797,8 +798,6 @@
  :graph.page/title "Page graph"
 
  :graph.switch/add-graph-action "Yes, add another graph"
- :graph.switch/db-worker-unavailable-no-fallback-warning "The database worker for graph \"{1}\" is unavailable, and no other graph is available."
- :graph.switch/db-worker-unavailable-switching-warning "The database worker for graph \"{1}\" is unavailable. Switching to graph \"{2}\"."
  :graph.switch/empty-desc "No matched graphs. Do you want to add another one?"
  :graph.switch/prompt "Switch to:"
  :graph.switch/select-prompt "Select a graph"
@@ -1733,6 +1732,8 @@
  :settings.features/markdown-mirror-regenerate-success "Markdown Mirror regenerated"
  :settings.features/page-not-found "The page \"{1}\" doesn't exist yet. Please create that page first, and then try again."
  :settings.features/plugin-system "Plugins"
+ :settings.features/semantic-search "Semantic search"
+ :settings.features/semantic-search-desc "Include semantic matches in search results. Available on macOS Apple silicon."
 
  :settings.general/accent-color "Accent color"
  :settings.general/accent-color-alert "Choosing an accent color may override any theme you have selected."
