@@ -7,6 +7,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
+            [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.shui.hooks :as hooks]
             [io.factorhouse.hsx.core :as hsx]))
@@ -50,6 +51,8 @@
     (catch :default _e
       nil)))
 
+(declare insert-timestamp-for-player!)
+
 (hsx/defc youtube-video
   [id {:keys [width height start aspect-ratio] :or {aspect-ratio [16 9]} :as _opts}]
   (let [[ratio-width ratio-height] aspect-ratio
@@ -80,18 +83,31 @@
            (<! (load-youtube-api))
            (register-player id (hooks/deref *iframe-ref)))))
      [id])
-    [:div.video-embed-frame
-     {:style {:width width
-              :aspect-ratio (str width " / " height)}}
-     [:iframe
-      {:id                (str "youtube-player-" id)
-       :ref               *iframe-ref
-       :allow-full-screen "allowfullscreen"
-       :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-       :referrer-policy   "strict-origin-when-cross-origin"
-       :referer           "https://logseq.com"
-       :frame-border      "0"
-       :src               url}]]))
+    [:div.video-embed-shell
+     {:style {:width width}}
+     [:div.video-embed-frame
+      {:style {:width "100%"
+               :aspect-ratio (str width " / " height)}}
+      [:iframe
+       {:id                (str "youtube-player-" id)
+        :ref               *iframe-ref
+        :allow-full-screen "allowfullscreen"
+        :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        :referrer-policy   "strict-origin-when-cross-origin"
+        :referer           "https://logseq.com"
+        :frame-border      "0"
+        :src               url}]]
+     (when-not (use-youtube-wrapper?)
+       [:div.video-embed-actions
+        [:button.video-timestamp-button
+         {:type "button"
+          :title (t :youtube/insert-current-timestamp)
+          :aria-label (t :youtube/insert-current-timestamp)
+          :on-pointer-down util/stop
+          :on-click (fn [e]
+                      (util/stop e)
+                      (insert-timestamp-for-player! id))}
+         svg/clock]])]))
 
 (defn seconds->display [seconds]
   (let [seconds (int seconds)
@@ -137,6 +153,32 @@
 (defn- player-method [player method]
   (let [f (gobj/get player method)]
     (when (fn? f) f)))
+
+(defn- get-player-by-id [id]
+  (get (get @state/state :youtube/players) id))
+
+(defn insert-timestamp-for-player! [id]
+  (if (use-youtube-wrapper?)
+    (notify-timestamp-unavailable!)
+    (if-let [player (get-player-by-id id)]
+      (if-let [get-current-time (player-method player "getCurrentTime")]
+        (let [macro (util/format "{{youtube-timestamp %s}}"
+                                 (Math/floor (.call get-current-time player)))
+              input-id (state/get-edit-input-id)]
+          (if-let [input (gdom/getElement input-id)]
+            (util/insert-at-current-position! input (str macro " "))
+            (notification/show!
+             (t :youtube/open-block-editor-to-insert-timestamp)
+             :warning
+             false)))
+        (notification/show!
+         (t :youtube/player-not-ready)
+         :warning
+         false))
+      (notification/show!
+       (t :youtube/player-not-ready)
+       :warning
+       false))))
 
 (hsx/defc timestamp
   [seconds]
