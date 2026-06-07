@@ -9,8 +9,7 @@ type login_callback_server_error =
   | Login_callback_server_start_failed of string
   | Login_callback_server_aborted of string
 
-let timeout_ms span =
-  if Float.compare span 0. > 0 then int_of_float span else 0
+let timeout_ms span = if Float.compare span 0. > 0 then int_of_float span else 0
 
 module Timer = struct
   type timeout_handle
@@ -24,26 +23,25 @@ module Http_server = struct
   type request
   type response
 
-  external create_server :
-    ((request -> response -> unit)[@u]) -> server = "createServer"
+  external create_server : ((request -> response -> unit)[@u]) -> server
+    = "createServer"
   [@@mel.module "http"]
 
-  external listen :
-    server -> int -> string -> ((unit -> unit)[@u]) -> unit = "listen"
+  external listen : server -> int -> string -> ((unit -> unit)[@u]) -> unit
+    = "listen"
   [@@mel.send]
 
   external on_error :
     server -> (_[@mel.as "error"]) -> ((Js.Exn.t -> unit)[@u]) -> unit = "on"
   [@@mel.send]
 
-  external close : server -> ((unit -> unit)[@u]) -> unit = "close"
-  [@@mel.send]
+  external close : server -> ((unit -> unit)[@u]) -> unit = "close" [@@mel.send]
 
   external target : request -> string option = "url"
   [@@mel.get] [@@mel.return { undefined_to_opt }]
 
-  external write_head :
-    response -> int -> string Js.Dict.t -> unit = "writeHead"
+  external write_head : response -> int -> string Js.Dict.t -> unit
+    = "writeHead"
   [@@mel.send]
 
   external end_ : response -> string -> ((unit -> unit)[@u]) -> unit = "end"
@@ -54,8 +52,7 @@ module Http_server = struct
     Js.Dict.set headers "Content-Type" "text/plain; charset=utf-8";
     headers
 
-  let close_ignore server =
-    try close server (fun [@u] () -> ()) with _ -> ()
+  let close_ignore server = try close server (fun[@u] () -> ()) with _ -> ()
 end
 
 let js_error_message exn =
@@ -92,19 +89,19 @@ let login_callback_server ~host ~port ~timeout_span ~on_listen ~handle_request =
   let on_request request response =
     if !settled then (
       Http_server.write_head response 410 (Http_server.text_headers ());
-      Http_server.end_ response "Login callback already handled"
-        (fun [@u] () -> ()))
-    else (
+      Http_server.end_ response "Login callback already handled" (fun[@u] () ->
+          ()))
+    else
       let response_body, result =
         handle_request { target = Http_server.target request }
       in
       finish (Ok result);
       Http_server.write_head response response_body.status
         (Http_server.text_headers ());
-      Http_server.end_ response response_body.body (fun [@u] () ->
+      Http_server.end_ response response_body.body (fun[@u] () ->
           match !server_ref with
           | None -> ()
-          | Some server -> Http_server.close_ignore server))
+          | Some server -> Http_server.close_ignore server)
   in
   let on_listening () =
     let timeout = timeout_ms timeout_span in
@@ -120,24 +117,21 @@ let login_callback_server ~host ~port ~timeout_span ~on_listen ~handle_request =
         | Error message ->
             finish (Error (Login_callback_server_aborted message)))
       (fun exn ->
-        finish
-          (Error
-             (Login_callback_server_aborted (Printexc.to_string exn))))
+        finish (Error (Login_callback_server_aborted (Printexc.to_string exn))))
   in
   try
     let server =
-      Http_server.create_server (fun [@u] request response ->
+      Http_server.create_server (fun[@u] request response ->
           on_request request response)
     in
     server_ref := Some server;
-    Http_server.on_error server (fun [@u] error ->
+    Http_server.on_error server (fun[@u] error ->
         finish
           (Error (Login_callback_server_start_failed (js_error_message error))));
-    Http_server.listen server port host (fun [@u] () -> on_listening ());
+    Http_server.listen server port host (fun[@u] () -> on_listening ());
     task
   with exn ->
-    finish
-      (Error (Login_callback_server_start_failed (Printexc.to_string exn)));
+    finish (Error (Login_callback_server_start_failed (Printexc.to_string exn)));
     task
 
 module Symbols = struct
@@ -171,7 +165,8 @@ module HTTP = struct
         match promise_error_name error with
         | Some "AbortError" -> "request timeout"
         | _ ->
-            Option.value (promise_error_message error)
+            Option.value
+              (promise_error_message error)
               ~default:"JavaScript promise rejected"
       in
       on_settle ();
@@ -222,7 +217,9 @@ module HTTP = struct
     let init =
       Fetch.RequestInit.make ~method_
         ~headers:(Fetch.HeadersInit.makeWithArray (Array.of_list headers))
-        ?body ~signal:(Fetch.AbortController.signal controller) ()
+        ?body
+        ~signal:(Fetch.AbortController.signal controller)
+        ()
     in
     promise_to_effect
       ~on_settle:(fun () -> clear_timeout_opt timeout_handle)
@@ -231,7 +228,6 @@ end
 
 module Events = struct
   type subscription = { close : unit -> unit Cli_effect.t }
-
   type readable_stream
   type reader
   type read_result
@@ -245,6 +241,7 @@ module Events = struct
   external read : reader -> read_result Js.Promise.t = "read" [@@mel.send]
   external cancel : reader -> unit Js.Promise.t = "cancel" [@@mel.send]
   external read_done : read_result -> bool = "done" [@@mel.get]
+
   external read_value : read_result -> uint8_array option = "value"
   [@@mel.get] [@@mel.return { undefined_to_opt }]
 
@@ -263,12 +260,12 @@ module Events = struct
     else
       read reader
       |> Js.Promise.then_ (fun result ->
-             if !closed || read_done result then Js.Promise.resolve ()
-             else (
-               result |> read_value
-               |> Option.iter (fun value ->
-                      on_chunk (decode decoder value stream_options));
-               read_loop closed decoder reader on_chunk))
+          if !closed || read_done result then Js.Promise.resolve ()
+          else (
+            result |> read_value
+            |> Option.iter (fun value ->
+                on_chunk (decode decoder value stream_options));
+            read_loop closed decoder reader on_chunk))
 
   let connect ~url ~on_chunk =
     let closed = ref false in
@@ -279,7 +276,8 @@ module Events = struct
         ~headers:
           (Fetch.HeadersInit.makeWithArray
              [| ("Accept", "text/event-stream") |])
-        ~signal:(Fetch.AbortController.signal controller) ()
+        ~signal:(Fetch.AbortController.signal controller)
+        ()
     in
     let handle_response response =
       if not (Fetch.Response.ok response) then
@@ -293,8 +291,8 @@ module Events = struct
         | None ->
             Fetch.Response.text response
             |> Js.Promise.then_ (fun text ->
-                   if not !closed then on_chunk text;
-                   Js.Promise.resolve ())
+                if not !closed then on_chunk text;
+                Js.Promise.resolve ())
         | Some body ->
             let reader = get_reader body in
             reader_ref := Some reader;
@@ -302,8 +300,8 @@ module Events = struct
     in
     ignore
       (Fetch.fetchWithInit url init
-      |> Js.Promise.then_ handle_response
-      |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+       |> Js.Promise.then_ handle_response
+       |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
         : unit Js.Promise.t);
     let close () =
       closed := true;

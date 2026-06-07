@@ -48,7 +48,8 @@ let decode_graph_dir_name dir_name =
     || contains_substring ~needle:"+3A+" dir_name
   then None
   else
-    dir_name |> replace_all ~needle:"~" ~replacement:"%"
+    dir_name
+    |> replace_all ~needle:"~" ~replacement:"%"
     |> decode_percent_graph_dir_name
 
 let decode_legacy_graph_dir_name dir_name =

@@ -299,10 +299,10 @@ let asset_column_role label =
 let columns_by_role roles columns =
   roles
   |> List.filter_map (fun role ->
-         List.find_opt
-           (fun label ->
-             Option.equal String.equal (asset_column_role label) (Some role))
-           columns)
+      List.find_opt
+        (fun label ->
+          Option.equal String.equal (asset_column_role label) (Some role))
+        columns)
 
 let asset_columns columns =
   let prefix_roles = [ "id"; "title"; "size"; "type" ] in
@@ -310,7 +310,9 @@ let asset_columns columns =
   let prefix_or_datetime label =
     Option.is_some (asset_column_role label) || is_datetime_field label
   in
-  let middle = List.filter (fun label -> not (prefix_or_datetime label)) columns in
+  let middle =
+    List.filter (fun label -> not (prefix_or_datetime label)) columns
+  in
   let created_at = List.filter is_created_at_field columns in
   let updated_at = List.filter is_updated_at_field columns in
   prefix @ middle @ created_at @ updated_at
@@ -353,8 +355,7 @@ let list_search_human command value config =
                 ~footer:(count_footer (List.length rows))
                 ~rows ()))
 
-let read_text_file path =
-  Cli_unix.read_text_file path
+let read_text_file path = Cli_unix.read_text_file path
 
 let read_current_graph root_dir =
   let path = Filename.concat root_dir "current-graph" in

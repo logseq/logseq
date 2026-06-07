@@ -1152,7 +1152,8 @@ let values_of_query_result value =
   | _ -> []
 
 let unquote_transit_value = function
-  | Melange_edn.Any (Melange_edn.Tagged (("transit/quote" | "'"), value)) -> value
+  | Melange_edn.Any (Melange_edn.Tagged (("transit/quote" | "'"), value)) ->
+      value
   | value -> value
 
 let keyword_string value = value |> unquote_transit_value |> Edn_util.as_keyword
@@ -1289,8 +1290,7 @@ let hex_digest_prefix byte_count seed =
 
 let insert_default_master_prompt invoke_config repo agent_page_uuid =
   let nonce =
-    Printf.sprintf "%.17g"
-      (Time.time_to_epoch_seconds_float (Time.now ()))
+    Printf.sprintf "%.17g" (Time.time_to_epoch_seconds_float (Time.now ()))
   in
   let block_uuid =
     "00000000-0000-4000-8000-"
@@ -1354,8 +1354,7 @@ let insert_default_master_prompt invoke_config repo agent_page_uuid =
 
 let insert_default_master_prompt_code invoke_config repo wrapper_uuid =
   let nonce =
-    Printf.sprintf "%.17g"
-      (Time.time_to_epoch_seconds_float (Time.now ()))
+    Printf.sprintf "%.17g" (Time.time_to_epoch_seconds_float (Time.now ()))
   in
   let code_uuid =
     "00000000-0000-4000-8001-" ^ hex_digest_prefix 6 (wrapper_uuid ^ ":" ^ nonce)
@@ -1774,8 +1773,7 @@ let process_tasks invoke_config repo graph agent_name config master_session
   in
   loop [] tasks
 
-let bridge_log_line message =
-  Time.rfc3339_millis (Time.now ()) ^ " " ^ message
+let bridge_log_line message = Time.rfc3339_millis (Time.now ()) ^ " " ^ message
 
 let emit_bridge_log : type a. a Output.Mode.t -> string -> unit =
  fun mode message ->
@@ -1855,8 +1853,7 @@ let bridge_lock_owner graph agent_name =
   Printf.sprintf "{:pid %d :graph \"%s\" :agent \"%s\" :started-at \"%s\"}\n"
     (Cli_unix.getpid ()) (edn_string_escape graph)
     (edn_string_escape agent_name)
-    (Printf.sprintf "%.3f"
-       (Time.time_to_epoch_seconds_float (Time.now ())))
+    (Printf.sprintf "%.3f" (Time.time_to_epoch_seconds_float (Time.now ())))
 
 let bridge_lock_error graph agent_name =
   let graph = Cli_primitive.string_of_graph graph in

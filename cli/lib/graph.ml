@@ -167,8 +167,7 @@ let tmp_sqlite_counter = ref 0
 let tmp_sqlite_path dir =
   incr tmp_sqlite_counter;
   let stamp =
-    int_of_float
-      (Time.time_to_epoch_seconds_float (Time.now ()) *. 1_000_000.)
+    int_of_float (Time.time_to_epoch_seconds_float (Time.now ()) *. 1_000_000.)
   in
   Filename.concat dir
     ("db." ^ string_of_int stamp ^ "."
@@ -178,8 +177,7 @@ let tmp_sqlite_path dir =
 let explicit_graph_and_repo globals =
   let graph =
     Option.bind globals.Global_opts.graph (fun graph ->
-        graph |> Cli_primitive.string_of_graph
-        |> Cli_primitive.non_empty
+        graph |> Cli_primitive.string_of_graph |> Cli_primitive.non_empty
         |> Option.map Cli_primitive.create_graph)
   in
   (graph, Option.map Cli_config.graph_to_repo graph)
@@ -309,8 +307,7 @@ let rec remove_tree path =
       Cli_unix.rmdir path)
     else Cli_unix.remove_tree path
 
-let write_file path content =
-  Cli_unix.write_text_file path content
+let write_file path content = Cli_unix.write_text_file path content
 
 let graph_path config graph =
   Filename.concat (graphs_dir config)
@@ -437,7 +434,8 @@ let list_graph_items config =
   let dir = graphs_dir config in
   if Cli_unix.file_exists dir then
     Cli_unix.readdir dir |> Array.to_list
-    |> List.filter (fun name -> Cli_unix.is_directory (Filename.concat dir name))
+    |> List.filter (fun name ->
+        Cli_unix.is_directory (Filename.concat dir name))
     |> List.sort_uniq String.compare
     |> List.filter_map (classify_graph_dir dir)
   else []
@@ -682,7 +680,10 @@ let metadata_source backup_dir =
 let backup_entry root name =
   let dir = Filename.concat root name in
   let db_path = backup_db_path dir in
-  if Cli_unix.file_exists dir && Cli_unix.is_directory dir && Cli_unix.file_exists db_path then
+  if
+    Cli_unix.file_exists dir && Cli_unix.is_directory dir
+    && Cli_unix.file_exists db_path
+  then
     let stat = Cli_unix.stat db_path in
     let fields =
       [
@@ -733,8 +734,8 @@ let unlink_graph_dir config graph repo =
   let source =
     if Cli_unix.file_exists repo_path && Cli_unix.is_directory repo_path then
       Some (repo_name, repo_path)
-    else if Cli_unix.file_exists graph_path && Cli_unix.is_directory graph_path then
-      Some (graph_name, graph_path)
+    else if Cli_unix.file_exists graph_path && Cli_unix.is_directory graph_path
+    then Some (graph_name, graph_path)
     else None
   in
   match source with
@@ -896,9 +897,7 @@ let execute_graph_create mode graph repo opts config =
         pure
           (Cli_result.ok ~command:Command_id.Graph_create mode
              (Message
-                ("Created graph \""
-                ^ Cli_primitive.string_of_graph graph
-                ^ "\"")))
+                ("Created graph \"" ^ Cli_primitive.string_of_graph graph ^ "\"")))
     | Some _ -> execute_graph_create_invoke mode graph repo config
 
 let execute_graph_export mode graph repo opts config =
@@ -1048,8 +1047,7 @@ let execute_graph_switch mode graph repo config =
           persist_current_graph config graph;
           pure
             (Cli_result.ok ~command:Command_id.Graph_switch mode
-               (Message
-                  ("Switched to graph \"" ^ graph_name ^ "\""))))
+               (Message ("Switched to graph \"" ^ graph_name ^ "\""))))
 
 let execute_graph_remove mode graph repo config =
   let open Cli_effect in

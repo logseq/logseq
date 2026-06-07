@@ -1,8 +1,8 @@
 (melange.emit
- (target jest)
+ (target node)
  (modules test_support test_cases fake_codex)
  (module_systems commonjs)
- (libraries melange-jest.jest melange.node)
+ (libraries melange-fest melange.node)
  (preprocess
   (pps melange.ppx)))
 
@@ -11,15 +11,11 @@
  (deps
   (alias ../bin/melange)
   (alias ./melange)
-  jest/test/test_cases.js
-  jest/test/fake_codex.js
-  ../bin/logseq_cli_melange/bin/main.js)
+  (:test_cases ./node/test/test_cases.js)
+  (:fake_codex ./node/test/fake_codex.js)
+  (:entrypoint ../bin/logseq_cli_melange/bin/main.js))
  (action
-  (setenv LOGSEQ_CLI_MELANGE_ENTRYPOINT bin/logseq_cli_melange/bin/main.js
-   (chdir
-    %{workspace_root}
-    (run
-     npx
-     jest
-     --testMatch
-     **/_build/default/test/jest/test/test_cases.js)))))
+  (setenv
+   LOGSEQ_CLI_MELANGE_ENTRYPOINT
+   %{entrypoint}
+   (run node --test %{test_cases}))))
