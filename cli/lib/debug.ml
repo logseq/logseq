@@ -16,13 +16,13 @@ type action =
       repo : Cli_primitive.repo;
       graph : Cli_primitive.graph;
       lookup : selector;
-      selector : Edn_ocaml.any;
+      selector : Melange_edn.any;
     }
 
 let parse_ident_option value =
   let value = String.trim value in
   try
-    match Edn_util.as_keyword_t (Edn_ocaml.of_edn_string value) with
+    match Edn_util.as_keyword_t (Melange_edn.of_edn_string value) with
     | Some keyword -> Ok (Cli_primitive.normalize_keyword keyword)
     | None ->
         Error

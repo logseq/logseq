@@ -18,15 +18,15 @@ module Human_output : sig
   val create :
     ?headers:string list -> ?footer:string -> rows:string list list -> unit -> t
 
-  val pp : Format.formatter -> t -> unit
-  (* format as table.
-     - columns need to be aligned
-     - empty row value display as '-'
-     - humanize created-at/updated-at
-  *)
+  val to_string : t -> string
+  (** format as table.
+      - columns need to be aligned
+      - empty row value display as '-'
+      - humanize created-at/updated-at
+   *)
 end
 
 type _ t =
   | Human : Human_output.t -> human t
-  | Edn : Edn_ocaml.any -> edn t
-  | Json : Edn_ocaml.any -> json t
+  | Edn : Melange_edn.any -> edn t
+  | Json : Melange_edn.any -> json t

@@ -11,7 +11,7 @@ type t = {
   tags : Selector.tag list;
   properties : Property.assignment list;
   children : t list;
-  raw : Edn_ocaml.any;
+  raw : Melange_edn.any;
 }
 
 type tree = { root : t }

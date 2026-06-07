@@ -1,4 +1,4 @@
-type list_options = Edn_ocaml.any
+type list_options = Melange_edn.any
 
 type page_filter = {
   expand : bool;
@@ -6,8 +6,8 @@ type page_filter = {
   include_built_in : bool;
   include_journal : bool;
   journal_only : bool;
-  created_after : Ptime.t option;
-  updated_after : Ptime.t option;
+  created_after : Time.date option;
+  updated_after : Time.date option;
 }
 
 type node_filter = {
@@ -15,9 +15,9 @@ type node_filter = {
   property_idents : Cli_primitive.keyword list;
 }
 
-val minimal_list_item : Entity.t -> Edn_ocaml.map Edn_ocaml.t
-val list_pages : Edn_ocaml.any -> page_filter -> Entity.t list
-val list_tags : Edn_ocaml.any -> list_options -> Entity.t list
-val list_properties : Edn_ocaml.any -> list_options -> Entity.t list
-val list_tasks : Edn_ocaml.any -> list_options -> Entity.t list
-val list_nodes : Edn_ocaml.any -> node_filter -> Entity.t list
+val minimal_list_item : Entity.t -> Melange_edn.map Melange_edn.t
+val list_pages : Melange_edn.any -> page_filter -> Entity.t list
+val list_tags : Melange_edn.any -> list_options -> Entity.t list
+val list_properties : Melange_edn.any -> list_options -> Entity.t list
+val list_tasks : Melange_edn.any -> list_options -> Entity.t list
+val list_nodes : Melange_edn.any -> node_filter -> Entity.t list

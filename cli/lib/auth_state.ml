@@ -3,10 +3,10 @@ type auth_data = {
   id_token : string option;
   access_token : string option;
   refresh_token : string option;
-  expires_at : Ptime.t option;
+  expires_at : Js.Date.t option;
   sub : string option;
   email : Cli_primitive.email option;
-  updated_at : Ptime.t;
+  updated_at : Js.Date.t;
 }
 
 type login_result = {
@@ -15,7 +15,7 @@ type login_result = {
   opened : bool;
   email : Cli_primitive.email option;
   sub : string option;
-  updated_at : Ptime.t;
+  updated_at : Js.Date.t;
 }
 
 type logout_result = {
@@ -37,18 +37,12 @@ let auth_path config =
   Option.value config.Cli_config.auth_path ~default:(default_auth_path ())
 
 let rec mkdir_p path =
-  if path = "" || path = Filename.dirname path || Sys.file_exists path then ()
+  if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then ()
   else (
     mkdir_p (Filename.dirname path);
     Cli_unix.mkdir path 0o755)
 
-let read_file path =
-  let ic = open_in_bin path in
-  Fun.protect
-    ~finally:(fun () -> close_in_noerr ic)
-    (fun () ->
-      let len = in_channel_length ic in
-      really_input_string ic len)
+let read_file = Cli_unix.read_text_file
 
 let json_escape value =
   let buffer = Buffer.create (String.length value + 8) in
@@ -72,21 +66,14 @@ let http_error_message status body =
   else
     "http request failed (" ^ string_of_int status ^ ")\nhttp response: " ^ body
 
-let http_request ~(method_ : Cohttp.Code.meth) ~url ~headers ~body ~timeout_span
+let http_request ~(method_ : Fetch.requestMethod) ~url ~headers ~body ~timeout_span
     =
   Cli_effect.bind
-    (Cli_platform.HTTP.request ?timeout_span method_ (Uri.of_string url)
-       ~headers:(Cohttp.Header.of_list headers)
-       ~body:(Cohttp_lwt.Body.of_string body))
+    (Cli_platform.HTTP.request ?timeout_span method_ url ~headers ~body)
     (fun (response, body) ->
-      Cli_effect.bind
-        (Cli_effect.of_lwt (Cohttp_lwt.Body.to_string body))
-        (fun body ->
-          let status =
-            Cohttp.Response.status response |> Cohttp.Code.code_of_status
-          in
-          if status >= 200 && status <= 299 then Cli_effect.pure body
-          else Cli_effect.error (Failure (http_error_message status body))))
+      let status = Fetch.Response.status response in
+      if status >= 200 && status <= 299 then Cli_effect.pure body
+      else Cli_effect.error (Failure (http_error_message status body)))
 
 let add_opt_string key value fields =
   match value with
@@ -97,7 +84,7 @@ let add_opt_int key value fields =
   match value with Some value -> json_int key value :: fields | None -> fields
 
 let add_opt_time key value fields =
-  add_opt_int key (Option.map Ptime_util.time_to_epoch_ms value) fields
+  add_opt_int key (Option.map Time.time_to_epoch_ms value) fields
 
 let auth_json data =
   []
@@ -108,7 +95,7 @@ let auth_json data =
   |> add_opt_string "access-token" data.access_token
   |> add_opt_string "id-token" data.id_token
   |> fun fields ->
-  json_int "updated-at" (Ptime_util.time_to_epoch_ms data.updated_at) :: fields
+  json_int "updated-at" (Time.time_to_epoch_ms data.updated_at) :: fields
   |> fun fields ->
   json_string "provider" data.provider :: fields
   |> List.rev |> String.concat ","
@@ -220,15 +207,15 @@ let parse_auth_json text =
           access_token;
           refresh_token;
           expires_at =
-            Option.map Ptime_util.time_of_epoch_ms
+            Option.map Time.time_of_epoch_ms
               (json_int_field text [ "expires-at"; "expires_at" ]);
           sub = json_string_field text [ "sub" ];
           email = json_string_field text [ "email" ];
           updated_at =
             Option.value
-              (Option.map Ptime_util.time_of_epoch_ms
+              (Option.map Time.time_of_epoch_ms
                  (json_int_field text [ "updated-at"; "updated_at" ]))
-              ~default:Ptime.epoch;
+              ~default:Time.epoch;
         }
 
 let base64url_index = function
@@ -274,7 +261,7 @@ let claims_of_id_token id_token =
         ( json_string_field payload [ "sub" ],
           json_string_field payload [ "email" ],
           Option.map
-            (fun exp -> Ptime_util.time_of_epoch_ms (Int64.mul exp 1_000L))
+            (fun exp -> Time.time_of_epoch_ms (Int64.mul exp 1_000L))
             (json_int_field payload [ "exp" ]) ))
 
 let auth_path_context path =
@@ -283,7 +270,7 @@ let auth_path_context path =
 let read_auth_file config =
   let path = auth_path config in
   Cli_effect.pure
-    (if not (Sys.file_exists path) then Ok None
+    (if not (Cli_unix.file_exists path) then Ok None
      else
        try Error.map (fun data -> Some data) (parse_auth_json (read_file path))
        with exn ->
@@ -297,10 +284,7 @@ let write_auth_file config data =
   Cli_effect.pure
     (try
        mkdir_p (Filename.dirname path);
-       let oc = open_out_bin path in
-       Fun.protect
-         ~finally:(fun () -> close_out_noerr oc)
-         (fun () -> output_string oc (auth_json data));
+       Cli_unix.write_text_file path (auth_json data);
        (try Cli_unix.chmod path 0o600 with Cli_unix.Cli_unix_error _ -> ());
        Ok data
      with exn ->
@@ -313,7 +297,7 @@ let delete_auth_file config =
   let path = auth_path config in
   Cli_effect.pure
     (try
-       if Sys.file_exists path then Sys.remove path;
+       if Cli_unix.file_exists path then Cli_unix.remove_tree path;
        Ok ()
      with exn ->
        Error
@@ -323,7 +307,7 @@ let delete_auth_file config =
 
 let expired_auth auth =
   match auth.expires_at with
-  | Some expires_at -> Ptime.compare expires_at (Ptime_util.now ()) <= 0
+  | Some expires_at -> Time.compare_time expires_at (Time.now ()) <= 0
   | None -> true
 
 let missing_auth config message =
@@ -347,7 +331,7 @@ let config_auth config =
         expires_at = None;
         sub = None;
         email = None;
-        updated_at = Ptime_util.now ();
+        updated_at = Time.now ();
       }
   else None
 
@@ -493,7 +477,7 @@ let refreshed_auth_of_body current body =
               expires_at;
               sub;
               email;
-              updated_at = Ptime_util.now ();
+              updated_at = Time.now ();
             })
 
 let refresh_auth config data =
@@ -522,7 +506,7 @@ let refresh_auth config data =
           Cli_effect.catch
             (Cli_effect.map
                (fun body -> refreshed_auth_of_body data body)
-               (http_request ~method_:`POST ~url
+               (http_request ~method_:Fetch.Post ~url
                   ~headers:
                     [
                       ("Content-Type", "application/x-www-form-urlencoded");
@@ -579,10 +563,10 @@ let auth_code_exchange config ~code ~redirect_uri ~code_verifier =
                  expires_at = None;
                  sub = None;
                  email = None;
-                 updated_at = Ptime_util.now ();
+                 updated_at = Time.now ();
                }
                body)
-           (http_request ~method_:`POST ~url
+           (http_request ~method_:Fetch.Post ~url
               ~headers:
                 [
                   ("Content-Type", "application/x-www-form-urlencoded");
@@ -868,7 +852,7 @@ let login config =
 
 let logout config =
   let path = auth_path config in
-  let existed = Sys.file_exists path in
+  let existed = Cli_unix.file_exists path in
   Cli_effect.bind (delete_auth_file config) (function
     | Error err -> Cli_effect.pure (Error err)
     | Ok () ->

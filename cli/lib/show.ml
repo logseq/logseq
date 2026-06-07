@@ -804,6 +804,8 @@ let linked_display value =
   Option.bind (Edn_util.get value ":show/linked-display?") Edn_util.as_bool
   = Some true
 
+let linked_arrow = Cli_platform.Symbols.linked_arrow
+
 let label_of value =
   let base =
     match status_label value with
@@ -815,7 +817,7 @@ let label_of value =
     | Some suffix -> base ^ " " ^ suffix
     | None -> base
   in
-  match linked_display value with true -> "→ " ^ label | false -> label
+  match linked_display value with true -> linked_arrow ^ label | false -> label
 
 let children_of value =
   Option.value
@@ -1172,8 +1174,14 @@ let render_tree_text_value ?(metadata = empty_render_metadata) root =
     List.iteri
       (fun idx child ->
         let last_child = idx = total - 1 in
-        let branch = if last_child then "└── " else "├── " in
-        let next_prefix = prefix ^ if last_child then "    " else "│   " in
+        let branch =
+          if last_child then Cli_platform.Symbols.tree_last
+          else Cli_platform.Symbols.tree_middle
+        in
+        let next_prefix =
+          prefix
+          ^ if last_child then "    " else Cli_platform.Symbols.tree_pipe
+        in
         lines :=
           append_label_lines !lines ~id:(id_text child) ~prefix ~branch
             ~continuation_prefix:next_prefix (label_of child);

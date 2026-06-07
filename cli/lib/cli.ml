@@ -127,7 +127,7 @@ let globals_of_options options =
     ?root_dir:(option_value "root-dir" options)
     ?config_path:(option_value "config" options)
     ?timeout_span:
-      (Option.map Ptime_util.span_of_ms
+      (Option.map Time.span_of_ms
          (Option.bind (option_value "timeout-ms" options) Int64.of_string_opt))
     ?output_format:
       (Option.bind (option_value "output" options) Output_mode.of_string)
@@ -238,13 +238,7 @@ let stdin_required_for_show_id argv =
   && Option.is_none (option_value "id" options)
 
 let read_stdin_all () =
-  let buffer = Buffer.create 128 in
-  (try
-     while true do
-       Buffer.add_char buffer (input_char stdin)
-     done
-   with End_of_file -> ());
-  Buffer.contents buffer
+  Cli_unix.read_stdin_all ()
 
 let group_help_path registry path =
   let is_prefix prefix path =

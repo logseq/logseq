@@ -8,10 +8,10 @@ type t = {
   title : string option;
   kind : kind;
   tags : Cli_primitive.keyword list;
-  created_at : Ptime.t option;
-  updated_at : Ptime.t option;
-  deleted_at : Ptime.t option;
-  raw : Edn_ocaml.any;
+  created_at : Js.Date.t option;
+  updated_at : Js.Date.t option;
+  deleted_at : Js.Date.t option;
+  raw : Melange_edn.any;
 }
 
 let of_value raw =

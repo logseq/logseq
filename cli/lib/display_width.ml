@@ -65,7 +65,7 @@ let take text max_width =
   in
   if max_width <= 0 then "" else loop 0 0
 
-let ellipsis = "…"
+let ellipsis = Cli_platform.Symbols.ellipsis
 
 let truncate text max_width =
   let max_width = max 1 max_width in
