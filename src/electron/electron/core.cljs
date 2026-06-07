@@ -413,16 +413,104 @@
       :log-info! logger/info
       :log-warn! logger/warn})))
 
+(defn- setup-devtools-extension! []
+  (when-let [^js devtoolsInstaller (and dev? (js/require "electron-devtools-installer"))]
+    (-> (.default devtoolsInstaller (.-REACT_DEVELOPER_TOOLS devtoolsInstaller))
+        (.then #(js/console.log "Added Extension:" (.-REACT_DEVELOPER_TOOLS devtoolsInstaller))))))
+
+(defn- <stop-db-workers!
+  []
+  (-> (try
+        (handler/stop-all-db-workers!)
+        (catch :default e
+          (logger/warn :electron/stop-db-workers-failed e)
+          (p/resolved nil)))
+      (p/catch
+       (fn [e]
+         (logger/warn :electron/stop-db-workers-failed e)))))
+
+(defn- register-reloadable-effects!
+  [^js app' ^js win]
+  (vreset! *setup-fn
+           (fn []
+             (let [dispose-fns (volatile! [])
+                   stop-embedding! (volatile! nil)
+                   add-dispose! (fn [f]
+                                  (when f
+                                    (vswap! dispose-fns conj f))
+                                  f)]
+               (try
+                 (add-dispose! (setup-updater! win))
+                 (add-dispose! (setup-app-manager! win))
+                 (add-dispose! (handler/set-ipc-handler! win))
+                 (add-dispose! (server/setup! win))
+                 (when (cfgs/semantic-search-enabled?)
+                   (vreset! stop-embedding! (embedding-server/setup! app')))
+                 (add-dispose! (exceptions/setup-exception-listeners!))
+
+                 (vreset! *teardown-fn
+                          (fn []
+                            (let [fns @dispose-fns
+                                  stop-embedding-fn @stop-embedding!]
+                              (vreset! dispose-fns [])
+                              (vreset! stop-embedding! nil)
+                              (-> (<stop-db-workers!)
+                                  (p/finally
+                                    (fn []
+                                      (run-dispose-fns! fns)
+                                      (when stop-embedding-fn
+                                        (stop-embedding-fn))))))))
+                 (catch :default e
+                   (run-dispose-fns! @dispose-fns)
+                   (when-let [stop-embedding! @stop-embedding!]
+                     (stop-embedding!))
+                   (vreset! *teardown-fn nil)
+                   (throw e)))))))
+
+(defn- setup-main-window-close-listener!
+  [^js win]
+  (.on win "close"
+       (fn [e]
+         (when @*quit-dirty? ;; when not updating
+           (.preventDefault e)
+           (let [windows (win/get-all-windows)
+                 window @*win
+                 multiple-windows? (> (count windows) 1)]
+             (cond
+               (or multiple-windows? (not mac?) @win/*quitting?)
+               (when window
+                 (win/close-handler win e)
+                 (reset! *win nil))
+
+               (and mac? (not multiple-windows?))
+               ;; Just hiding - don't do any actual closing operation
+               (do (.preventDefault ^js/Event e)
+                   (if (and mac? (.isFullScreen win))
+                     (do (.once win "leave-full-screen" #(.hide win))
+                         (.setFullScreen win false))
+                     (.hide win)))
+
+               :else
+               nil))))))
+
+(defn- setup-app-window-lifecycle-listeners!
+  [^js app' ^js win]
+  (setup-main-window-close-listener! win)
+  (.on app' "before-quit"
+       (fn [_e]
+         (reset! win/*quitting? true)
+         (-> (handler/stop-all-db-workers!)
+             (p/finally
+               (fn []
+                 (embedding-server/stop!))))))
+  (.on app' "activate" #(when @*win (.show win))))
+
 (defn- on-app-ready!
   [^js app']
   (.on app' "ready"
        (fn []
          (logger/info (str "Logseq App(" (.getVersion app') ") Starting... "))
-
-         ;; Add React developer tool
-         (when-let [^js devtoolsInstaller (and dev? (js/require "electron-devtools-installer"))]
-           (-> (.default devtoolsInstaller (.-REACT_DEVELOPER_TOOLS devtoolsInstaller))
-               (.then #(js/console.log "Added Extension:" (.-REACT_DEVELOPER_TOOLS devtoolsInstaller)))))
+         (setup-devtools-extension!)
 
          (let [_ (setup-interceptor! app')
                ^js win (win/create-main-window!)
@@ -439,83 +527,12 @@
            (handle-initial-deeplink! win)
            (maybe-warn-wrong-release!)
 
-           (vreset! *setup-fn
-                    (fn []
-                      (let [dispose-fns (volatile! [])
-                            stop-embedding! (volatile! nil)
-                            add-dispose! (fn [f]
-                                           (when f
-                                             (vswap! dispose-fns conj f))
-                                           f)]
-                        (try
-                          (add-dispose! (setup-updater! win))
-                          (add-dispose! (setup-app-manager! win))
-                          (add-dispose! (handler/set-ipc-handler! win))
-                          (add-dispose! (server/setup! win))
-                          (when (cfgs/semantic-search-enabled?)
-                            (vreset! stop-embedding! (embedding-server/setup! app')))
-                          (add-dispose! (exceptions/setup-exception-listeners!))
-
-                          (vreset! *teardown-fn
-                                   (fn []
-                                     (let [fns @dispose-fns
-                                           stop-embedding-fn @stop-embedding!]
-                                       (vreset! dispose-fns [])
-                                       (vreset! stop-embedding! nil)
-                                       (-> (try
-                                             (handler/stop-all-db-workers!)
-                                             (catch :default e
-                                               (logger/warn :electron/stop-db-workers-failed e)
-                                               (p/resolved nil)))
-                                           (p/catch
-                                            (fn [e]
-                                              (logger/warn :electron/stop-db-workers-failed e)))
-                                           (p/finally
-                                             (fn []
-                                               (run-dispose-fns! fns)
-                                               (when stop-embedding-fn
-                                                 (stop-embedding-fn))))))))
-                          (catch :default e
-                            (run-dispose-fns! @dispose-fns)
-                            (when-let [stop-embedding! @stop-embedding!]
-                              (stop-embedding!))
-                            (vreset! *teardown-fn nil)
-                            (throw e))))))
+           (register-reloadable-effects! app' win)
 
            ;; setup effects
            (@*setup-fn)
 
-           ;; main window events
-           (.on win "close" (fn [e]
-                              (when @*quit-dirty? ;; when not updating
-                                (.preventDefault e)
-
-                                (let [windows (win/get-all-windows)
-                                      window @*win
-                                      multiple-windows? (> (count windows) 1)]
-                                  (cond
-                                    (or multiple-windows? (not mac?) @win/*quitting?)
-                                    (when window
-                                      (win/close-handler win e)
-                                      (reset! *win nil))
-
-                                    (and mac? (not multiple-windows?))
-                                        ;; Just hiding - don't do any actual closing operation
-                                    (do (.preventDefault ^js/Event e)
-                                        (if (and mac? (.isFullScreen win))
-                                          (do (.once win "leave-full-screen" #(.hide win))
-                                              (.setFullScreen win false))
-                                          (.hide win)))
-                                    :else
-                                    nil)))))
-           (.on app' "before-quit" (fn [_e]
-                                     (reset! win/*quitting? true)
-                                     (-> (handler/stop-all-db-workers!)
-                                         (p/finally
-                                           (fn []
-                                             (embedding-server/stop!))))))
-
-           (.on app' "activate" #(when @*win (.show win)))))))
+           (setup-app-window-lifecycle-listeners! app' win)))))
 
 (defn main []
   (if-not (.requestSingleInstanceLock app)
