@@ -25,6 +25,8 @@
    :options ["--fix"
              "--type"
              "--file"
+             "--edn-options"
+             "--pretty-print"
              "--input"
              "--name"
              "--src"

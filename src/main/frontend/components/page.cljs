@@ -496,8 +496,7 @@
                 (recycle/recycle-page page {:class "ls-recycle-page-title-compact"})
                 [:div.ls-page-blocks
                  {:style {:margin-left (if (util/mobile?) 0 -20)}
-                  :class (when-not (or sidebar? (util/capacitor?))
-                           "mt-4")}
+                  :class (when-not (or sidebar? (util/capacitor?)) "mt-4")}
                  (page-blocks-cp page (merge option {:sidebar? sidebar?
                                                      :on-page-blocks-rendered #(when-not (= linked-refs-blocks-ready-page-id page-id)
                                                                                  (reset! linked-refs-blocks-ready-page-id* page-id))

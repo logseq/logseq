@@ -68,7 +68,8 @@
       (is (true? (:ok? result)))
       (is (= "graph export" (get-in result [:action :selector])))
       (is (= ["graph export"] (get-in result [:action :matched-commands])))
-      (is (= ["logseq graph export --graph my-graph --type edn --file /tmp/my-graph.edn --include-timestamps --exclude-built-in-pages --exclude-namespaces user,project"
+      (is (= ["logseq graph export --graph my-graph --type edn --file /tmp/my-graph.edn"
+              "logseq graph export --graph my-graph --type edn --file /tmp/my-graph.edn --edn-options '{:export-type :graph-human :include-timestamps? true :exclude-built-in-pages? true :exclude-namespaces #{:user :project}}' --pretty-print"
               "logseq graph export --graph my-graph --type sqlite --file /tmp/my-graph.sqlite"]
              examples))))
 
