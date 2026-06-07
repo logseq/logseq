@@ -2,7 +2,6 @@
   (:require ["/electron/utils" :as js-utils]
             ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
             ["fs-extra" :as fs]
-
             ["os" :as os]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
@@ -40,7 +39,44 @@
 
 (defonce *setup-fn (volatile! nil))
 (defonce *teardown-fn (volatile! nil))
+(defonce *lifecycle-op (volatile! (p/resolved nil)))
 (defonce *quit-dirty? (volatile! true))
+
+(defn- run-dispose-fns!
+  [fns]
+  (doseq [f (reverse (remove nil? fns))]
+    (try
+      (f)
+      (catch :default e
+        (logger/warn :electron/dispose-failed e)))))
+
+(defn- <run-current-teardown!
+  []
+  (if-let [teardown! @*teardown-fn]
+    (do
+      (vreset! *teardown-fn nil)
+      (try
+        (-> (or (teardown!) (p/resolved nil))
+            (p/catch (fn [e]
+                       (logger/warn :electron/teardown-failed e))))
+        (catch :default e
+          (logger/warn :electron/teardown-failed e)
+          (p/resolved nil))))
+    (p/resolved nil)))
+
+(defn- <enqueue-lifecycle!
+  [f]
+  (let [op (-> @*lifecycle-op
+               (p/catch (fn [_] nil))
+               (p/then (fn [_] (f))))]
+    (vreset! *lifecycle-op op)
+    op))
+
+(defn- replace-ipc-handler!
+  [channel listener]
+  (.removeHandler ipcMain channel)
+  (.handle ipcMain channel listener)
+  #(.removeHandler ipcMain channel))
 
 (defn setup-updater! [^js win]
   ;; manual/auto updater
@@ -158,47 +194,51 @@
         call-win-channel "call-main-win"
         export-publish-assets "export-publish-assets"
         quit-dirty-state "set-quit-dirty-state"
-        clear-win-effects! (win/setup-window-listeners! win)]
-
-    (doto ipcMain
-      (.handle quit-dirty-state
-               (fn [_ dirty?]
-                 (vreset! *quit-dirty? (boolean dirty?))))
-
-      (.handle toggle-win-channel
-               (fn [_ toggle-min?]
-                 (when-let [active-win (.getFocusedWindow BrowserWindow)]
-                   (if toggle-min?
-                     (if (.isMinimized active-win)
-                       (.restore active-win)
-                       (.minimize active-win))
-                     (if (.isMaximized active-win)
-                       (.unmaximize active-win)
-                       (.maximize active-win))))))
-
-      (.handle export-publish-assets handle-export-publish-assets)
-
-      (.handle call-app-channel
-               (fn [_ type & args]
-                 (try
-                   (js-invoke app type args)
-                   (catch :default e
-                     (logger/error (str call-app-channel " " e))))))
-
-      (.handle call-win-channel
-               (fn [^js e type & args]
-                 (let [win (get-win-from-sender e)]
-                   (try
-                     (js-invoke win type args)
-                     (catch :default e
-                       (logger/error (str call-win-channel " " e))))))))
-
-    #(do (clear-win-effects!)
-         (.removeHandler ipcMain toggle-win-channel)
-         (.removeHandler ipcMain export-publish-assets)
-         (.removeHandler ipcMain quit-dirty-state)
-         (.removeHandler ipcMain call-app-channel)
-         (.removeHandler ipcMain call-win-channel))))
+        clear-win-effects! (win/setup-window-listeners! win)
+        dispose-fns (volatile! [])
+        add-dispose! (fn [f]
+                       (vswap! dispose-fns conj f)
+                       f)]
+    (try
+      (add-dispose!
+       (replace-ipc-handler! quit-dirty-state
+                             (fn [_ dirty?]
+                               (vreset! *quit-dirty? (boolean dirty?)))))
+      (add-dispose!
+       (replace-ipc-handler! toggle-win-channel
+                             (fn [_ toggle-min?]
+                               (when-let [active-win (.getFocusedWindow BrowserWindow)]
+                                 (if toggle-min?
+                                   (if (.isMinimized active-win)
+                                     (.restore active-win)
+                                     (.minimize active-win))
+                                   (if (.isMaximized active-win)
+                                     (.unmaximize active-win)
+                                     (.maximize active-win)))))))
+      (add-dispose!
+       (replace-ipc-handler! export-publish-assets handle-export-publish-assets))
+      (add-dispose!
+       (replace-ipc-handler! call-app-channel
+                             (fn [_ type & args]
+                               (try
+                                 (js-invoke app type args)
+                                 (catch :default e
+                                   (logger/error (str call-app-channel " " e)))))))
+      (add-dispose!
+       (replace-ipc-handler! call-win-channel
+                             (fn [^js e type & args]
+                               (let [win (get-win-from-sender e)]
+                                 (try
+                                   (js-invoke win type args)
+                                   (catch :default e
+                                     (logger/error (str call-win-channel " " e))))))))
+      #(do
+         (run-dispose-fns! @dispose-fns)
+         (clear-win-effects!))
+      (catch :default e
+        (run-dispose-fns! @dispose-fns)
+        (clear-win-effects!)
+        (throw e)))))
 
 (defn- set-app-menu! []
   (let [about-fn (fn []
@@ -384,7 +424,7 @@
            (-> (.default devtoolsInstaller (.-REACT_DEVELOPER_TOOLS devtoolsInstaller))
                (.then #(js/console.log "Added Extension:" (.-REACT_DEVELOPER_TOOLS devtoolsInstaller)))))
 
-         (let [t0 (setup-interceptor! app')
+         (let [_ (setup-interceptor! app')
                ^js win (win/create-main-window!)
                _ (reset! *win win)]
 
@@ -401,20 +441,46 @@
 
            (vreset! *setup-fn
                     (fn []
-                      (let [t1 (setup-updater! win)
-                            t2 (setup-app-manager! win)
-                            t3 (handler/set-ipc-handler! win)
-                            t4 (server/setup! win)
-                            t5 (when (cfgs/semantic-search-enabled?)
-                                 (embedding-server/setup! app'))
-                            tt (exceptions/setup-exception-listeners!)]
+                      (let [dispose-fns (volatile! [])
+                            stop-embedding! (volatile! nil)
+                            add-dispose! (fn [f]
+                                           (when f
+                                             (vswap! dispose-fns conj f))
+                                           f)]
+                        (try
+                          (add-dispose! (setup-updater! win))
+                          (add-dispose! (setup-app-manager! win))
+                          (add-dispose! (handler/set-ipc-handler! win))
+                          (add-dispose! (server/setup! win))
+                          (when (cfgs/semantic-search-enabled?)
+                            (vreset! stop-embedding! (embedding-server/setup! app')))
+                          (add-dispose! (exceptions/setup-exception-listeners!))
 
-                        (vreset! *teardown-fn
-                                 #(-> (handler/stop-all-db-workers!)
-                                      (p/finally
-                                        (fn []
-                                          (doseq [f [t0 t1 t2 t3 t4 t5 tt]]
-                                            (and f (f))))))))))
+                          (vreset! *teardown-fn
+                                   (fn []
+                                     (let [fns @dispose-fns
+                                           stop-embedding-fn @stop-embedding!]
+                                       (vreset! dispose-fns [])
+                                       (vreset! stop-embedding! nil)
+                                       (-> (try
+                                             (handler/stop-all-db-workers!)
+                                             (catch :default e
+                                               (logger/warn :electron/stop-db-workers-failed e)
+                                               (p/resolved nil)))
+                                           (p/catch
+                                            (fn [e]
+                                              (logger/warn :electron/stop-db-workers-failed e)))
+                                           (p/finally
+                                             (fn []
+                                               (run-dispose-fns! fns)
+                                               (when stop-embedding-fn
+                                                 (stop-embedding-fn))))))))
+                          (catch :default e
+                            (run-dispose-fns! @dispose-fns)
+                            (when-let [stop-embedding! @stop-embedding!]
+                              (stop-embedding!))
+                            (vreset! *teardown-fn nil)
+                            (throw e))))))
 
            ;; setup effects
            (@*setup-fn)
@@ -493,8 +559,12 @@
 
 (defn start []
   (logger/debug "Main - start")
-  (when @*setup-fn (@*setup-fn)))
+  (<enqueue-lifecycle!
+   #(p/then (<run-current-teardown!)
+            (fn [_]
+              (when @*setup-fn
+                (@*setup-fn))))))
 
 (defn stop []
   (logger/debug "Main - stop")
-  (when @*teardown-fn (@*teardown-fn)))
+  (<enqueue-lifecycle! <run-current-teardown!))

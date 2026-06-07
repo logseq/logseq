@@ -162,6 +162,30 @@
             (.preventDefault e)
             (open-default-app! url open))
 
+          persist-zoom-level-handler
+          (fn []
+            (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents)))
+
+          restore-zoom-level-handler
+          (fn []
+            (.send web-contents "restore-zoom-level"))
+
+          enter-full-screen-handler
+          (fn []
+            (.send web-contents "full-screen" "enter"))
+
+          leave-full-screen-handler
+          (fn []
+            (.send web-contents "full-screen" "leave"))
+
+          maximize-handler
+          (fn []
+            (.send web-contents "maximize" true))
+
+          unmaximize-handler
+          (fn []
+            (.send web-contents "maximize" false))
+
           context-menu-handler
           (context-menu/setup-context-menu! win)
 
@@ -196,22 +220,27 @@
 
       (doto web-contents
         (.on "will-navigate" will-navigate-handler)
-        (.on "did-start-navigation" #(.send web-contents "persist-zoom-level" (.getZoomLevel web-contents)))
-        (.on "page-title-updated" #(.send web-contents "restore-zoom-level"))
+        (.on "did-start-navigation" persist-zoom-level-handler)
+        (.on "page-title-updated" restore-zoom-level-handler)
         (.setWindowOpenHandler window-open-handler))
 
       (doto win
-        (.on "enter-full-screen" #(.send web-contents "full-screen" "enter"))
-        (.on "leave-full-screen" #(.send web-contents "full-screen" "leave"))
-        (.on "maximize" #(.send web-contents "maximize" true))
-        (.on "unmaximize" #(.send web-contents "maximize" false)))
+        (.on "enter-full-screen" enter-full-screen-handler)
+        (.on "leave-full-screen" leave-full-screen-handler)
+        (.on "maximize" maximize-handler)
+        (.on "unmaximize" unmaximize-handler))
 
       ;; clear
       (fn []
         (doto web-contents
           (.off "context-menu" context-menu-handler)
-          (.off "will-navigate" will-navigate-handler))
+          (.off "will-navigate" will-navigate-handler)
+          (.off "did-start-navigation" persist-zoom-level-handler)
+          (.off "page-title-updated" restore-zoom-level-handler))
 
-        (.off win "enter-full-screen")
-        (.off win "leave-full-screen")))
+        (doto win
+          (.off "enter-full-screen" enter-full-screen-handler)
+          (.off "leave-full-screen" leave-full-screen-handler)
+          (.off "maximize" maximize-handler)
+          (.off "unmaximize" unmaximize-handler))))
     #()))
