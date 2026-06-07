@@ -143,7 +143,7 @@
 
 (defn setup-window-listeners!
   [^js win]
-  (when win
+  (if win
     (let [web-contents (. win -webContents)
           open-external!
           (fn [url]
