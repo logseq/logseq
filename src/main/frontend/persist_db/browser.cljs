@@ -45,6 +45,12 @@
                                           :visible? false)))))
            1500)))
 
+(defn- maybe-notify-search-index-rebuilt!
+  [repo]
+  (when (true? (get-in @state/state [:search/index-build-notify-repos repo]))
+    (state/set-state! [:search/index-build-notify-repos repo] false)
+    (notification/show! (t :search/indices-rebuilt-success) :success)))
+
 (def-thread-api :thread-api/search-index-build-progress
   [repo {:keys [build-id status progress processed total]}]
   (let [prev-state (get @state/state :search/index-build)
@@ -92,6 +98,7 @@
                                      :processed (or processed 0)
                                      :total (or total 0)}
                               build-id (assoc :build-id build-id)))
+          (maybe-notify-search-index-rebuilt! repo)
           (hide-search-index-progress-later! repo build-id))
 
         nil))
