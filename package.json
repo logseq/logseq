@@ -154,6 +154,7 @@
     "@sqlite.org/sqlite-wasm": "3.51.2-build9",
     "@tabler/icons-react": "3.44.0",
     "bignumber.js": "^9.3.1",
+    "buffer": "^6.0.3",
     "chrono-node": "2.9.0",
     "codemirror": "5.65.18",
     "comlink": "^4.4.2",
