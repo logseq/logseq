@@ -1,6 +1,9 @@
 type 'a term = 'a
 type 'a cmd = { name : string; term : 'a term }
-type 'a conv = (string -> ('a, [ `Msg of string ]) result) * (Format.formatter -> 'a -> unit)
+
+type 'a conv =
+  (string -> ('a, [ `Msg of string ]) result) * (Format.formatter -> 'a -> unit)
+
 type request_term = Cli_request.t term
 type request_cmd = Cli_request.t cmd
 
@@ -80,12 +83,7 @@ let make_app ?version:_ nodes =
     Cli_request.make ~globals:(Global_opts.create ()) ~path:[]
       ~command:Cli_request.Version ~raw_args:[]
   in
-  ({
-     root = { name = "logseq"; term = dummy };
-     registry;
-     leaves;
-   }
-    : app)
+  ({ root = { name = "logseq"; term = dummy }; registry; leaves } : app)
 
 let has_help_flag argv =
   List.exists (fun token -> token = "--help" || token = "-h") argv

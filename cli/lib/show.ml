@@ -817,7 +817,9 @@ let label_of value =
     | Some suffix -> base ^ " " ^ suffix
     | None -> base
   in
-  match linked_display value with true -> linked_arrow ^ label | false -> label
+  match linked_display value with
+  | true -> linked_arrow ^ label
+  | false -> label
 
 let children_of value =
   Option.value
@@ -1179,8 +1181,7 @@ let render_tree_text_value ?(metadata = empty_render_metadata) root =
           else Cli_platform.Symbols.tree_middle
         in
         let next_prefix =
-          prefix
-          ^ if last_child then "    " else Cli_platform.Symbols.tree_pipe
+          prefix ^ if last_child then "    " else Cli_platform.Symbols.tree_pipe
         in
         lines :=
           append_label_lines !lines ~id:(id_text child) ~prefix ~branch

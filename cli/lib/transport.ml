@@ -99,8 +99,8 @@ let find_substring_from ~needle haystack start =
   let haystack_len = String.length haystack in
   let rec matches needle_index haystack_index =
     needle_index = needle_len
-    || (haystack.[haystack_index] = needle.[needle_index]
-       && matches (needle_index + 1) (haystack_index + 1))
+    || haystack.[haystack_index] = needle.[needle_index]
+       && matches (needle_index + 1) (haystack_index + 1)
   in
   let rec loop idx =
     match String.index_from_opt haystack idx needle.[0] with
@@ -171,9 +171,7 @@ let http_error_message status body =
   | None ->
       Option.value (json_string_field_from "message" body) ~default:fallback
 
-let response_status response =
-  Fetch.Response.status response
-
+let response_status response = Fetch.Response.status response
 let success_status status = status >= 200 && status <= 299
 
 let request ?timeout_span method_ uri ~headers ~body =
@@ -369,8 +367,8 @@ let invoke config method_ args =
 let repo_value repo = Edn_util.string (Cli_primitive.string_of_repo repo)
 
 let thread_api_apply_outliner_ops config ~(repo : Cli_primitive.repo)
-    ~(ops : Melange_edn.vector Melange_edn.t) ~(options : Melange_edn.map Melange_edn.t)
-    =
+    ~(ops : Melange_edn.vector Melange_edn.t)
+    ~(options : Melange_edn.map Melange_edn.t) =
   invoke config
     (thread_api_method "apply-outliner-ops")
     [ repo_value repo; Edn_util.any ops; Edn_util.any options ]
@@ -496,7 +494,8 @@ let thread_api_set_db_sync_config config ~config:sync_config =
     (thread_api_method "set-db-sync-config")
     [ Edn_util.any sync_config ]
 
-let thread_api_sync_app_state config ~(auth_state : Melange_edn.map Melange_edn.t) =
+let thread_api_sync_app_state config
+    ~(auth_state : Melange_edn.map Melange_edn.t) =
   invoke config (thread_api_method "sync-app-state") [ Edn_util.any auth_state ]
 
 let thread_api_validate_db config ~(repo : Cli_primitive.repo)
@@ -649,11 +648,8 @@ let normalize_format format =
   let format = Edn_util.keyword_to_string format |> String.trim in
   if starts_with ~prefix:":" format then format else ":" ^ format
 
-let write_file_binary path content =
-  Cli_unix.write_binary_file path content
-
-let read_file_binary path =
-  Bytes.of_string (Cli_unix.read_binary_file path)
+let write_file_binary path content = Cli_unix.write_binary_file path content
+let read_file_binary path = Bytes.of_string (Cli_unix.read_binary_file path)
 
 let bytes_of_output_data value =
   match (Edn_util.as_bytes value, Edn_util.as_string value) with
