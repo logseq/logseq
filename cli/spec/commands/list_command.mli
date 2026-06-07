@@ -15,8 +15,8 @@ type page_opts = {
   include_journal : bool option;
   journal_only : bool;
   include_hidden : bool;
-  updated_after : Ptime.t option;
-  created_after : Ptime.t option;
+  updated_after : Time.date option;
+  created_after : Time.date option;
 }
 
 type tag_opts = {
@@ -65,7 +65,7 @@ type action = {
   command : Command_id.t;
   repo : Cli_primitive.repo;
   graph : Cli_primitive.graph;
-  options : Edn_ocaml.any;
+  options : Melange_edn.any;
 }
 
 type list_result = { items : Entity.t list }

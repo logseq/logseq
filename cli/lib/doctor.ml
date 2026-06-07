@@ -9,8 +9,8 @@ type check = {
   code : Cli_primitive.keyword option;
   message : string;
   path : Cli_primitive.path option;
-  servers : Edn_ocaml.any list;
-  raw : Edn_ocaml.any option;
+  servers : Melange_edn.any list;
+  raw : Melange_edn.any option;
 }
 
 type report = { status : check_status; checks : check list }
@@ -61,7 +61,7 @@ let check_db_worker_script (Doctor { script_path }) =
     Option.value script_path
       ~default:(Server_runtime.db_worker_runtime_script_path ())
   in
-  if not (Sys.file_exists path) then
+  if not (Cli_unix.file_exists path) then
     {
       id = Edn_util.keyword_t "db-worker-script";
       status = Error;
@@ -71,7 +71,7 @@ let check_db_worker_script (Doctor { script_path }) =
       servers = [];
       raw = None;
     }
-  else if Sys.is_directory path then
+  else if Cli_unix.is_directory path then
     {
       id = Edn_util.keyword_t "db-worker-script";
       status = Error;
@@ -83,8 +83,7 @@ let check_db_worker_script (Doctor { script_path }) =
     }
   else
     try
-      let ic = open_in_bin path in
-      close_in_noerr ic;
+      ignore (Cli_unix.read_text_file path);
       {
         id = Edn_util.keyword_t "db-worker-script";
         status = Ok;
@@ -108,17 +107,15 @@ let check_db_worker_script (Doctor { script_path }) =
       }
 
 let ensure_dir path =
-  if Sys.file_exists path then () else Cli_unix.mkdir path 0o755
+  if Cli_unix.file_exists path then () else Cli_unix.mkdir path 0o755
 
 let check_root_dir config =
   let path = config.Cli_config.root_dir in
   try
     ensure_dir path;
     let probe = Filename.concat path ".logseq-cli-doctor-check" in
-    let oc = open_out probe in
-    output_string oc "ok";
-    close_out_noerr oc;
-    Sys.remove probe;
+    Cli_unix.write_text_file probe "ok";
+    Cli_unix.remove_tree probe;
     {
       id = Edn_util.keyword_t "root-dir";
       status = Ok;

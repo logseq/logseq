@@ -87,6 +87,6 @@ val string_of_import_type : import_type -> string
 
 include Command_spec.S with type parsed := parsed and type action := action
 
-val action_context : action -> Edn_ocaml.map Edn_ocaml.t
+val action_context : action -> Melange_edn.map Melange_edn.t
 val repo : action -> Cli_primitive.repo option
 val graph : action -> Cli_primitive.graph option

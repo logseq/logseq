@@ -1,4 +1,4 @@
-type keyword = Edn_ocaml.keyword Edn_ocaml.t
+type keyword = Melange_edn.keyword Melange_edn.t
 type graph = string
 type repo = string
 type db_id = int64
@@ -34,12 +34,12 @@ let non_empty s =
 
 let normalize_keyword (kw : keyword) =
   match kw with
-  | Edn_ocaml.Keyword kw -> Edn_ocaml.Keyword (Edn_util.keyword_name kw)
+  | Melange_edn.Keyword kw -> Melange_edn.Keyword (Edn_util.keyword_name kw)
   | _ -> assert false
 
 let keyword_name kw =
   match normalize_keyword kw with
-  | Edn_ocaml.Keyword kw -> (
+  | Melange_edn.Keyword kw -> (
       match String.rindex_opt kw '/' with
       | Some i -> String.sub kw (i + 1) (String.length kw - i - 1)
       | None -> String.trim kw)
@@ -47,7 +47,7 @@ let keyword_name kw =
 
 let keyword_namespace kw =
   match normalize_keyword kw with
-  | Edn_ocaml.Keyword kw -> (
+  | Melange_edn.Keyword kw -> (
       match String.rindex_opt kw '/' with
       | Some i -> Some (":" ^ String.sub kw 0 i)
       | None -> None)

@@ -1,9 +1,9 @@
 type env = string -> string option
 
 type defaults = {
-  timeout_span : Ptime.span;
-  login_timeout_span : Ptime.span;
-  logout_timeout_span : Ptime.span;
+  timeout_span : float;
+  login_timeout_span : float;
+  logout_timeout_span : float;
   list_title_max_display_width : int;
   root_dir : Cli_primitive.path;
   ws_url : Cli_primitive.url;
@@ -15,9 +15,9 @@ type t = {
   repo : Cli_primitive.repo option;
   root_dir : Cli_primitive.path;
   config_path : Cli_primitive.path;
-  timeout_span : Ptime.span;
-  login_timeout_span : Ptime.span;
-  logout_timeout_span : Ptime.span;
+  timeout_span : float;
+  login_timeout_span : float;
+  logout_timeout_span : float;
   list_title_max_display_width : int;
   output_format : Output.Mode.packed option;
   verbose : bool;
@@ -31,7 +31,7 @@ type t = {
   base_url : Cli_primitive.url option;
   owner_source : Cli_primitive.owner_source;
   project_dir : Cli_primitive.path option;
-  raw_file_config : Edn_ocaml.any option;
+  raw_file_config : Melange_edn.any option;
   profile_session : Profile_types.session option;
 }
 
@@ -45,9 +45,9 @@ let default_config_path root_dir = Filename.concat root_dir "cli.edn"
 
 let defaults () =
   {
-    timeout_span = Ptime_util.span_of_ms 10_000L;
-    login_timeout_span = Ptime_util.span_of_ms 300_000L;
-    logout_timeout_span = Ptime_util.span_of_ms 120_000L;
+    timeout_span = Time.span_of_ms 10_000L;
+    login_timeout_span = Time.span_of_ms 300_000L;
+    logout_timeout_span = Time.span_of_ms 120_000L;
     list_title_max_display_width = 40;
     root_dir = default_root_dir ();
     ws_url = "wss://api.logseq.io/sync/%s";
@@ -84,33 +84,14 @@ let repo_to_graph repo =
 
 let value_of_edn edn = edn
 
-let edn_string_escape value =
-  let buffer = Buffer.create (String.length value + 8) in
-  String.iter
-    (function
-      | '"' -> Buffer.add_string buffer "\\\""
-      | '\\' -> Buffer.add_string buffer "\\\\"
-      | '\n' -> Buffer.add_string buffer "\\n"
-      | '\r' -> Buffer.add_string buffer "\\r"
-      | '\t' -> Buffer.add_string buffer "\\t"
-      | c -> Buffer.add_char buffer c)
-    value;
-  Buffer.contents buffer
+let edn_of_value = Melange_edn.to_edn_string
 
-let edn_of_value = Edn_ocaml.to_edn_string
-
-let read_file path =
-  let ic = open_in_bin path in
-  Fun.protect
-    ~finally:(fun () -> close_in_noerr ic)
-    (fun () ->
-      let len = in_channel_length ic in
-      really_input_string ic len)
+let read_file = Cli_unix.read_text_file
 
 let read_config_file path =
-  if not (Sys.file_exists path) then Ok None
+  if not (Cli_unix.file_exists path) then Ok None
   else
-    try Ok (Some (Edn_ocaml.of_edn_string (read_file path) |> value_of_edn))
+    try Ok (Some (Melange_edn.of_edn_string (read_file path) |> value_of_edn))
     with exn ->
       Error
         (Error.make
@@ -124,7 +105,7 @@ let current_graph_path root_dir = Filename.concat root_dir "current-graph"
 
 let read_current_graph root_dir =
   let path = current_graph_path root_dir in
-  if not (Sys.file_exists path) then None
+  if not (Cli_unix.file_exists path) then None
   else
     try
       let graph = String.trim (read_file path) in
@@ -206,17 +187,14 @@ let assoc_opt key value fields =
 let map_fields value = Option.value (Edn_util.as_map value) ~default:[]
 
 let rec mkdir_p path =
-  if path = "" || path = Filename.dirname path || Sys.file_exists path then ()
+  if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then ()
   else (
     mkdir_p (Filename.dirname path);
     Cli_unix.mkdir path 0o755)
 
 let write_config_file path value =
   mkdir_p (Filename.dirname path);
-  let oc = open_out_bin path in
-  Fun.protect
-    ~finally:(fun () -> close_out_noerr oc)
-    (fun () -> output_string oc (edn_of_value value ^ "\n"))
+  Cli_unix.write_text_file path (edn_of_value value ^ "\n")
 
 let pick_graph config globals =
   match globals.Global_opts.graph with Some _ as g -> g | None -> config.graph
@@ -240,7 +218,7 @@ let value_output key value =
   Option.bind (value_string key value) (fun value ->
       Output.Mode.of_string (normalize_output_string value))
 
-let edn_value_text value = Edn_ocaml.to_edn_string value
+let edn_value_text value = Melange_edn.to_edn_string value
 
 let validate_int64_config_value ~source key value =
   match Edn_util.get value key with
@@ -302,7 +280,7 @@ let first_some values = List.find_map (fun value -> value) values
 let positive_or_default value default =
   match value with Some value when value > 0 -> value | _ -> default
 
-let span_option_of_ms value = Option.map Ptime_util.span_of_ms value
+let span_option_of_ms value = Option.map Time.span_of_ms value
 
 let resolve ~(defaults : defaults) ~env (globals : Global_opts.t) =
   match checked_env_config env with

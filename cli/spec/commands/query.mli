@@ -1,7 +1,7 @@
 type input_spec = {
   name : string;
   optional : bool;
-  default : Edn_ocaml.any option;
+  default : Melange_edn.any option;
 }
 
 type source = Built_in | Custom
@@ -11,7 +11,7 @@ type query_entry = {
   source : source;
   doc : string option;
   inputs : input_spec list;
-  query : Edn_ocaml.any;
+  query : Melange_edn.any;
 }
 
 type opts = {
@@ -26,8 +26,8 @@ type action =
   | Run of {
       repo : Cli_primitive.repo;
       graph : Cli_primitive.graph;
-      query : Edn_ocaml.any;
-      inputs : Edn_ocaml.any list;
+      query : Melange_edn.any;
+      inputs : Melange_edn.any list;
       name : string option;
     }
   | List
@@ -36,11 +36,11 @@ val built_in_queries : query_entry list
 val normalize_query_name : string -> string option
 val list_queries : Cli_config.t -> query_entry list
 val find_query : Cli_config.t -> string -> query_entry option
-val validate_query : Edn_ocaml.any -> Edn_ocaml.any Error.build_result
+val validate_query : Melange_edn.any -> Melange_edn.any Error.build_result
 
 val normalize_inputs :
   query_entry option ->
-  Edn_ocaml.any list ->
-  Edn_ocaml.any list Error.build_result
+  Melange_edn.any list ->
+  Melange_edn.any list Error.build_result
 
 include Command_spec.S with type parsed := parsed and type action := action

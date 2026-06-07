@@ -1,59 +1,17 @@
 type invoke_config = {
   base_url : Cli_primitive.url;
-  timeout_span : Ptime.span;
+  timeout_span : float;
   profile_session : Profile_types.session option;
 }
 
 type event_type = Cli_primitive.keyword
-type event_payload = Edn_ocaml.any
+type event_payload = Melange_edn.any
 type event_subscription = { close : unit -> unit Cli_effect.t }
 
 let thread_api_method name = Edn_util.keyword_t (":thread-api/" ^ name)
 
-module Js_runtime = struct
-  type t
-
-  external string : string -> t = "caml_js_from_string"
-  external to_string : t -> string = "caml_js_to_string"
-  external variable : string -> t = "caml_js_var"
-  external get : 'a -> 'b -> 'c = "caml_js_get"
-  external fun_call : 'a -> t array -> 'b = "caml_js_fun_call"
-  external meth_call : 'a -> string -> t array -> 'b = "caml_js_meth_call"
-  external new_obj : 'a -> t array -> 'b = "caml_js_new"
-  external obj : (string * t) array -> t = "caml_js_object"
-  external callback : ('a -> 'b) -> t = "caml_js_wrap_callback"
-  external eval_string : string -> t = "caml_js_eval_string"
-  external inject : 'a -> t = "%identity"
-
-  let bool value =
-    fun_call
-      (eval_string "(function(value) { return value === 'true'; })")
-      [| string (if value then "true" else "false") |]
-
-  let to_bool value =
-    to_string
-      (fun_call
-         (eval_string "(function(value) { return value ? 'true' : 'false'; })")
-         [| inject value |])
-    = "true"
-end
-
 module T = Transit.Json
-module E = Edn_ocaml
-
-type parsed_url = { host : string; port : int; path : string }
-
-let js_backend () =
-  let executable = Sys.executable_name in
-  if
-    Filename.check_suffix executable ".wasm.js"
-    || Filename.check_suffix executable ".js"
-  then true
-  else
-    match Sys.backend_type with
-    | Native -> false
-    | Bytecode -> false
-    | Other _ -> true
+module E = Melange_edn
 
 let starts_with ~prefix value =
   let prefix_len = String.length prefix in
@@ -80,9 +38,6 @@ let strip_prefix prefix value =
 
 let transit_keyword_name keyword = strip_prefix ":" keyword
 
-let keyword_from_name name =
-  if starts_with ~prefix:":" name then name else ":" ^ name
-
 let symbol_name value =
   if starts_with ~prefix:"~$" value then
     Some (String.sub value 2 (String.length value - 2))
@@ -90,7 +45,7 @@ let symbol_name value =
 
 let rec transit_of_value value =
   match value with
-  | Edn_ocaml.Any Edn_ocaml.Nil -> T.Null
+  | Melange_edn.Any Melange_edn.Nil -> T.Null
   | Any (Bool value) -> T.Bool value
   | Any (Int value) -> (
       match Edn_util.int64_to_int_opt value with
@@ -139,76 +94,23 @@ let normalize_base_url base_url =
   then String.sub base_url 0 (String.length base_url - 1)
   else base_url
 
-let parse_http_url url =
-  let rest =
-    if starts_with ~prefix:"http://" url then
-      String.sub url 7 (String.length url - 7)
-    else if starts_with ~prefix:"https://" url then
-      invalid_arg "https transport is not implemented"
-    else invalid_arg ("unsupported url: " ^ url)
-  in
-  let host_port, path =
-    match String.index_opt rest '/' with
-    | Some idx ->
-        (String.sub rest 0 idx, String.sub rest idx (String.length rest - idx))
-    | None -> (rest, "/")
-  in
-  let host, port =
-    match String.rindex_opt host_port ':' with
-    | Some idx ->
-        let host = String.sub host_port 0 idx in
-        let port =
-          String.sub host_port (idx + 1) (String.length host_port - idx - 1)
-          |> int_of_string
-        in
-        (host, port)
-    | None -> (host_port, 80)
-  in
-  { host; port; path }
-
-let trim_cr value =
-  let len = String.length value in
-  if len > 0 && value.[len - 1] = '\r' then String.sub value 0 (len - 1)
-  else value
-
-let read_headers ic =
-  let rec loop acc =
-    let line = input_line ic |> trim_cr in
-    if line = "" then List.rev acc
-    else
-      match String.split_on_char ':' line with
-      | key :: rest ->
-          loop
-            (( String.lowercase_ascii (String.trim key),
-               String.trim (String.concat ":" rest) )
-            :: acc)
-      | [] -> loop acc
-  in
-  loop []
-
-let read_all ic =
-  let buffer = Buffer.create 256 in
-  (try
-     while true do
-       Buffer.add_char buffer (input_char ic)
-     done
-   with End_of_file -> ());
-  Buffer.contents buffer
-
-let parse_status line =
-  match String.split_on_char ' ' line with
-  | _http :: code :: _ -> int_of_string code
-  | _ -> invalid_arg ("invalid http response: " ^ line)
-
 let find_substring_from ~needle haystack start =
   let needle_len = String.length needle in
   let haystack_len = String.length haystack in
-  let rec loop idx =
-    if idx + needle_len > haystack_len then None
-    else if String.sub haystack idx needle_len = needle then Some idx
-    else loop (idx + 1)
+  let rec matches needle_index haystack_index =
+    needle_index = needle_len
+    || (haystack.[haystack_index] = needle.[needle_index]
+       && matches (needle_index + 1) (haystack_index + 1))
   in
-  loop start
+  let rec loop idx =
+    match String.index_from_opt haystack idx needle.[0] with
+    | None -> None
+    | Some idx ->
+        if idx + needle_len > haystack_len then None
+        else if matches 0 idx then Some idx
+        else loop (idx + 1)
+  in
+  if needle_len = 0 then Some start else loop start
 
 let parse_json_string_at text start =
   if start >= String.length text || text.[start] <> '"' then None
@@ -270,7 +172,7 @@ let http_error_message status body =
       Option.value (json_string_field_from "message" body) ~default:fallback
 
 let response_status response =
-  Cohttp.Response.status response |> Cohttp.Code.code_of_status
+  Fetch.Response.status response
 
 let success_status status = status >= 200 && status <= 299
 
@@ -278,12 +180,9 @@ let request ?timeout_span method_ uri ~headers ~body =
   Cli_effect.bind
     (Cli_platform.HTTP.request ?timeout_span method_ uri ~headers ~body)
     (fun (response, body) ->
-      Cli_effect.bind
-        (Cli_effect.of_lwt (Cohttp_lwt.Body.to_string body))
-        (fun body ->
-          let status = response_status response in
-          if success_status status then Cli_effect.pure (response, body)
-          else Cli_effect.error (Failure (http_error_message status body))))
+      let status = response_status response in
+      if success_status status then Cli_effect.pure (response, body)
+      else Cli_effect.error (Failure (http_error_message status body)))
 
 let method_name method_ =
   let method_ = Edn_util.keyword_to_string method_ |> String.trim in
@@ -458,20 +357,19 @@ let invoke config method_ args =
           match extract_json_string_field ~field:"resultTransit" body with
           | Some result_transit -> value_of_transit_string result_transit
           | None -> Edn_util.nil)
-        (request ~timeout_span:config.timeout_span `POST
-           (Uri.of_string (base_url ^ "/v1/invoke"))
+        (request ~timeout_span:config.timeout_span Fetch.Post
+           (base_url ^ "/v1/invoke")
            ~headers:
-             (Cohttp.Header.of_list
-                [
-                  ("Content-Type", "application/json");
-                  ("Accept", "application/json");
-                ])
-           ~body:(Cohttp_lwt.Body.of_string (invoke_body method_ args))))
+             [
+               ("Content-Type", "application/json");
+               ("Accept", "application/json");
+             ]
+           ~body:(invoke_body method_ args)))
 
 let repo_value repo = Edn_util.string (Cli_primitive.string_of_repo repo)
 
 let thread_api_apply_outliner_ops config ~(repo : Cli_primitive.repo)
-    ~(ops : Edn_ocaml.vector Edn_ocaml.t) ~(options : Edn_ocaml.map Edn_ocaml.t)
+    ~(ops : Melange_edn.vector Melange_edn.t) ~(options : Melange_edn.map Melange_edn.t)
     =
   invoke config
     (thread_api_method "apply-outliner-ops")
@@ -483,37 +381,37 @@ let thread_api_backup_db_sqlite config ~(repo : Cli_primitive.repo) ~path =
     [ repo_value repo; Edn_util.string path ]
 
 let thread_api_cli_list_nodes config ~(repo : Cli_primitive.repo)
-    ~(options : Edn_ocaml.map Edn_ocaml.t) =
+    ~(options : Melange_edn.map Melange_edn.t) =
   invoke config
     (thread_api_method "cli-list-nodes")
     [ repo_value repo; Edn_util.any options ]
 
 let thread_api_cli_list_pages config ~(repo : Cli_primitive.repo)
-    ~(options : Edn_ocaml.map Edn_ocaml.t) =
+    ~(options : Melange_edn.map Melange_edn.t) =
   invoke config
     (thread_api_method "cli-list-pages")
     [ repo_value repo; Edn_util.any options ]
 
 let thread_api_cli_list_properties config ~(repo : Cli_primitive.repo)
-    ~(options : Edn_ocaml.map Edn_ocaml.t) =
+    ~(options : Melange_edn.map Melange_edn.t) =
   invoke config
     (thread_api_method "cli-list-properties")
     [ repo_value repo; Edn_util.any options ]
 
 let thread_api_cli_list_tags config ~(repo : Cli_primitive.repo)
-    ~(options : Edn_ocaml.map Edn_ocaml.t) =
+    ~(options : Melange_edn.map Melange_edn.t) =
   invoke config
     (thread_api_method "cli-list-tags")
     [ repo_value repo; Edn_util.any options ]
 
 let thread_api_cli_list_tasks config ~(repo : Cli_primitive.repo)
-    ~(options : Edn_ocaml.map Edn_ocaml.t) =
+    ~(options : Melange_edn.map Melange_edn.t) =
   invoke config
     (thread_api_method "cli-list-tasks")
     [ repo_value repo; Edn_util.any options ]
 
 let thread_api_create_or_open_db config ~(repo : Cli_primitive.repo)
-    ~(options : Edn_ocaml.map Edn_ocaml.t) =
+    ~(options : Melange_edn.map Melange_edn.t) =
   invoke config
     (thread_api_method "create-or-open-db")
     [ repo_value repo; Edn_util.any options ]
@@ -558,7 +456,7 @@ let thread_api_db_sync_upload_graph config ~(repo : Cli_primitive.repo) =
   invoke config (thread_api_method "db-sync-upload-graph") [ repo_value repo ]
 
 let thread_api_export_edn config ~(repo : Cli_primitive.repo)
-    ~(options : Edn_ocaml.map Edn_ocaml.t) =
+    ~(options : Melange_edn.map Melange_edn.t) =
   invoke config
     (thread_api_method "export-edn")
     [ repo_value repo; Edn_util.any options ]
@@ -585,12 +483,12 @@ let thread_api_import_edn config ~(repo : Cli_primitive.repo) ~data =
   invoke config (thread_api_method "import-edn") [ repo_value repo; data ]
 
 let thread_api_pull config ~(repo : Cli_primitive.repo)
-    ~(selector : Edn_ocaml.vector Edn_ocaml.t) ~lookup =
+    ~(selector : Melange_edn.vector Melange_edn.t) ~lookup =
   invoke config (thread_api_method "pull")
     [ repo_value repo; Edn_util.any selector; lookup ]
 
 let thread_api_q config ~(repo : Cli_primitive.repo)
-    ~(query : Edn_ocaml.vector Edn_ocaml.t) =
+    ~(query : Melange_edn.vector Melange_edn.t) =
   invoke config (thread_api_method "q") [ repo_value repo; Edn_util.any query ]
 
 let thread_api_set_db_sync_config config ~config:sync_config =
@@ -598,11 +496,11 @@ let thread_api_set_db_sync_config config ~config:sync_config =
     (thread_api_method "set-db-sync-config")
     [ Edn_util.any sync_config ]
 
-let thread_api_sync_app_state config ~(auth_state : Edn_ocaml.map Edn_ocaml.t) =
+let thread_api_sync_app_state config ~(auth_state : Melange_edn.map Melange_edn.t) =
   invoke config (thread_api_method "sync-app-state") [ Edn_util.any auth_state ]
 
 let thread_api_validate_db config ~(repo : Cli_primitive.repo)
-    ~(options : Edn_ocaml.map Edn_ocaml.t) =
+    ~(options : Melange_edn.map Melange_edn.t) =
   invoke config
     (thread_api_method "validate-db")
     [ repo_value repo; Edn_util.any options ]
@@ -705,24 +603,19 @@ let decode_event event_text =
 
 let split_sse_events buffer =
   let rec loop start acc =
-    match
-      find_substring ~needle:"\n\n"
-        (String.sub buffer start (String.length buffer - start))
-    with
+    match find_substring_from ~needle:"\n\n" buffer start with
     | None ->
         (List.rev acc, String.sub buffer start (String.length buffer - start))
-    | Some rel_idx ->
-        let idx = start + rel_idx in
+    | Some idx ->
         let event_text = String.sub buffer start (idx - start) in
         loop (idx + 2) (event_text :: acc)
   in
   loop 0 []
 
 let dispatch_event on_event event_type payload =
-  Lwt.async (fun () ->
-      Lwt.catch
-        (fun () -> Cli_effect.to_lwt (on_event event_type payload))
-        (fun _ -> Lwt.return_unit))
+  Cli_effect.async (fun () ->
+      Cli_effect.catch (on_event event_type payload) (fun _ ->
+          Cli_effect.pure ()))
 
 let consume_sse_text on_event text =
   let events, _rest = split_sse_events text in
@@ -743,212 +636,30 @@ let consume_sse_chunk on_event buffer chunk =
       | None -> ())
     events
 
-let connect_events_fetch config on_event =
-  let base_url = normalize_base_url config.base_url in
-  let task, resolver = Lwt.wait () in
-  let closed = ref false in
-  let reader_ref = ref None in
-  let buffer = ref "" in
-  let wake value = if Lwt.is_sleeping task then Lwt.wakeup resolver value in
-  let ignore_js value = value in
-  let string value = Js_runtime.inject (Js_runtime.string value) in
-  let promise_then promise ~ok ~error =
-    ignore
-      (Js_runtime.meth_call promise "then"
-         [|
-           Js_runtime.callback (fun value ->
-               try ok value with _ -> ignore_js value);
-           Js_runtime.callback (fun value ->
-               try error value with _ -> ignore_js value);
-         |]
-        : Js_runtime.t)
-  in
-  let promise_catch promise =
-    try
-      ignore
-        (Js_runtime.meth_call promise "catch"
-           [| Js_runtime.callback ignore_js |]
-          : Js_runtime.t)
-    with _ -> ()
-  in
-  let controller =
-    try
-      Some
-        (Js_runtime.new_obj
-           (Js_runtime.eval_string "globalThis.AbortController")
-           [||])
-    with _ -> None
-  in
-  let cancel_reader reader =
-    try
-      let promise = Js_runtime.meth_call reader "cancel" [||] in
-      promise_catch promise
-    with _ -> ()
-  in
-  let abort_controller controller =
-    try ignore (Js_runtime.meth_call controller "abort" [||] : Js_runtime.t)
-    with _ -> ()
-  in
-  let close () =
-    closed := true;
-    Option.iter cancel_reader !reader_ref;
-    Option.iter abort_controller controller;
-    Cli_effect.pure ()
-  in
-  let subscription = { close } in
-  let subscription_woken = ref false in
-  let wake_subscription () =
-    if not !subscription_woken then (
-      subscription_woken := true;
-      wake subscription)
-  in
-  let consume_chunk_text text =
-    try
-      if not !closed then consume_sse_chunk on_event buffer text;
-      wake_subscription ()
-    with _ -> wake_subscription ()
-  in
-  let on_error value =
-    wake_subscription ();
-    value
-  in
-  let rec read_loop reader decoder =
-    if not !closed then
-      let promise = Js_runtime.meth_call reader "read" [||] in
-      promise_then promise
-        ~ok:(fun result ->
-          (if not !closed then
-             let done_ = Js_runtime.to_bool (Js_runtime.get result "done") in
-             if not done_ then (
-               let value : Js_runtime.t = Js_runtime.get result "value" in
-               let options =
-                 Js_runtime.obj [| ("stream", Js_runtime.bool true) |]
-               in
-               let chunk : Js_runtime.t =
-                 Js_runtime.meth_call decoder "decode"
-                   [| Js_runtime.inject value; Js_runtime.inject options |]
-               in
-               consume_chunk_text (Js_runtime.to_string chunk);
-               read_loop reader decoder));
-          result)
-        ~error:on_error
-  in
-  let read_text_response response =
-    try
-      let promise = Js_runtime.meth_call response "text" [||] in
-      promise_then promise
-        ~ok:(fun text ->
-          consume_chunk_text (Js_runtime.to_string text);
-          text)
-        ~error:on_error
-    with _ -> wake_subscription ()
-  in
-  let on_response response =
-    let ok = Js_runtime.to_bool (Js_runtime.get response "ok") in
-    if ok then
-      try
-        let body : Js_runtime.t = Js_runtime.get response "body" in
-        let reader : Js_runtime.t =
-          Js_runtime.meth_call body "getReader" [||]
-        in
-        let decoder : Js_runtime.t =
-          Js_runtime.new_obj (Js_runtime.variable "TextDecoder") [||]
-        in
-        reader_ref := Some reader;
-        wake_subscription ();
-        read_loop reader decoder
-      with _ -> read_text_response response
-    else wake_subscription ();
-    response
-  in
-  let headers = Js_runtime.obj [| ("Accept", string "text/event-stream") |] in
-  let fields =
-    [ ("method", string "GET"); ("headers", Js_runtime.inject headers) ]
-    @
-    match controller with
-    | Some controller ->
-        let signal : Js_runtime.t = Js_runtime.get controller "signal" in
-        [ ("signal", Js_runtime.inject signal) ]
-    | None -> []
-  in
-  let options = Js_runtime.obj (Array.of_list fields) in
-  let fetch = Js_runtime.eval_string "globalThis.fetch" in
-  let promise =
-    Js_runtime.fun_call fetch
-      [| string (base_url ^ "/v1/events"); Js_runtime.inject options |]
-  in
-  ignore (promise_then promise ~ok:on_response ~error:on_error);
-  wake_subscription ();
-  Cli_effect.of_lwt task
-
-let consume_events_response config on_event closed socket_ref =
-  let base_url = normalize_base_url config.base_url in
-  let url = parse_http_url (base_url ^ "/v1/events") in
-  let socket = Cli_unix.socket Cli_unix.PF_INET Cli_unix.SOCK_STREAM 0 in
-  socket_ref := Some socket;
-  try
-    let sockaddr =
-      Cli_unix.ADDR_INET
-        ((Cli_unix.gethostbyname url.host).Cli_unix.h_addr_list.(0), url.port)
-    in
-    Cli_unix.connect socket sockaddr;
-    let ic = Cli_unix.in_channel_of_descr socket in
-    let oc = Cli_unix.out_channel_of_descr socket in
-    Printf.fprintf oc "GET %s HTTP/1.1\r\n" url.path;
-    Printf.fprintf oc "Host: %s:%d\r\n" url.host url.port;
-    Printf.fprintf oc "Accept: text/event-stream\r\n";
-    Printf.fprintf oc "Connection: close\r\n";
-    Printf.fprintf oc "Content-Length: 0\r\n\r\n%!";
-    ignore (input_line ic |> trim_cr |> parse_status);
-    ignore (read_headers ic);
-    let body = read_all ic in
-    if not !closed then consume_sse_text on_event body;
-    close_in_noerr ic;
-    close_out_noerr oc
-  with _ -> ( try Cli_unix.close socket with Cli_unix.Cli_unix_error _ -> ())
-
 let connect_events config on_event =
-  if js_backend () then connect_events_fetch config on_event
-  else
-    let closed = ref false in
-    let socket_ref = ref None in
-    consume_events_response config on_event closed socket_ref;
-    let close () =
-      closed := true;
-      (match !socket_ref with
-      | Some socket -> (
-          try Cli_unix.shutdown socket Cli_unix.SHUTDOWN_ALL
-          with Cli_unix.Cli_unix_error _ -> ())
-      | None -> ());
-      Cli_effect.pure ()
-    in
-    Cli_effect.pure { close }
+  let base_url = normalize_base_url config.base_url in
+  let buffer = ref "" in
+  Cli_effect.map
+    (fun (subscription : Cli_platform.Events.subscription) ->
+      { close = subscription.close })
+    (Cli_platform.Events.connect ~url:(base_url ^ "/v1/events")
+       ~on_chunk:(consume_sse_chunk on_event buffer))
 
 let normalize_format format =
   let format = Edn_util.keyword_to_string format |> String.trim in
   if starts_with ~prefix:":" format then format else ":" ^ format
 
 let write_file_binary path content =
-  let oc = open_out_bin path in
-  Fun.protect
-    ~finally:(fun () -> close_out_noerr oc)
-    (fun () -> output_string oc content)
+  Cli_unix.write_binary_file path content
 
 let read_file_binary path =
-  let ic = open_in_bin path in
-  Fun.protect
-    ~finally:(fun () -> close_in_noerr ic)
-    (fun () ->
-      let len = in_channel_length ic in
-      let bytes = Bytes.create len in
-      really_input ic bytes 0 len;
-      bytes)
+  Bytes.of_string (Cli_unix.read_binary_file path)
 
 let bytes_of_output_data value =
   match (Edn_util.as_bytes value, Edn_util.as_string value) with
   | Some bytes, _ -> Bytes.to_string bytes
   | _, Some value -> value
-  | _ -> Edn_ocaml.to_edn_string value
+  | _ -> Melange_edn.to_edn_string value
 
 let unsupported_output_format format =
   Error.make

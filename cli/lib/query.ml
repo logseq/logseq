@@ -1,7 +1,7 @@
 type input_spec = {
   name : string;
   optional : bool;
-  default : Edn_ocaml.any option;
+  default : Melange_edn.any option;
 }
 
 type source = Built_in | Custom
@@ -11,7 +11,7 @@ type query_entry = {
   source : source;
   doc : string option;
   inputs : input_spec list;
-  query : Edn_ocaml.any;
+  query : Melange_edn.any;
 }
 
 type opts = {
@@ -26,15 +26,15 @@ type action =
   | Run of {
       repo : Cli_primitive.repo;
       graph : Cli_primitive.graph;
-      query : Edn_ocaml.any;
-      inputs : Edn_ocaml.any list;
+      query : Melange_edn.any;
+      inputs : Melange_edn.any list;
       name : string option;
     }
   | List
 
 let edn_value_of_string ~label text =
-  try Ok (Edn_ocaml.of_edn_string text)
-  with Edn_ocaml.Parse_error _ ->
+  try Ok (Melange_edn.of_edn_string text)
+  with Melange_edn.Parse_error _ ->
     Error (Error.invalid_options ("invalid " ^ label ^ " edn"))
 
 let normalize_query_name value =
@@ -183,7 +183,7 @@ let strip_leading_colon value =
 let query_name_of_value value =
   match (Edn_util.as_string value, Edn_util.as_keyword value) with
   | Some value, _ | _, Some value -> trim_non_empty (strip_leading_colon value)
-  | _ -> trim_non_empty (Edn_ocaml.to_edn_string value |> strip_leading_colon)
+  | _ -> trim_non_empty (Melange_edn.to_edn_string value |> strip_leading_colon)
 
 let custom_query_input value =
   match (Edn_util.as_string value, Edn_util.as_keyword value) with
@@ -290,7 +290,7 @@ let validate_query query =
       else Ok query
   | _ -> Error (Error.invalid_options "query must be a vector")
 
-let current_epoch_ms () = Ptime_util.time_to_epoch_ms (Ptime_util.now ())
+let current_epoch_ms () = Time.time_to_epoch_ms (Time.now ())
 
 let normalize_task_search_inputs (entry : query_entry option) inputs =
   match entry with
@@ -355,7 +355,7 @@ let command_id = function
 let validate_parsed _ = Ok ()
 
 let symbol_is name = function
-  | Edn_ocaml.Any (Edn_ocaml.String value) -> value = "~$" ^ name
+  | Melange_edn.Any (Melange_edn.String value) -> value = "~$" ^ name
   | Any (Symbol value) -> value = name
   | _ -> false
 

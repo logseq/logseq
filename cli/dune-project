@@ -1,5 +1,7 @@
 (lang dune 3.23)
 
+(using melange 1.0)
+
 (name logseq-cli)
 
 (generate_opam_files true)
@@ -19,7 +21,7 @@
  (name logseq-cli)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends ocaml cmdliner lwt transit edn_ocaml humanize ptime cohttp cohttp-lwt cohttp-lwt-unix uri alcotest js_of_ocaml js_of_ocaml-lwt js_of_ocaml-compiler)
+ (depends ocaml melange melange-fetch melange-transit melange-edn humanize)
  (tags
   ("add topics" "to describe" your project)))
 

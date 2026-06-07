@@ -138,6 +138,9 @@ server.listen(0, "127.0.0.1", () => {
       if (!stdout.includes("user.property/Assignee-Xf-emnkZ")) {
         throw new Error(`missing db ident in output:\n${stdout}`);
       }
+      if (stdout.includes("logseq.property/type") || stdout.includes("node")) {
+        throw new Error(`list page should not render property type column:\n${stdout}`);
+      }
       if (!stdout.includes("中文…")) {
         throw new Error(`missing display-width title truncation:\n${stdout}`);
       }

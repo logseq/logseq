@@ -26,7 +26,7 @@ type schema = {
   public : bool option;
 }
 
-type assignment = { key : key; value : Edn_ocaml.any }
+type assignment = { key : key; value : Melange_edn.any }
 
 type update_plan = {
   update_tags : Selector.tag list;
@@ -36,7 +36,7 @@ type update_plan = {
 }
 
 val empty_update_plan : update_plan
-val parse_key : Edn_ocaml.any -> key option
+val parse_key : Melange_edn.any -> key option
 val kind_of_string : string -> kind option
 val string_of_kind : kind -> string
 val cardinality_of_string : string -> cardinality option

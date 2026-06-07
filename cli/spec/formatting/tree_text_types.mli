@@ -1,14 +1,14 @@
 type render_options = {
   uuid_labels : (Cli_primitive.uuid * string) list;
   property_titles : (Cli_primitive.keyword * string) list;
-  property_value_labels : (Edn_ocaml.any * string) list;
+  property_value_labels : (Melange_edn.any * string) list;
   show_ids : bool;
 }
 
 val property_value_to_string :
-  ?labels:(Edn_ocaml.any * string) list ->
+  ?labels:(Melange_edn.any * string) list ->
   ?uuid_labels:(Cli_primitive.uuid * string) list ->
-  Edn_ocaml.any ->
+  Melange_edn.any ->
   string option
 
 val node_property_lines :

@@ -3,10 +3,10 @@ type auth_data = {
   id_token : string option;
   access_token : string option;
   refresh_token : string option;
-  expires_at : Ptime.t option;
+  expires_at : Time.date option;
   sub : string option;
   email : Cli_primitive.email option;
-  updated_at : Ptime.t;
+  updated_at : Time.date;
 }
 
 type login_result = {
@@ -15,7 +15,7 @@ type login_result = {
   opened : bool;
   email : Cli_primitive.email option;
   sub : string option;
-  updated_at : Ptime.t;
+  updated_at : Time.date;
 }
 
 type logout_result = {

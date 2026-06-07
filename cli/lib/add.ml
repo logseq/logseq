@@ -31,8 +31,8 @@ let sym value = Edn_util.string ("~$" ^ value)
 let normalized_lookup_name value = String.lowercase_ascii (String.trim value)
 
 let edn_value_of_string ~label text =
-  try Ok (Edn_ocaml.of_edn_string text)
-  with Edn_ocaml.Parse_error _ ->
+  try Ok (Melange_edn.of_edn_string text)
+  with Melange_edn.Parse_error _ ->
     Error (Error.invalid_options ("invalid " ^ label ^ " edn"))
 
 let strip_tag_prefix value =
@@ -122,7 +122,7 @@ let parse_properties_option ?(allow_non_built_in = false) = function
                         Error
                           (Error.invalid_options
                              ("invalid property key: "
-                             ^ Edn_ocaml.to_edn_string key)))
+                             ^ Melange_edn.to_edn_string key)))
               in
               loop [] fields
           | None -> Error (Error.invalid_options "properties must be a map"))
@@ -146,7 +146,7 @@ let parse_properties_vector_option ?(allow_non_built_in = false) = function
                         Error
                           (Error.invalid_options
                              ("invalid property key: "
-                             ^ Edn_ocaml.to_edn_string value)))
+                             ^ Melange_edn.to_edn_string value)))
               in
               loop [] values
           | None -> Error (Error.invalid_options "properties must be a vector"))
@@ -211,7 +211,9 @@ let generated_uuid_counter = ref 0
 let generate_uuid () =
   incr generated_uuid_counter;
   let seed =
-    Hashtbl.hash (Ptime.to_float_s (Ptime_util.now ()), !generated_uuid_counter)
+    Hashtbl.hash
+      ( Time.time_to_epoch_seconds_float (Time.now ()),
+        !generated_uuid_counter )
     land max_int
   in
   let first =
@@ -274,10 +276,7 @@ let parse_blocks_edn ~label text =
                "blocks must be a vector")))
 
 let read_file path =
-  let ic = open_in path in
-  Fun.protect
-    ~finally:(fun () -> close_in_noerr ic)
-    (fun () -> really_input_string ic (in_channel_length ic))
+  Cli_unix.read_text_file path
 
 let read_blocks (opts : opts) args =
   match

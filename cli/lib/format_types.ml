@@ -1,6 +1,6 @@
 type 'a formatter = 'a Cli_result.t -> Cli_config.t -> string
 
-open Edn_ocaml
+open Melange_edn
 
 let normalize_json v = v
 
@@ -50,16 +50,16 @@ let rec json_of_value value =
               if String.length s > 0 && s.[0] = ':' then
                 String.sub s 1 (String.length s - 1)
               else s
-          | None -> Edn_ocaml.to_edn_string k
+          | None -> Melange_edn.to_edn_string k
         in
         "\"" ^ json_escape key ^ "\":" ^ json_of_value v
       in
       "{" ^ String.concat "," (List.map member xs) ^ "}"
-  | _ -> Edn_ocaml.to_json_string value
+  | _ -> Melange_edn.to_json_string value
 
 let rec edn_of_value value =
   match value with
-  | Edn_ocaml.Any Edn_ocaml.Nil -> "nil"
+  | Melange_edn.Any Melange_edn.Nil -> "nil"
   | Any (Bool b) -> if b then "true" else "false"
   | Any (Int i) -> (
       match Edn_util.int64_to_int_opt i with
@@ -72,11 +72,11 @@ let rec edn_of_value value =
   | Any (Tagged ("uuid", uuid)) -> (
       match Edn_util.as_string uuid with
       | Some uuid -> "\"" ^ json_escape uuid ^ "\""
-      | None -> Edn_ocaml.to_edn_string value)
+      | None -> Melange_edn.to_edn_string value)
   | Any (Tagged ("bytes", bytes)) -> (
       match Edn_util.as_string bytes with
       | Some bytes -> "\"" ^ json_escape bytes ^ "\""
-      | None -> Edn_ocaml.to_edn_string value)
+      | None -> Melange_edn.to_edn_string value)
   | Any (List xs) ->
       "("
       ^ String.concat " " (List.map edn_of_value (Edn_util.iarray_to_list xs))
@@ -96,7 +96,7 @@ let rec edn_of_value value =
              (fun (k, v) -> edn_of_value k ^ " " ^ edn_of_value v)
              (Edn_util.iarray_to_list xs))
       ^ "}"
-  | _ -> Edn_ocaml.to_edn_string value
+  | _ -> Melange_edn.to_edn_string value
 
 let data_to_value = function
   | Cli_result.Message s ->
@@ -182,7 +182,7 @@ let to_edn result =
       in
       "{:status :error, :error " ^ edn_of_value error ^ "}"
 
-let render_human table = Format.asprintf "%a" Output.Human_output.pp table
+let render_human table = Output.Human_output.to_string table
 let count_footer count = "Count: " ^ Humanize_types.format_count count
 
 let strip_leading_colon value =
@@ -192,7 +192,7 @@ let strip_leading_colon value =
 
 let field_label key =
   key |> Edn_util.as_string_like
-  |> Option.value ~default:(Edn_ocaml.to_edn_string key)
+  |> Option.value ~default:(Melange_edn.to_edn_string key)
   |> strip_leading_colon
 
 let value_text value =
@@ -208,7 +208,7 @@ let value_text value =
   | _, _, Some value, _, _ -> string_of_int value
   | _, _, _, Some value, _ -> string_of_bool value
   | _, _, _, _, Some value -> string_of_float value
-  | _ -> Edn_ocaml.to_edn_string value
+  | _ -> Melange_edn.to_edn_string value
 
 let has_suffix ~suffix value =
   let suffix_len = String.length suffix in
@@ -288,9 +288,38 @@ let search_columns columns =
   let title, rest = List.partition (is_label "block/title") rest in
   db_id @ rest @ title
 
+let asset_column_role label =
+  match String.lowercase_ascii label with
+  | "id" | "db/id" -> Some "id"
+  | "title" | "block/title" -> Some "title"
+  | "size" | "logseq.property.asset/size" -> Some "size"
+  | "type" | "asset-type" | "logseq.property.asset/type" -> Some "type"
+  | _ -> None
+
+let columns_by_role roles columns =
+  roles
+  |> List.filter_map (fun role ->
+         List.find_opt
+           (fun label ->
+             Option.equal String.equal (asset_column_role label) (Some role))
+           columns)
+
+let asset_columns columns =
+  let prefix_roles = [ "id"; "title"; "size"; "type" ] in
+  let prefix = columns_by_role prefix_roles columns in
+  let prefix_or_datetime label =
+    Option.is_some (asset_column_role label) || is_datetime_field label
+  in
+  let middle = List.filter (fun label -> not (prefix_or_datetime label)) columns in
+  let created_at = List.filter is_created_at_field columns in
+  let updated_at = List.filter is_updated_at_field columns in
+  prefix @ middle @ created_at @ updated_at
+
 let columns_for_command command items =
   let columns = table_columns items in
-  if is_search_command command then search_columns columns else columns
+  match command with
+  | Command_id.List_asset -> asset_columns columns
+  | _ -> if is_search_command command then search_columns columns else columns
 
 let should_truncate_title command label =
   is_list_command command && is_title_label label
@@ -303,11 +332,12 @@ let list_search_human command value config =
       if List.length mapped <> List.length items then None
       else
         let title_width = title_max_display_width config in
-        let headers = columns_for_command command mapped in
+        let columns = columns_for_command command mapped in
+        let headers = columns in
         let rows =
           mapped
           |> List.map (fun fields ->
-              headers
+              columns
               |> List.map (fun label ->
                   let value =
                     fields |> field_by_label label |> Option.map value_text
@@ -324,16 +354,11 @@ let list_search_human command value config =
                 ~rows ()))
 
 let read_text_file path =
-  let ic = open_in_bin path in
-  Fun.protect
-    ~finally:(fun () -> close_in_noerr ic)
-    (fun () ->
-      let len = in_channel_length ic in
-      really_input_string ic len)
+  Cli_unix.read_text_file path
 
 let read_current_graph root_dir =
   let path = Filename.concat root_dir "current-graph" in
-  if not (Sys.file_exists path) then None
+  if not (Cli_unix.file_exists path) then None
   else
     try
       let graph = String.trim (read_text_file path) in
@@ -369,7 +394,7 @@ let graph_list_human value config =
                   (fun graph ->
                     let graph =
                       Option.value (Edn_util.as_string graph)
-                        ~default:(Edn_ocaml.to_edn_string graph)
+                        ~default:(Melange_edn.to_edn_string graph)
                     in
                     let prefix =
                       if Option.equal String.equal current_graph (Some graph)
