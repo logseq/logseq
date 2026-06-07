@@ -4248,7 +4248,7 @@
         {:class (when (:page-title? config) "is-page-title-row")
          :style (when (:page-title? config)
                   {:margin-left (cond
-                                  (util/mobile?) 0
+                                  (util/capacitor?) 0
                                   page-icon -36
                                   :else -30)})
          :data-has-heading (block-heading-level block level)

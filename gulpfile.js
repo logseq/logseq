@@ -347,6 +347,12 @@ const prepareElectronMaker = async () => {
   cp.execSync('pnpm cljs:release-electron', {
     stdio: 'inherit',
   })
+  cp.execSync('pnpm db-worker-node:bundle', {
+    stdio: 'inherit',
+  })
+  cp.execSync('pnpm webpack-app-build', {
+    stdio: 'inherit',
+  })
   cp.execSync('pnpm desktop:prepare-runtime-js', {
     stdio: 'inherit',
   })

@@ -560,6 +560,21 @@
               (state/set-developer-mode! mode)))
           [:div.text-sm.opacity-50 (t :settings.advanced/developer-mode-desc)]))
 
+(defn semantic-search-setting-supported?
+  [{:keys [platform arch]}]
+  (and (= "darwin" platform)
+       (= "arm64" arch)))
+
+(defn semantic-search-row [t enabled?]
+  (toggle "semantic_search"
+          (t :settings.features/semantic-search)
+          enabled?
+          (fn []
+            (let [enabled?' (not enabled?)]
+              (state/set-state! [:electron/user-cfgs :feature/enable-semantic-search?] enabled?')
+              (ipc/ipc :userAppCfgs :feature/enable-semantic-search? enabled?')))
+          [:div.text-sm.opacity-50 (t :settings.features/semantic-search-desc)]))
+
 (hsx/defc plugin-enabled-switcher
   [t]
   (let [value (state/lsp-enabled?-or-theme)
@@ -1089,10 +1104,13 @@
 (hsx/defc settings-features
   []
   (let [_config (state/use-sub :config)
+        app-base-info (state/use-sub :electron/app-base-info)
+        app-user-cfgs (state/use-sub :electron/user-cfgs)
         default-home-page (state/use-sub-default-home-page)
         current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
+        semantic-search-enabled? (true? (:feature/enable-semantic-search? app-user-cfgs))
         logged-in? (user-handler/logged-in?)]
     [:div.panel-wrap.is-features.mb-8
      (journal-row enable-journals?)
@@ -1116,6 +1134,8 @@
      (when (util/electron?)
        (markdown-mirror-row t))
      (flashcards-switcher-row enable-flashcards?)
+     (when (semantic-search-setting-supported? app-base-info)
+       (semantic-search-row t semantic-search-enabled?))
      (when-not web-platform?
        [:div.mt-1.sm:mt-0.sm:col-span-2
         [:hr]
@@ -1409,6 +1429,7 @@
     (hooks/use-effect!
      (fn []
        (state/load-app-user-cfgs)
+       (state/load-electron-app-base-info)
        (let [active-tab (if (and (= _active-tab :ai) (not (util/electron?)))
                           :advanced
                           _active-tab)]

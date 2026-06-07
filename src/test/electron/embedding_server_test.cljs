@@ -15,7 +15,8 @@
 
 (defn- fake-runtime
   [{:keys [existing-paths allocated-port run-command! wait-ready!]}]
-  (let [ensured-dirs (atom [])
+  (let [existing-paths* (atom existing-paths)
+        ensured-dirs (atom [])
         commands (atom [])
         writes (atom [])
         spawns (atom [])
@@ -30,7 +31,7 @@
                :dirname "/repo/static"
                :resources-path "/app/Contents/Resources"
                :python-command "python3"
-               :exists? #(contains? existing-paths %)
+               :exists? #(contains? @existing-paths* %)
                :ensure-dir! #(swap! ensured-dirs conj %)
                :find-port! (fn [_host]
                              (p/resolved (or allocated-port 54321)))
@@ -46,6 +47,13 @@
                                     (swap! commands conj {:cmd cmd
                                                           :args args
                                                           :cwd (:cwd opts)})
+                                    (when (and (= "python3" cmd)
+                                               (= ["-m" "venv" ".venv"] args))
+                                      (swap! existing-paths* conj
+                                             (node-path/join (:cwd opts)
+                                                             ".venv"
+                                                             "bin"
+                                                             "python")))
                                     (p/resolved nil)))
                :wait-ready! (or wait-ready!
                                 (fn [endpoint]
@@ -96,7 +104,7 @@
           runtime-dir "/users/me/logseq/embedding-server"
           venv-dir "/users/me/logseq/embedding-server/.venv"
           venv-python "/users/me/logseq/embedding-server/.venv/bin/python"
-          deps-stamp "/users/me/logseq/embedding-server/deps-v1.ok"
+          deps-stamp "/users/me/logseq/embedding-server/deps-v2.ok"
           script "/repo/sidecar/embedding_server.py"]
       (-> (p/let [result (embedding-server/start! app runtime)]
             (is (= :started result))
@@ -105,11 +113,11 @@
                      :args ["-m" "venv" ".venv"]
                      :cwd runtime-dir}
                     {:cmd venv-python
-                     :args ["-m" "pip" "install" "sentence-transformers"]
+                     :args ["-m" "pip" "install" "sentence-transformers" "httpx[socks]"]
                      :cwd runtime-dir}]
                    @commands))
             (is (= [{:file deps-stamp
-                     :content "sentence-transformers\n"}]
+                     :content "sentence-transformers\nhttpx[socks]\n"}]
                    @writes))
             (is (= [{:runtime-dir runtime-dir
                      :venv-dir venv-dir
@@ -132,14 +140,14 @@
   (async done
     (embedding-server/stop!)
     (let [{:keys [runtime events env]} (fake-runtime {:existing-paths #{"/users/me/logseq/embedding-server/.venv/bin/python"
-                                                                        "/users/me/logseq/embedding-server/deps-v1.ok"}
+                                                                        "/users/me/logseq/embedding-server/deps-v2.ok"}
                                                        :allocated-port 56789})
           app (fake-app "/users/me/logseq" false)]
       (-> (p/let [result (embedding-server/start! app runtime)]
             (is (= :started result))
-            (is (= [[:set-env "LOGSEQ_EMBEDDINGS_URL" "http://127.0.0.1:56789/v1/embeddings"]
-                    [:spawn-server 56789]
-                    [:wait-ready "http://127.0.0.1:56789/healthz"]]
+            (is (= [[:spawn-server 56789]
+                    [:wait-ready "http://127.0.0.1:56789/healthz"]
+                    [:set-env "LOGSEQ_EMBEDDINGS_URL" "http://127.0.0.1:56789/v1/embeddings"]]
                    @events))
             (is (= {"LOGSEQ_EMBEDDINGS_URL" "http://127.0.0.1:56789/v1/embeddings"}
                    @env))
@@ -148,7 +156,7 @@
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
-(deftest start-publishes-embedding-env-before-setup-completes
+(deftest start-does-not-publish-embedding-env-before-setup-completes
   (async done
     (embedding-server/stop!)
     (let [{:keys [runtime env spawns]} (fake-runtime {:existing-paths #{}
@@ -160,9 +168,32 @@
           (p/then (fn [_]
                     (is false "start should fail")))
           (p/catch (fn [_]
-                     (is (= {"LOGSEQ_EMBEDDINGS_URL" "http://127.0.0.1:56789/v1/embeddings"}
-                            @env))
+                     (is (= {} @env))
                      (is (empty? @spawns))))
+          (p/finally done)))))
+
+(deftest start-upgrades-existing-venv-when-dependency-stamp-is-stale
+  (async done
+    (embedding-server/stop!)
+    (let [runtime-dir "/users/me/logseq/embedding-server"
+          venv-python "/users/me/logseq/embedding-server/.venv/bin/python"
+          old-deps-stamp "/users/me/logseq/embedding-server/deps-v1.ok"
+          deps-stamp "/users/me/logseq/embedding-server/deps-v2.ok"
+          {:keys [runtime commands writes]} (fake-runtime {:existing-paths #{venv-python old-deps-stamp}
+                                                           :allocated-port 56789})
+          app (fake-app "/users/me/logseq" false)]
+      (-> (p/let [result (embedding-server/start! app runtime)]
+            (is (= :started result))
+            (is (= [{:cmd venv-python
+                     :args ["-m" "pip" "install" "sentence-transformers" "httpx[socks]"]
+                     :cwd runtime-dir}]
+                   @commands))
+            (is (= [{:file deps-stamp
+                     :content "sentence-transformers\nhttpx[socks]\n"}]
+                   @writes))
+            (embedding-server/stop!))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
 (deftest start-reuses-existing-venv-and-installed-deps-with-allocated-port
@@ -170,7 +201,7 @@
     (embedding-server/stop!)
     (let [runtime-dir "/users/me/logseq/embedding-server"
           venv-python "/users/me/logseq/embedding-server/.venv/bin/python"
-          deps-stamp "/users/me/logseq/embedding-server/deps-v1.ok"
+          deps-stamp "/users/me/logseq/embedding-server/deps-v2.ok"
           {:keys [runtime commands spawns env]} (fake-runtime {:existing-paths #{venv-python deps-stamp}
                                                                :allocated-port 45678})
           app (fake-app "/users/me/logseq" true)]
@@ -198,7 +229,7 @@
     (embedding-server/stop!)
     (let [_runtime-dir "/users/me/logseq/embedding-server"
           venv-python "/users/me/logseq/embedding-server/.venv/bin/python"
-          deps-stamp "/users/me/logseq/embedding-server/deps-v1.ok"
+          deps-stamp "/users/me/logseq/embedding-server/deps-v2.ok"
           {:keys [runtime spawns env]} (fake-runtime {:existing-paths #{venv-python deps-stamp}})
           app (fake-app "/users/me/logseq" true)
           runtime (dissoc runtime :find-port!)]
