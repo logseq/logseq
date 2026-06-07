@@ -169,7 +169,7 @@
             (notification/show!
              (t :youtube/open-block-editor-to-insert-timestamp)
              :warning
-             false)))
+             true)))
         (notification/show!
          (t :youtube/player-not-ready)
          :warning
