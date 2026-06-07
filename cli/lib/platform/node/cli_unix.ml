@@ -13,11 +13,9 @@ module Fs = struct
   type rm_options
   type stat
 
-  external mkdir_options : mode:int -> unit -> mkdir_options = ""
-  [@@mel.obj]
+  external mkdir_options : mode:int -> unit -> mkdir_options = "" [@@mel.obj]
 
-  external rm_options :
-    recursive:bool -> force:bool -> unit -> rm_options = ""
+  external rm_options : recursive:bool -> force:bool -> unit -> rm_options = ""
   [@@mel.obj]
 
   external mkdir_sync : string -> mkdir_options -> unit = "mkdirSync"
@@ -26,6 +24,7 @@ module Fs = struct
   external rmdir_sync : string -> unit = "rmdirSync" [@@mel.module "fs"]
   external exists_sync : string -> bool = "existsSync" [@@mel.module "fs"]
   external stat_sync : string -> stat = "statSync" [@@mel.module "fs"]
+
   external readdir_sync : string -> string array = "readdirSync"
   [@@mel.module "fs"]
 
@@ -45,21 +44,23 @@ module Fs = struct
     = "writeFileSync"
   [@@mel.module "fs"]
 
-  external read_file_latin1_sync :
-    string -> (_[@mel.as "latin1"]) -> string = "readFileSync"
+  external read_file_latin1_sync : string -> (_[@mel.as "latin1"]) -> string
+    = "readFileSync"
   [@@mel.module "fs"]
 
   external copy_file_sync : string -> string -> unit = "copyFileSync"
   [@@mel.module "fs"]
 
-  external rm_sync : string -> rm_options -> unit = "rmSync"
-  [@@mel.module "fs"]
+  external rm_sync : string -> rm_options -> unit = "rmSync" [@@mel.module "fs"]
 
   external rename_sync : string -> string -> unit = "renameSync"
   [@@mel.module "fs"]
 
   external chmod_sync : string -> int -> unit = "chmodSync" [@@mel.module "fs"]
-  external access_sync : string -> int -> unit = "accessSync" [@@mel.module "fs"]
+
+  external access_sync : string -> int -> unit = "accessSync"
+  [@@mel.module "fs"]
+
   external open_sync : string -> string -> int = "openSync" [@@mel.module "fs"]
   external close_sync : int -> unit = "closeSync" [@@mel.module "fs"]
   external mkdtemp_sync : string -> string = "mkdtempSync" [@@mel.module "fs"]
@@ -134,8 +135,7 @@ module Atomics_sleep = struct
     = "SharedArrayBuffer"
   [@@mel.new]
 
-  external make_int32_array : shared_array_buffer -> int32_array
-    = "Int32Array"
+  external make_int32_array : shared_array_buffer -> int32_array = "Int32Array"
   [@@mel.new]
 
   external wait : int32_array -> int -> int -> int -> string = "wait"
@@ -149,7 +149,8 @@ external error_code : Js.Exn.t -> string option = "code" [@@mel.get]
 
 let js_error_message exn =
   match Js.Exn.asJsExn exn with
-  | Some error -> Option.value (Js.Exn.message error) ~default:(Printexc.to_string exn)
+  | Some error ->
+      Option.value (Js.Exn.message error) ~default:(Printexc.to_string exn)
   | None -> Printexc.to_string exn
 
 let js_error_code exn =
@@ -168,18 +169,18 @@ let raise_error ?error op detail exn =
     let message = js_error_message exn in
     if String.trim message = "" then detail else message
   in
-  let error = Option.value error ~default:(unix_error_of_code (js_error_code exn)) in
+  let error =
+    Option.value error ~default:(unix_error_of_code (js_error_code exn))
+  in
   raise (Cli_unix_error (error, op, detail))
 
-let run_unit op detail fn =
-  try fn () with exn -> raise_error op detail exn
+let run_unit op detail fn = try fn () with exn -> raise_error op detail exn
 
 let mkdir path perm =
   run_unit "mkdir" path (fun () ->
       Fs.mkdir_sync path (Fs.mkdir_options ~mode:perm ()))
 
-let rmdir path =
-  run_unit "rmdir" path (fun () -> Fs.rmdir_sync path)
+let rmdir path = run_unit "rmdir" path (fun () -> Fs.rmdir_sync path)
 
 let mkdir_exclusive path perm =
   try
@@ -236,14 +237,13 @@ let getpid () = Process.pid
 let process_running pid =
   pid > 0
   &&
-  try
-    Process.kill pid 0;
-    true
-  with exn -> (
-    match js_error_code exn with Some "ESRCH" -> false | _ -> true)
+    try
+      Process.kill pid 0;
+      true
+    with exn -> (
+      match js_error_code exn with Some "ESRCH" -> false | _ -> true)
 
-let chmod path perm =
-  run_unit "chmod" path (fun () -> Fs.chmod_sync path perm)
+let chmod path perm = run_unit "chmod" path (fun () -> Fs.chmod_sync path perm)
 
 let access path permissions =
   let flag =
@@ -266,9 +266,7 @@ let environment () =
   Process.env |> Js.Dict.entries
   |> Array.map (fun (key, value) -> key ^ "=" ^ value)
 
-let gethostname () =
-  try Os.hostname () with _ -> ""
-
+let gethostname () = try Os.hostname () with _ -> ""
 let openfile _path _flags _perm = 0
 let close _fd = ()
 
@@ -281,25 +279,21 @@ let command_args argv =
 
 let copy_env env =
   let result = Js.Dict.empty () in
-  Process.env
-  |> Js.Dict.entries
+  Process.env |> Js.Dict.entries
   |> Array.iter (fun (key, value) -> Js.Dict.set result key value);
   Array.iter
     (fun entry ->
       match String.index_opt entry '=' with
       | None -> ()
       | Some index ->
-          Js.Dict.set result
-            (String.sub entry 0 index)
+          Js.Dict.set result (String.sub entry 0 index)
             (String.sub entry (index + 1) (String.length entry - index - 1)))
     env;
   result
 
 let stdio_ignore =
   [|
-    Js.Json.string "ignore";
-    Js.Json.string "ignore";
-    Js.Json.string "ignore";
+    Js.Json.string "ignore"; Js.Json.string "ignore"; Js.Json.string "ignore";
   |]
 
 let spawn_detached command args env =
@@ -342,8 +336,7 @@ let run_process_capture command args env =
     stderr;
   }
 
-let read_text_file_default path =
-  try Fs.read_file_utf8_sync path with _ -> ""
+let read_text_file_default path = try Fs.read_file_utf8_sync path with _ -> ""
 
 let contains_substring ~needle haystack =
   let needle_len = String.length needle in
@@ -359,9 +352,9 @@ let contains_substring ~needle haystack =
 let find_session_line text =
   text |> String.split_on_char '\n'
   |> List.find_opt (fun line ->
-         let lower = String.lowercase_ascii line in
-         contains_substring ~needle:"session" lower
-         || contains_substring ~needle:"thread" lower)
+      let lower = String.lowercase_ascii line in
+      contains_substring ~needle:"session" lower
+      || contains_substring ~needle:"thread" lower)
 
 let start_process_capture_session_line command args env =
   let tmp_dir =
@@ -398,23 +391,23 @@ let start_process_capture_session_line command args env =
     match find_session_line stdout with
     | Some line ->
         Child_process.unref child;
-        { status = 0; stdout = line; stderr = read_text_file_default stderr_path }
+        {
+          status = 0;
+          stdout = line;
+          stderr = read_text_file_default stderr_path;
+        }
     | None when Date.now () >= deadline ->
         Child_process.unref child;
         {
           status = 124;
-          stdout = if stdout = "" then last_stdout else stdout;
+          stdout = (if stdout = "" then last_stdout else stdout);
           stderr =
             (let stderr = read_text_file_default stderr_path in
              if String.trim stderr = "" then "timed out waiting for session id"
              else stderr);
         }
     | None when pid <= 0 || not (process_running pid) ->
-        {
-          status = 1;
-          stdout;
-          stderr = read_text_file_default stderr_path;
-        }
+        { status = 1; stdout; stderr = read_text_file_default stderr_path }
     | None ->
         Atomics_sleep.sleep_ms 50;
         loop stdout
@@ -438,5 +431,4 @@ let open_url url =
     true
   with _ -> false
 
-let write_stdout text =
-  ignore (Process.write Process.stdout text : bool)
+let write_stdout text = ignore (Process.write Process.stdout text : bool)

@@ -67,8 +67,8 @@ let process_alive pid =
   | Cli_unix.Cli_unix_error (Cli_unix.ESRCH, _, _) -> false
   | Cli_unix.Cli_unix_error (Cli_unix.EPERM, _, _) -> true
 
-let http_request ~(method_ : Fetch.requestMethod) ~url ~headers ~body ~timeout_span
-    =
+let http_request ~(method_ : Fetch.requestMethod) ~url ~headers ~body
+    ~timeout_span =
   Cli_effect.bind
     (Cli_platform.HTTP.request ?timeout_span method_ url ~headers ~body)
     (fun (response, body) -> Cli_effect.pure (response, body))
@@ -90,7 +90,8 @@ let parse_server_list_line line =
 let read_server_list path =
   if not (Cli_unix.file_exists path) then []
   else
-    Cli_unix.read_text_file path |> String.split_on_char '\n'
+    Cli_unix.read_text_file path
+    |> String.split_on_char '\n'
     |> List.filter_map parse_server_list_line
 
 type json_parser = { text : string; mutable pos : int }
@@ -306,7 +307,8 @@ let list_servers config =
     (Cli_effect.all (List.map discover_server entries))
 
 let rec mkdir_p path =
-  if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then ()
+  if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then
+    ()
   else (
     mkdir_p (Filename.dirname path);
     Cli_unix.mkdir path 0o755)
@@ -709,7 +711,8 @@ let list_graph_items config =
   let dir = graphs_dir config in
   if Cli_unix.file_exists dir then
     Cli_unix.readdir dir |> Array.to_list
-    |> List.filter (fun name -> Cli_unix.is_directory (Filename.concat dir name))
+    |> List.filter (fun name ->
+        Cli_unix.is_directory (Filename.concat dir name))
     |> List.sort_uniq String.compare
     |> List.filter_map (classify_graph_dir dir)
   else []
