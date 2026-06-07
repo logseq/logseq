@@ -1,62 +1,71 @@
-let is_unreserved_uri_char = function
-  | 'A' .. 'Z'
-  | 'a' .. 'z'
-  | '0' .. '9'
-  | '-' | '_' | '.' | '!' | '*' | '\'' | '(' | ')' ->
-      true
-  | _ -> false
+external encode_uri_component : string -> string = "encodeURIComponent"
+external decode_uri_component : string -> string = "decodeURIComponent"
 
-let hex_digit value =
-  Char.uppercase_ascii
-    (Char.chr
-       (if value < 10 then Char.code '0' + value else Char.code 'A' + value - 10))
+let replace_all ~needle ~replacement text =
+  let needle_len = String.length needle in
+  if needle_len = 0 then invalid_arg "needle must not be empty";
+  let text_len = String.length text in
+  let buffer = Buffer.create text_len in
+  let rec loop index =
+    if index >= text_len then Buffer.contents buffer
+    else if
+      index + needle_len <= text_len
+      && String.sub text index needle_len = needle
+    then (
+      Buffer.add_string buffer replacement;
+      loop (index + needle_len))
+    else (
+      Buffer.add_char buffer text.[index];
+      loop (index + 1))
+  in
+  loop 0
 
 let encode_graph_dir_name graph_name =
-  let buffer = Buffer.create (String.length graph_name) in
-  String.iter
-    (fun c ->
-      match c with
-      | ' ' -> Buffer.add_char buffer ' '
-      | _ when is_unreserved_uri_char c -> Buffer.add_char buffer c
-      | _ ->
-          let code = Char.code c in
-          Buffer.add_char buffer '~';
-          Buffer.add_char buffer (hex_digit (code lsr 4));
-          Buffer.add_char buffer (hex_digit (code land 0x0f)))
-    graph_name;
-  Buffer.contents buffer
+  graph_name |> encode_uri_component
+  |> replace_all ~needle:"%20" ~replacement:" "
+  |> replace_all ~needle:"~" ~replacement:"%7E"
+  |> replace_all ~needle:"%" ~replacement:"~"
 
 let graph_dir_name_of_repo repo =
   Cli_config.repo_to_graph repo
   |> Cli_primitive.string_of_graph |> encode_graph_dir_name
 
-let hex_value = function
-  | '0' .. '9' as c -> Some (Char.code c - Char.code '0')
-  | 'a' .. 'f' as c -> Some (10 + Char.code c - Char.code 'a')
-  | 'A' .. 'F' as c -> Some (10 + Char.code c - Char.code 'A')
-  | _ -> None
-
-let decode_graph_dir_name dir_name =
-  let len = String.length dir_name in
-  let buffer = Buffer.create len in
+let contains_substring ~needle text =
+  let needle_len = String.length needle in
+  let text_len = String.length text in
   let rec loop index =
-    if index >= len then Some (Buffer.contents buffer)
-    else
-      match dir_name.[index] with
-      | '~' when index + 2 < len -> (
-          match
-            (hex_value dir_name.[index + 1], hex_value dir_name.[index + 2])
-          with
-          | Some hi, Some lo ->
-              Buffer.add_char buffer (Char.chr ((hi lsl 4) lor lo));
-              loop (index + 3)
-          | _ -> None)
-      | '~' -> None
-      | c ->
-          Buffer.add_char buffer c;
-          loop (index + 1)
+    index + needle_len <= text_len
+    && (String.sub text index needle_len = needle || loop (index + 1))
   in
   loop 0
+
+let decode_percent_graph_dir_name dir_name =
+  try Some (decode_uri_component dir_name) with _ -> None
+
+let decode_graph_dir_name dir_name =
+  if
+    contains_substring ~needle:"++" dir_name
+    || contains_substring ~needle:"+3A+" dir_name
+  then None
+  else
+    dir_name |> replace_all ~needle:"~" ~replacement:"%"
+    |> decode_percent_graph_dir_name
+
+let decode_legacy_graph_dir_name dir_name =
+  if
+    not
+      (contains_substring ~needle:"++" dir_name
+      || contains_substring ~needle:"+3A+" dir_name
+      || contains_substring ~needle:"%" dir_name)
+  then None
+  else
+    dir_name
+    |> replace_all ~needle:"+3A+" ~replacement:":"
+    |> replace_all ~needle:"++" ~replacement:"/"
+    |> decode_percent_graph_dir_name
+    |> fun graph_name ->
+    Option.bind graph_name (fun graph_name ->
+        if graph_name = "" then None else Some graph_name)
 
 let canonical_graph_name_of_dir dir_name =
   match decode_graph_dir_name dir_name with

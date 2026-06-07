@@ -36,8 +36,8 @@ type task_opts = {
   pos : Block.position option;
   status : string option;
   priority : string option;
-  scheduled : Ptime.t option;
-  deadline : Ptime.t option;
+  scheduled : Time.date option;
+  deadline : Time.date option;
   no_status : bool;
   no_priority : bool;
   no_scheduled : bool;

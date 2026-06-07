@@ -127,8 +127,8 @@ let property_key_of_value value =
   | _ -> None
 
 let edn_value_of_string ~label text =
-  try Ok (Edn_ocaml.of_edn_string text)
-  with Edn_ocaml.Parse_error _ ->
+  try Ok (Melange_edn.of_edn_string text)
+  with Melange_edn.Parse_error _ ->
     Error (Error.invalid_options ("invalid " ^ label ^ " edn"))
 
 let parse_properties_edn value =
@@ -150,7 +150,7 @@ let parse_properties_edn value =
                         Error
                           (Error.invalid_options
                              ("invalid property key: "
-                             ^ Edn_ocaml.to_edn_string key)))
+                             ^ Melange_edn.to_edn_string key)))
               in
               loop [] fields
           | None -> Error (Error.invalid_options "properties must be a map"))
@@ -175,7 +175,7 @@ let parse_property_keys_edn value =
                         Error
                           (Error.invalid_options
                              ("invalid property key: "
-                             ^ Edn_ocaml.to_edn_string value)))
+                             ^ Melange_edn.to_edn_string value)))
               in
               loop [] values
           | None -> Error (Error.invalid_options "properties must be a vector"))

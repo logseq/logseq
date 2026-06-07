@@ -2,10 +2,10 @@ type status = Ok | Error
 
 type ok_data =
   | Message of string
-  | Items of Edn_ocaml.any list
-  | Entity of Edn_ocaml.any
-  | Query_result of Edn_ocaml.any
-  | Raw of Edn_ocaml.any
+  | Items of Melange_edn.any list
+  | Entity of Melange_edn.any
+  | Query_result of Melange_edn.any
+  | Raw of Melange_edn.any
   | Empty
 
 type error_data = Error.t
@@ -15,7 +15,7 @@ type 'o t = {
   data : ok_data option;
   error : error_data option;
   command : Command_id.t option;
-  context : Edn_ocaml.any option;
+  context : Melange_edn.any option;
   output : 'o Output.t;
   exit_code : int option;
 }
@@ -40,7 +40,7 @@ let strip_leading_colon value =
 
 let field_label key =
   key |> Edn_util.as_string_like
-  |> Option.value ~default:(Edn_ocaml.to_edn_string key)
+  |> Option.value ~default:(Melange_edn.to_edn_string key)
   |> strip_leading_colon
 
 let value_text value =
@@ -56,7 +56,7 @@ let value_text value =
   | _, _, Some value, _, _ -> string_of_int value
   | _, _, _, Some value, _ -> string_of_bool value
   | _, _, _, _, Some value -> string_of_float value
-  | _ -> Edn_ocaml.to_edn_string value
+  | _ -> Melange_edn.to_edn_string value
 
 let has_suffix ~suffix value =
   let suffix_len = String.length suffix in
@@ -80,8 +80,8 @@ let field_value_text label value =
   match Int64.of_string_opt text with
   | Some epoch_ms when is_datetime_field label ->
       Humanize_types.relative_datetime
-        ~then_time:(Ptime_util.time_of_epoch_ms epoch_ms)
-        ~now_time:(Ptime_util.now ())
+        ~then_time:(Time.time_of_epoch_ms epoch_ms)
+        ~now_time:(Time.now ())
   | _ -> text
 
 let parse_positive_int64 text =
@@ -103,8 +103,8 @@ let graph_info_timestamp_seconds value =
 let graph_info_field_value_text label value =
   match graph_info_timestamp_seconds value with
   | Some then_seconds when is_datetime_field label ->
-      Humanize.datetime
-        ~now:(Ptime_util.time_to_epoch_seconds (Ptime_util.now ()))
+      Humanize_types.datetime
+        ~now:(Time.time_to_epoch_seconds (Time.now ()))
         then_seconds
   | _ -> value_text value
 
@@ -234,7 +234,7 @@ let graph_list_human value =
                   (fun graph ->
                     let graph =
                       Option.value (Edn_util.as_string graph)
-                        ~default:(Edn_ocaml.to_edn_string graph)
+                        ~default:(Melange_edn.to_edn_string graph)
                     in
                     let prefix =
                       if Option.equal String.equal current_graph (Some graph)
@@ -319,7 +319,7 @@ let human_output command data =
   | Items values ->
       human_table ~headers:[ "Value" ]
         ~footer:(count_footer (List.length values))
-        (List.map (fun value -> [ Edn_ocaml.to_edn_string value ]) values)
+        (List.map (fun value -> [ Melange_edn.to_edn_string value ]) values)
 
 let output_for_data : type a.
     Command_id.t option -> a Output.Mode.t -> ok_data -> a Output.t =
@@ -342,7 +342,7 @@ let ok ?command ?context mode data =
 
 let error : type a.
     ?command:Command_id.t ->
-    ?context:Edn_ocaml.any ->
+    ?context:Melange_edn.any ->
     a Output.Mode.t ->
     Error.t ->
     a t =

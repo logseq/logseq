@@ -1,8 +1,8 @@
-(** The only public boundary that depends on Cmdliner. *)
+(** Lightweight command assembly boundary. *)
 
-type 'a term = 'a Cmdliner.Term.t
-type 'a cmd = 'a Cmdliner.Cmd.t
-type 'a conv = 'a Cmdliner.Arg.conv
+type 'a term = 'a
+type 'a cmd = { name : string; term : 'a term }
+type 'a conv = (string -> ('a, [ `Msg of string ]) result) * (Format.formatter -> 'a -> unit)
 type request_term = Cli_request.t term
 type request_cmd = Cli_request.t cmd
 

@@ -5,7 +5,7 @@ type t = {
   message : string;
   hint : string option;
   candidates : candidate list;
-  context : Edn_ocaml.any option;
+  context : Melange_edn.any option;
 }
 
 type 'a build_result = ('a, t) result

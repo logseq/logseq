@@ -12,20 +12,11 @@ bug-reports: "https://github.com/username/reponame/issues"
 depends: [
   "dune" {>= "3.23"}
   "ocaml"
-  "cmdliner"
-  "lwt"
-  "transit"
-  "edn_ocaml"
+  "melange"
+  "melange-fetch"
+  "melange-transit"
+  "melange-edn"
   "humanize"
-  "ptime"
-  "cohttp"
-  "cohttp-lwt"
-  "cohttp-lwt-unix"
-  "uri"
-  "alcotest"
-  "js_of_ocaml"
-  "js_of_ocaml-lwt"
-  "js_of_ocaml-compiler"
   "odoc" {with-doc}
 ]
 build: [
@@ -45,7 +36,7 @@ build: [
 dev-repo: "git+https://github.com/username/reponame.git"
 x-maintenance-intent: ["(latest)"]
 pin-depends: [
-  ["transit.dev" "git+https://github.com/RCmerci/transit-ocaml.git"]
-  ["edn_ocaml.dev" "git+https://github.com/RCmerci/edn-ocaml.git"]
-  ["humanize.dev" "git+https://github.com/RCmerci/humanize.git"]
+  ["humanize.dev" "git+https://github.com/rcmerci/humanize.git#747879af704dff4dd1897bc0f9a53a361071371c"]
+  ["melange-transit.dev" "git+https://github.com/RCmerci/melange-transit.git#afa316feb89df2810c1290a6207bafa7a27ec934"]
+  ["melange-edn.dev" "git+https://github.com/RCmerci/melange-edn.git#0.1.0"]
 ]

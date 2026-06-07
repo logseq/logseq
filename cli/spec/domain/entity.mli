@@ -8,13 +8,13 @@ type t = {
   title : string option;
   kind : kind;
   tags : Cli_primitive.keyword list;
-  created_at : Ptime.t option;
-  updated_at : Ptime.t option;
-  deleted_at : Ptime.t option;
-  raw : Edn_ocaml.any;
+  created_at : Time.date option;
+  updated_at : Time.date option;
+  deleted_at : Time.date option;
+  raw : Melange_edn.any;
 }
 
-val of_value : Edn_ocaml.any -> t
+val of_value : Melange_edn.any -> t
 val label : t -> string option
 val is_recycled : t -> bool
 val has_tag : Cli_primitive.keyword -> t -> bool

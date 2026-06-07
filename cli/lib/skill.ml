@@ -67,26 +67,17 @@ let installed_skill_targets ~cwd ~home_dir =
   [ local; global ]
   |> List.filter_map (function Ok target -> Some target | Error _ -> None)
 
-let read_file path =
-  let ic = open_in_bin path in
-  Fun.protect
-    ~finally:(fun () -> close_in_noerr ic)
-    (fun () ->
-      let len = in_channel_length ic in
-      really_input_string ic len)
+let read_file = Cli_unix.read_text_file
 
 let rec mkdir_p path =
-  if path = "" || path = Filename.dirname path || Sys.file_exists path then ()
+  if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then ()
   else (
     mkdir_p (Filename.dirname path);
     Cli_unix.mkdir path 0o755)
 
 let write_file path content =
   mkdir_p (Filename.dirname path);
-  let oc = open_out_bin path in
-  Fun.protect
-    ~finally:(fun () -> close_out_noerr oc)
-    (fun () -> output_string oc content)
+  Cli_unix.write_text_file path content
 
 let default_source_candidates config =
   let project =
@@ -103,7 +94,7 @@ let default_source_candidates config =
 
 let resolve_source_path ?source_path config =
   match non_empty source_path with
-  | Some path when Sys.file_exists path -> Ok path
+  | Some path when Cli_unix.file_exists path -> Ok path
   | Some path ->
       Error
         (Error.make
@@ -112,7 +103,7 @@ let resolve_source_path ?source_path config =
            ("skill source file not found: " ^ path))
   | None -> (
       let candidates = default_source_candidates config in
-      match List.find_opt Sys.file_exists candidates with
+      match List.find_opt Cli_unix.file_exists candidates with
       | Some path -> Ok path
       | None ->
           Error
@@ -129,7 +120,7 @@ let installed_skill_update_status ?source_path () =
   let home_dir = Sys.getenv_opt "HOME" in
   let targets = installed_skill_targets ~cwd ~home_dir in
   let existing_targets =
-    List.filter (fun target -> Sys.file_exists target.path) targets
+    List.filter (fun target -> Cli_unix.file_exists target.path) targets
   in
   if existing_targets = [] then
     { installed = false; outdated = false; outdated_targets = []; error = None }
@@ -244,7 +235,7 @@ let execute_install config mode ~global ~source_path ~destination_dir
       | Error err -> Cli_effect.pure (Output_mode.error ~command mode err)
       | Ok (dir, file) -> (
           try
-            if Sys.file_exists dir && not (Sys.is_directory dir) then
+            if Cli_unix.file_exists dir && not (Cli_unix.is_directory dir) then
               raise (Invalid_argument ("destination path is a file: " ^ dir));
             let content = read_file source in
             write_file file content;

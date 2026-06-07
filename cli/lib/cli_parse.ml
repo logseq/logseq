@@ -74,7 +74,7 @@ let globals_of_options options =
     ?root_dir:(option_value "root-dir" options)
     ?config_path:(option_value "config" options)
     ?timeout_span:
-      (Option.map Ptime_util.span_of_ms
+      (Option.map Time.span_of_ms
          (Option.bind (option_value "timeout-ms" options) Int64.of_string_opt))
     ?output_format:
       (Option.bind (option_value "output" options) Output.Mode.of_string)
@@ -93,7 +93,7 @@ let int64_option key options =
   Option.bind (option_value key options) Int64.of_string_opt
 
 let time_option key options =
-  Option.bind (option_value key options) Ptime_util.parse_time
+  Option.bind (option_value key options) Time.parse_time
 
 let bool_option_value key options =
   match option_value key options with
@@ -322,7 +322,7 @@ let validate_csv_member_option key values options =
 
 let validate_time_option key options =
   match option_value key options with
-  | Some value when Option.is_none (Ptime_util.parse_time value) ->
+  | Some value when Option.is_none (Time.parse_time value) ->
       Error (invalid_value key value "Expected RFC3339 datetime or epoch ms")
   | _ -> Ok ()
 

@@ -5,3 +5,4 @@
 - Platform-specific code must only appear under `lib/platform/`.
 - Only keep test cases related to business logic.
 - Do not keep temporary tests added during refactoring, and do not keep test cases that assert internal implementation details.
+- Before adding a new external JavaScript function, first check whether a corresponding implementation already exists in `melange.js` or `melange.node`. Avoid adding new externals whenever possible.

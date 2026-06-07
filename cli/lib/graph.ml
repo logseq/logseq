@@ -137,8 +137,8 @@ let validate_parsed = function
   | _ -> Ok ()
 
 let utc_timestamp () =
-  let (year, month, day), ((hour, minute, second), _) =
-    Ptime.to_date_time ~tz_offset_s:0 (Ptime_util.now ())
+  let year, month, day, hour, minute, second =
+    Time.utc_date_time (Time.now ())
   in
   Printf.sprintf "%04d%02d%02dT%02d%02d%02dZ" year month day hour minute second
 
@@ -167,12 +167,22 @@ let tmp_sqlite_counter = ref 0
 let tmp_sqlite_path dir =
   incr tmp_sqlite_counter;
   let stamp =
-    int_of_float (Ptime.to_float_s (Ptime_util.now ()) *. 1_000_000.)
+    int_of_float
+      (Time.time_to_epoch_seconds_float (Time.now ()) *. 1_000_000.)
   in
   Filename.concat dir
     ("db." ^ string_of_int stamp ^ "."
     ^ string_of_int !tmp_sqlite_counter
     ^ ".tmp.sqlite")
+
+let explicit_graph_and_repo globals =
+  let graph =
+    Option.bind globals.Global_opts.graph (fun graph ->
+        graph |> Cli_primitive.string_of_graph
+        |> Cli_primitive.non_empty
+        |> Option.map Cli_primitive.create_graph)
+  in
+  (graph, Option.map Cli_config.graph_to_repo graph)
 
 let build ?registry:_ config globals parsed =
   Error.bind (validate_parsed parsed) (fun () ->
@@ -181,15 +191,15 @@ let build ?registry:_ config globals parsed =
       match parsed with
       | Parsed_list -> Ok Graph_list
       | Parsed_create opts -> (
-          match (selected_graph, selected_repo) with
+          match explicit_graph_and_repo globals with
           | Some graph, Some repo -> Ok (Graph_create { graph; repo; opts })
           | _ -> Error (Error.missing_graph ()))
       | Parsed_switch -> (
-          match (selected_graph, selected_repo) with
+          match explicit_graph_and_repo globals with
           | Some graph, Some repo -> Ok (Graph_switch { graph; repo })
           | _ -> Error (Error.missing_graph ()))
       | Parsed_remove -> (
-          match (selected_graph, selected_repo) with
+          match explicit_graph_and_repo globals with
           | Some graph, Some repo -> Ok (Graph_remove { graph; repo })
           | _ -> Error (Error.missing_graph ()))
       | Parsed_validate opts -> (
@@ -285,62 +295,30 @@ let current_graph_path config =
   Filename.concat config.Cli_config.root_dir "current-graph"
 
 let rec ensure_dir path =
-  if Sys.file_exists path then ()
+  if Cli_unix.file_exists path then ()
   else
     let parent = Filename.dirname path in
     if parent <> path then ensure_dir parent;
     Cli_unix.mkdir path 0o755
 
 let rec remove_tree path =
-  if Sys.file_exists path then
-    if Sys.is_directory path then (
-      Sys.readdir path
+  if Cli_unix.file_exists path then
+    if Cli_unix.is_directory path then (
+      Cli_unix.readdir path
       |> Array.iter (fun name -> remove_tree (Filename.concat path name));
       Cli_unix.rmdir path)
-    else Sys.remove path
+    else Cli_unix.remove_tree path
 
 let write_file path content =
-  let oc = open_out path in
-  Fun.protect
-    ~finally:(fun () -> close_out_noerr oc)
-    (fun () -> output_string oc content)
+  Cli_unix.write_text_file path content
 
 let graph_path config graph =
   Filename.concat (graphs_dir config)
     (Graph_dir.encode_graph_dir_name (Cli_primitive.string_of_graph graph))
 
 let graph_exists config graph =
-  Sys.file_exists (graph_path config graph)
-  && Sys.is_directory (graph_path config graph)
-
-let hex_value = function
-  | '0' .. '9' as c -> Some (Char.code c - Char.code '0')
-  | 'a' .. 'f' as c -> Some (10 + Char.code c - Char.code 'a')
-  | 'A' .. 'F' as c -> Some (10 + Char.code c - Char.code 'A')
-  | _ -> None
-
-let percent_decode text =
-  let len = String.length text in
-  let buffer = Buffer.create len in
-  let rec loop index =
-    if index >= len then Some (Buffer.contents buffer)
-    else
-      match text.[index] with
-      | '%' when index + 2 < len -> (
-          match (hex_value text.[index + 1], hex_value text.[index + 2]) with
-          | Some hi, Some lo ->
-              Buffer.add_char buffer (Char.chr ((hi lsl 4) lor lo));
-              loop (index + 3)
-          | _ -> None)
-      | '%' -> None
-      | c ->
-          Buffer.add_char buffer c;
-          loop (index + 1)
-  in
-  loop 0
-
-let replace_char text from_char to_char =
-  String.map (fun c -> if c = from_char then to_char else c) text
+  Cli_unix.file_exists (graph_path config graph)
+  && Cli_unix.is_directory (graph_path config graph)
 
 let starts_with ~prefix value =
   let prefix_len = String.length prefix in
@@ -355,29 +333,7 @@ let contains_substring ~needle text =
   in
   loop 0
 
-let legacy_compat_name dir_name =
-  let len = String.length dir_name in
-  let buffer = Buffer.create len in
-  let rec loop index =
-    if index >= len then Buffer.contents buffer
-    else if index + 1 < len && String.sub dir_name index 2 = "++" then (
-      Buffer.add_char buffer '/';
-      loop (index + 2))
-    else if index + 3 < len && String.sub dir_name index 4 = "+3A+" then (
-      Buffer.add_char buffer ':';
-      loop (index + 4))
-    else (
-      Buffer.add_char buffer dir_name.[index];
-      loop (index + 1))
-  in
-  loop 0
-
-let decode_graph_dir_name dir_name =
-  if
-    contains_substring ~needle:"++" dir_name
-    || contains_substring ~needle:"+3A+" dir_name
-  then None
-  else percent_decode (replace_char dir_name '~' '%')
+let decode_graph_dir_name = Graph_dir.decode_graph_dir_name
 
 let legacy_derivation_signal dir_name =
   contains_substring ~needle:"++" dir_name
@@ -386,10 +342,7 @@ let legacy_derivation_signal dir_name =
 
 let decode_legacy_graph_dir_name dir_name =
   if not (legacy_derivation_signal dir_name) then None
-  else
-    match percent_decode (legacy_compat_name dir_name) with
-    | Some decoded when decoded <> "" -> Some decoded
-    | _ -> None
+  else Graph_dir.decode_legacy_graph_dir_name dir_name
 
 let ignored_graph_dir name =
   name = "Unlinked graphs" || name = "backup"
@@ -440,7 +393,7 @@ let classify_graph_dir graphs_root dir_name =
                    ( Edn_util.keyword ":conflict",
                      Edn_util.bool
                        (target_graph_dir <> dir_name
-                       && Sys.file_exists
+                       && Cli_unix.file_exists
                             (Filename.concat graphs_root target_graph_dir)) );
                  ])
         | None ->
@@ -482,9 +435,9 @@ let graph_list_value graph_items =
 
 let list_graph_items config =
   let dir = graphs_dir config in
-  if Sys.file_exists dir then
-    Sys.readdir dir |> Array.to_list
-    |> List.filter (fun name -> Sys.is_directory (Filename.concat dir name))
+  if Cli_unix.file_exists dir then
+    Cli_unix.readdir dir |> Array.to_list
+    |> List.filter (fun name -> Cli_unix.is_directory (Filename.concat dir name))
     |> List.sort_uniq String.compare
     |> List.filter_map (classify_graph_dir dir)
   else []
@@ -517,7 +470,9 @@ let default_sqlite_export_path config repo =
     Filename.concat (graph_path config (Cli_config.repo_to_graph repo)) "export"
   in
   ensure_dir export_root;
-  let timestamp_seconds = int_of_float (Ptime.to_float_s (Ptime_util.now ())) in
+  let timestamp_seconds =
+    int_of_float (Time.time_to_epoch_seconds_float (Time.now ()))
+  in
   let graph_name =
     Cli_config.repo_to_graph repo |> Cli_primitive.string_of_graph
   in
@@ -596,7 +551,7 @@ let graph_validate_result mode _config result =
            ("Graph invalid. Found "
            ^ format_count count "entity"
            ^ " with errors:\n"
-           ^ Edn_ocaml.to_edn_string (Edn_util.vector errors)))
+           ^ Melange_edn.to_edn_string (Edn_util.vector errors)))
 
 let sym name = Edn_util.string ("~$" ^ name)
 let vector values = Edn_util.vector values
@@ -628,7 +583,7 @@ let graph_info_key value =
           if String.length value >= 2 && String.sub value 0 2 = "~$" then
             String.sub value 2 (String.length value - 2)
           else value
-      | None -> Edn_ocaml.to_edn_string value)
+      | None -> Melange_edn.to_edn_string value)
 
 let graph_info_kv rows =
   let row_fields row =
@@ -647,7 +602,7 @@ let graph_info_timestamp_seconds value =
   let timestamp =
     match Edn_util.as_int64 value with
     | Some value -> Some value
-    | None -> parse_positive_int64 (Edn_ocaml.to_edn_string value)
+    | None -> parse_positive_int64 (Melange_edn.to_edn_string value)
   in
   timestamp
   |> Option.map (fun timestamp ->
@@ -656,13 +611,13 @@ let graph_info_timestamp_seconds value =
       else timestamp)
 
 let graph_info_datetime_value : type a.
-    a Output.Mode.t -> Edn_ocaml.any -> Edn_ocaml.any =
+    a Output.Mode.t -> Melange_edn.any -> Melange_edn.any =
  fun mode value ->
   match (mode, graph_info_timestamp_seconds value) with
   | Output.Mode.Human, Some then_seconds ->
       Edn_util.string
-        (Humanize.datetime
-           ~now:(Ptime_util.time_to_epoch_seconds (Ptime_util.now ()))
+        (Humanize_types.datetime
+           ~now:(Time.time_to_epoch_seconds (Time.now ()))
            then_seconds)
   | _ -> value
 
@@ -689,14 +644,8 @@ let graph_info_result mode _config graph rows =
   Cli_result.ok ~command:Command_id.Graph_info mode (Raw (Edn_util.map fields))
 
 let read_file_opt path =
-  if not (Sys.file_exists path) then None
-  else
-    let ic = open_in path in
-    Fun.protect
-      ~finally:(fun () -> close_in_noerr ic)
-      (fun () ->
-        let len = in_channel_length ic in
-        really_input_string ic len |> Option.some)
+  if not (Cli_unix.file_exists path) then None
+  else Some (Cli_unix.read_text_file path)
 
 let find_substring ~needle haystack =
   let needle_len = String.length needle in
@@ -733,7 +682,7 @@ let metadata_source backup_dir =
 let backup_entry root name =
   let dir = Filename.concat root name in
   let db_path = backup_db_path dir in
-  if Sys.file_exists dir && Sys.is_directory dir && Sys.file_exists db_path then
+  if Cli_unix.file_exists dir && Cli_unix.is_directory dir && Cli_unix.file_exists db_path then
     let stat = Cli_unix.stat db_path in
     let fields =
       [
@@ -752,9 +701,9 @@ let backup_entry root name =
 
 let list_backups config graph =
   let root = backup_root_path config graph in
-  if not (Sys.file_exists root) then []
+  if not (Cli_unix.file_exists root) then []
   else
-    Sys.readdir root |> Array.to_list |> List.sort String.compare
+    Cli_unix.readdir root |> Array.to_list |> List.sort String.compare
     |> List.filter_map (backup_entry root)
 
 let graph_backup_list_result mode config graph =
@@ -765,7 +714,7 @@ let graph_backup_list_result mode config graph =
 
 let graph_backup_remove_result mode config graph src =
   let dir = backup_dir_path config graph src in
-  if Sys.file_exists dir then (
+  if Cli_unix.file_exists dir then (
     remove_tree dir;
     Cli_result.ok ~command:Command_id.Graph_backup_remove mode
       (Message ("Removed backup " ^ src)))
@@ -782,9 +731,9 @@ let unlink_graph_dir config graph repo =
   let repo_path = Filename.concat graphs_root repo_name in
   let graph_path = graph_path config graph in
   let source =
-    if Sys.file_exists repo_path && Sys.is_directory repo_path then
+    if Cli_unix.file_exists repo_path && Cli_unix.is_directory repo_path then
       Some (repo_name, repo_path)
-    else if Sys.file_exists graph_path && Sys.is_directory graph_path then
+    else if Cli_unix.file_exists graph_path && Cli_unix.is_directory graph_path then
       Some (graph_name, graph_path)
     else None
   in
@@ -801,10 +750,10 @@ let unlink_graph_dir config graph repo =
       in
       let rec reserve suffix =
         let path = target suffix in
-        if Sys.file_exists path then reserve (suffix + 1) else path
+        if Cli_unix.file_exists path then reserve (suffix + 1) else path
       in
       let destination = reserve 0 in
-      Sys.rename source_path destination;
+      Cli_unix.rename source_path destination;
       Some destination
 
 let reserve_backup_target config graph base_name =
@@ -815,7 +764,7 @@ let reserve_backup_target config graph base_name =
       if suffix = 0 then base_name else base_name ^ "-" ^ string_of_int suffix
     in
     let dir = backup_dir_path config graph backup_name in
-    if Sys.file_exists dir then loop (suffix + 1)
+    if Cli_unix.file_exists dir then loop (suffix + 1)
     else (
       Cli_unix.mkdir dir 0o755;
       (backup_name, dir, backup_db_path dir))
@@ -824,7 +773,7 @@ let reserve_backup_target config graph base_name =
 
 let write_backup_metadata dir ~backup_name ~repo ~db_path =
   let repo = Cli_primitive.string_of_repo repo in
-  let created_at_ms = Ptime_util.time_to_epoch_ms (Ptime_util.now ()) in
+  let created_at_ms = Time.time_to_epoch_ms (Time.now ()) in
   write_file (backup_metadata_path dir)
     ("{:schema-version 1 :name \"" ^ String.escaped backup_name ^ "\" :repo \""
    ^ String.escaped repo ^ "\" :source :cli :created-at-ms "
@@ -848,8 +797,8 @@ let graph_backup_create_result mode config graph repo name backup_name =
         bind
           (Transport.thread_api_backup_db_sqlite invoke_config ~repo
              ~path:tmp_path) (fun _ ->
-            if Sys.file_exists tmp_path then (
-              Sys.rename tmp_path db_path;
+            if Cli_unix.file_exists tmp_path then (
+              Cli_unix.rename tmp_path db_path;
               write_backup_metadata dir ~backup_name ~repo ~db_path;
               pure
                 (Cli_result.ok ~command:Command_id.Graph_backup_create mode
@@ -948,7 +897,7 @@ let execute_graph_create mode graph repo opts config =
           (Cli_result.ok ~command:Command_id.Graph_create mode
              (Message
                 ("Created graph \""
-                ^ String.escaped (Cli_primitive.string_of_graph graph)
+                ^ Cli_primitive.string_of_graph graph
                 ^ "\"")))
     | Some _ -> execute_graph_create_invoke mode graph repo config
 
@@ -1040,7 +989,7 @@ let execute_graph_import mode graph repo opts config =
 let execute_graph_backup_restore mode source_graph dst_graph dst_repo src config
     =
   let db_path = backup_db_path (backup_dir_path config source_graph src) in
-  if not (Sys.file_exists db_path) then
+  if not (Cli_unix.file_exists db_path) then
     Cli_effect.pure
       (Cli_result.error ~command:Command_id.Graph_backup_restore mode
          (Error.make
@@ -1100,14 +1049,14 @@ let execute_graph_switch mode graph repo config =
           pure
             (Cli_result.ok ~command:Command_id.Graph_switch mode
                (Message
-                  ("Switched to graph \"" ^ String.escaped graph_name ^ "\""))))
+                  ("Switched to graph \"" ^ graph_name ^ "\""))))
 
 let execute_graph_remove mode graph repo config =
   let open Cli_effect in
   let graph_name = Cli_primitive.string_of_graph graph in
   let removed_graph_result =
     Cli_result.ok ~command:Command_id.Graph_remove mode
-      (Message ("Removed graph \"" ^ String.escaped graph_name ^ "\""))
+      (Message ("Removed graph \"" ^ graph_name ^ "\""))
   in
   if not (graph_exists config graph) then
     pure

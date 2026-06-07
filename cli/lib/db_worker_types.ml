@@ -1,4 +1,4 @@
-type list_options = Edn_ocaml.any
+type list_options = Melange_edn.any
 
 type page_filter = {
   expand : bool;
@@ -6,8 +6,8 @@ type page_filter = {
   include_built_in : bool;
   include_journal : bool;
   journal_only : bool;
-  created_after : Ptime.t option;
-  updated_after : Ptime.t option;
+  created_after : Js.Date.t option;
+  updated_after : Js.Date.t option;
 }
 
 type node_filter = {
@@ -62,7 +62,7 @@ let bool_field key value =
 let int_field key value = Edn_util.get_int64 value key
 
 let time_field key value =
-  Option.map Ptime_util.time_of_epoch_ms (int_field key value)
+  Option.map Time.time_of_epoch_ms (int_field key value)
 
 let tags_of_value value =
   match Edn_util.get value ":block/tags" with
@@ -133,8 +133,8 @@ let include_after key cutoff value =
   | Some cutoff -> (
       match Edn_util.get_int64 value key with
       | Some actual ->
-          Ptime.compare (Ptime_util.time_of_epoch_ms actual) cutoff > 0
-      | None -> Ptime.compare Ptime.epoch cutoff > 0)
+          Time.compare_time (Time.time_of_epoch_ms actual) cutoff > 0
+      | None -> Time.compare_time Time.epoch cutoff > 0)
 
 let list_pages db filter =
   db |> values_of_collection

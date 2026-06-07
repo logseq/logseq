@@ -25,7 +25,7 @@ type build_context = {
 }
 
 val command_id : t -> Command_id.t
-val context : t -> Edn_ocaml.map Edn_ocaml.t
+val context : t -> Melange_edn.map Melange_edn.t
 val build : Cli_config.t -> Cli_request.t -> t Error.build_result Cli_effect.t
 
 val execute :
