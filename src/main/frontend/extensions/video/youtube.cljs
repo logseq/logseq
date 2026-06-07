@@ -51,10 +51,11 @@
       nil)))
 
 (hsx/defc youtube-video
-  [id {:keys [width height start] :as _opts}]
-  (let [width  (or width (min (- (util/get-width) 96)
+  [id {:keys [width height start aspect-ratio] :or {aspect-ratio [16 9]} :as _opts}]
+  (let [[ratio-width ratio-height] aspect-ratio
+        width  (or width (min (- (util/get-width) 96)
                               560))
-        height (or height (int (* width (/ 315 560))))
+        height (or height (int (* width (/ ratio-height ratio-width))))
         origin (.. js/window -location -origin)
         origin-valid? (and (string? origin)
                            (re-matches #"^https?://.+" origin))

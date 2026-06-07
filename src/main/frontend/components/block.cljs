@@ -42,6 +42,7 @@
             [frontend.extensions.lightbox :as lightbox]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.sci :as sci]
+            [frontend.extensions.video :as video]
             [frontend.extensions.video.youtube :as youtube]
             [frontend.extensions.zotero :as zotero]
             [frontend.format.block :as block]
@@ -1673,8 +1674,9 @@
         (if (and (coll? src)
                  (= (first src) "youtube-player"))
           (let [t (re-find #"&t=(\d+)" url)
-                opts (when (seq t)
-                       {:start (nth t 1)})]
+                opts (cond-> {:aspect-ratio (video/matched-video-aspect-ratio results)}
+                       (seq t)
+                       (assoc :start (nth t 1)))]
             (youtube/youtube-video (last src) opts))
           (when src
             (let [width (min (- (util/get-width) 96) 560)
@@ -1725,12 +1727,13 @@
 
       (= name "youtube")
       (when-let [url (first arguments)]
-        (when-let [youtube-id (cond
-                                (== 11 (count url)) url
-                                :else
-                                (nth (util/safe-re-find text-util/youtube-regex url) 5))]
-          (when-not (string/blank? youtube-id)
-            (youtube/youtube-video youtube-id nil))))
+        (let [youtube-match (util/safe-re-find text-util/youtube-regex url)]
+          (when-let [youtube-id (cond
+                                  (== 11 (count url)) url
+                                  :else
+                                  (nth youtube-match 5))]
+            (when-not (string/blank? youtube-id)
+              (youtube/youtube-video youtube-id {:aspect-ratio (video/matched-video-aspect-ratio youtube-match)})))))
 
       (= name "youtube-timestamp")
       (when-let [timestamp' (first arguments)]
