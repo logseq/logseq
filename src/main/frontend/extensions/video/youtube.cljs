@@ -182,7 +182,7 @@
 
 (hsx/defc timestamp
   [seconds]
-  [:a.svg-small.youtube-timestamp
+  [:a.youtube-timestamp
    {:on-click (fn [e]
                 (util/stop e)
                 (if (use-youtube-wrapper?)

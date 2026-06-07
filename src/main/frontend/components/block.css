@@ -1872,6 +1872,30 @@ html.is-mac {
   }
 }
 
+.youtube-timestamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  width: fit-content;
+  max-width: max-content;
+  white-space: nowrap;
+  vertical-align: text-top;
+  line-height: normal;
+  color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary)/.8)));
+
+  svg {
+    display: block;
+    flex: 0 0 auto;
+    width: 0.9em;
+    height: 0.9em;
+  }
+
+  &:hover {
+    color: var(--lx-accent-12, var(--ls-link-text-hover-color, hsl(var(--primary))));
+    text-decoration: none;
+  }
+}
+
 .asset-video {
   display: block;
   max-width: 100%;
