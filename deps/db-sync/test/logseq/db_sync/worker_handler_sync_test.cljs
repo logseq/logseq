@@ -627,6 +627,35 @@
     (is (= "tx/reject" (:type response)))
     (is (= "snapshot upload in progress" (:reason response)))))
 
+(deftest tx-batch-applies-db-migration-entry-test
+  (testing "db migration entries apply with migration transact semantics"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          tx-entry {:tx (protocol/tx->transit [[:db/add -1 :block/title "migration-only"]])
+                    :outliner-op :db-migrate}
+          tx-metas (atom [])
+          _ (d/listen! conn ::capture-db-migrate-tx-meta
+                       (fn [tx-report]
+                         (swap! tx-metas conj (:tx-meta tx-report))))
+          response (try
+                     (with-redefs [ws/broadcast! (fn [& _] nil)]
+                       (sync-handler/handle-tx-batch! self nil [tx-entry] 0))
+                     (finally
+                       (d/unlisten! conn ::capture-db-migrate-tx-meta)))]
+      (is (= "tx/batch/ok" (:type response)))
+      (is (= 1 (:t response)))
+      (is (some (fn [tx-meta]
+                  (and (:db-migrate? tx-meta)
+                       (:skip-validate-db? tx-meta)))
+                @tx-metas))
+      (is (= "migration-only"
+             (:block/title (first (d/q '[:find [(pull ?e [:block/title]) ...]
+                                      :where [?e :block/title "migration-only"]]
+                                    @conn))))))))
+
 (deftest finished-snapshot-upload-persists-provided-checksum-test
   (async done
          (let [sql (test-sql/make-sql)
