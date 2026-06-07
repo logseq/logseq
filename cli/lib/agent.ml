@@ -24,10 +24,10 @@ type bridge_result = {
   mode : Cli_primitive.keyword;
   graph : Cli_primitive.graph;
   agent_name : string;
-  routed : Edn_ocaml.any list;
+  routed : Melange_edn.any list;
 }
 
-type routed_task = { block : Edn_ocaml.any; session : string option }
+type routed_task = { block : Melange_edn.any; session : string option }
 type prompt_templates = { task : string; comment : string }
 type inherited_session = { parent_block_uuid : string; session_id : string }
 
@@ -1152,7 +1152,7 @@ let values_of_query_result value =
   | _ -> []
 
 let unquote_transit_value = function
-  | Edn_ocaml.Any (Edn_ocaml.Tagged (("transit/quote" | "'"), value)) -> value
+  | Melange_edn.Any (Melange_edn.Tagged (("transit/quote" | "'"), value)) -> value
   | value -> value
 
 let keyword_string value = value |> unquote_transit_value |> Edn_util.as_keyword
@@ -1288,7 +1288,10 @@ let hex_digest_prefix byte_count seed =
   loop 0 []
 
 let insert_default_master_prompt invoke_config repo agent_page_uuid =
-  let nonce = Printf.sprintf "%.17g" (Ptime.to_float_s (Ptime_util.now ())) in
+  let nonce =
+    Printf.sprintf "%.17g"
+      (Time.time_to_epoch_seconds_float (Time.now ()))
+  in
   let block_uuid =
     "00000000-0000-4000-8000-"
     ^ hex_digest_prefix 6 (agent_page_uuid ^ ":" ^ nonce)
@@ -1350,7 +1353,10 @@ let insert_default_master_prompt invoke_config repo agent_page_uuid =
     ]
 
 let insert_default_master_prompt_code invoke_config repo wrapper_uuid =
-  let nonce = Printf.sprintf "%.17g" (Ptime.to_float_s (Ptime_util.now ())) in
+  let nonce =
+    Printf.sprintf "%.17g"
+      (Time.time_to_epoch_seconds_float (Time.now ()))
+  in
   let code_uuid =
     "00000000-0000-4000-8001-" ^ hex_digest_prefix 6 (wrapper_uuid ^ ":" ^ nonce)
   in
@@ -1769,7 +1775,7 @@ let process_tasks invoke_config repo graph agent_name config master_session
   loop [] tasks
 
 let bridge_log_line message =
-  Ptime_util.rfc3339_millis (Ptime_util.now ()) ^ " " ^ message
+  Time.rfc3339_millis (Time.now ()) ^ " " ^ message
 
 let emit_bridge_log : type a. a Output.Mode.t -> string -> unit =
  fun mode message ->
@@ -1849,7 +1855,8 @@ let bridge_lock_owner graph agent_name =
   Printf.sprintf "{:pid %d :graph \"%s\" :agent \"%s\" :started-at \"%s\"}\n"
     (Cli_unix.getpid ()) (edn_string_escape graph)
     (edn_string_escape agent_name)
-    (Printf.sprintf "%.3f" (Ptime.to_float_s (Ptime_util.now ())))
+    (Printf.sprintf "%.3f"
+       (Time.time_to_epoch_seconds_float (Time.now ())))
 
 let bridge_lock_error graph agent_name =
   let graph = Cli_primitive.string_of_graph graph in
@@ -1865,7 +1872,7 @@ let bridge_lock_owner_pid lock_dir =
   try
     let owner =
       Cli_unix.read_text_file (bridge_lock_owner_path lock_dir)
-      |> Edn_ocaml.of_edn_string
+      |> Melange_edn.of_edn_string
     in
     Edn_util.get_int owner ":pid"
   with _ -> None
@@ -1964,8 +1971,8 @@ let execute_bridge_once repo (graph : Cli_primitive.graph) agent_name config
 let sync_db_changes_event_type = Edn_util.keyword_t ":sync-db-changes"
 
 let wait_forever () =
-  let task, _resolver = Lwt.wait () in
-  Cli_effect.of_lwt task
+  let task, _resolver = Cli_effect.wait () in
+  task
 
 let execute_bridge_forever repo (graph : Cli_primitive.graph) agent_name config
     mode =

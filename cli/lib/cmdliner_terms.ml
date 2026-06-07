@@ -6,7 +6,7 @@ let request_for id =
     ~command:Cli_request.Version ~raw_args:path
 
 let leaf meta =
-  let term = Cmdliner.Term.const (request_for meta.Command_registry.id) in
+  let term = request_for meta.Command_registry.id in
   Cmdliner_boundary.Leaf (Cmdliner_boundary.make_leaf meta term)
 
 let nodes_of metas = List.map leaf metas

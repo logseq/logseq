@@ -1,4 +1,0 @@
-(library
- (name logseq_cli_platform_native)
- (implements logseq_cli_platform)
- (libraries lwt.unix ptime unix cohttp cohttp-lwt cohttp-lwt-unix uri))

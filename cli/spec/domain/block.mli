@@ -11,7 +11,7 @@ type t = {
   tags : Selector.tag list;
   properties : Property.assignment list;
   children : t list;
-  raw : Edn_ocaml.any;
+  raw : Melange_edn.any;
 }
 
 type tree = { root : t }
@@ -22,8 +22,8 @@ val string_of_position : position -> string
 val make :
   ?uuid:Cli_primitive.uuid -> ?title:string -> ?children:t list -> unit -> t
 
-val of_value : Edn_ocaml.any -> t
-val to_value : t -> Edn_ocaml.map Edn_ocaml.t
+val of_value : Melange_edn.any -> t
+val to_value : t -> Melange_edn.map Melange_edn.t
 val flatten : t list -> t list
 val collect_uuids : t list -> Cli_primitive.uuid list
 val label : t -> string option

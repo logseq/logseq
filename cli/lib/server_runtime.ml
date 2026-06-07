@@ -12,7 +12,7 @@ type server = {
   root_dir : Cli_primitive.path option;
   owner_source : Cli_primitive.owner_source;
   owned : bool;
-  raw : Edn_ocaml.any option;
+  raw : Melange_edn.any option;
 }
 
 type start_result = {
@@ -67,19 +67,14 @@ let process_alive pid =
   | Cli_unix.Cli_unix_error (Cli_unix.ESRCH, _, _) -> false
   | Cli_unix.Cli_unix_error (Cli_unix.EPERM, _, _) -> true
 
-let http_request ~(method_ : Cohttp.Code.meth) ~url ~headers ~body ~timeout_span
+let http_request ~(method_ : Fetch.requestMethod) ~url ~headers ~body ~timeout_span
     =
   Cli_effect.bind
-    (Cli_platform.HTTP.request ?timeout_span method_ (Uri.of_string url)
-       ~headers:(Cohttp.Header.of_list headers)
-       ~body:(Cohttp_lwt.Body.of_string body))
-    (fun (response, body) ->
-      Cli_effect.bind
-        (Cli_effect.of_lwt (Cohttp_lwt.Body.to_string body))
-        (fun body -> Cli_effect.pure (response, body)))
+    (Cli_platform.HTTP.request ?timeout_span method_ url ~headers ~body)
+    (fun (response, body) -> Cli_effect.pure (response, body))
 
 let http_success response =
-  let status = Cohttp.Response.status response |> Cohttp.Code.code_of_status in
+  let status = Fetch.Response.status response in
   status >= 200 && status < 300
 
 let parse_server_list_line line =
@@ -93,24 +88,10 @@ let parse_server_list_line line =
   | _ -> None
 
 let read_server_list path =
-  if not (Sys.file_exists path) then []
+  if not (Cli_unix.file_exists path) then []
   else
-    let ic = open_in path in
-    Fun.protect
-      ~finally:(fun () -> close_in_noerr ic)
-      (fun () ->
-        let rec loop acc =
-          match input_line ic with
-          | line ->
-              let acc =
-                match parse_server_list_line line with
-                | Some entry -> entry :: acc
-                | None -> acc
-              in
-              loop acc
-          | exception End_of_file -> List.rev acc
-        in
-        loop [])
+    Cli_unix.read_text_file path |> String.split_on_char '\n'
+    |> List.filter_map parse_server_list_line
 
 type json_parser = { text : string; mutable pos : int }
 
@@ -309,11 +290,11 @@ let discover_server (_pid, port) =
          if http_success response then
            Some (server_of_health ~fallback_port:port body)
          else None)
-       (http_request ~method_:`GET
+       (http_request ~method_:Fetch.Get
           ~url:("http://127.0.0.1:" ^ string_of_int port ^ "/healthz")
           ~headers:[ ("Accept", "application/json") ]
           ~body:""
-          ~timeout_span:(Some (Ptime_util.span_of_ms 1_000L))))
+          ~timeout_span:(Some (Time.span_of_ms 1_000L))))
     (fun _ -> Cli_effect.pure None)
 
 let list_servers config =
@@ -325,7 +306,7 @@ let list_servers config =
     (Cli_effect.all (List.map discover_server entries))
 
 let rec mkdir_p path =
-  if path = "" || path = Filename.dirname path || Sys.file_exists path then ()
+  if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then ()
   else (
     mkdir_p (Filename.dirname path);
     Cli_unix.mkdir path 0o755)
@@ -336,7 +317,7 @@ let ensure_repo_dir config repo =
   in
   try
     mkdir_p path;
-    if not (Sys.is_directory path) then
+    if not (Cli_unix.is_directory path) then
       Stdlib.Error
         (Error.make
            (Edn_util.keyword_t "root-dir-permission")
@@ -368,7 +349,7 @@ let script_candidates config =
 
 let resolve_script_path config =
   let candidates = script_candidates config in
-  match List.find_opt Sys.file_exists candidates with
+  match List.find_opt Cli_unix.file_exists candidates with
   | Some path -> Stdlib.Ok path
   | None ->
       Stdlib.Error
@@ -429,26 +410,26 @@ let invoke_config_of_server config server =
     profile_session = config.profile_session;
   }
 
-let wait_until_effect ?(timeout_span = Ptime_util.span_of_ms 8_000L)
-    ?(interval_span = Ptime_util.span_of_ms 50L) predicate =
+let wait_until_effect ?(timeout_span = Time.span_of_ms 8_000L)
+    ?(interval_span = Time.span_of_ms 50L) predicate =
   let open Cli_effect in
   let deadline =
     Option.value
-      (Ptime.add_span (Ptime_util.now ()) timeout_span)
-      ~default:Ptime.max
+      (Time.add_span (Time.now ()) timeout_span)
+      ~default:Time.max_time
   in
   let rec loop () =
     bind (predicate ()) (function
       | Some _ as result -> pure result
       | None ->
-          if Ptime.compare (Ptime_util.now ()) deadline >= 0 then pure None
+          if Time.compare_time (Time.now ()) deadline >= 0 then pure None
           else bind (sleep interval_span) (fun () -> loop ()))
   in
   loop ()
 
 let wait_for_lock path =
   wait_until_effect (fun () ->
-      Cli_effect.pure (if Sys.file_exists path then Some () else None))
+      Cli_effect.pure (if Cli_unix.file_exists path then Some () else None))
 
 let wait_for_ready config repo =
   wait_until_effect (fun () ->
@@ -577,11 +558,11 @@ let shutdown_server server =
   Cli_effect.catch
     (Cli_effect.map
        (fun (response, _body) -> http_success response)
-       (http_request ~method_:`POST
+       (http_request ~method_:Fetch.Post
           ~url:(server.base_url ^ "/v1/shutdown")
           ~headers:[ ("Content-Type", "application/json") ]
           ~body:"{}"
-          ~timeout_span:(Some (Ptime_util.span_of_ms 1_000L))))
+          ~timeout_span:(Some (Time.span_of_ms 1_000L))))
     (fun _ -> Cli_effect.pure false)
 
 let stop_server config repo =
@@ -603,10 +584,10 @@ let stop_server config repo =
                   (Edn_util.keyword_t "server-owned-by-other")
                   "server is owned by another process"))
         else
-          let shutdown_timeout_span = Ptime_util.span_of_ms 5_000L in
-          let shutdown_interval_span = Ptime_util.span_of_ms 200L in
-          let kill_timeout_span = Ptime_util.span_of_ms 1_000L in
-          let kill_interval_span = Ptime_util.span_of_ms 100L in
+          let shutdown_timeout_span = Time.span_of_ms 5_000L in
+          let shutdown_interval_span = Time.span_of_ms 200L in
+          let kill_timeout_span = Time.span_of_ms 1_000L in
+          let kill_interval_span = Time.span_of_ms 100L in
           bind (shutdown_server server) (fun _ ->
               bind
                 (wait_until_effect ~timeout_span:shutdown_timeout_span
@@ -657,46 +638,6 @@ let contains_substring ~needle text =
   in
   needle_len = 0 || loop 0
 
-let percent_decode text =
-  let len = String.length text in
-  let buffer = Buffer.create len in
-  let rec loop index =
-    if index >= len then Some (Buffer.contents buffer)
-    else
-      match text.[index] with
-      | '%' when index + 2 < len -> (
-          match
-            ( Graph_dir.hex_value text.[index + 1],
-              Graph_dir.hex_value text.[index + 2] )
-          with
-          | Some hi, Some lo ->
-              Buffer.add_char buffer (Char.chr ((hi lsl 4) lor lo));
-              loop (index + 3)
-          | _ -> None)
-      | '%' -> None
-      | c ->
-          Buffer.add_char buffer c;
-          loop (index + 1)
-  in
-  loop 0
-
-let legacy_compat_name dir_name =
-  let len = String.length dir_name in
-  let buffer = Buffer.create len in
-  let rec loop index =
-    if index >= len then Buffer.contents buffer
-    else if index + 1 < len && String.sub dir_name index 2 = "++" then (
-      Buffer.add_char buffer '/';
-      loop (index + 2))
-    else if index + 3 < len && String.sub dir_name index 4 = "+3A+" then (
-      Buffer.add_char buffer ':';
-      loop (index + 4))
-    else (
-      Buffer.add_char buffer dir_name.[index];
-      loop (index + 1))
-  in
-  loop 0
-
 let legacy_derivation_signal dir_name =
   contains_substring ~needle:"++" dir_name
   || contains_substring ~needle:"+3A+" dir_name
@@ -704,10 +645,7 @@ let legacy_derivation_signal dir_name =
 
 let decode_legacy_graph_dir_name dir_name =
   if not (legacy_derivation_signal dir_name) then None
-  else
-    match percent_decode (legacy_compat_name dir_name) with
-    | Some decoded when decoded <> "" -> Some decoded
-    | _ -> None
+  else Graph_dir.decode_legacy_graph_dir_name dir_name
 
 let canonical_graph_name graph =
   if graph <> "" && not (starts_with ~prefix:"logseq_db_" graph) then Some graph
@@ -749,7 +687,7 @@ let classify_graph_dir graphs_root dir_name =
                 target_graph_dir = Some target_graph_dir;
                 conflict =
                   target_graph_dir <> dir_name
-                  && Sys.file_exists
+                  && Cli_unix.file_exists
                        (Filename.concat graphs_root target_graph_dir);
                 reason = None;
               }
@@ -769,9 +707,9 @@ let classify_graph_dir graphs_root dir_name =
 
 let list_graph_items config =
   let dir = graphs_dir config in
-  if Sys.file_exists dir then
-    Sys.readdir dir |> Array.to_list
-    |> List.filter (fun name -> Sys.is_directory (Filename.concat dir name))
+  if Cli_unix.file_exists dir then
+    Cli_unix.readdir dir |> Array.to_list
+    |> List.filter (fun name -> Cli_unix.is_directory (Filename.concat dir name))
     |> List.sort_uniq String.compare
     |> List.filter_map (classify_graph_dir dir)
   else []

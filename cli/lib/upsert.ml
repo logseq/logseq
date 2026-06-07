@@ -36,8 +36,8 @@ type task_opts = {
   pos : Block.position option;
   status : string option;
   priority : string option;
-  scheduled : Ptime.t option;
-  deadline : Ptime.t option;
+  scheduled : Js.Date.t option;
+  deadline : Js.Date.t option;
   no_status : bool;
   no_priority : bool;
   no_scheduled : bool;
@@ -372,7 +372,7 @@ let ordinal value =
   string_of_int value ^ suffix
 
 let default_journal_title () =
-  let year, month, day = Ptime_util.local_date (Ptime_util.now ()) in
+  let year, month, day = Time.local_date (Time.now ()) in
   let months =
     [|
       "Jan";
@@ -567,8 +567,8 @@ let tag_of_value value =
 let key_of_value = Property.parse_key
 
 let edn_value_of_string ~label text =
-  try Ok (Edn_ocaml.of_edn_string text)
-  with Edn_ocaml.Parse_error _ ->
+  try Ok (Melange_edn.of_edn_string text)
+  with Melange_edn.Parse_error _ ->
     Error (Error.invalid_options ("invalid " ^ label ^ " edn"))
 
 let parse_vector_edn ~label text =
@@ -839,7 +839,7 @@ let build_task repo graph (opts : task_opts) =
                 Property.key =
                   Property.Key_ident
                     (Edn_util.keyword_t ":logseq.property/scheduled");
-                value = Edn_util.string (Ptime_util.rfc3339_millis scheduled);
+                value = Edn_util.string (Time.rfc3339_millis scheduled);
               }
               :: properties
           | None -> properties
@@ -851,7 +851,7 @@ let build_task repo graph (opts : task_opts) =
                 Property.key =
                   Property.Key_ident
                     (Edn_util.keyword_t ":logseq.property/deadline");
-                value = Edn_util.string (Ptime_util.rfc3339_millis deadline);
+                value = Edn_util.string (Time.rfc3339_millis deadline);
               }
               :: properties
           | None -> properties
@@ -1094,30 +1094,14 @@ let file_extension path =
   | _ -> None
 
 let rec mkdir_p path =
-  if path = "" || path = Filename.dirname path || Sys.file_exists path then ()
+  if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then ()
   else (
     mkdir_p (Filename.dirname path);
     Cli_unix.mkdir path 0o755)
 
 let copy_file source destination =
-  let ic = open_in_bin source in
-  Fun.protect
-    ~finally:(fun () -> close_in_noerr ic)
-    (fun () ->
-      mkdir_p (Filename.dirname destination);
-      let oc = open_out_bin destination in
-      Fun.protect
-        ~finally:(fun () -> close_out_noerr oc)
-        (fun () ->
-          let buffer = Bytes.create 65536 in
-          let rec loop () =
-            match input ic buffer 0 (Bytes.length buffer) with
-            | 0 -> ()
-            | n ->
-                output oc buffer 0 n;
-                loop ()
-          in
-          loop ()))
+  mkdir_p (Filename.dirname destination);
+  Cli_unix.copy_file source destination
 
 let graph_assets_dir config repo =
   Filename.concat
@@ -1756,7 +1740,7 @@ let pull_asset_by_uuid invoke_config repo uuid =
     (vector [ kw ":block/uuid"; Edn_util.uuid uuid ])
 
 let ensure_asset_file_metadata path =
-  if not (Sys.file_exists path) then
+  if not (Cli_unix.file_exists path) then
     Error
       (Error.make
          ~context:(Edn_util.map [ (kw ":path", Edn_util.string path) ])

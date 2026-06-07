@@ -1,10 +1,13 @@
-(executable
- (name main)
- (modes js)
- (libraries logseq_cli_platform_node logseq_cli lwt))
+(melange.emit
+ (target logseq_cli_melange)
+ (modules main)
+ (module_systems commonjs)
+ (preprocess
+  (pps melange.ppx))
+ (libraries logseq_cli_platform_node logseq_cli))
 
 (install
  (section bin)
  (package logseq-cli)
  (files
-  (main.bc.js as logseq-cli.js)))
+  (logseq_cli_melange/bin/main.js as logseq-cli.js)))

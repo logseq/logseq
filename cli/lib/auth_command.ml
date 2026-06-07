@@ -18,7 +18,7 @@ let login_value (result : Auth_state.login_result) =
       (Edn_util.keyword ":authorize-url", Edn_util.string result.authorize_url);
       (Edn_util.keyword ":opened", Edn_util.bool result.opened);
       ( Edn_util.keyword ":updated-at",
-        Edn_util.int64 (Ptime_util.time_to_epoch_ms result.updated_at) );
+        Edn_util.int64 (Time.time_to_epoch_ms result.updated_at) );
     ]
   in
   let fields =

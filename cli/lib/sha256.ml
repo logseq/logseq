@@ -210,18 +210,4 @@ let base64url_of_string text =
 let base64url text = raw text |> base64url_of_string
 
 let file_hex path =
-  let ic = open_in_bin path in
-  Fun.protect
-    ~finally:(fun () -> close_in_noerr ic)
-    (fun () ->
-      let buffer = Buffer.create 4096 in
-      let bytes = Bytes.create 65536 in
-      let rec loop () =
-        match input ic bytes 0 (Bytes.length bytes) with
-        | 0 -> ()
-        | n ->
-            Buffer.add_subbytes buffer bytes 0 n;
-            loop ()
-      in
-      loop ();
-      hex (Buffer.contents buffer))
+  Cli_unix.read_binary_file path |> hex
