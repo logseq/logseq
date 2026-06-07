@@ -1,5 +1,4 @@
-external set_timeout : ((unit -> unit)[@u]) -> int -> unit = "setTimeout"
-
+let set_timeout f ms = ignore (Js.Global.setTimeout ~f ms : Js.Global.timeoutId)
 let argv_contains value = Array.exists (( = ) value) Node.Process.argv
 
 let () =
@@ -17,8 +16,6 @@ let () =
     | None -> ""
   in
   print_endline "{\"session_id\":\"cli-live-session\"}";
-  set_timeout (fun[@u] () -> print_endline "still alive after session id") 200;
-  set_timeout
-    (fun[@u] () -> Node.Fs.writeFileAsUtf8Sync marker worker_script)
-    500;
-  set_timeout (fun[@u] () -> ()) 5000
+  set_timeout (fun () -> print_endline "still alive after session id") 200;
+  set_timeout (fun () -> Node.Fs.writeFileAsUtf8Sync marker worker_script) 500;
+  set_timeout (fun () -> ()) 5000

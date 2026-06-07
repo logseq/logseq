@@ -1,6 +1,3 @@
-external encode_uri_component : string -> string = "encodeURIComponent"
-external decode_uri_component : string -> string = "decodeURIComponent"
-
 let replace_all ~needle ~replacement text =
   let needle_len = String.length needle in
   if needle_len = 0 then invalid_arg "needle must not be empty";
@@ -21,7 +18,7 @@ let replace_all ~needle ~replacement text =
   loop 0
 
 let encode_graph_dir_name graph_name =
-  graph_name |> encode_uri_component
+  graph_name |> Js.Global.encodeURIComponent
   |> replace_all ~needle:"%20" ~replacement:" "
   |> replace_all ~needle:"~" ~replacement:"%7E"
   |> replace_all ~needle:"%" ~replacement:"~"
@@ -40,7 +37,7 @@ let contains_substring ~needle text =
   loop 0
 
 let decode_percent_graph_dir_name dir_name =
-  try Some (decode_uri_component dir_name) with _ -> None
+  try Some (Js.Global.decodeURIComponent dir_name) with _ -> None
 
 let decode_graph_dir_name dir_name =
   if

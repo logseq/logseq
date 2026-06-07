@@ -21,30 +21,9 @@ module Fs = struct
   external mkdir_sync : string -> mkdir_options -> unit = "mkdirSync"
   [@@mel.module "fs"]
 
-  external rmdir_sync : string -> unit = "rmdirSync" [@@mel.module "fs"]
-  external exists_sync : string -> bool = "existsSync" [@@mel.module "fs"]
   external stat_sync : string -> stat = "statSync" [@@mel.module "fs"]
 
-  external readdir_sync : string -> string array = "readdirSync"
-  [@@mel.module "fs"]
-
-  external write_file_utf8_sync :
-    string -> string -> (_[@mel.as "utf8"]) -> unit = "writeFileSync"
-  [@@mel.module "fs"]
-
-  external read_file_utf8_sync : string -> (_[@mel.as "utf8"]) -> string
-    = "readFileSync"
-  [@@mel.module "fs"]
-
   external read_fd_utf8_sync : int -> (_[@mel.as "utf8"]) -> string
-    = "readFileSync"
-  [@@mel.module "fs"]
-
-  external write_file_buffer_sync : string -> Node.Buffer.t -> unit
-    = "writeFileSync"
-  [@@mel.module "fs"]
-
-  external read_file_latin1_sync : string -> (_[@mel.as "latin1"]) -> string
     = "readFileSync"
   [@@mel.module "fs"]
 
@@ -52,10 +31,6 @@ module Fs = struct
   [@@mel.module "fs"]
 
   external rm_sync : string -> rm_options -> unit = "rmSync" [@@mel.module "fs"]
-
-  external rename_sync : string -> string -> unit = "renameSync"
-  [@@mel.module "fs"]
-
   external chmod_sync : string -> int -> unit = "chmodSync" [@@mel.module "fs"]
 
   external access_sync : string -> int -> unit = "accessSync"
@@ -78,8 +53,6 @@ module Process = struct
   type writable
 
   external pid : int = "pid" [@@mel.module "process"]
-  external platform : string = "platform" [@@mel.module "process"]
-  external env : string Js.Dict.t = "env" [@@mel.module "process"]
   external stdout : writable = "stdout" [@@mel.module "process"]
   external kill : int -> int -> unit = "kill" [@@mel.module "process"]
   external write : writable -> string -> bool = "write" [@@mel.send]
@@ -121,10 +94,6 @@ module Child_process = struct
   external stdout : spawn_result -> string Js.nullable = "stdout" [@@mel.get]
   external stderr : spawn_result -> string Js.nullable = "stderr" [@@mel.get]
   external error : spawn_result -> Js.Exn.t Js.nullable = "error" [@@mel.get]
-end
-
-module Date = struct
-  external now : unit -> float = "now" [@@mel.scope "Date"]
 end
 
 module Atomics_sleep = struct
@@ -180,7 +149,7 @@ let mkdir path perm =
   run_unit "mkdir" path (fun () ->
       Fs.mkdir_sync path (Fs.mkdir_options ~mode:perm ()))
 
-let rmdir path = run_unit "rmdir" path (fun () -> Fs.rmdir_sync path)
+let rmdir path = run_unit "rmdir" path (fun () -> Node.Fs.rmdirSync path)
 
 let mkdir_exclusive path perm =
   try
@@ -191,13 +160,13 @@ let mkdir_exclusive path perm =
     | Some "EEXIST" -> Already_exists
     | _ -> raise_error "mkdir" path exn)
 
-let file_exists = Fs.exists_sync
+let file_exists = Node.Fs.existsSync
 
 let is_directory path =
   try Fs.is_directory (Fs.stat_sync path) with _ -> false
 
 let readdir path =
-  try Fs.readdir_sync path with exn -> raise_error "readdir" path exn
+  try Node.Fs.readdirSync path with exn -> raise_error "readdir" path exn
 
 let rec mkdir_p path =
   if path = "" || path = Filename.dirname path || file_exists path then ()
@@ -206,21 +175,20 @@ let rec mkdir_p path =
     match mkdir_exclusive path 0o755 with Created | Already_exists -> ())
 
 let write_text_file path content =
-  run_unit "write" path (fun () -> Fs.write_file_utf8_sync path content)
+  run_unit "write" path (fun () -> Node.Fs.writeFileAsUtf8Sync path content)
 
 let read_text_file path =
-  try Fs.read_file_utf8_sync path with exn -> raise_error "read" path exn
+  try Node.Fs.readFileAsUtf8Sync path with exn -> raise_error "read" path exn
 
 let read_stdin_all () =
   try Fs.read_fd_utf8_sync 0 with exn -> raise_error "read" "stdin" exn
 
 let write_binary_file path content =
-  run_unit "write" path (fun () ->
-      Fs.write_file_buffer_sync path
-        (Node.Buffer.fromStringWithEncoding content ~encoding:`latin1))
+  run_unit "write" path (fun () -> Node.Fs.writeFileSync path content `latin1)
 
 let read_binary_file path =
-  try Fs.read_file_latin1_sync path with exn -> raise_error "read" path exn
+  try Node.Fs.readFileSync path `latin1
+  with exn -> raise_error "read" path exn
 
 let copy_file source destination =
   run_unit "copy" source (fun () -> Fs.copy_file_sync source destination)
@@ -230,7 +198,7 @@ let remove_tree path =
       Fs.rm_sync path (Fs.rm_options ~recursive:true ~force:true ()))
 
 let rename source destination =
-  run_unit "rename" source (fun () -> Fs.rename_sync source destination)
+  run_unit "rename" source (fun () -> Node.Fs.renameSync source destination)
 
 let getpid () = Process.pid
 
@@ -263,7 +231,7 @@ let stat path =
   with exn -> raise_error "stat" path exn
 
 let environment () =
-  Process.env |> Js.Dict.entries
+  Node.Process.process##env |> Js.Dict.entries
   |> Array.map (fun (key, value) -> key ^ "=" ^ value)
 
 let gethostname () = try Os.hostname () with _ -> ""
@@ -279,7 +247,7 @@ let command_args argv =
 
 let copy_env env =
   let result = Js.Dict.empty () in
-  Process.env |> Js.Dict.entries
+  Node.Process.process##env |> Js.Dict.entries
   |> Array.iter (fun (key, value) -> Js.Dict.set result key value);
   Array.iter
     (fun entry ->
@@ -336,7 +304,8 @@ let run_process_capture command args env =
     stderr;
   }
 
-let read_text_file_default path = try Fs.read_file_utf8_sync path with _ -> ""
+let read_text_file_default path =
+  try Node.Fs.readFileAsUtf8Sync path with _ -> ""
 
 let contains_substring ~needle haystack =
   let needle_len = String.length needle in
@@ -385,7 +354,7 @@ let start_process_capture_session_line command args env =
   let pid =
     Child_process.pid child |> Js.Nullable.toOption |> Option.value ~default:0
   in
-  let deadline = Date.now () +. 30_000. in
+  let deadline = Js.Date.now () +. 30_000. in
   let rec loop last_stdout =
     let stdout = read_text_file_default stdout_path in
     match find_session_line stdout with
@@ -396,7 +365,7 @@ let start_process_capture_session_line command args env =
           stdout = line;
           stderr = read_text_file_default stderr_path;
         }
-    | None when Date.now () >= deadline ->
+    | None when Js.Date.now () >= deadline ->
         Child_process.unref child;
         {
           status = 124;
@@ -421,7 +390,7 @@ let kill pid signal =
 let open_url url =
   try
     let command, args =
-      match Process.platform with
+      match Node.Process.process##platform with
       | "darwin" -> ("open", [ url ])
       | "linux" -> ("xdg-open", [ url ])
       | "win32" -> ("cmd.exe", [ "/d"; "/c"; "start"; ""; url ])
