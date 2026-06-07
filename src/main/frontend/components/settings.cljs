@@ -1124,6 +1124,7 @@
                                     (state/get-current-repo))
                             [:default-home :page] "")
         app-user-cfgs (rfx/use-sub [:electron/user-cfgs])
+        app-base-info (rfx/use-sub [:electron/app-base-info])
         current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
