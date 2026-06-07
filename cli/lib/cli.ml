@@ -237,8 +237,7 @@ let stdin_required_for_show_id argv =
   && option_present "id" options
   && Option.is_none (option_value "id" options)
 
-let read_stdin_all () =
-  Cli_unix.read_stdin_all ()
+let read_stdin_all () = Cli_unix.read_stdin_all ()
 
 let group_help_path registry path =
   let is_prefix prefix path =

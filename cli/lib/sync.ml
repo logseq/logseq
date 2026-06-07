@@ -165,8 +165,7 @@ let require_email = function
 let explicit_graph_and_repo globals =
   let graph =
     Option.bind globals.Global_opts.graph (fun graph ->
-        graph |> Cli_primitive.string_of_graph
-        |> Cli_primitive.non_empty
+        graph |> Cli_primitive.string_of_graph |> Cli_primitive.non_empty
         |> Option.map Cli_primitive.create_graph)
   in
   (graph, Option.map Cli_config.graph_to_repo graph)
@@ -190,9 +189,9 @@ let build ?registry:_ config globals = function
         (fun repo graph ->
           Sync_upload { repo; graph; e2ee_password = opts.e2ee_password })
         "repo is required for sync-upload"
-  | Parsed_download opts ->
+  | Parsed_download opts -> (
       let graph, repo = explicit_graph_and_repo globals in
-      (match (graph, repo) with
+      match (graph, repo) with
       | Some graph, Some repo ->
           Ok
             (Sync_download
@@ -350,7 +349,8 @@ let prepare_worker_runtime invoke_config config =
         (fun _ -> set_sync_config ())
 
 let unquote_transit_value = function
-  | Melange_edn.Any (Melange_edn.Tagged (("transit/quote" | "'"), value)) -> value
+  | Melange_edn.Any (Melange_edn.Tagged (("transit/quote" | "'"), value)) ->
+      value
   | value -> value
 
 let result_value result =
@@ -670,7 +670,8 @@ let local_asset_status config repo asset =
     | _ -> Local_mismatch path
 
 let remove_local_asset path =
-  if Cli_unix.file_exists path && not (Cli_unix.is_directory path) then Cli_unix.remove_tree path
+  if Cli_unix.file_exists path && not (Cli_unix.is_directory path) then
+    Cli_unix.remove_tree path
 
 let ensure_keys_args ~upload_keys ~e2ee_password =
   if not upload_keys then None

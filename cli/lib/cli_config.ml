@@ -83,9 +83,7 @@ let repo_to_graph repo =
     (strip_db_version_prefix (Cli_primitive.string_of_repo repo))
 
 let value_of_edn edn = edn
-
 let edn_of_value = Melange_edn.to_edn_string
-
 let read_file = Cli_unix.read_text_file
 
 let read_config_file path =
@@ -187,7 +185,8 @@ let assoc_opt key value fields =
 let map_fields value = Option.value (Edn_util.as_map value) ~default:[]
 
 let rec mkdir_p path =
-  if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then ()
+  if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then
+    ()
   else (
     mkdir_p (Filename.dirname path);
     Cli_unix.mkdir path 0o755)

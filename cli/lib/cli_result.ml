@@ -250,6 +250,31 @@ let graph_list_human value =
       | None -> empty_human)
   | None -> empty_human
 
+let text_list value key =
+  Option.bind (Edn_util.get value key) Edn_util.as_seq
+  |> Option.map (List.map value_text)
+  |> Option.value ~default:[]
+
+let bullet_lines values =
+  match values with
+  | [] -> [ "  - (none)" ]
+  | values -> List.map (fun value -> "  - " ^ value) values
+
+let example_human value =
+  let selector =
+    Edn_util.get_string value "selector" |> Option.value ~default:"-"
+  in
+  let matched_commands = text_list value "matched-commands" in
+  let examples = text_list value "examples" in
+  let message = Edn_util.get_string value "message" in
+  let lines =
+    (match message with Some message -> [ message ] | None -> [])
+    @ [ "Selector: " ^ selector; "Matched commands:" ]
+    @ bullet_lines matched_commands
+    @ [ "Examples:" ] @ bullet_lines examples
+  in
+  human_table (List.map (fun line -> [ line ]) lines)
+
 let graph_info_human value =
   match Edn_util.as_map value with
   | Some fields ->
@@ -309,6 +334,7 @@ let human_output command data =
       graph_list_human value
   | Raw value when command = Some Command_id.Graph_info ->
       graph_info_human value
+  | Raw value when command = Some Command_id.Example -> example_human value
   | Raw value when command = Some Command_id.Sync_remote_graphs ->
       remote_graphs_human value
   | Raw value -> (

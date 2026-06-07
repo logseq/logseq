@@ -30,8 +30,7 @@ type report = {
 
 let create_session enabled =
   if enabled then
-    Some
-      { enabled; start_time = Time.now (); spans = []; next_span_id = 0 }
+    Some { enabled; start_time = Time.now (); spans = []; next_span_id = 0 }
   else None
 
 let next_span_id session =
@@ -76,18 +75,11 @@ let summarize_stages spans =
   List.rev !order
   |> List.map (fun stage ->
       let count, total_span = Hashtbl.find table stage in
-      {
-        stage;
-        count;
-        total_span;
-        avg_span = Time.avg_span total_span count;
-      })
+      { stage; count; total_span; avg_span = Time.avg_span total_span count })
 
 let report (s : session) ~command ~status =
   let end_time = Time.now () in
-  let total_span =
-    Time.non_negative_diff ~start_time:s.start_time ~end_time
-  in
+  let total_span = Time.non_negative_diff ~start_time:s.start_time ~end_time in
   let spans : span list = List.rev s.spans in
   let spans =
     if List.exists (fun (span : span) -> span.stage = "cli.total") spans then

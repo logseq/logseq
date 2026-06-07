@@ -2,18 +2,8 @@ type error = EAGAIN | EWOULDBLOCK | ETIMEDOUT | ESRCH | EPERM
 type access_permission = R_OK | W_OK
 type open_flag = O_RDWR
 type file_descr = int
-
-type stats = {
-  st_size : int;
-  st_mtime : float;
-}
-
-type process_result = {
-  status : int;
-  stdout : string;
-  stderr : string;
-}
-
+type stats = { st_size : int; st_mtime : float }
+type process_result = { status : int; stdout : string; stderr : string }
 type mkdir_result = Created | Already_exists
 
 exception Cli_unix_error of error * string * string
@@ -52,7 +42,8 @@ val create_process_env :
   file_descr ->
   int
 
-val run_process_capture : string -> string list -> string array -> process_result
+val run_process_capture :
+  string -> string list -> string array -> process_result
 
 val start_process_capture_session_line :
   string -> string list -> string array -> process_result

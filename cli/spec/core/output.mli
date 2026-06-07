@@ -22,8 +22,7 @@ module Human_output : sig
   (** format as table.
       - columns need to be aligned
       - empty row value display as '-'
-      - humanize created-at/updated-at
-   *)
+      - humanize created-at/updated-at *)
 end
 
 type _ t =
