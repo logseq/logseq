@@ -458,6 +458,7 @@ let update_config config patch =
     fields
     |> assoc_opt "ws-url" (Edn_util.get_string patch "ws-url")
     |> assoc_opt "http-base" (Edn_util.get_string patch "http-base")
+    |> assoc_opt "graph" (Edn_util.get_string patch "graph")
   in
   let fields =
     match Edn_util.get patch "ws-url" with
@@ -469,6 +470,12 @@ let update_config config patch =
     match Edn_util.get patch "http-base" with
     | Some value when Edn_util.is_null value ->
         List.remove_assoc (Edn_util.keyword "http-base") fields
+    | _ -> fields
+  in
+  let fields =
+    match Edn_util.get patch "graph" with
+    | Some value when Edn_util.is_null value ->
+        List.remove_assoc (Edn_util.keyword "graph") fields
     | _ -> fields
   in
   let value = Edn_util.map_t (List.rev fields) in
