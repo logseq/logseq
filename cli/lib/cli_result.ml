@@ -169,7 +169,7 @@ let mapped_items_human items =
         (List.map (fun value -> [ value_text value ]) items)
 
 let items_human value =
-  Option.bind (Edn_util.get value ":items") Edn_util.as_seq
+  Option.bind (Edn_util.get value "items") Edn_util.as_seq
   |> Option.map mapped_items_human
 
 let list_like_fields =
@@ -221,11 +221,11 @@ let graph_list_human value =
   match Edn_util.as_map value with
   | Some fields -> (
       let current_graph =
-        match List.assoc_opt (Edn_util.keyword ":current-graph") fields with
+        match List.assoc_opt (Edn_util.keyword "current-graph") fields with
         | Some value -> Edn_util.as_string value
         | None -> None
       in
-      match List.assoc_opt (Edn_util.keyword ":graphs") fields with
+      match List.assoc_opt (Edn_util.keyword "graphs") fields with
       | Some graphs_value -> (
           match Edn_util.as_vector graphs_value with
           | Some graphs ->
@@ -279,12 +279,12 @@ let graph_info_human value =
   match Edn_util.as_map value with
   | Some fields ->
       let graph_rows =
-        match List.assoc_opt (Edn_util.keyword ":graph") fields with
+        match List.assoc_opt (Edn_util.keyword "graph") fields with
         | Some graph -> [ [ "graph"; value_text graph ] ]
         | None -> []
       in
       let kv_rows =
-        match List.assoc_opt (Edn_util.keyword ":kv") fields with
+        match List.assoc_opt (Edn_util.keyword "kv") fields with
         | Some kv -> (
             match Edn_util.as_map kv with
             | Some kv_fields ->
@@ -314,7 +314,7 @@ let remote_graph_row graph =
 let remote_graphs_human value =
   match Edn_util.as_map value with
   | Some fields -> (
-      match List.assoc_opt (Edn_util.keyword ":graphs") fields with
+      match List.assoc_opt (Edn_util.keyword "graphs") fields with
       | Some graphs_value -> (
           match Edn_util.as_seq graphs_value with
           | Some graphs ->

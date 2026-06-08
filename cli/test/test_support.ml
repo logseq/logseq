@@ -10,10 +10,13 @@ external rm_sync : string -> Js.Json.t Js.Dict.t -> unit = "rmSync"
 
 external chmod_sync : string -> int -> unit = "chmodSync" [@@mel.module "fs"]
 
+external process_pid : int = "pid" [@@mel.module "process"]
+
 external promise_error_message : Js.Promise.error -> string option = "message"
 [@@mel.get] [@@mel.return { undefined_to_opt }]
 
 let decode_uri_component = Js.Global.decodeURIComponent
+let encode_uri_component = Js.Global.encodeURIComponent
 let parse_json = Js.Json.parseExn
 let set_timeout f ms = ignore (Js.Global.setTimeout ~f ms : Js.Global.timeoutId)
 
@@ -107,6 +110,14 @@ let ( let* ) = Fest.Promise.( let* )
 let pass = ()
 let fail_test message = Fest.expect |> Fest.equal message ""
 
+let sleep_ms ms =
+  Js.Promise.make (fun ~resolve ~reject:_ ->
+      set_timeout
+        (fun () ->
+          let value = () in
+          (resolve value [@u]))
+        ms)
+
 let reject_with_assertion reject message =
   try fail_test message with exn -> reject exn [@u]
 
@@ -180,6 +191,33 @@ let assert_exit_non_zero name result =
 
 let temp_dir prefix = mkdtemp_sync (Node.Path.join [| tmpdir (); prefix |])
 
+let control_char = String.make 1 (Char.chr 1)
+
+let expect_valid_json name text =
+  try
+    ignore (parse_json text);
+    pass
+  with exn ->
+    fail_test
+      (Printf.sprintf "%s: expected valid JSON, got %s\n%s" name
+         (Printexc.to_string exn) text)
+
+let expect_valid_edn name text =
+  try
+    ignore (Melange_edn.of_edn_string text);
+    pass
+  with exn ->
+    fail_test
+      (Printf.sprintf "%s: expected valid EDN, got %s\n%s" name
+         (Printexc.to_string exn) text)
+
+let edn_any value = Melange_edn.any value
+let edn_keyword value = edn_any (Melange_edn.keyword value)
+let edn_string value = edn_any (Melange_edn.string value)
+
+let edn_map fields =
+  Melange_edn.map fields |> edn_any |> Melange_edn.to_edn_string
+
 let remove_tree path =
   rm_sync path
     (Js.Dict.fromArray
@@ -205,6 +243,68 @@ let write_json res status body =
   res_write_head res status
     (Js.Dict.fromArray [| ("Content-Type", "application/json") |]);
   res_end res body
+
+let base64url text =
+  Node.Buffer.fromString text |> Node.Buffer.toString ~encoding:`base64url
+
+let jwt_token payload =
+  base64url "{\"alg\":\"none\",\"typ\":\"JWT\"}"
+  ^ "." ^ base64url payload ^ ".signature"
+
+let id_token ?(sub = "user-1") ?(email = "user@example.com") () =
+  jwt_token
+    (Printf.sprintf "{\"sub\":%s,\"email\":%s,\"exp\":4102444800}"
+       (Js.Json.stringify (Js.Json.string sub))
+       (Js.Json.stringify (Js.Json.string email)))
+
+let token_response ?(sub = "user-1") ?(email = "user@example.com") () =
+  let object_ = Js.Dict.empty () in
+  Js.Dict.set object_ "id_token" (Js.Json.string (id_token ~sub ~email ()));
+  Js.Dict.set object_ "access_token" (Js.Json.string "access-token");
+  Js.Dict.set object_ "refresh_token" (Js.Json.string "refresh-token");
+  Js.Json.stringify (Js.Json.object_ object_)
+
+let query_param url key =
+  match String.split_on_char '?' url with
+  | [ _; query ] ->
+      query |> String.split_on_char '&'
+      |> List.find_map (fun part ->
+          match String.split_on_char '=' part with
+          | [ k; value ] when k = key -> Some value
+          | _ -> None)
+  | _ -> None
+
+let json_data_object stdout =
+  match Js.Json.decodeObject (parse_json stdout) with
+  | None ->
+      fail_test ("expected json object: " ^ stdout);
+      Js.Dict.empty ()
+  | Some root -> (
+      match Option.bind (Js.Dict.get root "data") Js.Json.decodeObject with
+      | None ->
+          fail_test ("expected data object: " ^ stdout);
+          Js.Dict.empty ()
+      | Some data -> data)
+
+let json_data_string stdout key =
+  match
+    Option.bind (Js.Dict.get (json_data_object stdout) key) Js.Json.decodeString
+  with
+  | Some value -> value
+  | None ->
+      fail_test ("expected string data field " ^ key ^ ": " ^ stdout);
+      ""
+
+let json_data_bool stdout key =
+  match
+    Option.bind
+      (Js.Dict.get (json_data_object stdout) key)
+      Js.Json.decodeBoolean
+  with
+  | Some value -> value
+  | None ->
+      fail_test ("expected boolean data field " ^ key ^ ": " ^ stdout);
+      false
 
 let run_cli_p ?(env = [||]) args =
   Js.Promise.make (fun ~resolve ~reject ->
@@ -233,6 +333,39 @@ let invoke_server response_for_body =
             try write_json res 200 (json_response (response_for_body !body))
             with exn ->
               write_json res 400 (error_response (Printexc.to_string exn))))
+
+let oauth_server () =
+  create_server (fun[@u] req res ->
+      let body = ref "" in
+      req_set_encoding req "utf8";
+      req_on_data req "data" (fun[@u] chunk -> body := !body ^ chunk);
+      req_on_end req "end" (fun[@u] () ->
+          ignore !body;
+          if req_method req <> "POST" || req_url req <> "/oauth2/token" then
+            write_json res 404 (error_response "not found")
+          else write_json res 200 (token_response ())))
+
+let rec fetch_with_retry attempts url =
+  let request =
+    Fetch.fetch url
+    |> Js.Promise.then_ (fun response ->
+        let status = Fetch.Response.status response in
+        if status >= 200 && status <= 299 then Js.Promise.resolve ()
+        else Js.Promise.reject (Failure ("HTTP " ^ string_of_int status)))
+  in
+  Js.Promise.catch
+    (fun error ->
+      if attempts <= 0 then
+        let message =
+          Option.value
+            (promise_error_message error)
+            ~default:"callback request failed"
+        in
+        Js.Promise.reject (Failure message)
+      else
+        sleep_ms 50
+        |> Js.Promise.then_ (fun () -> fetch_with_retry (attempts - 1) url))
+    request
 
 let with_server server run =
   Js.Promise.make (fun ~resolve ~reject ->

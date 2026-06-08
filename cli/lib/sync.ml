@@ -122,7 +122,7 @@ let command_id = function
   | Parsed_config_unset _ -> Sync_config_unset
 
 let validate_parsed _ = Ok ()
-let key_value key = Edn_util.keyword (":" ^ string_of_config_key key)
+let key_value key = Edn_util.keyword (string_of_config_key key)
 
 let config_value config = function
   | Ws_url -> config.Cli_config.ws_url
@@ -131,10 +131,10 @@ let config_value config = function
 let config_patch key value = Edn_util.map [ (key_value key, value) ]
 
 let config_result ?value key =
-  let fields = [ (Edn_util.keyword ":key", key_value key) ] in
+  let fields = [ (Edn_util.keyword "key", key_value key) ] in
   let fields =
     match value with
-    | Some value -> (Edn_util.keyword ":value", value) :: fields
+    | Some value -> (Edn_util.keyword "value", value) :: fields
     | None -> fields
   in
   Edn_util.map (List.rev fields)
@@ -283,11 +283,11 @@ let execute_config_unset mode config key =
 let sync_config_value config =
   Edn_util.map_t
     [
-      ( Edn_util.keyword ":ws-url",
+      ( Edn_util.keyword "ws-url",
         match config.Cli_config.ws_url with
         | Some value -> Edn_util.string value
         | None -> Edn_util.nil );
-      ( Edn_util.keyword ":http-base",
+      ( Edn_util.keyword "http-base",
         match config.Cli_config.http_base with
         | Some value -> Edn_util.string value
         | None -> Edn_util.nil );
@@ -302,9 +302,9 @@ let add_runtime_auth key value fields =
 let runtime_auth_state config =
   let fields =
     []
-    |> add_runtime_auth ":auth/id-token" config.Cli_config.id_token
-    |> add_runtime_auth ":auth/access-token" config.Cli_config.access_token
-    |> add_runtime_auth ":auth/refresh-token" config.Cli_config.refresh_token
+    |> add_runtime_auth "auth/id-token" config.Cli_config.id_token
+    |> add_runtime_auth "auth/access-token" config.Cli_config.access_token
+    |> add_runtime_auth "auth/refresh-token" config.Cli_config.refresh_token
   in
   match fields with [] -> None | _ -> Some (Edn_util.map_t (List.rev fields))
 
@@ -357,7 +357,7 @@ let result_value result =
   let result = unquote_transit_value result in
   match Edn_util.as_map result with
   | Some _ -> result
-  | _ -> Edn_util.map [ (Edn_util.keyword ":result", result) ]
+  | _ -> Edn_util.map [ (Edn_util.keyword "result", result) ]
 
 let kw name = Edn_util.keyword name
 let sym name = Edn_util.string ("~$" ^ name)
@@ -368,42 +368,42 @@ let graph_string graph = Cli_primitive.string_of_graph graph
 let graph_e2ee_query =
   vector
     [
-      kw ":find";
+      kw "find";
       sym "?v";
-      kw ":.";
-      kw ":where";
-      vector [ sym "?e"; kw ":db/ident"; kw ":logseq.kv/graph-rtc-e2ee?" ];
-      vector [ sym "?e"; kw ":kv/value"; sym "?v" ];
+      kw ".";
+      kw "where";
+      vector [ sym "?e"; kw "db/ident"; kw "logseq.kv/graph-rtc-e2ee?" ];
+      vector [ sym "?e"; kw "kv/value"; sym "?v" ];
     ]
 
 let sync_download_non_empty_query =
   vector
     [
-      kw ":find";
+      kw "find";
       Edn_util.list [ sym "count"; sym "?e" ];
-      kw ":.";
-      kw ":where";
-      vector [ sym "?e"; kw ":block/name"; sym "_" ];
+      kw ".";
+      kw "where";
+      vector [ sym "?e"; kw "block/name"; sym "_" ];
       Edn_util.list
         [
           sym "not";
           vector
-            [ sym "?e"; kw ":logseq.property/built-in?"; Edn_util.bool true ];
+            [ sym "?e"; kw "logseq.property/built-in?"; Edn_util.bool true ];
         ];
-      Edn_util.list [ sym "not"; vector [ sym "?e"; kw ":db/ident" ] ];
-      Edn_util.list [ sym "not"; vector [ sym "?e"; kw ":file/path" ] ];
+      Edn_util.list [ sym "not"; vector [ sym "?e"; kw "db/ident" ] ];
+      Edn_util.list [ sym "not"; vector [ sym "?e"; kw "file/path" ] ];
     ]
 
 let sync_asset_pull_selector =
   vector
     [
-      kw ":db/id";
-      kw ":block/uuid";
-      Edn_util.map [ (kw ":block/tags", vector [ kw ":db/ident" ]) ];
-      kw ":logseq.property.asset/type";
-      kw ":logseq.property.asset/checksum";
-      kw ":logseq.property.asset/remote-metadata";
-      kw ":logseq.property.asset/external-url";
+      kw "db/id";
+      kw "block/uuid";
+      Edn_util.map [ (kw "block/tags", vector [ kw "db/ident" ]) ];
+      kw "logseq.property.asset/type";
+      kw "logseq.property.asset/checksum";
+      kw "logseq.property.asset/remote-metadata";
+      kw "logseq.property.asset/external-url";
     ]
 
 let trim_keyword value =
@@ -412,12 +412,12 @@ let trim_keyword value =
   else value
 
 let status_ws_state status =
-  match Edn_util.get_string status ":ws-state" with
+  match Edn_util.get_string status "ws-state" with
   | Some state -> Some (trim_keyword state)
   | None -> None
 
 let status_last_error status =
-  match Edn_util.get status ":last-error" with
+  match Edn_util.get status "last-error" with
   | Some value when not (Edn_util.is_null value) -> Some value
   | _ -> None
 
@@ -457,7 +457,7 @@ let remote_graphs_error graphs =
 
 let worker_error_message ~default_message value =
   let message =
-    match Edn_util.get_string value ":message" with
+    match Edn_util.get_string value "message" with
     | Some message -> message
     | None -> (
         match Edn_util.as_string_like value with
@@ -489,17 +489,17 @@ let remote_graph_values value =
   else Option.value (Edn_util.as_seq value) ~default:[ value ]
 
 let remote_graph_name value =
-  match Edn_util.get value ":graph-name" with
+  match Edn_util.get value "graph-name" with
   | Some value -> value_string value
   | None -> None
 
 let remote_graph_id value =
-  match Edn_util.get value ":graph-id" with
+  match Edn_util.get value "graph-id" with
   | Some value -> value_string value
   | None -> None
 
 let remote_graph_e2ee value =
-  Option.value (Edn_util.get_bool value ":graph-e2ee?") ~default:false
+  Option.value (Edn_util.get_bool value "graph-e2ee?") ~default:false
 
 let find_remote_graph graph graphs =
   remote_graph_values graphs
@@ -508,7 +508,7 @@ let find_remote_graph graph graphs =
 
 let remote_graph_not_found graph =
   Error.make
-    ~context:(Edn_util.map [ (kw ":graph", Edn_util.string graph) ])
+    ~context:(Edn_util.map [ (kw "graph", Edn_util.string graph) ])
     (Edn_util.keyword_t "remote-graph-not-found")
     ("remote graph not found: " ^ graph)
 
@@ -517,8 +517,8 @@ let graph_db_not_empty repo count =
     ~context:
       (Edn_util.map
          [
-           (kw ":repo", Edn_util.string (repo_string repo));
-           (kw ":non-empty-entity-count", Edn_util.int count);
+           (kw "repo", Edn_util.string (repo_string repo));
+           (kw "non-empty-entity-count", Edn_util.int count);
          ])
     (Edn_util.keyword_t "graph-db-not-empty")
     "graph db is not empty"
@@ -532,15 +532,15 @@ let download_progress_enabled config ~progress ~progress_explicit =
 
 let download_progress_message graph_id event_type payload =
   match (Edn_util.keyword_to_string event_type, Edn_util.as_map payload) with
-  | ":rtc-log", Some _ ->
+  | "rtc-log", Some _ ->
       let event_kind =
-        Option.bind (Edn_util.get payload ":type") value_string
+        Option.bind (Edn_util.get payload "type") value_string
       in
       let event_graph_id =
-        Option.bind (Edn_util.get payload ":graph-uuid") value_string
+        Option.bind (Edn_util.get payload "graph-uuid") value_string
       in
       let message =
-        Option.bind (Edn_util.get payload ":message") value_string
+        Option.bind (Edn_util.get payload "message") value_string
       in
       if event_kind = Some "rtc.log/download" && event_graph_id = Some graph_id
       then message
@@ -564,18 +564,18 @@ let asset_download_error code message repo graph =
     ~context:
       (Edn_util.map
          [
-           (kw ":repo", Edn_util.string (repo_string repo));
-           (kw ":graph", Edn_util.string (graph_string graph));
+           (kw "repo", Edn_util.string (repo_string repo));
+           (kw "graph", Edn_util.string (graph_string graph));
          ])
     (Edn_util.keyword_t code) message
 
 let asset_lookup_ref ~id ~uuid =
   match (id, uuid) with
   | Some id, _ -> Edn_util.int64 id
-  | None, Some uuid -> vector [ kw ":block/uuid"; Edn_util.uuid uuid ]
+  | None, Some uuid -> vector [ kw "block/uuid"; Edn_util.uuid uuid ]
   | None, None -> Edn_util.nil
 
-let asset_tag_ident = ":logseq.class/Asset"
+let asset_tag_ident = "logseq.class/Asset"
 
 let asset_tag value =
   match Edn_util.as_string_like value with
@@ -583,7 +583,7 @@ let asset_tag value =
   | None -> (
       match Edn_util.as_map value with
       | Some _ -> (
-          match Edn_util.get value ":db/ident" with
+          match Edn_util.get value "db/ident" with
           | Some ident ->
               Option.value
                 (Option.map
@@ -595,7 +595,7 @@ let asset_tag value =
 
 let asset_tags value =
   Option.value
-    (Option.bind (Edn_util.get value ":block/tags") Edn_util.as_seq)
+    (Option.bind (Edn_util.get value "block/tags") Edn_util.as_seq)
     ~default:[]
 
 let non_empty_string_field value key =
@@ -614,32 +614,32 @@ let field_present value key =
 let asset_result_data ?(extra = []) asset ~download_requested ~checksum_status =
   let fields =
     [
-      ( kw ":asset-uuid",
+      ( kw "asset-uuid",
         Edn_util.string
           (Option.value
-             (non_empty_string_field asset ":block/uuid")
+             (non_empty_string_field asset "block/uuid")
              ~default:"") );
-      ( kw ":asset-type",
+      ( kw "asset-type",
         Edn_util.string
           (Option.value
-             (non_empty_string_field asset ":logseq.property.asset/type")
+             (non_empty_string_field asset "logseq.property.asset/type")
              ~default:"") );
-      (kw ":download-requested?", Edn_util.bool download_requested);
-      (kw ":checksum-status", kw checksum_status);
+      (kw "download-requested?", Edn_util.bool download_requested);
+      (kw "checksum-status", kw checksum_status);
     ]
     @ extra
   in
-  match Edn_util.get_int64 asset ":db/id" with
-  | Some id -> Edn_util.map ((kw ":asset-id", Edn_util.int64 id) :: fields)
+  match Edn_util.get_int64 asset "db/id" with
+  | Some id -> Edn_util.map ((kw "asset-id", Edn_util.int64 id) :: fields)
   | None -> Edn_util.map fields
 
 let asset_file_path config repo asset =
   let asset_uuid =
-    Option.value (non_empty_string_field asset ":block/uuid") ~default:""
+    Option.value (non_empty_string_field asset "block/uuid") ~default:""
   in
   let asset_type =
     Option.value
-      (non_empty_string_field asset ":logseq.property.asset/type")
+      (non_empty_string_field asset "logseq.property.asset/type")
       ~default:""
   in
   Filename.concat
@@ -663,7 +663,7 @@ let local_asset_status config repo asset =
   else
     match
       ( file_sha256 path,
-        non_empty_string_field asset ":logseq.property.asset/checksum" )
+        non_empty_string_field asset "logseq.property.asset/checksum" )
     with
     | Some actual, Some expected when String.equal actual expected ->
         Local_match
@@ -676,11 +676,11 @@ let remove_local_asset path =
 let ensure_keys_args ~upload_keys ~e2ee_password =
   if not upload_keys then None
   else
-    let fields = [ (kw ":ensure-server?", Edn_util.bool true) ] in
+    let fields = [ (kw "ensure-server?", Edn_util.bool true) ] in
     let fields =
       match e2ee_password with
       | Some password when String.trim password <> "" ->
-          (kw ":password", Edn_util.string password) :: fields
+          (kw "password", Edn_util.string password) :: fields
       | _ -> fields
     in
     Some (Edn_util.map_t (List.rev fields))
@@ -690,8 +690,8 @@ let e2ee_password_not_found repo =
     ~context:
       (Edn_util.map
          [
-           (kw ":repo", Edn_util.string (repo_string repo));
-           (kw ":action", kw ":sync-start");
+           (kw "repo", Edn_util.string (repo_string repo));
+           (kw "action", kw "sync-start");
          ])
     (Edn_util.keyword_t "e2ee-password-not-found")
     "e2ee-password not found"
@@ -700,7 +700,7 @@ let missing_refresh_token_error config =
   Error.make ~hint:"Run `logseq login` first."
     ~context:
       (Edn_util.map
-         [ (kw ":auth-path", Edn_util.string (Auth_state.auth_path config)) ])
+         [ (kw "auth-path", Edn_util.string (Auth_state.auth_path config)) ])
     (Edn_util.keyword_t "missing-auth")
     "missing refresh token"
 
@@ -774,9 +774,9 @@ let runtime_error repo status last_error =
     ~context:
       (Edn_util.map
          [
-           (kw ":repo", Edn_util.string (repo_string repo));
-           (kw ":status", status);
-           (kw ":last-error", last_error);
+           (kw "repo", Edn_util.string (repo_string repo));
+           (kw "status", status);
+           (kw "last-error", last_error);
          ])
     (Edn_util.keyword_t "sync-start-runtime-error")
     "sync start reached open websocket but runtime sync error is present"
@@ -789,8 +789,8 @@ let sync_start_timeout_error repo status =
     ~context:
       (Edn_util.map
          [
-           (kw ":repo", Edn_util.string (repo_string repo));
-           (kw ":status", status);
+           (kw "repo", Edn_util.string (repo_string repo));
+           (kw "status", status);
          ])
     (Edn_util.keyword_t "sync-start-timeout")
     "sync start timed out before websocket reached open state"
@@ -978,7 +978,7 @@ let execute_remote_graphs mode config =
                                ~command:Command_id.Sync_remote_graphs mode
                                (Raw
                                   (Edn_util.map
-                                     [ (kw ":graphs", graphs_value graphs) ])))))))
+                                     [ (kw "graphs", graphs_value graphs) ])))))))
 
 let execute_grant_access mode config repo graph_id email =
   Cli_effect.bind
@@ -1121,32 +1121,32 @@ let validate_asset repo graph asset =
         Error
           (asset_download_error "not-asset" "selected entity is not an asset"
              repo graph)
-      else if Option.is_none (non_empty_string_field asset ":block/uuid") then
+      else if Option.is_none (non_empty_string_field asset "block/uuid") then
         Error
           (asset_download_error "asset-uuid-missing" "asset uuid is missing"
              repo graph)
       else if
         Option.is_none
-          (non_empty_string_field asset ":logseq.property.asset/type")
+          (non_empty_string_field asset "logseq.property.asset/type")
       then
         Error
           (asset_download_error "asset-type-missing" "asset type is missing"
              repo graph)
       else if
         Option.is_none
-          (non_empty_string_field asset ":logseq.property.asset/checksum")
+          (non_empty_string_field asset "logseq.property.asset/checksum")
       then
         Error
           (asset_download_error "asset-checksum-missing"
              "asset checksum is missing" repo graph)
-      else if not (field_present asset ":logseq.property.asset/remote-metadata")
+      else if not (field_present asset "logseq.property.asset/remote-metadata")
       then
         Error
           (asset_download_error "asset-not-remote"
              "asset remote metadata is missing" repo graph)
       else if
         Option.is_some
-          (non_empty_string_field asset ":logseq.property.asset/external-url")
+          (non_empty_string_field asset "logseq.property.asset/external-url")
       then
         Error
           (asset_download_error "external-asset"
@@ -1158,7 +1158,7 @@ let validate_asset repo graph asset =
 
 let request_asset_download mode config invoke_config repo asset checksum_status
     extra =
-  match non_empty_string_field asset ":block/uuid" with
+  match non_empty_string_field asset "block/uuid" with
   | Some asset_uuid ->
       Cli_effect.bind
         (Transport.thread_api_db_sync_request_asset_download invoke_config ~repo
@@ -1178,7 +1178,7 @@ let request_asset_download mode config invoke_config repo asset checksum_status
 let execute_asset_download_request mode config invoke_config repo graph asset =
   Cli_effect.bind (Transport.thread_api_db_sync_status invoke_config ~repo)
     (fun status ->
-      match (status_ws_state status, Edn_util.get status ":graph-id") with
+      match (status_ws_state status, Edn_util.get status "graph-id") with
       | Some "open", Some graph_id when Option.is_some (value_string graph_id)
         -> (
           match local_asset_status config repo asset with
@@ -1188,22 +1188,22 @@ let execute_asset_download_request mode config invoke_config repo graph asset =
                    (Raw
                       (asset_result_data
                          ~extra:
-                           [ (kw ":skipped-reason", kw ":already-downloaded") ]
+                           [ (kw "skipped-reason", kw "already-downloaded") ]
                          asset ~download_requested:false
-                         ~checksum_status:":match")))
+                         ~checksum_status:"match")))
           | Local_mismatch path ->
               remove_local_asset path;
               request_asset_download mode config invoke_config repo asset
-                ":mismatch"
+                "mismatch"
                 [
-                  ( kw ":hint",
+                  ( kw "hint",
                     Edn_util.string
                       "Local asset checksum mismatched; requested re-download."
                   );
                 ]
           | Local_missing ->
               request_asset_download mode config invoke_config repo asset
-                ":missing" [])
+                "missing" [])
       | _ ->
           Cli_effect.pure
             (Cli_result.error ~command:Command_id.Sync_asset_download mode
@@ -1214,9 +1214,9 @@ let execute_asset_download_request mode config invoke_config repo graph asset =
                   ~context:
                     (Edn_util.map
                        [
-                         (kw ":repo", Edn_util.string (repo_string repo));
-                         (kw ":graph", Edn_util.string (graph_string graph));
-                         (kw ":status", status);
+                         (kw "repo", Edn_util.string (repo_string repo));
+                         (kw "graph", Edn_util.string (graph_string graph));
+                         (kw "status", status);
                        ])
                   (Edn_util.keyword_t "sync-not-started")
                   "sync is not started for this graph")))

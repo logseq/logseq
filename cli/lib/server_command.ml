@@ -58,56 +58,56 @@ let optional_string key = function
 let server_value (server : Server_runtime.server) =
   Edn_util.map
     ([
-       ( Edn_util.keyword ":repo",
+       ( Edn_util.keyword "repo",
          Edn_util.string (Cli_primitive.string_of_repo server.repo) );
-       ( Edn_util.keyword ":graph",
+       ( Edn_util.keyword "graph",
          match server.graph with
          | Some graph -> Edn_util.string (Cli_primitive.string_of_graph graph)
          | None -> Edn_util.nil );
-       (Edn_util.keyword ":pid", Edn_util.int server.pid);
-       (Edn_util.keyword ":host", Edn_util.string server.host);
-       (Edn_util.keyword ":port", Edn_util.int server.port);
-       (Edn_util.keyword ":base-url", Edn_util.string server.base_url);
-       (Edn_util.keyword ":status", status_value server.status);
-       (Edn_util.keyword ":owner-source", owner_source_value server.owner_source);
-       (Edn_util.keyword ":owned", Edn_util.bool server.owned);
+       (Edn_util.keyword "pid", Edn_util.int server.pid);
+       (Edn_util.keyword "host", Edn_util.string server.host);
+       (Edn_util.keyword "port", Edn_util.int server.port);
+       (Edn_util.keyword "base-url", Edn_util.string server.base_url);
+       (Edn_util.keyword "status", status_value server.status);
+       (Edn_util.keyword "owner-source", owner_source_value server.owner_source);
+       (Edn_util.keyword "owned", Edn_util.bool server.owned);
      ]
-    @ optional_string ":revision" server.revision
-    @ optional_string ":root-dir" server.root_dir)
+    @ optional_string "revision" server.revision
+    @ optional_string "root-dir" server.root_dir)
 
 let start_result_value (result : Server_runtime.start_result) =
   Edn_util.map
     [
-      ( Edn_util.keyword ":repo",
+      ( Edn_util.keyword "repo",
         Edn_util.string (Cli_primitive.string_of_repo result.repo) );
-      (Edn_util.keyword ":owner-source", owner_source_value result.owner_source);
-      (Edn_util.keyword ":owned", Edn_util.bool result.owned);
+      (Edn_util.keyword "owner-source", owner_source_value result.owner_source);
+      (Edn_util.keyword "owned", Edn_util.bool result.owned);
     ]
 
 let stop_result_value (result : Server_runtime.stop_result) =
   Edn_util.map
     [
-      ( Edn_util.keyword ":repo",
+      ( Edn_util.keyword "repo",
         Edn_util.string (Cli_primitive.string_of_repo result.repo) );
     ]
 
 let error_value (err : Error.t) =
   Edn_util.map
     [
-      ( Edn_util.keyword ":code",
+      ( Edn_util.keyword "code",
         Edn_util.string (Edn_util.keyword_to_string err.code) );
-      (Edn_util.keyword ":message", Edn_util.string err.message);
+      (Edn_util.keyword "message", Edn_util.string err.message);
     ]
 
 let failed_cleanup_value (server, err) =
   match Edn_util.as_map (server_value server) with
   | Some fields ->
-      Edn_util.map (fields @ [ (Edn_util.keyword ":error", error_value err) ])
+      Edn_util.map (fields @ [ (Edn_util.keyword "error", error_value err) ])
   | None ->
       Edn_util.map
         [
-          (Edn_util.keyword ":server", server_value server);
-          (Edn_util.keyword ":error", error_value err);
+          (Edn_util.keyword "server", server_value server);
+          (Edn_util.keyword "error", error_value err);
         ]
 
 let execute action config mode =
@@ -120,7 +120,7 @@ let execute action config mode =
                (Raw
                   (Edn_util.map
                      [
-                       ( Edn_util.keyword ":servers",
+                       ( Edn_util.keyword "servers",
                          Edn_util.vector (List.map server_value servers) );
                      ]))))
   | Server_cleanup ->
@@ -133,20 +133,20 @@ let execute action config mode =
                  (Raw
                     (Edn_util.map
                        [
-                         ( Edn_util.keyword ":cli-revision",
+                         ( Edn_util.keyword "cli-revision",
                            Edn_util.string result.cli_revision );
-                         ( Edn_util.keyword ":checked",
+                         ( Edn_util.keyword "checked",
                            Edn_util.int result.checked );
-                         ( Edn_util.keyword ":mismatched",
+                         ( Edn_util.keyword "mismatched",
                            Edn_util.int result.mismatched );
-                         ( Edn_util.keyword ":eligible",
+                         ( Edn_util.keyword "eligible",
                            Edn_util.int result.eligible );
-                         ( Edn_util.keyword ":skipped-owner",
+                         ( Edn_util.keyword "skipped-owner",
                            Edn_util.int result.skipped_owner );
-                         ( Edn_util.keyword ":killed",
+                         ( Edn_util.keyword "killed",
                            Edn_util.vector (List.map server_value result.killed)
                          );
-                         ( Edn_util.keyword ":failed",
+                         ( Edn_util.keyword "failed",
                            Edn_util.vector
                              (List.map failed_cleanup_value result.failed) );
                        ])))

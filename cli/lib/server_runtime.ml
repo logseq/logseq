@@ -108,23 +108,23 @@ let owner_source_of_string = function
 let server_of_health ~fallback_port body =
   let raw = Json_util.value_of_json_string body in
   let repo =
-    Edn_util.get_string raw ":repo"
+    Edn_util.get_string raw "repo"
     |> Option.value ~default:"" |> Cli_primitive.create_repo
   in
   let host =
-    Edn_util.get_string raw ":host" |> Option.value ~default:"127.0.0.1"
+    Edn_util.get_string raw "host" |> Option.value ~default:"127.0.0.1"
   in
   let port =
-    Edn_util.get_int raw ":port" |> Option.value ~default:fallback_port
+    Edn_util.get_int raw "port" |> Option.value ~default:fallback_port
   in
-  let pid = Edn_util.get_int raw ":pid" |> Option.value ~default:0 in
+  let pid = Edn_util.get_int raw "pid" |> Option.value ~default:0 in
   let status =
-    Edn_util.get_string raw ":status"
+    Edn_util.get_string raw "status"
     |> Option.map status_of_string
     |> Option.value ~default:Unknown
   in
   let owner_source =
-    Edn_util.get_string raw ":owner-source"
+    Edn_util.get_string raw "owner-source"
     |> Option.map owner_source_of_string
     |> Option.value ~default:Cli_primitive.Unknown
   in
@@ -136,8 +136,8 @@ let server_of_health ~fallback_port body =
     port;
     base_url = "http://" ^ host ^ ":" ^ string_of_int port;
     status;
-    revision = Edn_util.get_string raw ":revision";
-    root_dir = Edn_util.get_string raw ":root-dir";
+    revision = Edn_util.get_string raw "revision";
+    root_dir = Edn_util.get_string raw "root-dir";
     owner_source;
     owned = owner_source = Cli_primitive.Cli || owner_source = Unknown;
     raw = Some raw;
@@ -562,7 +562,7 @@ let classify_graph_dir graphs_root dir_name =
                   legacy_dir = Some dir_name;
                   target_graph_dir = None;
                   conflict = false;
-                  reason = Some (Edn_util.keyword_t ":graph-name-not-derivable");
+                  reason = Some (Edn_util.keyword_t "graph-name-not-derivable");
                 }
             else None)
 

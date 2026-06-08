@@ -6,6 +6,14 @@
   (pps melange.ppx))
  (libraries logseq_cli_platform_node logseq_cli))
 
+(melange.emit
+ (target playground)
+ (modules playground)
+ (module_systems commonjs)
+ (preprocess
+  (pps melange.ppx))
+ (libraries logseq_cli_platform_node logseq_cli melange-edn))
+
 (install
  (section bin)
  (package logseq-cli)

@@ -195,7 +195,7 @@ let custom_query_input value =
       match Edn_util.as_map value with
       | Some _ -> (
           match
-            Option.bind (Edn_util.get value ":name") query_name_of_value
+            Option.bind (Edn_util.get value "name") query_name_of_value
           with
           | None -> None
           | Some name ->
@@ -203,7 +203,7 @@ let custom_query_input value =
                 {
                   name;
                   optional = String.length name > 0 && name.[0] = '?';
-                  default = Edn_util.get value ":default";
+                  default = Edn_util.get value "default";
                 })
       | None -> None)
 
@@ -221,9 +221,9 @@ let custom_query_entry name source spec =
         match (Edn_util.as_vector spec, Edn_util.as_map spec) with
         | Some _, _ -> (Some spec, None, [])
         | _, Some _ ->
-            ( Edn_util.get spec ":query",
-              Edn_util.get_string spec ":doc",
-              custom_query_inputs (Edn_util.get spec ":inputs") )
+            ( Edn_util.get spec "query",
+              Edn_util.get_string spec "doc",
+              custom_query_inputs (Edn_util.get spec "inputs") )
         | _ -> (None, None, []))
   in
   match (query_name_of_value name, query) with
@@ -233,7 +233,7 @@ let custom_query_entry name source spec =
 let custom_queries config =
   match
     Option.bind config.Cli_config.raw_file_config (fun value ->
-        Edn_util.get value ":custom-queries")
+        Edn_util.get value "custom-queries")
   with
   | Some value -> (
       match Edn_util.as_map value with
@@ -266,7 +266,7 @@ let find_query config name =
 
 let rec contains_db_id_datom_clause value =
   match (Edn_util.as_vector value, Edn_util.as_list value) with
-  | Some (_ :: db_id :: _), _ when Edn_util.as_keyword db_id = Some ":db/id" ->
+  | Some (_ :: db_id :: _), _ when Edn_util.as_keyword db_id = Some "db/id" ->
       true
   | Some values, _ | _, Some values ->
       List.exists contains_db_id_datom_clause values
@@ -277,7 +277,7 @@ let validate_query query =
   | Some values ->
       let rec after_where = function
         | [] -> []
-        | keyword :: clauses when Edn_util.as_keyword keyword = Some ":where" ->
+        | keyword :: clauses when Edn_util.as_keyword keyword = Some "where" ->
             clauses
         | _ :: rest -> after_where rest
       in
@@ -303,7 +303,7 @@ let normalize_task_search_inputs (entry : query_entry option) inputs =
           in
           let status = String.trim status |> String.lowercase_ascii in
           if status = "" then inputs
-          else Edn_util.keyword (":logseq.property/status." ^ status) :: rest
+          else Edn_util.keyword ("logseq.property/status." ^ status) :: rest
       | _ -> inputs)
   | _ -> inputs
 
@@ -335,7 +335,7 @@ let normalize_inputs entry inputs =
           | spec :: rest, [] ->
               let default =
                 match spec.default with
-                | Some value when Edn_util.as_keyword value = Some ":now-ms" ->
+                | Some value when Edn_util.as_keyword value = Some "now-ms" ->
                     Edn_util.int64 (current_epoch_ms ())
                 | Some value -> value
                 | None when spec.name = "?now-ms" ->
@@ -364,7 +364,7 @@ let query_in_ends_with_percent query =
   | Some values -> (
       let rec find_in = function
         | [] -> []
-        | keyword :: rest when Edn_util.as_keyword keyword = Some ":in" ->
+        | keyword :: rest when Edn_util.as_keyword keyword = Some "in" ->
             collect_in [] rest
         | _ :: rest -> find_in rest
       and collect_in acc = function
@@ -458,12 +458,12 @@ let source_value = function
 let input_value (input : input_spec) =
   let fields =
     [
-      (Edn_util.keyword ":name", Edn_util.string input.name);
-      (Edn_util.keyword ":optional", Edn_util.bool input.optional);
+      (Edn_util.keyword "name", Edn_util.string input.name);
+      (Edn_util.keyword "optional", Edn_util.bool input.optional);
     ]
     @
     match input.default with
-    | Some value -> [ (Edn_util.keyword ":default", value) ]
+    | Some value -> [ (Edn_util.keyword "default", value) ]
     | None -> []
   in
   Edn_util.map fields
@@ -481,15 +481,15 @@ let query_entry_value (entry : query_entry) =
   let entry = hide_internal_inputs entry in
   Edn_util.map
     [
-      (Edn_util.keyword ":name", Edn_util.string entry.name);
-      (Edn_util.keyword ":source", source_value entry.source);
-      ( Edn_util.keyword ":doc",
+      (Edn_util.keyword "name", Edn_util.string entry.name);
+      (Edn_util.keyword "source", source_value entry.source);
+      ( Edn_util.keyword "doc",
         match entry.doc with
         | Some doc -> Edn_util.string doc
         | None -> Edn_util.nil );
-      ( Edn_util.keyword ":inputs",
+      ( Edn_util.keyword "inputs",
         Edn_util.vector (List.map input_value entry.inputs) );
-      (Edn_util.keyword ":query", entry.query);
+      (Edn_util.keyword "query", entry.query);
     ]
 
 let execute action config mode =
@@ -501,7 +501,7 @@ let execute action config mode =
            (Raw
               (Edn_util.map
                  [
-                   ( Edn_util.keyword ":queries",
+                   ( Edn_util.keyword "queries",
                      Edn_util.vector
                        (List.map query_entry_value (list_queries config)) );
                  ])))
@@ -518,7 +518,7 @@ let execute action config mode =
                 pure
                   (Cli_result.ok ~command:Command_id.Query mode
                      (Query_result
-                        (Edn_util.map [ (Edn_util.keyword ":result", value) ])))))
+                        (Edn_util.map [ (Edn_util.keyword "result", value) ])))))
 
 let meta ?(examples = []) id doc =
   {
