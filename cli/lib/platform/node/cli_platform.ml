@@ -1,3 +1,5 @@
+open Cli_effect.Infix
+
 let hostname = Cli_unix.gethostname
 let argv () = Node.Process.argv
 
@@ -175,9 +177,9 @@ module HTTP = struct
     ignore
       (promise |> Js.Promise.then_ on_ok |> Js.Promise.catch on_error
         : unit Js.Promise.t);
-    Cli_effect.bind task (function
+    task >>= function
       | Ok value -> Cli_effect.pure value
-      | Error message -> Cli_effect.error (Failure message))
+      | Error message -> Cli_effect.error (Failure message)
 
   let timeout_ms = function
     | Some timeout_span when Float.compare timeout_span 0. > 0 ->
