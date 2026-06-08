@@ -1855,15 +1855,54 @@ html.is-mac {
 .video-embed-shell {
   display: inline-flex;
   align-items: flex-end;
-  gap: 4px;
   max-width: 100%;
   margin: 0.25rem 0;
+  position: relative;
   vertical-align: top;
 
   .video-embed-frame {
     flex: 0 1 auto;
     min-width: 0;
     margin: 0;
+  }
+}
+
+.video-embed-resize-handle {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  width: 6px;
+  height: 15%;
+  min-height: 30px;
+  border: 1px solid rgb(229 231 235);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 30%);
+  cursor: col-resize;
+  opacity: 0;
+  user-select: none;
+  touch-action: none;
+  transform: translateY(-50%);
+}
+
+.video-embed-shell:hover .video-embed-resize-handle,
+.video-embed-resize-handle:hover,
+.is-resizing-video .video-embed-resize-handle {
+  opacity: 1;
+}
+
+.video-embed-resize-handle:hover,
+.is-resizing-video .video-embed-resize-handle {
+  background: rgb(0 0 0 / 70%);
+}
+
+.is-resizing-video {
+  cursor: col-resize;
+  user-select: none;
+}
+
+@media (pointer: coarse) {
+  .video-embed-resize-handle {
+    display: none;
   }
 }
 

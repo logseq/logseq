@@ -1604,38 +1604,115 @@
       (util/format "{{function %s}}" (first arguments))])))
 
 (def ^:private default-video-embed-width 560)
+(def ^:private min-video-embed-width 160)
+
+(defn- video-embed-parent-width
+  [*shell-ref]
+  (some-> (hooks/deref *shell-ref)
+          (.-parentElement)
+          (.-clientWidth)))
+
+(defn- clamp-video-embed-width
+  [width max-width]
+  (let [max-width (or max-width default-video-embed-width)
+        upper-bound (max min-video-embed-width max-width)]
+    (-> width
+        js/Math.round
+        (max min-video-embed-width)
+        (min upper-bound))))
+
 (defn- video-embed-dimensions
-  [aspect-ratio]
+  [aspect-ratio width]
   (let [[ratio-width ratio-height] (or aspect-ratio [16 9])
-        width default-video-embed-width
         height (int (* width (/ ratio-height ratio-width)))]
     [width height]))
 
-(defn- video-embed-cp
+(hsx/defc video-resize-handle
+  [{:keys [width *shell-ref set-width!]}]
+  (let [*drag (hooks/use-ref nil)]
+    (hooks/use-effect!
+     (fn []
+       #(dom/remove-class! js/document.documentElement "is-resizing-video"))
+     [])
+    [:div.video-embed-resize-handle
+     {:role "separator"
+      :aria-orientation "vertical"
+      :on-double-click (fn [e]
+                         (util/stop e)
+                         (hooks/set-ref! *drag nil)
+                         (set-width! nil))
+      :on-pointer-down (fn [^js e]
+                         (util/stop e)
+                         (.preventDefault e)
+                         (some-> (.-currentTarget e)
+                                 (.setPointerCapture (.-pointerId e)))
+                         (dom/add-class! js/document.documentElement "is-resizing-video")
+                         (hooks/set-ref! *drag {:pointer-id (.-pointerId e)
+                                                :start-x (.-clientX e)
+                                                :start-width width}))
+      :on-pointer-move (fn [^js e]
+                         (when-let [{:keys [pointer-id start-x start-width]} (hooks/deref *drag)]
+                           (when (= pointer-id (.-pointerId e))
+                             (let [dx (- (.-clientX e) start-x)
+                                   width' (clamp-video-embed-width
+                                           (+ start-width dx)
+                                           (video-embed-parent-width *shell-ref))]
+                               (set-width! width')))))
+      :on-pointer-up (fn [^js e]
+                       (when (= (:pointer-id (hooks/deref *drag)) (.-pointerId e))
+                         (hooks/set-ref! *drag nil)
+                         (dom/remove-class! js/document.documentElement "is-resizing-video")
+                         (let [target (.-currentTarget e)
+                               pointer-id (.-pointerId e)]
+                           (when (and target
+                                      (.hasPointerCapture target pointer-id))
+                             (.releasePointerCapture target pointer-id)))))
+      :on-pointer-cancel (fn [^js e]
+                           (when (= (:pointer-id (hooks/deref *drag)) (.-pointerId e))
+                             (hooks/set-ref! *drag nil)
+                             (dom/remove-class! js/document.documentElement "is-resizing-video")))}]))
+
+(hsx/defc video-embed-cp
   [{:keys [render id src start aspect-ratio] :as _embed}]
-  (let [[width height] (video-embed-dimensions aspect-ratio)]
-    (case render
-      :youtube-player
-      (let [opts (cond-> {:width width
-                          :height height}
-                 (seq start)
-                 (assoc :start start))]
-        [youtube/youtube-video id opts])
+  (let [[local-width set-local-width!] (hooks/use-state nil)
+        *shell-ref (hooks/use-ref nil)
+        resizable? (not (mobile-util/native-platform?))
+        max-width (video-embed-parent-width *shell-ref)
+        width (clamp-video-embed-width
+               (or local-width default-video-embed-width)
+               max-width)
+        [width height] (video-embed-dimensions aspect-ratio width)]
+    (when-let [frame
+               (case render
+                 :youtube-player
+                 (let [opts (cond-> {:width width
+                                     :height height
+                                     :bare-frame? true}
+                              (seq start)
+                              (assoc :start start))]
+                   [youtube/youtube-video id opts])
 
-      :iframe
-      [:div.video-embed-frame
-       {:style {:width width
-                :height height}}
-       [:iframe
-        {:allow-full-screen true
-         :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-         :framespacing "0"
-         :frame-border "no"
-         :border "0"
-         :scrolling "no"
-         :src src}]]
+                 :iframe
+                 [:div.video-embed-frame
+                  {:style {:width width
+                           :height height}}
+                  [:iframe
+                   {:allow-full-screen true
+                    :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+                    :framespacing "0"
+                    :frame-border "no"
+                    :border "0"
+                    :scrolling "no"
+                    :src src}]]
 
-      nil)))
+                 nil)]
+      [:div.video-embed-shell
+       {:ref *shell-ref}
+       frame
+       (when resizable?
+         (video-resize-handle {:width width
+                               :*shell-ref *shell-ref
+                               :set-width! set-local-width!}))])))
 
 (defn- macro-video-cp
   ([arguments]
