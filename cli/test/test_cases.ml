@@ -309,7 +309,7 @@ let () =
             fail_promise
               ("expected fresh PKCE challenge across logins, got " ^ first)));
 
-  test_promise "logout completes hosted UI callback flow" (fun () ->
+  test_promise "logout deletes auth and exits without callback" (fun () ->
       let root = temp_dir "logseq-cli-logout-flow-" in
       let config_path = Node.Path.join [| root; "cli.edn" |] in
       let auth_path = Node.Path.join [| root; "auth.json" |] in
@@ -341,12 +341,8 @@ let () =
               "logout";
             ]
         in
-        let* () =
-          fetch_with_retry 100
-            ("http://localhost:8765/auth/callback?state=" ^ state)
-        in
         let* result = logout in
-        ignore (expect_cli_exit_zero "logout callback" result);
+        ignore (expect_cli_exit_zero "logout" result);
         if Node.Fs.existsSync auth_path then
           fail_promise "logout did not delete auth file"
         else

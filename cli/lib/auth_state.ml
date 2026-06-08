@@ -492,7 +492,6 @@ let auth_code_exchange config ~code ~redirect_uri ~code_verifier =
                   "authorization code exchange failed")))
 
 let redirect_path = "/auth/callback"
-let logout_redirect_path = redirect_path
 let callback_host = "localhost"
 let callback_port = 8765
 
@@ -595,50 +594,6 @@ let callback_result_of_target ~state = function
               (Error.make
                  (Edn_util.keyword_t "missing-callback-code")
                  "missing authorization code") ))
-
-let logout_callback_result_of_target ~state = function
-  | None ->
-      ( login_callback_response 400 "Invalid request",
-        Error
-          (Error.make
-             (Edn_util.keyword_t "invalid-logout-callback-request")
-             "invalid logout callback request") )
-  | Some target -> (
-      let path, query = split_once '?' target in
-      let params = query_params query in
-      let param key = List.assoc_opt key params in
-      match (path, param "error", param "state") with
-      | path, _, _ when path <> logout_redirect_path ->
-          ( login_callback_response 404 "Not found",
-            Error
-              (Error.make
-                 (Edn_util.keyword_t "logout-callback-not-found")
-                 "logout callback path not found") )
-      | _, Some logout_error, _ ->
-          ( login_callback_response 400
-              "Logout failed. You can return to the CLI.",
-            Error
-              (Error.make
-                 ~context:
-                   (Edn_util.map
-                      [
-                        ( Edn_util.keyword "oauth-error",
-                          Edn_util.string logout_error );
-                      ])
-                 (Edn_util.keyword_t "logout-callback-error")
-                 "logout callback returned oauth error") )
-      | _, _, Some callback_state when callback_state <> state ->
-          ( login_callback_response 400
-              "Logout failed due to state mismatch. Return to the CLI and \
-               retry.",
-            Error
-              (Error.make
-                 (Edn_util.keyword_t "invalid-logout-callback-state")
-                 "logout callback state mismatch") )
-      | _ ->
-          ( login_callback_response 200
-              "Logout successful. You can return to the CLI.",
-            Ok () ))
 
 let open_browser config url =
   if
@@ -816,7 +771,7 @@ let logout config =
                   (Edn_util.keyword_t "logout-not-configured")
                   "oauth client id is not configured"))
       | Some client_id ->
-          let logout_uri = callback_uri logout_redirect_path in
+          let redirect_uri = callback_uri redirect_path in
           let state =
             raw_or_random config [ "oauth-logout-state"; "logout-state" ] 24
           in
@@ -826,76 +781,23 @@ let logout config =
                 [
                   ("response_type", "code");
                   ("client_id", client_id);
-                  ("redirect_uri", logout_uri);
+                  ("redirect_uri", redirect_uri);
                   ("state", state);
                   ("scope", oauth_scope config);
                 ]
           in
-          let result opened logout_completed =
+          let result opened =
             {
               auth_path = path;
               deleted = existed;
               logout_url;
               opened;
-              logout_completed;
+              logout_completed = true;
             }
           in
           Cli_effect.bind (delete_auth_file config) (function
             | Error err -> Cli_effect.pure (Error err)
-            | Ok () ->
-                let opened_ref = ref false in
-                let browser_open_error = ref None in
-                let on_listen () =
-                  match open_browser config logout_url with
-                  | Ok opened ->
-                      opened_ref := opened;
-                      Cli_effect.pure (Ok ())
-                  | Error err ->
-                      browser_open_error := Some err;
-                      Cli_effect.pure (Error err.Error.message)
-                in
-                let handle_request request =
-                  logout_callback_result_of_target ~state
-                    request.Cli_platform.target
-                in
-                Cli_effect.bind
-                  (Cli_platform.login_callback_server ~host:callback_host
-                     ~port:callback_port
-                     ~timeout_span:config.logout_timeout_span ~on_listen
-                     ~handle_request) (function
-                  | Ok (Ok ()) -> Cli_effect.pure (Ok (result !opened_ref true))
-                  | Ok (Error err) -> Cli_effect.pure (Error err)
-                  | Error Cli_platform.Login_callback_timeout ->
-                      Cli_effect.pure (Ok (result !opened_ref false))
-                  | Error (Cli_platform.Login_callback_server_aborted message)
-                    -> (
-                      match !browser_open_error with
-                      | Some err -> Cli_effect.pure (Error err)
-                      | None ->
-                          Cli_effect.pure
-                            (Error
-                               (Error.make
-                                  ~context:
-                                    (Edn_util.map
-                                       [
-                                         ( Edn_util.keyword "error",
-                                           Edn_util.string message );
-                                       ])
-                                  (Edn_util.keyword_t
-                                     "logout-callback-server-start-failed")
-                                  "failed to start logout callback server")))
-                  | Error
-                      (Cli_platform.Login_callback_server_start_failed message)
-                    ->
-                      Cli_effect.pure
-                        (Error
-                           (Error.make
-                              ~context:
-                                (Edn_util.map
-                                   [
-                                     ( Edn_util.keyword "error",
-                                       Edn_util.string message );
-                                   ])
-                              (Edn_util.keyword_t
-                                 "logout-callback-server-start-failed")
-                              "failed to start logout callback server")))))
+            | Ok () -> (
+                match open_browser config logout_url with
+                | Ok opened -> Cli_effect.pure (Ok (result opened))
+                | Error err -> Cli_effect.pure (Error err))))
