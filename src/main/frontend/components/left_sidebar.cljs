@@ -217,6 +217,7 @@
   [{:keys [default-home route-match route-name srs-open?]}]
   (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
         _preferred-language (state/use-sub [:preferred-language])
+        cards-due-count (state/use-sub :srs/cards-due-count)
         [checked-navs set-checked-navs!] (hooks/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:flashcards :all-pages :graph-view]))]
 
@@ -271,17 +272,16 @@
         (cond
           (= nav :flashcards)
           (when (state/enable-flashcards? (state/get-current-repo))
-            (let [num (state/use-sub :srs/cards-due-count)]
-              (sidebar-item
-               {:class "flashcards-nav"
-                :title (t :nav/flashcards)
-                :icon "cards"
-                :shortcut :go/flashcards
-                :active srs-open?
-                :on-click-handler #(do (fsrs/update-due-cards-count)
-                                       (state/pub-event! [:modal/show-cards]))
-                :more (when (and num (not (zero? num)))
-                        [:span.ml-1.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])})))
+            (sidebar-item
+             {:class "flashcards-nav"
+              :title (t :nav/flashcards)
+              :icon "cards"
+              :shortcut :go/flashcards
+              :active srs-open?
+              :on-click-handler #(do (fsrs/update-due-cards-count)
+                                     (state/pub-event! [:modal/show-cards]))
+              :more (when (and cards-due-count (not (zero? cards-due-count)))
+                      [:span.ml-1.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in cards-due-count])}))
 
           (= nav :graph-view)
           (sidebar-item

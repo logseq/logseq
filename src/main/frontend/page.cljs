@@ -137,15 +137,16 @@
      (plugin-handler/host-mounted!)
      (setup-fns!))
    [])
-  (if-let [route-match (state/use-sub :route-match)]
-    (when-let [view (:view (:data route-match))]
-      (ui/catch-error-and-notify
-       (helpful-default-error-screen)
-       [:<>
-        (container/root-container
-         route-match
-         ^{:key (:path route-match)}
-         [view route-match])
-        (when config/lsp-enabled?
-          (plugin/hook-daemon-renderers))]))
-    (not-found)))
+  (let [route-match (state/use-sub :route-match)]
+    (if route-match
+      (when-let [view (:view (:data route-match))]
+        (ui/catch-error-and-notify
+         (helpful-default-error-screen)
+         [:<>
+          (container/root-container
+           route-match
+           ^{:key (:path route-match)}
+           [view route-match])
+          (when config/lsp-enabled?
+            (plugin/hook-daemon-renderers))]))
+      (not-found))))

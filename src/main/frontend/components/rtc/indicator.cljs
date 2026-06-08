@@ -296,15 +296,16 @@
 
 (hsx/defc downloading-detail
   []
-  (when (true? (hooks/use-flow-state downloading?-flow))
-    (shui/button
-     {:class   "opacity-50"
-      :variant :ghost
-      :size    :sm
-      :on-click #(shui/popup-show! (.-target %)
-                                   (downloading-logs)
-                                   {:align "end"})}
-     (t :sync/downloading))))
+  (let [downloading? (hooks/use-flow-state downloading?-flow)]
+    (when (true? downloading?)
+      (shui/button
+       {:class   "opacity-50"
+        :variant :ghost
+        :size    :sm
+        :on-click #(shui/popup-show! (.-target %)
+                                     (downloading-logs)
+                                     {:align "end"})}
+       (t :sync/downloading)))))
 
 (def ^:private upload?-flow
   (->> rtc-flows/rtc-upload-log-flow
@@ -321,12 +322,13 @@
 
 (hsx/defc uploading-detail
   []
-  (when (true? (hooks/use-flow-state upload?-flow))
-    (shui/button
-     {:class   "opacity-50"
-      :variant :ghost
-      :size    :sm
-      :on-click #(shui/popup-show! (.-target %)
-                                   (uploading-logs)
-                                   {:align "end"})}
-     (t :sync/uploading))))
+  (let [upload? (hooks/use-flow-state upload?-flow)]
+    (when (true? upload?)
+      (shui/button
+       {:class   "opacity-50"
+        :variant :ghost
+        :size    :sm
+        :on-click #(shui/popup-show! (.-target %)
+                                     (uploading-logs)
+                                     {:align "end"})}
+       (t :sync/uploading)))))
