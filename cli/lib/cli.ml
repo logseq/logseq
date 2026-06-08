@@ -178,7 +178,7 @@ let graph_exists_error graph =
   let graph_name = Cli_primitive.string_of_graph graph in
   Error.make
     ~context:
-      (Edn_util.map [ (Edn_util.keyword ":graph", Edn_util.string graph_name) ])
+      (Edn_util.map [ (Edn_util.keyword "graph", Edn_util.string graph_name) ])
     (Edn_util.keyword_t "graph-exists")
     ("graph already exists: " ^ graph_name)
 
@@ -199,7 +199,7 @@ let ensure_action_graph_constraints config action =
   | _ -> Ok ()
 
 let profile_status output =
-  Edn_util.keyword_t (if output.exit_code = 0 then ":ok" else ":error")
+  Edn_util.keyword_t (if output.exit_code = 0 then "ok" else "error")
 
 let profile_command = function
   | Some request -> Command_id.to_string (Cli_request.command_id request)
@@ -219,10 +219,17 @@ let verbose_parsed_options_line request (config : Cli_config.t) =
   if not config.verbose then []
   else
     [
-      Printf.sprintf
-        "{:level :debug :message :cli/parsed-options :command %s :root-dir %s}"
-        (Command_id.to_string (Cli_request.command_id request))
-        config.root_dir;
+      Melange_edn.to_edn_string
+        (Edn_util.map
+           [
+             (Edn_util.keyword "level", Edn_util.keyword "debug");
+             ( Edn_util.keyword "message",
+               Edn_util.keyword "cli/parsed-options" );
+             ( Edn_util.keyword "command",
+               Edn_util.string
+                 (Command_id.to_string (Cli_request.command_id request)) );
+             (Edn_util.keyword "root-dir", Edn_util.string config.root_dir);
+           ]);
     ]
 
 let with_verbose_line config request output =

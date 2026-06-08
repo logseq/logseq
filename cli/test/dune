@@ -2,7 +2,13 @@
  (target node)
  (modules test_support test_cases fake_codex)
  (module_systems commonjs)
- (libraries melange-fest melange.node)
+ (libraries
+  logseq_cli_platform_node
+  logseq_cli
+  melange-edn
+  melange-fest
+  melange-fetch
+  melange.node)
  (preprocess
   (pps melange.ppx)))
 

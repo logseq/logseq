@@ -84,7 +84,12 @@ let normalize_stdin_id = function
         else
           let tokens = split_ws text in
           if tokens <> [] && List.for_all is_integer_text tokens then
-            Some ("[" ^ String.concat " " tokens ^ "]")
+            Some
+              (Melange_edn.to_edn_string
+                 (Edn_util.vector
+                    (List.map
+                       (fun token -> Edn_util.int64 (Int64.of_string token))
+                       tokens)))
           else Some text
   | None -> None
 
@@ -162,51 +167,51 @@ let link_target_selector =
   vector
     [
       wildcard;
-      kw ":db/id";
-      kw ":db/ident";
-      kw ":block/uuid";
-      kw ":block/name";
-      kw ":block/title";
-      kw ":block/order";
-      kw ":logseq.property/deleted-at";
-      kw ":logseq.property/created-from-property";
+      kw "db/id";
+      kw "db/ident";
+      kw "block/uuid";
+      kw "block/name";
+      kw "block/title";
+      kw "block/order";
+      kw "logseq.property/deleted-at";
+      kw "logseq.property/created-from-property";
       Edn_util.map
         [
-          ( kw ":logseq.property/status",
-            vector [ kw ":db/ident"; kw ":block/title" ] );
+          ( kw "logseq.property/status",
+            vector [ kw "db/ident"; kw "block/title" ] );
         ];
       Edn_util.map
         [
-          ( kw ":block/page",
+          ( kw "block/page",
             vector
               [
-                kw ":db/id";
-                kw ":block/name";
-                kw ":block/title";
-                kw ":block/uuid";
+                kw "db/id";
+                kw "block/name";
+                kw "block/title";
+                kw "block/uuid";
               ] );
         ];
       Edn_util.map
         [
-          ( kw ":block/parent",
+          ( kw "block/parent",
             vector
               [
-                kw ":db/id";
-                kw ":block/name";
-                kw ":block/title";
-                kw ":block/uuid";
+                kw "db/id";
+                kw "block/name";
+                kw "block/title";
+                kw "block/uuid";
               ] );
         ];
       Edn_util.map
         [
-          ( kw ":block/tags",
+          ( kw "block/tags",
             vector
               [
-                kw ":db/id";
-                kw ":db/ident";
-                kw ":block/name";
-                kw ":block/title";
-                kw ":block/uuid";
+                kw "db/id";
+                kw "db/ident";
+                kw "block/name";
+                kw "block/title";
+                kw "block/uuid";
               ] );
         ];
     ]
@@ -215,65 +220,71 @@ let pull_selector =
   vector
     [
       wildcard;
-      kw ":db/id";
-      kw ":db/ident";
-      kw ":block/uuid";
-      kw ":block/name";
-      kw ":block/title";
-      kw ":block/order";
-      kw ":logseq.property/deleted-at";
-      kw ":logseq.property/created-from-property";
+      kw "db/id";
+      kw "db/ident";
+      kw "block/uuid";
+      kw "block/name";
+      kw "block/title";
+      kw "block/order";
+      kw "logseq.property/deleted-at";
+      kw "logseq.property/created-from-property";
       Edn_util.map
         [
-          ( kw ":logseq.property/status",
-            vector [ kw ":db/ident"; kw ":block/title" ] );
+          ( kw "logseq.property/status",
+            vector [ kw "db/ident"; kw "block/title" ] );
         ];
       Edn_util.map
         [
-          ( kw ":block/page",
+          ( kw "block/page",
             vector
               [
-                kw ":db/id";
-                kw ":block/name";
-                kw ":block/title";
-                kw ":block/uuid";
+                kw "db/id";
+                kw "block/name";
+                kw "block/title";
+                kw "block/uuid";
               ] );
         ];
       Edn_util.map
         [
-          ( kw ":block/parent",
+          ( kw "block/parent",
             vector
               [
-                kw ":db/id";
-                kw ":block/name";
-                kw ":block/title";
-                kw ":block/uuid";
+                kw "db/id";
+                kw "block/name";
+                kw "block/title";
+                kw "block/uuid";
               ] );
         ];
       Edn_util.map
         [
-          ( kw ":block/tags",
+          ( kw "block/tags",
             vector
               [
-                kw ":db/id";
-                kw ":db/ident";
-                kw ":block/name";
-                kw ":block/title";
-                kw ":block/uuid";
+                kw "db/id";
+                kw "db/ident";
+                kw "block/name";
+                kw "block/title";
+                kw "block/uuid";
               ] );
         ];
-      Edn_util.map [ (kw ":block/link", link_target_selector) ];
+      Edn_util.map [ (kw "block/link", link_target_selector) ];
     ]
 
 let lookup_of_target = function
   | By_id id -> Edn_util.int64 id
-  | By_uuid uuid -> vector [ kw ":block/uuid"; Edn_util.uuid uuid ]
-  | By_page page -> vector [ kw ":block/name"; Edn_util.string page ]
+  | By_uuid uuid -> vector [ kw "block/uuid"; Edn_util.uuid uuid ]
+  | By_page page -> vector [ kw "block/name"; Edn_util.string page ]
   | By_ids _ -> Edn_util.nil
 
+let strip_keyword_prefix value =
+  if String.length value > 0 && value.[0] = ':' then
+    String.sub value 1 (String.length value - 1)
+  else value
+
 let value_key_matches expected key_value =
+  let expected = strip_keyword_prefix expected in
   match (Edn_util.as_keyword key_value, Edn_util.as_string key_value) with
-  | Some key, _ | _, Some key -> key = expected
+  | Some key, _ | _, Some key -> strip_keyword_prefix key = expected
   | _ -> false
 
 let string_starts_with ~prefix value =
@@ -282,11 +293,12 @@ let string_starts_with ~prefix value =
 
 let show_internal_key key_value =
   match (Edn_util.as_keyword key_value, Edn_util.as_string key_value) with
-  | Some key, _ | _, Some key -> string_starts_with ~prefix:":show/" key
+  | Some key, _ | _, Some key ->
+      string_starts_with ~prefix:"show/" (strip_keyword_prefix key)
   | _ -> false
 
 let structured_internal_key key =
-  value_key_matches ":block/uuid" key || show_internal_key key
+  value_key_matches "block/uuid" key || show_internal_key key
 
 let rec sanitize_structured_value value =
   match Edn_util.as_map value with
@@ -311,8 +323,8 @@ let rec sanitize_structured_value value =
 let linked_references_value (refs : linked_references) =
   Edn_util.map
     [
-      (kw ":count", Edn_util.int refs.count);
-      ( kw ":blocks",
+      (kw "count", Edn_util.int refs.count);
+      ( kw "blocks",
         Edn_util.vector
           (List.map
              (fun block -> sanitize_structured_value block.Block.raw)
@@ -320,11 +332,11 @@ let linked_references_value (refs : linked_references) =
     ]
 
 let tree_data_value root linked_references =
-  let fields = [ (kw ":root", sanitize_structured_value root) ] in
+  let fields = [ (kw "root", sanitize_structured_value root) ] in
   let fields =
     match linked_references with
     | Some refs ->
-        fields @ [ (kw ":linked-references", linked_references_value refs) ]
+        fields @ [ (kw "linked-references", linked_references_value refs) ]
     | None -> fields
   in
   Edn_util.map fields
@@ -334,39 +346,39 @@ let missing_entity value =
   else
     match Edn_util.as_map value with
     | Some fields ->
-        List.mem_assoc (kw ":db/id") fields && List.length fields = 1
+        List.mem_assoc (kw "db/id") fields && List.length fields = 1
     | _ -> false
 
 let property_value_block value =
-  Option.is_some (Edn_util.get value ":logseq.property/created-from-property")
+  Option.is_some (Edn_util.get value "logseq.property/created-from-property")
 
 let ident_value value =
-  Option.bind (Edn_util.get value ":db/ident") Edn_util.as_string_like
+  Option.map strip_keyword_prefix
+    (Option.bind (Edn_util.get value "db/ident") Edn_util.as_string_like)
 
 let tag_ident_matches expected tag =
+  let expected = strip_keyword_prefix expected in
   match Edn_util.as_string_like tag with
-  | Some ident -> ident = expected || ident = ":" ^ expected
+  | Some ident -> strip_keyword_prefix ident = expected
   | None -> (
       match Edn_util.as_map tag with
-      | Some _ ->
-          ident_value tag = Some expected
-          || ident_value tag = Some (":" ^ expected)
+      | Some _ -> ident_value tag = Some expected
       | None -> false)
 
 let has_tag_ident value expected =
-  match Option.bind (Edn_util.get value ":block/tags") Edn_util.as_seq with
+  match Option.bind (Edn_util.get value "block/tags") Edn_util.as_seq with
   | Some tags -> List.exists (tag_ident_matches expected) tags
   | _ -> false
 
 let page_hierarchy_display_page value =
-  (has_tag_ident value ":logseq.class/Page"
-  || has_tag_ident value ":logseq.class/Journal")
-  && (not (has_tag_ident value ":logseq.class/Tag"))
-  && not (has_tag_ident value ":logseq.class/Property")
+  (has_tag_ident value "logseq.class/Page"
+  || has_tag_ident value "logseq.class/Journal")
+  && (not (has_tag_ident value "logseq.class/Tag"))
+  && not (has_tag_ident value "logseq.class/Property")
 
 let page_hierarchy_target_page value =
   page_hierarchy_display_page value
-  && Option.is_none (Edn_util.get value ":block/page")
+  && Option.is_none (Edn_util.get value "block/page")
 
 let entity_error = function
   | By_page _ ->
@@ -393,13 +405,13 @@ let fail_show_error err = Cli_effect.error (Show_error err)
 let multi_id_error_value id err =
   Edn_util.map
     [
-      (kw ":id", Edn_util.int64 id);
-      ( kw ":error",
+      (kw "id", Edn_util.int64 id);
+      ( kw "error",
         Edn_util.map
           [
-            ( kw ":code",
+            ( kw "code",
               Edn_util.string (Edn_util.keyword_to_string err.Error.code) );
-            ( kw ":message",
+            ( kw "message",
               Edn_util.string ("Entity " ^ Int64.to_string id ^ " not found") );
           ] );
     ]
@@ -419,67 +431,67 @@ let tree_block_selector =
   vector
     [
       wildcard;
-      kw ":db/id";
-      kw ":db/ident";
-      kw ":block/uuid";
-      kw ":block/name";
-      kw ":block/title";
-      kw ":logseq.property/created-from-property";
-      kw ":block/order";
+      kw "db/id";
+      kw "db/ident";
+      kw "block/uuid";
+      kw "block/name";
+      kw "block/title";
+      kw "logseq.property/created-from-property";
+      kw "block/order";
       Edn_util.map
         [
-          ( kw ":logseq.property/status",
-            vector [ kw ":db/ident"; kw ":block/title" ] );
+          ( kw "logseq.property/status",
+            vector [ kw "db/ident"; kw "block/title" ] );
         ];
-      Edn_util.map [ (kw ":block/parent", vector [ kw ":db/id" ]) ];
+      Edn_util.map [ (kw "block/parent", vector [ kw "db/id" ]) ];
       Edn_util.map
         [
-          ( kw ":block/page",
+          ( kw "block/page",
             vector
               [
-                kw ":db/id";
-                kw ":block/name";
-                kw ":block/title";
-                kw ":block/uuid";
+                kw "db/id";
+                kw "block/name";
+                kw "block/title";
+                kw "block/uuid";
               ] );
         ];
       Edn_util.map
         [
-          ( kw ":block/tags",
+          ( kw "block/tags",
             vector
               [
-                kw ":db/id";
-                kw ":db/ident";
-                kw ":block/name";
-                kw ":block/title";
-                kw ":block/uuid";
+                kw "db/id";
+                kw "db/ident";
+                kw "block/name";
+                kw "block/title";
+                kw "block/uuid";
               ] );
         ];
-      Edn_util.map [ (kw ":block/link", link_target_selector) ];
+      Edn_util.map [ (kw "block/link", link_target_selector) ];
     ]
 
 let page_blocks_query =
   vector
     [
-      kw ":find";
+      kw "find";
       Edn_util.list [ sym "pull"; sym "?b"; tree_block_selector ];
-      kw ":in";
+      kw "in";
       sym "$";
       sym "?page-id";
-      kw ":where";
-      vector [ sym "?b"; kw ":block/page"; sym "?page-id" ];
+      kw "where";
+      vector [ sym "?b"; kw "block/page"; sym "?page-id" ];
     ]
 
 let page_hierarchy_children_query =
   vector
     [
-      kw ":find";
+      kw "find";
       Edn_util.list [ sym "pull"; sym "?child"; tree_block_selector ];
-      kw ":in";
+      kw "in";
       sym "$";
       sym "?parent-id";
-      kw ":where";
-      vector [ sym "?child"; kw ":block/parent"; sym "?parent-id" ];
+      kw "where";
+      vector [ sym "?child"; kw "block/parent"; sym "?parent-id" ];
     ]
 
 let row_entity value =
@@ -490,28 +502,28 @@ let row_entity value =
   | _, _, Some _ -> Some value
   | _ -> None
 
-let id_of value = Edn_util.get_int64 value ":db/id"
+let id_of value = Edn_util.get_int64 value "db/id"
 
 let parent_id_of value =
-  match Edn_util.get value ":block/parent" with
+  match Edn_util.get value "block/parent" with
   | Some parent -> (
       match (Edn_util.as_map parent, Edn_util.as_int64 parent) with
-      | Some _, _ -> Edn_util.get_int64 parent ":db/id"
+      | Some _, _ -> Edn_util.get_int64 parent "db/id"
       | _, Some id -> Some id
       | _ -> None)
   | None -> None
 
 let page_id_of root =
-  match Edn_util.get root ":block/page" with
+  match Edn_util.get root "block/page" with
   | Some page -> (
       match (Edn_util.as_map page, Edn_util.as_int64 page) with
-      | Some _, _ -> Edn_util.get_int64 page ":db/id"
+      | Some _, _ -> Edn_util.get_int64 page "db/id"
       | _, Some id -> Some id
       | _ -> id_of root)
   | None -> id_of root
 
 let order_key value =
-  match Edn_util.get value ":block/order" with
+  match Edn_util.get value "block/order" with
   | Some value -> (
       match (Edn_util.as_string value, Edn_util.as_int value) with
       | Some s, _ -> s
@@ -521,7 +533,7 @@ let order_key value =
 
 let assoc_children value children =
   if children = [] then value
-  else Edn_util.assoc ":block/children" (Edn_util.vector children) value
+  else Edn_util.assoc "block/children" (Edn_util.vector children) value
 
 let build_children ?max_depth blocks root_id =
   let rec children_of depth parent_id =
@@ -573,7 +585,7 @@ let linked_ref_ids value =
       List.filter_map
         (fun ref ->
           match (Edn_util.as_map ref, Edn_util.as_int64 ref) with
-          | Some _, _ -> Edn_util.get_int64 ref ":db/id"
+          | Some _, _ -> Edn_util.get_int64 ref "db/id"
           | _, Some id -> Some id
           | _ -> None)
         refs
@@ -644,20 +656,20 @@ let attach_tree config (action : action) root =
 let lookup_of_link_value link =
   match Edn_util.as_map link with
   | Some _ -> (
-      match Edn_util.get_int64 link ":db/id" with
+      match Edn_util.get_int64 link "db/id" with
       | Some id -> Some (Edn_util.int64 id)
       | None -> (
           match
             Option.bind
-              (Edn_util.get link ":block/uuid")
+              (Edn_util.get link "block/uuid")
               Edn_util.as_string_like
           with
-          | Some uuid -> Some (vector [ kw ":block/uuid"; Edn_util.uuid uuid ])
+          | Some uuid -> Some (vector [ kw "block/uuid"; Edn_util.uuid uuid ])
           | _ -> None))
   | None -> (
       match (Edn_util.as_int64 link, Edn_util.as_uuid link) with
       | Some id, _ -> Some (Edn_util.int64 id)
-      | _, Some uuid -> Some (vector [ kw ":block/uuid"; Edn_util.uuid uuid ])
+      | _, Some uuid -> Some (vector [ kw "block/uuid"; Edn_util.uuid uuid ])
       | _ -> (
           let values =
             match (Edn_util.as_vector link, Edn_util.as_list link) with
@@ -666,16 +678,16 @@ let lookup_of_link_value link =
           in
           match values with
           | Some [ key; id ]
-            when value_key_matches ":db/id" key
+            when value_key_matches "db/id" key
                  && Option.is_some (Edn_util.as_int64 id) ->
               Some
                 (Edn_util.int64
                    (Option.value (Edn_util.as_int64 id) ~default:0L))
-          | Some [ key; uuid_value ] when value_key_matches ":block/uuid" key
+          | Some [ key; uuid_value ] when value_key_matches "block/uuid" key
             -> (
               match Edn_util.as_string_like uuid_value with
               | Some uuid ->
-                  Some (vector [ kw ":block/uuid"; Edn_util.uuid uuid ])
+                  Some (vector [ kw "block/uuid"; Edn_util.uuid uuid ])
               | _ -> None)
           | _ -> None))
 
@@ -696,7 +708,7 @@ let pull_link_target config repo link =
 
 let link_target_id link =
   match (Edn_util.as_map link, Edn_util.as_int64 link) with
-  | Some _, _ -> Edn_util.get_int64 link ":db/id"
+  | Some _, _ -> Edn_util.get_int64 link "db/id"
   | _, Some id -> Some id
   | _ -> None
 
@@ -712,7 +724,7 @@ let linked_target_action action depth =
 let rec resolve_linked_blocks ?(depth = 1) ?(visited = []) config
     (action : action) root =
   let open Cli_effect in
-  match Edn_util.get root ":block/link" with
+  match Edn_util.get root "block/link" with
   | Some link -> (
       match link_target_id link with
       | Some target_id when List.mem target_id visited ->
@@ -732,12 +744,12 @@ let rec resolve_linked_blocks ?(depth = 1) ?(visited = []) config
                         (resolve_linked_blocks ~depth ~visited config action
                            target) (fun target ->
                           pure
-                            (Edn_util.assoc ":show/linked-display?"
+                            (Edn_util.assoc "show/linked-display?"
                                (Edn_util.bool true) target)))))
   | None -> (
       let children =
         Option.value
-          (Option.bind (Edn_util.get root ":block/children") Edn_util.as_seq)
+          (Option.bind (Edn_util.get root "block/children") Edn_util.as_seq)
           ~default:[]
       in
       match children with
@@ -753,7 +765,7 @@ let rec resolve_linked_blocks ?(depth = 1) ?(visited = []) config
           in
           bind (resolve_all [] children) (fun children ->
               pure
-                (Edn_util.assoc ":block/children" (Edn_util.vector children)
+                (Edn_util.assoc "block/children" (Edn_util.vector children)
                    root)))
 
 let nonblank_string = function
@@ -765,17 +777,17 @@ let uuid_string value key =
   |> nonblank_string
 
 let tag_label tag =
-  match nonblank_string (Edn_util.get_string tag ":block/title") with
+  match nonblank_string (Edn_util.get_string tag "block/title") with
   | Some title -> Some title
   | None -> (
-      match nonblank_string (Edn_util.get_string tag ":block/name") with
+      match nonblank_string (Edn_util.get_string tag "block/name") with
       | Some name -> Some name
-      | None -> uuid_string tag ":block/uuid")
+      | None -> uuid_string tag "block/uuid")
 
 let tags_suffix value =
   let tags =
     Option.value
-      (Option.bind (Edn_util.get value ":block/tags") Edn_util.as_seq)
+      (Option.bind (Edn_util.get value "block/tags") Edn_util.as_seq)
       ~default:[]
   in
   let labels = List.filter_map tag_label tags in
@@ -785,23 +797,23 @@ let tags_suffix value =
       Some (String.concat " " (List.map (fun label -> "#" ^ label) labels))
 
 let status_label value =
-  match Edn_util.get value ":logseq.property/status" with
-  | Some status -> nonblank_string (Edn_util.get_string status ":block/title")
+  match Edn_util.get value "logseq.property/status" with
+  | Some status -> nonblank_string (Edn_util.get_string status "block/title")
   | None -> None
 
 let base_label_of value =
-  match Edn_util.get_string value ":block/title" with
+  match Edn_util.get_string value "block/title" with
   | Some title when String.trim title <> "" -> title
   | _ -> (
-      match Edn_util.get_string value ":block/name" with
+      match Edn_util.get_string value "block/name" with
       | Some name when String.trim name <> "" -> name
       | _ -> (
-          match Edn_util.get_string value ":db/ident" with
+          match Edn_util.get_string value "db/ident" with
           | Some ident when String.trim ident <> "" -> ident
           | _ -> "-"))
 
 let linked_display value =
-  Option.bind (Edn_util.get value ":show/linked-display?") Edn_util.as_bool
+  Option.bind (Edn_util.get value "show/linked-display?") Edn_util.as_bool
   = Some true
 
 let linked_arrow = Cli_platform.Symbols.linked_arrow
@@ -823,7 +835,7 @@ let label_of value =
 
 let children_of value =
   Option.value
-    (Option.bind (Edn_util.get value ":block/children") Edn_util.as_seq)
+    (Option.bind (Edn_util.get value "block/children") Edn_util.as_seq)
     ~default:[]
 
 type render_metadata = {
@@ -840,20 +852,23 @@ let rec unique_preserve_order = function
       else value :: unique_preserve_order rest
 
 let property_key_namespace key =
-  key <> ":logseq.property/status"
-  && (not (string_starts_with ~prefix:":logseq.property/created-" key))
-  && (string_starts_with ~prefix:":user.property/" key
-     || string_starts_with ~prefix:":logseq.property/" key
-     || string_starts_with ~prefix:":logseq.property." key)
+  let key = strip_keyword_prefix key in
+  key <> "logseq.property/status"
+  && (not (string_starts_with ~prefix:"logseq.property/created-" key))
+  && (string_starts_with ~prefix:"user.property/" key
+     || string_starts_with ~prefix:"logseq.property/" key
+     || string_starts_with ~prefix:"logseq.property." key)
 
 let property_entity_hidden value =
-  Edn_util.get_bool value ":logseq.property/hide?" = Some true
+  Edn_util.get_bool value "logseq.property/hide?" = Some true
 
 let property_entity_block_left value =
-  Edn_util.get_string value ":logseq.property/ui-position" = Some ":block-left"
+  match Edn_util.get_string value "logseq.property/ui-position" with
+  | Some "block-left" -> true
+  | _ -> false
 
 let property_entity value =
-  Option.is_some (Edn_util.get value ":logseq.property/type")
+  Option.is_some (Edn_util.get value "logseq.property/type")
 
 let visible_property_entity value =
   property_entity value
@@ -889,7 +904,7 @@ let collect_property_entries root linked_references =
 
 let lookup_id_of_value value =
   match Edn_util.as_map value with
-  | Some _ -> Edn_util.get_int64 value ":db/id"
+  | Some _ -> Edn_util.get_int64 value "db/id"
   | None -> (
       let values =
         match (Edn_util.as_vector value, Edn_util.as_list value) with
@@ -897,7 +912,7 @@ let lookup_id_of_value value =
         | _ -> None
       in
       match values with
-      | Some [ key; id ] when value_key_matches ":db/id" key ->
+      | Some [ key; id ] when value_key_matches "db/id" key ->
           Edn_util.as_int64 id
       | _ -> None)
 
@@ -910,7 +925,7 @@ let rec property_value_ref_ids value =
       | None -> [])
 
 and property_value_ref_ids_seq = function
-  | key :: id :: rest when value_key_matches ":db/id" key -> (
+  | key :: id :: rest when value_key_matches "db/id" key -> (
       match Edn_util.as_int64 id with
       | Some id -> id :: property_value_ref_ids_seq rest
       | None ->
@@ -923,26 +938,26 @@ and property_value_ref_ids_seq = function
 let property_title_selector =
   vector
     [
-      kw ":db/id";
-      kw ":db/ident";
-      kw ":block/title";
-      kw ":block/name";
-      kw ":logseq.property/type";
-      kw ":logseq.property/hide?";
-      kw ":logseq.property/ui-position";
+      kw "db/id";
+      kw "db/ident";
+      kw "block/title";
+      kw "block/name";
+      kw "logseq.property/type";
+      kw "logseq.property/hide?";
+      kw "logseq.property/ui-position";
     ]
 
 let property_value_label_selector =
   vector
     [
-      kw ":db/id";
-      kw ":db/ident";
-      kw ":block/title";
-      kw ":block/name";
-      kw ":logseq.property/value";
+      kw "db/id";
+      kw "db/ident";
+      kw "block/title";
+      kw "block/name";
+      kw "logseq.property/value";
     ]
 
-let property_lookup ident = vector [ kw ":db/ident"; Edn_util.any ident ]
+let property_lookup ident = vector [ kw "db/ident"; Edn_util.any ident ]
 
 let fallback_property_title key =
   let key =
@@ -955,18 +970,18 @@ let fallback_property_title key =
   | _ -> key
 
 let entity_label_from_value value =
-  match nonblank_string (Edn_util.get_string value ":block/title") with
+  match nonblank_string (Edn_util.get_string value "block/title") with
   | Some title -> Some title
   | None -> (
-      match nonblank_string (Edn_util.get_string value ":block/name") with
+      match nonblank_string (Edn_util.get_string value "block/name") with
       | Some name -> Some name
       | None -> (
           match
-            nonblank_string (Edn_util.get_string value ":logseq.property/value")
+            nonblank_string (Edn_util.get_string value "logseq.property/value")
           with
           | Some value -> Some value
           | None -> (
-              match nonblank_string (Edn_util.get_string value ":db/ident") with
+              match nonblank_string (Edn_util.get_string value "db/ident") with
               | Some ident -> Some ident
               | None -> None)))
 
@@ -1084,11 +1099,6 @@ let property_title metadata key = List.assoc_opt key metadata.property_titles
 let property_value_label metadata id =
   List.assoc_opt id metadata.property_value_labels
 
-let strip_keyword_prefix value =
-  if String.length value > 0 && value.[0] = ':' then
-    String.sub value 1 (String.length value - 1)
-  else value
-
 let scalar_property_value_text value =
   match
     ( Edn_util.as_string_like value,
@@ -1120,7 +1130,7 @@ let rec property_value_items metadata value =
               | None -> [])))
 
 and property_value_items_seq metadata = function
-  | key :: id :: rest when value_key_matches ":db/id" key -> (
+  | key :: id :: rest when value_key_matches "db/id" key -> (
       match Edn_util.as_int64 id with
       | Some id ->
           (match property_value_label metadata id with
@@ -1196,15 +1206,15 @@ let render_tree_text_value ?(metadata = empty_render_metadata) root =
   String.concat "\n" !lines
 
 let linked_reference_context_value block =
-  match Edn_util.get block ":block/page" with
+  match Edn_util.get block "block/page" with
   | Some page when Option.is_some (Edn_util.as_map page) ->
-      Edn_util.assoc ":block/children" (Edn_util.vector [ block ]) page
+      Edn_util.assoc "block/children" (Edn_util.vector [ block ]) page
   | _ -> block
 
 let render_linked_reference_text metadata block =
   render_tree_text_value ~metadata (linked_reference_context_value block)
 
-let uuid_ref_text_keys = [ ":block/title"; ":block/name" ]
+let uuid_ref_text_keys = [ "block/title"; "block/name" ]
 
 let uuid_ref_text_key key =
   List.exists
@@ -1312,10 +1322,10 @@ let referenced_entities_footer (action : action) ordered_uuids uuid_entities =
           ^ ")\n" ^ String.concat "\n" rows)
 
 let block_page_id root =
-  match Edn_util.get root ":block/page" with
+  match Edn_util.get root "block/page" with
   | Some page -> (
       match (Edn_util.as_map page, Edn_util.as_int64 page) with
-      | Some _, _ -> Edn_util.get_int64 page ":db/id"
+      | Some _, _ -> Edn_util.get_int64 page "db/id"
       | _, Some id -> Some id
       | _ -> None)
   | None -> None

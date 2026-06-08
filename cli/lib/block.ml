@@ -46,9 +46,9 @@ let of_value raw =
   {
     (make ()) with
     raw;
-    id = Edn_util.get_int64 raw ":db/id";
-    uuid = Edn_util.get_string raw ":block/uuid";
-    title = Edn_util.get_string raw ":block/title";
+    id = Edn_util.get_int64 raw "db/id";
+    uuid = Edn_util.get_string raw "block/uuid";
+    title = Edn_util.get_string raw "block/title";
   }
 
 let tag_to_value = function
@@ -65,19 +65,19 @@ let property_key_to_value = function
 let parent_to_value = function
   | Selector.Block_id id -> Edn_util.int64 id
   | Block_uuid uuid ->
-      Edn_util.vector [ Edn_util.keyword ":block/uuid"; Edn_util.uuid uuid ]
+      Edn_util.vector [ Edn_util.keyword "block/uuid"; Edn_util.uuid uuid ]
 
 let rec to_value t =
   let fields =
     [
-      ( Edn_util.keyword ":block/title",
+      ( Edn_util.keyword "block/title",
         Edn_util.string (Option.value t.title ~default:"") );
     ]
   in
   let fields =
     if t.children = [] then fields
     else
-      ( Edn_util.keyword ":block/children",
+      ( Edn_util.keyword "block/children",
         Edn_util.vector
           (List.map (fun child -> Edn_util.any (to_value child)) t.children) )
       :: fields
@@ -85,20 +85,20 @@ let rec to_value t =
   let fields =
     match t.uuid with
     | Some uuid ->
-        (Edn_util.keyword ":block/uuid", Edn_util.uuid uuid) :: fields
+        (Edn_util.keyword "block/uuid", Edn_util.uuid uuid) :: fields
     | None -> fields
   in
   let fields =
     match t.parent with
     | Some parent ->
-        (Edn_util.keyword ":block/parent", parent_to_value parent) :: fields
+        (Edn_util.keyword "block/parent", parent_to_value parent) :: fields
     | None -> fields
   in
   let fields =
     match t.tags with
     | [] -> fields
     | tags ->
-        ( Edn_util.keyword ":block/tags",
+        ( Edn_util.keyword "block/tags",
           Edn_util.set (List.map tag_to_value tags) )
         :: fields
   in

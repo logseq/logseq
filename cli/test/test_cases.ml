@@ -17,9 +17,6 @@ let () =
       let root = temp_dir "logseq-cli-sync-download-graph-" in
       try
         write_file
-          (Node.Path.join [| root; "current-graph" |])
-          "fallback-current";
-        write_file
           (Node.Path.join [| root; "cli.edn" |])
           "{:graph \"fallback-file\"}\n";
         let result =
@@ -46,9 +43,6 @@ let () =
       try
         mkdir_p root;
         write_file
-          (Node.Path.join [| root; "current-graph" |])
-          "fallback-current";
-        write_file
           (Node.Path.join [| root; "cli.edn" |])
           "{:graph \"fallback-file\"}\n";
         let create_without_graph =
@@ -68,6 +62,9 @@ let () =
         then fail_test "graph create without -g created fallback graph";
         let create_fallback = run [ "graph"; "create"; "-g"; fallback_graph ] in
         ignore (expect_exit_zero "fallback graph create" create_fallback);
+        if
+          Node.Fs.existsSync (Node.Path.join [| root; "current-graph" |])
+        then fail_test "graph create wrote current-graph";
         let switch_without_graph =
           run
             ~env:[| ("LOGSEQ_CLI_GRAPH", fallback_graph) |]
@@ -97,6 +94,9 @@ let () =
         then fail_test "graph remove without -g removed fallback graph";
         let create = run [ "graph"; "create"; "-g"; graph ] in
         ignore (expect_exit_zero "graph create" create);
+        if
+          Node.Fs.existsSync (Node.Path.join [| root; "current-graph" |])
+        then fail_test "graph create wrote current-graph";
         ignore (expect_named_contains "graph create" create##stdout graph);
         let graph_dirs =
           Node.Fs.readdirSync (Node.Path.join [| root; "graphs" |])
@@ -113,6 +113,76 @@ let () =
         ignore (expect_exit_zero "json graph list" json_list);
         remove_tree root;
         expect_graph_in_json_list json_list##stdout graph
+      with exn ->
+        remove_tree root;
+        fail_test (Printexc.to_string exn));
+
+  test "graph list ignores current-graph file" (fun () ->
+      let root = temp_dir "logseq-cli-graph-list-current-file-" in
+      let run args = spawn_cli ("--root-dir" :: root :: args) in
+      try
+        mkdir_p root;
+        ignore
+          (expect_exit_zero "create alpha"
+             (run [ "graph"; "create"; "-g"; "alpha" ]));
+        ignore
+          (expect_exit_zero "create beta"
+             (run [ "graph"; "create"; "-g"; "beta" ]));
+        write_file (Node.Path.join [| root; "current-graph" |]) "alpha";
+        let result = run [ "graph"; "list" ] in
+        remove_tree root;
+        ignore (expect_exit_zero "graph list" result);
+        expect_named_not_contains "graph list current file marker" result##stdout
+          "* alpha"
+      with exn ->
+        remove_tree root;
+        fail_test (Printexc.to_string exn));
+
+  test "json output escapes control characters" (fun () ->
+      let root = temp_dir "logseq-cli-json-output-" in
+      let graph = "json" ^ control_char ^ "graph" in
+      try
+        let result =
+          spawn_cli
+            [
+              "--root-dir";
+              root;
+              "--output";
+              "json";
+              "graph";
+              "create";
+              "--graph";
+              graph;
+            ]
+        in
+        remove_tree root;
+        ignore (assert_exit_zero "json output graph create" result);
+        expect_valid_json "json output graph create" result##stdout
+      with exn ->
+        remove_tree root;
+        fail_test (Printexc.to_string exn));
+
+  test "verbose parsed options line is valid edn" (fun () ->
+      let root = temp_dir "logseq-cli verbose root-" in
+      try
+        let result =
+          spawn_cli
+            [
+              "--verbose";
+              "--root-dir";
+              root;
+              "--graph";
+              "alpha";
+              "graph";
+              "list";
+            ]
+        in
+        remove_tree root;
+        ignore (assert_exit_zero "verbose graph list" result);
+        match String.split_on_char '\n' result##stderr with
+        | line :: _ when String.trim line <> "" ->
+            expect_valid_edn "verbose parsed options line" line
+        | _ -> fail_test ("missing verbose stderr line: " ^ result##stderr)
       with exn ->
         remove_tree root;
         fail_test (Printexc.to_string exn));
@@ -148,6 +218,137 @@ let () =
       with exn ->
         remove_tree root;
         fail_test (Printexc.to_string exn));
+
+  test_promise "login generates fresh PKCE challenge across CLI processes"
+    (fun () ->
+      let login_once base_url index =
+        let root =
+          temp_dir ("logseq-cli-login-pkce-" ^ string_of_int index ^ "-")
+        in
+        let config_path = Node.Path.join [| root; "cli.edn" |] in
+        let auth_path = Node.Path.join [| root; "auth.json" |] in
+        let state = "fixed-test-state" in
+        let code = "auth-code-" ^ string_of_int index in
+        write_file config_path
+          (Printf.sprintf
+             "{:open-browser false\n\
+             \ :login-timeout-ms 5000\n\
+             \ :auth-path %S\n\
+             \ :oauth-authorize-endpoint %S\n\
+             \ :oauth-token-endpoint %S\n\
+             \ :oauth-client-id \"test-client\"\n\
+             \ :oauth-state %S}\n"
+             auth_path (base_url ^ "/authorize")
+             (base_url ^ "/oauth2/token")
+             state);
+        let login =
+          run_cli_p
+            [
+              "--root-dir";
+              root;
+              "--config";
+              config_path;
+              "--output";
+              "json";
+              "login";
+            ]
+        in
+        let callback_url =
+          Printf.sprintf "http://localhost:8765/auth/callback?state=%s&code=%s"
+            state code
+        in
+        let* () = fetch_with_retry 100 callback_url in
+        let* result = login in
+        remove_tree root;
+        ignore (expect_cli_exit_zero "login pkce" result);
+        let authorize_url = json_data_string result.stdout "authorize-url" in
+        match query_param authorize_url "code_challenge" with
+        | Some challenge -> Js.Promise.resolve challenge
+        | None -> fail_promise ("missing code_challenge: " ^ authorize_url)
+      in
+      with_server (oauth_server ()) (fun base_url ->
+          let* first = login_once base_url 1 in
+          let* second = login_once base_url 2 in
+          if first <> second then Js.Promise.resolve pass
+          else
+            fail_promise
+              ("expected fresh PKCE challenge across logins, got " ^ first)));
+
+  test_promise "logout completes hosted UI callback flow" (fun () ->
+      let root = temp_dir "logseq-cli-logout-flow-" in
+      let config_path = Node.Path.join [| root; "cli.edn" |] in
+      let auth_path = Node.Path.join [| root; "auth.json" |] in
+      let state = "fixed-logout-state" in
+      let write_auth () =
+        write_file auth_path
+          "{\"provider\":\"cognito\",\"refresh-token\":\"refresh-token\"}\n"
+      in
+      let logout_once base_url =
+        write_auth ();
+        write_file config_path
+          (Printf.sprintf
+             "{:open-browser false\n\
+             \ :logout-timeout-ms 5000\n\
+             \ :auth-path %S\n\
+             \ :http-base %S\n\
+             \ :oauth-client-id \"test-client\"\n\
+             \ :oauth-logout-state %S}\n"
+             auth_path base_url state);
+        let logout =
+          run_cli_p
+            [
+              "--root-dir";
+              root;
+              "--config";
+              config_path;
+              "--output";
+              "json";
+              "logout";
+            ]
+        in
+        let* () =
+          fetch_with_retry 100
+            ("http://localhost:8765/auth/callback?state=" ^ state)
+        in
+        let* result = logout in
+        ignore (expect_cli_exit_zero "logout callback" result);
+        if Node.Fs.existsSync auth_path then
+          fail_promise "logout did not delete auth file"
+        else
+          let logout_url = json_data_string result.stdout "logout-url" in
+          let deleted = json_data_bool result.stdout "deleted" in
+          let opened = json_data_bool result.stdout "opened" in
+          let completed = json_data_bool result.stdout "logout-completed" in
+          if not deleted then
+            fail_promise ("expected deleted=true: " ^ result.stdout)
+          else if opened then
+            fail_promise ("expected opened=false: " ^ result.stdout)
+          else if not completed then
+            fail_promise ("expected logout-completed=true: " ^ result.stdout)
+          else if
+            not
+              (Js.String.startsWith ~prefix:(base_url ^ "/logout?") logout_url)
+          then fail_promise ("unexpected logout-url: " ^ logout_url)
+          else if query_param logout_url "client_id" <> Some "test-client" then
+            fail_promise ("missing client_id: " ^ logout_url)
+          else if query_param logout_url "response_type" <> Some "code" then
+            fail_promise ("missing response_type: " ^ logout_url)
+          else if
+            query_param logout_url "scope" <> Some "email%20openid%20phone"
+          then fail_promise ("missing scope: " ^ logout_url)
+          else if query_param logout_url "state" <> Some state then
+            fail_promise ("missing state: " ^ logout_url)
+          else
+            match query_param logout_url "redirect_uri" with
+            | Some uri
+              when uri = "http%3A%2F%2Flocalhost%3A8765%2Fauth%2Fcallback" ->
+                Js.Promise.resolve pass
+            | _ -> fail_promise ("missing redirect_uri: " ^ logout_url)
+      in
+      with_server (oauth_server ()) (fun base_url ->
+          let* result = logout_once base_url in
+          remove_tree root;
+          Js.Promise.resolve result));
 
   test "example without selector returns all examples as json" (fun () ->
       let result = spawn_cli [ "--output"; "json"; "example" ] in
@@ -271,6 +472,67 @@ let () =
           else
             fail_promise
               (Printf.sprintf "expected two graph info requests, got %d"
+                 !request_count)));
+
+  test_promise "graph info reuses an existing db-worker from health json"
+    (fun () ->
+      let root = temp_dir "logseq-cli-graph-info-existing-server-" in
+      let request_count = ref 0 in
+      let result_transit =
+        "[\"~#set\",[[\"~:logseq.kv/schema-version\",77]]]"
+      in
+      let port_of_base_url base_url =
+        let colon = String.rindex base_url ':' in
+        String.sub base_url (colon + 1) (String.length base_url - colon - 1)
+      in
+      let server =
+        create_server (fun[@u] req res ->
+            let body = ref "" in
+            req_set_encoding req "utf8";
+            req_on_data req "data" (fun[@u] chunk -> body := !body ^ chunk);
+            req_on_end req "end" (fun[@u] () ->
+                match (req_method req, req_url req) with
+                | "GET", "/healthz" ->
+                    write_json res 200
+                      "{\"repo\":\"logseq_db_alpha\",\"status\":\"ready\",\"host\":\"127.0.0.1\",\"pid\":1,\"owner-source\":\"cli\",\"root-dir\":\"/tmp/logseq-cli\",\"revision\":\"test-revision\"}"
+                | "POST", "/v1/invoke" ->
+                    incr request_count;
+                    if not (Js.String.includes ~search:"thread-api/q" !body)
+                    then fail_test ("unexpected invoke method: " ^ !body);
+                    if not (Js.String.includes ~search:"logseq_db_alpha" !body)
+                    then fail_test ("missing repo in request: " ^ !body);
+                    write_json res 200 (json_response result_transit)
+                | _ -> write_json res 404 (error_response "not found")))
+      in
+      with_server server (fun base_url ->
+          let port = port_of_base_url base_url in
+          write_file (Node.Path.join [| root; "server-list" |])
+            (string_of_int process_pid ^ " " ^ port ^ "\n");
+          let* result =
+            run_cli_p
+              ~env:
+                [|
+                  ( "LOGSEQ_DB_WORKER_NODE_SCRIPT",
+                    Node.Path.join [| root; "missing-db-worker-node.js" |] );
+                |]
+              [
+                "--root-dir";
+                root;
+                "--graph";
+                "alpha";
+                "graph";
+                "info";
+              ]
+          in
+          remove_tree root;
+          ignore (expect_cli_exit_zero "graph info existing server" result);
+          ignore
+            (expect_named_contains "existing server schema" result.stdout
+               "logseq.kv/schema-version  77");
+          if !request_count = 1 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected one graph info request, got %d"
                  !request_count)));
 
   test_promise "list page human output formats timestamps for large result sets"
@@ -506,8 +768,7 @@ let () =
                  !backup_requests)
           else if
             not
-              (Js.String.includes ~search:"\"backup-name\":\"alpha-nightly-"
-                 output.stdout
+              (Js.String.includes ~search:"\"backup-name\":\"" output.stdout
               && Js.String.includes ~search:"\"path\":\"" output.stdout)
           then
             finish_with_error ("expected backup result json\n" ^ output.stdout)
@@ -532,9 +793,13 @@ let () =
                      (read_file
                         (Node.Path.join [| backup_dir; "metadata.edn" |])))
               then finish_with_error "expected backup metadata"
-              else (
+              else
+                let metadata =
+                  read_file (Node.Path.join [| backup_dir; "metadata.edn" |])
+                in
+                ignore (expect_valid_edn "backup metadata" metadata);
                 remove_tree root;
-                Js.Promise.resolve pass)));
+                Js.Promise.resolve pass));
 
   test_promise "upsert asset copies file and sends asset metadata" (fun () ->
       let root = temp_dir "logseq-cli-upsert-asset-" in
@@ -1074,6 +1339,7 @@ let () =
       let codex_bin = Node.Path.join [| tmp; "fake-codex" |] in
       let marker_path = Node.Path.join [| tmp; "codex-marker.txt" |] in
       let worker_script = "/tmp/logseq-cli-test-db-worker-node.js" in
+      let agent_name = "agent-a" ^ control_char ^ "lock" in
       let fake_codex_js =
         Node.Path.join [| current_dirname; "fake_codex.js" |]
       in
@@ -1082,7 +1348,11 @@ let () =
        ^ " \"$@\"\n");
       chmod_sync codex_bin 0o755;
       write_file config_path
-        ("{:agent-name \"agent-a\" :codex-bin \"" ^ codex_bin ^ "\"}");
+        (edn_map
+           [
+             (edn_keyword "agent-name", edn_string agent_name);
+             (edn_keyword "codex-bin", edn_string codex_bin);
+           ]);
       let registry_page =
         "{\"~:db/id\":100,\"~:block/uuid\":\"~uaaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"~:block/name\":\"agentbridge\",\"~:block/title\":\"AgentBridge\"}"
       in
@@ -1190,22 +1460,45 @@ let () =
                 if Node.Fs.existsSync marker_path then (
                   Option.iter clear_interval !interval;
                   let marker = read_file marker_path in
+                  let owner_path =
+                    Node.Path.join
+                      [|
+                        tmp;
+                        "agent-bridge-locks";
+                        encode_uri_component "alpha"
+                        ^ "--"
+                        ^ encode_uri_component agent_name
+                        ^ ".lock";
+                        "owner.edn";
+                      |]
+                  in
                   if marker <> worker_script then
                     cleanup_and_fail
                       ("worker script env was not forwarded: "
                       ^ Js.Json.stringify (Js.Json.string marker))
-                  else if
-                    not
-                      (Js.String.includes
-                         ~search:
-                           "Codex master session started: cli-live-session"
-                         !stdout)
-                  then
+                  else if not (Node.Fs.existsSync owner_path) then
                     cleanup_and_fail
-                      (Printf.sprintf
-                         "master session log missing:\nstdout:\n%s\nstderr:\n%s"
-                         !stdout !stderr)
-                  else cleanup_and_resolve pass)
+                      ("missing agent bridge owner: " ^ owner_path)
+                  else (
+                    ignore
+                      (expect_valid_edn "agent bridge owner"
+                         (read_file owner_path));
+                    if
+                      not
+                        (Js.String.includes
+                           ~search:
+                             "Codex master session started: cli-live-session"
+                           !stdout)
+                    then
+                      cleanup_and_fail
+                        (Printf.sprintf
+                           "master session log missing:\n\
+                            stdout:\n\
+                            %s\n\
+                            stderr:\n\
+                            %s"
+                           !stdout !stderr)
+                    else cleanup_and_resolve pass))
                 else (
                   decr remaining_attempts;
                   if !remaining_attempts <= 0 then (

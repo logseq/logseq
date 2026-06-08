@@ -23,7 +23,7 @@ let parse_ident_option value =
   let value = String.trim value in
   try
     match Edn_util.as_keyword_t (Melange_edn.of_edn_string value) with
-    | Some keyword -> Ok (Cli_primitive.normalize_keyword keyword)
+    | Some keyword -> Ok keyword
     | None ->
         Error
           (Error.invalid_options
@@ -65,9 +65,9 @@ let validate_parsed (Parsed_pull opts) =
 let selector_value = function
   | By_id id -> Edn_util.int64 id
   | By_uuid uuid ->
-      Edn_util.vector [ Edn_util.keyword ":block/uuid"; Edn_util.uuid uuid ]
+      Edn_util.vector [ Edn_util.keyword "block/uuid"; Edn_util.uuid uuid ]
   | By_ident ident ->
-      Edn_util.vector [ Edn_util.keyword ":db/ident"; Edn_util.any ident ]
+      Edn_util.vector [ Edn_util.keyword "db/ident"; Edn_util.any ident ]
 
 let default_selector = Edn_util.vector [ Edn_util.string "~$*" ]
 
@@ -110,10 +110,10 @@ let execute (Debug_pull action) config mode =
                    (Raw
                       (Edn_util.map
                          [
-                           (Edn_util.keyword ":entity", entity);
-                           ( Edn_util.keyword ":lookup",
+                           (Edn_util.keyword "entity", entity);
+                           ( Edn_util.keyword "lookup",
                              selector_value action.lookup );
-                           (Edn_util.keyword ":selector", action.selector);
+                           (Edn_util.keyword "selector", action.selector);
                          ])))))
 
 let metadata () =
