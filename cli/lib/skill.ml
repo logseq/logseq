@@ -54,7 +54,7 @@ let resolve_install_target ~global ~cwd ~home_dir =
       in
       Ok
         {
-          scope = Edn_util.keyword_t (if global then ":global" else ":local");
+          scope = Edn_util.keyword_t (if global then "global" else "local");
           path = skill_file_under base;
           update_command =
             (if global then "logseq skill install --global"
@@ -218,9 +218,9 @@ let execute_show config mode source_path =
 let install_value ~source ~file =
   Edn_util.map
     [
-      (Edn_util.keyword ":source-path", Edn_util.string source);
-      (Edn_util.keyword ":installed-path", Edn_util.string file);
-      ( Edn_util.keyword ":message",
+      (Edn_util.keyword "source-path", Edn_util.string source);
+      (Edn_util.keyword "installed-path", Edn_util.string file);
+      ( Edn_util.keyword "message",
         Edn_util.string ("Installed skill to " ^ file) );
     ]
 
