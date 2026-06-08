@@ -770,7 +770,7 @@
 (hsx/defc markdown-mirror-row
   [t]
   (let [repo (state/get-current-repo)
-        repo-config (when repo (state/use-sub [:config repo]))
+        repo-config (state/use-sub [:config repo])
         enabled? (true? (:feature/markdown-mirror? repo-config))
         *regenerating? (hooks/use-memo #(atom false) [])
         [regenerating?] (hooks/use-atom *regenerating?)
@@ -819,9 +819,10 @@
 
 (hsx/defc auto-chmod-row
   [t]
-  (let [enabled? (if (= nil (state/use-sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))
+  (let [auto-chmod-enabled? (state/use-sub [:electron/user-cfgs :feature/enable-automatic-chmod?])
+        enabled? (if (nil? auto-chmod-enabled?)
                    true
-                   (state/use-sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))]
+                   auto-chmod-enabled?)]
     (toggle
      "automatic-chmod"
      (t :settings.advanced/auto-chmod)
