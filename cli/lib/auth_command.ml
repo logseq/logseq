@@ -1,3 +1,5 @@
+open Cli_effect.Infix
+
 type parsed = Parsed_login | Parsed_logout
 type action = Login | Logout
 
@@ -47,7 +49,7 @@ let logout_value (result : Auth_state.logout_result) =
 let execute action config mode =
   match action with
   | Login ->
-      Cli_effect.bind (Auth_state.login config) (function
+      (Auth_state.login config >>= function
         | Ok result ->
             Cli_effect.pure
               (Cli_result.ok ~command:Command_id.Login mode
@@ -56,7 +58,7 @@ let execute action config mode =
             Cli_effect.pure
               (Output_mode.error ~command:Command_id.Login mode err))
   | Logout ->
-      Cli_effect.bind (Auth_state.logout config) (function
+      (Auth_state.logout config >>= function
         | Ok result ->
             Cli_effect.pure
               (Cli_result.ok ~command:Command_id.Logout mode
