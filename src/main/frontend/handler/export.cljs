@@ -18,33 +18,35 @@
             [logseq.db :as ldb]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.common.path :as path]
-            [logseq.publishing.html :as publish-html]
             [promesa.core :as p]))
+
+(defn- publishing-export-options
+  [repo]
+  {:repo repo
+   :app-state (select-keys @state/state
+                           [:ui/theme
+                            :ui/sidebar-collapsed-blocks])
+   :repo-config (get-in @state/state [:config repo])})
 
 (defn download-repo-as-html!
   "download public pages as html"
   [repo]
-  (when-let [db (db/get-db repo)]
-    (let [{:keys [asset-filenames html]}
-          (publish-html/build-html db
-                                   {:repo repo
-                                    :app-state (select-keys @state/state
-                                                            [:ui/theme
-                                                             :ui/sidebar-collapsed-blocks])
-                                    :repo-config (get-in @state/state [:config repo])})
-          html-str     (str "data:text/html;charset=UTF-8,"
-                            (js/encodeURIComponent html))]
-      (if (util/electron?)
-        (js/window.apis.exportPublishAssets
-         html
-         (config/get-repo-dir repo)
-         (clj->js asset-filenames)
-         (util/mocked-open-dir-path))
+  (p/let [{:keys [asset-filenames html]}
+          (state/<invoke-db-worker :thread-api/build-publishing-html repo (publishing-export-options repo))]
+    (when html
+      (let [html-str (str "data:text/html;charset=UTF-8,"
+                          (js/encodeURIComponent html))]
+        (if (util/electron?)
+          (js/window.apis.exportPublishAssets
+           html
+           (config/get-repo-dir repo)
+           (clj->js asset-filenames)
+           (util/mocked-open-dir-path))
 
-        (when-let [anchor (gdom/getElement "download-as-html")]
-          (.setAttribute anchor "href" html-str)
-          (.setAttribute anchor "download" "index.html")
-          (.click anchor))))))
+          (when-let [anchor (gdom/getElement "download-as-html")]
+            (.setAttribute anchor "href" html-str)
+            (.setAttribute anchor "download" "index.html")
+            (.click anchor)))))))
 
 (defn- file-name [repo extension]
   (-> repo

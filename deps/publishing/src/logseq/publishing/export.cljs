@@ -27,6 +27,25 @@
     (js/console.log (:payload msg))
     (js/console.error (:payload msg))))
 
+(defn- copy-file!
+  [from to]
+  (fs/mkdirSync (node-path/dirname to) #js {:recursive true})
+  (fs/copyFileSync from to))
+
+(defn- copy-path!
+  [from to]
+  (let [stat (fs/statSync from)]
+    (cond
+      (.isDirectory stat)
+      (do
+        (fs/mkdirSync to #js {:recursive true})
+        (doseq [entry (fs/readdirSync from)]
+          (copy-path! (node-path/join from entry)
+                      (node-path/join to entry))))
+
+      (.isFile stat)
+      (copy-file! from to))))
+
 (defn- cleanup-js-dir
   "Moves used js files to the correct dir and removes unused js files"
   [output-static-dir source-static-dir {:keys [dev?]}]
@@ -60,24 +79,22 @@
         assets-to-dir (node-path/join output-dir "assets")
         output-static-dir (node-path/join output-dir "static")]
     (p/let [_ (fs/mkdirSync assets-to-dir #js {:recursive true})
-            _ (p/all (concat
-                      [(fse/copy (node-path/join static-dir "404.html") (node-path/join output-dir "404.html"))]
-
-                      (map
-                       (fn [filename]
-                         (-> (fse/copy (node-path/join assets-from-dir filename) (node-path/join assets-to-dir filename))
-                             (p/catch
-                              (fn [e]
-                                (log-error-fn "Failed to copy"
-                                              (str {:from (node-path/join assets-from-dir filename)
-                                                    :to (node-path/join assets-to-dir filename)})
-                                              e)))))
-                       asset-filenames)
-
-                      (map
-                       (fn [part]
-                         (fse/copy (node-path/join static-dir part) (node-path/join output-static-dir part)))
-                       static-dirs)))])))
+            _ (copy-path! (node-path/join static-dir "404.html")
+                          (node-path/join output-dir "404.html"))
+            _ (doseq [part static-dirs]
+                (copy-path! (node-path/join static-dir part)
+                            (node-path/join output-static-dir part)))
+            _ (p/all
+               (map
+                (fn [filename]
+                  (-> (fse/copy (node-path/join assets-from-dir filename) (node-path/join assets-to-dir filename))
+                      (p/catch
+                       (fn [e]
+                         (log-error-fn "Failed to copy"
+                                       (str {:from (node-path/join assets-from-dir filename)
+                                             :to (node-path/join assets-to-dir filename)})
+                                       e)))))
+                asset-filenames))])))
 
 (defn create-export
   "Given a graph's directory, the generated html and the directory containing
