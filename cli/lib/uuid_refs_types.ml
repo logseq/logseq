@@ -114,8 +114,8 @@ let normalize_entity_field item field labels =
       let field = field_text field in
       let raw = Edn_util.assoc field (Edn_util.string value) item.Entity.raw in
       let item = { item with Entity.raw } in
-      if field = ":block/title" then { item with title = Some value }
-      else if field = ":block/name" || field = ":name" then
+      if field = "block/title" then { item with title = Some value }
+      else if field = "block/name" || field = "name" then
         { item with name = Some value }
       else item
 
@@ -131,22 +131,22 @@ let kw value = Edn_util.keyword value
 let vector values = Edn_util.vector values
 
 let uuid_lookup_selector =
-  vector [ kw ":db/id"; kw ":block/uuid"; kw ":block/title"; kw ":block/name" ]
+  vector [ kw "db/id"; kw "block/uuid"; kw "block/title"; kw "block/name" ]
 
-let uuid_lookup uuid = vector [ kw ":block/uuid"; Edn_util.uuid uuid ]
+let uuid_lookup uuid = vector [ kw "block/uuid"; Edn_util.uuid uuid ]
 
 let value_uuid value =
   match
-    Option.bind (Edn_util.get value ":block/uuid") Edn_util.as_string_like
+    Option.bind (Edn_util.get value "block/uuid") Edn_util.as_string_like
   with
   | Some uuid when Cli_primitive.is_uuid_string uuid -> Some (lower_uuid uuid)
   | _ -> None
 
 let label_of_value value =
-  match Edn_util.get_string value ":block/title" with
+  match Edn_util.get_string value "block/title" with
   | Some title when String.trim title <> "" -> Some title
   | _ -> (
-      match Edn_util.get_string value ":block/name" with
+      match Edn_util.get_string value "block/name" with
       | Some name when String.trim name <> "" -> Some name
       | _ -> value_uuid value)
 
@@ -177,7 +177,7 @@ let fetch_uuid_entities config repo uuids =
                     | Some uuid ->
                         {
                           uuid;
-                          id = Edn_util.get_int64 value ":db/id";
+                          id = Edn_util.get_int64 value "db/id";
                           label = label_of_value value;
                         }
                         :: acc

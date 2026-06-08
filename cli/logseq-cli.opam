@@ -38,6 +38,6 @@ dev-repo: "git+https://github.com/username/reponame.git"
 x-maintenance-intent: ["(latest)"]
 pin-depends: [
   ["humanize.dev" "git+https://github.com/rcmerci/humanize.git#747879af704dff4dd1897bc0f9a53a361071371c"]
-  ["melange-transit.dev" "git+https://github.com/RCmerci/melange-transit.git#afa316feb89df2810c1290a6207bafa7a27ec934"]
-  ["melange-edn.dev" "git+https://github.com/RCmerci/melange-edn.git#0.1.0"]
+  ["melange-transit.dev" "git+https://github.com/RCmerci/melange-transit.git#3b749ef0f3cc2a91d60e1a883f1ba7ff63106dcf"]
+  ["melange-edn.0.3.0" "git+https://github.com/RCmerci/melange-edn.git#0.3.0"]
 ]

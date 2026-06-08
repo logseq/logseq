@@ -179,6 +179,11 @@ let normalize_tag_name value =
 
 let normalized_lookup_name value = String.lowercase_ascii (String.trim value)
 
+let strip_keyword_prefix value =
+  if String.length value > 0 && value.[0] = ':' then
+    String.sub value 1 (String.length value - 1)
+  else value
+
 let nonempty_trimmed = function
   | Some value ->
       let value = String.trim value in
@@ -700,10 +705,10 @@ let normalize_content value =
 
 let normalize_priority value =
   match String.lowercase_ascii (String.trim value) with
-  | "low" -> Some (Edn_util.keyword_t ":logseq.property/priority.low")
-  | "medium" -> Some (Edn_util.keyword_t ":logseq.property/priority.medium")
-  | "high" -> Some (Edn_util.keyword_t ":logseq.property/priority.high")
-  | "urgent" -> Some (Edn_util.keyword_t ":logseq.property/priority.urgent")
+  | "low" -> Some (Edn_util.keyword_t "logseq.property/priority.low")
+  | "medium" -> Some (Edn_util.keyword_t "logseq.property/priority.medium")
+  | "high" -> Some (Edn_util.keyword_t "logseq.property/priority.high")
+  | "urgent" -> Some (Edn_util.keyword_t "logseq.property/priority.urgent")
   | _ -> None
 
 let invalid_priority_message value =
@@ -794,25 +799,25 @@ let build_task repo graph (opts : task_opts) =
         let properties = [] in
         let properties =
           if opts.no_status then
-            Property.Key_ident (Edn_util.keyword_t ":logseq.property/status")
+            Property.Key_ident (Edn_util.keyword_t "logseq.property/status")
             :: properties
           else properties
         in
         let properties =
           if opts.no_priority then
-            Property.Key_ident (Edn_util.keyword_t ":logseq.property/priority")
+            Property.Key_ident (Edn_util.keyword_t "logseq.property/priority")
             :: properties
           else properties
         in
         let properties =
           if opts.no_scheduled then
-            Property.Key_ident (Edn_util.keyword_t ":logseq.property/scheduled")
+            Property.Key_ident (Edn_util.keyword_t "logseq.property/scheduled")
             :: properties
           else properties
         in
         let properties =
           if opts.no_deadline then
-            Property.Key_ident (Edn_util.keyword_t ":logseq.property/deadline")
+            Property.Key_ident (Edn_util.keyword_t "logseq.property/deadline")
             :: properties
           else properties
         in
@@ -826,7 +831,7 @@ let build_task repo graph (opts : task_opts) =
               {
                 Property.key =
                   Property.Key_ident
-                    (Edn_util.keyword_t ":logseq.property/priority");
+                    (Edn_util.keyword_t "logseq.property/priority");
                 value = Edn_util.any priority;
               }
               :: properties
@@ -838,7 +843,7 @@ let build_task repo graph (opts : task_opts) =
               {
                 Property.key =
                   Property.Key_ident
-                    (Edn_util.keyword_t ":logseq.property/scheduled");
+                    (Edn_util.keyword_t "logseq.property/scheduled");
                 value = Edn_util.string (Time.rfc3339_millis scheduled);
               }
               :: properties
@@ -850,7 +855,7 @@ let build_task repo graph (opts : task_opts) =
               {
                 Property.key =
                   Property.Key_ident
-                    (Edn_util.keyword_t ":logseq.property/deadline");
+                    (Edn_util.keyword_t "logseq.property/deadline");
                 value = Edn_util.string (Time.rfc3339_millis deadline);
               }
               :: properties
@@ -1033,51 +1038,51 @@ let list values = Edn_util.list values
 let tag_selector =
   vector
     [
-      kw ":db/id";
-      kw ":block/uuid";
-      kw ":block/name";
-      kw ":block/title";
-      Edn_util.map [ (kw ":block/tags", vector [ kw ":db/ident" ]) ];
+      kw "db/id";
+      kw "block/uuid";
+      kw "block/name";
+      kw "block/title";
+      Edn_util.map [ (kw "block/tags", vector [ kw "db/ident" ]) ];
     ]
 
 let page_selector =
   vector
     [
-      kw ":db/id";
-      kw ":block/uuid";
-      kw ":block/name";
-      kw ":block/title";
-      kw ":logseq.property/deleted-at";
+      kw "db/id";
+      kw "block/uuid";
+      kw "block/name";
+      kw "block/title";
+      kw "logseq.property/deleted-at";
     ]
 
 let property_selector =
   vector
     [
-      kw ":db/id";
-      kw ":db/ident";
-      kw ":block/uuid";
-      kw ":block/name";
-      kw ":block/title";
-      kw ":logseq.property/type";
+      kw "db/id";
+      kw "db/ident";
+      kw "block/uuid";
+      kw "block/name";
+      kw "block/title";
+      kw "logseq.property/type";
     ]
 
 let asset_selector =
   vector
     [
-      kw ":db/id";
-      kw ":block/uuid";
-      kw ":block/title";
-      kw ":logseq.property/deleted-at";
-      Edn_util.map [ (kw ":block/tags", vector [ kw ":db/ident" ]) ];
+      kw "db/id";
+      kw "block/uuid";
+      kw "block/title";
+      kw "logseq.property/deleted-at";
+      Edn_util.map [ (kw "block/tags", vector [ kw "db/ident" ]) ];
     ]
 
 let task_selector =
-  vector [ kw ":db/id"; kw ":block/uuid"; kw ":block/name"; kw ":block/title" ]
+  vector [ kw "db/id"; kw "block/uuid"; kw "block/name"; kw "block/title" ]
 
 let result_ids ids =
   Edn_util.map
     [
-      ( kw ":result",
+      ( kw "result",
         Edn_util.vector (List.map (fun id -> Edn_util.int64 id) ids) );
     ]
 
@@ -1114,31 +1119,31 @@ let graph_assets_dir config repo =
 let class_query selector class_ident =
   Edn_util.map
     [
-      ( kw ":find",
+      ( kw "find",
         vector [ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
       );
-      (kw ":in", list [ sym "$"; sym "?name" ]);
-      ( kw ":where",
+      (kw "in", list [ sym "$"; sym "?name" ]);
+      ( kw "where",
         vector
           [
-            vector [ sym "?e"; kw ":block/name"; sym "?name" ];
-            vector [ sym "?e"; kw ":block/tags"; sym "?t" ];
-            vector [ sym "?t"; kw ":db/ident"; kw class_ident ];
+            vector [ sym "?e"; kw "block/name"; sym "?name" ];
+            vector [ sym "?e"; kw "block/tags"; sym "?t" ];
+            vector [ sym "?t"; kw "db/ident"; kw class_ident ];
           ] );
     ]
 
-let tag_query selector = class_query selector ":logseq.class/Tag"
-let property_query selector = class_query selector ":logseq.class/Property"
+let tag_query selector = class_query selector "logseq.class/Tag"
+let property_query selector = class_query selector "logseq.class/Property"
 
 let page_query selector =
   Edn_util.map
     [
-      ( kw ":find",
+      ( kw "find",
         vector [ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
       );
-      (kw ":in", list [ sym "$"; sym "?name" ]);
-      ( kw ":where",
-        vector [ vector [ sym "?e"; kw ":block/name"; sym "?name" ] ] );
+      (kw "in", list [ sym "$"; sym "?name" ]);
+      ( kw "where",
+        vector [ vector [ sym "?e"; kw "block/name"; sym "?name" ] ] );
     ]
 
 let pull_pages_by_name config repo name selector =
@@ -1177,44 +1182,44 @@ let first_entity value =
   | Some (first :: _), _ | _, Some (first :: _) -> Some first
   | _ -> None
 
-let id_of_entity value = Edn_util.get_int64 value ":db/id"
+let id_of_entity value = Edn_util.get_int64 value "db/id"
 
 let uuid_of_entity value =
-  Option.bind (Edn_util.get value ":block/uuid") Edn_util.as_string_like
+  Option.bind (Edn_util.get value "block/uuid") Edn_util.as_string_like
 
-let name_of_entity value = Edn_util.get_string value ":block/name"
+let name_of_entity value = Edn_util.get_string value "block/name"
 
 let tag_entity value =
-  match Option.bind (Edn_util.get value ":block/tags") Edn_util.as_seq with
+  match Option.bind (Edn_util.get value "block/tags") Edn_util.as_seq with
   | Some tags ->
       List.exists
         (fun tag ->
           match
-            Option.bind (Edn_util.get tag ":db/ident") Edn_util.as_string_like
+            Option.bind (Edn_util.get tag "db/ident") Edn_util.as_string_like
           with
-          | Some ":logseq.class/Tag" | Some "logseq.class/Tag" -> true
+          | Some ident -> strip_keyword_prefix ident = "logseq.class/Tag"
           | _ -> false)
         tags
   | _ -> false
 
 let property_entity value =
-  Option.is_some (Edn_util.get value ":logseq.property/type")
+  Option.is_some (Edn_util.get value "logseq.property/type")
 
 let asset_entity value =
-  match Option.bind (Edn_util.get value ":block/tags") Edn_util.as_seq with
+  match Option.bind (Edn_util.get value "block/tags") Edn_util.as_seq with
   | Some tags ->
       List.exists
         (fun tag ->
           match
-            Option.bind (Edn_util.get tag ":db/ident") Edn_util.as_string_like
+            Option.bind (Edn_util.get tag "db/ident") Edn_util.as_string_like
           with
-          | Some ":logseq.class/Asset" | Some "logseq.class/Asset" -> true
+          | Some ident -> strip_keyword_prefix ident = "logseq.class/Asset"
           | _ -> false)
         tags
   | _ -> false
 
 let ident_of_entity value =
-  Option.bind (Edn_util.get value ":db/ident") Edn_util.as_keyword_t
+  Option.bind (Edn_util.get value "db/ident") Edn_util.as_keyword_t
 
 let lookup_of_tag = function
   | Selector.Tag_id id -> Edn_util.int64 id
@@ -1226,7 +1231,7 @@ let lookup_of_property_key = function
   | Property.Key_ident ident -> Edn_util.any ident
   | Key_id id -> Edn_util.int64 id
   | Key_name name ->
-      Edn_util.any (Cli_primitive.normalize_keyword (Edn_util.keyword_t name))
+      Edn_util.any (Edn_util.keyword_t name)
 
 let apply_outliner_ops config repo ops =
   Transport.thread_api_apply_outliner_ops config ~repo
@@ -1236,11 +1241,11 @@ let create_tag_page config repo name =
   let op =
     Edn_util.vector
       [
-        kw ":create-page";
+        kw "create-page";
         Edn_util.vector
           [
             Edn_util.string name;
-            Edn_util.map [ (kw ":class?", Edn_util.bool true) ];
+            Edn_util.map [ (kw "class?", Edn_util.bool true) ];
           ];
       ]
   in
@@ -1250,7 +1255,7 @@ let create_page config repo name =
   let op =
     Edn_util.vector
       [
-        kw ":create-page";
+        kw "create-page";
         Edn_util.vector [ Edn_util.string name; Edn_util.map [] ];
       ]
   in
@@ -1260,41 +1265,41 @@ let rename_page config repo uuid name =
   let op =
     Edn_util.vector
       [
-        kw ":rename-page";
+        kw "rename-page";
         Edn_util.vector [ Edn_util.uuid uuid; Edn_util.string name ];
       ]
   in
   apply_outliner_ops config repo [ op ]
 
-let value_of_kind kind = Edn_util.keyword (":" ^ Property.string_of_kind kind)
+let value_of_kind kind = Edn_util.keyword (Property.string_of_kind kind)
 
 let value_of_cardinality = function
-  | Property.One -> Edn_util.keyword ":db.cardinality/one"
-  | Many -> Edn_util.keyword ":db.cardinality/many"
+  | Property.One -> Edn_util.keyword "db.cardinality/one"
+  | Many -> Edn_util.keyword "db.cardinality/many"
 
 let value_of_schema (schema : Property.schema) =
   let fields = [] in
   let fields =
     match schema.kind with
-    | Some kind -> (kw ":logseq.property/type", value_of_kind kind) :: fields
+    | Some kind -> (kw "logseq.property/type", value_of_kind kind) :: fields
     | None -> fields
   in
   let fields =
     match schema.cardinality with
     | Some cardinality ->
-        (kw ":db/cardinality", value_of_cardinality cardinality) :: fields
+        (kw "db/cardinality", value_of_cardinality cardinality) :: fields
     | None -> fields
   in
   let fields =
     match schema.hidden with
     | Some hidden ->
-        (kw ":logseq.property/hide?", Edn_util.bool hidden) :: fields
+        (kw "logseq.property/hide?", Edn_util.bool hidden) :: fields
     | None -> fields
   in
   let fields =
     match schema.public with
     | Some public ->
-        (kw ":logseq.property/public?", Edn_util.bool public) :: fields
+        (kw "logseq.property/public?", Edn_util.bool public) :: fields
     | None -> fields
   in
   Edn_util.map (List.rev fields)
@@ -1309,7 +1314,7 @@ let upsert_property_op ?(opts = Edn_util.map []) ident schema =
   in
   Edn_util.vector
     [
-      kw ":upsert-property";
+      kw "upsert-property";
       Edn_util.vector [ ident; value_of_schema schema; opts ];
     ]
 
@@ -1352,8 +1357,8 @@ let upsert_id_not_found entity_type id =
     ~context:
       (Edn_util.map
          [
-           (kw ":entity-type", Edn_util.string entity_type);
-           (kw ":id", Edn_util.int64 id);
+           (kw "entity-type", Edn_util.string entity_type);
+           (kw "id", Edn_util.int64 id);
          ])
 
 let upsert_id_type_mismatch entity_type id =
@@ -1363,8 +1368,8 @@ let upsert_id_type_mismatch entity_type id =
     ~context:
       (Edn_util.map
          [
-           (kw ":entity-type", Edn_util.string entity_type);
-           (kw ":id", Edn_util.int64 id);
+           (kw "entity-type", Edn_util.string entity_type);
+           (kw "id", Edn_util.int64 id);
          ])
 
 let same_tag_name entity target_name =
@@ -1425,8 +1430,8 @@ let resolve_property_ident invoke_config repo key =
   | Property.Key_ident ident ->
       bind
         (pull_entity_by_lookup invoke_config repo
-           (vector [ kw ":db/id" ])
-           (vector [ kw ":db/ident"; Edn_util.any ident ]))
+           (vector [ kw "db/id" ])
+           (vector [ kw "db/ident"; Edn_util.any ident ]))
         (fun result ->
           if Option.is_some (id_of_entity result) then pure (Ok ident)
           else
@@ -1438,7 +1443,7 @@ let resolve_property_ident invoke_config repo key =
   | Key_id id ->
       bind
         (pull_entity_by_lookup invoke_config repo
-           (vector [ kw ":db/ident" ])
+           (vector [ kw "db/ident" ])
            (Edn_util.int64 id))
         (fun result ->
           match ident_of_entity result with
@@ -1450,11 +1455,11 @@ let resolve_property_ident invoke_config repo key =
                       (Edn_util.keyword_t "property-not-found")
                       "property not found")))
   | Key_name name ->
-      let ident = Cli_primitive.normalize_keyword (Edn_util.keyword_t name) in
+      let ident = Edn_util.keyword_t name in
       bind
         (pull_entity_by_lookup invoke_config repo
-           (vector [ kw ":db/id" ])
-           (vector [ kw ":db/ident"; Edn_util.any ident ]))
+           (vector [ kw "db/id" ])
+           (vector [ kw "db/ident"; Edn_util.any ident ]))
         (fun result ->
           if Option.is_some (id_of_entity result) then pure (Ok ident)
           else
@@ -1510,9 +1515,9 @@ let append_tag_and_property_ops block_uuids ~update_tag_ids ~remove_tag_ids
       (fun tag_id ->
         Edn_util.vector
           [
-            kw ":batch-delete-property-value";
+            kw "batch-delete-property-value";
             Edn_util.vector
-              [ uuid_values; kw ":block/tags"; Edn_util.int64 tag_id ];
+              [ uuid_values; kw "block/tags"; Edn_util.int64 tag_id ];
           ])
       remove_tag_ids
   in
@@ -1521,7 +1526,7 @@ let append_tag_and_property_ops block_uuids ~update_tag_ids ~remove_tag_ids
       (fun ident ->
         Edn_util.vector
           [
-            kw ":batch-remove-property";
+            kw "batch-remove-property";
             Edn_util.vector [ uuid_values; Edn_util.any ident ];
           ])
       remove_properties
@@ -1531,11 +1536,11 @@ let append_tag_and_property_ops block_uuids ~update_tag_ids ~remove_tag_ids
       (fun tag_id ->
         Edn_util.vector
           [
-            kw ":batch-set-property";
+            kw "batch-set-property";
             Edn_util.vector
               [
                 uuid_values;
-                kw ":block/tags";
+                kw "block/tags";
                 Edn_util.int64 tag_id;
                 Edn_util.map [];
               ];
@@ -1547,7 +1552,7 @@ let append_tag_and_property_ops block_uuids ~update_tag_ids ~remove_tag_ids
       (fun (ident, value) ->
         Edn_util.vector
           [
-            kw ":batch-set-property";
+            kw "batch-set-property";
             Edn_util.vector
               [ uuid_values; Edn_util.any ident; value; Edn_util.map [] ];
           ])
@@ -1608,23 +1613,23 @@ let pull_created_page invoke_config repo name create_result =
       match Edn_util.as_string_like uuid_value with
       | Some uuid ->
           Transport.thread_api_pull invoke_config ~repo
-            ~selector:(Edn_util.vector_t [ kw ":db/id"; kw ":block/uuid" ])
-            ~lookup:(vector [ kw ":block/uuid"; Edn_util.uuid uuid ])
+            ~selector:(Edn_util.vector_t [ kw "db/id"; kw "block/uuid" ])
+            ~lookup:(vector [ kw "block/uuid"; Edn_util.uuid uuid ])
       | _ ->
           Transport.thread_api_pull invoke_config ~repo
-            ~selector:(Edn_util.vector_t [ kw ":db/id"; kw ":block/uuid" ])
+            ~selector:(Edn_util.vector_t [ kw "db/id"; kw "block/uuid" ])
             ~lookup:
               (vector
                  [
-                   kw ":block/name";
+                   kw "block/name";
                    Edn_util.string (normalized_lookup_name name);
                  ]))
   | _ ->
       Transport.thread_api_pull invoke_config ~repo
-        ~selector:(Edn_util.vector_t [ kw ":db/id"; kw ":block/uuid" ])
+        ~selector:(Edn_util.vector_t [ kw "db/id"; kw "block/uuid" ])
         ~lookup:
           (vector
-             [ kw ":block/name"; Edn_util.string (normalized_lookup_name name) ])
+             [ kw "block/name"; Edn_util.string (normalized_lookup_name name) ])
 
 let execute_create_tag mode invoke_config repo name =
   let open Cli_effect in
@@ -1688,7 +1693,7 @@ let execute_create_property mode invoke_config repo name schema =
       let opts =
         match ident with
         | Some _ -> Edn_util.map []
-        | None -> Edn_util.map [ (kw ":property-name", Edn_util.string name) ]
+        | None -> Edn_util.map [ (kw "property-name", Edn_util.string name) ]
       in
       bind (upsert_property invoke_config repo ~opts ident schema) (fun _ ->
           bind (pull_property_by_name invoke_config repo name property_selector)
@@ -1726,25 +1731,25 @@ let save_block_title invoke_config repo uuid content =
   let block =
     Edn_util.map
       [
-        (kw ":block/uuid", Edn_util.uuid uuid);
-        (kw ":block/title", Edn_util.string content);
+        (kw "block/uuid", Edn_util.uuid uuid);
+        (kw "block/title", Edn_util.string content);
       ]
   in
   let op =
     Edn_util.vector
-      [ kw ":save-block"; Edn_util.vector [ block; Edn_util.map [] ] ]
+      [ kw "save-block"; Edn_util.vector [ block; Edn_util.map [] ] ]
   in
   apply_outliner_ops invoke_config repo [ op ]
 
 let pull_asset_by_uuid invoke_config repo uuid =
   pull_entity_by_lookup invoke_config repo asset_selector
-    (vector [ kw ":block/uuid"; Edn_util.uuid uuid ])
+    (vector [ kw "block/uuid"; Edn_util.uuid uuid ])
 
 let ensure_asset_file_metadata path =
   if not (Cli_unix.file_exists path) then
     Error
       (Error.make
-         ~context:(Edn_util.map [ (kw ":path", Edn_util.string path) ])
+         ~context:(Edn_util.map [ (kw "path", Edn_util.string path) ])
          (Edn_util.keyword_t "asset-file-not-found")
          "asset file not found")
   else
@@ -1752,7 +1757,7 @@ let ensure_asset_file_metadata path =
     | None ->
         Error
           (Error.make
-             ~context:(Edn_util.map [ (kw ":path", Edn_util.string path) ])
+             ~context:(Edn_util.map [ (kw "path", Edn_util.string path) ])
              (Edn_util.keyword_t "invalid-options")
              "asset path must include a file extension")
     | Some asset_type -> (
@@ -1760,7 +1765,7 @@ let ensure_asset_file_metadata path =
         | None ->
             Error
               (Error.make
-                 ~context:(Edn_util.map [ (kw ":path", Edn_util.string path) ])
+                 ~context:(Edn_util.map [ (kw "path", Edn_util.string path) ])
                  (Edn_util.keyword_t "asset-checksum-failed")
                  "asset checksum failed")
         | Some checksum -> Ok (asset_type, file_size path, checksum))
@@ -1769,8 +1774,8 @@ let ensure_asset_tag_id invoke_config repo =
   let open Cli_effect in
   bind
     (pull_entity_by_lookup invoke_config repo
-       (vector [ kw ":db/id" ])
-       (vector [ kw ":db/ident"; kw ":logseq.class/Asset" ]))
+       (vector [ kw "db/id" ])
+       (vector [ kw "db/ident"; kw "logseq.class/Asset" ]))
     (fun entity ->
       match id_of_entity entity with
       | Some id -> pure (Ok id)
@@ -1791,19 +1796,19 @@ let with_asset_metadata (block : Block.t) asset_tag_id asset_type asset_size
         {
           Property.key =
             Property.Key_ident
-              (Edn_util.keyword_t ":logseq.property.asset/type");
+              (Edn_util.keyword_t "logseq.property.asset/type");
           value = Edn_util.string asset_type;
         };
         {
           key =
             Property.Key_ident
-              (Edn_util.keyword_t ":logseq.property.asset/size");
+              (Edn_util.keyword_t "logseq.property.asset/size");
           value = Edn_util.int64 (Int64.of_int asset_size);
         };
         {
           key =
             Property.Key_ident
-              (Edn_util.keyword_t ":logseq.property.asset/checksum");
+              (Edn_util.keyword_t "logseq.property.asset/checksum");
           value = Edn_util.string asset_checksum;
         };
       ]
@@ -1813,7 +1818,7 @@ let with_asset_metadata (block : Block.t) asset_tag_id asset_type asset_size
 let result_ids_of_create_result result =
   match Cli_result.data_value result with
   | Some value -> (
-      match Option.bind (Edn_util.get value ":result") Edn_util.as_seq with
+      match Option.bind (Edn_util.get value "result") Edn_util.as_seq with
       | Some values ->
           let ids = List.filter_map Edn_util.as_int64 values in
           if List.length ids = List.length values then Some ids else None
@@ -1955,8 +1960,8 @@ let ensure_task_tag_id invoke_config repo =
   let open Cli_effect in
   bind
     (pull_entity_by_lookup invoke_config repo
-       (vector [ kw ":db/id" ])
-       (vector [ kw ":db/ident"; kw ":logseq.class/Task" ]))
+       (vector [ kw "db/id" ])
+       (vector [ kw "db/ident"; kw "logseq.class/Task" ]))
     (fun entity ->
       match id_of_entity entity with
       | Some id -> pure (Ok id)
@@ -1998,7 +2003,7 @@ let execute_task_plan_on_uuids invoke_config repo block_uuids task_tag_id
   let update_properties =
     match status_ident with
     | Some ident ->
-        [ (Edn_util.keyword_t ":logseq.property/status", Edn_util.any ident) ]
+        [ (Edn_util.keyword_t "logseq.property/status", Edn_util.any ident) ]
     | None -> []
   in
   let update_properties =
@@ -2051,7 +2056,7 @@ let execute_task_page mode invoke_config repo page status_input
 
 let pull_task_by_uuid invoke_config repo uuid =
   pull_entity_by_lookup invoke_config repo task_selector
-    (vector [ kw ":block/uuid"; Edn_util.uuid uuid ])
+    (vector [ kw "block/uuid"; Edn_util.uuid uuid ])
 
 let execute_task_update mode invoke_config repo id uuid status_input
     update_properties clear_properties =
@@ -2159,7 +2164,7 @@ let update_plan_empty (plan : Property.update_plan) =
 let result_ids_of_cli_result result =
   match Cli_result.data_value result with
   | Some value -> (
-      match Option.bind (Edn_util.get value ":result") Edn_util.as_seq with
+      match Option.bind (Edn_util.get value "result") Edn_util.as_seq with
       | Some values ->
           let ids = List.filter_map Edn_util.as_int64 values in
           if List.length ids = List.length values then Some ids else None
@@ -2172,7 +2177,7 @@ let rec resolve_block_uuids_by_id invoke_config repo = function
       let open Cli_effect in
       bind
         (pull_entity_by_id invoke_config repo
-           (vector [ kw ":db/id"; kw ":block/uuid" ])
+           (vector [ kw "db/id"; kw "block/uuid" ])
            id)
         (fun entity ->
           match uuid_of_entity entity with

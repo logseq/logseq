@@ -61,7 +61,7 @@ let build ?registry:_ config _globals parsed =
           }
 
 let items_value items =
-  Edn_util.map [ (Edn_util.keyword ":items", Edn_util.vector items) ]
+  Edn_util.map [ (Edn_util.keyword "items", Edn_util.vector items) ]
 
 let sym name = Edn_util.string ("~$" ^ name)
 let kw name = Edn_util.keyword name
@@ -73,29 +73,29 @@ let call name args = list (sym name :: args)
 let pull_attrs = function
   | Block ->
       [
-        kw ":db/id";
-        kw ":db/ident";
-        kw ":block/title";
-        kw ":logseq.property/deleted-at";
-        Edn_util.map [ (kw ":block/parent", sym "...") ];
+        kw "db/id";
+        kw "db/ident";
+        kw "block/title";
+        kw "logseq.property/deleted-at";
+        Edn_util.map [ (kw "block/parent", sym "...") ];
       ]
   | Page ->
       [
-        kw ":db/id";
-        kw ":db/ident";
-        kw ":block/title";
-        kw ":logseq.property/deleted-at";
+        kw "db/id";
+        kw "db/ident";
+        kw "block/title";
+        kw "logseq.property/deleted-at";
       ]
-  | Property | Tag -> [ kw ":db/id"; kw ":db/ident"; kw ":block/title" ]
+  | Property | Tag -> [ kw "db/id"; kw "db/ident"; kw "block/title" ]
 
 let text_attr = function
-  | Block -> kw ":block/title"
-  | Page -> kw ":block/name"
-  | Property | Tag -> kw ":block/title"
+  | Block -> kw "block/title"
+  | Page -> kw "block/name"
+  | Property | Tag -> kw "block/title"
 
 let class_filter = function
-  | Property -> Some (kw ":logseq.class/Property")
-  | Tag -> Some (kw ":logseq.class/Tag")
+  | Property -> Some (kw "logseq.class/Property")
+  | Tag -> Some (kw "logseq.class/Tag")
   | Block | Page -> None
 
 let query_of_scope scope =
@@ -118,22 +118,22 @@ let query_of_scope scope =
     |> fun clauses -> vector [ entity; text_attr scope; title ] :: clauses )
     |> fun clauses ->
     match class_filter scope with
-    | Some class_ -> vector [ entity; kw ":block/tags"; class_ ] :: clauses
+    | Some class_ -> vector [ entity; kw "block/tags"; class_ ] :: clauses
     | None -> clauses
   in
   vector
     ([
-       kw ":find";
+       kw "find";
        vector
          [ list [ sym "pull"; entity; vector (pull_attrs scope) ]; sym "..." ];
-       kw ":in";
+       kw "in";
        sym "$";
        query;
-       kw ":where";
+       kw "where";
      ]
     @ where)
 
-let search_result_keys = [ ":db/id"; ":db/ident"; ":block/title" ]
+let search_result_keys = [ "db/id"; "db/ident"; "block/title" ]
 
 let select_search_item item =
   Edn_util.map
@@ -147,20 +147,20 @@ let select_search_item item =
 let rec recycled item =
   match Edn_util.as_map item with
   | Some _ -> (
-      Option.is_some (Edn_util.get item ":logseq.property/deleted-at")
+      Option.is_some (Edn_util.get item "logseq.property/deleted-at")
       ||
-      match Edn_util.get item ":block/parent" with
+      match Edn_util.get item "block/parent" with
       | Some parent -> recycled parent
       | None -> false)
   | None -> false
 
 let compare_search_item a b =
   let title item =
-    Edn_util.get_string item ":block/title"
+    Edn_util.get_string item "block/title"
     |> Option.value ~default:"" |> String.lowercase_ascii
   in
   let id item =
-    Edn_util.get_int64 item ":db/id" |> Option.value ~default:Int64.max_int
+    Edn_util.get_int64 item "db/id" |> Option.value ~default:Int64.max_int
   in
   let title_cmp = String.compare (title a) (title b) in
   if title_cmp <> 0 then title_cmp else Int64.compare (id a) (id b)
@@ -180,7 +180,7 @@ let normalize_uuid_refs config repo items =
   let entities = List.map Entity.of_value items in
   let uuids =
     Uuid_refs_types.collect_uuid_refs_from_items entities
-      [ Edn_util.keyword_t ":block/title" ]
+      [ Edn_util.keyword_t "block/title" ]
   in
   match uuids with
   | [] -> Cli_effect.pure items
@@ -188,7 +188,7 @@ let normalize_uuid_refs config repo items =
       Cli_effect.map
         (fun labels ->
           Uuid_refs_types.normalize_item_string_fields entities
-            [ Edn_util.keyword_t ":block/title" ]
+            [ Edn_util.keyword_t "block/title" ]
             labels
           |> List.map (fun item -> item.Entity.raw))
         (Uuid_refs_types.fetch_uuid_labels config repo uuids)

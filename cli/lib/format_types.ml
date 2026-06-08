@@ -1,21 +1,11 @@
 type 'a formatter = 'a Cli_result.t -> Cli_config.t -> string
 
-open Melange_edn
-
 let normalize_json v = v
 
-let json_escape value =
-  let buffer = Buffer.create (String.length value + 8) in
-  String.iter
-    (function
-      | '"' -> Buffer.add_string buffer "\\\""
-      | '\\' -> Buffer.add_string buffer "\\\\"
-      | '\n' -> Buffer.add_string buffer "\\n"
-      | '\r' -> Buffer.add_string buffer "\\r"
-      | '\t' -> Buffer.add_string buffer "\\t"
-      | c -> Buffer.add_char buffer c)
-    value;
-  Buffer.contents buffer
+let strip_leading_colon value =
+  if String.length value > 0 && value.[0] = ':' then
+    String.sub value 1 (String.length value - 1)
+  else value
 
 let rec json_of_value value =
   match
@@ -28,79 +18,31 @@ let rec json_of_value value =
       Edn_util.as_seq value,
       Edn_util.as_map value )
   with
-  | true, _, _, _, _, _, _, _ -> "null"
-  | _, Some b, _, _, _, _, _, _ -> if b then "true" else "false"
-  | _, _, Some i, _, _, _, _, _ -> string_of_int i
-  | _, _, _, Some f, _, _, _, _ -> string_of_float f
-  | _, _, _, _, Some s, _, _, _ ->
-      "\""
-      ^ json_escape
-          (if String.length s > 0 && s.[0] = ':' then
-             String.sub s 1 (String.length s - 1)
-           else s)
-      ^ "\""
-  | _, _, _, _, _, Some b, _, _ -> "\"" ^ json_escape (Bytes.to_string b) ^ "\""
+  | true, _, _, _, _, _, _, _ -> Js.Json.null
+  | _, Some b, _, _, _, _, _, _ -> Js.Json.boolean b
+  | _, _, Some i, _, _, _, _, _ -> Js.Json.number (float_of_int i)
+  | _, _, _, Some f, _, _, _, _ -> Js.Json.number f
+  | _, _, _, _, Some s, _, _, _ -> Js.Json.string (strip_leading_colon s)
+  | _, _, _, _, _, Some b, _, _ -> Js.Json.string (Bytes.to_string b)
   | _, _, _, _, _, _, Some xs, _ ->
-      "[" ^ String.concat "," (List.map json_of_value xs) ^ "]"
+      Js.Json.array (Array.of_list (List.map json_of_value xs))
   | _, _, _, _, _, _, _, Some xs ->
-      let member (k, v) =
-        let key =
-          match Edn_util.as_string_like k with
-          | Some s ->
-              if String.length s > 0 && s.[0] = ':' then
-                String.sub s 1 (String.length s - 1)
-              else s
-          | None -> Melange_edn.to_edn_string k
-        in
-        "\"" ^ json_escape key ^ "\":" ^ json_of_value v
-      in
-      "{" ^ String.concat "," (List.map member xs) ^ "}"
-  | _ -> Melange_edn.to_json_string value
-
-let rec edn_of_value value =
-  match value with
-  | Melange_edn.Any Melange_edn.Nil -> "nil"
-  | Any (Bool b) -> if b then "true" else "false"
-  | Any (Int i) -> (
-      match Edn_util.int64_to_int_opt i with
-      | Some i -> string_of_int i
-      | None -> Int64.to_string i)
-  | Any (Bigint i) | Any (Decimal i) -> i
-  | Any (Float f) -> string_of_float f
-  | Any (String s) -> "\"" ^ json_escape s ^ "\""
-  | Any (Keyword s) -> ":" ^ s
-  | Any (Tagged ("uuid", uuid)) -> (
-      match Edn_util.as_string uuid with
-      | Some uuid -> "\"" ^ json_escape uuid ^ "\""
-      | None -> Melange_edn.to_edn_string value)
-  | Any (Tagged ("bytes", bytes)) -> (
-      match Edn_util.as_string bytes with
-      | Some bytes -> "\"" ^ json_escape bytes ^ "\""
-      | None -> Melange_edn.to_edn_string value)
-  | Any (List xs) ->
-      "("
-      ^ String.concat " " (List.map edn_of_value (Edn_util.iarray_to_list xs))
-      ^ ")"
-  | Any (Vector xs) ->
-      "["
-      ^ String.concat " " (List.map edn_of_value (Edn_util.iarray_to_list xs))
-      ^ "]"
-  | Any (Set xs) ->
-      "#{"
-      ^ String.concat " " (List.map edn_of_value (Edn_util.iarray_to_list xs))
-      ^ "}"
-  | Any (Map xs) ->
-      "{"
-      ^ String.concat ", "
-          (List.map
-             (fun (k, v) -> edn_of_value k ^ " " ^ edn_of_value v)
-             (Edn_util.iarray_to_list xs))
-      ^ "}"
-  | _ -> Melange_edn.to_edn_string value
+      let object_ = Js.Dict.empty () in
+      List.iter
+        (fun (k, v) ->
+          let key =
+            match Edn_util.as_string_like k with
+            | Some s -> strip_leading_colon s
+            | None -> Melange_edn.to_edn_string k
+          in
+          Js.Dict.set object_ key (json_of_value v))
+        xs;
+      Js.Json.object_ object_
+  | _ -> Melange_edn.to_json value
 
 let data_to_value = function
   | Cli_result.Message s ->
-      Edn_util.map [ (Edn_util.keyword ":message", Edn_util.string s) ]
+      Edn_util.map [ (Edn_util.keyword "message", Edn_util.string s) ]
   | Items xs -> Edn_util.vector xs
   | Entity v | Query_result v | Raw v -> v
   | Empty -> Edn_util.nil
@@ -108,12 +50,12 @@ let data_to_value = function
 let candidate_to_value (candidate : Error.candidate) =
   let fields =
     match candidate.name with
-    | Some name -> [ (Edn_util.keyword ":name", Edn_util.string name) ]
+    | Some name -> [ (Edn_util.keyword "name", Edn_util.string name) ]
     | None -> []
   in
   let fields =
     match candidate.id with
-    | Some id -> (Edn_util.keyword ":id", Edn_util.int64 id) :: fields
+    | Some id -> (Edn_util.keyword "id", Edn_util.int64 id) :: fields
     | None -> fields
   in
   Edn_util.map fields
@@ -132,8 +74,8 @@ let error_to_value ?(edn = false) (error : Error.t) =
   in
   let fields =
     [
-      (Edn_util.keyword ":code", code_value);
-      (Edn_util.keyword ":message", Edn_util.string error.message);
+      (Edn_util.keyword "code", code_value);
+      (Edn_util.keyword "message", Edn_util.string error.message);
     ]
   in
   let fields =
@@ -142,13 +84,14 @@ let error_to_value ?(edn = false) (error : Error.t) =
     | candidates ->
         fields
         @ [
-            ( Edn_util.keyword ":candidates",
+            ( Edn_util.keyword "candidates",
               Edn_util.vector (List.map candidate_to_value candidates) );
           ]
   in
   Edn_util.map fields
 
 let to_json result =
+  let object_ = Js.Dict.empty () in
   match result.Cli_result.status with
   | Ok ->
       let data =
@@ -156,39 +99,43 @@ let to_json result =
         | Some data -> data_to_value data
         | None -> Edn_util.nil
       in
-      "{\"status\":\"ok\",\"data\":" ^ json_of_value data ^ "}"
+      Js.Dict.set object_ "status" (Js.Json.string "ok");
+      Js.Dict.set object_ "data" (json_of_value data);
+      Js.Json.stringify (Js.Json.object_ object_)
   | Error ->
       let error =
         match result.error with
         | Some e -> error_to_value e
         | None -> Edn_util.map []
       in
-      "{\"status\":\"error\",\"error\":" ^ json_of_value error ^ "}"
+      Js.Dict.set object_ "status" (Js.Json.string "error");
+      Js.Dict.set object_ "error" (json_of_value error);
+      Js.Json.stringify (Js.Json.object_ object_)
 
 let to_edn result =
-  match result.Cli_result.status with
-  | Ok ->
-      let data =
-        match result.data with
-        | Some data -> data_to_value data
-        | None -> Edn_util.nil
-      in
-      "{:status :ok, :data " ^ edn_of_value data ^ "}"
-  | Error ->
-      let error =
-        match result.error with
-        | Some e -> error_to_value ~edn:true e
-        | None -> Edn_util.map []
-      in
-      "{:status :error, :error " ^ edn_of_value error ^ "}"
+  let status, payload_key, payload =
+    match result.Cli_result.status with
+    | Ok ->
+        let data =
+          match result.data with
+          | Some data -> data_to_value data
+          | None -> Edn_util.nil
+        in
+        (Edn_util.keyword "ok", Edn_util.keyword "data", data)
+    | Error ->
+        let error =
+          match result.error with
+          | Some e -> error_to_value ~edn:true e
+          | None -> Edn_util.map []
+        in
+        (Edn_util.keyword "error", Edn_util.keyword "error", error)
+  in
+  Melange_edn.to_edn_string
+    (Edn_util.map
+       [ (Edn_util.keyword "status", status); (payload_key, payload) ])
 
 let render_human table = Output.Human_output.to_string table
 let count_footer count = "Count: " ^ Humanize_types.format_count count
-
-let strip_leading_colon value =
-  if String.length value > 0 && value.[0] = ':' then
-    String.sub value 1 (String.length value - 1)
-  else value
 
 let field_label key =
   key |> Edn_util.as_string_like
@@ -327,7 +274,7 @@ let should_truncate_title command label =
   is_list_command command && is_title_label label
 
 let list_search_human command value config =
-  match Option.bind (Edn_util.get value ":items") Edn_util.as_seq with
+  match Option.bind (Edn_util.get value "items") Edn_util.as_seq with
   | None -> None
   | Some items ->
       let mapped = List.filter_map Edn_util.as_map items in
@@ -355,38 +302,22 @@ let list_search_human command value config =
                 ~footer:(count_footer (List.length rows))
                 ~rows ()))
 
-let read_text_file path = Cli_unix.read_text_file path
-
-let read_current_graph root_dir =
-  let path = Filename.concat root_dir "current-graph" in
-  if not (Cli_unix.file_exists path) then None
-  else
-    try
-      let graph = String.trim (read_text_file path) in
-      if graph = "" then None else Some (Cli_primitive.create_graph graph)
-    with _ -> None
-
-let current_graph_of_config config =
-  match config.Cli_config.graph with
-  | Some _ as graph -> graph
-  | None -> read_current_graph config.Cli_config.root_dir
-
 let graph_list_human value config =
   match Edn_util.as_map value with
   | Some fields -> (
       let configured_graph =
-        current_graph_of_config config
+        config.Cli_config.graph
         |> Option.map Cli_primitive.string_of_graph
       in
       let current_graph =
-        match List.assoc_opt (Edn_util.keyword ":current-graph") fields with
+        match List.assoc_opt (Edn_util.keyword "current-graph") fields with
         | Some value -> (
             match Edn_util.as_string value with
             | Some _ as graph -> graph
             | None -> configured_graph)
         | None -> configured_graph
       in
-      match List.assoc_opt (Edn_util.keyword ":graphs") fields with
+      match List.assoc_opt (Edn_util.keyword "graphs") fields with
       | Some graphs_value -> (
           match Edn_util.as_vector graphs_value with
           | Some graphs ->

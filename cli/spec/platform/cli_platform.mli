@@ -35,6 +35,13 @@ module HTTP : sig
     (Fetch.Response.t * string) Cli_effect.t
 end
 
+module Crypto : sig
+  val sha256_hex : string -> string
+  val sha256_base64url : string -> string
+  val random_base64url : int -> string
+  val base64url_decode : string -> string
+end
+
 module Events : sig
   type subscription = { close : unit -> unit Cli_effect.t }
 

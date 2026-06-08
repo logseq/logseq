@@ -1,33 +1,27 @@
-let any value = Melange_edn.Any value
+let any = Melange_edn.any
 
-let keyword_name value =
-  if String.length value > 0 && value.[0] = ':' then
-    String.sub value 1 (String.length value - 1)
-  else value
-
-let keyword_t value = Melange_edn.Keyword (keyword_name value)
+let keyword_t value = Melange_edn.keyword value
 
 let keyword_to_string (value : Melange_edn.keyword Melange_edn.t) =
   match value with
-  | Melange_edn.Keyword value -> ":" ^ keyword_name value
-  | _ -> assert false
+  | Melange_edn.Keyword value -> Melange_edn.keyword_to_string value
 
 let keyword_any value = any (keyword_t value)
-let list_t values = Melange_edn.List (Iarray.of_list values)
-let vector_t values = Melange_edn.Vector (Iarray.of_list values)
-let set_t values = Melange_edn.Set (Iarray.of_list values)
-let map_t fields = Melange_edn.Map (Iarray.of_list fields)
-let nil = any Melange_edn.Nil
-let bool value = any (Melange_edn.Bool value)
-let int value = any (Melange_edn.Int (Int64.of_int value))
-let int64 value = any (Melange_edn.Int value)
-let float value = any (Melange_edn.Float value)
-let string value = any (Melange_edn.String value)
+let list_t values = Melange_edn.list values
+let vector_t values = Melange_edn.vector values
+let set_t values = Melange_edn.set values
+let map_t fields = Melange_edn.map fields
+let nil = any Melange_edn.nil
+let bool value = any (Melange_edn.bool value)
+let int value = any (Melange_edn.int (Int64.of_int value))
+let int64 value = any (Melange_edn.int value)
+let float value = any (Melange_edn.float value)
+let string value = any (Melange_edn.string value)
 let keyword value = any (keyword_t value)
-let uuid value = any (Melange_edn.Tagged ("uuid", string value))
+let uuid value = any (Melange_edn.tagged "uuid" (string value))
 
 let bytes value =
-  any (Melange_edn.Tagged ("bytes", string (Bytes.to_string value)))
+  any (Melange_edn.tagged "bytes" (string (Bytes.to_string value)))
 
 let list values = any (list_t values)
 let vector values = any (vector_t values)
@@ -37,7 +31,7 @@ let map fields = any (map_t fields)
 let iarray_to_list values =
   List.init (Iarray.length values) (fun index -> Iarray.get values index)
 
-let keyword_text value = ":" ^ keyword_name value
+let keyword_text value = Melange_edn.keyword_to_string value
 
 let int64_to_int_opt value =
   let int_value = Int64.to_int value in
@@ -68,7 +62,8 @@ let as_keyword = function
   | _ -> None
 
 let as_keyword_t = function
-  | Melange_edn.Any (Melange_edn.Keyword value) -> Some (keyword_t value)
+  | Melange_edn.Any (Melange_edn.Keyword value) ->
+      Some (keyword_t (Melange_edn.keyword_to_string value))
   | _ -> None
 
 let as_uuid = function
@@ -90,7 +85,7 @@ let as_vector = function
 
 let as_vector_t = function
   | Melange_edn.Any (Melange_edn.Vector values) ->
-      Some (Melange_edn.Vector values)
+      Some (Melange_edn.vector (iarray_to_list values))
   | _ -> None
 
 let as_set = function
@@ -102,7 +97,8 @@ let as_map = function
   | _ -> None
 
 let as_map_t = function
-  | Melange_edn.Any (Melange_edn.Map fields) -> Some (Melange_edn.Map fields)
+  | Melange_edn.Any (Melange_edn.Map fields) ->
+      Some (Melange_edn.map (iarray_to_list fields))
   | _ -> None
 
 let expect_vector_t label value =
@@ -129,7 +125,7 @@ let as_string_like value =
 
 let key_matches key field =
   match (as_keyword field, as_string field) with
-  | Some value, _ | _, Some value -> value = key || value = ":" ^ key
+  | Some value, _ | _, Some value -> value = key
   | _ -> false
 
 let get value key =

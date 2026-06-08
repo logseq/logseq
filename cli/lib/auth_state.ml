@@ -136,37 +136,10 @@ let parse_auth_json text =
               ~default:Time.epoch;
         }
 
-let base64url_index = function
-  | 'A' .. 'Z' as c -> Some (Char.code c - Char.code 'A')
-  | 'a' .. 'z' as c -> Some (Char.code c - Char.code 'a' + 26)
-  | '0' .. '9' as c -> Some (Char.code c - Char.code '0' + 52)
-  | '-' -> Some 62
-  | '_' -> Some 63
-  | '=' -> None
-  | _ -> None
-
-let base64url_decode text =
-  let buffer = Buffer.create (String.length text) in
-  let bits = ref 0 in
-  let value = ref 0 in
-  String.iter
-    (fun c ->
-      match base64url_index c with
-      | None -> ()
-      | Some sextet ->
-          value := (!value lsl 6) lor sextet;
-          bits := !bits + 6;
-          while !bits >= 8 do
-            bits := !bits - 8;
-            Buffer.add_char buffer (Char.chr ((!value lsr !bits) land 0xff));
-            value := !value land ((1 lsl !bits) - 1)
-          done)
-    text;
-  Buffer.contents buffer
-
 let jwt_payload token =
   match String.split_on_char '.' token with
-  | [ _header; payload; _signature ] -> Ok (base64url_decode payload)
+  | [ _header; payload; _signature ] ->
+      Ok (Cli_platform.Crypto.base64url_decode payload)
   | _ ->
       Error
         (Error.make
@@ -187,7 +160,7 @@ let claims_of_id_token id_token =
                 (first_int64_field object_ [ "exp" ])) ))
 
 let auth_path_context path =
-  Edn_util.map [ (Edn_util.keyword ":auth-path", Edn_util.string path) ]
+  Edn_util.map [ (Edn_util.keyword "auth-path", Edn_util.string path) ]
 
 let read_auth_file config =
   let path = auth_path config in
@@ -273,11 +246,11 @@ let normalize_base_url value =
   else value
 
 let oauth_domain_base config =
-  match raw_config_string config [ ":oauth-domain"; ":domain" ] with
+  match raw_config_string config [ "oauth-domain"; "domain" ] with
   | Some domain when String.trim domain <> "" -> "https://" ^ String.trim domain
   | _ -> "https://" ^ default_oauth_domain
 
-let raw_http_base config = raw_config_string config [ ":http-base" ]
+let raw_http_base config = raw_config_string config [ "http-base" ]
 
 let configured_http_base config =
   match raw_http_base config with
@@ -295,20 +268,27 @@ let oauth_endpoint_base config =
 
 let token_endpoint config =
   match
-    raw_config_string config [ ":oauth-token-endpoint"; ":token-endpoint" ]
+    raw_config_string config [ "oauth-token-endpoint"; "token-endpoint" ]
   with
   | Some endpoint when String.trim endpoint <> "" -> Some endpoint
   | _ -> Some (normalize_base_url (oauth_endpoint_base config) ^ "/oauth2/token")
 
+let logout_endpoint config =
+  match
+    raw_config_string config [ "oauth-logout-endpoint"; "logout-endpoint" ]
+  with
+  | Some endpoint when String.trim endpoint <> "" -> Some endpoint
+  | _ -> Some (normalize_base_url (oauth_endpoint_base config) ^ "/logout")
+
 let oauth_client_id config =
-  match raw_config_string config [ ":oauth-client-id"; ":client-id" ] with
+  match raw_config_string config [ "oauth-client-id"; "client-id" ] with
   | Some client_id when String.trim client_id <> "" -> Some client_id
   | _ -> Some default_oauth_client_id
 
 let authorize_endpoint config =
   match
     raw_config_string config
-      [ ":oauth-authorize-endpoint"; ":authorize-endpoint" ]
+      [ "oauth-authorize-endpoint"; "authorize-endpoint" ]
   with
   | Some endpoint when String.trim endpoint <> "" -> Some endpoint
   | _ ->
@@ -317,7 +297,7 @@ let authorize_endpoint config =
 
 let oauth_scope config =
   Option.value
-    (raw_config_string config [ ":oauth-scope"; ":scope" ])
+    (raw_config_string config [ "oauth-scope"; "scope" ])
     ~default:"email openid phone"
 
 let raw_config_bool config keys ~default =
@@ -358,16 +338,7 @@ let query_string fields =
   |> List.map (fun (key, value) -> form_encode key ^ "=" ^ form_encode value)
   |> String.concat "&"
 
-let random_base64url size =
-  let chars =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
-  in
-  let buffer = Bytes.create size in
-  for i = 0 to size - 1 do
-    Bytes.set buffer i chars.[Random.int (String.length chars)]
-  done;
-  Bytes.to_string buffer
-
+let random_base64url size = Cli_platform.Crypto.random_base64url size
 let pkce_challenge verifier = Sha256.base64url verifier
 
 let raw_or_random config keys size =
@@ -453,9 +424,9 @@ let refresh_auth config data =
                       ~context:
                         (Edn_util.map
                            [
-                             ( Edn_util.keyword ":auth-path",
+                             ( Edn_util.keyword "auth-path",
                                Edn_util.string (auth_path config) );
-                             ( Edn_util.keyword ":error",
+                             ( Edn_util.keyword "error",
                                Edn_util.string (Printexc.to_string exn) );
                            ])
                       (Edn_util.keyword_t "auth-refresh-failed")
@@ -512,15 +483,16 @@ let auth_code_exchange config ~code ~redirect_uri ~code_verifier =
                   ~context:
                     (Edn_util.map
                        [
-                         ( Edn_util.keyword ":auth-path",
+                         ( Edn_util.keyword "auth-path",
                            Edn_util.string (auth_path config) );
-                         ( Edn_util.keyword ":error",
+                         ( Edn_util.keyword "error",
                            Edn_util.string (Printexc.to_string exn) );
                        ])
                   (Edn_util.keyword_t "auth-code-exchange-failed")
                   "authorization code exchange failed")))
 
 let redirect_path = "/auth/callback"
+let logout_redirect_path = redirect_path
 let callback_host = "localhost"
 let callback_port = 8765
 
@@ -571,6 +543,9 @@ let query_params query =
 let login_callback_response status body : Cli_platform.login_callback_response =
   { status; body }
 
+let callback_uri path =
+  "http://" ^ callback_host ^ ":" ^ string_of_int callback_port ^ path
+
 let callback_result_of_target ~state = function
   | None ->
       ( login_callback_response 400 "Invalid request",
@@ -597,7 +572,7 @@ let callback_result_of_target ~state = function
                  ~context:
                    (Edn_util.map
                       [
-                        ( Edn_util.keyword ":oauth-error",
+                        ( Edn_util.keyword "oauth-error",
                           Edn_util.string oauth_error );
                       ])
                  (Edn_util.keyword_t "login-callback-error")
@@ -621,11 +596,55 @@ let callback_result_of_target ~state = function
                  (Edn_util.keyword_t "missing-callback-code")
                  "missing authorization code") ))
 
+let logout_callback_result_of_target ~state = function
+  | None ->
+      ( login_callback_response 400 "Invalid request",
+        Error
+          (Error.make
+             (Edn_util.keyword_t "invalid-logout-callback-request")
+             "invalid logout callback request") )
+  | Some target -> (
+      let path, query = split_once '?' target in
+      let params = query_params query in
+      let param key = List.assoc_opt key params in
+      match (path, param "error", param "state") with
+      | path, _, _ when path <> logout_redirect_path ->
+          ( login_callback_response 404 "Not found",
+            Error
+              (Error.make
+                 (Edn_util.keyword_t "logout-callback-not-found")
+                 "logout callback path not found") )
+      | _, Some logout_error, _ ->
+          ( login_callback_response 400
+              "Logout failed. You can return to the CLI.",
+            Error
+              (Error.make
+                 ~context:
+                   (Edn_util.map
+                      [
+                        ( Edn_util.keyword "oauth-error",
+                          Edn_util.string logout_error );
+                      ])
+                 (Edn_util.keyword_t "logout-callback-error")
+                 "logout callback returned oauth error") )
+      | _, _, Some callback_state when callback_state <> state ->
+          ( login_callback_response 400
+              "Logout failed due to state mismatch. Return to the CLI and \
+               retry.",
+            Error
+              (Error.make
+                 (Edn_util.keyword_t "invalid-logout-callback-state")
+                 "logout callback state mismatch") )
+      | _ ->
+          ( login_callback_response 200
+              "Logout successful. You can return to the CLI.",
+            Ok () ))
+
 let open_browser config url =
   if
     not
       (raw_config_bool config
-         [ ":open-browser"; ":open-browser?" ]
+         [ "open-browser"; "open-browser?" ]
          ~default:true)
   then Ok false
   else if Cli_unix.open_url url then Ok true
@@ -677,23 +696,19 @@ let login config =
                   (Edn_util.keyword_t "login-not-configured")
                   "oauth client id is not configured"))
       | Some client_id ->
-          let state = raw_or_random config [ ":oauth-state"; ":state" ] 24 in
+          let state = raw_or_random config [ "oauth-state"; "state" ] 24 in
           let code_verifier =
-            raw_or_random config [ ":oauth-code-verifier"; ":code-verifier" ] 48
+            raw_or_random config [ "oauth-code-verifier"; "code-verifier" ] 48
           in
           let code_challenge =
             match
               raw_config_string config
-                [ ":oauth-code-challenge"; ":code-challenge" ]
+                [ "oauth-code-challenge"; "code-challenge" ]
             with
             | Some value when String.trim value <> "" -> value
             | _ -> pkce_challenge code_verifier
           in
-          let redirect_uri =
-            "http://" ^ callback_host ^ ":"
-            ^ string_of_int callback_port
-            ^ redirect_path
-          in
+          let redirect_uri = callback_uri redirect_path in
           let authorize_url =
             authorize_endpoint ^ "?"
             ^ query_string
@@ -763,7 +778,7 @@ let login config =
                             ~context:
                               (Edn_util.map
                                  [
-                                   ( Edn_util.keyword ":error",
+                                   ( Edn_util.keyword "error",
                                      Edn_util.string message );
                                  ])
                             (Edn_util.keyword_t
@@ -776,7 +791,7 @@ let login config =
                         ~context:
                           (Edn_util.map
                              [
-                               ( Edn_util.keyword ":error",
+                               ( Edn_util.keyword "error",
                                  Edn_util.string message );
                              ])
                         (Edn_util.keyword_t "login-callback-server-start-failed")
@@ -785,15 +800,102 @@ let login config =
 let logout config =
   let path = auth_path config in
   let existed = Cli_unix.file_exists path in
-  Cli_effect.bind (delete_auth_file config) (function
-    | Error err -> Cli_effect.pure (Error err)
-    | Ok () ->
-        Cli_effect.pure
-          (Ok
-             {
-               auth_path = path;
-               deleted = existed;
-               logout_url = "";
-               opened = false;
-               logout_completed = false;
-             }))
+  match logout_endpoint config with
+  | None ->
+      Cli_effect.pure
+        (Error
+           (Error.make
+              (Edn_util.keyword_t "logout-not-configured")
+              "oauth logout endpoint is not configured"))
+  | Some logout_endpoint -> (
+      match oauth_client_id config with
+      | None ->
+          Cli_effect.pure
+            (Error
+               (Error.make
+                  (Edn_util.keyword_t "logout-not-configured")
+                  "oauth client id is not configured"))
+      | Some client_id ->
+          let logout_uri = callback_uri logout_redirect_path in
+          let state =
+            raw_or_random config [ "oauth-logout-state"; "logout-state" ] 24
+          in
+          let logout_url =
+            logout_endpoint ^ "?"
+            ^ query_string
+                [
+                  ("response_type", "code");
+                  ("client_id", client_id);
+                  ("redirect_uri", logout_uri);
+                  ("state", state);
+                  ("scope", oauth_scope config);
+                ]
+          in
+          let result opened logout_completed =
+            {
+              auth_path = path;
+              deleted = existed;
+              logout_url;
+              opened;
+              logout_completed;
+            }
+          in
+          Cli_effect.bind (delete_auth_file config) (function
+            | Error err -> Cli_effect.pure (Error err)
+            | Ok () ->
+                let opened_ref = ref false in
+                let browser_open_error = ref None in
+                let on_listen () =
+                  match open_browser config logout_url with
+                  | Ok opened ->
+                      opened_ref := opened;
+                      Cli_effect.pure (Ok ())
+                  | Error err ->
+                      browser_open_error := Some err;
+                      Cli_effect.pure (Error err.Error.message)
+                in
+                let handle_request request =
+                  logout_callback_result_of_target ~state
+                    request.Cli_platform.target
+                in
+                Cli_effect.bind
+                  (Cli_platform.login_callback_server ~host:callback_host
+                     ~port:callback_port
+                     ~timeout_span:config.logout_timeout_span ~on_listen
+                     ~handle_request) (function
+                  | Ok (Ok ()) -> Cli_effect.pure (Ok (result !opened_ref true))
+                  | Ok (Error err) -> Cli_effect.pure (Error err)
+                  | Error Cli_platform.Login_callback_timeout ->
+                      Cli_effect.pure (Ok (result !opened_ref false))
+                  | Error (Cli_platform.Login_callback_server_aborted message)
+                    -> (
+                      match !browser_open_error with
+                      | Some err -> Cli_effect.pure (Error err)
+                      | None ->
+                          Cli_effect.pure
+                            (Error
+                               (Error.make
+                                  ~context:
+                                    (Edn_util.map
+                                       [
+                                         ( Edn_util.keyword "error",
+                                           Edn_util.string message );
+                                       ])
+                                  (Edn_util.keyword_t
+                                     "logout-callback-server-start-failed")
+                                  "failed to start logout callback server")))
+                  | Error
+                      (Cli_platform.Login_callback_server_start_failed message)
+                    ->
+                      Cli_effect.pure
+                        (Error
+                           (Error.make
+                              ~context:
+                                (Edn_util.map
+                                   [
+                                     ( Edn_util.keyword "error",
+                                       Edn_util.string message );
+                                   ])
+                              (Edn_util.keyword_t
+                                 "logout-callback-server-start-failed")
+                              "failed to start logout callback server")))))
