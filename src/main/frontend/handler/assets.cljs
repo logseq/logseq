@@ -56,6 +56,14 @@
   (when-let [image (:logseq.property.pdf/hl-image block)]
     (str "./assets/" (:block/uuid image) ".png")))
 
+(defn- protect-windows-drive-in-assets-path
+  [path]
+  (cond-> path
+    (and util/win32?
+         (string? path)
+         (re-find #"^[A-Za-z]:/" path))
+    (string/replace-first #":" "/logseq__colon/")))
+
 (defn resolve-asset-real-path-url
   [repo rpath]
   (when-let [rpath (and (string? rpath)
@@ -68,6 +76,9 @@
                       encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" rpath))
                       rpath (if encoded-chars? (js/decodeURI rpath) rpath)
                       graph-root (config/get-repo-dir repo)
+                      graph-root (if (util/electron?)
+                                   (protect-windows-drive-in-assets-path graph-root)
+                                   graph-root)
                       has-schema? (string/starts-with? graph-root "file:")
                       protocol (if (util/electron?) "assets:" "file:")]
                   (if has-schema?
@@ -85,7 +96,10 @@
 
       ;; BUG: avoid double encoding from PDF assets
       (path/absolute? path)
-      (let [protocol (if (util/electron?) "assets://" "file://")]
+      (let [protocol (if (util/electron?) "assets://" "file://")
+            path (if (util/electron?)
+                   (protect-windows-drive-in-assets-path path)
+                   path)]
         (if (boolean (re-find #"(?i)%[0-9a-f]{2}" path)) ;; has encoded chars?
           ;; Incoming path might be already URL encoded. from PDF assets
           (path/path-join protocol (common-util/safe-decode-uri-component path))
@@ -141,11 +155,11 @@
               (check-alias-path? path))
          (resolve-asset-real-path-url (state/get-current-repo) path)
 
-         (util/electron?)
-         (let [full-path (if local-asset?
-                           (path/path-join repo-dir path) path)]
-           ;; fullpath will be encoded
-           (path/prepend-protocol "assets:" full-path))
+          (util/electron?)
+          (let [full-path (if local-asset?
+                            (path/path-join repo-dir path) path)]
+            ;; fullpath will be encoded
+            (path/prepend-protocol "assets:" (protect-windows-drive-in-assets-path full-path)))
 
          :else
          (p/let [binary (fs/read-file-raw repo-dir path {})
