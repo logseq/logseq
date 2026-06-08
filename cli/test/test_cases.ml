@@ -138,6 +138,41 @@ let () =
         remove_tree root;
         fail_test (Printexc.to_string exn));
 
+  test "graph switch updates cli.edn graph" (fun () ->
+      let root = temp_dir "logseq-cli-graph-switch-config-" in
+      let run args = spawn_cli ("--root-dir" :: root :: args) in
+      try
+        mkdir_p root;
+        ignore
+          (expect_exit_zero "create alpha"
+             (run [ "graph"; "create"; "-g"; "alpha" ]));
+        ignore
+          (expect_exit_zero "create beta"
+             (run [ "graph"; "create"; "-g"; "beta" ]));
+        write_file
+          (Node.Path.join [| root; "cli.edn" |])
+          "{:http-base \"http://127.0.0.1:65535\"}\n";
+        let switch =
+          spawn_cli
+            ~env:[| ("LOGSEQ_CLI_BASE_URL", "http://127.0.0.1:65535") |]
+            [ "--root-dir"; root; "--graph"; "beta"; "graph"; "switch" ]
+        in
+        ignore (expect_exit_zero "graph switch" switch);
+        let config = read_file (Node.Path.join [| root; "cli.edn" |]) in
+        ignore
+          (expect_named_contains "graph switch config graph" config
+             ":graph \"beta\"");
+        ignore
+          (expect_named_contains "graph switch config preserves http-base" config
+             ":http-base \"http://127.0.0.1:65535\"");
+        let list = run [ "graph"; "list" ] in
+        remove_tree root;
+        ignore (expect_exit_zero "graph list" list);
+        expect_named_contains "graph list selected graph" list##stdout "* beta"
+      with exn ->
+        remove_tree root;
+        fail_test (Printexc.to_string exn));
+
   test "json output escapes control characters" (fun () ->
       let root = temp_dir "logseq-cli-json-output-" in
       let graph = "json" ^ control_char ^ "graph" in
