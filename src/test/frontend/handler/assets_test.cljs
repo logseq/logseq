@@ -95,6 +95,12 @@
     (is (= "assets:///Users/charlie/graph/assets/test.png"
            (assets/normalize-asset-resource-url "/Users/charlie/graph/assets/test.png")))))
 
+(deftest normalize-asset-resource-url-electron-windows-test
+  (with-redefs [util/electron? (constantly true)
+                util/win32? true]
+    (is (= "assets:///C/logseq__colon/Users/charlie/graph/assets/test.png"
+           (assets/normalize-asset-resource-url "C:/Users/charlie/graph/assets/test.png")))))
+
 (deftest make-asset-url-electron-test
   (async done
     (with-redefs [util/electron? (constantly true)
@@ -102,6 +108,19 @@
       (-> (assets/<make-asset-url "assets/test.png")
           (p/then (fn [url]
                     (is (= "assets:///Users/charlie/graph/assets/test.png" url))
+                    (done)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))
+
+(deftest make-asset-url-electron-windows-test
+  (async done
+    (with-redefs [util/electron? (constantly true)
+                  util/win32? true
+                  config/get-repo-dir (constantly "C:/Users/charlie/graph")]
+      (-> (assets/<make-asset-url "assets/test.png")
+          (p/then (fn [url]
+                    (is (= "assets:///C/logseq__colon/Users/charlie/graph/assets/test.png" url))
                     (done)))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))
