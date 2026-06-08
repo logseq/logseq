@@ -224,6 +224,37 @@ module HTTP = struct
       (Fetch.fetchWithInit url init |> Js.Promise.then_ response_text)
 end
 
+module Crypto = struct
+  module Node_crypto = struct
+    type hash
+
+    external create_hash : string -> hash = "createHash" [@@mel.module "crypto"]
+    external update : hash -> string -> string -> hash = "update" [@@mel.send]
+    external digest : hash -> string -> string = "digest" [@@mel.send]
+
+    external random_bytes : int -> Node.Buffer.t = "randomBytes"
+    [@@mel.module "crypto"]
+  end
+
+  let sha256_digest output_encoding text =
+    let hash = Node_crypto.create_hash "sha256" in
+    let hash = Node_crypto.update hash text "latin1" in
+    Node_crypto.digest hash output_encoding
+
+  let sha256_hex text = sha256_digest "hex" text
+  let sha256_base64url text = sha256_digest "base64url" text
+
+  let random_base64url size =
+    let text =
+      Node_crypto.random_bytes size |> Node.Buffer.toString ~encoding:`base64url
+    in
+    if String.length text <= size then text else String.sub text 0 size
+
+  let base64url_decode text =
+    Node.Buffer.fromStringWithEncoding text ~encoding:`base64url
+    |> Node.Buffer.toString ~encoding:`utf8
+end
+
 module Events = struct
   type subscription = { close : unit -> unit Cli_effect.t }
   type readable_stream

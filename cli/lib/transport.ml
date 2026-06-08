@@ -8,7 +8,7 @@ type event_type = Cli_primitive.keyword
 type event_payload = Melange_edn.any
 type event_subscription = { close : unit -> unit Cli_effect.t }
 
-let thread_api_method name = Edn_util.keyword_t (":thread-api/" ^ name)
+let thread_api_method name = Edn_util.keyword_t ("thread-api/" ^ name)
 
 module T = Transit.Json
 module E = Melange_edn
@@ -45,7 +45,7 @@ let rec transit_of_value value =
       | Some symbol -> T.Symbol symbol
       | None -> T.String value)
   | Any (Symbol value) -> T.Symbol value
-  | Any (Keyword keyword) -> T.Keyword (transit_keyword_name (":" ^ keyword))
+  | Any (Keyword keyword) -> T.Keyword (Melange_edn.keyword_to_string keyword)
   | Any (Tagged ("uuid", value)) -> (
       match Edn_util.as_string value with
       | Some uuid -> T.Uuid uuid
@@ -130,10 +130,7 @@ let request ?timeout_span method_ uri ~headers ~body =
       else Cli_effect.error (Failure (http_error_message status body)))
 
 let method_name method_ =
-  let method_ = Edn_util.keyword_to_string method_ |> String.trim in
-  if starts_with ~prefix:":" method_ then
-    String.sub method_ 1 (String.length method_ - 1)
-  else method_
+  Edn_util.keyword_to_string method_ |> String.trim
 
 let invoke_body method_ args =
   let args_transit = transit_json_of_value (Edn_util.vector args) in
@@ -316,15 +313,12 @@ let value_get_string_key key value =
           match
             (Edn_util.as_string_like field_key, Edn_util.as_string value)
           with
-          | Some field, Some value when field = key || field = ":" ^ key ->
-              Some value
+          | Some field, Some value when field = key -> Some value
           | _ -> None)
         fields
   | None -> None
 
-let keyword_from_string value =
-  Edn_util.keyword_t
-    (if starts_with ~prefix:":" value then value else ":" ^ value)
+let keyword_from_string value = Edn_util.keyword_t (transit_keyword_name value)
 
 let decode_event_payload payload =
   try value_of_transit_string payload with _ -> Edn_util.string payload
@@ -417,8 +411,7 @@ let connect_events config on_event =
        ~on_chunk:(consume_sse_chunk on_event buffer))
 
 let normalize_format format =
-  let format = Edn_util.keyword_to_string format |> String.trim in
-  if starts_with ~prefix:":" format then format else ":" ^ format
+  Edn_util.keyword_to_string format |> String.trim
 
 let write_file_binary path content = Cli_unix.write_binary_file path content
 let read_file_binary path = Bytes.of_string (Cli_unix.read_binary_file path)
@@ -444,10 +437,10 @@ let write_output ~format ~path ~data =
   try
     let result =
       match format with
-      | ":edn" ->
+      | "edn" ->
           write_file_binary path (E.to_edn_string (edn_of_value data));
           Ok ()
-      | ":db" | ":sqlite" ->
+      | "db" | "sqlite" ->
           write_file_binary path (bytes_of_output_data data);
           Ok ()
       | _ -> Error (unsupported_output_format format)
@@ -460,10 +453,10 @@ let read_input ~format ~path =
   try
     let result =
       match format with
-      | ":edn" ->
+      | "edn" ->
           let content = read_file_binary path |> Bytes.to_string in
           Ok (E.of_edn_string content |> value_of_edn)
-      | ":db" | ":sqlite" -> Ok (Edn_util.bytes (read_file_binary path))
+      | "db" | "sqlite" -> Ok (Edn_util.bytes (read_file_binary path))
       | _ -> Error (unsupported_input_format format)
     in
     Cli_effect.pure result

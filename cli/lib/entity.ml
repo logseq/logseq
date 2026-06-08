@@ -16,11 +16,11 @@ type t = {
 
 let of_value raw =
   {
-    id = Edn_util.get_int64 raw ":db/id";
-    uuid = Edn_util.get_string raw ":block/uuid";
-    ident = Option.bind (Edn_util.get raw ":db/ident") Edn_util.as_keyword_t;
-    name = Edn_util.get_string raw ":name";
-    title = Edn_util.get_string raw ":block/title";
+    id = Edn_util.get_int64 raw "db/id";
+    uuid = Edn_util.get_string raw "block/uuid";
+    ident = Option.bind (Edn_util.get raw "db/ident") Edn_util.as_keyword_t;
+    name = Edn_util.get_string raw "name";
+    title = Edn_util.get_string raw "block/title";
     kind = Unknown;
     tags = [];
     created_at = None;

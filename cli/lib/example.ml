@@ -340,16 +340,16 @@ let build ?registry _ _ = function
 let value_of_action action =
   Edn_util.map
     [
-      (Edn_util.keyword ":selector", Edn_util.string action.selector);
-      ( Edn_util.keyword ":matched-commands",
+      (Edn_util.keyword "selector", Edn_util.string action.selector);
+      ( Edn_util.keyword "matched-commands",
         Edn_util.vector
           (List.map
              (fun command -> Edn_util.string command)
              action.matched_commands) );
-      ( Edn_util.keyword ":examples",
+      ( Edn_util.keyword "examples",
         Edn_util.vector
           (List.map (fun example -> Edn_util.string example) action.examples) );
-      (Edn_util.keyword ":message", Edn_util.string action.message);
+      (Edn_util.keyword "message", Edn_util.string action.message);
     ]
 
 let execute action _config mode =

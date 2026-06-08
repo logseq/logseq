@@ -24,7 +24,7 @@ type source =
 
 let make ?hint ?(candidates = []) ?context code message =
   {
-    code = Cli_primitive.normalize_keyword code;
+    code;
     message;
     hint;
     candidates;
