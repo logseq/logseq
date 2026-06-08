@@ -204,27 +204,28 @@
 
 (hsx/defc new-block-mode
   []
-  (when (state/use-sub [:document/mode?])
-    (ui/tooltip
-     [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
-      {:on-click state/toggle-document-mode!}
-      "D"]
-     [:div.p-2
-      [:p.mb-2 [:b (t :editor.document-mode/title)]]
-      [:ul
-       [:li
-        [:p.inline-block.mr-1
-         (interpolate-rich-text-node
-          (t :editor.document-mode/new-block-hint)
-          [[:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :editor/new-line)
-                                                                :shortcut-id :editor/new-line)]])]
-        [:li
-         [:p.inline-block.mr-1
-          (interpolate-rich-text-node
-           (t :editor.document-mode/toggle-desc)
-           [[:div.inline-block.mr-1
-             (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :ui/toggle-document-mode)
-                                          :shortcut-id :ui/toggle-document-mode)]])]]]]])))
+  (let [document-mode? (state/use-sub [:document/mode?])]
+    (when document-mode?
+      (ui/tooltip
+       [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
+        {:on-click state/toggle-document-mode!}
+        "D"]
+       [:div.p-2
+        [:p.mb-2 [:b (t :editor.document-mode/title)]]
+        [:ul
+         [:li
+          [:p.inline-block.mr-1
+           (interpolate-rich-text-node
+            (t :editor.document-mode/new-block-hint)
+            [[:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :editor/new-line)
+                                                                  :shortcut-id :editor/new-line)]])]
+          [:li
+           [:p.inline-block.mr-1
+            (interpolate-rich-text-node
+             (t :editor.document-mode/toggle-desc)
+             [[:div.inline-block.mr-1
+               (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :ui/toggle-document-mode)
+                                            :shortcut-id :ui/toggle-document-mode)]])]]]]]))))
 
 (def help-menu-items
   [{:title (t :help/handbook) :icon "book-2" :on-click #(handbooks/toggle-handbooks)}

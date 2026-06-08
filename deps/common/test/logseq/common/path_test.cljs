@@ -63,3 +63,11 @@
     (is (false? (path/protocol-url? "test.md")))
     (is (false? (path/protocol-url? "test")))
     (is (false? (path/protocol-url? "D:test.md")))))
+
+(deftest invalid-or-bare-protocol-urls
+  (testing "invalid or bare protocol URLs do not crash"
+    (is (string? (path/url-to-path "assets://")))
+    (is (string? (path/url-to-path "file://")))
+    (is (= "assets:///foo" (path/path-join "assets://" "foo")))
+    (is (string? (path/path-join "file://" "assets://")))
+    (is (string? (path/url-normalize "assets://")))))

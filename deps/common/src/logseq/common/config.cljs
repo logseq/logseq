@@ -65,6 +65,7 @@
 (defn local-relative-asset?
   [s]
   (and (string? s)
+       (not (string/includes? s "://"))
        (re-find (re-pattern (str "^[./]*" local-assets-dir)) s)))
 
 (defn local-protocol-asset?
