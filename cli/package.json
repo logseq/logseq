@@ -2,6 +2,10 @@
   "name": "logseq-cli",
   "private": true,
   "scripts": {
+    "bundle": "dune build @bundle",
     "test": "dune runtest"
+  },
+  "devDependencies": {
+    "vite": "^8.0.16"
   }
 }
