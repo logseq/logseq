@@ -1628,7 +1628,7 @@
     [width height]))
 
 (hsx/defc video-resize-handle
-  [{:keys [width *shell-ref set-width!]}]
+  [{:keys [width *shell-ref set-width! on-width-change!]}]
   (let [*drag (hooks/use-ref nil)]
     (hooks/use-effect!
      (fn []
@@ -1640,7 +1640,9 @@
       :on-double-click (fn [e]
                          (util/stop e)
                          (hooks/set-ref! *drag nil)
-                         (set-width! nil))
+                         (set-width! default-video-embed-width)
+                         (when on-width-change!
+                           (on-width-change! nil e)))
       :on-pointer-down (fn [^js e]
                          (util/stop e)
                          (.preventDefault e)
@@ -1657,9 +1659,14 @@
                                    width' (clamp-video-embed-width
                                            (+ start-width dx)
                                            (video-embed-parent-width *shell-ref))]
+                               (hooks/set-ref! *drag (assoc (hooks/deref *drag)
+                                                            :current-width width'))
                                (set-width! width')))))
       :on-pointer-up (fn [^js e]
                        (when (= (:pointer-id (hooks/deref *drag)) (.-pointerId e))
+                         (when-let [current-width (:current-width (hooks/deref *drag))]
+                           (when on-width-change!
+                             (on-width-change! current-width e)))
                          (hooks/set-ref! *drag nil)
                          (dom/remove-class! js/document.documentElement "is-resizing-video")
                          (let [target (.-currentTarget e)
@@ -1673,13 +1680,13 @@
                              (dom/remove-class! js/document.documentElement "is-resizing-video")))}]))
 
 (hsx/defc video-embed-cp
-  [{:keys [render id src start aspect-ratio] :as _embed}]
+  [{:keys [render id src start aspect-ratio width on-width-change!] :as _embed}]
   (let [[local-width set-local-width!] (hooks/use-state nil)
         *shell-ref (hooks/use-ref nil)
         resizable? (not (mobile-util/native-platform?))
         max-width (video-embed-parent-width *shell-ref)
         width (clamp-video-embed-width
-               (or local-width default-video-embed-width)
+               (or local-width width default-video-embed-width)
                max-width)
         [width height] (video-embed-dimensions aspect-ratio width)]
     (when-let [frame
@@ -1712,16 +1719,67 @@
        (when resizable?
          (video-resize-handle {:width width
                                :*shell-ref *shell-ref
-                               :set-width! set-local-width!}))])))
+                               :set-width! set-local-width!
+                               :on-width-change! on-width-change!}))])))
+
+(defn- video-macro-dom-occurrence
+  [event name arguments]
+  (let [target (.-target event)
+        current (some-> target (.closest ".video-embed-block"))
+        block-node (or (some-> current (.closest ".ls-block"))
+                       (some-> current (.closest "[blockid]")))
+        nodes (some-> block-node (.querySelectorAll ".video-embed-block"))
+        url-or-id (first arguments)]
+    (some->> nodes
+             array-seq
+             (filter (fn [node]
+                       (and (= name (.getAttribute node "data-video-macro-name"))
+                            (= url-or-id (.getAttribute node "data-video-macro-id")))))
+             (keep-indexed (fn [idx node]
+                             (when (= current node) idx)))
+             first)))
+
+(defn- editing-block-input
+  [block]
+  (when (= (:block/uuid block)
+           (:block/uuid (state/get-edit-block)))
+    (some-> (state/get-edit-input-id)
+            gdom/getElement)))
+
+(defn- save-video-macro-width!
+  [config name arguments width event]
+  (when-let [block (:block config)]
+    (let [input (editing-block-input block)
+          content (or (some-> input .-value)
+                      (:block/title block))
+          occurrence (or (video-macro-dom-occurrence event name arguments) 0)
+          content' (block-video/update-video-macro-width-in-content
+                    content
+                    {:name name
+                     :arguments arguments
+                     :occurrence occurrence}
+                    width)]
+      (when (and (seq content)
+                 (not= content content'))
+        (when input
+          (state/set-edit-content! (.-id input) content'))
+        (editor-handler/save-block-if-changed! block content')))))
 
 (defn- macro-video-cp
-  ([arguments]
-   (macro-video-cp arguments nil))
-  ([arguments provider-hint]
+  ([config name arguments]
+   (macro-video-cp config name arguments nil))
+  ([config name arguments provider-hint]
    (if-let [url-or-id (first arguments)]
      (if (or provider-hint (common-util/url? url-or-id))
-       (some-> (video/matched-video-embed url-or-id provider-hint)
-               video-embed-cp)
+       (let [width (block-video/video-width arguments)]
+         (some-> (video/matched-video-embed url-or-id provider-hint)
+                 (cond-> width
+                   (assoc :width width)
+                   true
+                   (assoc :on-width-change!
+                          (fn [width event]
+                            (save-video-macro-width! config name arguments width event))))
+                 video-embed-cp))
        [:span.warning.mr-1 {:title (t :block/invalid-url)}
         (macro->text "video" arguments)])
      (when-not provider-hint
@@ -1756,7 +1814,7 @@
       [:div.warning (t :block.macro/namespace-deprecated (t :library/title))]
 
       (= name "youtube")
-      (macro-video-cp arguments :youtube)
+      (macro-video-cp config name arguments :youtube)
 
       (= name "youtube-timestamp")
       (when-let [timestamp' (first arguments)]
@@ -1773,14 +1831,14 @@
         [:span.ml-1 (zotero/zotero-linked-file path)])
 
       (= name "vimeo")
-      (macro-video-cp arguments :vimeo)
+      (macro-video-cp config name arguments :vimeo)
 
       ;; TODO: support fullscreen mode, maybe we need a fullscreen dialog?
       (= name "bilibili")
-      (macro-video-cp arguments :bilibili)
+      (macro-video-cp config name arguments :bilibili)
 
       (= name "video")
-      (macro-video-cp arguments)
+      (macro-video-cp config name arguments)
 
       (contains? #{"tweet" "twitter"} name)
       (when-let [url (first arguments)]

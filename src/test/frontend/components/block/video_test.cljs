@@ -82,3 +82,36 @@
            (mapv #(get (second %) :key) without-prefix)))
     (is (= ["video-macro-youtube-dQw4w9WgXcQ"]
            (mapv #(get (second %) :key) with-prefix)))))
+
+(deftest video-macro-width-argument-parses-and-updates-width
+  (testing "Only positive numeric w= arguments are treated as video widths"
+    (is (= 420 (block-video/video-width ["dQw4w9WgXcQ" "w=420"])))
+    (is (nil? (block-video/video-width ["dQw4w9WgXcQ" "w=0"])))
+    (is (nil? (block-video/video-width ["dQw4w9WgXcQ" "w=abc"]))))
+
+  (testing "Updating width keeps the video id first and removes stale width arguments"
+    (is (= ["dQw4w9WgXcQ" "w=320"]
+           (block-video/set-video-width-argument ["dQw4w9WgXcQ"] 320)))
+    (is (= ["dQw4w9WgXcQ" "w=480"]
+           (block-video/set-video-width-argument ["dQw4w9WgXcQ" "w=320"] 480)))
+    (is (= ["dQw4w9WgXcQ"]
+           (block-video/set-video-width-argument ["dQw4w9WgXcQ" "w=320"] nil)))))
+
+(deftest video-macro-width-content-update-targets-current-macro
+  (testing "A width update only changes the selected matching occurrence"
+    (is (= "{{youtube a}} {{youtube a, w=300}}"
+           (block-video/update-video-macro-width-in-content
+            "{{youtube a}} {{youtube a}}"
+            {:name "youtube" :arguments ["a"] :occurrence 1}
+            300))))
+
+  (testing "Resetting width removes only the current macro w= argument"
+    (is (= "front {{youtube a, w=200}} middle {{youtube a}} back"
+           (block-video/update-video-macro-width-in-content
+            "front {{youtube a, w=200}} middle {{youtube a, w=300}} back"
+            {:name "youtube" :arguments ["a"] :occurrence 1}
+            nil))))
+
+  (testing "The video key ignores w= so resize updates do not force remounts"
+    (is (= (block-video/video-macro-key (macro-inline "youtube" "a" "w=200"))
+           (block-video/video-macro-key (macro-inline "youtube" "a" "w=300"))))))
