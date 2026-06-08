@@ -47,7 +47,10 @@ let bind task f =
     | Rejected exn -> reject resolver exn);
   result
 
-let ( >>= ) = bind
+module Infix = struct
+  let ( >>= ) = bind
+end
+
 let map f task = bind task (fun value -> pure (f value))
 
 let rec map_s f = function

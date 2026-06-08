@@ -1,3 +1,5 @@
+open Cli_effect.Infix
+
 type auth_data = {
   provider : string;
   id_token : string option;
@@ -53,12 +55,11 @@ let http_error_message status body =
 
 let http_request ~(method_ : Fetch.requestMethod) ~url ~headers ~body
     ~timeout_span =
-  Cli_effect.bind
-    (Cli_platform.HTTP.request ?timeout_span method_ url ~headers ~body)
-    (fun (response, body) ->
-      let status = Fetch.Response.status response in
-      if status >= 200 && status <= 299 then Cli_effect.pure body
-      else Cli_effect.error (Failure (http_error_message status body)))
+  Cli_platform.HTTP.request ?timeout_span method_ url ~headers ~body
+  >>= fun (response, body) ->
+  let status = Fetch.Response.status response in
+  if status >= 200 && status <= 299 then Cli_effect.pure body
+  else Cli_effect.error (Failure (http_error_message status body))
 
 let auth_json data =
   let object_ = Js.Dict.empty () in
@@ -613,26 +614,26 @@ let resolve_auth config =
   match config_auth config with
   | Some auth -> Cli_effect.pure (Ok auth)
   | None ->
-      Cli_effect.bind (read_auth_file config) (function
+      (read_auth_file config >>= function
         | Error err -> Cli_effect.pure (Error err)
         | Ok None ->
             Cli_effect.pure (Error (missing_auth config "missing auth"))
         | Ok (Some auth) ->
             if expired_auth auth then
-              Cli_effect.bind (refresh_auth config auth) (function
+              (refresh_auth config auth >>= function
                 | Error err -> Cli_effect.pure (Error err)
                 | Ok refreshed -> write_auth_file config refreshed)
             else Cli_effect.pure (Ok auth))
 
 let resolve_auth_token config =
-  Cli_effect.bind (resolve_auth config) (function
+  resolve_auth config >>= function
     | Error err -> Cli_effect.pure (Error err)
     | Ok auth -> (
         match auth.id_token with
         | Some token when String.trim token <> "" -> Cli_effect.pure (Ok token)
         | _ ->
             Cli_effect.pure
-              (Error (missing_auth config "auth token is required"))))
+              (Error (missing_auth config "auth token is required")))
 
 let login config =
   match authorize_endpoint config with
@@ -678,12 +679,11 @@ let login config =
                 ]
           in
           let finish_login opened code =
-            Cli_effect.bind
-              (auth_code_exchange config ~code ~redirect_uri ~code_verifier)
-              (function
+            auth_code_exchange config ~code ~redirect_uri ~code_verifier
+            >>= function
               | Error err -> Cli_effect.pure (Error err)
               | Ok auth ->
-                  Cli_effect.bind (write_auth_file config auth) (function
+                  (write_auth_file config auth >>= function
                     | Error err -> Cli_effect.pure (Error err)
                     | Ok data ->
                         Cli_effect.pure
@@ -695,7 +695,7 @@ let login config =
                                email = data.email;
                                sub = data.sub;
                                updated_at = data.updated_at;
-                             })))
+                             }))
           in
           let opened_ref = ref false in
           let browser_open_error = ref None in
@@ -711,10 +711,10 @@ let login config =
           let handle_request request =
             callback_result_of_target ~state request.Cli_platform.target
           in
-          Cli_effect.bind
-            (Cli_platform.login_callback_server ~host:callback_host
-               ~port:callback_port ~timeout_span:config.login_timeout_span
-               ~on_listen ~handle_request) (function
+          Cli_platform.login_callback_server ~host:callback_host
+            ~port:callback_port ~timeout_span:config.login_timeout_span
+            ~on_listen ~handle_request
+          >>= function
             | Ok (Ok code) -> finish_login !opened_ref code
             | Ok (Error err) -> Cli_effect.pure (Error err)
             | Error Cli_platform.Login_callback_timeout ->
@@ -750,7 +750,7 @@ let login config =
                                  Edn_util.string message );
                              ])
                         (Edn_util.keyword_t "login-callback-server-start-failed")
-                        "failed to start login callback server"))))
+                        "failed to start login callback server")))
 
 let logout config =
   let path = auth_path config in
@@ -795,9 +795,9 @@ let logout config =
               logout_completed = true;
             }
           in
-          Cli_effect.bind (delete_auth_file config) (function
+          delete_auth_file config >>= function
             | Error err -> Cli_effect.pure (Error err)
             | Ok () -> (
                 match open_browser config logout_url with
                 | Ok opened -> Cli_effect.pure (Ok (result opened))
-                | Error err -> Cli_effect.pure (Error err))))
+                | Error err -> Cli_effect.pure (Error err)))
