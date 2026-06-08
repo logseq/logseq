@@ -1602,27 +1602,30 @@
      [:span.warning
       (util/format "{{function %s}}" (first arguments))])))
 
+(def ^:private default-video-embed-width 560)
+
 (defn- video-embed-dimensions
   [aspect-ratio]
   (let [[ratio-width ratio-height] (or aspect-ratio [16 9])
-        width (min (- (util/get-width) 96) 560)
+        width default-video-embed-width
         height (int (* width (/ ratio-height ratio-width)))]
     [width height]))
 
 (defn- video-embed-cp
   [{:keys [render id src start aspect-ratio] :as _embed}]
-  (case render
-    :youtube-player
-    (let [opts (cond-> {:aspect-ratio aspect-ratio}
+  (let [[width height] (video-embed-dimensions aspect-ratio)]
+    (case render
+      :youtube-player
+      (let [opts (cond-> {:width width
+                          :height height}
                  (seq start)
                  (assoc :start start))]
-      (youtube/youtube-video id opts))
+        (youtube/youtube-video id opts))
 
-    :iframe
-    (let [[width height] (video-embed-dimensions aspect-ratio)]
+      :iframe
       [:div.video-embed-frame
        {:style {:width width
-                :aspect-ratio (str width " / " height)}}
+                :height height}}
        [:iframe
         {:allow-full-screen true
          :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
@@ -1630,9 +1633,9 @@
          :frame-border "no"
          :border "0"
          :scrolling "no"
-         :src src}]])
+         :src src}]]
 
-    nil))
+      nil)))
 
 (defn- macro-video-cp
   ([arguments]

@@ -7,7 +7,6 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.shui.hooks :as hooks]
             [io.factorhouse.hsx.core :as hsx]))
@@ -51,12 +50,13 @@
     (catch :default _e
       nil)))
 
+(def ^:private default-video-width 560)
+(def ^:private default-video-height 315)
+
 (hsx/defc youtube-video
-  [id {:keys [width height start aspect-ratio] :or {aspect-ratio [16 9]} :as _opts}]
-  (let [[ratio-width ratio-height] aspect-ratio
-        width  (or width (min (- (util/get-width) 96)
-                              560))
-        height (or height (int (* width (/ ratio-height ratio-width))))
+  [id {:keys [width height start] :as _opts}]
+  (let [width (or width default-video-width)
+        height (or height default-video-height)
         origin (.. js/window -location -origin)
         origin-valid? (and (string? origin)
                            (re-matches #"^https?://.+" origin))
@@ -84,7 +84,7 @@
     [:div.video-embed-shell
      [:div.video-embed-frame
       {:style {:width width
-               :aspect-ratio (str width " / " height)}}
+               :height height}}
       [:iframe
        {:id                (str "youtube-player-" id)
         :ref               *iframe-ref
@@ -139,9 +139,6 @@
 (defn- player-method [player method]
   (let [f (gobj/get player method)]
     (when (fn? f) f)))
-
-(defn- get-player-by-id [id]
-  (get (get @state/state :youtube/players) id))
 
 (hsx/defc timestamp
   [seconds]
