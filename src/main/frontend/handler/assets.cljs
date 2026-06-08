@@ -56,12 +56,15 @@
   (when-let [image (:logseq.property.pdf/hl-image block)]
     (str "./assets/" (:block/uuid image) ".png")))
 
+(defn- windows-drive-absolute-path?
+  [path]
+  (and (string? path)
+       (boolean (re-find #"^[A-Za-z]:[\/\\]" path))))
+
 (defn- protect-windows-drive-in-assets-path
   [path]
   (cond-> path
-    (and util/win32?
-         (string? path)
-         (re-find #"^[A-Za-z]:/" path))
+    (windows-drive-absolute-path? path)
     (string/replace-first #":" "/logseq__colon/")))
 
 (defn resolve-asset-real-path-url
@@ -89,13 +92,16 @@
 (defn normalize-asset-resource-url
   "try to convert resource file to url asset link"
   [path]
-  (let [protocol-link? (common-config/protocol-path? path)]
+  (let [windows-drive-path? (windows-drive-absolute-path? path)
+        protocol-link? (and (not windows-drive-path?)
+                            (common-config/protocol-path? path))]
     (cond
       protocol-link?
       path
 
       ;; BUG: avoid double encoding from PDF assets
-      (path/absolute? path)
+      (or (path/absolute? path)
+          windows-drive-path?)
       (let [protocol (if (util/electron?) "assets://" "file://")
             path (if (util/electron?)
                    (protect-windows-drive-in-assets-path path)

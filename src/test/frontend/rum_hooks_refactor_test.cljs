@@ -115,9 +115,19 @@
   (let [start (string/index-of source marker)
         end (when start
               (or (string/index-of source "\n(hsx/defc " (inc start))
+                  (string/index-of source "\n(defn" (inc start))
                   (count source)))]
     (when (and start end)
       (subs source start end))))
+
+(defn- assert-form-does-not-match!
+  [relative-file marker pattern message]
+  (let [source (source-for relative-file)
+        form (form-source source marker)]
+    (is (some? form)
+        (str relative-file " should contain " marker))
+    (is (not (re-find pattern form))
+        message)))
 
 (defn- hook-var-defined? [source var-name]
   (or (string/includes? source (str "(defn " var-name))
@@ -155,3 +165,71 @@
     (is (re-find #"(?s)\(let\s+\[[^\]]*installed-ui-items\s+\(state/use-sub \[:plugin/installed-ui-items\]\)[^\]]*pinned-items\s+\(state/use-sub \[:plugin/preferences :pinnedToolbarItems\]\)[^\]]*updates-coming\s+\(state/use-sub :plugin/updates-coming\)"
                  hook-ui-items-source)
         "hook-ui-items should call plugin state subscriptions unconditionally at the top of the component so plugin startup state changes do not alter React hook order")))
+
+(deftest react-hooks-are-not-called-behind-render-guards
+  (doseq [[relative-file marker pattern message]
+          [["src/main/frontend/components/rtc/indicator.cljs"
+            "(hsx/defc downloading-detail"
+            #"(?s)\(when\s+[^\n]*\(hooks/use-flow-state"
+            "downloading-detail should subscribe before deciding whether to render the button"]
+           ["src/main/frontend/components/rtc/indicator.cljs"
+            "(hsx/defc uploading-detail"
+            #"(?s)\(when\s+[^\n]*\(hooks/use-flow-state"
+            "uploading-detail should subscribe before deciding whether to render the button"]
+           ["deps/shui/src/logseq/shui/table/core.cljc"
+            "(hsx/defc table-header"
+            #"(?s)\(when-not\s+\(mobile\?\)\s+\(use-sticky-element!"
+            "table-header should call its sticky hook on every render and branch inside the effect"]
+           ["src/main/frontend/components/editor.cljs"
+            "(hsx/defc page-search\n"
+            #"(?s)\(when\s+input[\s\S]*\(use-current-edit-content"
+            "page-search should read editor hook state before branching on DOM input availability"]
+           ["src/main/frontend/components/editor.cljs"
+            "(hsx/defc template-search\n"
+            #"(?s)\(when\s+input[\s\S]*\(use-current-edit-content"
+            "template-search should read editor hook state before branching on DOM input availability"]
+           ["src/main/frontend/components/editor.cljs"
+            "(hsx/defc code-block-mode-picker"
+            #"(?s)\(when-let[\s\S]*\(hooks/use-memo"
+            "code-block-mode-picker should call hooks before CodeMirror/input guards"]
+           ["src/main/frontend/components/property/dialog.cljs"
+            "(hsx/defc dialog"
+            #"(?s)\(when\s+\(seq blocks\)[\s\S]*\(hooks/use-"
+            "property dialog should create hook state before checking whether blocks are present"]
+           ["src/main/frontend/components/reference.cljs"
+            "(hsx/defc references\n"
+            #"(?s)\(when-let\s+\[id \(:db/id entity\)\][\s\S]*\(hooks/use-"
+            "references should call hooks before checking entity id"]
+           ["src/main/frontend/components/reference.cljs"
+            "(hsx/defc unlinked-references"
+            #"(?s)\(when-let\s+\[id \(:db/id entity\)\][\s\S]*\(hooks/use-"
+            "unlinked-references should call hooks before checking entity id"]
+           ["src/main/frontend/components/page.cljs"
+            "(hsx/defc page-blocks-cp"
+            #"(?s)\(when-let\s+\[id \(:db/id block\*\)\][\s\S]*\(state/use-sub"
+            "page-blocks-cp should subscribe before checking block id"]
+           ["src/main/frontend/components/page.cljs"
+            "(hsx/defc today-queries"
+            #"(?s)\(when\s+\(and today\? \(not sidebar\?\)\)[\s\S]*\(state/use-sub-config"
+            "today-queries should subscribe before checking whether today queries are visible"]
+           ["src/main/frontend/components/left_sidebar.cljs"
+            "(hsx/defc ^:large-vars/cleanup-todo sidebar-navigations"
+            #"(?s)\(when\s+\(state/enable-flashcards\?[\s\S]*\(state/use-sub"
+            "sidebar-navigations should subscribe before checking flashcards feature availability"]
+           ["src/main/frontend/components/container.cljs"
+            "(hsx/defc new-block-mode"
+            #"(?s)\(when\s+\(state/use-sub"
+            "new-block-mode should subscribe before deciding whether to render the mode toggle"]
+           ["src/main/frontend/components/settings.cljs"
+            "(hsx/defc markdown-mirror-row"
+            #"(?s)\(when\s+repo\s+\(state/use-sub"
+            "markdown-mirror-row should subscribe before checking current repo"]
+           ["src/main/frontend/components/settings.cljs"
+            "(hsx/defc auto-chmod-row"
+            #"(?s)\(if\s+\(= nil \(state/use-sub"
+            "auto-chmod-row should subscribe once before deriving its enabled state"]
+           ["src/main/frontend/page.cljs"
+            "(hsx/defc current-page"
+            #"(?s)\(if-let\s+\[route-match \(state/use-sub"
+            "current-page should subscribe before branching on the route match"]]]
+    (assert-form-does-not-match! relative-file marker pattern message)))
