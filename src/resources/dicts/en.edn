@@ -1964,8 +1964,6 @@
  :window/restore "Restore"
 
  :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
- :youtube/insert-current-timestamp "Insert current timestamp"
- :youtube/open-block-editor-to-insert-timestamp "Open a block editor to insert the timestamp."
  :youtube/player-not-ready "YouTube player isn't ready yet."
  :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 

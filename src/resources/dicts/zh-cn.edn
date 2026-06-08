@@ -1946,8 +1946,6 @@
  :window/restore "还原"
 
  :youtube/embed-first-reminder-mobile "请先嵌入一个 YouTube 视频，然后再使用此图标。\r\n                                      请记住：在移动端，你可以将原始 YouTube URL 直接粘贴为嵌入视频。"
- :youtube/insert-current-timestamp "插入当前时间戳"
- :youtube/open-block-editor-to-insert-timestamp "打开一个块编辑器后再插入时间戳。"
  :youtube/player-not-ready "YouTube 播放器尚未准备好。"
  :youtube/timestamps-not-available-mobile "移动端暂不支持 YouTube 时间戳。"
 

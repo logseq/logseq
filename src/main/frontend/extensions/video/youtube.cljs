@@ -51,8 +51,6 @@
     (catch :default _e
       nil)))
 
-(declare insert-timestamp-for-player!)
-
 (hsx/defc youtube-video
   [id {:keys [width height start aspect-ratio] :or {aspect-ratio [16 9]} :as _opts}]
   (let [[ratio-width ratio-height] aspect-ratio
@@ -95,18 +93,7 @@
         :referrer-policy   "strict-origin-when-cross-origin"
         :referer           "https://logseq.com"
         :frame-border      "0"
-        :src               url}]]
-     (when-not (use-youtube-wrapper?)
-       [:div.video-embed-actions
-        [:button.video-timestamp-button
-         {:type "button"
-          :title (t :youtube/insert-current-timestamp)
-          :aria-label (t :youtube/insert-current-timestamp)
-          :on-pointer-down util/stop
-          :on-click (fn [e]
-                      (util/stop e)
-                      (insert-timestamp-for-player! id))}
-         svg/clock]])]))
+        :src               url}]]]))
 
 (defn seconds->display [seconds]
   (let [seconds (int seconds)
@@ -155,29 +142,6 @@
 
 (defn- get-player-by-id [id]
   (get (get @state/state :youtube/players) id))
-
-(defn insert-timestamp-for-player! [id]
-  (if (use-youtube-wrapper?)
-    (notify-timestamp-unavailable!)
-    (if-let [player (get-player-by-id id)]
-      (if-let [get-current-time (player-method player "getCurrentTime")]
-        (let [macro (util/format "{{youtube-timestamp %s}}"
-                                 (Math/floor (.call get-current-time player)))
-              input-id (state/get-edit-input-id)]
-          (if-let [input (gdom/getElement input-id)]
-            (util/insert-at-current-position! input (str macro " "))
-            (notification/show!
-             (t :youtube/open-block-editor-to-insert-timestamp)
-             :warning
-             true)))
-        (notification/show!
-         (t :youtube/player-not-ready)
-         :warning
-         false))
-      (notification/show!
-       (t :youtube/player-not-ready)
-       :warning
-       false))))
 
 (hsx/defc timestamp
   [seconds]

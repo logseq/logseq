@@ -1856,27 +1856,6 @@ html.is-mac {
   }
 }
 
-.video-embed-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-}
-
-.video-timestamp-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--ls-border-radius-low);
-  color: var(--ls-secondary-text-color);
-
-  &:hover {
-    color: var(--ls-primary-text-color);
-    background: var(--ls-secondary-background-color);
-  }
-}
-
 .youtube-timestamp {
   display: inline-flex;
   align-items: center;
