@@ -1024,9 +1024,16 @@ let execute_graph_switch mode graph repo config =
       | Error err ->
           pure (Cli_result.error ~command:Command_id.Graph_switch mode err)
       | Ok _ ->
-          pure
-            (Cli_result.ok ~command:Command_id.Graph_switch mode
-               (Message ("Switched to graph \"" ^ graph_name ^ "\""))))
+          bind
+            (Cli_config.update_config config
+               (Edn_util.map [ (kw "graph", string graph_name) ]))
+            (function
+            | Error err ->
+                pure (Cli_result.error ~command:Command_id.Graph_switch mode err)
+            | Ok _ ->
+                pure
+                  (Cli_result.ok ~command:Command_id.Graph_switch mode
+                     (Message ("Switched to graph \"" ^ graph_name ^ "\"")))))
 
 let execute_graph_remove mode graph repo config =
   let open Cli_effect in
