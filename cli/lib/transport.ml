@@ -1,3 +1,5 @@
+open Cli_effect.Infix
+
 type invoke_config = {
   base_url : Cli_primitive.url;
   timeout_span : float;
@@ -122,12 +124,11 @@ let response_status response = Fetch.Response.status response
 let success_status status = status >= 200 && status <= 299
 
 let request ?timeout_span method_ uri ~headers ~body =
-  Cli_effect.bind
-    (Cli_platform.HTTP.request ?timeout_span method_ uri ~headers ~body)
-    (fun (response, body) ->
-      let status = response_status response in
-      if success_status status then Cli_effect.pure (response, body)
-      else Cli_effect.error (Failure (http_error_message status body)))
+  Cli_platform.HTTP.request ?timeout_span method_ uri ~headers ~body
+  >>= fun (response, body) ->
+  let status = response_status response in
+  if success_status status then Cli_effect.pure (response, body)
+  else Cli_effect.error (Failure (http_error_message status body))
 
 let method_name method_ =
   Edn_util.keyword_to_string method_ |> String.trim

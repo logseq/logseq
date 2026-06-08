@@ -1,3 +1,5 @@
+open Cli_effect.Infix
+
 type server_status = Starting | Ready | Error | Unknown
 
 type server = {
@@ -69,9 +71,8 @@ let process_alive pid =
 
 let http_request ~(method_ : Fetch.requestMethod) ~url ~headers ~body
     ~timeout_span =
-  Cli_effect.bind
-    (Cli_platform.HTTP.request ?timeout_span method_ url ~headers ~body)
-    (fun (response, body) -> Cli_effect.pure (response, body))
+  Cli_platform.HTTP.request ?timeout_span method_ url ~headers ~body
+  >>= fun (response, body) -> Cli_effect.pure (response, body)
 
 let http_success response =
   let status = Fetch.Response.status response in
@@ -479,11 +480,11 @@ let stop_server config repo =
                                       "timed out stopping server"))))))
 
 let restart_server config repo =
-  Cli_effect.bind (stop_server config repo) (function
+  stop_server config repo >>= function
     | Stdlib.Ok _ -> start_server config repo ~create_empty_db:false
     | Stdlib.Error err when err.code = Edn_util.keyword_t "server-not-found" ->
         start_server config repo ~create_empty_db:false
-    | Stdlib.Error err -> Cli_effect.pure (Stdlib.Error err))
+    | Stdlib.Error err -> Cli_effect.pure (Stdlib.Error err)
 
 let ignored_graph_dir name =
   name = "Unlinked graphs" || name = "backup"
