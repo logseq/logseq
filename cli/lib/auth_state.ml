@@ -45,22 +45,6 @@ let rec mkdir_p path =
 
 let read_file = Cli_unix.read_text_file
 
-let json_escape value =
-  let buffer = Buffer.create (String.length value + 8) in
-  String.iter
-    (function
-      | '"' -> Buffer.add_string buffer "\\\""
-      | '\\' -> Buffer.add_string buffer "\\\\"
-      | '\n' -> Buffer.add_string buffer "\\n"
-      | '\r' -> Buffer.add_string buffer "\\r"
-      | '\t' -> Buffer.add_string buffer "\\t"
-      | c -> Buffer.add_char buffer c)
-    value;
-  Buffer.contents buffer
-
-let json_string key value = "\"" ^ key ^ "\":\"" ^ json_escape value ^ "\""
-let json_int key value = "\"" ^ key ^ "\":" ^ Int64.to_string value
-
 let http_error_message status body =
   if String.trim body = "" then
     "http request failed (" ^ string_of_int status ^ ")"
@@ -76,123 +60,50 @@ let http_request ~(method_ : Fetch.requestMethod) ~url ~headers ~body
       if status >= 200 && status <= 299 then Cli_effect.pure body
       else Cli_effect.error (Failure (http_error_message status body)))
 
-let add_opt_string key value fields =
-  match value with
-  | Some value -> json_string key value :: fields
-  | None -> fields
-
-let add_opt_int key value fields =
-  match value with Some value -> json_int key value :: fields | None -> fields
-
-let add_opt_time key value fields =
-  add_opt_int key (Option.map Time.time_to_epoch_ms value) fields
-
 let auth_json data =
-  []
-  |> add_opt_string "email" data.email
-  |> add_opt_string "sub" data.sub
-  |> add_opt_time "expires-at" data.expires_at
-  |> add_opt_string "refresh-token" data.refresh_token
-  |> add_opt_string "access-token" data.access_token
-  |> add_opt_string "id-token" data.id_token
-  |> fun fields ->
-  json_int "updated-at" (Time.time_to_epoch_ms data.updated_at) :: fields
-  |> fun fields ->
-  json_string "provider" data.provider :: fields
-  |> List.rev |> String.concat ","
-  |> fun body -> "{" ^ body ^ "}\n"
-
-let find_substring ~needle haystack =
-  let needle_len = String.length needle in
-  let haystack_len = String.length haystack in
-  let rec loop i =
-    if i + needle_len > haystack_len then None
-    else if String.sub haystack i needle_len = needle then Some i
-    else loop (i + 1)
+  let object_ = Js.Dict.empty () in
+  let set_string key value = Js.Dict.set object_ key (Js.Json.string value) in
+  let set_int key value =
+    Js.Dict.set object_ key (Js.Json.number (Int64.to_float value))
   in
-  loop 0
-
-let skip_ws text index =
-  let rec loop i =
-    if i < String.length text then
-      match text.[i] with ' ' | '\n' | '\r' | '\t' -> loop (i + 1) | _ -> i
-    else i
+  let set_opt_string key = Option.iter (set_string key) in
+  let set_opt_time key =
+    Option.iter (fun value -> set_int key (Time.time_to_epoch_ms value))
   in
-  loop index
+  set_string "provider" data.provider;
+  set_int "updated-at" (Time.time_to_epoch_ms data.updated_at);
+  set_opt_string "id-token" data.id_token;
+  set_opt_string "access-token" data.access_token;
+  set_opt_string "refresh-token" data.refresh_token;
+  set_opt_time "expires-at" data.expires_at;
+  set_opt_string "sub" data.sub;
+  set_opt_string "email" data.email;
+  Js.Json.stringify (Js.Json.object_ object_) ^ "\n"
 
-let find_key_value_start text key =
-  match find_substring ~needle:("\"" ^ key ^ "\"") text with
-  | None -> None
-  | Some key_pos ->
-      let colon_pos = ref None in
-      let i = ref (key_pos + String.length key + 2) in
-      while Option.is_none !colon_pos && !i < String.length text do
-        if text.[!i] = ':' then colon_pos := Some !i;
-        incr i
-      done;
-      Option.map (fun pos -> skip_ws text (pos + 1)) !colon_pos
+let first_string_field object_ keys =
+  keys |> List.find_map (Json_util.string_field object_)
 
-let parse_json_string_at text start =
-  if start >= String.length text || text.[start] <> '"' then None
-  else
-    let buffer = Buffer.create 32 in
-    let rec loop i =
-      if i >= String.length text then None
-      else
-        match text.[i] with
-        | '"' -> Some (Buffer.contents buffer)
-        | '\\' when i + 1 < String.length text ->
-            let c =
-              match text.[i + 1] with
-              | '"' -> '"'
-              | '\\' -> '\\'
-              | '/' -> '/'
-              | 'n' -> '\n'
-              | 'r' -> '\r'
-              | 't' -> '\t'
-              | other -> other
-            in
-            Buffer.add_char buffer c;
-            loop (i + 2)
-        | c ->
-            Buffer.add_char buffer c;
-            loop (i + 1)
-    in
-    loop (start + 1)
-
-let json_string_field text keys =
-  keys
-  |> List.find_map (fun key ->
-      match find_key_value_start text key with
-      | Some start -> parse_json_string_at text start
-      | None -> None)
-
-let json_int_field text keys =
-  keys
-  |> List.find_map (fun key ->
-      match find_key_value_start text key with
-      | None -> None
-      | Some start ->
-          let stop = ref start in
-          while
-            !stop < String.length text
-            && ((text.[!stop] >= '0' && text.[!stop] <= '9')
-               || text.[!stop] = '-')
-          do
-            incr stop
-          done;
-          if !stop = start then None
-          else Int64.of_string_opt (String.sub text start (!stop - start)))
+let first_int64_field object_ keys =
+  keys |> List.find_map (Json_util.int64_field object_)
 
 let parse_auth_json text =
-  let id_token = json_string_field text [ "id-token"; "id_token" ] in
+  let object_ = Json_util.object_of_json_string text in
+  let id_token =
+    Option.bind object_ (fun object_ ->
+        first_string_field object_ [ "id-token"; "id_token" ])
+  in
   let access_token =
-    json_string_field text [ "access-token"; "access_token" ]
+    Option.bind object_ (fun object_ ->
+        first_string_field object_ [ "access-token"; "access_token" ])
   in
   let refresh_token =
-    json_string_field text [ "refresh-token"; "refresh_token" ]
+    Option.bind object_ (fun object_ ->
+        first_string_field object_ [ "refresh-token"; "refresh_token" ])
   in
-  let provider = json_string_field text [ "provider" ] in
+  let provider =
+    Option.bind object_ (fun object_ ->
+        first_string_field object_ [ "provider" ])
+  in
   match (provider, id_token, access_token, refresh_token) with
   | None, None, None, None ->
       Error
@@ -208,14 +119,20 @@ let parse_auth_json text =
           access_token;
           refresh_token;
           expires_at =
-            Option.map Time.time_of_epoch_ms
-              (json_int_field text [ "expires-at"; "expires_at" ]);
-          sub = json_string_field text [ "sub" ];
-          email = json_string_field text [ "email" ];
+            Option.bind object_ (fun object_ ->
+                Option.map Time.time_of_epoch_ms
+                  (first_int64_field object_ [ "expires-at"; "expires_at" ]));
+          sub =
+            Option.bind object_ (fun object_ ->
+                first_string_field object_ [ "sub" ]);
+          email =
+            Option.bind object_ (fun object_ ->
+                first_string_field object_ [ "email" ]);
           updated_at =
             Option.value
-              (Option.map Time.time_of_epoch_ms
-                 (json_int_field text [ "updated-at"; "updated_at" ]))
+              (Option.bind object_ (fun object_ ->
+                   Option.map Time.time_of_epoch_ms
+                     (first_int64_field object_ [ "updated-at"; "updated_at" ])))
               ~default:Time.epoch;
         }
 
@@ -258,12 +175,16 @@ let jwt_payload token =
 
 let claims_of_id_token id_token =
   Error.bind (jwt_payload id_token) (fun payload ->
+      let object_ = Json_util.object_of_json_string payload in
       Ok
-        ( json_string_field payload [ "sub" ],
-          json_string_field payload [ "email" ],
-          Option.map
-            (fun exp -> Time.time_of_epoch_ms (Int64.mul exp 1_000L))
-            (json_int_field payload [ "exp" ]) ))
+        ( Option.bind object_ (fun object_ ->
+              first_string_field object_ [ "sub" ]),
+          Option.bind object_ (fun object_ ->
+              first_string_field object_ [ "email" ]),
+          Option.bind object_ (fun object_ ->
+              Option.map
+                (fun exp -> Time.time_of_epoch_ms (Int64.mul exp 1_000L))
+                (first_int64_field object_ [ "exp" ])) ))
 
 let auth_path_context path =
   Edn_util.map [ (Edn_util.keyword ":auth-path", Edn_util.string path) ]
@@ -455,31 +376,41 @@ let raw_or_random config keys size =
   | _ -> random_base64url size
 
 let refreshed_auth_of_body current body =
-  match json_string_field body [ "id_token"; "id-token" ] with
+  match Json_util.object_of_json_string body with
   | None ->
       Error
         (Error.make
            (Edn_util.keyword_t "missing-id-token")
            "auth token response missing id_token")
-  | Some id_token ->
-      Error.bind (claims_of_id_token id_token) (fun (sub, email, expires_at) ->
-          Ok
-            {
-              provider = "cognito";
-              id_token = Some id_token;
-              access_token =
-                json_string_field body [ "access_token"; "access-token" ];
-              refresh_token =
-                (match
-                   json_string_field body [ "refresh_token"; "refresh-token" ]
-                 with
-                | Some _ as token -> token
-                | None -> current.refresh_token);
-              expires_at;
-              sub;
-              email;
-              updated_at = Time.now ();
-            })
+  | Some object_ -> (
+      match first_string_field object_ [ "id_token"; "id-token" ] with
+      | None ->
+          Error
+            (Error.make
+               (Edn_util.keyword_t "missing-id-token")
+               "auth token response missing id_token")
+      | Some id_token ->
+          Error.bind (claims_of_id_token id_token)
+            (fun (sub, email, expires_at) ->
+              Ok
+                {
+                  provider = "cognito";
+                  id_token = Some id_token;
+                  access_token =
+                    first_string_field object_
+                      [ "access_token"; "access-token" ];
+                  refresh_token =
+                    (match
+                       first_string_field object_
+                         [ "refresh_token"; "refresh-token" ]
+                     with
+                    | Some _ as token -> token
+                    | None -> current.refresh_token);
+                  expires_at;
+                  sub;
+                  email;
+                  updated_at = Time.now ();
+                }))
 
 let refresh_auth config data =
   match data.refresh_token with

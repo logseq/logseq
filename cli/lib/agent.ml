@@ -353,124 +353,31 @@ let codex_available config =
   let result = run_command_capture [ codex_bin config; "--version" ] in
   result.Cli_unix.status = 0
 
-let find_json_field_index line field =
-  let quoted_field = "\"" ^ field ^ "\"" in
-  let rec loop start =
-    match String.index_from_opt line start '"' with
-    | None -> None
-    | Some idx
-      when idx + String.length quoted_field <= String.length line
-           && String.sub line idx (String.length quoted_field) = quoted_field ->
-        Some idx
-    | Some idx -> loop (idx + 1)
-  in
-  loop 0
-
-let parse_json_quoted_string line start =
-  let buffer = Buffer.create 32 in
-  let rec loop i escaped =
-    if i >= String.length line then None
-    else
-      match (escaped, line.[i]) with
-      | false, '"' -> Some (Buffer.contents buffer)
-      | false, '\\' -> loop (i + 1) true
-      | true, '"' ->
-          Buffer.add_char buffer '"';
-          loop (i + 1) false
-      | true, '\\' ->
-          Buffer.add_char buffer '\\';
-          loop (i + 1) false
-      | true, 'n' ->
-          Buffer.add_char buffer '\n';
-          loop (i + 1) false
-      | true, 'r' ->
-          Buffer.add_char buffer '\r';
-          loop (i + 1) false
-      | true, 't' ->
-          Buffer.add_char buffer '\t';
-          loop (i + 1) false
-      | true, c ->
-          Buffer.add_char buffer c;
-          loop (i + 1) false
-      | false, c ->
-          Buffer.add_char buffer c;
-          loop (i + 1) false
-  in
-  loop (start + 1) false
-
-let skip_json_space line start =
-  let rec loop i =
-    if i >= String.length line then i
-    else match line.[i] with ' ' | '\n' | '\r' | '\t' -> loop (i + 1) | _ -> i
-  in
-  loop start
-
-let parse_json_string_field line field =
-  match find_json_field_index line field with
-  | None -> None
-  | Some idx -> (
-      let after_field = idx + String.length field + 2 in
-      match String.index_from_opt line after_field ':' with
-      | None -> None
-      | Some colon ->
-          let start = skip_json_space line (colon + 1) in
-          if start < String.length line && line.[start] = '"' then
-            parse_json_quoted_string line start
-          else None)
-
-let json_object_substring line start =
-  if start >= String.length line || line.[start] <> '{' then None
-  else
-    let rec loop i depth in_string escaped =
-      if i >= String.length line then None
-      else
-        match (in_string, escaped, line.[i]) with
-        | true, true, _ -> loop (i + 1) depth true false
-        | true, false, '\\' -> loop (i + 1) depth true true
-        | true, false, '"' -> loop (i + 1) depth false false
-        | true, false, _ -> loop (i + 1) depth true false
-        | false, _, '"' -> loop (i + 1) depth true false
-        | false, _, '{' -> loop (i + 1) (depth + 1) false false
-        | false, _, '}' when depth = 1 ->
-            Some (String.sub line start (i - start + 1))
-        | false, _, '}' -> loop (i + 1) (depth - 1) false false
-        | false, _, _ -> loop (i + 1) depth false false
-    in
-    loop start 0 false false
-
-let parse_json_nested_string_field line object_field nested_field =
-  match find_json_field_index line object_field with
-  | None -> None
-  | Some idx -> (
-      let after_field = idx + String.length object_field + 2 in
-      match String.index_from_opt line after_field ':' with
-      | None -> None
-      | Some colon -> (
-          let start = skip_json_space line (colon + 1) in
-          match json_object_substring line start with
-          | None -> None
-          | Some object_text -> parse_json_string_field object_text nested_field
-          ))
-
 let parse_codex_session_id stdout =
   stdout |> String.split_on_char '\n'
   |> List.find_map (fun line ->
-      match
-        [ "session-id"; "session_id"; "thread-id"; "thread_id" ]
-        |> List.find_map (parse_json_string_field line)
-      with
-      | Some session_id -> Some session_id
-      | None ->
-          [
-            ("session", "id");
-            ("session", "session-id");
-            ("session", "session_id");
-            ("thread", "id");
-            ("thread", "thread-id");
-            ("thread", "thread_id");
-          ]
-          |> List.find_map (fun (object_field, nested_field) ->
-              parse_json_nested_string_field line object_field nested_field))
+      try
+        match Json_util.object_of_json_string line with
+        | None -> None
+        | Some object_ -> (
+            match
+              [ "session-id"; "session_id"; "thread-id"; "thread_id" ]
+              |> List.find_map (Json_util.string_field object_)
+            with
+            | Some session_id -> Some session_id
+            | None ->
+                [
+                  ("session", "id");
+                  ("session", "session-id");
+                  ("session", "session_id");
+                  ("thread", "id");
+                  ("thread", "thread-id");
+                  ("thread", "thread_id");
+                ]
+                |> List.find_map (fun (object_field, nested_field) ->
+                    Json_util.nested_string_field object_ object_field
+                      nested_field))
+      with _ -> None)
 
 let start_codex config command =
   let result = start_command_capture_session_line command in
