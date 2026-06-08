@@ -7,7 +7,6 @@
                "script/README.md" "script/config.edn"
                "dev/README.md" "dev/config.edn"]]
     (is (= ["pages/foo.md" "pages/bar.md"]
-           #_:clj-kondo/ignore ;; buggy unresolved var
            (common-config/remove-hidden-files
             files
             {:hidden ["script" "/dev"]}

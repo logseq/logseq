@@ -313,9 +313,12 @@
 
 (hsx/defc sidebar-favorites
   []
-  (let [_favorites-updated? (state/use-sub :favorites/updated?)
+  (let [current-repo (state/use-sub :git/current-repo)
+        db-restoring? (state/use-sub :db/restoring?)
+        _favorites-updated? (state/use-sub :favorites/updated?)
         _preferred-language (state/use-sub [:preferred-language])
-        favorite-entities (page-handler/get-favorites)]
+        favorite-entities (when (and current-repo (false? db-restoring?))
+                            (page-handler/get-favorites))]
     (sidebar-content-group
      [:a.wrap-th
       [:strong.flex-1 (t :sidebar.left/favorites)]]
@@ -340,8 +343,12 @@
 
 (hsx/defc sidebar-recent-pages
   []
-  (let [_preferred-language (state/use-sub [:preferred-language])
-        pages (recent-handler/get-recent-pages)]
+  (let [current-repo (state/use-sub :git/current-repo)
+        db-restoring? (state/use-sub :db/restoring?)
+        _recent-page-ids (state/use-sub [:ui/recent-pages current-repo])
+        _preferred-language (state/use-sub [:preferred-language])
+        pages (when (and current-repo (false? db-restoring?))
+                (recent-handler/get-recent-pages))]
        (sidebar-content-group
         [:a.wrap-th [:strong.flex-1 (t :sidebar.left/recent-pages)]]
 
