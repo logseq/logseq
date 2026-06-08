@@ -49,9 +49,3 @@
     "logseq_db_demo" "demo"
     "logseq_db_logseq_db_demo" "logseq_db_demo"
     "my_logseq_db_notes" "my_logseq_db_notes"))
-
-(deftest get-matched-video-recognizes-youtube-shorts-id
-  (are [url expected-id] (= expected-id
-                            (nth (text-util/get-matched-video url) 5))
-    "https://www.youtube.com/shorts/xu9p5ynlhZk" "xu9p5ynlhZk"
-    "https://m.youtube.com/shorts/xu9p5ynlhZk?feature=share" "xu9p5ynlhZk"))

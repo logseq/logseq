@@ -6,19 +6,6 @@
             [frontend.util :as util]
             [goog.string :as gstring]))
 
-(def bilibili-regex #"^((?:https?:)?//)?((?:www).)?((?:bilibili.com))(/(?:video/)?)([\w-]+)(\?p=(\d+))?(\S+)?$")
-(def loom-regex #"^((?:https?:)?//)?((?:www).)?((?:loom.com))(/(?:share/|embed/))([\w-]+)(\S+)?$")
-(def vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com))(/(?:video/)?)([\w-]+)(\S+)?$")
-(def youtube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be|y2u.be|youtube-nocookie.com))(/(?:shorts/|[\w-]+\?v=|embed/|v/)?)([\w-]+)([\S^\?]+)?$")
-
-(defn get-matched-video
-  [url]
-  (when (not-empty url)
-    (or (re-find youtube-regex url)
-        (re-find loom-regex url)
-        (re-find vimeo-regex url)
-        (re-find bilibili-regex url))))
-
 (defn build-data-value
   [col]
   (let [items (map (fn [item] (str "\"" item "\"")) col)]

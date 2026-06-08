@@ -6,12 +6,12 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.extensions.video :as video]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.text :as text-util]
             [promesa.core :as p]))
 
 (defn- is-tweet-link
@@ -63,7 +63,7 @@
                  (string/blank? url)
                  title
 
-                 (and prettify-url? (boolean (text-util/get-matched-video url)))
+                 (and prettify-url? (boolean (video/get-matched-video url)))
                  (str title " {{video " url "}}")
 
                  (and prettify-url? (is-tweet-link url))

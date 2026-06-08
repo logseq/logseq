@@ -1602,99 +1602,51 @@
      [:span.warning
       (util/format "{{function %s}}" (first arguments))])))
 
-(defn- video-iframe
-  [attrs width height]
-  [:div.video-embed-frame
-   {:style {:width width
-            :aspect-ratio (str width " / " height)}}
-   [:iframe attrs]])
+(defn- video-embed-dimensions
+  [aspect-ratio]
+  (let [[ratio-width ratio-height] (or aspect-ratio [16 9])
+        width (min (- (util/get-width) 96) 560)
+        height (int (* width (/ ratio-height ratio-width)))]
+    [width height]))
 
-(defn- macro-vimeo-cp
-  [_config arguments]
-  (when-let [url (first arguments)]
-    (when-let [vimeo-id (nth (util/safe-re-find text-util/vimeo-regex url) 5)]
-      (when-not (string/blank? vimeo-id)
-        (let [width (min (- (util/get-width) 96)
-                         560)
-              height (int (* width (/ 315 560)))]
-          (video-iframe
-           {:allow-full-screen "allowfullscreen"
-            :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-            :frame-border "0"
-            :src (str "https://player.vimeo.com/video/" vimeo-id)}
-           width
-           height))))))
+(defn- video-embed-cp
+  [{:keys [render id src start aspect-ratio] :as _embed}]
+  (case render
+    :youtube-player
+    (let [opts (cond-> {:aspect-ratio aspect-ratio}
+                 (seq start)
+                 (assoc :start start))]
+      (youtube/youtube-video id opts))
 
-(defn- macro-bilibili-cp
-  [_config arguments]
-  (when-let [url (first arguments)]
-    (when-let [id (cond
-                    (<= (count url) 15) url
-                    :else
-                    (nth (util/safe-re-find text-util/bilibili-regex url) 5))]
-      (when-not (string/blank? id)
-        (let [width (min (- (util/get-width) 96)
-                         560)
-              height (int (* width (/ 315 560)))]
-          (video-iframe
-           {:allowfullscreen true
-            :framespacing "0"
-            :frameborder "no"
-            :border "0"
-            :scrolling "no"
-            :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")}
-           width
-           height))))))
+    :iframe
+    (let [[width height] (video-embed-dimensions aspect-ratio)]
+      [:div.video-embed-frame
+       {:style {:width width
+                :aspect-ratio (str width " / " height)}}
+       [:iframe
+        {:allow-full-screen true
+         :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+         :framespacing "0"
+         :frame-border "no"
+         :border "0"
+         :scrolling "no"
+         :src src}]])
+
+    nil))
 
 (defn- macro-video-cp
-  [_config arguments]
-  (if-let [url (first arguments)]
-    (if (common-util/url? url)
-      (let [results (text-util/get-matched-video url)
-            src (match results
-                  [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
-                  (if (= (count id) 11) ["youtube-player" id] url)
-
-                  [_ _ _ "youtube-nocookie.com" _ id _]
-                  (str "https://www.youtube-nocookie.com/embed/" id)
-
-                  [_ _ _ "loom.com" _ id _]
-                  (str "https://www.loom.com/embed/" id)
-
-                  [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
-                  (str "https://player.vimeo.com/video/" id)
-
-                  [_ _ _ "bilibili.com" _ id & query]
-                  (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1&autoplay=0"
-                       (when-let [page (second query)]
-                         (str "&page=" page)))
-
-                  :else
-                  url)]
-        (if (and (coll? src)
-                 (= (first src) "youtube-player"))
-          (let [t (re-find #"&t=(\d+)" url)
-                opts (cond-> {:aspect-ratio (video/matched-video-aspect-ratio results)}
-                       (seq t)
-                       (assoc :start (nth t 1)))]
-            (youtube/youtube-video (last src) opts))
-          (when src
-            (let [width (min (- (util/get-width) 96) 560)
-                  height (int (* width (/ 315 560)))]
-              (video-iframe
-               {:allow-full-screen true
-                :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-                :framespacing "0"
-                :frame-border "no"
-                :border "0"
-                :scrolling "no"
-                :src src}
-               width
-               height)))))
-      [:span.warning.mr-1 {:title (t :block/invalid-url)}
-       (macro->text "video" arguments)])
-    [:span.warning.mr-1 {:title (t :block/empty-url)}
-     (macro->text "video" arguments)]))
+  ([arguments]
+   (macro-video-cp arguments nil))
+  ([arguments provider-hint]
+   (if-let [url-or-id (first arguments)]
+     (if (or provider-hint (common-util/url? url-or-id))
+       (some-> (video/matched-video-embed url-or-id provider-hint)
+               video-embed-cp)
+       [:span.warning.mr-1 {:title (t :block/invalid-url)}
+        (macro->text "video" arguments)])
+     (when-not provider-hint
+       [:span.warning.mr-1 {:title (t :block/empty-url)}
+        (macro->text "video" arguments)]))))
 
 (defn- macro-else-cp
   [name config arguments]
@@ -1724,14 +1676,7 @@
       [:div.warning (t :block.macro/namespace-deprecated (t :library/title))]
 
       (= name "youtube")
-      (when-let [url (first arguments)]
-        (let [youtube-match (util/safe-re-find text-util/youtube-regex url)]
-          (when-let [youtube-id (cond
-                                  (== 11 (count url)) url
-                                  :else
-                                  (nth youtube-match 5))]
-            (when-not (string/blank? youtube-id)
-              (youtube/youtube-video youtube-id {:aspect-ratio (video/matched-video-aspect-ratio youtube-match)})))))
+      (macro-video-cp arguments :youtube)
 
       (= name "youtube-timestamp")
       (when-let [timestamp' (first arguments)]
@@ -1748,14 +1693,14 @@
         [:span.ml-1 (zotero/zotero-linked-file path)])
 
       (= name "vimeo")
-      (macro-vimeo-cp config arguments)
+      (macro-video-cp arguments :vimeo)
 
       ;; TODO: support fullscreen mode, maybe we need a fullscreen dialog?
       (= name "bilibili")
-      (macro-bilibili-cp config arguments)
+      (macro-video-cp arguments :bilibili)
 
       (= name "video")
-      (macro-video-cp config arguments)
+      (macro-video-cp arguments)
 
       (contains? #{"tweet" "twitter"} name)
       (when-let [url (first arguments)]
