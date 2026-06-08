@@ -1,3 +1,5 @@
+open Cli_effect.Infix
+
 type request = Cli_request.t
 type config = Cli_config.t
 type action = Cli_action.t
@@ -277,7 +279,7 @@ let run app input =
     Profile_types.create_session (option_present "profile" options)
   in
   let time stage f = Profile_types.time profile_session stage f in
-  let ( let* ) = Cli_effect.bind in
+  let ( let* ) = ( >>= ) in
   let finish ?config request output =
     let output =
       match (config, request) with

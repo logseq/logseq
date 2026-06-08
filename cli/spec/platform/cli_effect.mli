@@ -8,7 +8,6 @@ val error : exn -> 'a t
 val map : ('a -> 'b) -> 'a t -> 'b t
 val map_s : ('a -> 'b t) -> 'a list -> 'b list t
 val bind : 'a t -> ('a -> 'b t) -> 'b t
-val ( >>= ) : 'a t -> ('a -> 'b t) -> 'b t
 val both : 'a t -> 'b t -> ('a * 'b) t
 val all : 'a t list -> 'a list t
 val pick : 'a t list -> 'a t
@@ -20,3 +19,7 @@ val wakeup : 'a resolver -> 'a -> unit
 val is_pending : 'a t -> bool
 val async : (unit -> unit t) -> unit
 val on_any : 'a t -> ('a -> unit) -> (exn -> unit) -> unit
+
+module Infix : sig
+  val ( >>= ) : 'a t -> ('a -> 'b t) -> 'b t
+end
