@@ -42,6 +42,7 @@
    [logseq.outliner.op :as outliner-op]
    [logseq.outliner.page :as outliner-page]
    [logseq.outliner.property :as outliner-property]
+   [logseq.outliner.recycle :as outliner-recycle]
    [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-sync-repo")
@@ -2346,6 +2347,27 @@
                   [:recycle-delete-permanently [[:block/uuid page-uuid]]]
                   nil)))
       (is (nil? (d/entity @conn [:block/uuid page-uuid])))
+      (is (nil? (d/entity @conn [:block/uuid child-uuid]))))))
+
+(deftest replay-recycle-delete-permanently-removes-recycled-block-test
+  (testing "replay should permanently delete a recycled block subtree"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page 1"}
+                  :blocks [{:block/title "parent"
+                            :build/children [{:block/title "child"}]}]}])
+          parent (db-test/find-block-by-content @conn "parent")
+          child (db-test/find-block-by-content @conn "child")
+          parent-uuid (:block/uuid parent)
+          child-uuid (:block/uuid child)]
+      (ldb/transact! conn
+                     (outliner-recycle/recycle-blocks-tx-data @conn [parent] {})
+                     {:outliner-op :delete-blocks})
+      (is (true? (ldb/recycled? (d/entity @conn [:block/uuid parent-uuid]))))
+      (is (some? (#'sync-apply/replay-canonical-outliner-op!
+                  conn
+                  [:recycle-delete-permanently [[:block/uuid parent-uuid]]]
+                  nil)))
+      (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
       (is (nil? (d/entity @conn [:block/uuid child-uuid]))))))
 
 (deftest replay-recycle-delete-permanently-missing-root-is-idempotent-test

@@ -151,80 +151,79 @@
    (fn []
      (when on-page-blocks-rendered
        (on-page-blocks-rendered))))
-  (when-let [id (:db/id block*)]
-    (let [block (db/sub-block id)
-          block-id (:block/uuid block)
-          block? (not (db/page? block))
-          full-children (->> (:block/_parent block)
-                             ldb/sort-by-order)
-          mobile-length-limit 50
-          [children more?] (if (and (> (count full-children) mobile-length-limit) (util/mobile?) journals?)
-                             [(take mobile-length-limit full-children) true]
-                             [full-children false])
-          quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) common-config/quick-add-page-name))
-          children (cond
-                     (and (= id quick-add-page-id)
-                          (user-handler/user-uuid)
-                          (ldb/get-graph-rtc-uuid (db/get-db)))
-                     (editor-handler/get-user-quick-add-blocks)
+  (let [document-mode? (state/use-sub :document/mode?)]
+    (when-let [id (:db/id block*)]
+      (let [block (db/sub-block id)
+            block-id (:block/uuid block)
+            block? (not (db/page? block))
+            full-children (->> (:block/_parent block)
+                               ldb/sort-by-order)
+            mobile-length-limit 50
+            [children more?] (if (and (> (count full-children) mobile-length-limit) (util/mobile?) journals?)
+                               [(take mobile-length-limit full-children) true]
+                               [full-children false])
+            quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) common-config/quick-add-page-name))
+            children (cond
+                       (and (= id quick-add-page-id)
+                            (user-handler/user-uuid)
+                            (ldb/get-graph-rtc-uuid (db/get-db)))
+                       (editor-handler/get-user-quick-add-blocks)
 
-                     (ldb/class? block)
-                     (remove (fn [b] (contains? (set (map :db/id (:block/tags b))) (:db/id block))) children)
+                       (ldb/class? block)
+                       (remove (fn [b] (contains? (set (map :db/id (:block/tags b))) (:db/id block))) children)
 
-                     (ldb/property? block)
-                     (remove (fn [b] (some? (get b (:db/ident block)))) children)
+                       (ldb/property? block)
+                       (remove (fn [b] (some? (get b (:db/ident block)))) children)
 
-                     :else
-                     children)
-          config (assoc config :library? (ldb/library? block))
-          document-mode? (state/use-sub :document/mode?)]
-      (cond
-        (and
-         (not block?)
-         (not config/publishing?)
-         (empty? children) block)
-        (add-button block config)
+                       :else
+                       children)
+            config (assoc config :library? (ldb/library? block))]
+        (cond
+          (and
+           (not block?)
+           (not config/publishing?)
+           (empty? children) block)
+          (add-button block config)
 
-        :else
-        (let [hiccup-config (merge
-                             {:id (str (:block/uuid block))
-                              :db/id (:db/id block)
-                              :block? block?
-                              :editor-box editor/box
-                              :document/mode? document-mode?}
-                             config)
-              config hiccup-config
-              blocks (if block? [block] (db/sort-by-order children block))]
-          [:div.relative
-           (page-blocks-inner block blocks config sidebar? false block-id)
-           (when more?
-             (shui/button {:variant :ghost
-                           :class "text-muted-foreground w-full"
-                           :on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
-               (t :ui/load-more)))
-           (when-not more?
-             (when-not hide-add-button?
-               (add-button block config)))])))))
+          :else
+          (let [hiccup-config (merge
+                               {:id (str (:block/uuid block))
+                                :db/id (:db/id block)
+                                :block? block?
+                                :editor-box editor/box
+                                :document/mode? document-mode?}
+                               config)
+                config hiccup-config
+                blocks (if block? [block] (db/sort-by-order children block))]
+            [:div.relative
+             (page-blocks-inner block blocks config sidebar? false block-id)
+             (when more?
+               (shui/button {:variant :ghost
+                             :class "text-muted-foreground w-full"
+                             :on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
+                 (t :ui/load-more)))
+             (when-not more?
+               (when-not hide-add-button?
+                 (add-button block config)))]))))))
 
 (hsx/defc today-queries
   [repo today? sidebar?]
-  (when (and today? (not sidebar?))
-    (let [queries (get-in (state/use-sub-config repo) [:default-queries :journals])]
-      (when (seq queries)
-        [:div#today-queries
-         (for [query queries]
-           (let [query' (assoc query :collapsed? true)]
-             (with-meta
-               [:<>
-                (ui/catch-error
-                 (ui/component-error (t :page/default-query-error) {:content (pr-str query')})
-                 (query/custom-query (component-block/wrap-query-components
-                                      {:editor-box editor/box
-                                       :page page-cp
-                                       :built-in-query? true
-                                       :today-query? true})
-                                     query'))]
-               {:key (str repo "-custom-query-" (:query query'))})))]))))
+  (let [queries (get-in (state/use-sub-config repo) [:default-queries :journals])]
+    (when (and today? (not sidebar?) (seq queries))
+      [:div#today-queries
+       (for [query queries]
+         (let [query' (assoc query :collapsed? true)]
+           (with-meta
+             [:<>
+              (ui/catch-error
+               (ui/component-error (t :page/default-query-error) {:content (pr-str query')})
+               (query/custom-query (component-block/wrap-query-components
+                                    {:editor-box editor/box
+                                     :page page-cp
+                                     :built-in-query? true
+                                     :today-query? true})
+                                   query'))]
+             {:key (str repo "-custom-query-" (:query query'))})))])))
 
 (hsx/defc db-page-title-actions
   [page]
@@ -495,7 +494,8 @@
               (if recycle-page?
                 (recycle/recycle-page page {:class "ls-recycle-page-title-compact"})
                 [:div.ls-page-blocks
-                 {:class (when-not (or sidebar? (util/capacitor?)) "mt-4")}
+                 {:style {:margin-left (if (util/mobile?) 0 -20)}
+                  :class (when-not (or sidebar? (util/capacitor?)) "mt-4")}
                  (page-blocks-cp page (merge option {:sidebar? sidebar?
                                                      :on-page-blocks-rendered #(when-not (= linked-refs-blocks-ready-page-id page-id)
                                                                                  (reset! linked-refs-blocks-ready-page-id* page-id))

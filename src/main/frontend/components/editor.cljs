@@ -262,14 +262,14 @@
         embed? (= @commands/*current-command "Page embed")
         tag? (= action :page-search-hashtag)
         db-tag? tag?
-        input (gdom/getElement id)]
+        input (gdom/getElement id)
+        edit-content (use-current-edit-content)]
     (hooks/use-effect!
      (fn []
        #(reset! commands/*current-command nil))
      [])
     (when input
       (let [current-pos (cursor/pos input)
-            edit-content (use-current-edit-content)
             q (or
                (editor-handler/get-selected-text)
                (when (= action :page-search-hashtag)
@@ -388,10 +388,10 @@
 (hsx/defc template-search
   [id _format]
   (let [pos (hooks/use-memo state/get-editor-last-pos [])
-        input (gdom/getElement id)]
+        input (gdom/getElement id)
+        edit-content (use-current-edit-content)]
     (when input
       (let [current-pos (cursor/pos input)
-            edit-content (use-current-edit-content)
             q (or
                (when (>= (count edit-content) current-pos)
                  (subs edit-content pos current-pos))
@@ -409,11 +409,12 @@
 
 (hsx/defc code-block-mode-picker
   [id format]
-  (when-let [modes (some->> js/window.CodeMirror (.-modes) (js/Object.keys) (js->clj) (remove #(= "null" %)))]
-    (when-let [^js input (gdom/getElement id)]
-      (let [pos          (hooks/use-memo state/get-editor-last-pos [])
-            current-pos  (cursor/pos input)
-            edit-content (or (use-current-edit-content) "")
+  (let [pos          (hooks/use-memo state/get-editor-last-pos [])
+        edit-content (or (use-current-edit-content) "")
+        modes        (some->> js/window.CodeMirror (.-modes) (js/Object.keys) (js->clj) (remove #(= "null" %)))
+        ^js input    (gdom/getElement id)]
+    (when (and modes input)
+      (let [current-pos  (cursor/pos input)
             q            (or (editor-handler/get-selected-text)
                              (common-util/safe-subs edit-content pos current-pos)
                              "")

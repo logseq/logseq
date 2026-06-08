@@ -8,6 +8,7 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.cli-install :as cli-install]
+            [electron.configs :as cfgs]
             [electron.db :as db]
             [electron.embedding-server :as embedding-server]
             [electron.exceptions :as exceptions]
@@ -404,7 +405,8 @@
                             t2 (setup-app-manager! win)
                             t3 (handler/set-ipc-handler! win)
                             t4 (server/setup! win)
-                            t5 (embedding-server/setup! app')
+                            t5 (when (cfgs/semantic-search-enabled?)
+                                 (embedding-server/setup! app'))
                             tt (exceptions/setup-exception-listeners!)]
 
                         (vreset! *teardown-fn
@@ -455,6 +457,7 @@
     (let [privileges {:standard        true
                       :secure          true
                       :bypassCSP       true
+                      :corsEnabled     true
                       :supportFetchAPI true}]
       (.registerSchemesAsPrivileged
        protocol (bean/->js [{:scheme     LSP_SCHEME
@@ -462,10 +465,7 @@
                             {:scheme     FILE_LSP_SCHEME
                              :privileges privileges}
                             {:scheme     FILE_ASSETS_SCHEME
-                             :privileges {:standard        false
-                                          :secure          false
-                                          :bypassCSP       false
-                                          :supportFetchAPI false}}]))
+                             :privileges (assoc privileges :stream true)}]))
 
       (register-default-protocol-client! app)
       (set-app-menu!)

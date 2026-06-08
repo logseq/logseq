@@ -56,6 +56,9 @@
 (defn- create-static-dir [dir]
   (fs/mkdirSync (path/join dir) #js {:recursive true})
   (mapv #(fs/mkdirSync (path/join dir %)) publish-export/static-dirs)
+  (fs/mkdirSync (path/join dir "css" "fonts") #js {:recursive true})
+  (fs/writeFileSync (path/join dir "css" "style.css") "style")
+  (fs/writeFileSync (path/join dir "css" "fonts" "font.woff2") "font")
   (fs/mkdirSync (path/join dir "js" "publishing"))
   (mapv #(fs/writeFileSync (path/join dir "js" "publishing" %) %)
         (conj publish-export/js-files "manifest.edn"))
@@ -87,6 +90,12 @@
            (is (= "main.js"
                   (str (fs/readFileSync "tmp/published-graph/static/js/main.js")))
                "cljs frontend compiled as main.js is copied correctly")
+           (is (= "style"
+                  (str (fs/readFileSync "tmp/published-graph/static/css/style.css")))
+               "static files are copied recursively")
+           (is (= "font"
+                  (str (fs/readFileSync "tmp/published-graph/static/css/fonts/font.woff2")))
+               "nested static files are copied recursively")
            (is (empty? (filter #(.endsWith (path/basename %) ".map")
                                (get-files "tmp/published-graph/static/js")))
                "source maps are not copied"))))

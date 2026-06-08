@@ -57,7 +57,9 @@
   (let [current-repo (state/get-current-repo)]
     (some (fn [{:keys [url] :as graph}]
             (when (and (= current-repo url)
-                       (repo/local-uploadable-graph? graph))
+                       (repo/local-uploadable-graph?
+                        (assoc graph :rtc-graph?
+                               (boolean (ldb/get-graph-rtc-uuid (db/get-db current-repo))))))
               graph))
           (state/get-repos))))
 
@@ -130,24 +132,25 @@
                  (when (util/uuid-string? current-page)
                    (db/entity [:block/uuid (uuid current-page)])))
         ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
-        working-page? (if config/publishing? (not (state/use-sub :db/restoring?)) true)
-        page-menu (if (and working-page? (ldb/page? page))
-                    (page-menu/page-menu page)
-                    (when-not config/publishing?
-                      (let [block-id-str (str (:block/uuid page))
-                            favorited? (page-handler/favorited? block-id-str)]
-                        [{:title   (if favorited?
-                                     (t :page/unfavorite)
-                                     (t :page/add-to-favorites))
-                          :options {:on-click
-                                    (fn []
-                                      (if favorited?
-                                        (page-handler/<unfavorite-page! block-id-str)
-                                        (page-handler/<favorite-page! block-id-str)))}}
-                         {:title   (t :publish/dialog-title)
-                          :options {:on-click #(shui/dialog-open! (fn [] (page-menu/publish-page-dialog page))
-                                                                  {:class "w-auto max-w-md"})}}])))
-        page-menu-and-hr (concat page-menu [{:hr true}])
+        db-storing? (state/use-sub :db/restoring?)
+        working-page? (if config/publishing? (not db-storing?) true)
+        page-menu-items (fn []
+                          (if (and working-page? (ldb/page? (or (some-> page :db/id db/entity) page)))
+                            (page-menu/page-menu page)
+                            (when-not config/publishing?
+                              (let [block-id-str (str (:block/uuid page))
+                                    favorited? (page-handler/favorited? block-id-str)]
+                                [{:title   (if favorited?
+                                             (t :page/unfavorite)
+                                             (t :page/add-to-favorites))
+                                  :options {:on-click
+                                            (fn []
+                                              (if favorited?
+                                                (page-handler/<unfavorite-page! block-id-str)
+                                                (page-handler/<favorite-page! block-id-str)))}}
+                                 {:title   (t :publish/dialog-title)
+                                  :options {:on-click #(shui/dialog-open! (fn [] (page-menu/publish-page-dialog page))
+                                                                          {:class "w-auto max-w-md"})}}]))))
         login? (and (state/use-sub :auth/id-token) (user-handler/logged-in?))
         items (fn []
                 (->>
@@ -200,7 +203,7 @@
                              (ui/icon "logout")]]
                      :options {:on-click #(user-handler/logout)
                                :class "w-full"}})]
-                 (concat page-menu-and-hr)
+                 (concat (page-menu-items) [{:hr true}])
                  (remove nil?)))]
 
     (ui/tooltip
@@ -399,7 +402,8 @@
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
-                               (= default-home-page (state/get-current-page)))]
+                               (= default-home-page (state/get-current-page)))
+        electron-server (state/use-sub :electron/server)]
     [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -470,7 +474,7 @@
           (plugins/updates-notifications)])
 
        (when (state/feature-http-server-enabled?)
-         (server/server-indicator (state/use-sub :electron/server)))
+         (server/server-indicator electron-server))
 
        (when (util/electron?)
          (back-and-forward))
