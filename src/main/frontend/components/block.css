@@ -1841,6 +1841,17 @@ html.is-mac {
   }
 }
 
+.block-title-wrap.has-video-embed,
+.video-inline-text,
+.video-embed-block {
+  display: block;
+  width: 100%;
+}
+
+.video-embed-block {
+  max-width: 100%;
+}
+
 .video-embed-shell {
   display: inline-flex;
   align-items: flex-end;

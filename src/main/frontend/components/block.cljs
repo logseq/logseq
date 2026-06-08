@@ -19,6 +19,7 @@
             [frontend.components.block.image :as block-image]
             [frontend.components.block.macros :as block-macros]
             [frontend.components.block.selection :as block-selection]
+            [frontend.components.block.video :as block-video]
             [frontend.components.icon :as icon-component]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.macro :as macro]
@@ -1603,7 +1604,6 @@
       (util/format "{{function %s}}" (first arguments))])))
 
 (def ^:private default-video-embed-width 560)
-
 (defn- video-embed-dimensions
   [aspect-ratio]
   (let [[ratio-width ratio-height] (or aspect-ratio [16 9])
@@ -1620,7 +1620,7 @@
                           :height height}
                  (seq start)
                  (assoc :start start))]
-        (youtube/youtube-video id opts))
+        [youtube/youtube-video id opts])
 
       :iframe
       [:div.video-embed-frame
@@ -1873,6 +1873,13 @@
     (macro-cp config options)
 
     :else ""))
+
+(defn- video-inline-segments-cp
+  [config items]
+  (block-video/video-inline-segments-cp
+   #(inline config %)
+   #(map-inline config %)
+   items))
 
 (hsx/defc block-child
   [block]
@@ -2396,9 +2403,18 @@
         block-ref? (:block-ref? config)
         block-type (or (keyword (pu/lookup block :logseq.property/ls-type)) :default)
         heading (block-heading-level block level)
-        elem (if heading
+        video-title? (block-video/contains-video-macro? block-ast-title)
+        elem (cond
+               video-title?
+               (keyword (str "div.block-title-wrap.has-video-embed"
+                             (when heading ".as-heading")
+                             (when block-ref? ".as-inline")))
+
+               heading
                (keyword (str "h" heading ".block-title-wrap.as-heading"
                              (when block-ref? ".as-inline")))
+
+               :else
                :span.block-title-wrap)]
     (->elem
      elem
@@ -2443,7 +2459,9 @@
                          (assoc :node-ref-link-only? true)
                          (integer? heading)
                          (assoc :parent-heading heading))]
-           (map-inline config' block-ast-title))))))))
+           (if video-title?
+             (video-inline-segments-cp config' block-ast-title)
+             (map-inline config' block-ast-title)))))))))
 
 (hsx/defc block-title-aux
   [config block {:keys [query? *show-query?]}]
@@ -3213,6 +3231,11 @@
                          {:on-click #(edit-block-content config block edit-input-id)}})])
      (or custom-block-content (block-content config block edit-input-id block-id *show-query?)))))
 
+(defn- video-macro-block?
+  [block]
+  (block-video/contains-video-macro? [(:block.temp/ast-title block)
+                                      (:block.temp/ast-body block)]))
+
 (hsx/defc ^:large-vars/cleanup-todo block-content-or-editor
   [config {:block/keys [uuid] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? refs-count *hide-block-refs? *show-query?]}]
   (let [format :markdown
@@ -3228,7 +3251,8 @@
         type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
                                 (not= (:db/id block) (:db/id raw-mode-block)))
         config (assoc config :block-parent-id block-id)
-        bg-color (pu/lookup block :logseq.property/background-color)]
+        bg-color (pu/lookup block :logseq.property/background-color)
+        video-macro? (video-macro-block? block)]
     [:div.block-content-or-editor-wrap
      (merge
       {:class (util/classnames [{"ls-page-title-container" (:page-title? config)
@@ -3300,6 +3324,12 @@
                (assoc block-asset/read-mode-title-attrs
                       :on-click #(edit-block-content config block edit-input-id))
                (text-block-title (dissoc config :raw-title?) block)])]
+
+           video-macro?
+           [:div.flex.flex-col.video-macro-block-wrap.w-full
+            (block-content-f {})
+            (when show-editor?
+              [:div.mt-1 editor-cp])]
 
            show-editor?
            editor-cp
@@ -4772,9 +4802,12 @@
 
       ["Paragraph" l]
            ;; TODO: speedup
-      (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
-        (->elem :div (map-inline config l))
-        (->elem :div.is-paragraph (map-inline config l)))
+      (let [items (if (block-video/contains-video-macro? l)
+                    (video-inline-segments-cp config l)
+                    (map-inline config l))]
+        (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
+          (->elem :div items)
+          (->elem :div.is-paragraph items)))
 
       ["Horizontal_Rule"]
       [:hr]
