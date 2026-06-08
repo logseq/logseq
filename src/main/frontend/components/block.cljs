@@ -2743,14 +2743,12 @@
   (boolean (util/rec-get-node target "ls-comments-area")))
 
 (defn- video-embed-target?
-  [target block-dom-element]
+  [target _block-dom-element]
   (boolean
    (or
     (dom/closest target ".video-embed-shell")
     (dom/closest target ".video-embed-frame")
-    (and block-dom-element
-         (dom/closest target ".block-content-inner")
-         (seq (dom/sel block-dom-element ".video-embed-frame"))))))
+    (dom/closest target ".video-embed-resize-handle"))))
 
 (defn- block-content-on-pointer-down
   [e block block-id edit-input-id content config]
