@@ -889,6 +889,36 @@ let () =
       fail_test ("unexpected invoke body: " ^ body);
       None)
   in
+  test_promise "invoke response decodes JSON escaped resultTransit" (fun () ->
+      let server =
+        create_server (fun[@u] req res ->
+            let body = ref "" in
+            req_set_encoding req "utf8";
+            req_on_data req "data" (fun[@u] chunk -> body := !body ^ chunk);
+            req_on_end req "end" (fun[@u] () ->
+                if req_method req <> "POST" || req_url req <> "/v1/invoke" then
+                  write_json res 404 (error_response "not found")
+                else if
+                  not
+                    (Js.String.includes ~search:"thread-api/cli-list-pages"
+                       !body)
+                then write_json res 400 (error_response "unexpected request")
+                else write_json res 200 "{\"resultTransit\":\"\\u005b\\u005d\"}"))
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [ "--graph"; "alpha"; "--output"; "json"; "list"; "page" ]
+          in
+          ignore (expect_cli_exit_zero "json escaped resultTransit" output);
+          if
+            Js.String.includes
+              ~search:"{\"status\":\"ok\",\"data\":{\"items\":[]}}"
+              output.stdout
+          then Js.Promise.resolve pass
+          else fail_promise ("expected empty list result\n" ^ output.stdout)));
+
   let run_sync_progress_case name root_prefix handle_events
       ?(delay_download_response = false) assert_progress =
     test_promise name (fun () ->
@@ -976,6 +1006,26 @@ let () =
     (fun stdout ->
       ignore
         (expect_named_contains "progress output" stdout "downloaded 1 block"));
+
+  run_sync_progress_case "sync download decodes JSON escaped progress payload"
+    "logseq-cli-sync-progress-escaped-"
+    (fun res ->
+      let payload =
+        "[\"~:rtc-log\",[\"^ \
+         \",\"~:type\",\"~:rtc.log/download\",\"~:graph-uuid\",\"~u"
+        ^ sync_graph_id ^ "\",\"~:message\",\"downloaded escaped payload\"]]"
+      in
+      let payload_json = Js.Json.stringify (Js.Json.string payload) in
+      let escaped_payload_json =
+        "\"\\u005b" ^ String.sub payload_json 2 (String.length payload_json - 2)
+      in
+      res_write_head res 200
+        (Js.Dict.fromArray [| ("Content-Type", "text/event-stream") |]);
+      res_end res ("data: {\"payload\":" ^ escaped_payload_json ^ "}\n\n"))
+    (fun stdout ->
+      ignore
+        (expect_named_contains "escaped progress output" stdout
+           "downloaded escaped payload"));
 
   run_sync_progress_case "sync download finishes while event stream stays open"
     "logseq-cli-sync-progress-stream-"
