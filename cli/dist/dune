@@ -1,0 +1,28 @@
+(rule
+ (target logseq-cli.js)
+ (deps
+  (alias ../bin/melange)
+  (:entrypoint ../bin/logseq_cli_melange/bin/main.js)
+  (glob_files_rec ../bin/logseq_cli_melange/**)
+  ../package.json
+  ../pnpm-lock.yaml
+  ../vite.config.mjs)
+ (action
+  (chdir
+   %{project_root}
+   (run
+    sh
+    -c
+    "exec pnpm --dir \"$DUNE_SOURCEROOT\" exec vite build --config vite.config.mjs --outDir \"$DUNE_PROJECT_ROOT/dist\" --emptyOutDir false"))))
+
+(rule
+ (alias show-vars)
+ (action
+  (progn
+   (echo "project_root=%{project_root}\n")
+   (echo "workspace_root=%{workspace_root}\n")
+   (echo "profile=%{profile}\n")
+   (echo "context_name=%{context_name}\n")
+   (echo "ocaml_version=%{ocaml_version}\n")
+   (echo "ocaml_where=%{ocaml_where}\n")
+   (echo "ext_exe=%{ext_exe}\n"))))
