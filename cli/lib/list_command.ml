@@ -91,10 +91,10 @@ let kind_of_parsed = function
 
 let normalize_priority value =
   match String.lowercase_ascii (String.trim value) with
-  | "low" -> Some ":logseq.property/priority.low"
-  | "medium" -> Some ":logseq.property/priority.medium"
-  | "high" -> Some ":logseq.property/priority.high"
-  | "urgent" -> Some ":logseq.property/priority.urgent"
+  | "low" -> Some "logseq.property/priority.low"
+  | "medium" -> Some "logseq.property/priority.medium"
+  | "high" -> Some "logseq.property/priority.high"
+  | "urgent" -> Some "logseq.property/priority.urgent"
   | _ -> None
 
 let invalid_priority_message value =
@@ -127,67 +127,67 @@ let field_map fields =
 let page_field_map =
   field_map
     [
-      ("id", ":db/id");
-      ("ident", ":db/ident");
-      ("title", ":block/title");
-      ("uuid", ":block/uuid");
-      ("created-at", ":block/created-at");
-      ("updated-at", ":block/updated-at");
+      ("id", "db/id");
+      ("ident", "db/ident");
+      ("title", "block/title");
+      ("uuid", "block/uuid");
+      ("created-at", "block/created-at");
+      ("updated-at", "block/updated-at");
     ]
 
 let tag_field_map =
   page_field_map
   @ field_map
       [
-        ("properties", ":logseq.property.class/properties");
-        ("extends", ":logseq.property.class/extends");
-        ("description", ":logseq.property/description");
+        ("properties", "logseq.property.class/properties");
+        ("extends", "logseq.property.class/extends");
+        ("description", "logseq.property/description");
       ]
 
 let property_field_map =
   page_field_map
   @ field_map
       [
-        ("classes", ":logseq.property/classes");
-        ("type", ":logseq.property/type");
-        ("cardinality", ":db/cardinality");
-        ("description", ":logseq.property/description");
+        ("classes", "logseq.property/classes");
+        ("type", "logseq.property/type");
+        ("cardinality", "db/cardinality");
+        ("description", "logseq.property/description");
       ]
 
 let task_field_map =
   field_map
     [
-      ("id", ":db/id");
-      ("title", ":block/title");
-      ("status", ":logseq.property/status");
-      ("priority", ":logseq.property/priority");
-      ("scheduled", ":logseq.property/scheduled");
-      ("deadline", ":logseq.property/deadline");
-      ("updated-at", ":block/updated-at");
-      ("created-at", ":block/created-at");
+      ("id", "db/id");
+      ("title", "block/title");
+      ("status", "logseq.property/status");
+      ("priority", "logseq.property/priority");
+      ("scheduled", "logseq.property/scheduled");
+      ("deadline", "logseq.property/deadline");
+      ("updated-at", "block/updated-at");
+      ("created-at", "block/created-at");
     ]
 
 let node_field_map =
   field_map
     [
-      ("id", ":db/id");
-      ("title", ":block/title");
-      ("type", ":node/type");
-      ("page-id", ":block/page-id");
-      ("page-title", ":block/page-title");
-      ("created-at", ":block/created-at");
-      ("updated-at", ":block/updated-at");
+      ("id", "db/id");
+      ("title", "block/title");
+      ("type", "node/type");
+      ("page-id", "block/page-id");
+      ("page-title", "block/page-title");
+      ("created-at", "block/created-at");
+      ("updated-at", "block/updated-at");
     ]
 
 let asset_field_map =
   field_map
     [
-      ("id", ":db/id");
-      ("title", ":block/title");
-      ("asset-type", ":logseq.property.asset/type");
-      ("size", ":logseq.property.asset/size");
-      ("updated-at", ":block/updated-at");
-      ("created-at", ":block/created-at");
+      ("id", "db/id");
+      ("title", "block/title");
+      ("asset-type", "logseq.property.asset/type");
+      ("size", "logseq.property.asset/size");
+      ("updated-at", "block/updated-at");
+      ("created-at", "block/created-at");
     ]
 
 let field_map_of_kind = function
@@ -252,8 +252,8 @@ let compare_item_by keyword a b =
   if primary <> 0 then primary
   else
     compare_value
-      (value_of (Edn_util.keyword_t ":db/id") a)
-      (value_of (Edn_util.keyword_t ":db/id") b)
+      (value_of (Edn_util.keyword_t "db/id") a)
+      (value_of (Edn_util.keyword_t "db/id") b)
 
 let sort_values ~field_map common items =
   let sort_field = Option.value common.sort ~default:default_sort_field in
@@ -310,11 +310,11 @@ let string_list_of_value value =
 
 let common_of_options options =
   {
-    fields = Option.map string_list_of_value (Edn_util.get options ":fields");
-    limit = Edn_util.get_int options ":limit";
-    offset = Edn_util.get_int options ":offset";
-    sort = Edn_util.get_string options ":sort";
-    order = Option.bind (Edn_util.get_string options ":order") order_of_string;
+    fields = Option.map string_list_of_value (Edn_util.get options "fields");
+    limit = Edn_util.get_int options "limit";
+    offset = Edn_util.get_int options "offset";
+    sort = Edn_util.get_string options "sort";
+    order = Option.bind (Edn_util.get_string options "order") order_of_string;
   }
 
 let select_fields field_map fields item =
@@ -361,39 +361,39 @@ let normalized_lookup_name value = String.lowercase_ascii (String.trim value)
 let tag_selector =
   vector
     [
-      kw ":db/id";
-      kw ":block/uuid";
-      kw ":block/name";
-      kw ":block/title";
-      Edn_util.map [ (kw ":block/tags", vector [ kw ":db/ident" ]) ];
-      kw ":logseq.property/public?";
+      kw "db/id";
+      kw "block/uuid";
+      kw "block/name";
+      kw "block/title";
+      Edn_util.map [ (kw "block/tags", vector [ kw "db/ident" ]) ];
+      kw "logseq.property/public?";
     ]
 
 let property_selector =
   vector
     [
-      kw ":db/id";
-      kw ":db/ident";
-      kw ":block/name";
-      kw ":block/title";
-      kw ":logseq.property/type";
-      kw ":db/cardinality";
-      kw ":logseq.property/public?";
+      kw "db/id";
+      kw "db/ident";
+      kw "block/name";
+      kw "block/title";
+      kw "logseq.property/type";
+      kw "db/cardinality";
+      kw "logseq.property/public?";
     ]
 
 let class_query selector class_ident =
   Edn_util.map
     [
-      ( kw ":find",
+      ( kw "find",
         vector [ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
       );
-      (kw ":in", list [ sym "$"; sym "?name" ]);
-      ( kw ":where",
+      (kw "in", list [ sym "$"; sym "?name" ]);
+      ( kw "where",
         vector
           [
-            vector [ sym "?e"; kw ":block/name"; sym "?name" ];
-            vector [ sym "?e"; kw ":block/tags"; sym "?tag" ];
-            vector [ sym "?tag"; kw ":db/ident"; kw class_ident ];
+            vector [ sym "?e"; kw "block/name"; sym "?name" ];
+            vector [ sym "?e"; kw "block/tags"; sym "?tag" ];
+            vector [ sym "?tag"; kw "db/ident"; kw class_ident ];
           ] );
     ]
 
@@ -402,20 +402,20 @@ let pull_tag_by_name config repo name =
     ~query:
       (Edn_util.vector_t
          [
-           class_query tag_selector ":logseq.class/Tag";
+           class_query tag_selector "logseq.class/Tag";
            Edn_util.string (normalized_lookup_name name);
          ])
 
 let pull_tag_by_uuid config repo uuid =
   Transport.thread_api_pull config ~repo
     ~selector:(Edn_util.expect_vector_t "list tag selector" tag_selector)
-    ~lookup:(vector [ kw ":block/uuid"; Edn_util.uuid uuid ])
+    ~lookup:(vector [ kw "block/uuid"; Edn_util.uuid uuid ])
 
 let pull_property_by_ident config repo ident =
   Transport.thread_api_pull config ~repo
     ~selector:
       (Edn_util.expect_vector_t "list property selector" property_selector)
-    ~lookup:(vector [ kw ":db/ident"; kw ident ])
+    ~lookup:(vector [ kw "db/ident"; kw ident ])
 
 let pull_property_by_id config repo id =
   Transport.thread_api_pull config ~repo
@@ -425,8 +425,8 @@ let pull_property_by_id config repo id =
 
 let pull_asset_tag config repo =
   Transport.thread_api_pull config ~repo
-    ~selector:(Edn_util.vector_t [ kw ":db/id" ])
-    ~lookup:(vector [ kw ":db/ident"; kw ":logseq.class/Asset" ])
+    ~selector:(Edn_util.vector_t [ kw "db/id" ])
+    ~lookup:(vector [ kw "db/ident"; kw "logseq.class/Asset" ])
 
 let first_entity value =
   let map_value value =
@@ -445,20 +445,20 @@ let first_entity value =
   | _, _, Some _ -> Some value
   | _ -> None
 
-let id_of_entity value = Edn_util.get_int64 value ":db/id"
+let id_of_entity value = Edn_util.get_int64 value "db/id"
 
 let ident_of_entity value =
-  Option.bind (Edn_util.get value ":db/ident") Edn_util.as_keyword_t
+  Option.bind (Edn_util.get value "db/ident") Edn_util.as_keyword_t
 
 let tag_entity value =
-  match Option.bind (Edn_util.get value ":block/tags") Edn_util.as_seq with
+  match Option.bind (Edn_util.get value "block/tags") Edn_util.as_seq with
   | Some tags ->
       List.exists
         (fun tag ->
           match
-            Option.bind (Edn_util.get tag ":db/ident") Edn_util.as_string_like
+            Option.bind (Edn_util.get tag "db/ident") Edn_util.as_string_like
           with
-          | Some (":logseq.class/Tag" | "logseq.class/Tag") -> true
+          | Some "logseq.class/Tag" -> true
           | _ -> false)
         tags
   | None -> false
@@ -474,10 +474,10 @@ let tag_id_of_result result =
   | _ -> Error (Error.make (Edn_util.keyword_t "tag-not-found") "tag not found")
 
 let property_entity value =
-  Option.is_some (Edn_util.get value ":logseq.property/type")
+  Option.is_some (Edn_util.get value "logseq.property/type")
 
 let property_public value =
-  match Edn_util.get_bool value ":logseq.property/public?" with
+  match Edn_util.get_bool value "logseq.property/public?" with
   | Some false -> false
   | _ -> true
 
@@ -555,8 +555,7 @@ let resolve_property_ident invoke_config repo selector =
   | Key_name name ->
       bind
         (pull_property_by_ident invoke_config repo
-           (Edn_util.keyword_to_string
-              (Cli_primitive.normalize_keyword (Edn_util.keyword_t name))))
+           (Edn_util.keyword_to_string (Edn_util.keyword_t name)))
         (fun entity -> pure (property_ident_of_entity entity))
 
 let rec resolve_property_idents invoke_config repo = function
@@ -573,15 +572,15 @@ let rec resolve_property_idents invoke_config repo = function
 let normalize_task_options invoke_config repo options =
   let open Cli_effect in
   let options =
-    match Edn_util.get_string options ":priority" with
+    match Edn_util.get_string options "priority" with
     | Some priority_input -> (
         match normalize_priority priority_input with
         | Some priority ->
-            Edn_util.assoc ":priority" (Edn_util.keyword priority) options
+            Edn_util.assoc "priority" (Edn_util.keyword priority) options
         | None -> options)
     | None -> options
   in
-  match Edn_util.get_string options ":status" with
+  match Edn_util.get_string options "status" with
   | None -> pure (Ok options)
   | Some status_input when String.trim status_input = "" -> pure (Ok options)
   | Some status_input ->
@@ -594,7 +593,7 @@ let normalize_task_options invoke_config repo options =
           let statuses = Task_status.normalize_available_statuses values in
           match Task_status.resolve_status_ident status_input statuses with
           | Some ident ->
-              pure (Ok (Edn_util.assoc ":status" (Edn_util.any ident) options))
+              pure (Ok (Edn_util.assoc "status" (Edn_util.any ident) options))
           | None ->
               pure
                 (Error
@@ -613,26 +612,26 @@ let fields_include options field =
 
 let normalize_tag_options options =
   if
-    bool_option options ":with-properties"
-    || bool_option options ":with-extends"
-  then Edn_util.assoc ":expand" (Edn_util.bool true) options
+    bool_option options "with-properties"
+    || bool_option options "with-extends"
+  then Edn_util.assoc "expand" (Edn_util.bool true) options
   else options
 
 let normalize_property_options options =
-  if bool_option options ":with-classes" then
-    Edn_util.assoc ":expand" (Edn_util.bool true) options
+  if bool_option options "with-classes" then
+    Edn_util.assoc "expand" (Edn_util.bool true) options
   else options
 
 let normalize_node_options invoke_config repo options =
   let open Cli_effect in
   let tag_selectors =
-    Edn_util.get options ":tags"
+    Edn_util.get options "tags"
     |> Option.map string_list_of_value
     |> Option.value ~default:[]
     |> List.map parse_tag_selector
   in
   let property_selectors =
-    Edn_util.get options ":properties"
+    Edn_util.get options "properties"
     |> Option.map string_list_of_value
     |> Option.value ~default:[]
     |> List.map parse_property_selector
@@ -645,13 +644,13 @@ let normalize_node_options invoke_config repo options =
           | Error err -> pure (Error err)
           | Ok property_idents ->
               let options =
-                options |> Edn_util.remove ":tags"
-                |> Edn_util.remove ":properties"
+                options |> Edn_util.remove "tags"
+                |> Edn_util.remove "properties"
               in
               let options =
                 if tag_ids = [] then options
                 else
-                  Edn_util.assoc ":tag-ids"
+                  Edn_util.assoc "tag-ids"
                     (Edn_util.vector
                        (List.map (fun id -> Edn_util.int64 id) tag_ids))
                     options
@@ -659,7 +658,7 @@ let normalize_node_options invoke_config repo options =
               let options =
                 if property_idents = [] then options
                 else
-                  Edn_util.assoc ":property-idents"
+                  Edn_util.assoc "property-idents"
                     (Edn_util.vector
                        (List.map
                           (fun ident -> Edn_util.any ident)
@@ -675,7 +674,7 @@ let normalize_asset_options invoke_config repo options =
       | Some id ->
           pure
             (Ok
-               (Edn_util.assoc ":tag-ids"
+               (Edn_util.assoc "tag-ids"
                   (Edn_util.vector [ Edn_util.int64 id ])
                   options))
       | None ->
@@ -687,31 +686,31 @@ let normalize_asset_options invoke_config repo options =
 
 let prepare_tag_item options item =
   ( ( item |> fun item ->
-      if bool_option options ":with-properties" then item
-      else Edn_util.remove ":logseq.property.class/properties" item )
+      if bool_option options "with-properties" then item
+      else Edn_util.remove "logseq.property.class/properties" item )
   |> fun item ->
-    if bool_option options ":with-extends" then item
-    else Edn_util.remove ":logseq.property.class/extends" item )
+    if bool_option options "with-extends" then item
+    else Edn_util.remove "logseq.property.class/extends" item )
   |> fun item ->
   if fields_include options "description" then item
-  else Edn_util.remove ":logseq.property/description" item
+  else Edn_util.remove "logseq.property/description" item
 
 let prepare_property_item options item =
   let with_type =
-    match Edn_util.get_bool options ":with-type" with
+    match Edn_util.get_bool options "with-type" with
     | Some value -> value
     | None -> true
   in
   ( ( item |> fun item ->
-      if bool_option options ":with-classes" then item
-      else Edn_util.remove ":logseq.property/classes" item )
+      if bool_option options "with-classes" then item
+      else Edn_util.remove "logseq.property/classes" item )
   |> fun item ->
-    if with_type then item else Edn_util.remove ":logseq.property/type" item )
+    if with_type then item else Edn_util.remove "logseq.property/type" item )
   |> fun item ->
   if fields_include options "description" then item
-  else Edn_util.remove ":logseq.property/description" item
+  else Edn_util.remove "logseq.property/description" item
 
-let prepare_page_item item = Edn_util.remove ":logseq.property/type" item
+let prepare_page_item item = Edn_util.remove "logseq.property/type" item
 
 let prepare_items kind options items =
   match kind with
@@ -723,11 +722,11 @@ let prepare_items kind options items =
 let visible_title_fields = function
   | Node ->
       [
-        Edn_util.keyword_t ":block/title";
-        Edn_util.keyword_t ":block/page-title";
+        Edn_util.keyword_t "block/title";
+        Edn_util.keyword_t "block/page-title";
       ]
   | Page | Tag | Property | Task | Asset ->
-      [ Edn_util.keyword_t ":block/title" ]
+      [ Edn_util.keyword_t "block/title" ]
 
 let normalize_visible_title_fields config repo kind items =
   let fields = visible_title_fields kind in
@@ -749,14 +748,14 @@ let add_optional key value fields =
 
 let common_options common =
   []
-  |> add_optional ":fields" (Option.map value_of_string_list common.fields)
-  |> add_optional ":limit"
+  |> add_optional "fields" (Option.map value_of_string_list common.fields)
+  |> add_optional "limit"
        (Option.map (fun value -> Edn_util.int value) common.limit)
-  |> add_optional ":offset"
+  |> add_optional "offset"
        (Option.map (fun value -> Edn_util.int value) common.offset)
-  |> add_optional ":sort"
+  |> add_optional "sort"
        (Option.map (fun value -> Edn_util.string value) common.sort)
-  |> add_optional ":order"
+  |> add_optional "order"
        (Option.map
           (fun value -> Edn_util.string (string_of_order value))
           common.order)
@@ -771,49 +770,49 @@ let add_optional_bool key value fields =
 let options_of_parsed = function
   | Parsed_page opts ->
       common_options opts.common
-      |> add_bool ":expand" opts.expand
-      |> add_optional_bool ":include-built-in" opts.include_built_in
-      |> add_optional_bool ":include-journal" opts.include_journal
-      |> add_bool ":journal-only" opts.journal_only
-      |> add_bool ":include-hidden" opts.include_hidden
-      |> add_optional ":updated-after"
+      |> add_bool "expand" opts.expand
+      |> add_optional_bool "include-built-in" opts.include_built_in
+      |> add_optional_bool "include-journal" opts.include_journal
+      |> add_bool "journal-only" opts.journal_only
+      |> add_bool "include-hidden" opts.include_hidden
+      |> add_optional "updated-after"
            (Option.map
               (fun value -> Edn_util.int64 (Time.time_to_epoch_ms value))
               opts.updated_after)
-      |> add_optional ":created-after"
+      |> add_optional "created-after"
            (Option.map
               (fun value -> Edn_util.int64 (Time.time_to_epoch_ms value))
               opts.created_after)
       |> fun fields -> Edn_util.map (List.rev fields)
   | Parsed_tag opts ->
       common_options opts.common
-      |> add_bool ":expand" opts.expand
-      |> add_optional_bool ":include-built-in" opts.include_built_in
-      |> add_bool ":with-properties" opts.with_properties
-      |> add_bool ":with-extends" opts.with_extends
+      |> add_bool "expand" opts.expand
+      |> add_optional_bool "include-built-in" opts.include_built_in
+      |> add_bool "with-properties" opts.with_properties
+      |> add_bool "with-extends" opts.with_extends
       |> fun fields -> Edn_util.map (List.rev fields)
   | Parsed_property opts ->
       common_options opts.common
-      |> add_bool ":expand" opts.expand
-      |> add_optional_bool ":include-built-in" opts.include_built_in
-      |> add_bool ":with-classes" opts.with_classes
-      |> add_bool ":with-type" opts.with_type
+      |> add_bool "expand" opts.expand
+      |> add_optional_bool "include-built-in" opts.include_built_in
+      |> add_bool "with-classes" opts.with_classes
+      |> add_bool "with-type" opts.with_type
       |> fun fields -> Edn_util.map (List.rev fields)
   | Parsed_task opts ->
       common_options opts.common
-      |> add_optional ":status"
+      |> add_optional "status"
            (Option.map (fun value -> Edn_util.string value) opts.status)
-      |> add_optional ":priority"
+      |> add_optional "priority"
            (Option.map (fun value -> Edn_util.string value) opts.priority)
-      |> add_optional ":content"
+      |> add_optional "content"
            (Option.map (fun value -> Edn_util.string value) opts.content)
       |> fun fields -> Edn_util.map (List.rev fields)
   | Parsed_node opts ->
       common_options opts.common
-      |> add_optional ":tags"
+      |> add_optional "tags"
            (if opts.tags = [] then None
             else Some (value_of_string_list opts.tags))
-      |> add_optional ":properties"
+      |> add_optional "properties"
            (if opts.properties = [] then None
             else Some (value_of_string_list opts.properties))
       |> fun fields -> Edn_util.map (List.rev fields)
@@ -834,7 +833,7 @@ let build ?registry:_ config _globals parsed =
             })
 
 let items_value items =
-  Edn_util.map_t [ (Edn_util.keyword ":items", Edn_util.vector items) ]
+  Edn_util.map_t [ (Edn_util.keyword "items", Edn_util.vector items) ]
 
 let execute action config mode =
   let open Cli_effect in

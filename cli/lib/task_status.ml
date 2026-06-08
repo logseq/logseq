@@ -8,13 +8,13 @@ let vector_t values = Edn_util.vector_t values
 let status_closed_values_query =
   vector_t
     [
-      kw ":find";
+      kw "find";
       vector [ sym "?status-ident"; sym "..." ];
-      kw ":where";
-      vector [ sym "?property"; kw ":db/ident"; kw ":logseq.property/status" ];
+      kw "where";
+      vector [ sym "?property"; kw "db/ident"; kw "logseq.property/status" ];
       vector
-        [ sym "?value"; kw ":block/closed-value-property"; sym "?property" ];
-      vector [ sym "?value"; kw ":db/ident"; sym "?status-ident" ];
+        [ sym "?value"; kw "block/closed-value-property"; sym "?property" ];
+      vector [ sym "?value"; kw "db/ident"; sym "?status-ident" ];
     ]
 
 let starts_with ~prefix value =
@@ -39,7 +39,7 @@ let status_value_of_ident ident =
   |> drop_prefix "status." |> normalize_token
 
 let keyword_of_string value =
-  Cli_primitive.normalize_keyword (Edn_util.keyword_t value)
+  Edn_util.keyword_t value
 
 let status_of_value value =
   match Edn_util.as_string_like value with
@@ -61,14 +61,14 @@ let status_of_value value =
           in
           let ident =
             match
-              Option.bind (value_of_key ":ident") Edn_util.as_string_like
+              Option.bind (value_of_key "ident") Edn_util.as_string_like
             with
             | Some ident -> Some (keyword_of_string ident)
             | None -> None
           in
           let value =
             match
-              Option.bind (value_of_key ":value") Edn_util.as_string_like
+              Option.bind (value_of_key "value") Edn_util.as_string_like
             with
             | Some value -> Some (normalize_token value)
             | _ ->
@@ -89,7 +89,7 @@ let normalize_available_statuses values =
 let resolve_status_ident value statuses =
   let token = normalize_token value in
   let ident_from_token =
-    keyword_of_string (":logseq.property/status." ^ token)
+    keyword_of_string ("logseq.property/status." ^ token)
   in
   statuses
   |> List.find_map (fun s ->

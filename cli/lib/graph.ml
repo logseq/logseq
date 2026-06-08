@@ -289,9 +289,6 @@ let build ?registry:_ config globals parsed =
 
 let graphs_dir config = Filename.concat config.Cli_config.root_dir "graphs"
 
-let current_graph_path config =
-  Filename.concat config.Cli_config.root_dir "current-graph"
-
 let rec ensure_dir path =
   if Cli_unix.file_exists path then ()
   else
@@ -363,9 +360,9 @@ let classify_graph_dir graphs_root dir_name =
         Some
           (Edn_util.map
              [
-               (Edn_util.keyword ":kind", Edn_util.keyword ":canonical");
-               (Edn_util.keyword ":graph-name", Edn_util.string graph_name);
-               (Edn_util.keyword ":graph-dir", Edn_util.string dir_name);
+               (Edn_util.keyword "kind", Edn_util.keyword "canonical");
+               (Edn_util.keyword "graph-name", Edn_util.string graph_name);
+               (Edn_util.keyword "graph-dir", Edn_util.string dir_name);
              ])
     | _ -> (
         let legacy_graph_name =
@@ -382,12 +379,12 @@ let classify_graph_dir graphs_root dir_name =
             Some
               (Edn_util.map
                  [
-                   (Edn_util.keyword ":kind", Edn_util.keyword ":legacy");
-                   (Edn_util.keyword ":legacy-dir", Edn_util.string dir_name);
-                   (Edn_util.keyword ":graph-name", Edn_util.string graph_name);
-                   ( Edn_util.keyword ":target-graph-dir",
+                   (Edn_util.keyword "kind", Edn_util.keyword "legacy");
+                   (Edn_util.keyword "legacy-dir", Edn_util.string dir_name);
+                   (Edn_util.keyword "graph-name", Edn_util.string graph_name);
+                   ( Edn_util.keyword "target-graph-dir",
                      Edn_util.string target_graph_dir );
-                   ( Edn_util.keyword ":conflict",
+                   ( Edn_util.keyword "conflict",
                      Edn_util.bool
                        (target_graph_dir <> dir_name
                        && Cli_unix.file_exists
@@ -398,11 +395,11 @@ let classify_graph_dir graphs_root dir_name =
               Some
                 (Edn_util.map
                    [
-                     ( Edn_util.keyword ":kind",
-                       Edn_util.keyword ":legacy-undecodable" );
-                     (Edn_util.keyword ":legacy-dir", Edn_util.string dir_name);
-                     ( Edn_util.keyword ":reason",
-                       Edn_util.keyword ":graph-name-not-derivable" );
+                     ( Edn_util.keyword "kind",
+                       Edn_util.keyword "legacy-undecodable" );
+                     (Edn_util.keyword "legacy-dir", Edn_util.string dir_name);
+                     ( Edn_util.keyword "reason",
+                       Edn_util.keyword "graph-name-not-derivable" );
                    ])
             else None)
 
@@ -410,12 +407,12 @@ let graph_name_of_canonical_item value =
   match Edn_util.as_map value with
   | Some fields -> (
       match
-        ( List.assoc_opt (Edn_util.keyword ":kind") fields,
-          List.assoc_opt (Edn_util.keyword ":graph-name") fields )
+        ( List.assoc_opt (Edn_util.keyword "kind") fields,
+          List.assoc_opt (Edn_util.keyword "graph-name") fields )
       with
       | Some kind, Some graph -> (
           match (Edn_util.as_keyword kind, Edn_util.as_string graph) with
-          | Some ":canonical", Some graph -> Some graph
+          | Some "canonical", Some graph -> Some graph
           | _ -> None)
       | _ -> None)
   | None -> None
@@ -424,10 +421,10 @@ let graph_list_value graph_items =
   let graphs = List.filter_map graph_name_of_canonical_item graph_items in
   Edn_util.map
     [
-      ( Edn_util.keyword ":graphs",
+      ( Edn_util.keyword "graphs",
         Edn_util.vector (List.map (fun graph -> Edn_util.string graph) graphs)
       );
-      (Edn_util.keyword ":graph-items", Edn_util.vector graph_items);
+      (Edn_util.keyword "graph-items", Edn_util.vector graph_items);
     ]
 
 let list_graph_items config =
@@ -456,12 +453,12 @@ let string value = Edn_util.string value
 let bool value = Edn_util.bool value
 
 let export_format = function
-  | Edn -> Edn_util.keyword_t ":edn"
-  | Sqlite -> Edn_util.keyword_t ":sqlite"
+  | Edn -> Edn_util.keyword_t "edn"
+  | Sqlite -> Edn_util.keyword_t "sqlite"
 
 let import_format = function
-  | Import_edn -> Edn_util.keyword_t ":edn"
-  | Import_sqlite -> Edn_util.keyword_t ":sqlite"
+  | Import_edn -> Edn_util.keyword_t "edn"
+  | Import_sqlite -> Edn_util.keyword_t "sqlite"
 
 let default_sqlite_export_path config repo =
   let export_root =
@@ -480,28 +477,29 @@ let default_sqlite_export_path config repo =
 let export_graph_options opts =
   let fields = ref [] in
   if opts.include_timestamps then
-    fields := (kw ":include-timestamps?", bool true) :: !fields;
+    fields := (kw "include-timestamps?", bool true) :: !fields;
   if opts.exclude_built_in_pages then
-    fields := (kw ":exclude-built-in-pages?", bool true) :: !fields;
+    fields := (kw "exclude-built-in-pages?", bool true) :: !fields;
   if opts.exclude_namespaces <> [] then
     fields :=
-      ( kw ":exclude-namespaces",
+      ( kw "exclude-namespaces",
         Edn_util.set
           (List.map
              (fun value ->
                kw
-                 (if String.length value > 0 && value.[0] = ':' then value
-                  else ":" ^ value))
+                 (if String.length value > 0 && value.[0] = ':' then
+                    String.sub value 1 (String.length value - 1)
+                  else value))
              opts.exclude_namespaces) )
       :: !fields;
   Edn_util.map (List.rev !fields)
 
 let export_payload opts =
-  let fields = ref [ (kw ":export-type", kw ":graph") ] in
+  let fields = ref [ (kw "export-type", kw "graph") ] in
   let graph_options = export_graph_options opts in
   (match graph_options with
   | value when Edn_util.as_map value = Some [] -> ()
-  | _ -> fields := (kw ":graph-options", graph_options) :: !fields);
+  | _ -> fields := (kw "graph-options", graph_options) :: !fields);
   Edn_util.map (List.rev !fields)
 
 let graph_export_message mode _config path =
@@ -519,17 +517,13 @@ let graph_import_message mode _config graph opts new_graph =
     (Raw
        (Edn_util.map
           [
-            (kw ":new-graph?", bool new_graph); (kw ":message", string message);
+            (kw "new-graph?", bool new_graph); (kw "message", string message);
           ]))
-
-let persist_current_graph config graph =
-  ensure_dir config.Cli_config.root_dir;
-  write_file (current_graph_path config) (Cli_primitive.string_of_graph graph)
 
 let validation_errors value =
   match Edn_util.as_map value with
   | Some _ -> (
-      match Option.bind (Edn_util.get value ":errors") Edn_util.as_seq with
+      match Option.bind (Edn_util.get value "errors") Edn_util.as_seq with
       | Some errors -> errors
       | None -> [])
   | None -> []
@@ -540,7 +534,7 @@ let graph_validate_result mode _config result =
   match validation_errors result with
   | [] ->
       Cli_result.ok ~command:Command_id.Graph_validate mode
-        (Raw (Edn_util.map [ (kw ":result", result) ]))
+        (Raw (Edn_util.map [ (kw "result", result) ]))
   | errors ->
       let count = List.length errors in
       Cli_result.error ~command:Command_id.Graph_validate mode
@@ -559,22 +553,19 @@ let list values = Edn_util.list values
 let graph_info_query =
   vector_t
     [
-      kw ":find";
+      kw "find";
       sym "?ident";
       sym "?value";
-      kw ":where";
-      vector [ sym "?e"; kw ":db/ident"; sym "?ident" ];
+      kw "where";
+      vector [ sym "?e"; kw "db/ident"; sym "?ident" ];
       vector [ list [ sym "namespace"; sym "?ident" ]; sym "?ns" ];
       vector [ list [ sym "="; string "logseq.kv"; sym "?ns" ] ];
-      vector [ sym "?e"; kw ":kv/value"; sym "?value" ];
+      vector [ sym "?e"; kw "kv/value"; sym "?value" ];
     ]
 
 let graph_info_key value =
   match Edn_util.as_keyword value with
-  | Some value ->
-      if String.length value > 0 && value.[0] = ':' then
-        String.sub value 1 (String.length value - 1)
-      else value
+  | Some value -> value
   | None -> (
       match Edn_util.as_string value with
       | Some value ->
@@ -631,12 +622,12 @@ let graph_info_result mode _config graph rows =
   in
   let fields =
     [
-      (kw ":graph", string graph);
-      (kw ":logseq.kv/graph-created-at", graph_created_at);
-      ( kw ":logseq.kv/schema-version",
+      (kw "graph", string graph);
+      (kw "logseq.kv/graph-created-at", graph_created_at);
+      ( kw "logseq.kv/schema-version",
         Option.value (kv_value "logseq.kv/schema-version") ~default:Edn_util.nil
       );
-      (kw ":kv", Edn_util.map kv);
+      (kw "kv", Edn_util.map kv);
     ]
   in
   Cli_result.ok ~command:Command_id.Graph_info mode (Raw (Edn_util.map fields))
@@ -645,36 +636,20 @@ let read_file_opt path =
   if not (Cli_unix.file_exists path) then None
   else Some (Cli_unix.read_text_file path)
 
-let find_substring ~needle haystack =
-  let needle_len = String.length needle in
-  let haystack_len = String.length haystack in
-  let rec loop idx =
-    if idx + needle_len > haystack_len then None
-    else if String.sub haystack idx needle_len = needle then Some idx
-    else loop (idx + 1)
-  in
-  loop 0
+let strip_leading_colon value =
+  if String.length value > 0 && value.[0] = ':' then
+    String.sub value 1 (String.length value - 1)
+  else value
 
 let metadata_source backup_dir =
   match read_file_opt (backup_metadata_path backup_dir) with
   | Some text -> (
-      match find_substring ~needle:":source" text with
-      | Some idx ->
-          let start = idx + String.length ":source" in
-          let rest = String.sub text start (String.length text - start) in
-          let token =
-            rest |> String.split_on_char ' '
-            |> List.find_opt (fun value -> String.trim value <> "")
-            |> Option.value ~default:"" |> String.trim
-          in
-          let token =
-            token |> String.split_on_char '}' |> List.hd |> String.trim
-          in
-          if token = "" then None
-          else if String.length token > 0 && token.[0] = ':' then
-            Some (String.sub token 1 (String.length token - 1))
-          else Some token
-      | None -> None)
+      try
+        let metadata = Melange_edn.of_edn_string text in
+        Option.bind (Edn_util.get metadata "source") (fun value ->
+            Edn_util.as_string_like value)
+        |> Option.map strip_leading_colon
+      with _ -> None)
   | _ -> None
 
 let backup_entry root name =
@@ -687,14 +662,14 @@ let backup_entry root name =
     let stat = Cli_unix.stat db_path in
     let fields =
       [
-        (kw ":name", string name);
-        (kw ":created-at", Edn_util.float stat.Cli_unix.st_mtime);
-        (kw ":size-bytes", Edn_util.int stat.Cli_unix.st_size);
+        (kw "name", string name);
+        (kw "created-at", Edn_util.float stat.Cli_unix.st_mtime);
+        (kw "size-bytes", Edn_util.int stat.Cli_unix.st_size);
       ]
     in
     let fields =
       match metadata_source dir with
-      | Some source -> fields @ [ (kw ":source", string source) ]
+      | Some source -> fields @ [ (kw "source", string source) ]
       | None -> fields
     in
     Some (Edn_util.map fields)
@@ -711,7 +686,7 @@ let graph_backup_list_result mode config graph =
   Cli_result.ok ~command:Command_id.Graph_backup_list mode
     (Raw
        (Edn_util.map
-          [ (kw ":backups", Edn_util.vector (list_backups config graph)) ]))
+          [ (kw "backups", Edn_util.vector (list_backups config graph)) ]))
 
 let graph_backup_remove_result mode config graph src =
   let dir = backup_dir_path config graph src in
@@ -776,10 +751,16 @@ let write_backup_metadata dir ~backup_name ~repo ~db_path =
   let repo = Cli_primitive.string_of_repo repo in
   let created_at_ms = Time.time_to_epoch_ms (Time.now ()) in
   write_file (backup_metadata_path dir)
-    ("{:schema-version 1 :name \"" ^ String.escaped backup_name ^ "\" :repo \""
-   ^ String.escaped repo ^ "\" :source :cli :created-at-ms "
-    ^ Int64.to_string created_at_ms
-    ^ " :db-path \"" ^ String.escaped db_path ^ "\"}")
+    (Melange_edn.to_edn_string
+       (Edn_util.map
+          [
+            (kw "schema-version", Edn_util.int 1);
+            (kw "name", string backup_name);
+            (kw "repo", string repo);
+            (kw "source", kw "cli");
+            (kw "created-at-ms", Edn_util.int64 created_at_ms);
+            (kw "db-path", string db_path);
+          ]))
 
 let graph_backup_create_result mode config graph repo name backup_name =
   let open Cli_effect in
@@ -806,9 +787,9 @@ let graph_backup_create_result mode config graph repo name backup_name =
                    (Raw
                       (Edn_util.map
                          [
-                           (kw ":backup-name", string backup_name);
-                           (kw ":path", string db_path);
-                           ( kw ":message",
+                           (kw "backup-name", string backup_name);
+                           (kw "path", string db_path);
+                           ( kw "message",
                              string ("Created backup " ^ backup_name) );
                          ]))))
             else (
@@ -828,14 +809,14 @@ let graph_create_enable_sync_result mode _config graph repo create_result
     (Raw
        (Edn_util.map
           [
-            (kw ":graph", string (Cli_primitive.string_of_graph graph));
-            (kw ":repo", string (Cli_primitive.string_of_repo repo));
-            ( kw ":stages",
+            (kw "graph", string (Cli_primitive.string_of_graph graph));
+            (kw "repo", string (Cli_primitive.string_of_repo repo));
+            ( kw "stages",
               Edn_util.map
                 [
-                  (kw ":create", graph_create_data create_result);
-                  (kw ":upload", graph_create_data upload_result);
-                  (kw ":start", graph_create_data start_result);
+                  (kw "create", graph_create_data create_result);
+                  (kw "upload", graph_create_data upload_result);
+                  (kw "start", graph_create_data start_result);
                 ] );
           ]))
 
@@ -850,10 +831,9 @@ let execute_graph_create_invoke mode graph repo config =
           (Transport.thread_api_create_or_open_db invoke_config ~repo
              ~options:(Edn_util.map_t []))
           (fun result ->
-            persist_current_graph config graph;
             pure
               (Cli_result.ok ~command:Command_id.Graph_create mode
-                 (Raw (Edn_util.map [ (kw ":result", result) ])))))
+                 (Raw (Edn_util.map [ (kw "result", result) ])))))
 
 let execute_graph_create_enable_sync mode graph repo opts config =
   let open Cli_effect in
@@ -1009,7 +989,7 @@ let execute_graph_validate mode repo fix config =
     | Ok invoke_config ->
         bind
           (Transport.thread_api_validate_db invoke_config ~repo
-             ~options:(Edn_util.map_t [ (kw ":fix", bool fix) ]))
+             ~options:(Edn_util.map_t [ (kw "fix", bool fix) ]))
           (fun result -> pure (graph_validate_result mode config result)))
 
 let execute_graph_info mode graph repo config =
@@ -1044,7 +1024,6 @@ let execute_graph_switch mode graph repo config =
       | Error err ->
           pure (Cli_result.error ~command:Command_id.Graph_switch mode err)
       | Ok _ ->
-          persist_current_graph config graph;
           pure
             (Cli_result.ok ~command:Command_id.Graph_switch mode
                (Message ("Switched to graph \"" ^ graph_name ^ "\""))))

@@ -27,44 +27,33 @@ let set_verbose verbose =
   install_stderr_handler ();
   verbose_enabled := verbose
 
-let string_of_level = function
-  | Debug -> ":debug"
-  | Info -> ":info"
-  | Warn -> ":warn"
-  | Error -> ":error"
+let level_value = function
+  | Debug -> Edn_util.keyword "debug"
+  | Info -> Edn_util.keyword "info"
+  | Warn -> Edn_util.keyword "warn"
+  | Error -> Edn_util.keyword "error"
 
 let level_enabled = function
   | Debug -> !verbose_enabled
   | Info | Warn | Error -> true
-
-let escape_string value =
-  let buffer = Buffer.create (String.length value) in
-  String.iter
-    (function
-      | '\n' -> Buffer.add_string buffer "\\n"
-      | '\r' -> Buffer.add_string buffer "\\r"
-      | '\t' -> Buffer.add_string buffer "\\t"
-      | c -> Buffer.add_char buffer c)
-    value;
-  Buffer.contents buffer
 
 let preview_fields = function
   | None -> []
   | Some value ->
       let preview = truncate_preview value in
       [
-        Printf.sprintf ":preview %s" (escape_string preview.preview);
-        Printf.sprintf ":length %d" preview.length;
-        Printf.sprintf ":truncated? %b" preview.truncated;
+        (Edn_util.keyword "preview", Edn_util.string preview.preview);
+        (Edn_util.keyword "length", Edn_util.int preview.length);
+        (Edn_util.keyword "truncated?", Edn_util.bool preview.truncated);
       ]
 
 let log level message value =
   if !handler_installed && level_enabled level then
     let fields =
       [
-        Printf.sprintf ":level %s" (string_of_level level);
-        Printf.sprintf ":message %s" (escape_string message);
+        (Edn_util.keyword "level", level_value level);
+        (Edn_util.keyword "message", Edn_util.string message);
       ]
       @ preview_fields value
     in
-    prerr_endline ("{" ^ String.concat " " fields ^ "}")
+    prerr_endline (Melange_edn.to_edn_string (Edn_util.map fields))

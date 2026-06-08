@@ -190,7 +190,7 @@ let status_assignment = function
               {
                 Property.key =
                   Property.Key_ident
-                    (Edn_util.keyword_t ":logseq.property/status");
+                    (Edn_util.keyword_t "logseq.property/status");
                 value = Edn_util.any ident;
               };
             ]
@@ -275,23 +275,23 @@ let build ?registry:_ config _globals (Parsed_update_block opts) =
   | Some repo -> build_action opts repo
 
 let block_selector =
-  vector [ kw ":db/id"; kw ":block/uuid"; kw ":block/name"; kw ":block/title" ]
+  vector [ kw "db/id"; kw "block/uuid"; kw "block/name"; kw "block/title" ]
 
 let page_selector =
-  vector [ kw ":db/id"; kw ":block/uuid"; kw ":block/name"; kw ":block/title" ]
+  vector [ kw "db/id"; kw "block/uuid"; kw "block/name"; kw "block/title" ]
 
 let tag_selector =
-  vector [ kw ":db/id"; kw ":block/uuid"; kw ":block/name"; kw ":block/title" ]
+  vector [ kw "db/id"; kw "block/uuid"; kw "block/name"; kw "block/title" ]
 
-let id_of_entity value = Edn_util.get_int64 value ":db/id"
+let id_of_entity value = Edn_util.get_int64 value "db/id"
 
 let uuid_of_entity value =
-  Option.bind (Edn_util.get value ":block/uuid") Edn_util.as_string_like
+  Option.bind (Edn_util.get value "block/uuid") Edn_util.as_string_like
 
 let ident_of_entity value =
-  Option.bind (Edn_util.get value ":db/ident") Edn_util.as_keyword_t
+  Option.bind (Edn_util.get value "db/ident") Edn_util.as_keyword_t
 
-let page_entity value = Option.is_some (Edn_util.get_string value ":block/name")
+let page_entity value = Option.is_some (Edn_util.get_string value "block/name")
 
 let pull invoke_config repo selector lookup =
   Transport.thread_api_pull invoke_config ~repo
@@ -303,7 +303,7 @@ let pull_by_id invoke_config repo selector id =
 
 let pull_by_uuid invoke_config repo selector uuid =
   pull invoke_config repo selector
-    (vector [ kw ":block/uuid"; Edn_util.uuid uuid ])
+    (vector [ kw "block/uuid"; Edn_util.uuid uuid ])
 
 let normalized_page_name value = String.lowercase_ascii (String.trim value)
 let variable value = Edn_util.string ("~$" ^ value)
@@ -312,20 +312,20 @@ let list values = Edn_util.list values
 let tag_query selector =
   vector
     [
-      Edn_util.map [ (kw ":title", variable "?title") ];
-      kw ":where";
-      vector [ variable "?tag"; kw ":block/title"; variable "?title" ];
-      vector [ variable "?tag"; kw ":block/tags"; kw ":logseq.class/Tag" ];
+      Edn_util.map [ (kw "title", variable "?title") ];
+      kw "where";
+      vector [ variable "?tag"; kw "block/title"; variable "?title" ];
+      vector [ variable "?tag"; kw "block/tags"; kw "logseq.class/Tag" ];
       list
         [
           Edn_util.string "~$clojure.string/includes?";
           variable "?title";
           variable "?query";
         ];
-      kw ":in";
+      kw "in";
       variable "$";
       variable "?query";
-      kw ":result-transform";
+      kw "result-transform";
       list
         [
           Edn_util.string "~$fn";
@@ -338,19 +338,19 @@ let tag_query selector =
                   Edn_util.string "~$fn";
                   vector
                     [
-                      Edn_util.map [ (kw ":keys", vector [ variable "title" ]) ];
+                      Edn_util.map [ (kw "keys", vector [ variable "title" ]) ];
                     ];
                   list
                     [
                       Edn_util.string "~$d/entity";
                       variable "$";
-                      vector [ kw ":block/name"; variable "title" ];
+                      vector [ kw "block/name"; variable "title" ];
                     ];
                 ];
               variable "result";
             ];
         ];
-      kw ":view";
+      kw "view";
       selector;
     ]
 
@@ -426,7 +426,7 @@ let resolve_target invoke_config repo action =
       bind
         (pull invoke_config repo page_selector
            (vector
-              [ kw ":block/name"; Edn_util.string (normalized_page_name page) ]))
+              [ kw "block/name"; Edn_util.string (normalized_page_name page) ]))
         (fun entity ->
           match id_of_entity entity with
           | None ->
@@ -447,12 +447,12 @@ let pos_opts = function
   | Some Block.Last_child ->
       Edn_util.map
         [
-          (kw ":sibling?", Edn_util.bool false);
-          (kw ":bottom?", Edn_util.bool true);
+          (kw "sibling?", Edn_util.bool false);
+          (kw "bottom?", Edn_util.bool true);
         ]
-  | Some Sibling -> Edn_util.map [ (kw ":sibling?", Edn_util.bool true) ]
+  | Some Sibling -> Edn_util.map [ (kw "sibling?", Edn_util.bool true) ]
   | Some First_child | None ->
-      Edn_util.map [ (kw ":sibling?", Edn_util.bool false) ]
+      Edn_util.map [ (kw "sibling?", Edn_util.bool false) ]
 
 let lookup_of_tag = function
   | Selector.Tag_id id -> Edn_util.int64 id
@@ -493,7 +493,7 @@ let resolve_property_ident invoke_config repo = function
       let open Cli_effect in
       bind
         (pull invoke_config repo
-           (vector [ kw ":db/ident" ])
+           (vector [ kw "db/ident" ])
            (Edn_util.int64 id))
         (fun result ->
           match ident_of_entity result with
@@ -505,12 +505,12 @@ let resolve_property_ident invoke_config repo = function
                       (Edn_util.keyword_t "property-not-found")
                       "property not found")))
   | Key_name name ->
-      let ident = Cli_primitive.normalize_keyword (Edn_util.keyword_t name) in
+      let ident = Edn_util.keyword_t name in
       let open Cli_effect in
       bind
         (pull invoke_config repo
-           (vector [ kw ":db/id" ])
-           (vector [ kw ":db/ident"; Edn_util.any ident ]))
+           (vector [ kw "db/id" ])
+           (vector [ kw "db/ident"; Edn_util.any ident ]))
         (fun result ->
           if Option.is_some (id_of_entity result) then pure (Ok ident)
           else
@@ -566,9 +566,9 @@ let property_ops block_uuids ~update_tag_ids ~remove_tag_ids ~update_properties
       (fun tag_id ->
         Edn_util.vector
           [
-            kw ":batch-delete-property-value";
+            kw "batch-delete-property-value";
             Edn_util.vector
-              [ uuid_values; kw ":block/tags"; Edn_util.int64 tag_id ];
+              [ uuid_values; kw "block/tags"; Edn_util.int64 tag_id ];
           ])
       remove_tag_ids
   in
@@ -577,7 +577,7 @@ let property_ops block_uuids ~update_tag_ids ~remove_tag_ids ~update_properties
       (fun ident ->
         Edn_util.vector
           [
-            kw ":batch-remove-property";
+            kw "batch-remove-property";
             Edn_util.vector [ uuid_values; Edn_util.any ident ];
           ])
       remove_properties
@@ -587,11 +587,11 @@ let property_ops block_uuids ~update_tag_ids ~remove_tag_ids ~update_properties
       (fun tag_id ->
         Edn_util.vector
           [
-            kw ":batch-set-property";
+            kw "batch-set-property";
             Edn_util.vector
               [
                 uuid_values;
-                kw ":block/tags";
+                kw "block/tags";
                 Edn_util.int64 tag_id;
                 Edn_util.map [];
               ];
@@ -603,7 +603,7 @@ let property_ops block_uuids ~update_tag_ids ~remove_tag_ids ~update_properties
       (fun (ident, value) ->
         Edn_util.vector
           [
-            kw ":batch-set-property";
+            kw "batch-set-property";
             Edn_util.vector
               [ uuid_values; Edn_util.any ident; value; Edn_util.map [] ];
           ])
@@ -644,13 +644,13 @@ let save_ops source_uuid = function
       [
         Edn_util.vector
           [
-            kw ":save-block";
+            kw "save-block";
             Edn_util.vector
               [
                 Edn_util.map
                   [
-                    (kw ":block/uuid", Edn_util.uuid source_uuid);
-                    (kw ":block/title", Edn_util.string content);
+                    (kw "block/uuid", Edn_util.uuid source_uuid);
+                    (kw "block/title", Edn_util.string content);
                   ];
                 Edn_util.map [];
               ];
@@ -663,7 +663,7 @@ let move_ops source_uuid pos = function
       [
         Edn_util.vector
           [
-            kw ":move-blocks";
+            kw "move-blocks";
             Edn_util.vector
               [
                 Edn_util.vector [ Edn_util.uuid source_uuid ];
@@ -689,12 +689,12 @@ let execute_ops mode invoke_config action source_uuid target_uuid =
         if ops = [] then
           pure
             (Cli_result.ok ~command:Command_id.Upsert_block mode
-               (Raw (Edn_util.map [ (kw ":result", Edn_util.nil) ])))
+               (Raw (Edn_util.map [ (kw "result", Edn_util.nil) ])))
         else
           bind (apply_outliner_ops invoke_config action.repo ops) (fun result ->
               pure
                 (Cli_result.ok ~command:Command_id.Upsert_block mode
-                   (Raw (Edn_util.map [ (kw ":result", result) ])))))
+                   (Raw (Edn_util.map [ (kw "result", result) ])))))
 
 let resolve_optional_target_uuid invoke_config action =
   let open Cli_effect in

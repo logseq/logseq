@@ -32,26 +32,21 @@ let non_empty s =
   let s = trim s in
   if s = "" then None else Some s
 
-let normalize_keyword (kw : keyword) =
-  match kw with
-  | Melange_edn.Keyword kw -> Melange_edn.Keyword (Edn_util.keyword_name kw)
-  | _ -> assert false
-
 let keyword_name kw =
-  match normalize_keyword kw with
+  match kw with
   | Melange_edn.Keyword kw -> (
+      let kw = Melange_edn.keyword_to_string kw in
       match String.rindex_opt kw '/' with
       | Some i -> String.sub kw (i + 1) (String.length kw - i - 1)
       | None -> String.trim kw)
-  | _ -> assert false
 
 let keyword_namespace kw =
-  match normalize_keyword kw with
+  match kw with
   | Melange_edn.Keyword kw -> (
+      let kw = Melange_edn.keyword_to_string kw in
       match String.rindex_opt kw '/' with
-      | Some i -> Some (":" ^ String.sub kw 0 i)
+      | Some i -> Some (String.sub kw 0 i)
       | None -> None)
-  | _ -> assert false
 
 let is_uuid_hex = function
   | '0' .. '9' | 'a' .. 'f' | 'A' .. 'F' -> true

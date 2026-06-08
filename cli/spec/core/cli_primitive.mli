@@ -20,9 +20,7 @@ val create_repo : string -> repo
 
 val string_of_graph : graph -> string
 val string_of_repo : repo -> string
-val trim : string -> string
 val non_empty : string -> string option
-val normalize_keyword : keyword -> keyword
 val keyword_name : keyword -> string
 val keyword_namespace : keyword -> string option
 val is_uuid_string : string -> bool

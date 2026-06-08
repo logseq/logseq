@@ -22,13 +22,13 @@ let add_raw_field key raw fields =
 
 let minimal_list_item e =
   []
-  |> add_raw_field ":logseq.property/type" e.Entity.raw
-  |> add_raw_field ":db/cardinality" e.Entity.raw
-  |> add_raw_field ":db/ident" e.Entity.raw
-  |> add_raw_field ":block/updated-at" e.Entity.raw
-  |> add_raw_field ":block/created-at" e.Entity.raw
-  |> add_raw_field ":block/title" e.Entity.raw
-  |> add_raw_field ":db/id" e.Entity.raw
+  |> add_raw_field "logseq.property/type" e.Entity.raw
+  |> add_raw_field "db/cardinality" e.Entity.raw
+  |> add_raw_field "db/ident" e.Entity.raw
+  |> add_raw_field "block/updated-at" e.Entity.raw
+  |> add_raw_field "block/created-at" e.Entity.raw
+  |> add_raw_field "block/title" e.Entity.raw
+  |> add_raw_field "db/id" e.Entity.raw
   |> fun fields -> Edn_util.map_t fields
 
 let values_of_collection value =
@@ -45,7 +45,7 @@ let value_ident value =
       | Some keyword -> Some (Edn_util.keyword_t keyword)
       | None ->
           if Option.is_some (Edn_util.as_map value) then
-            Option.bind (Edn_util.get value ":db/ident") Edn_util.as_keyword_t
+            Option.bind (Edn_util.get value "db/ident") Edn_util.as_keyword_t
           else None)
 
 let value_id value =
@@ -53,7 +53,7 @@ let value_id value =
   | Some id -> Some id
   | None ->
       if Option.is_some (Edn_util.as_map value) then
-        Edn_util.get_int64 value ":db/id"
+        Edn_util.get_int64 value "db/id"
       else None
 
 let bool_field key value =
@@ -65,7 +65,7 @@ let time_field key value =
   Option.map Time.time_of_epoch_ms (int_field key value)
 
 let tags_of_value value =
-  match Edn_util.get value ":block/tags" with
+  match Edn_util.get value "block/tags" with
   | Some tags_value -> (
       match Edn_util.as_seq tags_value with
       | Some tags -> List.filter_map value_ident tags
@@ -74,7 +74,7 @@ let tags_of_value value =
   | None -> []
 
 let tag_ids_of_value value =
-  match Edn_util.get value ":block/tags" with
+  match Edn_util.get value "block/tags" with
   | Some tags_value -> (
       match Edn_util.as_seq tags_value with
       | Some tags -> List.filter_map value_id tags
@@ -89,7 +89,6 @@ let key_matches key value =
       || String.length key > 0
          && key.[0] = ':'
          && candidate = String.sub key 1 (String.length key - 1)
-      || candidate = ":" ^ key
   | None -> false
 
 let has_key key value =
@@ -99,17 +98,17 @@ let has_key key value =
   | None -> false
 
 let is_built_in value =
-  bool_field ":logseq.property/built-in?" value
-  || bool_field ":block/built-in?" value
+  bool_field "logseq.property/built-in?" value
+  || bool_field "block/built-in?" value
 
 let is_hidden value =
-  bool_field ":block/hidden?" value
-  || bool_field ":logseq.property/hidden?" value
-  || bool_field ":logseq.property/hide?" value
+  bool_field "block/hidden?" value
+  || bool_field "logseq.property/hidden?" value
+  || bool_field "logseq.property/hide?" value
 
 let is_journal value =
-  bool_field ":block/journal?" value
-  || Option.is_some (Edn_util.get value ":block/journal-day")
+  bool_field "block/journal?" value
+  || Option.is_some (Edn_util.get value "block/journal-day")
 
 let with_entity_raw raw kind =
   let entity = Entity.of_value raw in
@@ -117,9 +116,9 @@ let with_entity_raw raw kind =
     entity with
     kind;
     tags = tags_of_value raw;
-    created_at = time_field ":block/created-at" raw;
-    updated_at = time_field ":block/updated-at" raw;
-    deleted_at = time_field ":logseq.property/deleted-at" raw;
+    created_at = time_field "block/created-at" raw;
+    updated_at = time_field "block/updated-at" raw;
+    deleted_at = time_field "logseq.property/deleted-at" raw;
   }
 
 let entity_with_output raw kind ~expand =
@@ -145,8 +144,8 @@ let list_pages db filter =
       let journal = is_journal value in
       if filter.journal_only then journal
       else filter.include_journal || not journal)
-  |> List.filter (include_after ":block/created-at" filter.created_after)
-  |> List.filter (include_after ":block/updated-at" filter.updated_after)
+  |> List.filter (include_after "block/created-at" filter.created_after)
+  |> List.filter (include_after "block/updated-at" filter.updated_after)
   |> List.map (fun raw ->
       entity_with_output raw Entity.Page ~expand:filter.expand)
 
@@ -162,10 +161,10 @@ let option_ident key options =
   | Some value -> value_ident value
   | None -> None
 
-let option_expand options = option_bool ":expand" false options
+let option_expand options = option_bool "expand" false options
 
 let option_include_built_in options =
-  option_bool ":include-built-in" true options
+  option_bool "include-built-in" true options
 
 let list_schema_entities db options kind =
   let expand = option_expand options in
@@ -190,25 +189,25 @@ let string_includes ~needle value =
   loop 0
 
 let list_tasks db options =
-  let status = option_ident ":status" options in
-  let priority = option_ident ":priority" options in
-  let content = option_string ":content" options in
+  let status = option_ident "status" options in
+  let priority = option_ident "priority" options in
+  let content = option_string "content" options in
   db |> values_of_collection
   |> List.filter (fun value ->
       match status with
       | None -> true
       | Some expected ->
-          option_ident ":logseq.property/status" value = Some expected)
+          option_ident "logseq.property/status" value = Some expected)
   |> List.filter (fun value ->
       match priority with
       | None -> true
       | Some expected ->
-          option_ident ":logseq.property/priority" value = Some expected)
+          option_ident "logseq.property/priority" value = Some expected)
   |> List.filter (fun value ->
       match content with
       | None -> true
       | Some needle -> (
-          match Edn_util.get_string value ":block/title" with
+          match Edn_util.get_string value "block/title" with
           | Some title -> string_includes ~needle title
           | None -> false))
   |> List.map (fun raw -> entity_with_output raw Entity.Task ~expand:false)
@@ -230,8 +229,8 @@ let has_all_property_idents expected value =
 
 let schema_definition value =
   let tags = tags_of_value value in
-  List.mem (Edn_util.keyword_t ":logseq.class/Tag") tags
-  || List.mem (Edn_util.keyword_t ":logseq.class/Property") tags
+  List.mem (Edn_util.keyword_t "logseq.class/Tag") tags
+  || List.mem (Edn_util.keyword_t "logseq.class/Property") tags
 
 let list_nodes db filter =
   db |> values_of_collection
@@ -240,7 +239,7 @@ let list_nodes db filter =
   |> List.filter (has_all_property_idents filter.property_idents)
   |> List.map (fun raw ->
       let kind =
-        if Option.is_some (Edn_util.get raw ":block/page") then Entity.Block
+        if Option.is_some (Edn_util.get raw "block/page") then Entity.Block
         else Entity.Page
       in
       entity_with_output raw kind ~expand:false)
