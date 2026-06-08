@@ -131,11 +131,15 @@
   (for [[idx {:keys [type items item]}] (medley/indexed (video-inline-segments items))]
     (case type
       :video
-      [:div.video-embed-block
-       {:key (video-macro-key item)
-        :data-video-macro-name (get-in item [1 :name])
-        :data-video-macro-id (first (get-in item [1 :arguments]))}
-       (inline-f item)]
+       (let [macro-name (get-in item [1 :name])
+             macro-id (first (get-in item [1 :arguments]))]
+         [:div.video-embed-block
+          {:key (if (seq macro-id)
+                  (str "video-macro-" macro-name "-" macro-id)
+                  (str "video-macro-" macro-name "-idx-" idx))
+           :data-video-macro-name macro-name
+           :data-video-macro-id macro-id}
+          (inline-f item)])
 
       :inline
       (into [:div.video-inline-text
