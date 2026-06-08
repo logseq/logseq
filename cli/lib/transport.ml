@@ -17,19 +17,6 @@ let starts_with ~prefix value =
   let prefix_len = String.length prefix in
   String.length value >= prefix_len && String.sub value 0 prefix_len = prefix
 
-let json_escape value =
-  let buffer = Buffer.create (String.length value + 8) in
-  String.iter
-    (function
-      | '"' -> Buffer.add_string buffer "\\\""
-      | '\\' -> Buffer.add_string buffer "\\\\"
-      | '\n' -> Buffer.add_string buffer "\\n"
-      | '\r' -> Buffer.add_string buffer "\\r"
-      | '\t' -> Buffer.add_string buffer "\\t"
-      | c -> Buffer.add_char buffer c)
-    value;
-  Buffer.contents buffer
-
 let strip_prefix prefix value =
   if starts_with ~prefix value then
     String.sub value (String.length prefix)
@@ -112,49 +99,6 @@ let find_substring_from ~needle haystack start =
   in
   if needle_len = 0 then Some start else loop start
 
-let parse_json_string_at text start =
-  if start >= String.length text || text.[start] <> '"' then None
-  else
-    let buffer = Buffer.create 16 in
-    let rec loop idx =
-      if idx >= String.length text then None
-      else
-        match text.[idx] with
-        | '"' -> Some (Buffer.contents buffer)
-        | '\\' when idx + 1 < String.length text ->
-            (match text.[idx + 1] with
-            | '"' -> Buffer.add_char buffer '"'
-            | '\\' -> Buffer.add_char buffer '\\'
-            | '/' -> Buffer.add_char buffer '/'
-            | 'n' -> Buffer.add_char buffer '\n'
-            | 'r' -> Buffer.add_char buffer '\r'
-            | 't' -> Buffer.add_char buffer '\t'
-            | other -> Buffer.add_char buffer other);
-            loop (idx + 2)
-        | c ->
-            Buffer.add_char buffer c;
-            loop (idx + 1)
-    in
-    loop (start + 1)
-
-let json_string_field_from ?(start = 0) field body =
-  let key = "\"" ^ field ^ "\"" in
-  match find_substring_from ~needle:key body start with
-  | None -> None
-  | Some idx ->
-      let rec skip_ws idx =
-        if idx < String.length body then
-          match body.[idx] with
-          | ' ' | '\n' | '\r' | '\t' -> skip_ws (idx + 1)
-          | _ -> idx
-        else idx
-      in
-      let colon = skip_ws (idx + String.length key) in
-      if colon >= String.length body || body.[colon] <> ':' then None
-      else
-        let value_start = skip_ws (colon + 1) in
-        parse_json_string_at body value_start
-
 let http_error_message status body =
   let fallback =
     if String.trim body = "" then
@@ -163,13 +107,16 @@ let http_error_message status body =
       "http request failed (" ^ string_of_int status ^ ")\nhttp response: "
       ^ body
   in
-  match find_substring_from ~needle:{|"error"|} body 0 with
-  | Some error_start ->
-      Option.value
-        (json_string_field_from ~start:error_start "message" body)
-        ~default:fallback
-  | None ->
-      Option.value (json_string_field_from "message" body) ~default:fallback
+  try
+    match Json_util.object_of_json_string body with
+    | Some object_ ->
+        Option.value
+          (match Json_util.nested_string_field object_ "error" "message" with
+          | Some _ as message -> message
+          | None -> Json_util.string_field object_ "message")
+          ~default:fallback
+    | None -> fallback
+  with _ -> fallback
 
 let response_status response = Fetch.Response.status response
 let success_status status = status >= 200 && status <= 299
@@ -190,161 +137,10 @@ let method_name method_ =
 
 let invoke_body method_ args =
   let args_transit = transit_json_of_value (Edn_util.vector args) in
-  "{\"method\":\""
-  ^ json_escape (method_name method_)
-  ^ "\",\"argsTransit\":\"" ^ json_escape args_transit ^ "\"}"
+  Json_util.string_of_string_fields
+    [ ("method", method_name method_); ("argsTransit", args_transit) ]
 
-type json_parser = { text : string; mutable pos : int }
-
-let parser text = { text; pos = 0 }
-let parser_done p = p.pos >= String.length p.text
-let peek p = if parser_done p then None else Some p.text.[p.pos]
-
-let bump p =
-  let c = p.text.[p.pos] in
-  p.pos <- p.pos + 1;
-  c
-
-let rec skip_ws p =
-  match peek p with
-  | Some (' ' | '\n' | '\r' | '\t') ->
-      ignore (bump p);
-      skip_ws p
-  | _ -> ()
-
-let expect p expected =
-  skip_ws p;
-  match peek p with
-  | Some c when c = expected -> ignore (bump p)
-  | _ -> invalid_arg ("expected " ^ String.make 1 expected)
-
-let parse_json_string p =
-  skip_ws p;
-  expect p '"';
-  let buffer = Buffer.create 16 in
-  let rec loop () =
-    match bump p with
-    | '"' -> Buffer.contents buffer
-    | '\\' -> (
-        match bump p with
-        | '"' ->
-            Buffer.add_char buffer '"';
-            loop ()
-        | '\\' ->
-            Buffer.add_char buffer '\\';
-            loop ()
-        | '/' ->
-            Buffer.add_char buffer '/';
-            loop ()
-        | 'n' ->
-            Buffer.add_char buffer '\n';
-            loop ()
-        | 'r' ->
-            Buffer.add_char buffer '\r';
-            loop ()
-        | 't' ->
-            Buffer.add_char buffer '\t';
-            loop ()
-        | other ->
-            Buffer.add_char buffer other;
-            loop ())
-    | c ->
-        Buffer.add_char buffer c;
-        loop ()
-  in
-  loop ()
-
-let rec parse_json_value p =
-  skip_ws p;
-  match peek p with
-  | Some '"' -> Edn_util.string (parse_json_string p)
-  | Some '{' -> parse_json_object p
-  | Some '[' -> parse_json_array p
-  | Some 't' ->
-      p.pos <- p.pos + 4;
-      Edn_util.bool true
-  | Some 'f' ->
-      p.pos <- p.pos + 5;
-      Edn_util.bool false
-  | Some 'n' ->
-      p.pos <- p.pos + 4;
-      Edn_util.nil
-  | Some _ -> parse_json_number p
-  | None -> invalid_arg "empty json"
-
-and parse_json_object p =
-  expect p '{';
-  skip_ws p;
-  let rec loop fields =
-    skip_ws p;
-    match peek p with
-    | Some '}' ->
-        ignore (bump p);
-        Edn_util.map (List.rev fields)
-    | _ -> (
-        let key = parse_json_string p in
-        expect p ':';
-        let value = parse_json_value p in
-        skip_ws p;
-        match peek p with
-        | Some ',' ->
-            ignore (bump p);
-            loop ((Edn_util.string key, value) :: fields)
-        | Some '}' ->
-            ignore (bump p);
-            Edn_util.map (List.rev ((Edn_util.string key, value) :: fields))
-        | _ -> invalid_arg "expected object separator")
-  in
-  loop []
-
-and parse_json_array p =
-  expect p '[';
-  skip_ws p;
-  let rec loop values =
-    skip_ws p;
-    match peek p with
-    | Some ']' ->
-        ignore (bump p);
-        Edn_util.vector (List.rev values)
-    | _ -> (
-        let value = parse_json_value p in
-        skip_ws p;
-        match peek p with
-        | Some ',' ->
-            ignore (bump p);
-            loop (value :: values)
-        | Some ']' ->
-            ignore (bump p);
-            Edn_util.vector (List.rev (value :: values))
-        | _ -> invalid_arg "expected array separator")
-  in
-  loop []
-
-and parse_json_number p =
-  let start = p.pos in
-  let rec loop () =
-    match peek p with
-    | Some ('0' .. '9' | '-' | '+') ->
-        ignore (bump p);
-        loop ()
-    | _ -> ()
-  in
-  loop ();
-  let text = String.sub p.text start (p.pos - start) in
-  Edn_util.int (int_of_string text)
-
-let value_of_json text = parse_json_value (parser text)
 let find_substring ~needle haystack = find_substring_from ~needle haystack 0
-
-let extract_json_string_field ~field body =
-  let key = "\"" ^ field ^ "\"" in
-  match find_substring ~needle:key body with
-  | Some idx ->
-      let p = parser body in
-      p.pos <- idx + String.length key;
-      expect p ':';
-      Some (parse_json_string p)
-  | None -> None
 
 let invoke config method_ args =
   let base_url = normalize_base_url config.base_url in
@@ -352,8 +148,11 @@ let invoke config method_ args =
   Profile_types.time config.profile_session stage (fun () ->
       Cli_effect.map
         (fun (_response, body) ->
-          match extract_json_string_field ~field:"resultTransit" body with
-          | Some result_transit -> value_of_transit_string result_transit
+          match Json_util.object_of_json_string body with
+          | Some object_ -> (
+              match Json_util.string_field object_ "resultTransit" with
+              | Some result_transit -> value_of_transit_string result_transit
+              | None -> Edn_util.nil)
           | None -> Edn_util.nil)
         (request ~timeout_span:config.timeout_span Fetch.Post
            (base_url ^ "/v1/invoke")
@@ -532,38 +331,6 @@ let decode_event_payload payload =
 
 let max_non_progress_event_decode_bytes = 256 * 1024
 
-let json_string_field field text =
-  let len = String.length text in
-  let rec skip_ws index =
-    if index < len then
-      match text.[index] with
-      | ' ' | '\n' | '\r' | '\t' -> skip_ws (index + 1)
-      | _ -> index
-    else index
-  in
-  let rec parse_string index buffer =
-    if index >= len then None
-    else
-      match text.[index] with
-      | '"' -> Some (Buffer.contents buffer, index + 1)
-      | '\\' when index + 1 < len ->
-          Buffer.add_char buffer text.[index];
-          Buffer.add_char buffer text.[index + 1];
-          parse_string (index + 2) buffer
-      | c ->
-          Buffer.add_char buffer c;
-          parse_string (index + 1) buffer
-  in
-  match find_substring ~needle:("\"" ^ field ^ "\"") text with
-  | None -> None
-  | Some field_index ->
-      let colon_index = skip_ws (field_index + String.length field + 2) in
-      if colon_index >= len || text.[colon_index] <> ':' then None
-      else
-        let value_index = skip_ws (colon_index + 1) in
-        if value_index >= len || text.[value_index] <> '"' then None
-        else Option.map fst (parse_string (value_index + 1) (Buffer.create 16))
-
 let decode_event event_text =
   let data_line =
     event_text |> String.split_on_char '\n'
@@ -576,13 +343,18 @@ let decode_event event_text =
   | None -> None
   | Some data -> (
       try
-        match json_string_field "type" data with
+        let json = Js.Json.parseExn data in
+        let event_type =
+          Option.bind (Js.Json.decodeObject json) (fun object_ ->
+              Json_util.string_field object_ "type")
+        in
+        match event_type with
         | Some event_type
           when event_type <> "rtc-log"
                && String.length data > max_non_progress_event_decode_bytes ->
             Some (keyword_from_string event_type, Edn_util.nil)
         | _ -> (
-            let event = value_of_json data in
+            let event = Json_util.value_of_json json in
             let decoded_payload =
               match value_get_string_key "payload" event with
               | Some payload -> decode_event_payload payload
