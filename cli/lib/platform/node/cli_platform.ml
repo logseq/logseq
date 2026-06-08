@@ -48,6 +48,7 @@ module Http_server = struct
   let text_headers () =
     let headers = Js.Dict.empty () in
     Js.Dict.set headers "Content-Type" "text/plain; charset=utf-8";
+    Js.Dict.set headers "Connection" "close";
     headers
 
   let close_ignore server = try close server (fun[@u] () -> ()) with _ -> ()
