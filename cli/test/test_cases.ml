@@ -8,9 +8,17 @@ let () =
       let output = run_cli [ "--help" ] in
       expect_named_contains "help" output "Usage");
 
-  test "--version prints binary name" (fun () ->
+  test "--version prints build metadata" (fun () ->
       let output = run_cli [ "--version" ] in
-      expect_named_contains "version" output "logseq-cli")
+      let lines = string_split (string_trim_end output) "\n" in
+      if Array.length lines <> 2 then
+        fail_test
+          (Printf.sprintf "version: expected 2 lines, got %d\n%s"
+             (Array.length lines) output);
+      expect_named_contains "version build time" lines.(0) "Build time: ";
+      expect_named_contains "version revision" lines.(1) "Revision: ";
+      expect_named_not_contains "version old binary name" output
+        "logseq-cli ocaml")
 
 let () =
   test "sync download requires an explicit graph" (fun () ->
