@@ -41,11 +41,5 @@ type tree_data = {
 val normalize_stdin_id : string option -> string option
 val resolve_target : opts -> target Error.build_result
 val invalid_options : opts -> string option
-val build_tree_data : Cli_config.t -> action -> tree_data Cli_effect.t
-
-val prepare_tree_render_data :
-  Cli_config.t -> action -> tree_data -> tree_data Cli_effect.t
-
-val render_tree_text : tree_data -> action -> string
 
 include Command_spec.S with type parsed := parsed and type action := action

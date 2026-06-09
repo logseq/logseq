@@ -34,9 +34,7 @@ val error :
   Error.t ->
   'o t
 
-val is_ok : 'a t -> bool
 val is_error : 'a t -> bool
 val exit_code : 'a t -> int
 val data_value : 'a t -> Melange_edn.any option
 val with_command : Command_id.t -> 'a t -> 'a t
-val with_context : Melange_edn.any -> 'a t -> 'a t

@@ -24,14 +24,11 @@ type build_context = {
   selected_repo : Cli_primitive.repo option;
 }
 
-val command_id : t -> Command_id.t
-val context : t -> Melange_edn.map Melange_edn.t
 val build : Cli_config.t -> Cli_request.t -> t Error.build_result Cli_effect.t
 
 val execute :
   t -> Cli_config.t -> 'o Output.Mode.t -> 'o Cli_result.t Cli_effect.t
 
-val requires_existing_graph : t -> bool
 val requires_missing_graph : t -> bool
 val repo : t -> Cli_primitive.repo option
 val graph : t -> Cli_primitive.graph option

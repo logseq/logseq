@@ -62,4 +62,3 @@ val update_config :
 val graph_to_repo : Cli_primitive.graph -> Cli_primitive.repo
 val repo_to_graph : Cli_primitive.repo -> Cli_primitive.graph
 val pick_graph : t -> Global_opts.t -> Cli_primitive.graph option
-val pick_repo : t -> Global_opts.t -> Cli_primitive.repo option

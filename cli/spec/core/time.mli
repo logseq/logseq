@@ -4,7 +4,6 @@ type date = Js.Date.t
 val now : unit -> date
 val epoch : date
 val max_time : date
-val time_of_float_s : float -> date
 val time_of_epoch_ms : int64 -> date
 val time_to_epoch_ms : date -> int64
 val time_to_epoch_seconds : date -> int64
@@ -12,8 +11,6 @@ val time_to_epoch_seconds_float : date -> float
 val compare_time : date -> date -> int
 val span_of_ms : int64 -> span
 val span_to_ms : span -> int64
-val span_to_ms_float : span -> float
-val span_to_seconds_float : span -> float
 val zero_span : span
 val compare_span : span -> span -> int
 val add_span_value : span -> span -> span

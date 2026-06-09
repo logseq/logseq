@@ -41,6 +41,3 @@ let exception_error ?context exn =
 
 let map f = function Ok x -> Ok (f x) | Error e -> Error e
 let bind x f = match x with Ok v -> f v | Error e -> Error e
-
-let pp fmt t =
-  Format.fprintf fmt "%s: %s" (Edn_util.keyword_to_string t.code) t.message
