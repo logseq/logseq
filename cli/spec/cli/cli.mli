@@ -4,7 +4,6 @@ type request = Cli_request.t
 type config = Cli_config.t
 type action = Cli_action.t
 type result = Result : 'o Cli_result.t -> result
-type registry = Command_registry.t
 
 type phase =
   | Raw_argv
@@ -28,8 +27,7 @@ type lifecycle = {
 }
 
 type app = {
-  registry : registry;
-  cmdliner : Cmdliner_boundary.app;
+  registry : Command_registry.t;
   defaults : Cli_config.defaults;
 }
 
