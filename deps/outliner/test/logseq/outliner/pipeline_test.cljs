@@ -33,5 +33,4 @@
     (is (contains? refs query-class-id)
         "#Query class tag is included in :block/refs")
     (is (not (contains? refs query-property-id))
-        "#Query block does not reference logseq.property/query through :block/refs"))
         "#Query block does not reference logseq.property/query through :block/refs")))
