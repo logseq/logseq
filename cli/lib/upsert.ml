@@ -1082,8 +1082,7 @@ let task_selector =
 let result_ids ids =
   Edn_util.map
     [
-      ( kw "result",
-        Edn_util.vector (List.map (fun id -> Edn_util.int64 id) ids) );
+      (kw "result", Edn_util.vector (List.map (fun id -> Edn_util.int64 id) ids));
     ]
 
 let file_sha256 path = try Some (Sha256.file_hex path) with _ -> None
@@ -1142,8 +1141,7 @@ let page_query selector =
         vector [ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
       );
       (kw "in", list [ sym "$"; sym "?name" ]);
-      ( kw "where",
-        vector [ vector [ sym "?e"; kw "block/name"; sym "?name" ] ] );
+      (kw "where", vector [ vector [ sym "?e"; kw "block/name"; sym "?name" ] ]);
     ]
 
 let pull_pages_by_name config repo name selector =
@@ -1230,8 +1228,7 @@ let lookup_of_tag = function
 let lookup_of_property_key = function
   | Property.Key_ident ident -> Edn_util.any ident
   | Key_id id -> Edn_util.int64 id
-  | Key_name name ->
-      Edn_util.any (Edn_util.keyword_t name)
+  | Key_name name -> Edn_util.any (Edn_util.keyword_t name)
 
 let apply_outliner_ops config repo ops =
   Transport.thread_api_apply_outliner_ops config ~repo
@@ -1795,14 +1792,12 @@ let with_asset_metadata (block : Block.t) asset_tag_id asset_type asset_size
       [
         {
           Property.key =
-            Property.Key_ident
-              (Edn_util.keyword_t "logseq.property.asset/type");
+            Property.Key_ident (Edn_util.keyword_t "logseq.property.asset/type");
           value = Edn_util.string asset_type;
         };
         {
           key =
-            Property.Key_ident
-              (Edn_util.keyword_t "logseq.property.asset/size");
+            Property.Key_ident (Edn_util.keyword_t "logseq.property.asset/size");
           value = Edn_util.int64 (Int64.of_int asset_size);
         };
         {
