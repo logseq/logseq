@@ -28,7 +28,10 @@
         refs (set (outliner-pipeline/db-rebuild-block-refs @conn block))
         query-property-id (:db/id (d/entity @conn :logseq.property/query))
         query-class-id (:db/id (d/entity @conn :logseq.class/Query))]
+    (is (some? query-property-id)
+        "Sanity: :logseq.property/query entity exists")
     (is (contains? refs query-class-id)
         "#Query class tag is included in :block/refs")
     (is (not (contains? refs query-property-id))
+        "#Query block does not reference logseq.property/query through :block/refs"))
         "#Query block does not reference logseq.property/query through :block/refs")))
