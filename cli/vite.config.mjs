@@ -4,8 +4,7 @@ import { defineConfig } from "vite";
 
 const entry = resolve(
   process.cwd(),
-  process.env.LOGSEQ_CLI_MELANGE_ENTRYPOINT ??
-    "_build/default/bin/logseq_cli_melange/bin/main.js",
+  "bin/logseq_cli_melange/bin/main.js",
 );
 
 const nodeBuiltins = [
@@ -17,7 +16,7 @@ export default defineConfig({
   build: {
     lib: {
       entry,
-      formats: ["esm"],
+      formats: ["cjs"],
       fileName: () => "logseq-cli.js",
     },
     emptyOutDir: false,
@@ -33,7 +32,7 @@ export default defineConfig({
     },
     commonjsOptions: {
       include: [
-        /\/_build\/default\/bin\/logseq_cli_melange\//,
+        /\/bin\/logseq_cli_melange\//,
       ],
     },
   },
