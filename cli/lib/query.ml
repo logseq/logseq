@@ -194,9 +194,7 @@ let custom_query_input value =
   | _ -> (
       match Edn_util.as_map value with
       | Some _ -> (
-          match
-            Option.bind (Edn_util.get value "name") query_name_of_value
-          with
+          match Option.bind (Edn_util.get value "name") query_name_of_value with
           | None -> None
           | Some name ->
               Some

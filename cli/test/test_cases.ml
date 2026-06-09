@@ -62,9 +62,8 @@ let () =
         then fail_test "graph create without -g created fallback graph";
         let create_fallback = run [ "graph"; "create"; "-g"; fallback_graph ] in
         ignore (expect_exit_zero "fallback graph create" create_fallback);
-        if
-          Node.Fs.existsSync (Node.Path.join [| root; "current-graph" |])
-        then fail_test "graph create wrote current-graph";
+        if Node.Fs.existsSync (Node.Path.join [| root; "current-graph" |]) then
+          fail_test "graph create wrote current-graph";
         let switch_without_graph =
           run
             ~env:[| ("LOGSEQ_CLI_GRAPH", fallback_graph) |]
@@ -94,9 +93,8 @@ let () =
         then fail_test "graph remove without -g removed fallback graph";
         let create = run [ "graph"; "create"; "-g"; graph ] in
         ignore (expect_exit_zero "graph create" create);
-        if
-          Node.Fs.existsSync (Node.Path.join [| root; "current-graph" |])
-        then fail_test "graph create wrote current-graph";
+        if Node.Fs.existsSync (Node.Path.join [| root; "current-graph" |]) then
+          fail_test "graph create wrote current-graph";
         ignore (expect_named_contains "graph create" create##stdout graph);
         let graph_dirs =
           Node.Fs.readdirSync (Node.Path.join [| root; "graphs" |])
@@ -132,8 +130,8 @@ let () =
         let result = run [ "graph"; "list" ] in
         remove_tree root;
         ignore (expect_exit_zero "graph list" result);
-        expect_named_not_contains "graph list current file marker" result##stdout
-          "* alpha"
+        expect_named_not_contains "graph list current file marker"
+          result##stdout "* alpha"
       with exn ->
         remove_tree root;
         fail_test (Printexc.to_string exn));
@@ -163,8 +161,8 @@ let () =
           (expect_named_contains "graph switch config graph" config
              ":graph \"beta\"");
         ignore
-          (expect_named_contains "graph switch config preserves http-base" config
-             ":http-base \"http://127.0.0.1:65535\"");
+          (expect_named_contains "graph switch config preserves http-base"
+             config ":http-base \"http://127.0.0.1:65535\"");
         let list = run [ "graph"; "list" ] in
         remove_tree root;
         ignore (expect_exit_zero "graph list" list);
@@ -537,7 +535,8 @@ let () =
       in
       with_server server (fun base_url ->
           let port = port_of_base_url base_url in
-          write_file (Node.Path.join [| root; "server-list" |])
+          write_file
+            (Node.Path.join [| root; "server-list" |])
             (string_of_int process_pid ^ " " ^ port ^ "\n");
           let* result =
             run_cli_p
@@ -546,14 +545,7 @@ let () =
                   ( "LOGSEQ_DB_WORKER_NODE_SCRIPT",
                     Node.Path.join [| root; "missing-db-worker-node.js" |] );
                 |]
-              [
-                "--root-dir";
-                root;
-                "--graph";
-                "alpha";
-                "graph";
-                "info";
-              ]
+              [ "--root-dir"; root; "--graph"; "alpha"; "graph"; "info" ]
           in
           remove_tree root;
           ignore (expect_cli_exit_zero "graph info existing server" result);

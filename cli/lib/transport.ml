@@ -130,8 +130,7 @@ let request ?timeout_span method_ uri ~headers ~body =
   if success_status status then Cli_effect.pure (response, body)
   else Cli_effect.error (Failure (http_error_message status body))
 
-let method_name method_ =
-  Edn_util.keyword_to_string method_ |> String.trim
+let method_name method_ = Edn_util.keyword_to_string method_ |> String.trim
 
 let invoke_body method_ args =
   let args_transit = transit_json_of_value (Edn_util.vector args) in
@@ -411,9 +410,7 @@ let connect_events config on_event =
     (Cli_platform.Events.connect ~url:(base_url ^ "/v1/events")
        ~on_chunk:(consume_sse_chunk on_event buffer))
 
-let normalize_format format =
-  Edn_util.keyword_to_string format |> String.trim
-
+let normalize_format format = Edn_util.keyword_to_string format |> String.trim
 let write_file_binary path content = Cli_unix.write_binary_file path content
 let read_file_binary path = Bytes.of_string (Cli_unix.read_binary_file path)
 

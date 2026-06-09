@@ -156,9 +156,7 @@ let sanitize_file_config value =
         (List.filter
            (fun (key, _) ->
              match Edn_util.as_string_like key with
-             | Some
-                 ("auth-token" | "retries" | "e2ee-password") ->
-                 false
+             | Some ("auth-token" | "retries" | "e2ee-password") -> false
              | _ -> true)
            fields)
   | None -> value
@@ -247,8 +245,7 @@ let validate_output_config_value ~source key value =
               ^ edn_value_text raw ^ ". Expected one of human, json, edn")))
 
 let validate_config_values ~source value =
-  Error.bind (validate_int64_config_value ~source "timeout-ms" value)
-    (fun () ->
+  Error.bind (validate_int64_config_value ~source "timeout-ms" value) (fun () ->
       Error.bind (validate_int64_config_value ~source "login-timeout-ms" value)
         (fun () ->
           Error.bind

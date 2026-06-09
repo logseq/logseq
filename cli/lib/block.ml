@@ -84,8 +84,7 @@ let rec to_value t =
   in
   let fields =
     match t.uuid with
-    | Some uuid ->
-        (Edn_util.keyword "block/uuid", Edn_util.uuid uuid) :: fields
+    | Some uuid -> (Edn_util.keyword "block/uuid", Edn_util.uuid uuid) :: fields
     | None -> fields
   in
   let fields =

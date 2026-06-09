@@ -225,8 +225,7 @@ let verbose_parsed_options_line request (config : Cli_config.t) =
         (Edn_util.map
            [
              (Edn_util.keyword "level", Edn_util.keyword "debug");
-             ( Edn_util.keyword "message",
-               Edn_util.keyword "cli/parsed-options" );
+             (Edn_util.keyword "message", Edn_util.keyword "cli/parsed-options");
              ( Edn_util.keyword "command",
                Edn_util.string
                  (Command_id.to_string (Cli_request.command_id request)) );

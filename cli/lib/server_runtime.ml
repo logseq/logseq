@@ -481,10 +481,10 @@ let stop_server config repo =
 
 let restart_server config repo =
   stop_server config repo >>= function
-    | Stdlib.Ok _ -> start_server config repo ~create_empty_db:false
-    | Stdlib.Error err when err.code = Edn_util.keyword_t "server-not-found" ->
-        start_server config repo ~create_empty_db:false
-    | Stdlib.Error err -> Cli_effect.pure (Stdlib.Error err)
+  | Stdlib.Ok _ -> start_server config repo ~create_empty_db:false
+  | Stdlib.Error err when err.code = Edn_util.keyword_t "server-not-found" ->
+      start_server config repo ~create_empty_db:false
+  | Stdlib.Error err -> Cli_effect.pure (Stdlib.Error err)
 
 let ignored_graph_dir name =
   name = "Unlinked graphs" || name = "backup"

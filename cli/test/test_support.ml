@@ -9,7 +9,6 @@ external rm_sync : string -> Js.Json.t Js.Dict.t -> unit = "rmSync"
 [@@mel.module "fs"]
 
 external chmod_sync : string -> int -> unit = "chmodSync" [@@mel.module "fs"]
-
 external process_pid : int = "pid" [@@mel.module "process"]
 
 external promise_error_message : Js.Promise.error -> string option = "message"
@@ -190,7 +189,6 @@ let assert_exit_non_zero name result =
        result##stdout result##stderr)
 
 let temp_dir prefix = mkdtemp_sync (Node.Path.join [| tmpdir (); prefix |])
-
 let control_char = String.make 1 (Char.chr 1)
 
 let expect_valid_json name text =

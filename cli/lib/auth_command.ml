@@ -48,24 +48,24 @@ let logout_value (result : Auth_state.logout_result) =
 
 let execute action config mode =
   match action with
-  | Login ->
-      (Auth_state.login config >>= function
-        | Ok result ->
-            Cli_effect.pure
-              (Cli_result.ok ~command:Command_id.Login mode
-                 (Raw (login_value result)))
-        | Error err ->
-            Cli_effect.pure
-              (Output_mode.error ~command:Command_id.Login mode err))
-  | Logout ->
-      (Auth_state.logout config >>= function
-        | Ok result ->
-            Cli_effect.pure
-              (Cli_result.ok ~command:Command_id.Logout mode
-                 (Raw (logout_value result)))
-        | Error err ->
-            Cli_effect.pure
-              (Output_mode.error ~command:Command_id.Logout mode err))
+  | Login -> (
+      Auth_state.login config >>= function
+      | Ok result ->
+          Cli_effect.pure
+            (Cli_result.ok ~command:Command_id.Login mode
+               (Raw (login_value result)))
+      | Error err ->
+          Cli_effect.pure (Output_mode.error ~command:Command_id.Login mode err)
+      )
+  | Logout -> (
+      Auth_state.logout config >>= function
+      | Ok result ->
+          Cli_effect.pure
+            (Cli_result.ok ~command:Command_id.Logout mode
+               (Raw (logout_value result)))
+      | Error err ->
+          Cli_effect.pure
+            (Output_mode.error ~command:Command_id.Logout mode err))
 
 let meta id doc =
   {

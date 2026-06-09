@@ -599,9 +599,7 @@ let callback_result_of_target ~state = function
 let open_browser config url =
   if
     not
-      (raw_config_bool config
-         [ "open-browser"; "open-browser?" ]
-         ~default:true)
+      (raw_config_bool config [ "open-browser"; "open-browser?" ] ~default:true)
   then Ok false
   else if Cli_unix.open_url url then Ok true
   else
@@ -613,27 +611,26 @@ let open_browser config url =
 let resolve_auth config =
   match config_auth config with
   | Some auth -> Cli_effect.pure (Ok auth)
-  | None ->
-      (read_auth_file config >>= function
-        | Error err -> Cli_effect.pure (Error err)
-        | Ok None ->
-            Cli_effect.pure (Error (missing_auth config "missing auth"))
-        | Ok (Some auth) ->
-            if expired_auth auth then
-              (refresh_auth config auth >>= function
-                | Error err -> Cli_effect.pure (Error err)
-                | Ok refreshed -> write_auth_file config refreshed)
-            else Cli_effect.pure (Ok auth))
+  | None -> (
+      read_auth_file config >>= function
+      | Error err -> Cli_effect.pure (Error err)
+      | Ok None -> Cli_effect.pure (Error (missing_auth config "missing auth"))
+      | Ok (Some auth) ->
+          if expired_auth auth then
+            refresh_auth config auth >>= function
+            | Error err -> Cli_effect.pure (Error err)
+            | Ok refreshed -> write_auth_file config refreshed
+          else Cli_effect.pure (Ok auth))
 
 let resolve_auth_token config =
   resolve_auth config >>= function
-    | Error err -> Cli_effect.pure (Error err)
-    | Ok auth -> (
-        match auth.id_token with
-        | Some token when String.trim token <> "" -> Cli_effect.pure (Ok token)
-        | _ ->
-            Cli_effect.pure
-              (Error (missing_auth config "auth token is required")))
+  | Error err -> Cli_effect.pure (Error err)
+  | Ok auth -> (
+      match auth.id_token with
+      | Some token when String.trim token <> "" -> Cli_effect.pure (Ok token)
+      | _ ->
+          Cli_effect.pure (Error (missing_auth config "auth token is required"))
+      )
 
 let login config =
   match authorize_endpoint config with
@@ -651,7 +648,7 @@ let login config =
                (Error.make
                   (Edn_util.keyword_t "login-not-configured")
                   "oauth client id is not configured"))
-      | Some client_id ->
+      | Some client_id -> (
           let state = raw_or_random config [ "oauth-state"; "state" ] 24 in
           let code_verifier =
             raw_or_random config [ "oauth-code-verifier"; "code-verifier" ] 48
@@ -681,21 +678,21 @@ let login config =
           let finish_login opened code =
             auth_code_exchange config ~code ~redirect_uri ~code_verifier
             >>= function
-              | Error err -> Cli_effect.pure (Error err)
-              | Ok auth ->
-                  (write_auth_file config auth >>= function
-                    | Error err -> Cli_effect.pure (Error err)
-                    | Ok data ->
-                        Cli_effect.pure
-                          (Ok
-                             {
-                               auth_path = auth_path config;
-                               authorize_url;
-                               opened;
-                               email = data.email;
-                               sub = data.sub;
-                               updated_at = data.updated_at;
-                             }))
+            | Error err -> Cli_effect.pure (Error err)
+            | Ok auth -> (
+                write_auth_file config auth >>= function
+                | Error err -> Cli_effect.pure (Error err)
+                | Ok data ->
+                    Cli_effect.pure
+                      (Ok
+                         {
+                           auth_path = auth_path config;
+                           authorize_url;
+                           opened;
+                           email = data.email;
+                           sub = data.sub;
+                           updated_at = data.updated_at;
+                         }))
           in
           let opened_ref = ref false in
           let browser_open_error = ref None in
@@ -715,42 +712,41 @@ let login config =
             ~port:callback_port ~timeout_span:config.login_timeout_span
             ~on_listen ~handle_request
           >>= function
-            | Ok (Ok code) -> finish_login !opened_ref code
-            | Ok (Error err) -> Cli_effect.pure (Error err)
-            | Error Cli_platform.Login_callback_timeout ->
-                Cli_effect.pure
-                  (Error
-                     (Error.make
-                        (Edn_util.keyword_t "login-timeout")
-                        "login callback timed out"))
-            | Error (Cli_platform.Login_callback_server_aborted message) -> (
-                match !browser_open_error with
-                | Some err -> Cli_effect.pure (Error err)
-                | None ->
-                    Cli_effect.pure
-                      (Error
-                         (Error.make
-                            ~context:
-                              (Edn_util.map
-                                 [
-                                   ( Edn_util.keyword "error",
-                                     Edn_util.string message );
-                                 ])
-                            (Edn_util.keyword_t
-                               "login-callback-server-start-failed")
-                            "failed to start login callback server")))
-            | Error (Cli_platform.Login_callback_server_start_failed message) ->
-                Cli_effect.pure
-                  (Error
-                     (Error.make
-                        ~context:
-                          (Edn_util.map
-                             [
-                               ( Edn_util.keyword "error",
-                                 Edn_util.string message );
-                             ])
-                        (Edn_util.keyword_t "login-callback-server-start-failed")
-                        "failed to start login callback server")))
+          | Ok (Ok code) -> finish_login !opened_ref code
+          | Ok (Error err) -> Cli_effect.pure (Error err)
+          | Error Cli_platform.Login_callback_timeout ->
+              Cli_effect.pure
+                (Error
+                   (Error.make
+                      (Edn_util.keyword_t "login-timeout")
+                      "login callback timed out"))
+          | Error (Cli_platform.Login_callback_server_aborted message) -> (
+              match !browser_open_error with
+              | Some err -> Cli_effect.pure (Error err)
+              | None ->
+                  Cli_effect.pure
+                    (Error
+                       (Error.make
+                          ~context:
+                            (Edn_util.map
+                               [
+                                 ( Edn_util.keyword "error",
+                                   Edn_util.string message );
+                               ])
+                          (Edn_util.keyword_t
+                             "login-callback-server-start-failed")
+                          "failed to start login callback server")))
+          | Error (Cli_platform.Login_callback_server_start_failed message) ->
+              Cli_effect.pure
+                (Error
+                   (Error.make
+                      ~context:
+                        (Edn_util.map
+                           [
+                             (Edn_util.keyword "error", Edn_util.string message);
+                           ])
+                      (Edn_util.keyword_t "login-callback-server-start-failed")
+                      "failed to start login callback server"))))
 
 let logout config =
   let path = auth_path config in
@@ -770,7 +766,7 @@ let logout config =
                (Error.make
                   (Edn_util.keyword_t "logout-not-configured")
                   "oauth client id is not configured"))
-      | Some client_id ->
+      | Some client_id -> (
           let redirect_uri = callback_uri redirect_path in
           let state =
             raw_or_random config [ "oauth-logout-state"; "logout-state" ] 24
@@ -796,8 +792,8 @@ let logout config =
             }
           in
           delete_auth_file config >>= function
-            | Error err -> Cli_effect.pure (Error err)
-            | Ok () -> (
-                match open_browser config logout_url with
-                | Ok opened -> Cli_effect.pure (Ok (result opened))
-                | Error err -> Cli_effect.pure (Error err)))
+          | Error err -> Cli_effect.pure (Error err)
+          | Ok () -> (
+              match open_browser config logout_url with
+              | Ok opened -> Cli_effect.pure (Ok (result opened))
+              | Error err -> Cli_effect.pure (Error err))))
