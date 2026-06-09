@@ -20,6 +20,8 @@
 (defonce ^:private *startup-promise (atom nil))
 (defonce ^:private *endpoint-promise (atom nil))
 (defonce ^:private *endpoint (atom nil))
+(defonce ^:private *endpoint-ready? (atom false))
+(defonce ^:private *endpoint-env-published? (atom false))
 
 (declare find-port! run-command! spawn-server! wait-ready! stop!)
 
@@ -51,6 +53,8 @@
         runtime-dir (node-path/join user-data-dir runtime-dir-name)
         venv-dir (node-path/join runtime-dir venv-name)
         venv-python (node-path/join venv-dir "bin" "python")
+        venv-python-candidates [venv-python
+                                (node-path/join venv-dir "bin" "python3")]
         sidecar-root (sidecar-dir {:packaged? packaged?
                                    :resources-path (or (:resources-path opts)
                                                        (.-resourcesPath js/process))
@@ -60,6 +64,7 @@
      :runtime-dir runtime-dir
      :venv-dir venv-dir
      :venv-python venv-python
+     :venv-python-candidates venv-python-candidates
      :deps-stamp (node-path/join runtime-dir deps-stamp-name)
      :log-file (node-path/join runtime-dir log-file-name)
      :sidecar-dir sidecar-root
@@ -74,6 +79,8 @@
                    default-model-id)
      :exists? (or (:exists? opts) #(fs/existsSync %))
      :ensure-dir! (or (:ensure-dir! opts) #(fs/ensureDirSync %))
+     :remove-dir! (or (:remove-dir! opts) #(fs/removeSync %))
+     :delete-env! (or (:delete-env! opts) #(js-delete js/process.env %))
      :write-file! (or (:write-file! opts) #(.writeFileSync fs %1 %2 "utf8"))
      :logger (:logger opts)
      :find-port! (or (:find-port! opts) find-port!)
@@ -134,8 +141,26 @@
   [{:keys [host port set-env!]}]
   (let [endpoint-url (embedding-endpoint host port)]
     (reset! *endpoint endpoint-url)
+    (reset! *endpoint-ready? true)
+    (reset! *endpoint-env-published? true)
     (set-env! embedding-url-env endpoint-url)
     endpoint-url))
+
+(defn- reserve-endpoint!
+  [{:keys [host port]}]
+  (let [endpoint-url (embedding-endpoint host port)]
+    (reset! *endpoint endpoint-url)
+    (reset! *endpoint-ready? false)
+    endpoint-url))
+
+(defn- clear-endpoint!
+  [delete-env!]
+  (when @*endpoint-env-published?
+    (delete-env! embedding-url-env))
+  (reset! *endpoint-promise nil)
+  (reset! *endpoint nil)
+  (reset! *endpoint-ready? false)
+  (reset! *endpoint-env-published? false))
 
 (defn- allocate-port!
   [{:keys [host port] :as cfg}]
@@ -159,12 +184,13 @@
       (poll!))))
 
 (defn- attach-exit-handler!
-  [^js proc logger]
+  [^js proc {:keys [logger delete-env!]}]
   (when (and proc (fn? (.-on proc)))
     (.on proc "exit"
          (fn [code signal]
            (when (identical? proc @*server-process)
-             (reset! *server-process nil))
+             (reset! *server-process nil)
+             (clear-endpoint! delete-env!))
            ((:info logger) :embedding-server/exited {:code code
                                                      :signal signal})))))
 
@@ -187,23 +213,34 @@
            ((:error logger) :embedding-server/start-failed error)))
     proc))
 
+(defn- existing-venv-python
+  [{:keys [exists? venv-python-candidates]}]
+  (some #(when (exists? %) %) venv-python-candidates))
+
 (defn- install-runtime!
-  [{:keys [runtime-dir venv-python deps-stamp python-command
-           ensure-dir! exists? write-file! logger] :as cfg}]
+  [{:keys [runtime-dir venv-dir deps-stamp python-command
+           ensure-dir! remove-dir! exists? write-file! logger] :as cfg}]
   (ensure-dir! runtime-dir)
   (let [run-command-fn (:run-command! cfg)
-        needs-venv? (not (exists? venv-python))
+        venv-python (existing-venv-python cfg)
+        needs-venv? (nil? venv-python)
         needs-deps? (or needs-venv?
                         (not (exists? deps-stamp)))]
     (p/let [_ (when needs-venv?
+                (remove-dir! venv-dir))
+            _ (when needs-venv?
                 (run-command-fn python-command ["-m" "venv" venv-name] {:cwd runtime-dir
                                                                          :logger logger}))
+            venv-python (or (existing-venv-python cfg)
+                            (throw (ex-info "Embedding server virtualenv Python is missing"
+                                            {:venv-dir venv-dir
+                                             :candidates (:venv-python-candidates cfg)})))
             _ (when needs-deps?
                 (run-command-fn venv-python (into ["-m" "pip" "install"] dependencies) {:cwd runtime-dir
                                                                                         :logger logger}))]
       (when needs-deps?
         (write-file! deps-stamp (str (string/join "\n" dependencies) "\n")))
-      cfg)))
+      (assoc cfg :venv-python venv-python))))
 
 (defn start!
   ([app'] (start! app' {}))
@@ -226,25 +263,24 @@
        :else
        (let [cfg (assoc cfg :logger (or (:logger cfg) (default-logger)))
              endpoint-resolve (atom nil)
-             endpoint-reject (atom nil)
              endpoint-promise (js/Promise.
-                               (fn [resolve reject]
-                                 (reset! endpoint-resolve resolve)
-                                 (reset! endpoint-reject reject)))
+                               (fn [resolve _reject]
+                                 (reset! endpoint-resolve resolve)))
              _ (reset! *endpoint-promise endpoint-promise)
              startup (-> (p/let [cfg (allocate-port! cfg)
-                                 endpoint-url (publish-endpoint! cfg)
+                                 endpoint-url (reserve-endpoint! cfg)
                                  _ (@endpoint-resolve endpoint-url)
                                  cfg (install-runtime! cfg)
                                  proc ((:spawn-server! cfg) cfg)
                                  _ (do
                                      (reset! *server-process proc)
-                                     (attach-exit-handler! proc (:logger cfg)))
-                                 _ ((:wait-ready! cfg) (embedding-health-endpoint (:host cfg) (:port cfg)))]
+                                     (attach-exit-handler! proc cfg))
+                                 _ ((:wait-ready! cfg) (embedding-health-endpoint (:host cfg) (:port cfg)))
+                                 _ (publish-endpoint! cfg)]
                            :started)
                          (p/catch (fn [error]
-                                    (when @endpoint-reject
-                                      (@endpoint-reject error))
+                                    (when @endpoint-resolve
+                                      (@endpoint-resolve nil))
                                     (stop!)
                                     ((:error (:logger cfg)) :embedding-server/setup-failed error)
                                     (throw error)))
@@ -263,7 +299,8 @@
 
        @*endpoint
        (do
-         ((:set-env! cfg) embedding-url-env @*endpoint)
+         (when @*endpoint-ready?
+           ((:set-env! cfg) embedding-url-env @*endpoint))
          (p/resolved @*endpoint))
 
        @*endpoint-promise
@@ -271,14 +308,14 @@
 
        :else
        (do
-         (start! app' opts)
+         (p/catch (start! app' opts)
+                  (fn [_error] nil))
          @*endpoint-promise)))))
 
 (defn stop!
   []
   (reset! *startup-promise nil)
-  (reset! *endpoint-promise nil)
-  (reset! *endpoint nil)
+  (clear-endpoint! #(js-delete js/process.env %))
   (when-let [^js proc @*server-process]
     (reset! *server-process nil)
     (when (fn? (.-kill proc))
