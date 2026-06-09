@@ -760,6 +760,7 @@
                                                 "meaning based query"
                                                 {:limit 10
                                                  :enable-snippet? false
+                                                 :feature/enable-semantic-search? true
                                                  :query-embedding query-embedding}))]
           (is (= [{:db/id 901
                    :block/title "Semantic only result"}]
@@ -808,6 +809,7 @@
                                                 {:limit 10
                                                  :built-in? false
                                                  :enable-snippet? false
+                                                 :feature/enable-semantic-search? true
                                                  :query-embedding [0.1 0.2 0.3]}))]
           (is (= ["which team is Manu in?"]
                  (mapv :block/title result))))))))
@@ -856,6 +858,7 @@
                                                   "semantic large graph"
                                                   {:limit 50
                                                    :enable-snippet? false
+                                                   :feature/enable-semantic-search? true
                                                    :query-embedding [0.1 0.2 0.3]}))]
           (is (= [10] @query-limits))
           (is (= 5 (count result)))
@@ -913,6 +916,7 @@
                                                "alpha"
                                                {:limit 10
                                                 :enable-snippet? false
+                                                :feature/enable-semantic-search? true
                                                 :query-embedding [0.4 0.5 0.6]}))]
           (is (= ["alpha keyword" "related semantic result"]
                  (mapv :block/title result))))))))
@@ -957,6 +961,7 @@
                                                 "alpha"
                                                 {:limit 10
                                                  :enable-snippet? false
+                                                 :feature/enable-semantic-search? true
                                                  :query-embedding [0.4 0.5 0.6]}))]
           (is (= ["alpha"]
                  (mapv :block/title result))))))))
@@ -1013,6 +1018,7 @@
                                                 "manu spurs"
                                                 {:limit 10
                                                  :enable-snippet? false
+                                                 :feature/enable-semantic-search? true
                                                  :query-embedding [0.4 0.5 0.6]}))]
           (is (= ["which team is Manu in?"
                   "Which team is Tony in?"

@@ -3,6 +3,7 @@
   (:require
    [clojure.set :as set]
    [datascript.core :as d]
+   [frontend.worker.platform :as platform]
    [frontend.worker.shared-service :as shared-service]
    [frontend.worker.state :as worker-state]
    [frontend.worker.sync.assets :as sync-assets]
@@ -963,6 +964,24 @@
    (fn [conn]
      (transact-remote-txs! conn remote-txs))))
 
+(defn- report-apply-remote-txs-error!
+  [error {:keys [has-local-changes? remote-txs local-txs]}]
+  (try
+    (platform/post-message!
+     (platform/current)
+     :capture-error
+     (cond-> {:error error
+              :payload {:source "db-sync"
+                        :operation "apply-remote-txs"
+                        :has-local-changes? has-local-changes?
+                        :remote-tx-count (count remote-txs)
+                        :local-tx-count (count local-txs)}}
+       (ex-data error)
+       (assoc :extra {:error-data (ex-data error)})))
+    (catch :default report-error
+      (log/error :db-sync/report-apply-remote-txs-error-failed
+                 {:error report-error}))))
+
 (defn apply-remote-txs!
   [repo client remote-txs]
   (if-let [conn (worker-state/get-datascript-conn repo)]
@@ -989,6 +1008,11 @@
                       :remote-txs remote-txs
                       :local-txs local-txs
                       :error error})
+          (report-apply-remote-txs-error!
+           error
+           {:has-local-changes? has-local-changes?
+            :remote-txs remote-txs
+            :local-txs local-txs})
           (throw error)))
 
       (when-let [*inflight (:inflight client)]

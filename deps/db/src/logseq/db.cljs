@@ -227,6 +227,9 @@
                       (remove (fn [m] (or ;; db/id
                                        (integer? m)
                                        (empty? m)))))
+         tx-data (if-not (string? repo-or-conn)
+                   (delete-blocks/expand-delete-blocks-tx @repo-or-conn tx-data tx-meta)
+                   tx-data)
          delete-blocks-tx (when-not (string? repo-or-conn)
                             (delete-blocks/update-refs-history @repo-or-conn tx-data tx-meta))
          tx-data (concat tx-data delete-blocks-tx)]
