@@ -90,6 +90,21 @@ let has_help_flag argv =
 
 let has_version_flag argv = List.exists (fun token -> token = "--version") argv
 
+let build_time : string =
+  [%mel.raw
+    {|
+typeof LOGSEQ_CLI_BUILD_TIME !== "undefined" ? LOGSEQ_CLI_BUILD_TIME : "unknown"
+|}]
+
+let revision : string =
+  [%mel.raw
+    {|
+typeof LOGSEQ_CLI_REVISION !== "undefined" ? LOGSEQ_CLI_REVISION : "dev"
+|}]
+
+let version_output () =
+  "Build time: " ^ build_time ^ "\nRevision: " ^ revision
+
 let remove_help_flags argv =
   List.filter (fun token -> token <> "--help" && token <> "-h") argv
 
@@ -117,7 +132,7 @@ let eval ?argv ?env:_ app =
     | None -> Array.to_list Sys.argv
   in
   let argv = strip_program_name app.registry argv in
-  if has_version_flag argv then Cli_effect.pure (Version "logseq-cli ocaml")
+  if has_version_flag argv then Cli_effect.pure (Version (version_output ()))
   else if has_help_flag argv then
     let group = positional (remove_help_flags argv) in
     Cli_effect.pure (Help (Command_registry.render_help ~group app.registry))
