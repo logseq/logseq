@@ -102,15 +102,11 @@
   (let [block-db-id (:db/id block)
         ;; explicit lookup in order to be nbb compatible
         properties (->>
-                    (->> (entity-plus/lookup-kv-then-entity (d/entity db block-db-id) :block/properties)
-                         (into {}))
+                    (entity-plus/lookup-kv-then-entity (d/entity db block-db-id) :block/properties)
                     (remove (fn [[k _v]]
-                              (and (non-ref-properties k)
-                                   ;; query value refs still count
-                                   (not= k :logseq.property/query))))
+                              (non-ref-properties k)))
                     (into {}))
         property-key-refs (->> (keys properties)
-                               (remove non-ref-properties)
                                (keep (fn [ident]
                                        (:db/id (d/entity db ident)))))
         page-or-object? (or page-or-object?-memoized page-or-object?-helper)
