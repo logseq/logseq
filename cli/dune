@@ -1,3 +1,1 @@
-(alias
- (name bundle)
- (deps dist/logseq-cli.js))
+

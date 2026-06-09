@@ -1,4 +1,5 @@
 (rule
+ (alias bundle)
  (target logseq-cli.js)
  (deps
   (alias ../bin/melange)
@@ -13,12 +14,14 @@
    (run
     sh
     -c
-    "exec pnpm --dir \"$DUNE_SOURCEROOT\" exec vite build --config vite.config.mjs --outDir \"$DUNE_PROJECT_ROOT/dist\" --emptyOutDir false"))))
+    "exec \"$DUNE_SOURCEROOT/node_modules/.bin/vite\" build --config vite.config.mjs --outDir dist --emptyOutDir false"))))
 
 (rule
  (alias show-vars)
  (action
   (progn
+   (run pwd)
+   (run sh -c "printf 'DUNE_PROJECT_ROOT=%s\nDUNE_SOURCEROOT=%s\n' \"$DUNE_PROJECT_ROOT\" \"$DUNE_SOURCEROOT\"")
    (echo "project_root=%{project_root}\n")
    (echo "workspace_root=%{workspace_root}\n")
    (echo "profile=%{profile}\n")
