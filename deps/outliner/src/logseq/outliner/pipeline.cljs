@@ -7,7 +7,8 @@
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
-            [logseq.outliner.datascript-report :as ds-report]))
+            [logseq.outliner.datascript-report :as ds-report]
+            [clojure.set :as set]))
 
 (defn filter-deleted-blocks
   [datoms]
@@ -91,19 +92,25 @@
        ;; and look weirdly recursive - https://github.com/logseq/db-test/issues/36
        (not (:logseq.property/created-from-property block))))
 
+(defonce non-ref-properties
+  (set/union private-built-in-props
+             #{:logseq.property/query :logseq.property.publish/published-url :logseq.property/exclude-from-graph-view}))
+
 (defn db-rebuild-block-refs
   "Rebuild block refs for DB graphs, should returns ids"
   [db block & {:keys [page-or-object?-memoized]}]
   (let [block-db-id (:db/id block)
         ;; explicit lookup in order to be nbb compatible
-        properties (->
+        properties (->>
                     (->> (entity-plus/lookup-kv-then-entity (d/entity db block-db-id) :block/properties)
                          (into {}))
-                    ;; both page and parent shouldn't be counted as refs
-                    (dissoc :block/parent :block/page :logseq.property/created-by-ref
-                            :logseq.property.history/block :logseq.property.history/property :logseq.property.history/ref-value))
+                    (remove (fn [[k _v]]
+                              (and (non-ref-properties k)
+                                   ;; query value refs still count
+                                   (not= k :logseq.property/query))))
+                    (into {}))
         property-key-refs (->> (keys properties)
-                               (remove private-built-in-props)
+                               (remove non-ref-properties)
                                (keep (fn [ident]
                                        (:db/id (d/entity db ident)))))
         page-or-object? (or page-or-object?-memoized page-or-object?-helper)
