@@ -98,17 +98,6 @@ let string_of_config_key = function
   | Ws_url -> "ws-url"
   | Http_base -> "http-base"
 
-let authenticated = function
-  | Sync_remote_graphs | Sync_ensure_keys _ | Sync_grant_access _
-  | Sync_status _ | Sync_start _ | Sync_stop _ | Sync_upload _ | Sync_download _
-  | Sync_asset_download _ ->
-      true
-  | _ -> false
-
-let required_config_keys = function
-  | Sync_config_get _ | Sync_config_set _ | Sync_config_unset _ -> []
-  | _ -> [ Ws_url; Http_base ]
-
 let command_id = function
   | Parsed_status -> Command_id.Sync_status
   | Parsed_start _ -> Sync_start
@@ -541,7 +530,7 @@ let download_progress_message graph_id event_type payload =
       else None
   | _ -> None
 
-let maybe_connect_download_progress config invoke_config ~enabled ~graph_id =
+let maybe_connect_download_progress _config invoke_config ~enabled ~graph_id =
   if not enabled then Cli_effect.pure None
   else
     Transport.connect_events invoke_config (fun event_type payload ->
@@ -975,7 +964,7 @@ let ensure_empty_download_db invoke_config repo =
       Cli_effect.pure (Error (graph_db_not_empty repo count))
   | _ -> Cli_effect.pure (Ok ())
 
-let invoke_download_graph mode config invoke_config repo graph_id graph_e2ee
+let invoke_download_graph mode _config invoke_config repo graph_id graph_e2ee
     subscription =
   Cli_effect.finally
     ( Transport.thread_api_db_sync_download_graph_by_id invoke_config ~repo
@@ -1097,7 +1086,7 @@ let validate_asset repo graph asset =
       Error
         (asset_download_error "asset-not-found" "asset not found" repo graph)
 
-let request_asset_download mode config invoke_config repo asset checksum_status
+let request_asset_download mode _config invoke_config repo asset checksum_status
     extra =
   match non_empty_string_field asset "block/uuid" with
   | Some asset_uuid ->

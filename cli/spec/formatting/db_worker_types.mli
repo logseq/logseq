@@ -16,8 +16,3 @@ type node_filter = {
 }
 
 val minimal_list_item : Entity.t -> Melange_edn.map Melange_edn.t
-val list_pages : Melange_edn.any -> page_filter -> Entity.t list
-val list_tags : Melange_edn.any -> list_options -> Entity.t list
-val list_properties : Melange_edn.any -> list_options -> Entity.t list
-val list_tasks : Melange_edn.any -> list_options -> Entity.t list
-val list_nodes : Melange_edn.any -> node_filter -> Entity.t list

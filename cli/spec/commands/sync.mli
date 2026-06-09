@@ -89,7 +89,5 @@ type sync_status = {
 
 val config_key_of_string : string -> config_key option
 val string_of_config_key : config_key -> string
-val authenticated : action -> bool
-val required_config_keys : action -> config_key list
 
 include Command_spec.S with type parsed := parsed and type action := action

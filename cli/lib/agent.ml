@@ -272,48 +272,6 @@ let validate_prompt_template template =
                  "agent bridge prompt template is missing required variables")
         | [] -> Ok ())
 
-let assoc_string key pairs =
-  List.find_map (fun (k, v) -> if k = key then Some v else None) pairs
-
-let render_prompt_template template vars =
-  Error.bind (validate_prompt_template template) (fun () ->
-      let len = String.length template.body in
-      let buffer = Buffer.create (len + 32) in
-      let rec loop index =
-        if index >= len then Ok (Buffer.contents buffer)
-        else if
-          index + 3 < len
-          && template.body.[index] = '{'
-          && template.body.[index + 1] = '{'
-        then (
-          match String.index_from_opt template.body (index + 2) '}' with
-          | Some close when close + 1 < len && template.body.[close + 1] = '}'
-            ->
-              let name =
-                String.sub template.body (index + 2) (close - index - 2)
-              in
-              if valid_var_name name then
-                match assoc_string name vars with
-                | Some value ->
-                    Buffer.add_string buffer value;
-                    loop (close + 2)
-                | None ->
-                    Error
-                      (Error.make
-                         (Edn_util.keyword_t "agent-prompt-template-var-missing")
-                         "agent bridge prompt template var has no value")
-              else (
-                Buffer.add_string buffer "{{";
-                loop (index + 2))
-          | _ ->
-              Buffer.add_char buffer template.body.[index];
-              loop (index + 1))
-        else (
-          Buffer.add_char buffer template.body.[index];
-          loop (index + 1))
-      in
-      loop 0)
-
 let raw_config_string config key =
   Option.bind config.Cli_config.raw_file_config (fun value ->
       Edn_util.get_string value key)
@@ -383,7 +341,7 @@ let parse_codex_session_id stdout =
                       nested_field))
       with _ -> None)
 
-let start_codex config command =
+let start_codex _config command =
   let result = start_command_capture_session_line command in
   if result.Cli_unix.status <> 0 then
     Error

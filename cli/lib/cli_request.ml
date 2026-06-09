@@ -46,7 +46,3 @@ let command_id t =
   | Skill p -> Skill.command_id p
   | Completion p -> Completion.command_id p
   | Example p -> Example.command_id p
-
-let validate _ = Ok ()
-let is_version t = match t.command with Version -> true | _ -> false
-let output_format t = t.globals.output_format

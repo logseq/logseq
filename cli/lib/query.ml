@@ -327,7 +327,7 @@ let normalize_inputs entry inputs =
       else
         let rec fill acc specs values =
           match (specs, values) with
-          | spec :: rest_specs, value :: rest_values ->
+          | _spec :: rest_specs, value :: rest_values ->
               fill (value :: acc) rest_specs rest_values
           | [], rest_values -> List.rev_append acc rest_values
           | spec :: rest, [] ->

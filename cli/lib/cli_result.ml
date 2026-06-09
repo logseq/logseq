@@ -405,7 +405,6 @@ let error : type a.
         exit_code = Some 1;
       }
 
-let is_ok t = t.status = Ok
 let is_error t = t.status = Error
 
 let exit_code t =
@@ -417,4 +416,3 @@ let data_value t =
   | Some data -> Some (data_value data)
 
 let with_command command t = { t with command = Some command }
-let with_context context t = { t with context = Some context }

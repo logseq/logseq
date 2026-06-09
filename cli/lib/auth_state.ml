@@ -622,16 +622,6 @@ let resolve_auth config =
             | Ok refreshed -> write_auth_file config refreshed
           else Cli_effect.pure (Ok auth))
 
-let resolve_auth_token config =
-  resolve_auth config >>= function
-  | Error err -> Cli_effect.pure (Error err)
-  | Ok auth -> (
-      match auth.id_token with
-      | Some token when String.trim token <> "" -> Cli_effect.pure (Ok token)
-      | _ ->
-          Cli_effect.pure (Error (missing_auth config "auth token is required"))
-      )
-
 let login config =
   match authorize_endpoint config with
   | None ->

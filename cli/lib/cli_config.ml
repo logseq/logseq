@@ -184,11 +184,6 @@ let write_config_file path value =
 let pick_graph config globals =
   match globals.Global_opts.graph with Some _ as g -> g | None -> config.graph
 
-let pick_repo config globals =
-  match pick_graph config globals with
-  | Some graph -> Some (graph_to_repo graph)
-  | None -> config.repo
-
 let value_string key value = Edn_util.get_string value key
 let value_int key value = Edn_util.get_int value key
 let value_int64 key value = Edn_util.get_int64 value key

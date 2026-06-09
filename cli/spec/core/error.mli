@@ -40,4 +40,3 @@ val unknown_command : string -> t
 val exception_error : ?context:Melange_edn.any -> exn -> t
 val map : ('a -> 'b) -> 'a build_result -> 'b build_result
 val bind : 'a build_result -> ('a -> 'b build_result) -> 'b build_result
-val pp : Format.formatter -> t -> unit

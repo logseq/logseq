@@ -138,11 +138,6 @@ let to_path t =
   let _, _, p = List.find (fun (id, _, _) -> id = t) table in
   p
 
-let of_path path =
-  table |> List.find_map (fun (id, _, p) -> if p = path then Some id else None)
-
-let group t = match to_path t with x :: _ -> x | [] -> "version"
-
 let is_write = function
   | Graph_create | Graph_switch | Graph_remove | Graph_import | Upsert_block
   | Upsert_page | Upsert_task | Upsert_asset | Upsert_tag | Upsert_property
@@ -165,5 +160,3 @@ let requires_auth = function
   | Sync_grant_access | Sync_config_get | Sync_config_set | Sync_config_unset ->
       true
   | _ -> false
-
-let pp fmt t = Format.pp_print_string fmt (to_string t)
