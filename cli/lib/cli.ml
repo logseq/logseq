@@ -52,6 +52,21 @@ let make_app ?version () =
   let cmdliner = Cmdliner_terms.app ?version () in
   { registry = cmdliner.registry; cmdliner; defaults = Cli_config.defaults () }
 
+let build_time : string =
+  [%mel.raw
+    {|
+typeof LOGSEQ_CLI_BUILD_TIME !== "undefined" ? LOGSEQ_CLI_BUILD_TIME : "unknown"
+|}]
+
+let revision : string =
+  [%mel.raw
+    {|
+typeof LOGSEQ_CLI_REVISION !== "undefined" ? LOGSEQ_CLI_REVISION : "dev"
+|}]
+
+let version_output () =
+  "Build time: " ^ build_time ^ "\nRevision: " ^ revision
+
 let env_lookup env key = List.assoc_opt key env
 let is_option token = String.length token > 0 && token.[0] = '-'
 
@@ -322,7 +337,7 @@ let run app input =
       }
   in
   if option_present "version" options then
-    let version = "logseq-cli ocaml" in
+    let version = version_output () in
     let packed_result =
       Result
         (Cli_result.ok ~command:Command_id.Version Output.Mode.Human
