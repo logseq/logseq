@@ -1,7 +1,7 @@
 (melange.emit
  (target logseq_cli_melange)
  (modules main)
- (module_systems esm)
+ (module_systems commonjs)
  (preprocess
   (pps melange.ppx))
  (libraries logseq_cli_platform_node logseq_cli))
@@ -9,7 +9,7 @@
 (melange.emit
  (target playground)
  (modules playground)
- (module_systems esm)
+ (module_systems commonjs)
  (preprocess
   (pps melange.ppx))
  (libraries logseq_cli_platform_node logseq_cli melange-edn))
@@ -18,4 +18,4 @@
  (section bin)
  (package logseq-cli)
  (files
-  (dist/logseq-cli.js as logseq-cli.js)))
+  (logseq_cli_melange/bin/main.js as logseq-cli.js)))
