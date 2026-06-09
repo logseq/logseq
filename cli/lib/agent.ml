@@ -184,8 +184,7 @@ let ident_value value =
 
 let has_task_tag raw =
   value_list (Edn_util.get raw "block/tags")
-  |> List.exists (fun tag ->
-      ident_value tag = Some "logseq.class/Task")
+  |> List.exists (fun tag -> ident_value tag = Some "logseq.class/Task")
 
 let status_ident raw =
   match Edn_util.get raw "logseq.property/status" with
@@ -568,8 +567,7 @@ let rec block_title_tree block =
   in
   title :: List.concat_map block_title_tree (child_blocks block)
 
-let code_block_tag tag =
-  ident_value tag = Some "logseq.class/Code-block"
+let code_block_tag tag = ident_value tag = Some "logseq.class/Code-block"
 
 let block_has_code_tag block =
   value_list (Edn_util.get block "block/tags") |> List.exists code_block_tag
@@ -700,8 +698,7 @@ let agent_bridge_registry_page_query =
               ] );
           (kw "in", list [ sym "$"; sym "?page-name" ]);
           ( kw "where",
-            vector [ vector [ sym "?p"; kw "block/name"; sym "?page-name" ] ]
-          );
+            vector [ vector [ sym "?p"; kw "block/name"; sym "?page-name" ] ] );
         ];
       Edn_util.string (registry_page_name ());
     ]
@@ -792,8 +789,7 @@ let agent_master_prompt_blocks_query page_id =
               ] );
           (kw "in", list [ sym "$"; sym "?page-id" ]);
           ( kw "where",
-            vector [ vector [ sym "?b"; kw "block/parent"; sym "?page-id" ] ]
-          );
+            vector [ vector [ sym "?b"; kw "block/parent"; sym "?page-id" ] ] );
         ];
       Edn_util.int64 page_id;
     ]
@@ -847,8 +843,7 @@ let prompt_template_blocks_query page_id =
               ] );
           (kw "in", list [ sym "$"; sym "?page-id" ]);
           ( kw "where",
-            vector [ vector [ sym "?b"; kw "block/parent"; sym "?page-id" ] ]
-          );
+            vector [ vector [ sym "?b"; kw "block/parent"; sym "?page-id" ] ] );
         ];
       Edn_util.int64 page_id;
     ]
@@ -882,9 +877,8 @@ let routable_task_selector =
         [
           ( kw "logseq.property/assignee",
             vector
-              [
-                kw "db/id"; kw "block/title"; kw "block/name"; kw "db/ident";
-              ] );
+              [ kw "db/id"; kw "block/title"; kw "block/name"; kw "db/ident" ]
+          );
         ];
       kw "logseq.property.agent/session-id";
       Edn_util.map [ (kw "block/parent", vector [ kw "db/id" ]) ];
@@ -960,8 +954,7 @@ let comment_block_selector =
                 kw "block/title";
                 Edn_util.map
                   [
-                    ( kw "block/tags",
-                      vector [ kw "db/ident"; kw "block/title" ] );
+                    (kw "block/tags", vector [ kw "db/ident"; kw "block/title" ]);
                   ];
               ] );
         ];
@@ -978,9 +971,8 @@ let comment_target_block_selector =
         [
           ( kw "logseq.property/assignee",
             vector
-              [
-                kw "db/id"; kw "block/title"; kw "block/name"; kw "db/ident";
-              ] );
+              [ kw "db/id"; kw "block/title"; kw "block/name"; kw "db/ident" ]
+          );
         ];
       kw "logseq.property.agent/session-id";
       sym "*";
@@ -1167,9 +1159,7 @@ let master_prompt_from_block block =
         child_blocks block
         |> List.filter block_has_code_tag
         |> List.filter_map (fun child ->
-            Option.bind
-              (Edn_util.get_string child "block/title")
-              trim_non_empty)
+            Option.bind (Edn_util.get_string child "block/title") trim_non_empty)
       in
       match prompts with
       | [ prompt ] -> Ok prompt
@@ -1344,8 +1334,7 @@ let ensure_prompt_templates invoke_config repo =
   let open Cli_effect in
   bind (ensure_registry_page invoke_config repo) (fun page ->
       match
-        ( Edn_util.get_int64 page "db/id",
-          Edn_util.get_string page "block/uuid" )
+        (Edn_util.get_int64 page "db/id", Edn_util.get_string page "block/uuid")
       with
       | None, _ -> error (Failure "agent bridge registry page id not found")
       | _, None -> error (Failure "agent bridge registry page uuid not found")
@@ -1525,6 +1514,7 @@ let process_comment invoke_config repo graph agent_name config master_session
 
 let datom_attr datom =
   Option.map strip_keyword_prefix (Edn_util.get_string datom "a")
+
 let datom_value_string datom = Edn_util.get_string datom "v"
 
 let datom_added datom =
@@ -1606,8 +1596,7 @@ let nearest_ancestor_task_session invoke_config repo block =
             match
               ( has_task_tag parent,
                 Option.bind
-                  (Edn_util.get_string parent
-                     "logseq.property.agent/session-id")
+                  (Edn_util.get_string parent "logseq.property.agent/session-id")
                   trim_non_empty,
                 Edn_util.get_string parent "block/uuid" )
             with

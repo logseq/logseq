@@ -187,9 +187,8 @@ let entity_selector =
         [
           ( kw "block/tags",
             vector
-              [
-                kw "db/id"; kw "db/ident"; kw "block/title"; kw "block/name";
-              ] );
+              [ kw "db/id"; kw "db/ident"; kw "block/title"; kw "block/name" ]
+          );
         ];
     ]
 
@@ -688,8 +687,7 @@ let execute action config mode =
         | Ok invoke_config ->
             execute_remove_entity mode invoke_config repo
               ~command:Command_id.Remove_property
-              ~list_method:
-                (Edn_util.keyword_t "thread-api/cli-list-properties")
+              ~list_method:(Edn_util.keyword_t "thread-api/cli-list-properties")
               ~not_found_code:(Edn_util.keyword_t "property-not-found")
               ~ambiguous_code:(Edn_util.keyword_t "ambiguous-property-name")
               ~label:"property" ~validate:validate_property_target ~id ~name)

@@ -492,9 +492,7 @@ let resolve_property_ident invoke_config repo = function
   | Key_id id ->
       let open Cli_effect in
       bind
-        (pull invoke_config repo
-           (vector [ kw "db/ident" ])
-           (Edn_util.int64 id))
+        (pull invoke_config repo (vector [ kw "db/ident" ]) (Edn_util.int64 id))
         (fun result ->
           match ident_of_entity result with
           | Some ident -> pure (Ok ident)

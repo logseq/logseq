@@ -26,17 +26,14 @@ let status_value = function
 let check_value (check : check) =
   let fields =
     [
-      ( Edn_util.keyword "id",
-        Edn_util.any check.id );
+      (Edn_util.keyword "id", Edn_util.any check.id);
       (Edn_util.keyword "status", status_value check.status);
       (Edn_util.keyword "message", Edn_util.string check.message);
     ]
   in
   let fields =
     match check.code with
-    | Some code ->
-        (Edn_util.keyword "code", Edn_util.any code)
-        :: fields
+    | Some code -> (Edn_util.keyword "code", Edn_util.any code) :: fields
     | None -> fields
   in
   let fields =
