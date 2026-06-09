@@ -28,18 +28,3 @@ let of_value raw =
     deleted_at = None;
     raw;
   }
-
-let label t =
-  match t.title with
-  | Some _ as x -> x
-  | None -> (
-      match t.name with
-      | Some _ as x -> x
-      | None -> Option.map Edn_util.keyword_to_string t.ident)
-
-let is_recycled t = Option.is_some t.deleted_at
-let has_tag tag t = List.mem tag t.tags
-let is_page t = t.kind = Page
-let is_block t = t.kind = Block
-let is_tag t = t.kind = Tag
-let is_property t = t.kind = Property

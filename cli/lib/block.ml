@@ -22,11 +22,6 @@ let position_of_string = function
   | "sibling" -> Some Sibling
   | _ -> None
 
-let string_of_position = function
-  | First_child -> "first-child"
-  | Last_child -> "last-child"
-  | Sibling -> "sibling"
-
 let make ?uuid ?title ?(children = []) () =
   {
     id = None;
@@ -111,5 +106,4 @@ let rec to_value t =
   Edn_util.map_t (List.rev fields)
 
 let rec flatten xs = xs @ List.concat_map (fun t -> flatten t.children) xs
-let collect_uuids xs = flatten xs |> List.filter_map (fun t -> t.uuid)
 let label t = match t.title with Some _ as x -> x | None -> t.name

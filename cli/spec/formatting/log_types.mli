@@ -11,5 +11,3 @@ type record = {
 
 val truncate_preview : ?max_len:int -> Melange_edn.any -> preview
 val install_stderr_handler : unit -> unit
-val set_verbose : bool -> unit
-val log : level -> string -> Melange_edn.any option -> unit

@@ -24,73 +24,6 @@ type build_context = {
   selected_repo : Cli_primitive.repo option;
 }
 
-let command_id = function
-  | Version -> Command_id.Version
-  | Graph action -> (
-      match action with
-      | Graph.Graph_list -> Graph_list
-      | Graph_create _ -> Graph_create
-      | Graph_switch _ -> Graph_switch
-      | Graph_remove _ -> Graph_remove
-      | Graph_validate _ -> Graph_validate
-      | Graph_info _ -> Graph_info
-      | Graph_backup_list _ -> Graph_backup_list
-      | Graph_backup_create _ -> Graph_backup_create
-      | Graph_backup_restore _ -> Graph_backup_restore
-      | Graph_backup_remove _ -> Graph_backup_remove
-      | Graph_export _ -> Graph_export
-      | Graph_import _ -> Graph_import)
-  | List action -> action.List_command.command
-  | Upsert action -> (
-      match action with
-      | Upsert.Upsert_block _ -> Upsert_block
-      | Upsert_page _ -> Upsert_page
-      | Upsert_task _ -> Upsert_task
-      | Upsert_asset _ -> Upsert_asset
-      | Upsert_tag _ -> Upsert_tag
-      | Upsert_property _ -> Upsert_property)
-  | Remove action -> (
-      match action with
-      | Remove.Remove_block _ -> Remove_block
-      | Remove_page _ -> Remove_page
-      | Remove_tag _ -> Remove_tag
-      | Remove_property _ -> Remove_property)
-  | Search action -> action.Search.command
-  | Query _ -> Query
-  | Show _ -> Show
-  | Server action -> (
-      match action with
-      | Server_command.Server_list -> Server_list
-      | Server_cleanup -> Server_cleanup
-      | Server_start _ -> Server_start
-      | Server_stop _ -> Server_stop
-      | Server_restart _ -> Server_restart)
-  | Sync action -> (
-      match action with
-      | Sync.Sync_status _ -> Sync_status
-      | Sync_start _ -> Sync_start
-      | Sync_stop _ -> Sync_stop
-      | Sync_upload _ -> Sync_upload
-      | Sync_download _ -> Sync_download
-      | Sync_asset_download _ -> Sync_asset_download
-      | Sync_remote_graphs -> Sync_remote_graphs
-      | Sync_ensure_keys _ -> Sync_ensure_keys
-      | Sync_grant_access _ -> Sync_grant_access
-      | Sync_config_get _ -> Sync_config_get
-      | Sync_config_set _ -> Sync_config_set
-      | Sync_config_unset _ -> Sync_config_unset)
-  | Auth Auth_command.Login -> Login
-  | Auth Logout -> Logout
-  | Agent _ -> Agent_bridge
-  | Doctor _ -> Doctor
-  | Debug _ -> Debug_pull
-  | Skill (Skill.Skill_show _) -> Skill_show
-  | Skill (Skill.Skill_install _) -> Skill_install
-  | Completion _ -> Completion
-  | Example _ -> Example
-
-let context _ = Edn_util.map_t []
-
 let build config request =
   let result =
     match request.Cli_request.command with
@@ -168,8 +101,6 @@ let execute action config mode =
   | Example action -> Example.execute action config mode
   | Auth action -> Auth_command.execute action config mode
   | Agent action -> Agent.execute action config mode
-
-let requires_existing_graph _ = false
 
 let requires_missing_graph = function
   | Sync (Sync.Sync_download { require_missing_graph; _ }) ->

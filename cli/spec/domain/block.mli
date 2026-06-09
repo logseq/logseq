@@ -17,7 +17,6 @@ type t = {
 type tree = { root : t }
 
 val position_of_string : string -> position option
-val string_of_position : position -> string
 
 val make :
   ?uuid:Cli_primitive.uuid -> ?title:string -> ?children:t list -> unit -> t
@@ -25,5 +24,4 @@ val make :
 val of_value : Melange_edn.any -> t
 val to_value : t -> Melange_edn.map Melange_edn.t
 val flatten : t list -> t list
-val collect_uuids : t list -> Cli_primitive.uuid list
 val label : t -> string option

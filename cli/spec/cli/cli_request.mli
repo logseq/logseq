@@ -32,6 +32,3 @@ val make :
   t
 
 val command_id : t -> Command_id.t
-val validate : t -> unit Error.build_result
-val is_version : t -> bool
-val output_format : t -> Output.Mode.packed option

@@ -397,7 +397,7 @@ let generate shell registry =
 let command_id _ = Command_id.Completion
 let validate_parsed _ = Ok ()
 
-let build ?registry config _ = function
+let build ?registry _config _ = function
   | Parsed_completion { shell } ->
       Ok
         (Completion

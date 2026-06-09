@@ -330,48 +330,7 @@ let make commands =
 let add command t =
   { t with commands = with_catalog_options command :: t.commands }
 
-let merge registries =
-  {
-    commands =
-      List.concat_map (fun r -> r.commands) registries
-      |> List.map with_catalog_options;
-    groups = List.concat_map (fun r -> r.groups) registries;
-  }
-
-let find_by_id id t = List.find_opt (fun c -> c.id = id) t.commands
 let find_by_path path t = List.find_opt (fun c -> c.path = path) t.commands
-
-let examples_for_selector selector t =
-  match find_by_path selector t with
-  | Some c -> Ok c.examples
-  | None -> Error (Error.unknown_command (String.concat " " selector))
-
-let options_for_path path t =
-  match find_by_path path t with
-  | Some c -> Ok c.options
-  | None ->
-      Error
-        (Error.unknown_command ("unknown command: " ^ String.concat " " path))
-
-let prefixes path =
-  let rec loop acc prefix = function
-    | [] -> List.rev acc
-    | segment :: rest ->
-        let prefix = prefix @ [ segment ] in
-        loop (prefix :: acc) prefix rest
-  in
-  loop [] [] path
-
-let uniq xs = List.sort_uniq compare xs
-
-let group_paths t =
-  t.commands |> List.concat_map (fun c -> prefixes c.path) |> uniq
-
-let top_level_paths t =
-  t.commands
-  |> List.filter_map (fun c ->
-      match c.path with x :: _ -> Some [ x ] | [] -> None)
-  |> uniq
 
 let top_level_group_doc = function
   | "agent" -> Some "Agent bridge commands"

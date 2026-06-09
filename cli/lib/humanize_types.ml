@@ -4,10 +4,6 @@ let pluralize_noun = Humanize.pluralize_noun
 let format_count_with_noun count noun =
   format_count count ^ " " ^ pluralize_noun count noun
 
-let format_filesize = function
-  | None -> "-"
-  | Some bytes -> Humanize.filesize bytes
-
 let datetime = Humanize.datetime
 
 let relative_datetime ~then_time ~now_time =
