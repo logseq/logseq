@@ -611,9 +611,7 @@ let fields_include options field =
   | None -> false
 
 let normalize_tag_options options =
-  if
-    bool_option options "with-properties"
-    || bool_option options "with-extends"
+  if bool_option options "with-properties" || bool_option options "with-extends"
   then Edn_util.assoc "expand" (Edn_util.bool true) options
   else options
 
@@ -722,11 +720,9 @@ let prepare_items kind options items =
 let visible_title_fields = function
   | Node ->
       [
-        Edn_util.keyword_t "block/title";
-        Edn_util.keyword_t "block/page-title";
+        Edn_util.keyword_t "block/title"; Edn_util.keyword_t "block/page-title";
       ]
-  | Page | Tag | Property | Task | Asset ->
-      [ Edn_util.keyword_t "block/title" ]
+  | Page | Tag | Property | Task | Asset -> [ Edn_util.keyword_t "block/title" ]
 
 let normalize_visible_title_fields config repo kind items =
   let fields = visible_title_fields kind in

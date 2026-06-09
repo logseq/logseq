@@ -516,9 +516,7 @@ let graph_import_message mode _config graph opts new_graph =
   Cli_result.ok ~command:Command_id.Graph_import mode
     (Raw
        (Edn_util.map
-          [
-            (kw "new-graph?", bool new_graph); (kw "message", string message);
-          ]))
+          [ (kw "new-graph?", bool new_graph); (kw "message", string message) ]))
 
 let validation_errors value =
   match Edn_util.as_map value with
@@ -1028,12 +1026,13 @@ let execute_graph_switch mode graph repo config =
             (Cli_config.update_config config
                (Edn_util.map [ (kw "graph", string graph_name) ]))
             (function
-            | Error err ->
-                pure (Cli_result.error ~command:Command_id.Graph_switch mode err)
-            | Ok _ ->
-                pure
-                  (Cli_result.ok ~command:Command_id.Graph_switch mode
-                     (Message ("Switched to graph \"" ^ graph_name ^ "\"")))))
+              | Error err ->
+                  pure
+                    (Cli_result.error ~command:Command_id.Graph_switch mode err)
+              | Ok _ ->
+                  pure
+                    (Cli_result.ok ~command:Command_id.Graph_switch mode
+                       (Message ("Switched to graph \"" ^ graph_name ^ "\"")))))
 
 let execute_graph_remove mode graph repo config =
   let open Cli_effect in

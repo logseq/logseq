@@ -259,25 +259,25 @@ let execute_config_get mode config key =
        (Raw (config_result ?value key)))
 
 let execute_config_set mode config key value =
-  (Cli_config.update_config config (config_patch key (Edn_util.string value))
-   >>= function
-   | Ok _ ->
-       Cli_effect.pure
-         (Cli_result.ok ~command:Command_id.Sync_config_set mode
-            (Raw (config_result ~value:(Edn_util.string value) key)))
-   | Error err ->
-       Cli_effect.pure
-         (Cli_result.error ~command:Command_id.Sync_config_set mode err))
+  Cli_config.update_config config (config_patch key (Edn_util.string value))
+  >>= function
+  | Ok _ ->
+      Cli_effect.pure
+        (Cli_result.ok ~command:Command_id.Sync_config_set mode
+           (Raw (config_result ~value:(Edn_util.string value) key)))
+  | Error err ->
+      Cli_effect.pure
+        (Cli_result.error ~command:Command_id.Sync_config_set mode err)
 
 let execute_config_unset mode config key =
-  (Cli_config.update_config config (config_patch key Edn_util.nil) >>= function
-   | Ok _ ->
-       Cli_effect.pure
-         (Cli_result.ok ~command:Command_id.Sync_config_unset mode
-            (Raw (config_result key)))
-   | Error err ->
-       Cli_effect.pure
-         (Cli_result.error ~command:Command_id.Sync_config_unset mode err))
+  Cli_config.update_config config (config_patch key Edn_util.nil) >>= function
+  | Ok _ ->
+      Cli_effect.pure
+        (Cli_result.ok ~command:Command_id.Sync_config_unset mode
+           (Raw (config_result key)))
+  | Error err ->
+      Cli_effect.pure
+        (Cli_result.error ~command:Command_id.Sync_config_unset mode err)
 
 let sync_config_value config =
   Edn_util.map_t
@@ -327,13 +327,13 @@ let should_resolve_auth_file config =
 let resolve_runtime_auth_if_available config =
   if not (should_resolve_auth_file config) then Cli_effect.pure (Ok config)
   else
-    (Auth_state.read_auth_file config >>= function
-      | Error err -> Cli_effect.pure (Error err)
-      | Ok None -> Cli_effect.pure (Ok config)
-      | Ok (Some _) ->
-          (Auth_state.resolve_auth config >>= function
-            | Error err -> Cli_effect.pure (Error err)
-            | Ok auth -> Cli_effect.pure (Ok (config_with_auth config auth))))
+    Auth_state.read_auth_file config >>= function
+    | Error err -> Cli_effect.pure (Error err)
+    | Ok None -> Cli_effect.pure (Ok config)
+    | Ok (Some _) -> (
+        Auth_state.resolve_auth config >>= function
+        | Error err -> Cli_effect.pure (Error err)
+        | Ok auth -> Cli_effect.pure (Ok (config_with_auth config auth)))
 
 let prepare_worker_runtime invoke_config config =
   let set_sync_config () =
@@ -343,8 +343,8 @@ let prepare_worker_runtime invoke_config config =
   match runtime_auth_state config with
   | None -> set_sync_config ()
   | Some auth_state ->
-      Transport.thread_api_sync_app_state invoke_config ~auth_state
-      >>= fun _ -> set_sync_config ()
+      Transport.thread_api_sync_app_state invoke_config ~auth_state >>= fun _ ->
+      set_sync_config ()
 
 let unquote_transit_value = function
   | Melange_edn.Any (Melange_edn.Tagged (("transit/quote" | "'"), value)) ->
@@ -531,15 +531,11 @@ let download_progress_enabled config ~progress ~progress_explicit =
 let download_progress_message graph_id event_type payload =
   match (Edn_util.keyword_to_string event_type, Edn_util.as_map payload) with
   | "rtc-log", Some _ ->
-      let event_kind =
-        Option.bind (Edn_util.get payload "type") value_string
-      in
+      let event_kind = Option.bind (Edn_util.get payload "type") value_string in
       let event_graph_id =
         Option.bind (Edn_util.get payload "graph-uuid") value_string
       in
-      let message =
-        Option.bind (Edn_util.get payload "message") value_string
-      in
+      let message = Option.bind (Edn_util.get payload "message") value_string in
       if event_kind = Some "rtc.log/download" && event_graph_id = Some graph_id
       then message
       else None
@@ -612,9 +608,8 @@ let asset_result_data ?(extra = []) asset ~download_requested ~checksum_status =
     [
       ( kw "asset-uuid",
         Edn_util.string
-          (Option.value
-             (non_empty_string_field asset "block/uuid")
-             ~default:"") );
+          (Option.value (non_empty_string_field asset "block/uuid") ~default:"")
+      );
       ( kw "asset-type",
         Edn_util.string
           (Option.value
@@ -744,18 +739,17 @@ let ensure_e2ee_password_available config invoke_config repo e2ee_password
                 ~refresh_token
         in
         Cli_effect.catch
-          (verify_e2ee_password >>= fun result ->
-               match tagged_error_value result with
-               | Some value ->
-                   let message =
-                     worker_error_message
-                       ~default_message:"e2ee password failed" value
-                   in
-                   if missing_e2ee_password_diagnostic message then
-                     Cli_effect.pure (Error (e2ee_password_not_found repo))
-                   else
-                     Cli_effect.pure (Error (e2ee_password_worker_error value))
-               | None -> Cli_effect.pure (Ok ()))
+          ( verify_e2ee_password >>= fun result ->
+            match tagged_error_value result with
+            | Some value ->
+                let message =
+                  worker_error_message ~default_message:"e2ee password failed"
+                    value
+                in
+                if missing_e2ee_password_diagnostic message then
+                  Cli_effect.pure (Error (e2ee_password_not_found repo))
+                else Cli_effect.pure (Error (e2ee_password_worker_error value))
+            | None -> Cli_effect.pure (Ok ()) )
           (fun exn ->
             let message = Printexc.to_string exn in
             if missing_e2ee_password_diagnostic message then
@@ -785,8 +779,7 @@ let sync_start_timeout_error repo status =
     ~context:
       (Edn_util.map
          [
-           (kw "repo", Edn_util.string (repo_string repo));
-           (kw "status", status);
+           (kw "repo", Edn_util.string (repo_string repo)); (kw "status", status);
          ])
     (Edn_util.keyword_t "sync-start-timeout")
     "sync start timed out before websocket reached open state"
@@ -810,29 +803,26 @@ let wait_sync_start_ready config invoke_config repo =
   loop ()
 
 let execute_status mode config repo =
-  (Server_runtime.ensure_server config repo ~create_empty_db:false >>= function
-    | Error err ->
-        Cli_effect.pure
-          (Cli_result.error ~command:Command_id.Sync_status mode err)
-    | Ok invoke_config ->
-        prepare_worker_runtime invoke_config config >>= fun _ ->
-        Transport.thread_api_db_sync_status invoke_config ~repo
-        >>= fun result ->
-                Cli_effect.pure
-                  (Cli_result.ok ~command:Command_id.Sync_status mode
-             (Raw result)))
+  Server_runtime.ensure_server config repo ~create_empty_db:false >>= function
+  | Error err ->
+      Cli_effect.pure
+        (Cli_result.error ~command:Command_id.Sync_status mode err)
+  | Ok invoke_config ->
+      prepare_worker_runtime invoke_config config >>= fun _ ->
+      Transport.thread_api_db_sync_status invoke_config ~repo >>= fun result ->
+      Cli_effect.pure
+        (Cli_result.ok ~command:Command_id.Sync_status mode (Raw result))
 
 let execute_stop mode config repo =
-  (Server_runtime.ensure_server config repo ~create_empty_db:false >>= function
-    | Error err ->
-        Cli_effect.pure
-          (Cli_result.error ~command:Command_id.Sync_stop mode err)
-    | Ok invoke_config ->
-        prepare_worker_runtime invoke_config config >>= fun _ ->
-        Transport.thread_api_db_sync_stop invoke_config >>= fun result ->
-        Cli_effect.pure
-          (Cli_result.ok ~command:Command_id.Sync_stop mode
-             (Raw (result_value result))))
+  Server_runtime.ensure_server config repo ~create_empty_db:false >>= function
+  | Error err ->
+      Cli_effect.pure (Cli_result.error ~command:Command_id.Sync_stop mode err)
+  | Ok invoke_config ->
+      prepare_worker_runtime invoke_config config >>= fun _ ->
+      Transport.thread_api_db_sync_stop invoke_config >>= fun result ->
+      Cli_effect.pure
+        (Cli_result.ok ~command:Command_id.Sync_stop mode
+           (Raw (result_value result)))
 
 let sync_download_timeout_span = Time.span_of_ms 1_800_000L
 
@@ -851,154 +841,149 @@ let sync_download_invoke_config invoke_config =
 let execute_upload mode config repo e2ee_password =
   let command = Command_id.Sync_upload in
   let error err = Cli_effect.pure (Cli_result.error ~command mode err) in
-  (resolve_runtime_auth_if_available config >>= function
-    | Error err -> error err
-    | Ok config ->
-        (Server_runtime.ensure_server config repo ~create_empty_db:false
-         >>= function
+  resolve_runtime_auth_if_available config >>= function
+  | Error err -> error err
+  | Ok config -> (
+      Server_runtime.ensure_server config repo ~create_empty_db:false
+      >>= function
+      | Error err -> error err
+      | Ok invoke_config -> (
+          let upload_invoke_config =
+            sync_download_invoke_config invoke_config
+          in
+          let ensure_upload_e2ee_password () =
+            match e2ee_password with
+            | Some password when String.trim password <> "" ->
+                ensure_e2ee_password_available config upload_invoke_config repo
+                  e2ee_password true
+            | _ ->
+                Transport.thread_api_q upload_invoke_config ~repo
+                  ~query:(Edn_util.vector_t [ graph_e2ee_query ])
+                >>= fun graph_e2ee ->
+                let graph_e2ee =
+                  match Edn_util.as_bool graph_e2ee with
+                  | Some false -> false
+                  | _ -> true
+                in
+                ensure_e2ee_password_available config upload_invoke_config repo
+                  e2ee_password graph_e2ee
+          in
+          prepare_worker_runtime upload_invoke_config config >>= fun _ ->
+          ensure_upload_e2ee_password () >>= function
           | Error err -> error err
-          | Ok invoke_config ->
-              let upload_invoke_config =
-                sync_download_invoke_config invoke_config
-              in
-              let ensure_upload_e2ee_password () =
-                match e2ee_password with
-                | Some password when String.trim password <> "" ->
-                    ensure_e2ee_password_available config upload_invoke_config
-                      repo e2ee_password true
-                | _ ->
-                    Transport.thread_api_q upload_invoke_config ~repo
-                      ~query:(Edn_util.vector_t [ graph_e2ee_query ])
-                    >>= fun graph_e2ee ->
-                    let graph_e2ee =
-                      match Edn_util.as_bool graph_e2ee with
-                      | Some false -> false
-                      | _ -> true
-                    in
-                    ensure_e2ee_password_available config upload_invoke_config
-                      repo e2ee_password graph_e2ee
-              in
-              prepare_worker_runtime upload_invoke_config config >>= fun _ ->
-              (ensure_upload_e2ee_password () >>= function
-                    | Error err -> error err
-                    | Ok () ->
-                        Transport.thread_api_db_sync_upload_graph
-                          upload_invoke_config ~repo
-                        >>= fun result ->
-                        match tagged_error_value result with
-                        | Some value -> error (sync_upload_worker_error value)
-                        | None ->
-                            Cli_effect.pure
-                              (Cli_result.ok ~command mode
-                                 (Raw (result_value result))))))
+          | Ok () -> (
+              Transport.thread_api_db_sync_upload_graph upload_invoke_config
+                ~repo
+              >>= fun result ->
+              match tagged_error_value result with
+              | Some value -> error (sync_upload_worker_error value)
+              | None ->
+                  Cli_effect.pure
+                    (Cli_result.ok ~command mode (Raw (result_value result))))))
 
 let execute_start mode config repo e2ee_password =
   let command = Command_id.Sync_start in
   let error err = Cli_effect.pure (Cli_result.error ~command mode err) in
   let ok status = Cli_effect.pure (Cli_result.ok ~command mode (Raw status)) in
-  (resolve_runtime_auth_if_available config >>= function
-    | Error err -> error err
-    | Ok config ->
-        (Server_runtime.ensure_server config repo ~create_empty_db:false
-         >>= function
-          | Error err -> error err
-          | Ok invoke_config ->
-              prepare_worker_runtime invoke_config config >>= fun _ ->
-              let start_sync () =
-                Transport.thread_api_db_sync_start invoke_config ~repo
-                >>= fun _ ->
-                (wait_sync_start_ready config invoke_config repo >>= function
-                 | Ok status -> ok status
-                 | Error err -> error err)
-              in
-              Transport.thread_api_q invoke_config ~repo
-                ~query:(Edn_util.vector_t [ graph_e2ee_query ])
-              >>= fun graph_e2ee ->
-              let graph_e2ee = Edn_util.as_bool graph_e2ee = Some true in
-              let handle_e2ee = function
-                | Error err -> error err
-                | Ok () -> start_sync ()
-              in
-              ensure_e2ee_password_available config invoke_config repo
-                e2ee_password graph_e2ee
-              >>= handle_e2ee))
+  resolve_runtime_auth_if_available config >>= function
+  | Error err -> error err
+  | Ok config -> (
+      Server_runtime.ensure_server config repo ~create_empty_db:false
+      >>= function
+      | Error err -> error err
+      | Ok invoke_config ->
+          prepare_worker_runtime invoke_config config >>= fun _ ->
+          let start_sync () =
+            Transport.thread_api_db_sync_start invoke_config ~repo >>= fun _ ->
+            wait_sync_start_ready config invoke_config repo >>= function
+            | Ok status -> ok status
+            | Error err -> error err
+          in
+          Transport.thread_api_q invoke_config ~repo
+            ~query:(Edn_util.vector_t [ graph_e2ee_query ])
+          >>= fun graph_e2ee ->
+          let graph_e2ee = Edn_util.as_bool graph_e2ee = Some true in
+          let handle_e2ee = function
+            | Error err -> error err
+            | Ok () -> start_sync ()
+          in
+          ensure_e2ee_password_available config invoke_config repo e2ee_password
+            graph_e2ee
+          >>= handle_e2ee)
 
 let execute_remote_graphs mode config =
-  (Auth_state.resolve_auth config >>= function
-    | Error err ->
-        Cli_effect.pure
-          (Cli_result.error ~command:Command_id.Sync_remote_graphs mode err)
-    | Ok auth ->
-        let config = config_with_auth config auth in
-        (invoke_global_config config >>= function
-          | Error err ->
+  Auth_state.resolve_auth config >>= function
+  | Error err ->
+      Cli_effect.pure
+        (Cli_result.error ~command:Command_id.Sync_remote_graphs mode err)
+  | Ok auth -> (
+      let config = config_with_auth config auth in
+      invoke_global_config config >>= function
+      | Error err ->
+          Cli_effect.pure
+            (Cli_result.error ~command:Command_id.Sync_remote_graphs mode err)
+      | Ok invoke_config -> (
+          prepare_worker_runtime invoke_config config >>= fun _ ->
+          Transport.thread_api_db_sync_list_remote_graphs invoke_config
+          >>= fun graphs ->
+          match remote_graphs_error graphs with
+          | Some error_value ->
               Cli_effect.pure
                 (Cli_result.error ~command:Command_id.Sync_remote_graphs mode
-                   err)
-          | Ok invoke_config ->
-              prepare_worker_runtime invoke_config config >>= fun _ ->
-              Transport.thread_api_db_sync_list_remote_graphs invoke_config
-              >>= fun graphs ->
-              match remote_graphs_error graphs with
-              | Some error_value ->
-                  Cli_effect.pure
-                    (Cli_result.error ~command:Command_id.Sync_remote_graphs
-                       mode
-                       (remote_graphs_worker_error error_value))
-              | None ->
-                  Cli_effect.pure
-                    (Cli_result.ok ~command:Command_id.Sync_remote_graphs mode
-                       (Raw
-                          (Edn_util.map
-                             [ (kw "graphs", graphs_value graphs) ])))))
+                   (remote_graphs_worker_error error_value))
+          | None ->
+              Cli_effect.pure
+                (Cli_result.ok ~command:Command_id.Sync_remote_graphs mode
+                   (Raw (Edn_util.map [ (kw "graphs", graphs_value graphs) ]))))
+      )
 
 let execute_grant_access mode config repo graph_id email =
-  (Server_runtime.ensure_server config repo ~create_empty_db:false >>= function
-    | Error err ->
-        Cli_effect.pure
-          (Cli_result.error ~command:Command_id.Sync_grant_access mode err)
-    | Ok invoke_config ->
-        prepare_worker_runtime invoke_config config >>= fun _ ->
-        Transport.thread_api_db_sync_grant_graph_access invoke_config ~repo
-          ~graph_id ~email
-        >>= fun result ->
-        Cli_effect.pure
-          (Cli_result.ok ~command:Command_id.Sync_grant_access mode
-             (Raw (result_value result))))
+  Server_runtime.ensure_server config repo ~create_empty_db:false >>= function
+  | Error err ->
+      Cli_effect.pure
+        (Cli_result.error ~command:Command_id.Sync_grant_access mode err)
+  | Ok invoke_config ->
+      prepare_worker_runtime invoke_config config >>= fun _ ->
+      Transport.thread_api_db_sync_grant_graph_access invoke_config ~repo
+        ~graph_id ~email
+      >>= fun result ->
+      Cli_effect.pure
+        (Cli_result.ok ~command:Command_id.Sync_grant_access mode
+           (Raw (result_value result)))
 
 let execute_ensure_keys mode config ~upload_keys ~e2ee_password =
-  (invoke_global_config config >>= function
-    | Error err ->
-        Cli_effect.pure
-          (Cli_result.error ~command:Command_id.Sync_ensure_keys mode err)
-    | Ok invoke_config ->
-        prepare_worker_runtime invoke_config config >>= fun _ ->
-        let options = ensure_keys_args ~upload_keys ~e2ee_password in
-        Transport.thread_api_db_sync_ensure_user_rsa_keys ?options invoke_config
-        >>= fun result ->
-        Cli_effect.pure
-          (Cli_result.ok ~command:Command_id.Sync_ensure_keys mode
-             (Raw (result_value result))))
+  invoke_global_config config >>= function
+  | Error err ->
+      Cli_effect.pure
+        (Cli_result.error ~command:Command_id.Sync_ensure_keys mode err)
+  | Ok invoke_config ->
+      prepare_worker_runtime invoke_config config >>= fun _ ->
+      let options = ensure_keys_args ~upload_keys ~e2ee_password in
+      Transport.thread_api_db_sync_ensure_user_rsa_keys ?options invoke_config
+      >>= fun result ->
+      Cli_effect.pure
+        (Cli_result.ok ~command:Command_id.Sync_ensure_keys mode
+           (Raw (result_value result)))
 
 let ensure_empty_download_db invoke_config repo =
-  (Transport.thread_api_q invoke_config ~repo
-     ~query:(Edn_util.vector_t [ sync_download_non_empty_query ])
-   >>= function
-   | count_value
-     when Option.value (Edn_util.as_int count_value) ~default:0 > 0 ->
-       let count = Option.value (Edn_util.as_int count_value) ~default:0 in
-       Cli_effect.pure (Error (graph_db_not_empty repo count))
-   | _ -> Cli_effect.pure (Ok ()))
+  Transport.thread_api_q invoke_config ~repo
+    ~query:(Edn_util.vector_t [ sync_download_non_empty_query ])
+  >>= function
+  | count_value when Option.value (Edn_util.as_int count_value) ~default:0 > 0
+    ->
+      let count = Option.value (Edn_util.as_int count_value) ~default:0 in
+      Cli_effect.pure (Error (graph_db_not_empty repo count))
+  | _ -> Cli_effect.pure (Ok ())
 
 let invoke_download_graph mode config invoke_config repo graph_id graph_e2ee
     subscription =
   Cli_effect.finally
-    (Transport.thread_api_db_sync_download_graph_by_id invoke_config ~repo
-       ~graph_id ~graph_e2ee
-     >>= fun result ->
-     Cli_effect.pure
-       (Cli_result.ok ~command:Command_id.Sync_download mode
-          (Raw (result_value result))))
+    ( Transport.thread_api_db_sync_download_graph_by_id invoke_config ~repo
+        ~graph_id ~graph_e2ee
+    >>= fun result ->
+      Cli_effect.pure
+        (Cli_result.ok ~command:Command_id.Sync_download mode
+           (Raw (result_value result))) )
     (fun () ->
       match subscription with
       | Some subscription -> subscription.Transport.close ()
@@ -1011,65 +996,64 @@ let execute_download_with_remote mode config repo graph progress
       Cli_effect.pure
         (Cli_result.error ~command:Command_id.Sync_download mode
            (remote_graph_not_found graph))
-  | Some graph_id ->
+  | Some graph_id -> (
       let graph_e2ee = remote_graph_e2ee remote_graph in
-      (Server_runtime.ensure_server config repo ~create_empty_db:true
-       >>= function
-        | Error err ->
-            Cli_effect.pure
-              (Cli_result.error ~command:Command_id.Sync_download mode err)
-        | Ok invoke_config ->
-            let download_invoke_config =
-              sync_download_invoke_config invoke_config
-            in
-            prepare_worker_runtime invoke_config config >>= fun _ ->
-            (ensure_e2ee_password_available config invoke_config repo
-               e2ee_password graph_e2ee
-             >>= function
-             | Error err ->
-                 Cli_effect.pure
-                   (Cli_result.error ~command:Command_id.Sync_download mode err)
-             | Ok () ->
-                 (ensure_empty_download_db invoke_config repo >>= function
-                  | Error err ->
-                      Cli_effect.pure
-                        (Cli_result.error ~command:Command_id.Sync_download mode
-                           err)
-                  | Ok () ->
-                      let progress_enabled =
-                        download_progress_enabled config ~progress
-                          ~progress_explicit
-                      in
-                      maybe_connect_download_progress config download_invoke_config
-                        ~enabled:progress_enabled ~graph_id
-                      >>= fun subscription ->
-                      invoke_download_graph mode config download_invoke_config repo
-                        graph_id graph_e2ee subscription)))
+      Server_runtime.ensure_server config repo ~create_empty_db:true
+      >>= function
+      | Error err ->
+          Cli_effect.pure
+            (Cli_result.error ~command:Command_id.Sync_download mode err)
+      | Ok invoke_config -> (
+          let download_invoke_config =
+            sync_download_invoke_config invoke_config
+          in
+          prepare_worker_runtime invoke_config config >>= fun _ ->
+          ensure_e2ee_password_available config invoke_config repo e2ee_password
+            graph_e2ee
+          >>= function
+          | Error err ->
+              Cli_effect.pure
+                (Cli_result.error ~command:Command_id.Sync_download mode err)
+          | Ok () -> (
+              ensure_empty_download_db invoke_config repo >>= function
+              | Error err ->
+                  Cli_effect.pure
+                    (Cli_result.error ~command:Command_id.Sync_download mode err)
+              | Ok () ->
+                  let progress_enabled =
+                    download_progress_enabled config ~progress
+                      ~progress_explicit
+                  in
+                  maybe_connect_download_progress config download_invoke_config
+                    ~enabled:progress_enabled ~graph_id
+                  >>= fun subscription ->
+                  invoke_download_graph mode config download_invoke_config repo
+                    graph_id graph_e2ee subscription)))
 
 let execute_download mode config repo graph progress progress_explicit
     e2ee_password =
   let graph_name = graph_string graph in
-  (resolve_runtime_auth_if_available config >>= function
-    | Error err ->
-        Cli_effect.pure
-          (Cli_result.error ~command:Command_id.Sync_download mode err)
-    | Ok config ->
-        (invoke_global_config config ~create_empty_db:true >>= function
-          | Error err ->
+  resolve_runtime_auth_if_available config >>= function
+  | Error err ->
+      Cli_effect.pure
+        (Cli_result.error ~command:Command_id.Sync_download mode err)
+  | Ok config -> (
+      invoke_global_config config ~create_empty_db:true >>= function
+      | Error err ->
+          Cli_effect.pure
+            (Cli_result.error ~command:Command_id.Sync_download mode err)
+      | Ok global_config -> (
+          prepare_worker_runtime global_config config >>= fun _ ->
+          Transport.thread_api_db_sync_list_remote_graphs global_config
+          >>= fun remote_graphs ->
+          match find_remote_graph graph_name remote_graphs with
+          | None ->
               Cli_effect.pure
-                (Cli_result.error ~command:Command_id.Sync_download mode err)
-          | Ok global_config ->
-              prepare_worker_runtime global_config config >>= fun _ ->
-              Transport.thread_api_db_sync_list_remote_graphs global_config
-              >>= fun remote_graphs ->
-              match find_remote_graph graph_name remote_graphs with
-              | None ->
-                  Cli_effect.pure
-                    (Cli_result.error ~command:Command_id.Sync_download mode
-                       (remote_graph_not_found graph_name))
-              | Some remote_graph ->
-                  execute_download_with_remote mode config repo graph_name
-                    progress progress_explicit e2ee_password remote_graph))
+                (Cli_result.error ~command:Command_id.Sync_download mode
+                   (remote_graph_not_found graph_name))
+          | Some remote_graph ->
+              execute_download_with_remote mode config repo graph_name progress
+                progress_explicit e2ee_password remote_graph))
 
 let validate_asset repo graph asset =
   match Edn_util.as_map asset with
@@ -1173,25 +1157,25 @@ let execute_asset_download_request mode config invoke_config repo graph asset =
               "sync is not started for this graph"))
 
 let execute_asset_download mode config repo graph id uuid =
-  (Server_runtime.ensure_server config repo ~create_empty_db:false >>= function
-    | Error err ->
-        Cli_effect.pure
-          (Cli_result.error ~command:Command_id.Sync_asset_download mode err)
-    | Ok invoke_config ->
-        prepare_worker_runtime invoke_config config >>= fun _ ->
-        Transport.thread_api_pull invoke_config ~repo
-          ~selector:
-            (Edn_util.expect_vector_t "sync asset pull selector"
-               sync_asset_pull_selector)
-          ~lookup:(asset_lookup_ref ~id ~uuid)
-        >>= fun asset ->
-        match validate_asset repo graph asset with
-        | Error err ->
-            Cli_effect.pure
-              (Cli_result.error ~command:Command_id.Sync_asset_download mode err)
-        | Ok asset ->
-            execute_asset_download_request mode config invoke_config repo graph
-              asset)
+  Server_runtime.ensure_server config repo ~create_empty_db:false >>= function
+  | Error err ->
+      Cli_effect.pure
+        (Cli_result.error ~command:Command_id.Sync_asset_download mode err)
+  | Ok invoke_config -> (
+      prepare_worker_runtime invoke_config config >>= fun _ ->
+      Transport.thread_api_pull invoke_config ~repo
+        ~selector:
+          (Edn_util.expect_vector_t "sync asset pull selector"
+             sync_asset_pull_selector)
+        ~lookup:(asset_lookup_ref ~id ~uuid)
+      >>= fun asset ->
+      match validate_asset repo graph asset with
+      | Error err ->
+          Cli_effect.pure
+            (Cli_result.error ~command:Command_id.Sync_asset_download mode err)
+      | Ok asset ->
+          execute_asset_download_request mode config invoke_config repo graph
+            asset)
 
 let execute action config mode =
   match action with
