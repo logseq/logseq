@@ -87,8 +87,7 @@ let parse_tags_vector_option = parse_tags_option
 
 let normalize_property_name value =
   let value = String.trim value in
-  if value = "" then None
-  else Some (Edn_util.keyword_t value)
+  if value = "" then None else Some (Edn_util.keyword_t value)
 
 let property_key_of_value value =
   match
@@ -357,8 +356,7 @@ let page_query selector =
         vector [ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
       );
       (kw "in", list [ sym "$"; sym "?name" ]);
-      ( kw "where",
-        vector [ vector [ sym "?e"; kw "block/name"; sym "?name" ] ] );
+      (kw "where", vector [ vector [ sym "?e"; kw "block/name"; sym "?name" ] ]);
     ]
 
 let tag_query selector =
@@ -604,8 +602,7 @@ let collect_action_block_uuids blocks =
 let result_ids ids =
   Edn_util.map
     [
-      ( kw "result",
-        Edn_util.vector (List.map (fun id -> Edn_util.int64 id) ids) );
+      (kw "result", Edn_util.vector (List.map (fun id -> Edn_util.int64 id) ids));
     ]
 
 let lookup_of_tag = function

@@ -306,8 +306,7 @@ let graph_list_human value config =
   match Edn_util.as_map value with
   | Some fields -> (
       let configured_graph =
-        config.Cli_config.graph
-        |> Option.map Cli_primitive.string_of_graph
+        config.Cli_config.graph |> Option.map Cli_primitive.string_of_graph
       in
       let current_graph =
         match List.assoc_opt (Edn_util.keyword "current-graph") fields with

@@ -23,13 +23,7 @@ type source =
   | Unknown
 
 let make ?hint ?(candidates = []) ?context code message =
-  {
-    code;
-    message;
-    hint;
-    candidates;
-    context;
-  }
+  { code; message; hint; candidates; context }
 
 let code value = Edn_util.keyword_t value
 let invalid_options message = make (code "invalid-options") message
