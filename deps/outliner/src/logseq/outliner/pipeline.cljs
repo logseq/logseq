@@ -92,7 +92,7 @@
        ;; and look weirdly recursive - https://github.com/logseq/db-test/issues/36
        (not (:logseq.property/created-from-property block))))
 
-(defonce non-ref-properties
+(defonce ^:private non-ref-properties
   (set/union private-built-in-props
              #{:logseq.property/query :logseq.property.publish/published-url :logseq.property/exclude-from-graph-view}))
 
