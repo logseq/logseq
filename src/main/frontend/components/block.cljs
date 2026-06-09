@@ -1683,14 +1683,12 @@
   [{:keys [render id src start aspect-ratio width on-width-change!] :as _embed}]
   (let [[local-width set-local-width!] (hooks/use-state nil)
         *shell-ref (hooks/use-ref nil)
-  (let [[local-width set-local-width!] (hooks/use-state nil)
-        *shell-ref (hooks/use-ref nil)
         resizable? (not (mobile-util/native-platform?))
         max-width (or (video-embed-parent-width *shell-ref)
-                      (max 0 (- (util/get-width) 96)))
+                    (max 0 (- (util/get-width) 96)))
         width (clamp-video-embed-width
-               (or local-width width default-video-embed-width)
-               max-width)
+                (or local-width width default-video-embed-width)
+                max-width)
         [width height] (video-embed-dimensions aspect-ratio width)]
     (when-let [frame
                (case render
