@@ -1348,10 +1348,6 @@ let fetch_breadcrumb_line invoke_config (action : action) root =
           pure (render_breadcrumb_line parents))
   | _ -> pure None
 
-let human_output = function
-  | Some (Output.Mode.Packed mode) -> not (Output.Mode.structured mode)
-  | None -> true
-
 let prepare_uuid_refs config (action : action) root linked_references =
   let uuids = referenced_uuids root linked_references in
   let open Cli_effect in
@@ -1370,7 +1366,7 @@ let prepare_uuid_refs config (action : action) root linked_references =
 
 let human_output_for_mode mode = not (Output.Mode.structured mode)
 
-let show_result mode config action root linked_references footer metadata =
+let show_result mode _config _action root linked_references footer metadata =
   if not (human_output_for_mode mode) then
     Cli_result.ok ~command:Command_id.Show mode
       (Raw (tree_data_value root linked_references))
@@ -1447,47 +1443,6 @@ let multi_tree_message mode config action root linked_references footer metadata
   with
   | { Cli_result.data = Some (Message message); _ } -> message
   | _ -> render_tree_text_value ~metadata root
-
-let build_tree_data config action =
-  let open Cli_effect in
-  bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
-    (function
-    | Error _ ->
-        pure
-          {
-            root = Block.make ();
-            linked_references = None;
-            referenced_uuids = [];
-            uuid_to_entity = [];
-            breadcrumb_line = None;
-          }
-    | Ok invoke_config ->
-        bind (pull_entity invoke_config action.repo action.target) (fun value ->
-            bind (attach_tree invoke_config action value) (fun root ->
-                bind (resolve_linked_blocks invoke_config action root)
-                  (fun root ->
-                    bind (attach_linked_references invoke_config action root)
-                      (fun linked_references ->
-                        bind
-                          (resolve_linked_references invoke_config action
-                             linked_references) (fun linked_references ->
-                            bind
-                              (prepare_uuid_refs config action root
-                                 linked_references)
-                              (fun
-                                (root, linked_references, _, referenced_uuids)
-                              ->
-                                pure
-                                  {
-                                    root = Block.of_value root;
-                                    linked_references;
-                                    referenced_uuids;
-                                    uuid_to_entity = [];
-                                    breadcrumb_line = None;
-                                  })))))))
-
-let prepare_tree_render_data _ _ data = Cli_effect.pure data
-let render_tree_text data _ = Option.value (Block.label data.root) ~default:""
 
 let execute_single mode action config target =
   let open Cli_effect in

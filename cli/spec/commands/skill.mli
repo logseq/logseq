@@ -34,9 +34,4 @@ val installed_skill_targets :
   home_dir:Cli_primitive.path option ->
   install_target list
 
-val installed_skill_update_status :
-  ?source_path:Cli_primitive.path -> unit -> update_status
-
-val format_installed_skill_warning : update_status -> string option
-
 include Command_spec.S with type parsed := parsed and type action := action

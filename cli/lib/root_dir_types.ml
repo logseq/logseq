@@ -18,8 +18,6 @@ let normalize_root_dir root =
   if Filename.is_relative path then Filename.concat (Sys.getcwd ()) path
   else path
 
-let graphs_dir root_dir = Filename.concat root_dir "graphs"
-
 let rec mkdir_p path =
   if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then
     ()

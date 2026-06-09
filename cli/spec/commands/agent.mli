@@ -34,6 +34,3 @@ val resolve_agent_name :
 
 val routable_task_decision : Entity.t -> agent_name:string -> routable_decision
 val validate_prompt_template : prompt_template -> unit Error.build_result
-
-val render_prompt_template :
-  prompt_template -> (string * string) list -> string Error.build_result

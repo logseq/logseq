@@ -137,8 +137,6 @@ let invoke_body method_ args =
   Json_util.string_of_string_fields
     [ ("method", method_name method_); ("argsTransit", args_transit) ]
 
-let find_substring ~needle haystack = find_substring_from ~needle haystack 0
-
 let invoke config method_ args =
   let base_url = normalize_base_url config.base_url in
   let stage = "transport.invoke:" ^ method_name method_ in
@@ -381,15 +379,6 @@ let dispatch_event on_event event_type payload =
   Cli_effect.async (fun () ->
       Cli_effect.catch (on_event event_type payload) (fun _ ->
           Cli_effect.pure ()))
-
-let consume_sse_text on_event text =
-  let events, _rest = split_sse_events text in
-  List.iter
-    (fun event_text ->
-      match decode_event event_text with
-      | Some (event_type, payload) -> dispatch_event on_event event_type payload
-      | None -> ())
-    events
 
 let consume_sse_chunk on_event buffer chunk =
   let events, rest = split_sse_events (!buffer ^ chunk) in

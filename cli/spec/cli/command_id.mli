@@ -64,9 +64,6 @@ type t =
 
 val to_string : t -> string
 val to_path : t -> string list
-val of_path : string list -> t option
-val group : t -> string
 val is_write : t -> bool
 val requires_graph : t -> bool
 val requires_auth : t -> bool
-val pp : Format.formatter -> t -> unit

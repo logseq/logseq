@@ -84,17 +84,6 @@ let all tasks =
   finish_if_ready ();
   result
 
-let pick tasks =
-  let result, resolver = wait () in
-  List.iter
-    (fun task ->
-      on_state task (function
-        | Pending -> ()
-        | Resolved value -> if is_pending result then wakeup resolver value
-        | Rejected exn -> if is_pending result then reject resolver exn))
-    tasks;
-  result
-
 let catch value handler =
   let result, resolver = wait () in
   on_state value (function

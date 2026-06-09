@@ -21,11 +21,6 @@ val create_repo : string -> repo
 val string_of_graph : graph -> string
 val string_of_repo : repo -> string
 val non_empty : string -> string option
-val keyword_name : keyword -> string
-val keyword_namespace : keyword -> string option
 val is_uuid_string : string -> bool
-val uuid_of_string : string -> uuid option
-val string_of_shell : shell -> string
 val shell_of_string : string -> shell option
-val owner_source_of_string : string option -> owner_source
 val string_of_owner_source : owner_source -> string

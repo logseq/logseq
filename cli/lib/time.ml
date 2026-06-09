@@ -13,10 +13,6 @@ let time_of_epoch_ms_float ms =
     if finite (Js.Date.getTime time) then time else invalid_time ()
   else invalid_time ()
 
-let time_of_float_s seconds =
-  if finite seconds then time_of_epoch_ms_float (seconds *. 1000.)
-  else invalid_time ()
-
 let now () = Js.Date.make ()
 let epoch = time_of_epoch_ms_float 0.
 let max_time = time_of_epoch_ms_float 8_640_000_000_000_000.
@@ -33,8 +29,6 @@ let span_of_ms ms =
   if finite span then span else invalid_span ()
 
 let span_to_ms span = Int64.of_float span
-let span_to_ms_float span = span
-let span_to_seconds_float span = span /. 1000.
 let zero_span = 0.
 let compare_span = Float.compare
 let add_span_value left right = left +. right

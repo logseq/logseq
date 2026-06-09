@@ -70,9 +70,6 @@ type action = {
 
 type list_result = { items : Entity.t list }
 
-let empty_common_opts =
-  { fields = None; limit = None; offset = None; sort = None; order = None }
-
 let order_of_string value =
   match String.lowercase_ascii (String.trim value) with
   | "asc" -> Some Asc
@@ -261,20 +258,6 @@ let sort_values ~field_map common items =
   | None -> items
   | Some keyword -> (
       let sorted = List.sort (compare_item_by keyword) items in
-      match common.order with
-      | Some Asc -> sorted
-      | Some Desc | None -> List.rev sorted)
-
-let apply_sort ~field_map common entities =
-  let sort_field = Option.value common.sort ~default:default_sort_field in
-  match List.assoc_opt sort_field field_map with
-  | None -> entities
-  | Some keyword -> (
-      let sorted =
-        List.sort
-          (fun a b -> compare_item_by keyword a.Entity.raw b.Entity.raw)
-          entities
-      in
       match common.order with
       | Some Asc -> sorted
       | Some Desc | None -> List.rev sorted)

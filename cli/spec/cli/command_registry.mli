@@ -42,12 +42,6 @@ type t = { commands : command_meta list; groups : group_meta list }
 val empty : t
 val make : command_meta list -> t
 val add : command_meta -> t -> t
-val merge : t list -> t
-val find_by_id : Command_id.t -> t -> command_meta option
 val find_by_path : string list -> t -> command_meta option
-val examples_for_selector : string list -> t -> string list Error.build_result
-val group_paths : t -> string list list
-val top_level_paths : t -> string list list
 val global_options : option_meta list
-val options_for_path : string list -> t -> option_meta list Error.build_result
 val render_help : ?group:string list -> t -> string
