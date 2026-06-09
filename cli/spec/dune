@@ -51,8 +51,6 @@
   Cli_request
   Cli_action
   Cli
-  Cmdliner_boundary
-  Cmdliner_terms
   Command_id
   Command_registry
   ; commands

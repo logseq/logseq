@@ -4,7 +4,6 @@ type request = Cli_request.t
 type config = Cli_config.t
 type action = Cli_action.t
 type result = Result : 'o Cli_result.t -> result
-type registry = Command_registry.t
 
 type phase =
   | Raw_argv
@@ -28,8 +27,7 @@ type lifecycle = {
 }
 
 type app = {
-  registry : registry;
-  cmdliner : Cmdliner_boundary.app;
+  registry : Command_registry.t;
   defaults : Cli_config.defaults;
 }
 
@@ -48,9 +46,17 @@ type run_output = {
   lifecycle : lifecycle;
 }
 
-let make_app ?version () =
-  let cmdliner = Cmdliner_terms.app ?version () in
-  { registry = cmdliner.registry; cmdliner; defaults = Cli_config.defaults () }
+let command_metadata () =
+  Graph.metadata () @ List_command.metadata () @ Upsert.metadata ()
+  @ Remove.metadata () @ Search.metadata () @ Query.metadata () @ Show.metadata ()
+  @ Server_command.metadata () @ Sync.metadata () @ Completion.metadata ()
+  @ Skill.metadata () @ Example.metadata () @ Doctor.metadata ()
+  @ Debug.metadata () @ Agent.metadata () @ Auth_command.metadata ()
+
+let command_registry () = Command_registry.make (command_metadata ())
+
+let make_app ?version:_ () =
+  { registry = command_registry (); defaults = Cli_config.defaults () }
 
 let build_time : string =
   [%mel.raw
