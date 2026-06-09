@@ -13,3 +13,9 @@
  (preprocess
   (pps melange.ppx))
  (libraries logseq_cli_platform_node logseq_cli melange-edn))
+
+(install
+ (section bin)
+ (package logseq-cli)
+ (files
+  (dist/logseq-cli.js as logseq-cli.js)))

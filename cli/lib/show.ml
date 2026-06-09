@@ -184,23 +184,15 @@ let link_target_selector =
         [
           ( kw "block/page",
             vector
-              [
-                kw "db/id";
-                kw "block/name";
-                kw "block/title";
-                kw "block/uuid";
-              ] );
+              [ kw "db/id"; kw "block/name"; kw "block/title"; kw "block/uuid" ]
+          );
         ];
       Edn_util.map
         [
           ( kw "block/parent",
             vector
-              [
-                kw "db/id";
-                kw "block/name";
-                kw "block/title";
-                kw "block/uuid";
-              ] );
+              [ kw "db/id"; kw "block/name"; kw "block/title"; kw "block/uuid" ]
+          );
         ];
       Edn_util.map
         [
@@ -237,23 +229,15 @@ let pull_selector =
         [
           ( kw "block/page",
             vector
-              [
-                kw "db/id";
-                kw "block/name";
-                kw "block/title";
-                kw "block/uuid";
-              ] );
+              [ kw "db/id"; kw "block/name"; kw "block/title"; kw "block/uuid" ]
+          );
         ];
       Edn_util.map
         [
           ( kw "block/parent",
             vector
-              [
-                kw "db/id";
-                kw "block/name";
-                kw "block/title";
-                kw "block/uuid";
-              ] );
+              [ kw "db/id"; kw "block/name"; kw "block/title"; kw "block/uuid" ]
+          );
         ];
       Edn_util.map
         [
@@ -448,12 +432,8 @@ let tree_block_selector =
         [
           ( kw "block/page",
             vector
-              [
-                kw "db/id";
-                kw "block/name";
-                kw "block/title";
-                kw "block/uuid";
-              ] );
+              [ kw "db/id"; kw "block/name"; kw "block/title"; kw "block/uuid" ]
+          );
         ];
       Edn_util.map
         [
@@ -660,9 +640,7 @@ let lookup_of_link_value link =
       | Some id -> Some (Edn_util.int64 id)
       | None -> (
           match
-            Option.bind
-              (Edn_util.get link "block/uuid")
-              Edn_util.as_string_like
+            Option.bind (Edn_util.get link "block/uuid") Edn_util.as_string_like
           with
           | Some uuid -> Some (vector [ kw "block/uuid"; Edn_util.uuid uuid ])
           | _ -> None))
@@ -765,8 +743,8 @@ let rec resolve_linked_blocks ?(depth = 1) ?(visited = []) config
           in
           bind (resolve_all [] children) (fun children ->
               pure
-                (Edn_util.assoc "block/children" (Edn_util.vector children)
-                   root)))
+                (Edn_util.assoc "block/children" (Edn_util.vector children) root))
+      )
 
 let nonblank_string = function
   | Some text when String.trim text <> "" -> Some text
