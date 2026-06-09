@@ -40,5 +40,3 @@ val parse_key : Melange_edn.any -> key option
 val kind_of_string : string -> kind option
 val string_of_kind : kind -> string
 val cardinality_of_string : string -> cardinality option
-val string_of_cardinality : cardinality -> string
-val schema_empty : schema

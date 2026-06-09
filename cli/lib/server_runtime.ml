@@ -590,14 +590,6 @@ let revision_matches cli_revision server =
   | Some revision -> String.equal revision cli_revision
   | None -> false
 
-let compute_revision_mismatches ~cli_revision servers =
-  let mismatched =
-    List.filter
-      (fun server -> not (revision_matches cli_revision server))
-      servers
-  in
-  match mismatched with [] -> None | servers -> Some { cli_revision; servers }
-
 let cleanup_revision_mismatched_servers config ~cli_revision =
   let open Cli_effect in
   bind (list_servers config) (fun servers ->

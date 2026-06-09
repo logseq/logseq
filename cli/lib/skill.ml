@@ -33,8 +33,6 @@ let skill_file_under base =
        skill_dir_name)
     skill_file_name
 
-let skill_dir_under base = Filename.dirname (skill_file_under base)
-
 let non_empty value =
   match Option.map String.trim value with
   | Some "" | None -> None
@@ -115,56 +113,6 @@ let resolve_source_path ?source_path config =
                (Edn_util.keyword_t "skill-source-not-found")
                ("skill source file not found. Checked paths: "
                ^ String.concat ", " candidates)))
-
-let installed_skill_update_status ?source_path () =
-  let cwd = Sys.getcwd () in
-  let home_dir = Sys.getenv_opt "HOME" in
-  let targets = installed_skill_targets ~cwd ~home_dir in
-  let existing_targets =
-    List.filter (fun target -> Cli_unix.file_exists target.path) targets
-  in
-  if existing_targets = [] then
-    { installed = false; outdated = false; outdated_targets = []; error = None }
-  else
-    match
-      let source_path =
-        Option.value source_path ~default:(skill_file_under cwd)
-      in
-      read_file source_path
-    with
-    | exception exn ->
-        {
-          installed = true;
-          outdated = false;
-          outdated_targets = [];
-          error =
-            Some
-              (Error.make
-                 (Edn_util.keyword_t "skill-source-read-failed")
-                 (Printexc.to_string exn));
-        }
-    | source_content ->
-        let outdated_targets =
-          existing_targets
-          |> List.filter (fun target ->
-              match read_file target.path with
-              | content -> content <> source_content
-              | exception _ -> false)
-        in
-        {
-          installed = true;
-          outdated = outdated_targets <> [];
-          outdated_targets;
-          error = None;
-        }
-
-let format_installed_skill_warning status =
-  if status.outdated then
-    Some
-      "\n\n\
-       Warning: Installed logseq-cli skill is out of date. Run `logseq skill \
-       install` or `logseq skill install --global` to update it."
-  else None
 
 let command_id = function
   | Parsed_show -> Command_id.Skill_show

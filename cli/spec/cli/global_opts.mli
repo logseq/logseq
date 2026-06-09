@@ -18,6 +18,3 @@ val create :
   ?profile:bool ->
   unit ->
   t
-
-val merge : earlier:t -> later:t -> t
-val with_graph : Cli_primitive.graph option -> t -> t

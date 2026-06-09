@@ -107,7 +107,7 @@ let validate_parsed (Parsed_update_block opts) =
   | Some message -> Error (Error.invalid_options message)
   | None -> Ok ()
 
-let parse_tags_edn label value =
+let parse_tags_edn _label value =
   match value with
   | None -> Ok []
   | Some text when String.trim text = "" -> Ok []

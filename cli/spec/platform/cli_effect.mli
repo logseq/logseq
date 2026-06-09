@@ -10,7 +10,6 @@ val map_s : ('a -> 'b t) -> 'a list -> 'b list t
 val bind : 'a t -> ('a -> 'b t) -> 'b t
 val both : 'a t -> 'b t -> ('a * 'b) t
 val all : 'a t list -> 'a list t
-val pick : 'a t list -> 'a t
 val catch : 'a t -> (exn -> 'a t) -> 'a t
 val finally : 'a t -> (unit -> unit t) -> 'a t
 val sleep : float -> unit t

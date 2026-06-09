@@ -15,10 +15,3 @@ type t = {
 }
 
 val of_value : Melange_edn.any -> t
-val label : t -> string option
-val is_recycled : t -> bool
-val has_tag : Cli_primitive.keyword -> t -> bool
-val is_page : t -> bool
-val is_block : t -> bool
-val is_tag : t -> bool
-val is_property : t -> bool

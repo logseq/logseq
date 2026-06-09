@@ -70,17 +70,10 @@ type action = {
 
 type list_result = { items : Entity.t list }
 
-val empty_common_opts : common_opts
 val order_of_string : string -> order option
 val string_of_order : order -> string
 val kind_of_parsed : parsed -> kind
 val normalize_options : parsed -> parsed Error.build_result
-
-val apply_sort :
-  field_map:(string * Cli_primitive.keyword) list ->
-  common_opts ->
-  Entity.t list ->
-  Entity.t list
 
 val apply_offset_limit : common_opts -> Entity.t list -> Entity.t list
 

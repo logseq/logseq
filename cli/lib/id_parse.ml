@@ -27,12 +27,4 @@ let parse_id_string s =
     else Error (Error.invalid_options "invalid id")
   with _ -> Error (Error.invalid_options "invalid id")
 
-let parse_id_option = function
-  | Some value -> (
-      match (Edn_util.as_int64 value, Edn_util.as_string value) with
-      | Some id, _ when valid_id id -> Ok { ids = [ id ]; multi = false }
-      | _, Some s -> parse_id_string s
-      | _ -> Error (Error.invalid_options "invalid id"))
-  | None -> Ok { ids = []; multi = false }
-
 let to_single parsed = match parsed.ids with [ id ] -> Some id | _ -> None

@@ -82,11 +82,9 @@ type action =
 
 val normalize_export_type : string -> export_type option
 val normalize_import_type : string -> import_type option
-val string_of_export_type : export_type -> string
 val string_of_import_type : import_type -> string
 
 include Command_spec.S with type parsed := parsed and type action := action
 
-val action_context : action -> Melange_edn.map Melange_edn.t
 val repo : action -> Cli_primitive.repo option
 val graph : action -> Cli_primitive.graph option
