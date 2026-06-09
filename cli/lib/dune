@@ -2,8 +2,6 @@
  (name logseq_cli)
  (implements logseq_cli_spec)
  (modes melange)
- (flags
-  (:standard -w -27-32-34-37-39))
  (preprocess
   (pps melange.ppx))
  (libraries

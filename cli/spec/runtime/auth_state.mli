@@ -42,6 +42,5 @@ val refresh_auth :
   Cli_config.t -> auth_data -> auth_data Error.build_result Cli_effect.t
 
 val resolve_auth : Cli_config.t -> auth_data Error.build_result Cli_effect.t
-val resolve_auth_token : Cli_config.t -> string Error.build_result Cli_effect.t
 val login : Cli_config.t -> login_result Error.build_result Cli_effect.t
 val logout : Cli_config.t -> logout_result Error.build_result Cli_effect.t

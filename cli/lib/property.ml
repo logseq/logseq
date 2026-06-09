@@ -87,8 +87,3 @@ let cardinality_of_string = function
   | "one" -> Some One
   | "many" -> Some Many
   | _ -> None
-
-let string_of_cardinality = function One -> "one" | Many -> "many"
-
-let schema_empty =
-  { kind = None; cardinality = None; hidden = None; public = None }

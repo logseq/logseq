@@ -1225,11 +1225,6 @@ let lookup_of_tag = function
   | Tag_ident ident -> Edn_util.any ident
   | Tag_uuid uuid -> Edn_util.uuid uuid
 
-let lookup_of_property_key = function
-  | Property.Key_ident ident -> Edn_util.any ident
-  | Key_id id -> Edn_util.int64 id
-  | Key_name name -> Edn_util.any (Edn_util.keyword_t name)
-
 let apply_outliner_ops config repo ops =
   Transport.thread_api_apply_outliner_ops config ~repo
     ~ops:(Edn_util.vector_t ops) ~options:(Edn_util.map_t [])

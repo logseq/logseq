@@ -30,18 +30,6 @@ type parsed =
   | Parsed_export of export_opts
   | Parsed_import of import_opts
 
-type graph_item_kind = Canonical | Legacy | Legacy_undecodable
-
-type graph_item = {
-  kind : graph_item_kind;
-  graph_name : Cli_primitive.graph option;
-  graph_dir : Cli_primitive.path option;
-  legacy_dir : Cli_primitive.path option;
-  target_graph_dir : Cli_primitive.path option;
-  conflict : bool;
-  reason : Cli_primitive.keyword option;
-}
-
 type action =
   | Graph_list
   | Graph_create of {
@@ -101,8 +89,6 @@ let normalize_import_type = function
   | "edn" -> Some Import_edn
   | "sqlite" -> Some Import_sqlite
   | _ -> None
-
-let string_of_export_type = function Edn -> "edn" | Sqlite -> "sqlite"
 
 let string_of_import_type = function
   | Import_edn -> "edn"
@@ -437,9 +423,6 @@ let list_graph_items config =
     |> List.filter_map (classify_graph_dir dir)
   else []
 
-let list_graph_dirs config =
-  list_graph_items config |> List.filter_map graph_name_of_canonical_item
-
 let backup_root_path config graph =
   Filename.concat (graph_path config graph) "backup"
 
@@ -716,7 +699,7 @@ let unlink_graph_dir config graph repo =
   | Some (dir_name, source_path) ->
       let unlinked_root = Filename.concat graphs_root "Unlinked graphs" in
       ensure_dir unlinked_root;
-      let rec target suffix =
+      let target suffix =
         let name =
           if suffix = 0 then dir_name else dir_name ^ "-" ^ string_of_int suffix
         in
@@ -818,7 +801,7 @@ let graph_create_enable_sync_result mode _config graph repo create_result
                 ] );
           ]))
 
-let execute_graph_create_invoke mode graph repo config =
+let execute_graph_create_invoke mode _graph repo config =
   let open Cli_effect in
   bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
     (function
@@ -878,7 +861,7 @@ let execute_graph_create mode graph repo opts config =
                 ("Created graph \"" ^ Cli_primitive.string_of_graph graph ^ "\"")))
     | Some _ -> execute_graph_create_invoke mode graph repo config
 
-let execute_graph_export mode graph repo opts config =
+let execute_graph_export mode _graph repo opts config =
   let open Cli_effect in
   let output_path =
     match (opts.file, opts.export_type) with
@@ -1178,8 +1161,6 @@ let metadata () =
       ~examples:[ "logseq graph backup remove --src my-graph-nightly" ]
       Graph_backup_remove "Remove graph backup";
   ]
-
-let action_context _ = Edn_util.map_t []
 
 let repo = function
   | Graph_list -> None

@@ -68,9 +68,6 @@ val list_servers : Cli_config.t -> server list Cli_effect.t
 val list_graph_items : Cli_config.t -> Graph_types.graph_item list
 val list_graphs : Cli_config.t -> Cli_primitive.graph list
 
-val compute_revision_mismatches :
-  cli_revision:string -> server list -> revision_mismatch option
-
 val cleanup_revision_mismatched_servers :
   Cli_config.t ->
   cli_revision:string ->
