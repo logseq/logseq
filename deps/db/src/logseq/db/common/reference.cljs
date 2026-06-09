@@ -68,11 +68,27 @@
   [db parent-eid]
   (into #{} (map :e) (d/datoms db :avet :block/parent parent-eid)))
 
+(defn- visible-ref-block
+  "Return the block users should see for a raw linked-reference match.
+
+   Property value blocks are storage nodes created under an owning block. They
+   can carry refs, but linked references should show the owner block because the
+   value block is not a normal outline node."
+  [ref]
+  (loop [block ref
+         seen #{}]
+    (let [block-id (:db/id block)]
+      (if (and (:logseq.property/created-from-property block)
+               (:block/parent block)
+               (not (contains? seen block-id)))
+        (recur (:block/parent block) (conj seen block-id))
+        block))))
+
 (defn- normalize-ref-blocks
   [ref-blocks]
   (reduce
    (fn [acc ref]
-     (let [visible-ref (ldb/visible-outline-block ref)
+     (let [visible-ref (visible-ref-block ref)
            visible-id (:db/id visible-ref)
            raw-id (:db/id ref)
            acc' (if (contains? (:seen-visible-ids acc) visible-id)
@@ -296,7 +312,7 @@
         class-ids (class-ref-ids db entity id)]
     (->> (top-ref-blocks db ids class-ids)
          (reduce (fn [visible-ids ref]
-                   (conj visible-ids (:db/id (ldb/visible-outline-block ref))))
+                   (conj visible-ids (:db/id (visible-ref-block ref))))
                  #{})
          count)))
 

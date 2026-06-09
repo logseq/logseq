@@ -31,36 +31,6 @@
 (def read-transit-str sqlite-util/read-transit-str)
 (def build-favorite-tx db-db/build-favorite-tx)
 
-(defn property-value-block?
-  "Returns true for generated property value storage blocks."
-  [block]
-  (some? (:logseq.property/created-from-property block)))
-
-(defn visible-outline-block
-  "Returns the nearest user-visible outline block for `block`.
-
-   Generated property value blocks are storage nodes under an owning block. When
-   user-facing reference, search, or navigation code receives one of those nodes,
-   the owning block is the visible outline block."
-  [block]
-  (loop [current block
-         seen #{}]
-    (let [current-id (:db/id current)]
-      (cond
-        (nil? current)
-        block
-
-        (contains? seen current-id)
-        current
-
-        (property-value-block? current)
-        (if-let [parent (:block/parent current)]
-          (recur parent (conj seen current-id))
-          current)
-
-        :else
-        current))))
-
 (defonce *transact-fn (atom nil))
 (defonce *transact-invalid-callback (atom nil))
 (defonce *transact-pipeline-fn (atom nil))

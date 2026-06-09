@@ -520,7 +520,6 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn hidden-entity?
   [entity]
   (or (ldb/hidden? entity)
-      (ldb/property-value-block? entity)
       (let [page (:block/page entity)]
         (and (ldb/hidden? page)
              (not= (:block/title page) common-config/quick-add-page-name)))))
@@ -725,7 +724,6 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn- block->index*
   [context {:block/keys [uuid page title] :as block}]
   (when-not (or
-             (hidden-entity? block)
              (ldb/closed-value? block)
              (and (string? title) (> (count title) 10000))
              (string/blank? title))        ; empty page or block
@@ -766,8 +764,7 @@ DROP TRIGGER IF EXISTS blocks_au;
     :logseq.property.node/display-type
     :logseq.property/hide?
     :logseq.property/deleted-at
-    :logseq.property/built-in?
-    :logseq.property/created-from-property])
+    :logseq.property/built-in?])
 
 (defn- pull-search-result-blocks
   [db results]
@@ -966,9 +963,7 @@ DROP TRIGGER IF EXISTS blocks_au;
           (or (ldb/page-in-library? @conn block)
               (not (ldb/internal-page? block))))
      ;; remove non-page blocks when asking for pages only
-     (and page-only? (not (ldb/page? block)))
-     ;; generated property value blocks are storage nodes, not standalone search results
-     (ldb/property-value-block? block)))
+     (and page-only? (not (ldb/page? block)))))
    (if dev?
      true
      (if built-in?

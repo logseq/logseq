@@ -190,10 +190,7 @@
     (is (true? (#'search/hidden-entity? {:logseq.property/deleted-at 1}))))
 
   (testing "entities on recycled pages are hidden"
-    (is (true? (#'search/hidden-entity? {:block/page {:logseq.property/deleted-at 1}}))))
-
-  (testing "generated property value blocks are hidden from user search surfaces"
-    (is (true? (#'search/hidden-entity? {:logseq.property/created-from-property {:db/id 1}})))))
+    (is (true? (#'search/hidden-entity? {:block/page {:logseq.property/deleted-at 1}})))))
 
 (deftest search-blocks-aux-bind-count
   (testing "namespace match SQL keeps bind count aligned"
@@ -554,23 +551,6 @@
         (let [indexed (search/block->index block)]
           (is (= "Local-first semantic search" (:title indexed)))
           (is (not (contains? indexed :embedding))))))))
-
-(deftest block-index-skips-generated-property-value-blocks
-  (testing "property value storage blocks should not become standalone search nodes"
-    (let [block-id #uuid "00000000-0000-0000-0000-00000000023a"
-          page-id #uuid "00000000-0000-0000-0000-00000000023b"
-          block {:db/id 1
-                 :block/uuid block-id
-                 :block/title "(tags [[Asset]])"
-                 :block/page {:block/uuid page-id}
-                 :logseq.property/created-from-property {:db/id 2}}]
-      (with-redefs [ldb/page? (constantly false)
-                    ldb/object? (constantly false)
-                    ldb/journal? (constantly false)
-                    ldb/closed-value? (constantly false)
-                    ldb/hidden? (constantly false)
-                    ldb/get-title-with-parents (fn [entity] (:block/title entity))]
-        (is (nil? (search/block->index block)))))))
 
 (deftest block-index-includes-bounded-vector-context
   (testing "vector-only text includes local block context without changing the keyword title"
@@ -1245,26 +1225,6 @@
              (:block.temp/unique-title result)))
       (is (= "Mile$pfts_2lqh>$stone$<pfts_2lqh$"
              (:block/title result))))))
-
-(deftest search-result-excludes-generated-property-value-blocks
-  (testing "old search index rows for generated property values are not returned as nodes"
-    (let [conn (db-test/create-conn-with-blocks
-                {:properties {:user.property/notes {:logseq.property/type :default
-                                                    :block/title "Notes"}}
-                 :pages-and-blocks
-                 [{:page {:block/title "Search Context"}
-                   :blocks [{:block/title "Owner block"
-                             :build/properties {:user.property/notes "(tags [[Asset]])"}}]}]})
-          property-value (db-test/find-block-by-content @conn "(tags [[Asset]])")
-          result (#'search/search-result->block-result
-                  conn
-                  "Asset"
-                  nil
-                  {:enable-snippet? true}
-                  {:id (str (:block/uuid property-value))
-                   :page (str (:block/uuid (:block/page property-value)))
-                   :title "(tags [[Asset]])"})]
-      (is (nil? result)))))
 
 (deftest upsert-blocks-batches-rows-into-single-sql-statement
   (let [calls (atom [])
