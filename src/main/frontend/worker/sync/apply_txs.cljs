@@ -13,6 +13,7 @@
    [frontend.worker.sync.crypt :as sync-crypt]
    [frontend.worker.sync.large-title :as sync-large-title]
    [frontend.worker.sync.presence :as sync-presence]
+   [frontend.worker.sync.repair :as sync-repair]
    [frontend.worker.sync.transport :as sync-transport]
    [frontend.worker.sync.util :as sync-util :refer [fail-fast]]
    [frontend.worker.undo-redo :as worker-undo-redo]
@@ -256,13 +257,6 @@
           (broadcast-rtc-state! client)))
       tx-id)))
 
-(defn- sync-fix-tx-meta
-  []
-  {:outliner-op :fix
-   :db-sync/tx-id (random-uuid)})
-
-(def ^:private upload-repair-created-at 0)
-
 (defn- missing-datom-repair-tx?
   [tx-data]
   (let [required-block-attrs #{:block/uuid :block/title :block/page :block/parent :block/order
@@ -324,58 +318,17 @@
        distinct
        vec))
 
-(defn- ref-attr?
-  [db attr]
-  (= :db.type/ref (get-in (d/schema db) [attr :db/valueType])))
-
-(defn- ref-value
-  [db attr v]
-  (if-let [entity (and (ref-attr? db attr)
-                       (number? v)
-                       (d/entity db v))]
-    (if-let [block-uuid (:block/uuid entity)]
-      [:block/uuid block-uuid]
-      (or (:db/ident entity) v))
-    v))
-
-(defn- many-attr?
-  [db attr]
-  (= :db.cardinality/many (get-in (d/schema db) [attr :db/cardinality])))
-
-(defn- assoc-repair-attr
-  [db m attr value]
-  (let [value' (ref-value db attr value)]
-    (if (many-attr? db attr)
-      (update m attr (fnil conj #{}) value')
-      (assoc m attr value'))))
-
-(defn- local-repair-block-map
-  [db block-uuid]
-  (when-let [eid (d/entid db [:block/uuid block-uuid])]
-    (let [datoms (d/datoms db :eavt eid)]
-      (reduce (fn [m datom]
-                (assoc-repair-attr db m (:a datom) (:v datom)))
-              {}
-              datoms))))
-
-(defn- local-repair-tx-data
-  [db block-uuids]
-  (->> block-uuids
-       distinct
-       (keep (partial local-repair-block-map db))
-       vec))
-
 (defn enqueue-upload-repair!
   [repo block-uuids]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [tx-data (local-repair-tx-data @conn block-uuids)]
+    (let [tx-data (sync-repair/local-repair-tx-data @conn block-uuids)]
       (when (seq tx-data)
-        (let [tx-meta (sync-fix-tx-meta)
+        (let [tx-meta (sync-repair/sync-fix-tx-meta)
               {:keys [should-inc-pending?]}
               (client-op/upsert-local-tx-entry!
                repo
                {:tx-id (:db-sync/tx-id tx-meta)
-                :created-at upload-repair-created-at
+                :created-at sync-repair/upload-repair-created-at
                 :pending? true
                 :failed? false
                 :outliner-op (:outliner-op tx-meta)
@@ -416,25 +369,6 @@
                            :body body})))))
     nil))
 
-(defn- <decrypt-repair-tx-map-entry
-  [aes-key [attr value]]
-  (if (contains? rtc-const/encrypt-attr-set attr)
-    (p/let [value' (sync-crypt/<decrypt-text-value aes-key value)]
-      [attr value'])
-    (p/resolved [attr value])))
-
-(defn- <decrypt-repair-tx-item
-  [aes-key item]
-  (if (map? item)
-    (p/let [entries (p/all (mapv (partial <decrypt-repair-tx-map-entry aes-key) item))]
-      (into {} entries))
-    (p/let [[item'] (sync-crypt/<decrypt-tx-data aes-key [item])]
-      item')))
-
-(defn- <decrypt-repair-tx-data
-  [aes-key tx-data]
-  (p/all (mapv (partial <decrypt-repair-tx-item aes-key) tx-data)))
-
 (defn- <server-repair-blocks-tx-data
   [repo client block-uuids]
   (if (seq block-uuids)
@@ -448,61 +382,14 @@
               tx-data (<fetch-repair-blocks repo client block-uuids)]
         (if (seq tx-data)
           (if aes-key
-            (<decrypt-repair-tx-data aes-key tx-data)
+            (sync-repair/<decrypt-tx-data aes-key tx-data)
             (p/resolved tx-data))
           (p/resolved nil))))
     nil))
 
-(defn- repair-map-block-uuid
-  [item]
-  (when (map? item)
-    (:block/uuid item)))
-
-(defn- repair-temp-id
-  [block-uuid]
-  (str "repair-block-" block-uuid))
-
-(defn- repair-ref->temp-id
-  [uuid->temp-id v]
-  (cond
-    (and (vector? v)
-         (= :block/uuid (first v))
-         (contains? uuid->temp-id (second v)))
-    (get uuid->temp-id (second v))
-
-    (map? v)
-    (update-vals v (partial repair-ref->temp-id uuid->temp-id))
-
-    (vector? v)
-    (mapv (partial repair-ref->temp-id uuid->temp-id) v)
-
-    (set? v)
-    (set (map (partial repair-ref->temp-id uuid->temp-id) v))
-
-    (seq? v)
-    (doall (map (partial repair-ref->temp-id uuid->temp-id) v))
-
-    :else
-    v))
-
-(defn- with-repair-temp-ids
-  [tx-data]
-  (let [uuid->temp-id (->> tx-data
-                           (keep repair-map-block-uuid)
-                           distinct
-                           (map (juxt identity repair-temp-id))
-                           (into {}))]
-    (mapv (fn [item]
-            (let [item' (repair-ref->temp-id uuid->temp-id item)]
-              (if-let [block-uuid (repair-map-block-uuid item)]
-                (assoc item' :db/id (repair-temp-id block-uuid))
-                item')))
-          tx-data)))
-
 (defn- maybe-apply-repair-tx-data!
   [conn tx-data]
-  (when (seq tx-data)
-    (ldb/transact! conn (with-repair-temp-ids tx-data) (sync-fix-tx-meta))))
+  (sync-repair/apply-tx-data! conn tx-data))
 
 (defn- <apply-server-repair-blocks!
   [repo client conn block-uuids]
@@ -1116,9 +1003,11 @@
 
     :create-page
     (let [[title opts] args
-          page-uuid (:uuid opts)]
-      (when-not (and (uuid? page-uuid)
-                     (d/entity @conn [:block/uuid page-uuid]))
+          page-uuid (:uuid opts)
+          existing-page (when (uuid? page-uuid)
+                          (d/entity @conn [:block/uuid page-uuid]))]
+      (when-not (and existing-page
+                     (not (ldb/recycled? existing-page)))
         (outliner-page/create! conn title opts)))
 
     :delete-page
@@ -1226,7 +1115,7 @@
 (defn- repair-applied-txs!
   [conn tx-report]
   (when (seq (:tx-data tx-report))
-    (fix-tx! conn tx-report (sync-fix-tx-meta))))
+    (fix-tx! conn tx-report (sync-repair/sync-fix-tx-meta))))
 
 (defn- apply-remote-tx-with-local-changes!
   [{:keys [repo conn local-txs remote-txs pre-repair-tx-data post-repair-tx-data

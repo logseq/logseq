@@ -22,6 +22,7 @@
    [frontend.worker.sync.large-title :as sync-large-title]
    [frontend.worker.sync.log-and-state :as sync-log-state]
    [frontend.worker.sync.presence :as sync-presence]
+   [frontend.worker.sync.repair :as sync-repair]
    [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
    [frontend.worker.sync.transport :as sync-transport]
    [frontend.worker.sync.util :as sync-util]
@@ -66,7 +67,28 @@
       (finally
         (aset js/console "error" original-console-error)))))
 
+(def ^:private *logseq-db-hooks (atom nil))
+
+(def reset-logseq-db-hooks-fixture
+  {:before
+   (fn []
+     (reset! *logseq-db-hooks
+             {:transact-fn @ldb/*transact-fn
+              :transact-pipeline-fn @ldb/*transact-pipeline-fn
+              :transact-invalid-callback @ldb/*transact-invalid-callback})
+     (reset! ldb/*transact-fn nil)
+     (reset! ldb/*transact-pipeline-fn nil)
+     (reset! ldb/*transact-invalid-callback nil))
+   :after
+   (fn []
+     (let [{:keys [transact-fn transact-pipeline-fn transact-invalid-callback]} @*logseq-db-hooks]
+       (reset! ldb/*transact-fn transact-fn)
+       (reset! ldb/*transact-pipeline-fn transact-pipeline-fn)
+       (reset! ldb/*transact-invalid-callback transact-invalid-callback)
+       (reset! *logseq-db-hooks nil)))})
+
 (use-fixtures :once (test-noise/mute-console-fixture ::db-sync-test))
+(use-fixtures :each reset-logseq-db-hooks-fixture)
 
 (defn- js-row
   [m]
@@ -4210,7 +4232,7 @@
              (-> (p/let [aes-key (crypt/<generate-aes-key)
                          encrypted-title (sync-crypt/<encrypt-text-value aes-key title)
                          encrypted-name (sync-crypt/<encrypt-text-value aes-key name)
-                         [block-map] (#'sync-apply/<decrypt-repair-tx-data
+                         [block-map] (sync-repair/<decrypt-tx-data
                                       aes-key
                                       [{:block/uuid block-uuid
                                         :block/title encrypted-title

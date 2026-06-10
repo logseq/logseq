@@ -12,6 +12,7 @@
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.apply-txs :as sync-apply]
             [frontend.worker.sync.client-op :as client-op]
+            [frontend.worker.sync.repair :as sync-repair]
             [frontend.worker.undo-redo :as undo-redo]
             [logseq.db :as ldb]
             [logseq.db-sync.checksum :as sync-checksum]
@@ -414,7 +415,7 @@
            seen #{}
            tx-data []]
       (if (seq pending)
-        (let [repair-tx-data (#'sync-apply/local-repair-tx-data server-db pending)
+        (let [repair-tx-data (sync-repair/local-repair-tx-data server-db pending)
               seen' (into seen pending)
               deps (collect-deps repair-tx-data seen')]
           (recur deps seen' (into tx-data repair-tx-data)))
