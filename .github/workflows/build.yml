@@ -15,6 +15,7 @@ env:
   JAVA_VERSION: '21'
   # This is the latest node version we can run.
   NODE_VERSION: '24'
+  OCAML_VERSION: '5.4.0'
   BABASHKA_VERSION: '1.12.215'
 
 jobs:
@@ -126,6 +127,11 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
       - name: Clojure cache
         uses: actions/cache@v4
         id: clojure-deps
@@ -139,6 +145,10 @@ jobs:
       - name: Fetch Clojure deps
         if: steps.clojure-deps.outputs.cache-hit != 'true'
         run: clojure -A:cljs -P
+
+      - name: Fetch OCaml deps
+        working-directory: cli
+        run: opam install . --deps-only --with-test --yes
 
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
@@ -224,8 +234,17 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
       - name: Install CLI Linux runtime deps
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
+
+      - name: Fetch OCaml deps
+        working-directory: cli
+        run: opam install . --deps-only --with-test --yes
 
       - name: Fetch scripts pnpm deps
         run: cd scripts && pnpm install --frozen-lockfile

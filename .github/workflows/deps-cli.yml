@@ -64,6 +64,7 @@ env:
   CLOJURE_VERSION: '1.12.4.1618'
   JAVA_VERSION: '21'
   NODE_VERSION: '24'
+  OCAML_VERSION: '5.4.0'
   BABASHKA_VERSION: '1.12.215'
 
 jobs:
@@ -98,8 +99,20 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
+      - name: Fetch OCaml deps
+        working-directory: cli
+        run: opam install . --deps-only --with-test --yes
+
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
+
+      - name: Run logseq CLI tests
+        run: pnpm --dir cli test
 
       - name: Build logseq CLI
         run: |
@@ -144,6 +157,15 @@ jobs:
         with:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
+      - name: Fetch OCaml deps
+        working-directory: cli
+        run: opam install . --deps-only --with-test --yes
 
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
