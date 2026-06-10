@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker.handler.sync
   (:require [clojure.string :as string]
+            [datascript.core :as d]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.batch :as batch]
@@ -292,6 +293,69 @@
              :txs txs}
       (string? checksum) (assoc :checksum checksum))))
 
+(defn- parse-uuid-param
+  [value]
+  (try
+    (when (seq value)
+      (uuid value))
+    (catch :default _
+      nil)))
+
+(defn- ref-value
+  [db v]
+  (if-let [entity (and (number? v) (d/entity db v))]
+    (if-let [block-uuid (:block/uuid entity)]
+      [:block/uuid block-uuid]
+      (or (:db/ident entity) v))
+    v))
+
+(defn- many-attr?
+  [db attr]
+  (= :db.cardinality/many (get-in (d/schema db) [attr :db/cardinality])))
+
+(defn- assoc-repair-attr
+  [db m attr value]
+  (let [value' (ref-value db value)]
+    (if (many-attr? db attr)
+      (update m attr (fnil conj #{}) value')
+      (assoc m attr value'))))
+
+(defn- repair-block-map
+  [db block-uuid]
+  (when-let [eid (d/entid db [:block/uuid block-uuid])]
+    (let [datoms (d/datoms db :eavt eid)]
+      (reduce (fn [m datom]
+                (assoc-repair-attr db m (:a datom) (:v datom)))
+              {}
+              datoms))))
+
+(defn repair-blocks-response
+  [^js self block-uuids]
+  (ensure-conn! self)
+  (let [db @(.-conn self)
+        tx-data (->> block-uuids
+                     (keep (partial repair-block-map db))
+                     vec)]
+    {:tx (protocol/tx->transit tx-data)}))
+
+(defn- block-uuid-lookup-ref
+  [entity-id]
+  (when (and (sequential? entity-id)
+             (= :block/uuid (first entity-id))
+             (uuid? (second entity-id)))
+    (second entity-id)))
+
+(defn- missing-block-uuids-from-error
+  [error]
+  (loop [e error
+         result []]
+    (if e
+      (let [missing-uuid (block-uuid-lookup-ref (:entity-id (ex-data e)))]
+        (recur (ex-cause e)
+               (cond-> result
+                 missing-uuid (conj missing-uuid))))
+      (-> result distinct vec))))
+
 (defn- import-snapshot! [^js self rows reset?]
   (let [sql (.-sql self)]
     (ensure-schema! self)
@@ -342,11 +406,14 @@
                                  (boolean (apply-tx-entry! conn tx-entry))
                                  (catch :default e
                                    (log/error :db-sync/transact-failed e)
-                                   (throw (ex-info "tx entry apply failed"
-                                                   (cond-> {:type :db-sync/tx-entry-failed
-                                                            :successful-tx-ids successful-tx-ids}
-                                                     tx-id (assoc :failed-tx-id tx-id))
-                                                   e))))
+                                   (let [missing-block-uuids (missing-block-uuids-from-error e)]
+                                     (throw (ex-info "tx entry apply failed"
+                                                     (cond-> {:type :db-sync/tx-entry-failed
+                                                              :successful-tx-ids successful-tx-ids}
+                                                       tx-id (assoc :failed-tx-id tx-id)
+                                                       (seq missing-block-uuids)
+                                                       (assoc :missing-block-uuids missing-block-uuids))
+                                                     e)))))
                 next-successful-tx-ids (cond-> successful-tx-ids
                                          tx-id (conj tx-id))]
             (recur (next remaining)
@@ -387,7 +454,7 @@
               (string? checksum) (assoc :checksum checksum)))
           (catch :default e
             (let [new-t (t-now self)
-                  {:keys [successful-tx-ids failed-tx-id]}
+                  {:keys [successful-tx-ids failed-tx-id missing-block-uuids]}
                   (ex-data e)]
               (log/error :db-sync/transact-failed e)
               (when (> new-t current-t)
@@ -398,7 +465,8 @@
                        :error-detail (str e)
                        :t new-t}
                 (seq successful-tx-ids) (assoc :success-tx-ids successful-tx-ids)
-                failed-tx-id (assoc :failed-tx-id failed-tx-id)))))
+                failed-tx-id (assoc :failed-tx-id failed-tx-id)
+                (seq missing-block-uuids) (assoc :missing-block-uuids missing-block-uuids)))))
         {:type "tx/reject"
          :reason "empty tx data"}))))
 
@@ -413,6 +481,26 @@
         (if-not ready-for-sync?
           (http/error-response "graph not ready" 409)
           (http/json-response :sync/pull (pull-response self since)))))))
+
+(defn- handle-sync-repair-blocks
+  [^js self request ^js url]
+  (let [graph-id (graph-id-from-request request)
+        block-uuids (->> (.getAll (.-searchParams url) "uuid")
+                         (map parse-uuid-param)
+                         (remove nil?)
+                         distinct
+                         vec)]
+    (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
+      (cond
+        (not ready-for-sync?)
+        (http/error-response "graph not ready" 409)
+
+        (empty? block-uuids)
+        (http/bad-request "missing block uuid")
+
+        :else
+        (http/json-response :sync/repair-blocks
+                            (repair-blocks-response self block-uuids))))))
 
 (defn- normalize-diagnostic-block
   [{:keys [block/uuid block/parent block/page block/order] :as block}]
@@ -599,6 +687,9 @@
 
     :sync/pull
     (handle-sync-pull self url)
+
+    :sync/repair-blocks
+    (handle-sync-repair-blocks self request url)
 
     :sync/checksum-diagnostics
     (handle-sync-checksum-diagnostics self request)

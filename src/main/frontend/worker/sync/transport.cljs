@@ -64,7 +64,10 @@
                   (contains? m :failed-tx-id) (update :failed-tx-id uuid-like->string)
                   (contains? m :success-tx-ids) (update :success-tx-ids
                                                         (fn [ids]
-                                                          (mapv uuid-like->string (or ids [])))))
+                                                          (mapv uuid-like->string (or ids []))))
+                  (contains? m :missing-block-uuids) (update :missing-block-uuids
+                                                             (fn [ids]
+                                                               (mapv uuid-like->string (or ids [])))))
                 m))]
       (let [message* (normalize-legacy-tx-reject message)
             coerced (coerce db-sync-schema/ws-server-message-coercer message* {:schema :ws/server})]
