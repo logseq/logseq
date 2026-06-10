@@ -54,6 +54,9 @@ let () =
         "_logseq_json_names_bash");
 
   test "skill show ignores structured output mode" (fun () ->
+      mkdir_p ".agents/skills/logseq-cli";
+      write_file ".agents/skills/logseq-cli/SKILL.md"
+        "---\nname: logseq-cli\n---\n\n# Logseq CLI\n";
       let output = run_cli [ "--output"; "json"; "skill"; "show" ] in
       expect_named_contains "skill markdown name" output "name: logseq-cli";
       expect_named_contains "skill markdown title" output "# Logseq CLI";
@@ -1939,7 +1942,7 @@ let () =
            "downloaded escaped payload"));
 
   run_sync_progress_case "sync download finishes while event stream stays open"
-    "logseq-cli-sync-progress-stream-"
+    "logseq-cli-sync-progress-stream-" ~delay_download_response:true
     (fun res ->
       res_write_head res 200
         (Js.Dict.fromArray [| ("Content-Type", "text/event-stream") |]);
