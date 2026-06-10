@@ -352,6 +352,14 @@ let generate_bash_completion registry =
       "  done";
       "}";
       "";
+      "_logseq_json_names_bash() {";
+      "  logseq graph list --output json 2>/dev/null | node -e 'const fs = \
+       require(\"fs\"); const input = fs.readFileSync(0, \"utf8\"); if \
+       (!input.trim()) process.exit(0); const data = JSON.parse(input); const \
+       graphs = data && data.data && data.data.graphs; if (Array.isArray(graphs)) \
+       console.log(graphs.join(\" \"));'";
+      "}";
+      "";
       "_logseq_opts_for() {";
       "  printf '%s' \"" ^ String.concat " " global_option_names ^ "\"";
       "}";

@@ -283,6 +283,16 @@ let page_selector =
 let tag_selector =
   vector [ kw "db/id"; kw "block/uuid"; kw "block/name"; kw "block/title" ]
 
+let property_selector =
+  vector
+    [
+      kw "db/id";
+      kw "db/ident";
+      kw "block/name";
+      kw "block/title";
+      kw "logseq.property/type";
+    ]
+
 let id_of_entity value = Edn_util.get_int64 value "db/id"
 
 let uuid_of_entity value =
@@ -354,6 +364,24 @@ let tag_query selector =
       selector;
     ]
 
+let class_query selector class_ident =
+  Edn_util.map
+    [
+      ( kw "find",
+        vector [ vector [ list [ variable "pull"; variable "?e"; selector ]; variable "..." ] ]
+      );
+      (kw "in", list [ variable "$"; variable "?name" ]);
+      ( kw "where",
+        vector
+          [
+            vector [ variable "?e"; kw "block/name"; variable "?name" ];
+            vector [ variable "?e"; kw "block/tags"; variable "?t" ];
+            vector [ variable "?t"; kw "db/ident"; kw class_ident ];
+          ] );
+    ]
+
+let property_query selector = class_query selector "logseq.class/Property"
+
 let first_entity value =
   match
     (Edn_util.as_vector value, Edn_util.as_list value, Edn_util.as_map value)
@@ -367,6 +395,15 @@ let pull_tag_by_name invoke_config repo name =
     ~query:
       (Edn_util.vector_t
          [ tag_query tag_selector; Edn_util.string (normalized_page_name name) ])
+
+let pull_property_by_name invoke_config repo name =
+  Transport.thread_api_q invoke_config ~repo
+    ~query:
+      (Edn_util.vector_t
+         [
+           property_query property_selector;
+           Edn_util.string (normalized_page_name name);
+         ])
 
 let source_not_found () =
   Error.make (Edn_util.keyword_t "source-not-found") "source block not found"
@@ -503,20 +540,25 @@ let resolve_property_ident invoke_config repo = function
                       (Edn_util.keyword_t "property-not-found")
                       "property not found")))
   | Key_name name ->
-      let ident = Edn_util.keyword_t name in
       let open Cli_effect in
-      bind
-        (pull invoke_config repo
-           (vector [ kw "db/id" ])
-           (vector [ kw "db/ident"; Edn_util.any ident ]))
+      bind (pull_property_by_name invoke_config repo name)
         (fun result ->
-          if Option.is_some (id_of_entity result) then pure (Ok ident)
-          else
-            pure
-              (Error
-                 (Error.make
-                    (Edn_util.keyword_t "property-not-found")
-                    "property not found")))
+          match Option.bind (first_entity result) ident_of_entity with
+          | Some ident -> pure (Ok ident)
+          | None ->
+              let ident = Edn_util.keyword_t name in
+              bind
+                (pull invoke_config repo
+                   (vector [ kw "db/id" ])
+                   (vector [ kw "db/ident"; Edn_util.any ident ]))
+                (fun result ->
+                  if Option.is_some (id_of_entity result) then pure (Ok ident)
+                  else
+                    pure
+                      (Error
+                         (Error.make
+                            (Edn_util.keyword_t "property-not-found")
+                            "property not found"))))
 
 let rec resolve_tag_ids invoke_config repo = function
   | [] -> Cli_effect.pure (Ok [])

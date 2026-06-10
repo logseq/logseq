@@ -1,13 +1,15 @@
 # Logseq CLI (Node)
 
-The Logseq CLI is a Node.js program compiled from ClojureScript that connects to a db-worker-node server managed by the CLI. When installed, the CLI binary name is `logseq`.
+The Logseq CLI is a Node.js program built from the `cli/` Dune, Melange, and Vite runtime. It connects to a ClojureScript db-worker-node server managed by the CLI. When installed, the CLI binary name is `logseq`.
 
 ## Build the CLI
 
 ```bash
-clojure -M:cljs compile logseq-cli
+pnpm cli:release
 pnpm db-worker-node:release:bundle
 ```
+
+`pnpm cli:release` bundles the `cli/` runtime and stages it to `static/logseq-cli.js`, which is the stable local, npm package, and desktop packaging runtime path.
 
 `pnpm db-worker-node:release:bundle` compiles and bundles `db-worker-node` with Vite, and writes a standalone runtime to `dist/db-worker-node.js` plus an asset manifest at `dist/db-worker-node-assets.json` (which may contain an empty `assets` array when no extra files are required).
 

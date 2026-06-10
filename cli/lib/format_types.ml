@@ -7,7 +7,13 @@ let strip_leading_colon value =
     String.sub value 1 (String.length value - 1)
   else value
 
+let unquote_transit_value = function
+  | Melange_edn.Any (Melange_edn.Tagged (("transit/quote" | "'"), value)) ->
+      value
+  | value -> value
+
 let rec json_of_value value =
+  let value = unquote_transit_value value in
   match
     ( Edn_util.is_null value,
       Edn_util.as_bool value,
@@ -79,6 +85,11 @@ let error_to_value ?(edn = false) (error : Error.t) =
     ]
   in
   let fields =
+    match error.hint with
+    | None -> fields
+    | Some hint -> fields @ [ (Edn_util.keyword "hint", Edn_util.string hint) ]
+  in
+  let fields =
     match error.candidates with
     | [] -> fields
     | candidates ->
@@ -87,6 +98,22 @@ let error_to_value ?(edn = false) (error : Error.t) =
             ( Edn_util.keyword "candidates",
               Edn_util.vector (List.map candidate_to_value candidates) );
           ]
+  in
+  let fields =
+    match error.context with
+    | None -> fields
+    | Some context -> (
+        match Edn_util.as_map context with
+        | Some context_fields ->
+            let reserved = [ "code"; "message"; "hint"; "candidates" ] in
+            fields
+            @ List.filter
+                (fun (key, _) ->
+                  match Edn_util.as_string_like key with
+                  | Some key -> not (List.mem (strip_leading_colon key) reserved)
+                  | None -> true)
+                context_fields
+        | None -> fields @ [ (Edn_util.keyword "context", context) ])
   in
   Edn_util.map fields
 
@@ -143,6 +170,7 @@ let field_label key =
   |> strip_leading_colon
 
 let value_text value =
+  let value = unquote_transit_value value in
   match
     ( Edn_util.is_null value,
       Edn_util.as_string_like value,
@@ -156,6 +184,14 @@ let value_text value =
   | _, _, _, Some value, _ -> string_of_bool value
   | _, _, _, _, Some value -> string_of_float value
   | _ -> Melange_edn.to_edn_string value
+
+let query_result_human value =
+  match Edn_util.get value "result" with
+  | Some result -> (
+      match Edn_util.as_seq result with
+      | Some values -> String.concat "\n" (List.map value_text values)
+      | None -> value_text result)
+  | None -> value_text value
 
 let has_suffix ~suffix value =
   let suffix_len = String.length suffix in
@@ -349,6 +385,9 @@ let to_human : type a. a Cli_result.t -> Cli_config.t -> string =
   match (result.Cli_result.command, result.data, result.output) with
   | Some Command_id.Graph_list, Some (Cli_result.Raw value), Output.Human _ ->
       graph_list_human value config
+  | Some Command_id.Query, Some (Cli_result.Query_result value), Output.Human _
+    ->
+      query_result_human value
   | Some command, Some (Cli_result.Raw value), Output.Human _
     when is_list_or_search_command command -> (
       match list_search_human command value config with
@@ -364,7 +403,10 @@ let format_error err _ =
   "Error (" ^ Edn_util.keyword_to_string err.Error.code ^ "): " ^ err.message
 
 let format_result result config =
-  match config.Cli_config.output_format with
+  match (result.Cli_result.command, result.data) with
+  | Some Command_id.Skill_show, Some (Cli_result.Message message) -> message
+  | _ -> (
+      match config.Cli_config.output_format with
   | Some (Output.Mode.Packed Output.Mode.Json) -> to_json result
   | Some (Output.Mode.Packed Output.Mode.Edn) -> to_edn result
   | Some (Output.Mode.Packed Output.Mode.Human) | None -> (
@@ -373,7 +415,7 @@ let format_result result config =
       | Error -> (
           match result.error with
           | Some err -> format_error err result.command
-          | None -> ""))
+          | None -> "")))
 
 let format_counted_table ~headers ~rows =
   render_human

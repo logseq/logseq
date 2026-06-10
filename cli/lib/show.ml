@@ -364,6 +364,10 @@ let page_hierarchy_target_page value =
   page_hierarchy_display_page value
   && Option.is_none (Edn_util.get value "block/page")
 
+let library_page value =
+  Edn_util.get_bool value "logseq.property/built-in?" = Some true
+  && Edn_util.get_string value "block/title" = Some "Library"
+
 let entity_error = function
   | By_page _ ->
       Error.make (Edn_util.keyword_t "page-not-found") "page not found"
@@ -629,7 +633,9 @@ let attach_page_hierarchy config repo ?max_depth root =
   attach_node 1 [] root
 
 let attach_tree config (action : action) root =
-  if action.page_hierarchy && page_hierarchy_target_page root then
+  if library_page root then
+    attach_page_hierarchy config action.repo ?max_depth:action.level root
+  else if action.page_hierarchy && page_hierarchy_target_page root then
     attach_page_hierarchy config action.repo ?max_depth:action.level root
   else attach_children config action.repo ?max_depth:action.level root
 
@@ -1010,8 +1016,30 @@ let fetch_property_value_labels invoke_config repo ids =
   in
   pull [] ids
 
-let prepare_property_render_metadata invoke_config action root linked_references
-    =
+let replace_uuid_refs_in_property_value_labels config repo property_value_labels =
+  let label_uuids =
+    property_value_labels |> List.map snd
+    |> Uuid_refs_types.collect_uuid_refs_from_strings
+  in
+  let open Cli_effect in
+  bind (Uuid_refs_types.fetch_uuid_entities config repo label_uuids)
+    (fun uuid_entities ->
+      let labels =
+        List.filter_map
+          (fun (entry : Uuid_refs_types.uuid_label) ->
+            Option.map (fun label -> (entry.uuid, label)) entry.label)
+          uuid_entities
+      in
+      let property_value_labels =
+        List.map
+          (fun (id, label) ->
+            (id, Uuid_refs_types.replace_uuid_refs label labels))
+          property_value_labels
+      in
+      pure property_value_labels)
+
+let prepare_property_render_metadata config invoke_config action root
+    linked_references =
   let entries = collect_property_entries root linked_references in
   match entries with
   | [] -> Cli_effect.pure empty_render_metadata
@@ -1040,7 +1068,11 @@ let prepare_property_render_metadata invoke_config action root linked_references
           in
           bind (fetch_property_value_labels invoke_config action.repo value_ids)
             (fun property_value_labels ->
-              pure { property_titles; property_value_labels }))
+              bind
+                (replace_uuid_refs_in_property_value_labels config action.repo
+                   property_value_labels)
+                (fun property_value_labels ->
+                  pure { property_titles; property_value_labels })))
 
 let id_text value =
   match id_of value with Some id -> Int64.to_string id | None -> "-"
@@ -1192,26 +1224,16 @@ let linked_reference_context_value block =
 let render_linked_reference_text metadata block =
   render_tree_text_value ~metadata (linked_reference_context_value block)
 
-let uuid_ref_text_keys = [ "block/title"; "block/name" ]
-
-let uuid_ref_text_key key =
-  List.exists
-    (fun expected -> value_key_matches expected key)
-    uuid_ref_text_keys
-
 let collect_uuid_ref_strings value =
   let rec collect acc value =
+    let acc =
+      match Edn_util.as_string value with
+      | Some text -> text :: acc
+      | None -> acc
+    in
     match Edn_util.as_map value with
     | Some fields ->
-        List.fold_left
-          (fun acc (key, value) ->
-            let acc =
-              match Edn_util.as_string value with
-              | Some text when uuid_ref_text_key key -> text :: acc
-              | _ -> acc
-            in
-            collect acc value)
-          acc fields
+        List.fold_left (fun acc (_, value) -> collect acc value) acc fields
     | None -> (
         match Edn_util.as_seq value with
         | Some values -> List.fold_left collect acc values
@@ -1471,7 +1493,7 @@ let execute_single mode action config target =
                                   let metadata =
                                     if human_output_for_mode mode then
                                       prepare_property_render_metadata
-                                        invoke_config action value
+                                        config invoke_config action value
                                         linked_references
                                     else pure empty_render_metadata
                                   in
@@ -1535,7 +1557,8 @@ let execute action config mode =
                                                 if human_output_for_mode mode
                                                 then
                                                   prepare_property_render_metadata
-                                                    invoke_config action root
+                                                    config invoke_config action
+                                                    root
                                                     linked_references
                                                 else pure empty_render_metadata
                                               in

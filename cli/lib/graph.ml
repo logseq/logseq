@@ -9,6 +9,8 @@ type backup_remove_opts = { src : string }
 type export_opts = {
   export_type : export_type;
   file : Cli_primitive.path option;
+  edn_options : Melange_edn.any option;
+  pretty_print : bool;
   include_timestamps : bool;
   exclude_built_in_pages : bool;
   exclude_namespaces : string list;
@@ -114,12 +116,25 @@ let validate_parsed = function
       Error (Error.invalid_options "--e2ee-password requires --enable-sync")
   | Parsed_export opts
     when opts.export_type = Sqlite
+         && (Option.is_some opts.edn_options || opts.pretty_print) ->
+      Error
+        (Error.invalid_options
+           "graph export --type sqlite does not accept --edn-options or \
+            --pretty-print")
+  | Parsed_export opts
+    when opts.export_type = Sqlite
          && (opts.include_timestamps || opts.exclude_built_in_pages
             || opts.exclude_namespaces <> []) ->
       Error
         (Error.invalid_options
            "graph export --type sqlite does not accept --include-timestamps, \
             --exclude-built-in-pages, or --exclude-namespaces")
+  | Parsed_export opts
+    when Option.is_some opts.edn_options
+         && Option.is_none (Option.bind opts.edn_options Edn_util.as_map) ->
+      Error
+        (Error.invalid_options
+           "graph export --edn-options must be an EDN map")
   | _ -> Ok ()
 
 let utc_timestamp () =
@@ -457,7 +472,7 @@ let default_sqlite_export_path config repo =
   Filename.concat export_root
     (graph_name ^ "_" ^ string_of_int timestamp_seconds ^ ".sqlite")
 
-let export_graph_options opts =
+let export_graph_option_fields opts =
   let fields = ref [] in
   if opts.include_timestamps then
     fields := (kw "include-timestamps?", bool true) :: !fields;
@@ -475,11 +490,29 @@ let export_graph_options opts =
                   else value))
              opts.exclude_namespaces) )
       :: !fields;
-  Edn_util.map (List.rev !fields)
+  List.rev !fields
 
 let export_payload opts =
-  let fields = ref [ (kw "export-type", kw "graph") ] in
-  let graph_options = export_graph_options opts in
+  let edn_option_fields =
+    match opts.edn_options with
+    | Some value -> Option.value (Edn_util.as_map value) ~default:[]
+    | None -> []
+  in
+  let export_type =
+    Option.value
+      (List.find_map
+         (fun (key, value) ->
+           if Edn_util.key_matches "export-type" key then Some value else None)
+         edn_option_fields)
+      ~default:(kw "graph")
+  in
+  let graph_options =
+    edn_option_fields
+    |> List.filter (fun (key, _) -> not (Edn_util.key_matches "export-type" key))
+    |> List.append (export_graph_option_fields opts)
+    |> Edn_util.map
+  in
+  let fields = ref [ (kw "export-type", export_type) ] in
   (match graph_options with
   | value when Edn_util.as_map value = Some [] -> ()
   | _ -> fields := (kw "graph-options", graph_options) :: !fields);
@@ -1015,7 +1048,7 @@ let execute_graph_switch mode graph repo config =
               | Ok _ ->
                   pure
                     (Cli_result.ok ~command:Command_id.Graph_switch mode
-                       (Message ("Switched to graph \"" ^ graph_name ^ "\"")))))
+                       (Message ("switched to " ^ graph_name)))))
 
 let execute_graph_remove mode graph repo config =
   let open Cli_effect in
