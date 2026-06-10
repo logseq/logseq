@@ -6,11 +6,13 @@ on:
   push:
     branches: [master]
     paths:
+      - 'cli/**'
       - 'src/main/logseq/cli/**'
       - 'src/test/logseq/cli/**'
       - 'cli-e2e/**'
       - 'dist/logseq.js'
       - 'scripts/prepare-cli-package.mjs'
+      - 'scripts/stage-cli-runtime.mjs'
       - 'scripts/test-cli-release-config.mjs'
       - '.github/workflows/deps-cli.yml'
       - '!**/*.md'
@@ -25,11 +27,13 @@ on:
   pull_request:
     branches: [master]
     paths:
+      - 'cli/**'
       - 'src/main/logseq/cli/**'
       - 'src/test/logseq/cli/**'
       - 'cli-e2e/**'
       - 'dist/logseq.js'
       - 'scripts/prepare-cli-package.mjs'
+      - 'scripts/stage-cli-runtime.mjs'
       - 'scripts/test-cli-release-config.mjs'
       - '.github/workflows/deps-cli.yml'
       - '!**/*.md'
@@ -99,7 +103,7 @@ jobs:
 
       - name: Build logseq CLI
         run: |
-          clojure -M:cljs release logseq-cli
+          pnpm cli:release
           pnpm db-worker-node:release:bundle
 
       - name: Verify CLI publish config
@@ -146,7 +150,7 @@ jobs:
 
       - name: Build logseq CLI
         run: |
-          clojure -M:cljs release logseq-cli
+          pnpm cli:release
           pnpm db-worker-node:release:bundle
 
       - name: Prepare npm package
