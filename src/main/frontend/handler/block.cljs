@@ -100,6 +100,15 @@
   [block & {:as opts}]
   (db-block-title/block-unique-title (db/get-db) block opts))
 
+(defn block-title-with-icon
+  "Used for select item"
+  [block title icon-cp]
+  (if-let [icon (:logseq.property/icon block)]
+    [:div.flex.flex-row.items-center.gap-1
+     (icon-cp icon {:size 14})
+     title]
+    (or title (:block/title block))))
+
 (defn edit-block!
   [block pos & {:keys [_container-id custom-content tail-len save-code-editor?]
                 :or {tail-len 0
