@@ -7,7 +7,6 @@
             [frontend.components.macro :as component-macro]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
@@ -21,11 +20,12 @@
             [frontend.util :as util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
             [open-spaced-repetition.cljc-fsrs.core :as fsrs.core]
             [promesa.core :as p]
-            [rum.core :as rum]
+            [io.factorhouse.hsx.core :as hsx]
             [tick.core :as tick]))
 
 (commands/register-slash-command
@@ -244,120 +244,115 @@
                                        {:align "start"}))}
         (ui/icon "info-circle")))]))
 
-(rum/defcs ^:private card-view < rum/reactive db-mixins/query
-  {:will-mount (fn [state]
-                 (let [[repo block-id _] (:rum/args state)
-                       *block (atom nil)]
-                   (p/let [result (db-async/<get-block repo block-id {:children? true})]
-                     (reset! *block result))
-                   (assoc state ::block *block)))}
-  [state repo _block-id *card-index *phase opts]
-  (when-let [block (rum/react (::block state))]
-    (when-let [block-entity (db/sub-block (:db/id block))]
-      (let [phase (rum/react *phase)
-            _card-index (rum/react *card-index)
-            next-phase (phase->next-phase block-entity phase)]
-        [:div.ls-card.content.flex.flex-col.overflow-hidden
-         {:class (when (:mobile? opts) "ls-mobile-card")}
-         [:div.ls-card-scroll.flex-1.min-h-0.overflow-y-auto.overflow-x-hidden
-          [:div.mb-4.ml-2.opacity-70.text-sm
-           (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
-          (let [option (case phase
-                         :init
-                         {:hide-children? true}
-                         :show-cloze
-                         {:show-cloze? true
-                          :hide-children? true}
-                         {:show-cloze? true
-                          :ignore-block-collapsed? true})]
-            (component-block/blocks-container option [block-entity]))]
-         [:div.mt-8.pb-2.shrink-0
-          {:class (when (:mobile? opts) "ls-mobile-card-actions")}
-          (if (contains? #{:show-cloze :show-answer} next-phase)
-            (btn-with-shortcut {:btn-text (case next-phase
-                                            :show-answer
-                                            (t :flashcard.review/show-answers)
-                                            :show-cloze
-                                            (t :flashcard.review/show-clozes)
-                                            :init
-                                            (t :flashcard.review/hide-answers))
-                                :shortcut "s"
-                                :mobile? (:mobile? opts)
-                                :id "card-answers"
-                                :on-click #(swap! *phase
-                                                  (fn [phase]
-                                                    (phase->next-phase block-entity phase)))})
-            [:div.flex.justify-center (rating-btns repo block-entity *card-index *phase opts)])]]))))
+(hsx/defc ^:private card-view
+  [repo block-id *card-index *phase opts]
+  (let [*block (hooks/use-memo #(atom nil) [repo block-id])
+           [block] (hooks/use-atom *block)
+           [phase] (hooks/use-atom *phase)
+           [_card-index] (hooks/use-atom *card-index)
+           block-entity (db/sub-block (:db/id block))]
+       (hooks/use-effect!
+        (fn []
+          (reset! *block nil)
+          (p/let [result (db-async/<get-block repo block-id {:children? true})]
+            (reset! *block result)))
+        [repo block-id])
+       (when block
+         (when block-entity
+           (let [next-phase (phase->next-phase block-entity phase)]
+             [:div.ls-card.content.flex.flex-col.overflow-hidden
+              {:class (when (:mobile? opts) "ls-mobile-card")}
+              [:div.ls-card-scroll.flex-1.min-h-0.overflow-y-auto.overflow-x-hidden
+               [:div.mb-4.ml-2.opacity-70.text-sm
+                (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
+               (let [option (case phase
+                              :init
+                              {:hide-children? true}
+                              :show-cloze
+                              {:show-cloze? true
+                               :hide-children? true}
+                              {:show-cloze? true
+                               :ignore-block-collapsed? true})]
+                 (component-block/blocks-container option [block-entity]))]
+              [:div.mt-8.pb-2.shrink-0
+               {:class (when (:mobile? opts) "ls-mobile-card-actions")}
+               (if (contains? #{:show-cloze :show-answer} next-phase)
+                 (btn-with-shortcut {:btn-text (case next-phase
+                                                 :show-answer
+                                                 (t :flashcard.review/show-answers)
+                                                 :show-cloze
+                                                 (t :flashcard.review/show-clozes)
+                                                 :init
+                                                 (t :flashcard.review/hide-answers))
+                                     :shortcut "s"
+                                     :mobile? (:mobile? opts)
+                                     :id "card-answers"
+                                     :on-click #(swap! *phase
+                                                       (fn [phase]
+                                                         (phase->next-phase block-entity phase)))})
+                 [:div.flex.justify-center (rating-btns repo block-entity *card-index *phase opts)])]])))))
 
 (declare update-due-cards-count)
-(rum/defcs ^:large-vars/cleanup-todo cards-view < rum/reactive
-  (rum/local 0 ::card-index)
-  (shortcut/mixin :shortcut.handler/cards false)
-  {:init (fn [state]
-           (let [*block-ids (atom nil)
-                 *loading? (atom nil)
-                 [cards-id opts] (:rum/args state)
-                 opts (or opts {})
-                 *cards-list (atom [{:db/id :global
-                                     :block/title (t :flashcard/all-cards)}])
-                 repo (state/get-current-repo)
-                 cards-class-id (:db/id (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards))]
-             (reset! *loading? true)
-             (p/let [result (<get-due-card-block-ids (state/get-current-repo) cards-id)]
-               (reset! *block-ids result)
-               (reset! *loading? false))
-             (when cards-class-id
-               (p/let [cards (db-async/<get-tag-objects repo cards-class-id)
-                       cards (p/all (map (fn [block]
-                                           (if-not (string/blank? (:block/title block))
-                                             block
-                                             (when-let [query-block-id (:db/id (:logseq.property/query block))]
-                                               (p/let [query-block (db-async/<get-block (state/get-current-repo) query-block-id)]
-                                                 (assoc block :block/title (:block/title query-block))))))
-                                         cards))]
-                 (reset! *cards-list (concat [{:db/id :global
-                                               :block/title (t :flashcard/all-cards)}]
-                                             (remove
-                                              (fn [card]
-                                                (string/blank? (:block/title card)))
-                                              cards)))))
-             (assoc state
-                    ::block-ids *block-ids
-                    ::cards-id (atom (or cards-id :global))
-                    ::opts opts
-                    ::loading? *loading?
-                    ::cards-list *cards-list)))
-   :will-unmount (fn [state]
-                   (let [opts (::opts state)]
-                     (when-let [on-header-change (:on-header-change opts)]
-                       (on-header-change nil))
-                     (when-let [on-selector-change (:on-selector-change opts)]
-                       (on-selector-change nil)))
-                   (update-due-cards-count)
-                   state)}
-  [state _cards-id _opts]
+(hsx/defc ^:large-vars/cleanup-todo cards-view
+  [initial-cards-id opts*]
   (let [repo (state/get-current-repo)
-        opts (::opts state)
+        opts (or opts* {})
         mobile? (:mobile? opts)
-        *cards-id (::cards-id state)
-        cards-id (rum/react *cards-id)
-        *cards-list (::cards-list state)
-        all-cards (or (rum/react *cards-list)
+        *cards-id (hooks/use-memo #(atom (or initial-cards-id :global)) [])
+        [cards-id] (hooks/use-atom *cards-id)
+        *cards-list (hooks/use-memo #(atom [{:db/id :global
+                                             :block/title (t :flashcard/all-cards)}]) [])
+        [cards-list] (hooks/use-atom *cards-list)
+        all-cards (or cards-list
                       [{:db/id :global
                         :block/title (t :flashcard/all-cards)}])
-        *block-ids (::block-ids state)
-        block-ids (rum/react *block-ids)
-        loading? (rum/react (::loading? state))
-        *card-index (::card-index state)
-        card-index (rum/react *card-index)
-        *phase (atom :init)
+        *block-ids (hooks/use-memo #(atom nil) [])
+        [block-ids] (hooks/use-atom *block-ids)
+        *loading? (hooks/use-memo #(atom nil) [])
+        [loading?] (hooks/use-atom *loading?)
+        *card-index (hooks/use-memo #(atom 0) [])
+        [card-index] (hooks/use-atom *card-index)
+        *phase (hooks/use-memo #(atom :init) [])
         progress-label (str (min (inc card-index) (count block-ids)) "/" (count block-ids))
         select-card! (fn [v]
                        (reset! *cards-id v)
                        (let [cards-id' (when-not (global-cards-id? v) v)]
                          (p/let [result (<get-due-card-block-ids repo cards-id')]
                            (reset! *card-index 0)
+                           (reset! *phase :init)
                            (reset! *block-ids result))))]
+    (shortcut/use-shortcut-handler! :shortcut.handler/cards
+                                    {:cards-id initial-cards-id
+                                     :opts opts})
+    (hooks/use-effect!
+     (fn []
+       (let [cards-class-id (:db/id (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards))]
+         (reset! *loading? true)
+        (p/let [result (<get-due-card-block-ids repo initial-cards-id)]
+           (reset! *block-ids result)
+           (reset! *loading? false))
+         (when cards-class-id
+           (p/let [cards (db-async/<get-tag-objects repo cards-class-id)
+                   cards (p/all (map (fn [block]
+                                       (if-not (string/blank? (:block/title block))
+                                         block
+                                         (when-let [query-block-id (:db/id (:logseq.property/query block))]
+                                           (p/let [query-block (db-async/<get-block repo query-block-id)]
+                                             (assoc block :block/title (:block/title query-block))))))
+                                     cards))]
+             (reset! *cards-list (concat [{:db/id :global
+                                           :block/title (t :flashcard/all-cards)}]
+                                         (remove
+                                          (fn [card]
+                                            (string/blank? (:block/title card)))
+                                          cards)))))
+         #(do
+            (when-let [on-header-change (:on-header-change opts)]
+              (on-header-change nil))
+            (when-let [on-selector-change (:on-selector-change opts)]
+              (on-selector-change nil))
+            (update-due-cards-count))))
+     [])
     (when (false? loading?)
       (when mobile?
         (when-let [on-header-change (:on-header-change opts)]
@@ -400,9 +395,8 @@
          (cond
            block-id
            [:div.flex.flex-col.flex-1.min-h-0
-            (rum/with-key
-              (card-view repo block-id *card-index *phase opts)
-              (str "card-" block-id))]
+            ^{:key (str "card-" block-id)}
+            [card-view repo block-id *card-index *phase opts]]
 
            (empty? block-ids)
            [:div.ls-card.content.ml-2
@@ -468,14 +462,10 @@
         ;; If there are more than one separator, only the last component is considered the cue.
         [(string/trimr (string/join cloze-cue-separator (drop-last parts))) cue]))))
 
-(rum/defcs cloze-macro-show < rum/reactive
-  {:init (fn [state]
-           (let [config (first (:rum/args state))
-                 shown? (atom (:show-cloze? config))]
-             (assoc state :shown? shown?)))}
-  [state config options]
-  (let [shown?* (:shown? state)
-        shown? (rum/react shown?*)
+(hsx/defc cloze-macro-show
+  [config options]
+  (let [shown?* (hooks/use-memo #(atom (:show-cloze? config)) [])
+        [shown?] (hooks/use-atom shown?*)
         ;; Only suppress toggle when the click originates from a child <a>
         ;; element rendered inside the revealed answer (e.g. a page ref).
         ;; An ancestor <a> should not block the toggle.

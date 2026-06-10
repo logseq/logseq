@@ -982,7 +982,7 @@
  :nav/invalid-jump-error "Salto inválido"
  :nav/journals "Diários"
  :nav/plugins "Plugins"
- :nav/search "Produrar"
+ :nav/search "Buscar"
  :nav/settings "Configurações"
  :nav/skip-to-main-content "Pular para o conteúdo principal"
  :nav/tasks "Tarefas"

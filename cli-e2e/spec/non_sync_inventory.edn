@@ -25,6 +25,8 @@
    :options ["--fix"
              "--type"
              "--file"
+             "--edn-options"
+             "--pretty-print"
              "--input"
              "--name"
              "--src"
@@ -155,9 +157,8 @@
    :options ["--dev-script"]}
 
   :agent
-  {:commands ["agent bridge"
-              "agent bridge list"]
-   :options ["--all"]}
+  {:commands ["agent bridge"]
+   :options []}
 
   :completion
   {:commands ["completion"]

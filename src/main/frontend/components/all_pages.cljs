@@ -5,7 +5,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [logseq.common.config :as common-config]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- columns
   []
@@ -24,7 +24,7 @@
        (remove nil?)
        vec))
 
-(rum/defc all-pages < rum/static
+(hsx/defc all-pages
   []
   (let [columns' (views/build-columns {} (columns)
                                       {:with-object-name? false

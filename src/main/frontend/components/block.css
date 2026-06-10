@@ -495,8 +495,6 @@ html.is-mobile .ls-block-content-indent {
 }
 
 .ls-comment-body {
-  max-height: 300px;
-  overflow: auto;
   cursor: text;
 }
 
@@ -1665,9 +1663,76 @@ html.is-mac {
   text-overflow: ellipsis;
 }
 
-.block-content-wrapper svg, .view-actions svg {
+.block-content-wrapper svg,
+.view-actions svg {
   width: 18px;
   height: 18px;
+  display: block;
+  flex-shrink: 0;
+}
+
+.view-actions,
+.view-actions > *,
+.view-actions button,
+.view-action-type,
+.view-action-type .property-value-inner,
+.view-action-type .property-value-inner > .jtrigger,
+.view-action-type .select-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+.view-actions button,
+.view-action-type,
+.view-action-type .property-value-inner,
+.view-action-type .property-value-inner > .jtrigger {
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+}
+
+.view-action-type .property-value-inner {
+  border-radius: 6px;
+  cursor: pointer;
+  flex: 0 0 24px;
+  padding: 0;
+}
+
+.view-action-type .property-value-inner > .jtrigger {
+  flex: 0 0 24px;
+}
+
+.view-action-type .select-item {
+  justify-content: center;
+  line-height: 1;
+}
+
+.view-action-type .ui__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.view-action-type:hover .property-value-inner {
+  background: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
+}
+
+.view-actions button {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.filters-row {
+  overflow: hidden;
+}
+
+.ls-view-filter-value-item {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Inline page-ref / tag icons set their own size via SVG width/height
@@ -1816,6 +1881,18 @@ html.is-mac {
 @container (max-width: 600px) {
   .ls-page-title .block-tags {
     margin-top: 0;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ls-page-title-container .ls-block-right > .block-tags {
+    opacity: 0;
+    transition: opacity 150ms ease-in;
+  }
+
+  .ls-page-title-container:hover .ls-block-right > .block-tags,
+  .ls-page-title-container:focus-within .ls-block-right > .block-tags {
+    opacity: 1;
   }
 }
 

@@ -27,9 +27,9 @@
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc toggle
+(hsx/defc toggle
   []
   (when-not (util/sm-breakpoint?)
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
@@ -38,7 +38,7 @@
                                :on-click ui-handler/toggle-right-sidebar!})
       (t :sidebar.right/toggle))))
 
-(rum/defc block-cp < rum/reactive
+(hsx/defc block-cp
   [repo idx block]
   (let [id (:block/uuid block)]
     [:div.mt-2
@@ -51,14 +51,14 @@
   []
   (js/document.querySelector ".sidebar-item-list"))
 
-(rum/defc page-cp < rum/reactive
+(hsx/defc page-cp
   [repo page-name]
-  (page/page-cp {:parameters {:path {:name page-name}}
+  (page/page-cp {:page-name page-name
                  :sidebar?   true
                  :scroll-container (get-scrollable-container)
                  :repo repo}))
 
-(rum/defc shortcut-settings
+(hsx/defc shortcut-settings
   []
   [:div.contents.flex-col.flex.ml-3
    (shortcut-help/shortcut-page {:show-title? false})])
@@ -72,100 +72,102 @@
                          :sidebar-key sidebar-key} repo block-id {:indent? false})]
      (block-cp repo idx block)]))
 
-(rum/defc search-title < rum/reactive
+(hsx/defc search-title
   [*input]
-  (let [input (rum/react *input)
+  (let [input (first (hooks/use-atom *input))
         input' (if (string/blank? input) (t :search/blank-input) input)]
     [:span.overflow-hidden.text-ellipsis input']))
 
-(rum/defc sidebar-search
+(hsx/defc sidebar-search
   [repo block-type init-key input *input]
-  (rum/with-key
-    (cmdk/cmdk-block {:initial-input input
-                      :sidebar? true
-                      :on-input-change (fn [new-value]
-                                         (reset! *input new-value))
-                      :on-input-blur (fn [new-value]
-                                       (state/sidebar-replace-block! [repo input block-type]
-                                                                     [repo new-value block-type]))})
-    (str init-key)))
+  ^{:key (str init-key)}
+  [cmdk/cmdk-block {:initial-input input
+                    :sidebar? true
+                    :on-input-change (fn [new-value]
+                                       (reset! *input new-value))
+                    :on-input-blur (fn [new-value]
+                                     (state/sidebar-replace-block! [repo input block-type]
+                                                                   [repo new-value block-type]))}])
+
+(defn- build-sidebar-item
+  [repo idx db-id block-type *db-id init-key]
+  (let [lookup (cond
+                 (integer? db-id) db-id
+                 (uuid? db-id) [:block/uuid db-id]
+                 :else nil)
+        entity (when lookup (db/entity repo lookup))
+        page? (ldb/page? entity)
+        block-render (fn []
+                       (when entity
+                         (if page?
+                           [[:.flex.items-center.page-title.gap-1
+                             (icon/get-node-icon-cp entity {:class "text-md"})
+                             [:span.overflow-hidden.text-ellipsis (:block/title entity)]]
+                            (page-cp repo (str (:block/uuid entity)))]
+                           (block-with-breadcrumb repo entity idx [repo db-id block-type] false))))]
+    (case (keyword block-type)
+      :contents
+      (when-let [page (db/get-page "Contents")]
+        [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :page/contents)]
+         (page-cp repo (str (:block/uuid page)))])
+
+      :help
+      [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :nav/help)] (onboarding/help)]
+
+      :page-graph
+      [[:.flex.items-center (ui/icon "hierarchy" {:class "text-md mr-2"}) (t :graph.page/title)]
+       (page/page-graph)]
+
+      :block-ref
+      (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
+        (when-let [block (db/entity repo lookup)]
+          [(t :reference/blocks)
+           (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
+
+      :block
+      (block-render)
+
+      :page
+      (block-render)
+
+      :plugin
+      [[:.flex.items-center.page-title
+        (ui/icon "puzzle" {:class "text-md mr-2"})
+        [:h3 {:id db-id} (str db-id)]]
+       (plugins/renderer-resolver db-id)]
+
+      :search
+      [[:.flex.items-center.page-title
+        (ui/icon "search" {:class "text-md mr-2"})
+        (search-title *db-id)]
+       (sidebar-search repo block-type init-key db-id *db-id)]
+
+      :shortcut-settings
+      [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help.shortcuts/label)]
+       (shortcut-settings)]
+
+      :rtc
+      [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) RTC"]
+       (rtc-debug-ui/rtc-debug-ui)]
+
+      :undo-redo
+      [[:.flex.items-center (ui/icon "rotate-clockwise" {:class "text-md mr-2"}) "(Dev) Undo/Redo"]
+       (undo-redo-debug-ui/undo-redo-debug-ui)]
+
+      :profiler
+      [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) Profiler"]
+       (profiler/profiler)]
+
+      ["" [:span]])))
 
 (defn- <build-sidebar-item
   [repo idx db-id block-type *db-id init-key]
-  (->
-   (p/do!
-    (when-not (contains? #{:contents :search} block-type)
-      (db-async/<get-block repo db-id))
-    (let [lookup (cond
-                   (integer? db-id) db-id
-                   (uuid? db-id) [:block/uuid db-id]
-                   :else nil)
-          entity (when lookup (db/entity repo lookup))
-          page? (ldb/page? entity)
-          block-render (fn []
-                         (when entity
-                           (if page?
-                             [[:.flex.items-center.page-title.gap-1
-                               (icon/get-node-icon-cp entity {:size 20 :class "text-md"})
-                               [:span.overflow-hidden.text-ellipsis (:block/title entity)]]
-                              (page-cp repo (str (:block/uuid entity)))]
-                             (block-with-breadcrumb repo entity idx [repo db-id block-type] false))))]
-      (case (keyword block-type)
-        :contents
-        (when-let [page (db/get-page "Contents")]
-          [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :page/contents)]
-           (page-cp repo (str (:block/uuid page)))])
-
-        :help
-        [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :nav/help)] (onboarding/help)]
-
-        :page-graph
-        [[:.flex.items-center (ui/icon "hierarchy" {:class "text-md mr-2"}) (t :graph.page/title)]
-         (page/page-graph)]
-
-        :block-ref
-        (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
-          (when-let [block (db/entity repo lookup)]
-            [(t :reference/blocks)
-             (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
-
-        :block
-        (block-render)
-
-        :page
-        (block-render)
-
-        :plugin
-        [[:.flex.items-center.page-title
-          (ui/icon "puzzle" {:class "text-md mr-2"})
-          [:h3 {:id db-id} (str db-id)]]
-         (plugins/renderer-resolver db-id)]
-
-        :search
-        [[:.flex.items-center.page-title
-          (ui/icon "search" {:class "text-md mr-2"})
-          (search-title *db-id)]
-         (sidebar-search repo block-type init-key db-id *db-id)]
-
-        :shortcut-settings
-        [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help.shortcuts/label)]
-         (shortcut-settings)]
-
-        :rtc
-        [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) RTC"]
-         (rtc-debug-ui/rtc-debug-ui)]
-
-        :undo-redo
-        [[:.flex.items-center (ui/icon "rotate-clockwise" {:class "text-md mr-2"}) "(Dev) Undo/Redo"]
-         (undo-redo-debug-ui/undo-redo-debug-ui)]
-
-        :profiler
-        [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) Profiler"]
-         (profiler/profiler)]
-
-        ["" [:span]])))
-   (p/catch (fn [error]
-              (js/console.error error)))))
+  (-> (p/do!
+       (when-not (contains? #{:contents :search} block-type)
+         (db-async/<get-block repo db-id))
+       (build-sidebar-item repo idx db-id block-type *db-id init-key))
+      (p/catch (fn [error]
+                 (js/console.error error)))))
 
 (defonce *drag-to
   (atom nil))
@@ -185,7 +187,7 @@
     developer-mode?
     (conj {:db-id "profiler" :block-type :profiler :label "(Dev) Profiler"})))
 
-(rum/defc actions-menu-content
+(hsx/defc actions-menu-content
   [db-id idx type collapsed? block-count]
   (let [multi-items? (> block-count 1)
         menu-item shui/dropdown-menu-item
@@ -209,13 +211,13 @@
        (menu-item {:on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
                   (t :sidebar.right/open-as-page)))]))
 
-(rum/defc drop-indicator
+(hsx/defc drop-indicator
   [idx drag-to]
   [:.sidebar-drop-indicator {:on-drag-enter #(when drag-to (reset! *drag-to idx))
                              :on-drag-over util/stop
                              :class (when (= idx drag-to) "drag-over")}])
 
-(rum/defc drop-area
+(hsx/defc drop-area
   [idx]
   [:.sidebar-item-drop-area
    {:on-drag-over util/stop}
@@ -224,14 +226,22 @@
    [:.sidebar-item-drop-area-overlay.bottom
     {:on-drag-enter #(reset! *drag-to idx)}]])
 
-(rum/defc inner-component <
-  {:should-update (fn [_prev-state state] (last (:rum/args state)))}
+(hsx/defc inner-component-inner
   [component _should-update?]
   component)
 
-(rum/defc sidebar-item-inner
+(def inner-component
+  (let [memo-class (js/React.memo
+                    (fn [^js props]
+                      (apply inner-component-inner (.-args props)))
+                    (fn [_prev-props ^js next-props]
+                      (not (last (.-args next-props)))))]
+    (fn [& args]
+      (js/React.createElement memo-class #js {:args (vec args)}))))
+
+(hsx/defc sidebar-item-inner
   [db-id {:keys [repo idx block-type collapsed? drag-from drag-to block-count *db-id init-key]}]
-  (let [[item set-item!] (hooks/use-state nil)]
+  (let [[item set-item!] (hooks/use-state #(build-sidebar-item repo idx db-id block-type *db-id init-key))]
     (hooks/use-effect!
      (fn []
        (p/let [item (<build-sidebar-item repo idx db-id block-type *db-id init-key)]
@@ -309,14 +319,13 @@
            (when drag-from (drop-area idx))])]
        (drop-indicator idx drag-to)])))
 
-(rum/defcs sidebar-item < rum/reactive
-  {:init (fn [state] (assoc state
-                            ::db-id (atom (nth (:rum/args state) 2))
-                            ::init-key (random-uuid)))}
-  [state repo idx db-id block-type block-count]
-  (let [drag-from (rum/react *drag-from)
-        drag-to (rum/react *drag-to)
-        collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
+(hsx/defc sidebar-item-component
+  [repo idx db-id block-type block-count]
+  (let [*db-id (hooks/use-memo #(atom db-id) [])
+        init-key (hooks/use-memo #(random-uuid) [])
+        drag-from (first (hooks/use-atom *drag-from))
+        drag-to (first (hooks/use-atom *drag-to))
+        collapsed? (state/use-sub [:ui/sidebar-collapsed-blocks db-id])]
     (sidebar-item-inner db-id {:repo repo
                                :idx idx
                                :block-type block-type
@@ -324,8 +333,17 @@
                                :drag-from drag-from
                                :drag-to drag-to
                                :block-count block-count
-                               :*db-id (::db-id state)
-                               :init-key (::init-key state)})))
+                               :*db-id *db-id
+                               :init-key init-key})))
+
+(def sidebar-item
+  (let [memo-class (js/React.memo
+                    (fn [^js props]
+                      (apply sidebar-item-component (.-args props)))
+                    (fn [^js prev-props ^js next-props]
+                      (= (.-args prev-props) (.-args next-props))))]
+    (fn [& args]
+      (js/React.createElement memo-class #js {:args (vec args)}))))
 
 (defn- get-page
   [match]
@@ -346,9 +364,9 @@
   (let [match (:route-match @state/state)]
     (get-page match)))
 
-(rum/defc sidebar-resizer
+(hsx/defc sidebar-resizer
   [sidebar-open? sidebar-id handler-position]
-  (let [el-ref (rum/use-ref nil)
+  (let [el-ref (hooks/use-ref nil)
         min-px-width 320 ; Custom window controls width
         min-ratio 0.1
         max-ratio 0.7
@@ -361,11 +379,11 @@
                      (when el-ref
                        (let [value (* ratio 100)
                              width (str value "%")]
-                         (.setAttribute (rum/deref el-ref) "aria-valuenow" value)
+                         (.setAttribute (hooks/deref el-ref) "aria-valuenow" value)
                          (ui-handler/persist-right-sidebar-width! width))))]
     (hooks/use-effect!
      (fn []
-       (when-let [el (and (fn? js/window.interact) (rum/deref el-ref))]
+       (when-let [el (and (fn? js/window.interact) (hooks/deref el-ref))]
          (-> (js/interact el)
              (.draggable
               (bean/->js
@@ -433,7 +451,7 @@
       :tabIndex         "0"
       :data-expanded    sidebar-open?}]))
 
-(rum/defc plugin-renderer-menu-items
+(hsx/defc plugin-renderer-menu-items
   [renderers]
   (for [r renderers]
     (shui/dropdown-menu-item
@@ -447,15 +465,10 @@
        [:span.pr-1.flex.items-center (shui/tabler-icon "puzzle")]
        [:strong (:title r)]])))
 
-(rum/defcs sidebar-inner <
-  (rum/local false ::anim-finished?)
-  {:will-mount (fn [state]
-                 (js/setTimeout (fn [] (reset! (get state ::anim-finished?) true)) 300)
-                 state)}
-  [state repo t blocks]
-  (let [*anim-finished? (get state ::anim-finished?)
-        block-count (count blocks)
-        developer-mode? (state/sub [:ui/developer-mode?])]
+(hsx/defc sidebar-inner
+  [repo t blocks]
+  (let [block-count (count blocks)
+        developer-mode? (state/use-sub [:ui/developer-mode?])]
     [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
 
      [:div.cp__right-sidebar-scrollable
@@ -503,26 +516,29 @@
             label]])]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.px-2
-       (if @*anim-finished?
-         (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
-           (rum/with-key
-             (sidebar-item repo idx db-id block-type block-count)
-             (str "sidebar-block-" db-id)))
-         [:div.p-4
-          [:span.font-medium.opacity-50 (t :ui/loading)]])]]]))
+       (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
+         ^{:key (str "sidebar-block-" db-id)}
+         [:<> (sidebar-item repo idx db-id block-type block-count)])]]]))
 
-(rum/defcs sidebar < rum/reactive
-  [state]
-  (let [blocks (state/sub-right-sidebar-blocks)
+(hsx/defc sidebar-component
+  []
+  (let [blocks (state/use-right-sidebar-blocks)
         blocks (if (empty? blocks)
                  [[(state/get-current-repo) "contents" :contents nil]]
                  blocks)
-        sidebar-open? (state/sub :ui/sidebar-open?)
-        width (state/sub :ui/sidebar-width)
-        repo (state/sub :git/current-repo)]
+        sidebar-open? (state/use-sub :ui/sidebar-open?)
+        width (state/use-sub :ui/sidebar-width)
+        repo (state/use-sub :git/current-repo)]
     [:div#right-sidebar.cp__right-sidebar.h-screen
      {:class (if sidebar-open? "open" "closed")
       :style {:width width}}
      (sidebar-resizer sidebar-open? "right-sidebar" :west)
      (when sidebar-open?
        (sidebar-inner repo t blocks))]))
+
+(def sidebar
+  (let [memo-class (js/React.memo
+                    (fn [_props]
+                      (sidebar-component)))]
+    (fn []
+      (js/React.createElement memo-class #js {}))))

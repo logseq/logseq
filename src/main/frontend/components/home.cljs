@@ -1,7 +1,7 @@
 (ns frontend.components.home
-  (:require [rum.core :as rum]
+  (:require [io.factorhouse.hsx.core :as hsx]
             [frontend.components.container :as container]))
 
-(rum/defc home
+(hsx/defc home
   []
   (container/main-content))

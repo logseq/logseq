@@ -46,6 +46,8 @@
 (defonce *sqlite (atom nil))
 ;; repo -> {:db conn :search conn :client-ops conn}
 (defonce *sqlite-conns (atom {}))
+;; repo -> platform vector search index
+(defonce *vector-indexes (atom {}))
 ;; repo -> conn
 (defonce *datascript-conns (atom nil))
 
@@ -61,6 +63,10 @@
   ([repo which-db]
    (assert (contains? #{:db :search :client-ops} which-db) which-db)
    (get-in @*sqlite-conns [repo which-db])))
+
+(defn get-vector-index
+  [repo]
+  (get @*vector-indexes repo))
 
 (defn get-datascript-conn
   [repo]

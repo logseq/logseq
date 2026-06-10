@@ -5,7 +5,7 @@
             [frontend.worker.graph-dir :as graph-dir]
             [frontend.worker.platform :as platform]
             [lambdaisland.glogi :as log]
-            [logseq.cli.common.file :as common-file]
+            [logseq.common.export.file :as common-file]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]

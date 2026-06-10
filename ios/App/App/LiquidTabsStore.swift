@@ -123,25 +123,33 @@ final class LiquidTabsStore: ObservableObject {
         }
     }
 
-    func waitForWebTab(_ id: String) {
-        DispatchQueue.main.async {
-            self.pendingWebTabRequestId += 1
-            let requestId = self.pendingWebTabRequestId
-            self.pendingWebTabId = id
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-                guard self.pendingWebTabRequestId == requestId,
-                      self.pendingWebTabId == id else {
-                    return
-                }
-
-                self.pendingWebTabId = nil
+    private func updateOnMain(_ update: @escaping () -> Void) {
+        if Thread.isMainThread {
+            update()
+        } else {
+            DispatchQueue.main.async {
+                update()
             }
         }
     }
 
+    func beginWebTabTransitionIfNeeded(_ id: String?) {
+        guard let id, id != "graphs", id != "search" else {
+            return
+        }
+
+        waitForWebTab(id)
+    }
+
+    private func waitForWebTab(_ id: String) {
+        updateOnMain {
+            self.pendingWebTabRequestId += 1
+            self.pendingWebTabId = id
+        }
+    }
+
     func markWebTabReady(_ id: String) {
-        DispatchQueue.main.async {
+        updateOnMain {
             guard self.pendingWebTabId == id else { return }
             self.pendingWebTabRequestId += 1
             self.pendingWebTabId = nil

@@ -208,6 +208,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
           cache-dependency-path: |
+            pnpm-lock.yaml
             deps/db/pnpm-lock.yaml
             scripts/pnpm-lock.yaml
 
@@ -223,22 +224,48 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
+      - name: Install CLI Linux runtime deps
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
+
       - name: Fetch scripts pnpm deps
         run: cd scripts && pnpm install --frozen-lockfile
 
-      - name: Create DB graph with properties
-        run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ./properties-graph
+      - name: Fetch root pnpm deps
+        run: pnpm install --frozen-lockfile
 
-      # TODO: Use a smaller, test-focused graph to test classes
+      - name: Create DB graph with properties
+        run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ./cli-root/graphs/properties-graph
+
       - name: Create DB graph with classes
-        run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./schema-graph
+        run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./cli-root/graphs/schema-graph
 
       - name: Fetch deps/db pnpm deps
         run: cd deps/db && pnpm install --frozen-lockfile
 
-      # Can run from deps/db since all JS deps for this command are available in deps/db
-      - name: Validate created DB graphs
-        run: cd deps/db && pnpm exec nbb-logseq -cp src:../cli/src -m logseq.cli validate -g ../../scripts/properties-graph ../../scripts/schema-graph
+      - name: Build logseq CLI runtime
+        run: |
+          clojure -M:cljs release logseq-cli
+          pnpm db-worker-node:release:bundle
+          pnpm --dir deps/db-sync build:node-adapter
+          node scripts/prepare-cli-package.mjs
+          pnpm --dir dist/cli-package install --prod
+          pnpm --dir dist/cli-package pack --pack-destination ../
 
-      - name: Export a created DB graph and confirm the export is idempotent
-        run: cd deps/db && pnpm exec nbb-logseq -cp src:../cli/src -m logseq.cli export-edn -g ../../scripts/properties-graph -f properties.edn --roundtrip
+      - name: Smoke test packaged CLI
+        run: node dist/cli-package/dist/logseq.js --version
+
+      - name: Validate created DB graphs
+        run: |
+          node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph properties-graph --timeout-ms 3000 --profile --verbose graph validate
+          node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph schema-graph --timeout-ms 120000 --profile --verbose graph validate
+
+      - name: Print db-worker-node logs on graph validation failure
+        if: failure()
+        run: |
+          find scripts/cli-root/graphs -maxdepth 2 -name 'db-worker-node-*.log' -print -exec tail -n 200 {} \; || true
+          pgrep -af db-worker-node || true
+
+      - name: Export a created DB graph
+        run: node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph properties-graph --timeout-ms 3000 graph export --type edn --file scripts/properties.edn
+      - name: Import an exported graph to confirm the export is working
+        run: node dist/cli-package/dist/logseq.js --root-dir scripts/cli-root --graph properties-graph-roundtrip --timeout-ms 20000 graph import --type edn --input scripts/properties.edn

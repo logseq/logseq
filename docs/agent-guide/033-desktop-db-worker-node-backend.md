@@ -26,7 +26,7 @@ This split creates two write paths with eventual synchronization, and desktop pl
 
 The goal is to make desktop and CLI share db-worker-node semantics and lock behavior so disk SQLite becomes the single source of truth.
 
-The desktop default DB graphs directory is `~/logseq/graphs`, defined in `deps/cli/src/logseq/cli/common/graph.cljs`, and used by Electron DB file operations in `src/electron/electron/db.cljs`.
+The desktop default DB graphs directory is `~/logseq/graphs`, defined in `deps/common/src/logseq/common/config.cljs` and resolved through `deps/common/src/logseq/common/graph.cljs`, then used by Electron DB file operations in `src/electron/electron/db.cljs`.
 
 This plan focuses on backend access flow and lifecycle management, and does not change business-level thread-api semantics or SQLite schema.
 

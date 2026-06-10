@@ -19,7 +19,10 @@
 (def MAIN_WINDOW_ENTRY (if dev?
                          ;; Use index.html to test plugins on development mode
                          "http://localhost:3001"
-                         (str "file://" (node-path/join js/__dirname "index.html"))))
+                         ;; Loading the renderer through Logseq's privileged
+                         ;; scheme keeps the parent origin non-opaque for
+                         ;; plugin iframe postMessage handshakes.
+                         "lsp://logseq.com/index.html"))
 
 (defn create-main-window!
   ([]

@@ -198,7 +198,16 @@
    ;; `repair-comment-classes-and-targets` is idempotent: each datom it emits
    ;; is guarded by a presence check, so re-running on an already-clean DB is
    ;; a no-op.
-   ["65.38" {:fix repair-comment-classes-and-targets}]])
+   ["65.38" {:fix repair-comment-classes-and-targets}]
+    ;; 65.39 — gallery view properties (master's 65.33), appended at the tail.
+    ;; This integration branch's dev graphs are already past master's 65.33, so the
+    ;; version runner would otherwise skip gallery; this backfills them. PR branches
+    ;; built from master keep gallery at 65.33 and omit this entry. Idempotent.
+   ["65.39" {:properties [:logseq.property.view/gallery-asset-property
+                          :logseq.property.view/gallery-display-properties
+                          :logseq.property.view/gallery-card-size
+                          :logseq.property.view/gallery-card-width
+                          :logseq.property.view/gallery-card-height]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

@@ -11,9 +11,9 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc select-pages
+(hsx/defc select-pages
   [library-page]
   (let [[result set-result!] (hooks/use-state nil)
         [input set-input!] (hooks/use-state "")
@@ -54,7 +54,7 @@
       :input-opts {:class "!p-1 !text-sm"}
       :clear-input-on-chosen? false})))
 
-(rum/defc add-pages
+(hsx/defc add-pages
   [library-page]
   [:div.ls-add-pages.px-1.mt-4
    (shui/button

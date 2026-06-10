@@ -16,7 +16,7 @@
 
 (defn preferred-locale
   []
-  (or (some-> (state/sub :preferred-language) keyword) :en))
+  (or (some-> (:preferred-language @state/state) keyword) :en))
 
 (defn locale-tag
   [language]
@@ -231,14 +231,14 @@
   "Format a number using Intl.NumberFormat with the application locale."
   ([n] (locale-format-number n {}))
   ([n opts]
-   (let [tag (locale-tag (state/sub :preferred-language))]
+   (let [tag (locale-tag (:preferred-language @state/state))]
      (.format (js/Intl.NumberFormat. tag (clj->js opts)) n))))
 
 (defn locale-format-date
   "Format a js/Date using Intl.DateTimeFormat with the application locale."
   ([d] (locale-format-date d {:year "numeric" :month "short" :day "numeric"}))
   ([d opts]
-   (let [tag (locale-tag (state/sub :preferred-language))]
+   (let [tag (locale-tag (:preferred-language @state/state))]
      (.format (js/Intl.DateTimeFormat. tag (clj->js opts)) d))))
 
 (defn locale-format-time
@@ -309,6 +309,6 @@
 
 ;; TODO: Fetch preferred language from backend if user is logged in
 (defn start []
-  (let [preferred-language (state/sub :preferred-language)]
+  (let [preferred-language (:preferred-language @state/state)]
     (when (nil? preferred-language)
       (state/set-preferred-language! (fetch-local-language)))))

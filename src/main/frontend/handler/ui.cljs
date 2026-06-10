@@ -15,8 +15,7 @@
             [goog.object :as gobj]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+            [promesa.core :as p]))
 
 ;; sidebars
 (def *left-sidebar-resized-at (atom (js/Date.now)))
@@ -86,9 +85,8 @@
    (when clear-query-state?
      (react/clear-query-state!))
    (doseq [component (keys @react/component->query-key)]
-     (rum/request-render component))
-   (when-let [component (state/get-root-component)]
-     (rum/request-render component))
+     (when (fn? component)
+       (component)))
    nil))
 
 (defn highlight-element!
@@ -167,7 +165,8 @@
 (defn- reorder-matched
   "Reorder matched if grouped"
   [state]
-  (let [[matched {:keys [grouped?]}] (:rum/args state)]
+  (let [matched (:matched state)
+        grouped? (get-in state [:opts :grouped?])]
     (if grouped?
       (let [*idx (atom -1)
             inc-idx #(swap! *idx inc)]
@@ -211,7 +210,7 @@
 
 (defn auto-complete-complete
   [state e]
-  (let [[_matched {:keys [on-chosen on-enter]}] (:rum/args state)
+  (let [{:keys [on-chosen on-enter]} (:opts state)
         matched (reorder-matched state)
         current-idx (get state :frontend.ui/current-idx)]
     (util/stop e)
@@ -223,7 +222,7 @@
 
 (defn auto-complete-shift-complete
   [state e]
-  (let [[_matched {:keys [on-chosen on-shift-chosen on-enter]}] (:rum/args state)
+  (let [{:keys [on-chosen on-shift-chosen on-enter]} (:opts state)
         matched (reorder-matched state)
         current-idx (get state :frontend.ui/current-idx)]
     (util/stop e)

@@ -5,7 +5,7 @@
             [frontend.components.block :as component-block]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
+            [frontend.db.hooks :as db-hooks]
             [frontend.db.react :as react]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
@@ -13,7 +13,7 @@
             [frontend.util :as util]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- resolve-entity
   [db value]
@@ -44,7 +44,7 @@
                                             db)
                                        vec))}
                      nil)
-            util/react)))
+            db-hooks/use-query)))
 
 (defn- group-title
   [db root]
@@ -111,32 +111,32 @@
     :id (str (:block/uuid root))}
    root))
 
-(rum/defc recycle-page < rum/reactive db-mixins/query
+(hsx/defc recycle-page
   [_page {:keys [class]}]
   (let [db* (db/get-db)
-        root-ids (or (sub-deleted-root-ids)
-                     [])
-        roots (if (seq root-ids)
-                (->> root-ids
-                     (keep #(d/entity db* %))
-                     (sort-by :logseq.property/deleted-at #(compare %2 %1)))
-                (deleted-roots db*))
-        groups (->> roots
-                    (group-by #(group-title db* %))
-                    (sort-by (fn [[_ roots]]
-                               (:logseq.property/deleted-at (first roots)))
-                             #(compare %2 %1)))]
-    [:div {:class (util/classnames ["flex" "flex-col" "gap-8" "ls-recycle-page-content" class])}
-     [:div.text-sm.text-muted-foreground.ls-recycle-page-description.ml-1
-      (t :storage.recycle/retention-desc)]
-     (if (seq groups)
-       (for [[title roots] groups]
-         [:section {:key title}
-          (when-not (some ldb/page? roots)
-            [:h2.text-lg.font-medium.mb-3 title])
-          [:div.flex.flex-col
-           (for [root roots]
-             [:div {:key (str (:block/uuid root))}
-              (deleted-root-header db* root)
-              (deleted-root-outliner root)])]])
-       [:div.text-sm.text-muted-foreground (t :storage.recycle/empty)])]))
+           root-ids (or (sub-deleted-root-ids)
+                        [])
+           roots (if (seq root-ids)
+                   (->> root-ids
+                        (keep #(d/entity db* %))
+                        (sort-by :logseq.property/deleted-at #(compare %2 %1)))
+                   (deleted-roots db*))
+           groups (->> roots
+                       (group-by #(group-title db* %))
+                       (sort-by (fn [[_ roots]]
+                                  (:logseq.property/deleted-at (first roots)))
+                                #(compare %2 %1)))]
+       [:div {:class (util/classnames ["flex" "flex-col" "gap-8" "ls-recycle-page-content" class])}
+        [:div.text-sm.text-muted-foreground.ls-recycle-page-description.ml-1
+         (t :storage.recycle/retention-desc)]
+        (if (seq groups)
+          (for [[title roots] groups]
+            [:section {:key title}
+             (when-not (some ldb/page? roots)
+               [:h2.text-lg.font-medium.mb-3 title])
+             [:div.flex.flex-col
+              (for [root roots]
+                [:div {:key (str (:block/uuid root))}
+                 (deleted-root-header db* root)
+                 (deleted-root-outliner root)])]])
+          [:div.text-sm.text-muted-foreground (t :storage.recycle/empty)])]))

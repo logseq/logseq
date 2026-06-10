@@ -8,9 +8,9 @@
             [clojure.string :as string]
             [electron.configs :as cfgs]
             [electron.logger :as logger]
-            [logseq.cli.common.graph :as cli-common-graph]
-            [logseq.common.graph-dir :as graph-dir]
             [logseq.common.config :as common-config]
+            [logseq.common.graph :as common-graph]
+            [logseq.common.graph-dir :as graph-dir]
             [promesa.core :as p]
             [shadow.esm :refer [dynamic-import]]))
 
@@ -257,7 +257,7 @@
   (when (and (string? graph-name)
              (string/starts-with? graph-name common-config/db-version-prefix))
     (let [repo (common-config/canonicalize-db-version-repo graph-name)]
-      (node-path/join (cli-common-graph/get-db-graphs-dir)
+      (node-path/join (common-graph/get-db-graphs-dir)
                       (graph-dir/repo->encoded-graph-dir-name repo)))))
 
 (comment

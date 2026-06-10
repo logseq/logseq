@@ -39,9 +39,9 @@
     "cmdk": "^1.1.1",
     "date-fns": "^2.30.0",
     "lucide-react": "^0.577.0",
-    "react": "^18.3.1",
-    "react-day-picker": "^8.9.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.2.6",
+    "react-day-picker": "^9.0.9",
+    "react-dom": "^19.2.6",
     "react-hook-form": "^7.71.2",
     "react-remove-scroll": "^2.7.2",
     "tailwind-merge": "^3.5.0",
@@ -58,8 +58,8 @@
     "@types/babel__core": "^7.20.5",
     "@types/babel__preset-env": "^7.10.0",
     "@types/prop-types": "^15.7.15",
-    "@types/react": "18.3.1",
-    "@types/react-dom": "18.3.1",
+    "@types/react": "19.2.15",
+    "@types/react-dom": "19.2.3",
     "buffer": "^5.5.0",
     "parcel": "2.8.3",
     "postcss": "^8.5.8",
@@ -76,8 +76,12 @@
     "react-dom": {
       "global": "ReactDOM"
     },
-    "react/jsx-dev-runtime": "./node_modules/react/jsx-dev-runtime.js",
-    "react/jsx-runtime": "./node_modules/react/jsx-runtime.js",
+    "react/jsx-dev-runtime": {
+      "global": "ReactJSXDevRuntime"
+    },
+    "react/jsx-runtime": {
+      "global": "ReactJSXRuntime"
+    },
     "@/*": "./@/$1"
   },
   "targets": {
@@ -87,7 +91,9 @@
       "outputFormat": "global",
       "includeNodeModules": {
         "react": false,
-        "react-dom": false
+        "react-dom": false,
+        "react/jsx-dev-runtime": false,
+        "react/jsx-runtime": false
       }
     }
   },

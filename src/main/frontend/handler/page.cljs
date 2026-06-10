@@ -38,6 +38,7 @@
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
+(def edit-page-when-present! page-common-handler/edit-page-when-present!)
 
 (defn get-recycle-page
   []

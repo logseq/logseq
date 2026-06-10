@@ -233,13 +233,21 @@
         (p/resolved true))
       (p/resolved false))))
 
+(defonce ^:private *runtime-opts (atom {}))
+
 (defn- start-managed-daemon!
   [repo]
-  (p/let [config (cli-server/ensure-server! {:owner-source :electron} repo)]
-    {:repo repo
-     :base-url (:base-url config)
-     :auth-token nil
-     :owned? (:owned? config)}))
+  (let [config (merge {:owner-source :electron}
+                      @*runtime-opts)]
+    (p/let [_ (when (seq (:embedding-endpoint config))
+                (-> (cli-server/stop-server! config repo)
+                    (p/catch (fn [_] nil))))
+            config (cli-server/ensure-server! config
+                                            repo)]
+      {:repo repo
+       :base-url (:base-url config)
+       :auth-token nil
+       :owned? (:owned? config)})))
 
 (defn- stop-managed-daemon!
   [{:keys [repo]}]
@@ -253,8 +261,11 @@
     :runtime-ready? runtime-ready-default?}))
 
 (defn ensure-runtime!
-  [repo window-id]
-  (ensure-started! manager repo window-id))
+  ([repo window-id]
+   (ensure-started! manager repo window-id))
+  ([repo window-id opts]
+   (reset! *runtime-opts opts)
+   (ensure-started! manager repo window-id)))
 
 (defn release-window!
   [window-id]

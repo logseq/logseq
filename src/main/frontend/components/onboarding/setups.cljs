@@ -1,8 +1,8 @@
 (ns frontend.components.onboarding.setups
   (:require [frontend.context.i18n :refer [t]]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc setups-container
+(hsx/defc setups-container
   [flag content]
 
   [:div.cp__onboarding-setups.flex.flex-1

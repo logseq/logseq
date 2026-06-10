@@ -106,11 +106,17 @@
         hash-url (hash-route-url parsed-url)
         graph-id (or (some-> hash-url .-searchParams (.get "graph-id"))
                      (.get (.-searchParams parsed-url) "graph-id"))
+        graph-identifier (when (string/blank? graph-id)
+                           (or (some-> hash-url .-searchParams (.get "graph"))
+                               (.get (.-searchParams parsed-url) "graph")))
         route (or (some-> hash-url .-pathname path-parts route-from-path-parts)
                   (route-from-path-parts (path-parts (.-pathname parsed-url))))]
     (cond-> {}
       (not (string/blank? graph-id))
       (assoc :graph-id graph-id)
+
+      (not (string/blank? graph-identifier))
+      (assoc :graph-identifier graph-identifier)
 
       route
       (assoc :route route))))

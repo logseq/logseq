@@ -259,7 +259,7 @@ Remove graph backup orchestration from `backup-db-with-sqlite-backup!` or shrink
 
 Keep `ensure-graphs-dir!`, `ensure-graph-dir!`, and `get-db` only if callers still need them.
 
-Change `backup-db-via-worker!` so it calls the shared `<create-backup!` with `graphs-dir` from `logseq.cli.common.graph/get-db-graphs-dir`.
+Change `backup-db-via-worker!` so it calls the shared `<create-backup!` with `graphs-dir` from `logseq.common.graph/get-db-graphs-dir`.
 
 Use `electron.db-worker/ensure-runtime!` and `logseq.cli.transport/invoke` only inside the Desktop snapshot function.
 

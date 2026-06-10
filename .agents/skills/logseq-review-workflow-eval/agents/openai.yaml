@@ -1,0 +1,4 @@
+interface:
+  display_name: "Logseq Review Workflow Eval"
+  short_description: "Compare review workflow skill revisions"
+  default_prompt: "Use $logseq-review-workflow-eval to compare the before and after behavior of logseq-review-workflow on the same review prompt."

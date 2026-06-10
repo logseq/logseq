@@ -4,7 +4,7 @@ const cp = require('child_process')
 const exec = utils.promisify(cp.exec)
 const path = require('path')
 const gulp = require('gulp')
-const replace = require('gulp-replace')
+const webpack = require('webpack')
 
 const outputPath = path.join(__dirname, 'static')
 const outputJsPath = path.join(outputPath, 'js')
@@ -21,6 +21,58 @@ const resourceSyncGlobs = [
 const outputFilePath = path.join(outputPath, '**')
 const rawCopySrc = (globs, options = {}) =>
   gulp.src(globs, { encoding: false, ...options })
+const browserGlobalEntryPath = (file) =>
+  path.join(__dirname, 'scripts', 'browser-globals', file)
+const runWebpack = (config) =>
+  new Promise((resolve, reject) => {
+    webpack(config, (err, stats) => {
+      if (err) {
+        reject(err)
+      } else if (stats.hasErrors()) {
+        reject(new Error(stats.toString({
+          all: false,
+          errors: true,
+          warnings: true,
+        })))
+      } else {
+        resolve()
+      }
+    })
+  })
+const browserGlobalConfig = (mode, outputDir, entry, externals = {}) => ({
+  mode,
+  target: 'web',
+  devtool: false,
+  entry,
+  externals,
+  output: {
+    path: outputDir,
+    filename: '[name].js',
+    clean: false,
+  },
+})
+const bundleBrowserGlobals = (outputDir) =>
+  Promise.all([
+    runWebpack(browserGlobalConfig('production', outputDir, {
+      'react.production.min': browserGlobalEntryPath('react.js'),
+    })),
+    runWebpack(browserGlobalConfig('development', outputDir, {
+      'react.development': browserGlobalEntryPath('react.js'),
+    })),
+    runWebpack(browserGlobalConfig('production', outputDir, {
+      'react-dom.production.min': browserGlobalEntryPath('react-dom.js'),
+      'react-dom-client.production.min': browserGlobalEntryPath('react-dom-client.js'),
+      'react-jsx-runtime.production.min': browserGlobalEntryPath('react-jsx-runtime.js'),
+      'react-jsx-dev-runtime.production.min': browserGlobalEntryPath('react-jsx-dev-runtime.js'),
+      'tabler-icons-react.min': browserGlobalEntryPath('tabler-icons-react.js'),
+    }, { react: 'React' })),
+    runWebpack(browserGlobalConfig('development', outputDir, {
+      'react-dom.development': browserGlobalEntryPath('react-dom.js'),
+      'react-dom-client.development': browserGlobalEntryPath('react-dom-client.js'),
+      'react-jsx-runtime.development': browserGlobalEntryPath('react-jsx-runtime.js'),
+      'react-jsx-dev-runtime.development': browserGlobalEntryPath('react-jsx-dev-runtime.js'),
+    }, { react: 'React' })),
+  ])
 const removeUnsupportedIOSFontSources = (cssText) =>
   cssText.
     replace(/@font-face\s*{[^{}]*url\(["']?web\/Inter-[^{}]*?\.woff2[^{}]*}\s*/g, '').
@@ -116,19 +168,10 @@ const common = {
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
         'packages/ui/dist/ui.js',
         'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm',
-        'node_modules/react/umd/react.production.min.js',
-        'node_modules/react/umd/react.development.js',
-        'node_modules/react-dom/umd/react-dom.production.min.js',
-        'node_modules/react-dom/umd/react-dom.development.js',
         'node_modules/prop-types/prop-types.min.js',
         'node_modules/dompurify/dist/purify.js',
       ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
-      () => gulp.src([
-        'node_modules/@tabler/icons-react/dist/umd/tabler-icons-react.min.js',
-      ]).
-        pipe(replace('"@tabler/icons-react"]={},a.react,',
-          '"tablerIcons"]={},a.React,')).
-        pipe(gulp.dest(path.join(outputPath, 'js'))),
+      () => bundleBrowserGlobals(path.join(outputPath, 'js')),
       () => rawCopySrc([
         'node_modules/@glidejs/glide/dist/glide.min.js',
         'node_modules/@glidejs/glide/dist/css/glide.core.min.css',
@@ -156,16 +199,13 @@ const common = {
         'node_modules/marked/lib/marked.umd.js',
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
-        'node_modules/react/umd/react.production.min.js',
-        'node_modules/react/umd/react.development.js',
-        'node_modules/react-dom/umd/react-dom.production.min.js',
-        'node_modules/react-dom/umd/react-dom.development.js',
         'node_modules/prop-types/prop-types.min.js',
         'node_modules/interactjs/dist/interact.min.js',
         'node_modules/photoswipe/dist/umd/*.js',
         'packages/ui/dist/ui.js',
         'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
+      () => bundleBrowserGlobals(path.join(outputPath, 'mobile', 'js')),
       () => rawCopySrc([
         'node_modules/inter-ui/inter.css',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css'))),
@@ -257,21 +297,37 @@ const common = {
 
   switchReactDevelopmentMode (cb) {
     try {
-      const reactFrom = path.join(outputPath, 'js', 'react.development.js')
-      const reactTo = path.join(outputPath, 'js', 'react.production.min.js')
-      fs.renameSync(reactFrom, reactTo)
-
-      const reactDomFrom = path.join(outputPath, 'js',
-        'react-dom.development.js')
-      const reactDomTo = path.join(outputPath, 'js',
-        'react-dom.production.min.js')
-      fs.renameSync(reactDomFrom, reactDomTo)
+      [
+        ['react.development.js', 'react.production.min.js'],
+        ['react-dom.development.js', 'react-dom.production.min.js'],
+        ['react-dom-client.development.js', 'react-dom-client.production.min.js'],
+        ['react-jsx-runtime.development.js', 'react-jsx-runtime.production.min.js'],
+        ['react-jsx-dev-runtime.development.js', 'react-jsx-dev-runtime.production.min.js'],
+      ].forEach(([from, to]) => {
+        fs.renameSync(
+          path.join(outputPath, 'js', from),
+          path.join(outputPath, 'js', to),
+        )
+      })
 
       cb()
     } catch (err) {
       console.error('Error during switchReactDevelopmentMode:', err)
       cb(err)
     }
+  },
+
+  pruneDesktopPackageFiles () {
+    for (const entry of ['mobile', 'android', 'ios']) {
+      fs.rmSync(path.join(outputPath, entry), {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      })
+    }
+
+    return Promise.resolve()
   },
 }
 
@@ -287,8 +343,14 @@ exports.electron = () => {
   })
 }
 
-exports.electronMaker = async () => {
+const prepareElectronMaker = async () => {
   cp.execSync('pnpm cljs:release-electron', {
+    stdio: 'inherit',
+  })
+  cp.execSync('pnpm db-worker-node:bundle', {
+    stdio: 'inherit',
+  })
+  cp.execSync('pnpm webpack-app-build', {
     stdio: 'inherit',
   })
   cp.execSync('pnpm desktop:prepare-runtime-js', {
@@ -309,17 +371,31 @@ exports.electronMaker = async () => {
   pkg.version = version
   fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2))
 
+  await common.pruneDesktopPackageFiles()
+
   if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
     cp.execSync('pnpm install --frozen-lockfile', {
       cwd: outputPath,
       stdio: 'inherit',
     })
   }
+}
 
-  cp.execSync('pnpm electron:make', {
+const runStaticScript = (script) => {
+  cp.execSync(`pnpm ${script}`, {
     cwd: outputPath,
     stdio: 'inherit',
   })
+}
+
+exports.electronMaker = async () => {
+  await prepareElectronMaker()
+  runStaticScript('electron:make')
+}
+
+exports.electronMakerUnsigned = async () => {
+  await prepareElectronMaker()
+  runStaticScript('electron:make-unsigned')
 }
 
 exports.cap = common.runCapWithLocalDevServerEntry

@@ -32,8 +32,8 @@
    [frontend.worker.undo-redo :as worker-undo-redo]
    [goog.functions :as gfun]
    [lambdaisland.glogi :as log]
+   [logseq.api.db-based.tools :as api-tools]
    [logseq.cli.common.db-worker :as cli-db-worker]
-   [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
    [logseq.common.graph-dir :as graph-dir]
    [logseq.common.util :as common-util]
    [logseq.db :as ldb]
@@ -52,6 +52,7 @@
    [logseq.db.sqlite.util :as sqlite-util]
    [logseq.outliner.op :as outliner-op]
    [logseq.outliner.recycle :as outliner-recycle]
+   [logseq.publishing.html :as publish-html]
    [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
    [missionary.core :as m]
    [promesa.core :as p]
@@ -59,6 +60,7 @@
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
+(defonce *vector-indexes worker-state/*vector-indexes)
 (defonce *datascript-conns worker-state/*datascript-conns)
 (defonce *client-ops-conns worker-state/*client-ops-conns)
 (defonce *opfs-pools worker-state/*opfs-pools)
@@ -68,10 +70,15 @@
 (def search-db-version
   "Current search index version, stored in PRAGMA user_version.
   Bump to force a rebuild when the index format changes."
-  1)
+  2)
 (def ^:private recycle-gc-kv :logseq.kv/recycle-last-gc-at)
 
 (def ^:private search-index-build-batch-size 200)
+(def ^:private vector-embedding-batch-size 32)
+(def ^:private vector-embedding-parallelism 2)
+(def ^:private vector-embedding-max-batch-chars (* vector-embedding-batch-size 2048))
+(def ^:private vector-embedding-max-title-length 2048)
+(def ^:private query-embedding-timeout-ms 50)
 (def ^:private search-index-build-time-budget-ms 8)
 (def ^:private search-index-build-idle-status-ttl-ms 2000)
 (def ^:private search-index-build-pause-ms 300)
@@ -86,7 +93,6 @@
   (if (some? config)
     config
     default-graph-config-content))
-
 
 (defn- node-runtime?
   []
@@ -268,6 +274,10 @@
     (js/clearInterval timer))
   (swap! *client-ops-cleanup-timers dissoc repo)
   (swap! *sqlite-conns dissoc repo)
+  (when-let [vector-index (worker-state/get-vector-index repo)]
+    (when-let [close-fn (:close! vector-index)]
+      (close-fn)))
+  (swap! *vector-indexes dissoc repo)
   (swap! *datascript-conns dissoc repo)
   (swap! *client-ops-conns dissoc repo)
   (swap! client-op/*repo->pending-local-tx-count dissoc repo)
@@ -296,6 +306,7 @@
   (if-let [search-db (worker-state/get-sqlite-conn repo :search)]
     (do
       (search/truncate-table! search-db)
+      (search/truncate-vector-index! (worker-state/get-vector-index repo))
       (p/resolved nil))
     (when-not @*publishing?
       (p/let [pool (<get-opfs-pool repo)
@@ -321,6 +332,10 @@
       (d/reset-conn! conn new-db' {:reset-conn! true})
       (d/reset-schema! conn (:schema new-db)))))
 
+(defn- vector-index-path
+  [repo pool]
+  (resolve-db-path repo pool "search/vector"))
+
 (defn- get-dbs
   [repo]
   (if @*publishing?
@@ -332,7 +347,7 @@
                                             {:sqlite @*sqlite
                                              :path "/search-db.sqlite"
                                              :mode "c"})]
-      [db search-db])
+      [db search-db nil nil])
     (p/let [^js pool (<get-opfs-pool repo)
             capacity (when (exists? (.-getCapacity pool))
                        (.getCapacity pool))
@@ -340,6 +355,8 @@
                 (.unpauseVfs pool))
             db-path (resolve-db-path repo pool repo-path)
             search-path (resolve-db-path repo pool (str "search" repo-path))
+            current-platform (platform/current)
+            vector-path (vector-index-path repo pool)
             client-ops-path (resolve-db-path repo pool (str "client-ops-" repo-path))
             _ (log/info :db-worker/get-dbs-open {:repo repo :db-path db-path})
             db (platform/sqlite-open (platform/current)
@@ -351,12 +368,16 @@
                                             {:sqlite @*sqlite
                                              :pool pool
                                              :path search-path})
+            vector-index (when (get-in current-platform [:vector :open-index])
+                           (platform/vector-open current-platform
+                                                 {:path vector-path
+                                                  :dimension (platform/embedding-dimension current-platform)}))
             _ (log/info :db-worker/get-dbs-open {:repo repo :client-ops-path client-ops-path})
             client-ops-db (platform/sqlite-open (platform/current)
                                                 {:sqlite @*sqlite
                                                  :pool pool
                                                  :path client-ops-path})]
-      [db search-db client-ops-db])))
+      [db search-db client-ops-db vector-index])))
 
 (defn- enable-sqlite-wal-mode!
   [^Object db]
@@ -376,8 +397,8 @@
       (.exec sqlite-db "VACUUM")
       (ldb/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
                                        :kv/value (common-util/time-ms)}]
-        {:skip-validate-db? true
-         :persist-op? false}))))
+                     {:skip-validate-db? true
+                      :persist-op? false}))))
 
 (defn- run-client-ops-cleanup!
   [repo]
@@ -501,11 +522,15 @@
                (nil? (client-op/get-local-tx repo)))
       (client-op/update-local-tx repo 0)))
   (when-not (worker-state/get-sqlite-conn repo)
-    (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
+    (p/let [[db search-db client-ops-db vector-index] (get-dbs repo)
+            dbs (cond-> [db search-db]
+                  client-ops-db (conj client-ops-db))
             storage (new-sqlite-storage db)]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db
                                        :client-ops client-ops-db})
+      (when vector-index
+        (swap! *vector-indexes assoc repo vector-index))
       (doseq [db' dbs]
         (enable-sqlite-wal-mode! db'))
       (common-sqlite/create-kvs-table! db)
@@ -602,6 +627,25 @@
   [^js search-db]
   (aget (aget (.exec search-db #js {:sql "PRAGMA user_version" :rowMode "array"}) 0) 0))
 
+(defn- expected-vector-index-metadata
+  []
+  {:embedding-model-id (platform/embedding-model-id (platform/current))
+   :embedding-dimension (platform/embedding-dimension (platform/current))
+   :context-version search/vector-context-version})
+
+(defn- vector-index-current?
+  [repo]
+  (if-let [vector-index (worker-state/get-vector-index repo)]
+    (if-let [metadata-fn (:metadata vector-index)]
+      (= (expected-vector-index-metadata) (metadata-fn))
+      false)
+    true))
+
+(defn- persist-vector-index-metadata!
+  [repo]
+  (when-let [set-metadata! (:set-metadata! (worker-state/get-vector-index repo))]
+    (set-metadata! (expected-vector-index-metadata))))
+
 (defn- start-search-index-build!
   [repo]
   (let [build-id (str (random-uuid))]
@@ -626,8 +670,14 @@
 
 (defn- report-search-index-progress!
   [repo payload]
-  (-> (worker-state/<invoke-main-thread :thread-api/search-index-build-progress repo payload)
-      (p/catch (fn [_error] nil))))
+  (if (node-runtime?)
+    (do
+      (platform/post-message! (platform/current)
+                              :thread-api/search-index-build-progress
+                              [repo payload])
+      (p/resolved nil))
+    (-> (worker-state/<invoke-main-thread :thread-api/search-index-build-progress repo payload)
+        (p/catch (fn [_error] nil)))))
 
 (def-thread-api :thread-api/init
   []
@@ -812,8 +862,154 @@
 (defn- search-blocks
   [repo q option]
   (let [search-db (get-search-db repo)
-        conn (worker-state/get-datascript-conn repo)]
-    (search/search-blocks conn search-db q option)))
+        conn (worker-state/get-datascript-conn repo)
+        vector-index (worker-state/get-vector-index repo)]
+    (search/search-blocks conn search-db vector-index q option)))
+
+(defn- validate-embedding-count!
+  [blocks embeddings]
+  (when-not (= (count blocks) (count embeddings))
+    (throw (ex-info "embedding result count mismatch"
+                    {:block-count (count blocks)
+                     :embedding-count (count embeddings)
+                     :model-id (platform/embedding-model-id (platform/current))}))))
+
+(defn- embeddable-index-block?
+  [{:keys [id page title]}]
+  (and id page (not (string/blank? (str title)))))
+
+(defn- vector-embedding-title
+  [block-or-title]
+  (let [title (if (map? block-or-title)
+                (or (:vector-title block-or-title)
+                    (:title block-or-title))
+                block-or-title)
+        title (str title)]
+    (if (> (count title) vector-embedding-max-title-length)
+      (subs title 0 vector-embedding-max-title-length)
+      title)))
+
+(defn- vector-embedding-batches
+  [blocks]
+  (loop [remaining (seq blocks)
+         batch []
+         batch-chars 0
+         result []]
+    (if-let [block (first remaining)]
+      (let [text (vector-embedding-title block)
+            text-chars (count text)
+            full? (or (>= (count batch) vector-embedding-batch-size)
+                      (and (seq batch)
+                           (> (+ batch-chars text-chars)
+                              vector-embedding-max-batch-chars)))]
+        (if full?
+          (recur remaining [] 0 (conj result batch))
+          (recur (next remaining)
+                 (conj batch block)
+                 (+ batch-chars text-chars)
+                 result)))
+      (cond-> result
+        (seq batch) (conj batch)))))
+
+(defn- <embed-index-batch
+  ([batch]
+   (<embed-index-batch #(platform/embed-texts (platform/current) %) batch))
+  ([embed-texts-fn batch]
+   (p/let [embeddings (embed-texts-fn (mapv vector-embedding-title batch))
+           _ (validate-embedding-count! batch embeddings)]
+     (mapv (fn [block embedding]
+             (assoc block :embedding embedding))
+           batch
+           embeddings))))
+
+(defn- <embed-index-batch-with-fallback
+  ([batch]
+   (<embed-index-batch-with-fallback #(platform/embed-texts (platform/current) %) batch))
+  ([embed-texts-fn batch]
+   (-> (<embed-index-batch embed-texts-fn batch)
+       (p/catch
+        (fn [error]
+          (if (= 1 (count batch))
+            (throw error)
+            (let [split-index (quot (count batch) 2)
+                  left (subvec (vec batch) 0 split-index)
+                  right (subvec (vec batch) split-index)]
+              (p/let [left-embedded (<embed-index-batch-with-fallback embed-texts-fn left)
+                      right-embedded (<embed-index-batch-with-fallback embed-texts-fn right)]
+                (into left-embedded right-embedded)))))))))
+
+(defn- pop-embedding-batch!
+  [queue]
+  (let [selected (atom nil)]
+    (swap! queue
+           (fn [items]
+             (if (seq items)
+               (do
+                 (reset! selected (first items))
+                 (subvec items 1))
+               items)))
+    @selected))
+
+(defn- <embed-index-batches
+  ([batches]
+   (<embed-index-batches batches nil))
+  ([batches on-batch-embedded]
+   (let [batches (vec batches)]
+     (if (empty? batches)
+       (p/resolved [])
+       (let [queue (atom (mapv vector (range (count batches)) batches))
+             results (atom {})
+             worker-count (min vector-embedding-parallelism (count batches))]
+         (letfn [(worker []
+                   (if-let [[idx batch] (pop-embedding-batch! queue)]
+                     (-> (<embed-index-batch-with-fallback batch)
+                         (p/then (fn [embedded]
+                                   (swap! results assoc idx embedded)
+                                   (when on-batch-embedded
+                                     (on-batch-embedded (count embedded)))
+                                   (worker))))
+                     (p/resolved nil)))]
+           (p/let [_ (p/all (mapv (fn [_] (worker)) (range worker-count)))]
+             (into [] (mapcat (fn [idx]
+                                (get @results idx))
+                              (range (count batches)))))))))))
+
+(defn- <embed-index-blocks
+  [repo blocks]
+  (let [blocks (vec (filter embeddable-index-block? blocks))]
+    (if (and (seq blocks) (worker-state/get-vector-index repo))
+      (<embed-index-batches (vector-embedding-batches blocks))
+      (p/resolved []))))
+
+(defn- schedule-vector-index-upsert!
+  [repo blocks]
+  (when (and (seq blocks) (worker-state/get-vector-index repo))
+    (-> (<embed-index-blocks repo blocks)
+        (p/then (fn [vector-blocks]
+                  (when (seq vector-blocks)
+                    (search/upsert-vector-blocks! (worker-state/get-vector-index repo) vector-blocks))))
+        (p/catch (fn [error]
+                   (log/error :search/vector-index-upsert-failed {:repo repo
+                                                                  :error error})))))
+  nil)
+
+(defn- <search-blocks
+  [repo q option]
+  (let [vector-index (worker-state/get-vector-index repo)]
+    (if (and vector-index
+             (:feature/enable-semantic-search? option)
+             (not (:page-only? option))
+             (not (:query-embedding option))
+             (not (string/blank? q)))
+      (-> (p/let [embeddings (-> (platform/embed-texts (platform/current) [q])
+                                  (p/timeout query-embedding-timeout-ms))
+                  _ (validate-embedding-count! [{:title q}] embeddings)]
+            (search-blocks repo q (assoc option :query-embedding (first embeddings))))
+          (p/catch (fn [error]
+                     (log/warn :search/query-embedding-failed {:repo repo
+                                                               :error error})
+                     (search-blocks repo q option))))
+      (p/resolved (search-blocks repo q option)))))
 
 (def-thread-api :thread-api/block-refs-check
   [repo id {:keys [unlinked?]}]
@@ -917,6 +1113,11 @@
       {:schema (:schema @conn)
        :initial-data (vec (d/datoms @conn :eavt))}
       (common-initial-data/get-initial-data @conn))))
+
+(def-thread-api :thread-api/build-publishing-html
+  [repo options]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (publish-html/build-html @conn options)))
 
 (def-thread-api :thread-api/reset-db
   [repo db-transit]
@@ -1040,23 +1241,26 @@
 
 (def-thread-api :thread-api/search-blocks
   [repo q option]
-  (search-blocks repo q option))
+  (<search-blocks repo q option))
 
 (def-thread-api :thread-api/search-upsert-blocks
   [repo blocks]
   (when-let [db (get-search-db repo)]
     (search/upsert-blocks! db (bean/->js blocks))
+    (schedule-vector-index-upsert! repo blocks)
     nil))
 
 (def-thread-api :thread-api/search-delete-blocks
   [repo ids]
   (when-let [db (get-search-db repo)]
+    (search/delete-vector-blocks! (worker-state/get-vector-index repo) ids)
     (search/delete-blocks! db ids)
     nil))
 
 (def-thread-api :thread-api/search-truncate-tables
   [repo]
   (when-let [db (get-search-db repo)]
+    (search/truncate-vector-index! (worker-state/get-vector-index repo))
     (search/truncate-table! db)
     nil))
 
@@ -1065,11 +1269,11 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (search/build-blocks-indice @conn)))
 
-(defn- take-block-datoms-batch
-  [datoms batch-size time-budget-ms]
+(defn- take-search-index-batch
+  [items batch-size time-budget-ms]
   (let [deadline (+ (common-util/time-ms) time-budget-ms)]
     (loop [batch (transient [])
-           remaining (seq datoms)
+           remaining (seq items)
            n 0]
       (if (or (nil? remaining)
               (>= n batch-size)
@@ -1101,75 +1305,122 @@
       (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve search-index-build-pause-ms)))]
         (p/recur)))))
 
-(defn- <build-blocks-fts!
-  "Build FTS index in batches with yielding. Sets user_version to search-db-version on completion."
+(defn- <build-blocks-index!
+  "Build FTS/vector index in batches with yielding. Sets user_version to search-db-version on completion."
   [repo search-db conn build-id]
   (ensure-active-search-index-build! repo build-id)
-  (search/truncate-table! search-db)
   (let [db @conn
-        datoms (d/datoms db :avet :block/uuid)
-        total (count datoms)]
+        blocks (->> (d/datoms db :avet :block/uuid)
+                    (keep #(d/entity db (:e %)))
+                    (remove search/hidden-entity?)
+                    vec)
+        vector-context (search/build-vector-context-cache blocks)
+        total (count blocks)
+        vector-index (worker-state/get-vector-index repo)
+        vector-index? (boolean vector-index)
+        fts-progress-scale (if vector-index? 50 100)
+        vector-progress-base (if vector-index? 50 100)
+        progress-for-fts (fn [processed]
+                           (if (zero? total)
+                             vector-progress-base
+                             (min vector-progress-base
+                                  (int (* fts-progress-scale (/ processed total))))))
+        report-progress! (fn [progress processed total]
+                           (report-search-index-progress! repo {:build-id build-id
+                                                                :status :running
+                                                                :stage :search-index
+                                                                :progress progress
+                                                                :processed processed
+                                                                :total total}))]
     (p/do!
      (report-search-index-progress! repo {:build-id build-id
                                           :status :running
+                                          :stage :search-index
                                           :progress 0
                                           :processed 0
                                           :total total})
      (<wait-for-search-index-idle! repo build-id)
-     (p/loop [remaining (seq datoms)
+     (ensure-active-search-index-build! repo build-id)
+     (search/truncate-table! search-db)
+     (search/truncate-vector-index! vector-index)
+     (p/loop [remaining (seq blocks)
               processed 0
-              last-progress 0]
+              last-progress 0
+              indexed-blocks []]
        (ensure-active-search-index-build! repo build-id)
        (if (seq remaining)
-         (let [[batch remaining'] (take-block-datoms-batch remaining
+         (let [[batch remaining'] (take-search-index-batch remaining
                                                            search-index-build-batch-size
                                                            search-index-build-time-budget-ms)
                processed' (+ processed (count batch))
-               indexed (->> batch
-                            (keep #(d/entity db (:e %)))
-                            (remove search/hidden-entity?)
-                            (keep search/block->index))
-               progress (if (zero? total)
-                          100
-                          (min 100 (int (* 100 (/ processed' total)))))
+               indexed (vec (keep #(search/block->index-with-context vector-context %) batch))
+               indexed-blocks' (into indexed-blocks indexed)
+               progress (progress-for-fts processed')
                should-report? (> progress last-progress)]
-           (when (seq indexed)
-             (search/upsert-blocks! search-db (bean/->js indexed)))
-           (when should-report?
-             (report-search-index-progress! repo {:build-id build-id
-                                                  :status :running
-                                                  :progress progress
-                                                  :processed processed'
-                                                  :total total}))
-           (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))]
-             (p/recur remaining' processed' (if should-report? progress last-progress))))
+           (p/let [_ (when (seq indexed)
+                       (search/upsert-blocks! search-db (bean/->js indexed)))
+                   _ (when should-report?
+                       (report-progress! progress processed' total))
+                   _ (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))]
+             (p/recur remaining' processed' (if should-report? progress last-progress) indexed-blocks')))
          (do
            (ensure-active-search-index-build! repo build-id)
-           (.exec search-db (str "PRAGMA user_version = " search-db-version))
-           (report-search-index-progress! repo {:build-id build-id
-                                                :status :completed
-                                                :progress 100
-                                                :processed total
-                                                :total total})))))))
+           (p/let [_ (when (and vector-index? (seq indexed-blocks))
+                       (let [vector-total (count indexed-blocks)
+                             vector-processed (atom 0)
+                             vector-batches (vector-embedding-batches indexed-blocks)]
+                         (p/let [vector-blocks (<embed-index-batches
+                                                vector-batches
+                                                (fn [embedded-count]
+                                                  (let [processed' (swap! vector-processed + embedded-count)
+                                                        progress (+ vector-progress-base
+                                                                    (if (zero? vector-total)
+                                                                      50
+                                                                      (min 50 (int (* 50 (/ processed' vector-total))))))]
+                                                    (report-progress! progress processed' vector-total))))]
+                           (search/upsert-vector-blocks! (worker-state/get-vector-index repo) vector-blocks))))
+                   _ (do
+                       (persist-vector-index-metadata! repo)
+                       (.exec search-db (str "PRAGMA user_version = " search-db-version))
+                       (report-search-index-progress! repo {:build-id build-id
+                                                            :status :completed
+                                                            :stage :search-index
+                                                            :progress 100
+                                                            :processed total
+                                                            :total total}))]
+             nil)))))))
 
 (def-thread-api :thread-api/search-build-blocks-indice-in-worker
   [repo & [force?]]
   (p/let [search-db (get-search-db repo)]
     (when search-db
       (let [version (search-index-version search-db)]
-        (if (and (= version search-db-version) (not force?))
+        (if (and (= version search-db-version)
+                 (vector-index-current? repo)
+                 (not force?))
           version
-          (when-let [conn (worker-state/get-datascript-conn repo)]
-            (let [build-id (start-search-index-build! repo)]
-              (-> (<build-blocks-fts! repo search-db conn build-id)
+         (when-let [conn (worker-state/get-datascript-conn repo)]
+           (let [build-id (start-search-index-build! repo)]
+              (-> (report-search-index-progress! repo {:build-id build-id
+                                                       :status :running
+                                                       :stage :search-index
+                                                       :progress 0
+                                                       :processed 0
+                                                       :total 0})
+                  (p/then (fn [_]
+                            (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))))
+                  (p/then (fn [_]
+                            (<build-blocks-index! repo search-db conn build-id)))
                   (p/catch (fn [error]
                              (when-not (= :search/stale-index-build (:type (ex-data error)))
-                               (throw error))))
+                               (log/error :search/index-build-failed {:repo repo
+                                                                      :error error}))))
                   (p/finally (fn []
                                (when (= build-id (get @*search-index-build-ids repo))
                                  (report-search-index-progress! repo {:build-id build-id
                                                                       :status :idle}))
-                               (clear-search-index-build! repo build-id)))))))))))
+                               (clear-search-index-build! repo build-id))))
+              :started)))))))
 
 (def-thread-api :thread-api/search-build-pages-indice
   [_repo]
@@ -1272,7 +1523,11 @@
       (throw (ex-info "graph not opened" {:code :graph-not-opened :repo repo})))
     (let [{:keys [init-tx block-props-tx misc-tx]} (sqlite-export/build-import export-edn @conn {})
           tx-data (vec (concat init-tx block-props-tx misc-tx))
-          tx-meta {::sqlite-export/imported-data? true}]
+          tx-meta (cond-> {::sqlite-export/imported-data? true}
+                    ;; :datoms format imports imports all datoms including built-in ones. Add :initial-db?
+                    ;; to keep pipeline from reverting their import
+                    (= :datoms (::sqlite-export/graph-format export-edn))
+                    (assoc :initial-db? true))]
       (ldb/transact! conn tx-data tx-meta)
       {:tx-count (count tx-data)})))
 
@@ -1370,27 +1625,27 @@
 (def-thread-api :thread-api/api-get-page-data
   [repo page-title]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-common-mcp-tools/get-page-data @conn page-title)))
+    (api-tools/get-page-data @conn page-title)))
 
 (def-thread-api :thread-api/api-list-properties
   [repo options]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-common-mcp-tools/list-properties @conn options)))
+    (api-tools/list-properties @conn options)))
 
 (def-thread-api :thread-api/api-list-tags
   [repo options]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-common-mcp-tools/list-tags @conn options)))
+    (api-tools/list-tags @conn options)))
 
 (def-thread-api :thread-api/api-list-pages
   [repo options]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-common-mcp-tools/list-pages @conn options)))
+    (api-tools/list-pages @conn options)))
 
 (def-thread-api :thread-api/api-build-upsert-nodes-edn
   [repo ops]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-common-mcp-tools/build-upsert-nodes-edn @conn ops)))
+    (api-tools/build-upsert-nodes-edn @conn ops)))
 
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs

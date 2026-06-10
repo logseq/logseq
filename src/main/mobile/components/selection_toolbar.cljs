@@ -5,11 +5,12 @@
             [frontend.context.i18n :refer [t]]
             [frontend.handler.comments :as comments-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.mobile.haptics :as haptics]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util.url :as url-util]
             [logseq.shui.hooks :as hooks]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- dismiss-action-bar!
   []
@@ -63,7 +64,7 @@
                      (close!))}])
       (when (and (seq reaction-blocks) selection-target)
         [{:id "reaction"
-          :label (t :command.editor/add-reaction)
+          :label (t :mobile.toolbar/reaction)
           :system-icon "face.smiling"
           :handler (fn []
                      (let [opts (if (= 1 (count reaction-blocks))
@@ -102,7 +103,7 @@
                    (state/clear-selection!)
                    (close!))}]))))
 
-(rum/defc action-bar
+(hsx/defc action-bar
   []
   (let [actions (selection-actions)
         action-ids (mapv :id actions)
@@ -117,9 +118,8 @@
                                       "action"
                                       (fn [^js e]
                                         (when-let [id (.-id e)]
-                                          (prn :debug :id id
-                                               :handler (.-current handlers-ref))
                                           (when-let [handler (get (.-current handlers-ref) id)]
+                                            (haptics/haptics)
                                             (handler)))))
                actions' {:actions (map (fn [{:keys [id label system-icon]}]
                                          {:id id

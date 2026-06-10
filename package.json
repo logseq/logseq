@@ -29,7 +29,6 @@
     "cssnano": "^7.1.8",
     "gulp": "^5.0.1",
     "gulp-postcss": "^10.0.0",
-    "gulp-replace": "^1.1.4",
     "npm-run-all2": "^8.0.4",
     "playwright": "^1.58.2",
     "postcss": "^8.5.13",
@@ -62,7 +61,8 @@
     "release-mobile": "run-s gulp:buildMobile cljs:release-mobile webpack-mobile-build",
     "dev-release-app": "run-s gulp:build cljs:dev-release-app webpack-app-build",
     "dev-electron-app": "gulp electron",
-    "release-electron": "run-s gulp:build && pnpm db-worker-node:release:bundle webpack-app-build && gulp electronMaker",
+    "release-electron": "run-s gulp:build && gulp electronMaker",
+    "release-electron:unsigned": "run-s gulp:build && gulp electronMakerUnsigned",
     "debug-electron": "cd static/ && pnpm electron:debug",
     "webpack-watch": "webpack --watch",
     "webpack-app-watch": "pnpm exec webpack --watch --config-name app",
@@ -141,7 +141,6 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@emoji-mart/data": "^1.2.1",
-    "@emoji-mart/react": "^1.1.1",
     "@glidejs/glide": "^3.7.1",
     "@highlightjs/cdn-assets": "11.11.1",
     "@isomorphic-git/lightning-fs": "^4.6.2",
@@ -153,8 +152,9 @@
     "@radix-ui/colors": "^3.0.0",
     "@sentry/react": "^10.51.0",
     "@sqlite.org/sqlite-wasm": "3.51.2-build9",
-    "@tabler/icons-react": "2.47.0",
+    "@tabler/icons-react": "3.44.0",
     "bignumber.js": "^9.3.1",
+    "buffer": "^6.0.3",
     "chrono-node": "2.9.0",
     "codemirror": "5.65.18",
     "comlink": "^4.4.2",
@@ -180,9 +180,9 @@
     "pixi.js": "^8.18.1",
     "posthog-js": "1.10.0",
     "prop-types": "^15.8.1",
-    "react": "18.3.1",
+    "react": "19.2.6",
     "react-colorful": "^5.6.1",
-    "react-dom": "18.3.1",
+    "react-dom": "19.2.6",
     "react-intersection-observer": "^10.0.3",
     "react-textarea-autosize": "8.5.9",
     "react-transition-group": "4.4.5",
@@ -195,15 +195,22 @@
     "url": "^0.11.4",
     "util": "^0.12.5"
   },
+  "optionalDependencies": {
+    "@zvec/bindings-darwin-arm64": "0.4.0",
+    "@zvec/bindings-linux-arm64": "0.4.0",
+    "@zvec/bindings-linux-x64": "0.4.0",
+    "@zvec/bindings-win32-x64": "0.4.0",
+    "@zvec/zvec": "0.4.0"
+  },
   "pnpm": {
     "ignoredBuiltDependencies": [
       "canvas",
       "core-js",
-      "onnxruntime-node",
       "protobufjs",
       "sharp"
     ],
     "onlyBuiltDependencies": [
+      "@zvec/zvec",
       "better-sqlite3",
       "electron",
       "keytar"

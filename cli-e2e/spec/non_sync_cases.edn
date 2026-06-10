@@ -140,6 +140,22 @@
      :graph ["--type" "--file"]}},
    :tags [:graph],
    :extends :non-sync/graph-json-env}
+  {:id "graph-export-edn",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page ExportOptionsHome >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph export --graph {{graph-arg}} --type edn --file {{export-path-arg}} --edn-options '{:export-type :graph-human}' --pretty-print"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths {[:status] "ok"},
+    :stdout-contains ["{{export-path}}"]},
+   :covers
+   {:commands ["graph export"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :graph ["--type" "--file" "--edn-options" "--pretty-print"]}},
+   :tags [:graph],
+   :extends :non-sync/graph-json-env}
   {:tags [:graph],
    :extends :non-sync/source-graph-json-env,
    :expect
@@ -1278,45 +1294,28 @@
    :extends :non-sync/graph-json-env}
   {:id "agent-bridge-workflows",
    :setup
-   ["mkdir -p '{{tmp-dir}}/assigned-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/assigned-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-assigned >/dev/null && {{cli}} --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --output json upsert task --graph cli-e2e-agent-bridge-assigned --target-page AgentBridgeE2E --content '测试 agent bridge 功能，把当前task status设置为done' --status todo >/dev/null"
+   ["mkdir -p '{{tmp-dir}}/assigned-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/assigned-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-assigned >/dev/null && {{cli}} --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --output json upsert task --graph cli-e2e-agent-bridge-assigned --target-page AgentBridgeE2E --content 'Test AgentBridge task routing and completion status' --status todo >/dev/null"
     "mkdir -p '{{tmp-dir}}/parallel-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/parallel-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/parallel-root' --config '{{tmp-dir}}/parallel-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-parallel >/dev/null"
+    "mkdir -p '{{tmp-dir}}/duplicate-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/duplicate-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/duplicate-root' --config '{{tmp-dir}}/duplicate-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-duplicate >/dev/null"
     "mkdir -p '{{tmp-dir}}/comment-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/comment-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/comment-root' --config '{{tmp-dir}}/comment-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-comment >/dev/null"],
    :cmds
    ["python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --graph cli-e2e-agent-bridge-assigned --tmp-dir '{{tmp-dir}}/assigned-work' --repo-root '{{repo-root}}' --assign-after-start"
     "python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/parallel-root' --config '{{tmp-dir}}/parallel-root/cli.edn' --graph cli-e2e-agent-bridge-parallel --tmp-dir '{{tmp-dir}}/parallel-work' --repo-root '{{repo-root}}' --parallel-assignment-check"
+    "python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/duplicate-root' --config '{{tmp-dir}}/duplicate-root/cli.edn' --graph cli-e2e-agent-bridge-duplicate --tmp-dir '{{tmp-dir}}/duplicate-work' --repo-root '{{repo-root}}' --duplicate-bridge-check"
     "python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/comment-root' --config '{{tmp-dir}}/comment-root/cli.edn' --graph cli-e2e-agent-bridge-comment --tmp-dir '{{tmp-dir}}/comment-work' --repo-root '{{repo-root}}' --comment-mention-check"
-    "bash '{{repo-root}}/cli-e2e/scripts/agent_bridge_demo.sh' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/demo-root' --graph cli-e2e-agent-bridge-demo --repo-root '{{repo-root}}'"
-    "mkdir -p '{{tmp-dir}}/list-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/list-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/list-root' --config '{{tmp-dir}}/list-root/cli.edn' --output json agent bridge list --all"],
+    "bash '{{repo-root}}/cli-e2e/scripts/agent_bridge_demo.sh' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/demo-root' --graph cli-e2e-agent-bridge-demo --repo-root '{{repo-root}}'"],
    :expect
    {:exit 0,
-    :stdout-json-paths {[:status] "ok", [:data :sessions] []}},
-   :covers
-   {:commands ["agent bridge" "agent bridge list"],
-    :options
-    {:global ["--config" "--graph" "--root-dir" "--output"],
-     :agent ["--all"]}},
-   :cleanup
-   ["{{cli}} --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-assigned"
-    "{{cli}} --root-dir '{{tmp-dir}}/parallel-root' --config '{{tmp-dir}}/parallel-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-parallel"
-    "{{cli}} --root-dir '{{tmp-dir}}/comment-root' --config '{{tmp-dir}}/comment-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-comment"],
-   :tags [:agent]}
-  {:id "agent-bridge-prompt-template-graphs",
-   :setup
-   ["mkdir -p '{{tmp-dir}}/prompt-template-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/prompt-template-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/prompt-template-root' --config '{{tmp-dir}}/prompt-template-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-template-a >/dev/null"],
-   :cmds
-   ["python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/prompt-template-root' --config '{{tmp-dir}}/prompt-template-root/cli.edn' --graph cli-e2e-agent-bridge-template-a --tmp-dir '{{tmp-dir}}/prompt-template-work' --repo-root '{{repo-root}}' --prompt-template-graph-check"],
-   :expect
-   {:exit 0,
-    :stdout-contains ["agent bridge graph prompt templates are isolated and linted"]},
+    :stdout-contains ["agent bridge"]},
    :covers
    {:commands ["agent bridge"],
     :options
-    {:global ["--config" "--graph" "--root-dir" "--output"],
-     :agent ["--dry-run"]}},
+    {:global ["--config" "--graph" "--root-dir" "--output"]}},
    :cleanup
-   ["{{cli}} --root-dir '{{tmp-dir}}/prompt-template-root' --config '{{tmp-dir}}/prompt-template-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-template-a"
-    "{{cli}} --root-dir '{{tmp-dir}}/prompt-template-root' --config '{{tmp-dir}}/prompt-template-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-template-a-other"
-    "{{cli}} --root-dir '{{tmp-dir}}/prompt-template-root' --config '{{tmp-dir}}/prompt-template-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-template-a-invalid"],
+   ["{{cli}} --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-assigned"
+    "{{cli}} --root-dir '{{tmp-dir}}/parallel-root' --config '{{tmp-dir}}/parallel-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-parallel"
+    "{{cli}} --root-dir '{{tmp-dir}}/duplicate-root' --config '{{tmp-dir}}/duplicate-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-duplicate"
+    "{{cli}} --root-dir '{{tmp-dir}}/comment-root' --config '{{tmp-dir}}/comment-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-comment"],
    :tags [:agent]}
   {:id "skill-show-human",
    :cmds ["{{cli}} skill show"],

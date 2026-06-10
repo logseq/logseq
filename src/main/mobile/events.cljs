@@ -11,8 +11,11 @@
   (state/clear-edit!)
   (init/keyboard-hide))
 
-(defmethod events/handle :mobile/start-audio-record [_]
-  (recorder/record! {:save-to-today? true}))
+(defmethod events/handle :mobile/start-audio-record [[_ {:keys [target-block save-to-today?]
+                                                    :or {save-to-today? true}}]]
+  (recorder/record! (cond-> {:save-to-today? save-to-today?}
+                      target-block
+                      (assoc :target-block target-block))))
 
 (defmethod events/handle :mobile/redirect-to [[_ {:keys [k params query]}]]
   (rfe/push-state k params query))

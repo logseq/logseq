@@ -22,35 +22,85 @@
   [repo diff]
   (state/input-idle? repo :diff diff))
 
+(defonce ^:private *search-index-progress-hide-timeout (atom nil))
+
+(defn- clear-search-index-progress-hide-timeout!
+  []
+  (when-let [timeout-id @*search-index-progress-hide-timeout]
+    (js/clearTimeout timeout-id)
+    (reset! *search-index-progress-hide-timeout nil)))
+
+(defn- hide-search-index-progress-later!
+  [repo build-id]
+  (clear-search-index-progress-hide-timeout!)
+  (reset! *search-index-progress-hide-timeout
+          (js/setTimeout
+           (fn []
+             (let [{current-repo :repo current-build-id :build-id}
+                   (get @state/state :search/index-build)]
+               (when (and (= repo current-repo)
+                          (= build-id current-build-id))
+                 (state/set-state! :search/index-build
+                                   (assoc (get @state/state :search/index-build)
+                                          :visible? false)))))
+           1500)))
+
+(defn- maybe-notify-search-index-rebuilt!
+  [repo]
+  (when (true? (get-in @state/state [:search/index-build-notify-repos repo]))
+    (state/set-state! [:search/index-build-notify-repos repo] false)
+    (notification/show! (t :search/indices-rebuilt-success) :success)))
+
 (def-thread-api :thread-api/search-index-build-progress
-  [repo {:keys [status progress processed total]}]
+  [repo {:keys [build-id status progress processed total]}]
   (let [prev-state (get @state/state :search/index-build)
         current-repo (state/get-current-repo)
+        stage :search-index
         visible-repo? (or (= repo current-repo)
                           (= repo (:repo prev-state)))]
     (when visible-repo?
       (case status
         :idle
-        (state/set-state! :search/index-build
-                          (assoc (or prev-state {})
-                                 :running? false
-                                 :repo repo))
+        (when-not (= :completed (:status prev-state))
+          (clear-search-index-progress-hide-timeout!)
+          (state/set-state! :search/index-build
+                            (cond-> (assoc (or prev-state {})
+                                           :visible? false
+                                           :running? false
+                                           :status status
+                                           :stage stage
+                                           :repo repo)
+                              build-id (assoc :build-id build-id))))
 
         :running
-        (state/set-state! :search/index-build
-                          {:running? true
-                           :repo repo
-                           :progress (or progress 0)
-                           :processed (or processed 0)
-                           :total (or total 0)})
+        (do
+          (clear-search-index-progress-hide-timeout!)
+          (state/set-state! :search/index-build
+                            (cond-> {:visible? true
+                                     :running? true
+                                     :status status
+                                     :repo repo
+                                     :stage stage
+                                     :progress (or progress 0)
+                                     :processed (or processed 0)
+                                     :total (or total 0)}
+                              build-id (assoc :build-id build-id))))
 
         :completed
-        (state/set-state! :search/index-build
-                          {:running? false
-                           :repo repo
-                           :progress (or progress 0)
-                           :processed (or processed 0)
-                           :total (or total 0)})
+        (do
+          (state/set-state! :search/index-build
+                            (cond-> {:visible? true
+                                     :running? false
+                                     :status status
+                                     :repo repo
+                                     :stage stage
+                                     :progress (or progress 0)
+                                     :processed (or processed 0)
+                                     :total (or total 0)}
+                              build-id (assoc :build-id build-id)))
+          (maybe-notify-search-index-rebuilt! repo)
+          (hide-search-index-progress-later! repo build-id))
+
         nil))
     nil))
 

@@ -33,7 +33,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
+            [frontend.db.hooks :as db-hooks]
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.db.react :as react]
@@ -63,7 +63,6 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.mixins :as mixins]
             [frontend.mobile.haptics :as haptics]
             [frontend.mobile.intent :as mobile-intent]
             [frontend.mobile.util :as mobile-util]
@@ -97,7 +96,7 @@
             [medley.core :as medley]
             [missionary.core :as m]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 ;; local state
 (defonce *dragging?
@@ -177,7 +176,7 @@
     (when (seq images)
       (lightbox/preview-images! images))))
 
-(rum/defc resize-image-handles
+(hsx/defc resize-image-handles
   [dx-fn]
   (let [handle-props {}
         add-resizing-class! #(dom/add-class! js/document.documentElement "is-resizing-buf")
@@ -225,14 +224,14 @@
 
 (defonce *resizing-image? (atom false))
 
-(rum/defc ^:large-vars/cleanup-todo asset-container
-  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}]
+(hsx/defc ^:large-vars/cleanup-todo asset-container
+  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text gallery-view?]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)
         asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))]
     (hooks/use-effect!
      (fn []
-       (when (:block/uuid asset-block)
+       (when (and (seq src) (:block/uuid asset-block))
          (when-not (or asset-width asset-height)
            (measure-image!
             src
@@ -243,13 +242,15 @@
                                                          :logseq.property.asset/height height}))))))
        (fn []))
      [])
-    (let [*el-ref (rum/use-ref nil)
-          image-src (fs/asset-path-normalize src)
-          src' (if (or (string/starts-with? src "/")
-                       (string/starts-with? src "~"))
+    (let [*el-ref (hooks/use-ref nil)
+          image-src (when (seq src)
+                      (fs/asset-path-normalize src))
+          src' (if (and (seq src)
+                        (or (string/starts-with? src "/")
+                            (string/starts-with? src "~")))
                  (str "file://" src)
                  src)
-          get-blockid #(some-> (rum/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
+          get-blockid #(some-> (hooks/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
       [:div.asset-container
        {:key "resize-asset-container"
         :on-pointer-down util/stop
@@ -260,10 +261,11 @@
         :ref *el-ref}
        [:img.rounded-sm.relative.fade-in.fade-in-faster
         (merge
-         {:loading "lazy"
-          :referrerPolicy "no-referrer"
-          :src src'
-          :title title}
+         (cond-> {:loading "lazy"
+                  :referrerPolicy "no-referrer"
+                  :src src'}
+           (not gallery-view?)
+           (assoc :title title))
          metadata)]
        (when (and (not breadcrumb?)
                   (not positioned?))
@@ -390,20 +392,21 @@
                      [:span.flex.items-center.gap-1.text-red-700
                       (ui/icon "trash") (t :asset/delete)])])))]))])])))
 
-(rum/defcs ^:large-vars/cleanup-todo resizable-image <
-  (rum/local nil ::size)
-  {:will-unmount (fn [state]
-                   (reset! *resizing-image? false)
-                   state)}
-  [state config title src metadata full-text local?]
+(hsx/defc ^:large-vars/cleanup-todo resizable-image
+  [config title src metadata full-text local?]
+  (hooks/use-effect!
+   (fn []
+     #(reset! *resizing-image? false))
+   [])
   (let [breadcrumb? (:breadcrumb? config)
         positioned? (:property-position config)
         asset-block (:asset-block config)
         asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))
         metadata (block-image/effective-image-metadata config asset-block metadata)
         width (:width metadata)
-        *width (get state ::size)
-        width (or @*width width)
+        *width (hooks/use-memo #(atom nil) [])
+        [local-width] (hooks/use-atom *width)
+        width (or local-width width)
         metadata' (assoc metadata :width width)
         resizable? (and (not (mobile-util/native-platform?))
                         (not breadcrumb?)
@@ -412,7 +415,8 @@
                                             {:breadcrumb? breadcrumb?
                                              :positioned? positioned?
                                              :local? local?
-                                             :full-text full-text})]
+                                             :full-text full-text
+                                             :gallery-view? (:gallery-view? config)})]
     (if (or (:disable-resize? config)
             (:table-view? config)
             (not resizable?))
@@ -454,7 +458,7 @@
                      (editor-handler/resize-image! config block-id metadata full-text {:width width'})))
                  (reset! *resizing-image? false))))))]])))
 
-(rum/defc audio-cp
+(hsx/defc audio-cp
   ([src] (audio-cp src nil))
   ([src ext]
    ;; Change protocol to allow media fragment uris to play
@@ -499,10 +503,10 @@
                          (p/then load$)))))
                (js/console.error _e))))))))
 
-(rum/defcs asset-link < rum/reactive
-  (rum/local nil ::src)
-  [state config title href metadata full_text]
-  (let [src (::src state)
+(hsx/defc asset-link
+  [config title href metadata full_text]
+  (let [src* (hooks/use-memo #(atom nil) [href])
+        [src] (hooks/use-atom src*)
         href (cond-> href
                (common-config/local-relative-asset? href)
                (config/get-local-asset-absolute-path))
@@ -511,16 +515,18 @@
                          (try
                            (js/URL. href)
                            (catch :default _ nil))))]
-    (when (nil? @src)
-      (-> (assets-handler/<make-asset-url href js-url)
-          (p/then (fn [url]
-                    (reset! src (common-util/safe-decode-uri-component url))))
-          (p/catch #(js/console.log "Failed to load asset:" %))))
-    (:image-placeholder config)
-    (if (and (:image-placeholder config) (nil? @src))
-      (:image-placeholder config)
+    (hooks/use-effect!
+     (fn []
+       (when (nil? @src*)
+         (-> (assets-handler/<make-asset-url href js-url)
+             (p/then (fn [url]
+                       (reset! src* (common-util/safe-decode-uri-component url))))
+             (p/catch #(js/console.log "Failed to load asset:" %)))))
+     [href])
+    (if (nil? src)
+      nil
       (let [asset-block (:asset-block config)
-            ext (block-asset/link-ext @src href asset-block)
+            ext (block-asset/link-ext src href asset-block)
             repo (state/get-current-repo)
             repo-dir (config/get-repo-dir repo)
             share-fn (fn [event]
@@ -535,35 +541,35 @@
         (cond
           (or (contains? config/audio-formats ext)
               (and (= ext :webm) (string/starts-with? title "Audio-")))
-          (audio-cp @src ext)
+          (audio-cp src ext)
 
           (contains? config/video-formats ext)
-          [:video {:src @src
+          [:video {:src src
                    :controls true}]
 
           (contains? (common-config/img-formats) ext)
-          (resizable-image config title @src metadata full_text true)
+          (resizable-image config title src metadata full_text true)
 
           (= ext :pdf)
           [:a.asset-ref.is-pdf
            {:data-href href
-            :data-url @src
+            :data-url src
             :draggable true
             :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" href)
             :on-click (fn [e]
                         (util/stop e)
-                        (open-pdf-file e (:asset-block config) @src))}
+                        (open-pdf-file e (:asset-block config) src))}
            title]
 
           (util/mobile?)
-          [:a.asset-ref {:href @src
+          [:a.asset-ref {:href src
                          :on-click share-fn}
            title]
 
           util/web-platform?
           (let [file-name (block-asset/link-file-name asset-block ext)]
             [:a.asset-ref
-             {:href @src
+                     {:href src
               :download file-name}
              file-name])
 
@@ -573,19 +579,19 @@
              {:on-click (fn [e]
                           (util/stop e)
                           (let [repo-dir (config/get-repo-dir repo)
-                                ext-url (:logseq.property.asset/external-url asset-block)
-                                remote-ext-url? (and (not (string/blank? ext-url))
-                                                     (path/protocol-url? ext-url)
-                                                     (not (common-config/local-protocol-asset? ext-url)))
-                                local-ext-url? (and (not (string/blank? ext-url))
-                                                    (common-config/local-relative-asset? ext-url))
-                                file-fpath (if local-ext-url?
+                                 ext-url (:logseq.property.asset/external-url asset-block)
+                                 remote-ext-url? (and (not (string/blank? ext-url))
+                                                      (path/protocol-url? ext-url)
+                                                      (not (common-config/local-protocol-asset? ext-url)))
+                                 local-ext-url? (and (not (string/blank? ext-url))
+                                                     (common-config/local-relative-asset? ext-url))
+                                 file-fpath (if local-ext-url?
                                               ;; Plugin-sourced asset stored under assets/storages/<plugin-id>/...
-                                             (path/path-join repo-dir (string/replace ext-url #"^[./]+" ""))
-                                             (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) (when ext (str "." (name ext))))))]
-                            (if remote-ext-url?
-                              (js/window.apis.openExternal ext-url)
-                              (js/window.apis.openPath file-fpath))))}
+                                              (path/path-join repo-dir (string/replace ext-url #"^[./]+" ""))
+                                              (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) (when ext (str "." (name ext))))))]
+                             (if remote-ext-url?
+                               (js/window.apis.openExternal ext-url)
+                               (js/window.apis.openPath file-fpath))))}
              file-name])
 
           :else
@@ -724,21 +730,20 @@
 
 (declare block-title)
 
-(rum/defcs ^:large-vars/cleanup-todo page-inner <
-  (rum/local false ::mouse-down?)
+(hsx/defc ^:large-vars/cleanup-todo page-inner
   "The inner div of page reference component
 
    page-name-in-block is the overridable name of the page (legacy)
 
    All page-names are sanitized except page-name-in-block"
-  [state
-   {:keys [contents-page? other-position?
+  [{:keys [contents-page? other-position?
            on-context-menu stop-event-propagation? with-tags? show-unique-title?]
     :or {with-tags? true
          show-unique-title? true}
     :as config}
    page-entity children label]
-  (let [*mouse-down? (::mouse-down? state)
+  (let [*mouse-down? (hooks/use-memo #(atom false) [])
+        [mouse-down?] (hooks/use-atom *mouse-down?)
         tag? (:tag? config)
         recycled? (ldb/recycled? page-entity)
         page-name (when (:block/title page-entity)
@@ -747,20 +752,7 @@
                     (or (model/untitled-page? (:block/title page-entity))
                         (and (ldb/page? page-entity) (string/blank? (:block/title page-entity)))))
         show-icon? (:show-icon? config)
-        ;; Inline page-refs in regular block context use a fixed 20px
-        ;; slot (matches the left sidebar's `.page-icon` and right
-        ;; sidebar tabs — the canonical "this is a page" baseline).
-        ;; Heading contexts override via `heading-icon-size` so refs
-        ;; scale with the heading. Restored after a May-20 merge
-        ;; conflict resolution silently dropped the 20-default and
-        ;; let inline refs fall through to `heading-icon-size`'s 14.
-        ;; The matching CSS (`.page-ref .icon-cp-container`'s 20×20
-        ;; slot, the non-photo 16×16 inner SVG clamp, the
-        ;; `translateY(-1px)` optical lift, and the emoji font-size
-        ;; clamp) survived the merge intact and is still load-bearing.
-        icon-size (if-let [heading-level (:parent-heading config)]
-                    (heading-icon-size heading-level)
-                    20)]
+        icon-size (heading-icon-size (:parent-heading config))]
     [:a.relative
      (cond->
       {:tabIndex "0"
@@ -795,7 +787,7 @@
                               (.preventDefault e)
                               (reset! *mouse-down? true))))
        :on-pointer-up (fn [e]
-                        (when @*mouse-down?
+                        (when mouse-down?
                           (state/clear-edit!)
                           (when-not (:disable-click? config)
                             (<open-page-ref config page-entity e page-name contents-page?))
@@ -822,9 +814,10 @@
             (last child)
             (let [{:keys [content children]} (last child)
                   page-name (subs content 2 (- (count content) 2))]
-              (rum/with-key (page-reference (assoc config :children children)
-                                            (or (:block/uuid page-entity) page-name)
-                                            nil) page-name))))
+              ^{:key page-name}
+              [page-reference (assoc config :children children)
+               (or (:block/uuid page-entity) page-name)
+               nil])))
         (cond
           (and label
                (string? label)
@@ -847,7 +840,7 @@
           :else
           (block-title (assoc config :page-ref? true) page-entity {})))]]))
 
-(rum/defc popup-preview-impl
+(hsx/defc popup-preview-impl
   [children {:keys [*timer *timer1 visible? set-visible! render *el-popup]}]
   (let [*el-trigger (hooks/use-ref nil)]
     (hooks/use-effect!
@@ -896,17 +889,17 @@
                                               (js/setTimeout #(set-visible! false) 300))))))}
      children]))
 
-(rum/defc page-preview-trigger
+(hsx/defc page-preview-trigger
   [{:keys [children sidebar? open? manual?] :as config} page-entity]
   (let [*timer (hooks/use-ref nil)                          ;; show
         *timer1 (hooks/use-ref nil)                         ;; hide
         *el-popup (hooks/use-ref nil)
         *el-wrap (hooks/use-ref nil)
-        [in-popup? set-in-popup!] (rum/use-state nil)
-        [visible? set-visible!] (rum/use-state nil)
+        [in-popup? set-in-popup!] (hooks/use-state nil)
+        [visible? set-visible!] (hooks/use-state nil)
         ;; set-visible! (fn debug-visible [v] (js/console.warn "debug: visible" v) (set-visible! v))
-        _  #_:clj-kondo/ignore (rum/defc preview-render []
-                                 (let [[ready? set-ready!] (rum/use-state false)]
+        _  #_:clj-kondo/ignore (hsx/defc preview-render []
+                                 (let [[ready? set-ready!] (hooks/use-state false)]
 
                                    (hooks/use-effect!
                                     (fn []
@@ -978,72 +971,81 @@
                        {:children? false
                         :skip-refresh? true}))
 
-(rum/defcs page-cp-inner < db-mixins/query rum/reactive
-  {:init (fn [state]
-           (let [args (:rum/args state)
-                 [config page] args
-                 *result (atom nil)
-                 page-id-or-name (or (:db/id page)
-                                     (:block/uuid page)
-                                     (when-let [s (:block/name page)]
-                                       (string/trim s)))
-                 page-entity (if (e/entity? page) page (db/get-page page-id-or-name))]
-             (cond
-               page-entity
-               (reset! *result page-entity)
-               (or (:skip-async-load? config) (:table-view? config))
-               (reset! *result page)
-               :else
-               (p/let [result (<get-block page-id-or-name)]
-                 (reset! *result result)))
-
-             (assoc state :*entity *result)))}
+(hsx/defc page-cp-inner
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
                             Keys for `config`:
                             - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
-  [state {:keys [label children preview? disable-preview? show-non-exists-page? tag? _skip-async-load?] :as config} page]
-  (let [entity' (rum/react (:*entity state))
-        entity (or (db/sub-block (:db/id entity')) entity')
-        config (assoc config :block entity)]
-    (cond
-      entity
-      (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
-            inner (page-inner config entity children label)
-            modal? (shui-dialog/has-modal?)]
-        (if (and (not (util/mobile?))
-                 (not= page-name (:id config))
-                 (not (false? preview?))
-                 (not disable-preview?)
-                 (not modal?))
-          (page-preview-trigger (assoc config :children inner) entity)
-          inner))
+  [{:keys [label children preview? disable-preview? show-non-exists-page? tag? _skip-async-load?] :as config} page]
+  (let [page-id-or-name (or (:db/id page)
+                            (:block/uuid page)
+                            (when-let [s (:block/name page)]
+                              (string/trim s)))
+        page-entity (if (e/entity? page) page (db/get-page page-id-or-name))
+        initial-entity (cond
+                         page-entity
+                         page-entity
 
-      (and (:block/name page) show-non-exists-page?)
-      (page-inner config (merge
-                          {:block/title (or (:block/title page)
-                                            (:block/name page))
-                           :block/name (:block/name page)}
-                          page) children label)
+                         (or (:skip-async-load? config) (:table-view? config))
+                         page
 
-      (:block/name page)
-      [:span
-       (when tag? "#")
-       (when-not tag?
-         [:span.text-gray-500.bracket page-ref/left-brackets])
-       (or label (:block/name page))
-       (when-not tag?
-         [:span.text-gray-500.bracket page-ref/right-brackets])]
+                         :else
+                         nil)
+        *entity (hooks/use-memo #(atom initial-entity) [page-id-or-name])
+        [entity'] (hooks/use-atom *entity)]
+    (hooks/use-effect!
+     (fn []
+       (cond
+         page-entity
+         nil
 
-      :else
-      nil)))
+         (or (:skip-async-load? config) (:table-view? config))
+         nil
 
-(rum/defc page-cp
+         :else
+         (p/let [result (<get-block page-id-or-name)]
+           (reset! *entity result))))
+     [page-id-or-name])
+    (let [entity (or (db/sub-block (:db/id entity')) entity')
+          config (assoc config :block entity)]
+      (cond
+        entity
+        (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
+              inner (page-inner config entity children label)
+              modal? (shui-dialog/has-modal?)]
+          (if (and (not (util/mobile?))
+                   (not= page-name (:id config))
+                   (not (false? preview?))
+                   (not disable-preview?)
+                   (not modal?))
+            (page-preview-trigger (assoc config :children inner) entity)
+            inner))
+
+        (and (:block/name page) show-non-exists-page?)
+        (page-inner config (merge
+                            {:block/title (or (:block/title page)
+                                              (:block/name page))
+                             :block/name (:block/name page)}
+                            page) children label)
+
+        (:block/name page)
+        [:span
+         (when tag? "#")
+         (when-not tag?
+           [:span.text-gray-500.bracket page-ref/left-brackets])
+         (or label (:block/name page))
+         (when-not tag?
+           [:span.text-gray-500.bracket page-ref/right-brackets])]
+
+        :else
+        nil))))
+
+(hsx/defc page-cp
   [config page]
   (let [id (or (:db/id page) (:block/uuid page) (:block/name page))]
-    (rum/with-key (page-cp-inner config page)
-      (str id))))
+    ^{:key (str id)}
+    [page-cp-inner config page]))
 
-(rum/defc asset-reference
+(hsx/defc asset-reference
   [config title path]
   (let [repo (state/get-current-repo)
         real-path-url (cond
@@ -1077,10 +1079,8 @@
         title-or-path])]))
 
 (defn- maybe-request-asset-download!
-  [state block]
+  [file-exists? requested? block]
   (let [repo (state/get-current-repo)
-        file-exists? @(::file-exists? state)
-        requested? (get state ::download-requested?)
         asset-file-write-finish @(get @state/state :assets/asset-file-write-finish)
         asset-file-write-finished? (get-in asset-file-write-finish [repo (str (:block/uuid block))])
         file-ready? (or file-exists? asset-file-write-finished?)]
@@ -1088,37 +1088,21 @@
       (reset! requested? false))
     (when (and (not @requested?)
                (assets-handler/maybe-request-remote-asset-download! repo block file-ready?))
-      (reset! requested? true)))
-  state)
+      (reset! requested? true))))
 
-(rum/defcs asset-cp < rum/reactive
-  (rum/local nil ::file-exists?)
-  (rum/local false ::download-requested?)
-  {:will-mount (fn [state]
-                 (let [block (last (:rum/args state))
-                       asset-type (:logseq.property.asset/type block)
-                       external-url? (not (string/blank? (:logseq.property.asset/external-url block)))
-                       path (path/path-join common-config/local-assets-dir (str (:block/uuid block) "." asset-type))]
-                   (p/let [result (if (or external-url? config/publishing?)
-                                    ;; publishing doesn't have window.pfs defined
-                                    true
-                                    (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path))]
-                     (reset! (::file-exists? state) result))
-                   state))
-   :did-mount (fn [state]
-                (maybe-request-asset-download! state (last (:rum/args state))))
-   :did-update (fn [state]
-                 (maybe-request-asset-download! state (last (:rum/args state))))}
-  [state config block]
+(hsx/defc asset-cp
+  [config block]
   (let [asset-type (:logseq.property.asset/type block)
         file (str (:block/uuid block) "." asset-type)
-        file-exists? @(::file-exists? state)
+        file-exists?* (hooks/use-memo #(atom nil) [(:block/uuid block) asset-type])
+        requested?* (hooks/use-memo #(atom false) [(:block/uuid block)])
+        [file-exists?] (hooks/use-atom file-exists?*)
         repo (state/get-current-repo)
-        asset-file-write-finished? (state/sub :assets/asset-file-write-finish
-                                              {:path-in-sub-atom [repo (str (:block/uuid block))]})
+        asset-file-write-finished? (state/use-sub :assets/asset-file-write-finish
+                                                  :path-in-sub-atom [repo (str (:block/uuid block))])
         file-ready? (or file-exists? asset-file-write-finished?)
-        progress-entry (state/sub :rtc/asset-upload-download-progress
-                                  {:path-in-sub-atom [repo (str (:block/uuid block))]})
+        progress-entry (state/use-sub :rtc/asset-upload-download-progress
+                                      :path-in-sub-atom [repo (str (:block/uuid block))])
         {:keys [direction loaded total]} progress-entry
         in-progress? (and (number? loaded) (number? total) (pos? total) (not= loaded total))
         percent (when in-progress?
@@ -1133,6 +1117,7 @@
                          [:div.asset-transfer-progress-bar
                           [:span {:style {:width (str percent "%")}}]]])
         image? (contains? (common-config/img-formats) (keyword asset-type))
+        gallery-image? (and (:gallery-view? config) image?)
         width (get-in block [:logseq.property.asset/resize-metadata :width])
         asset-width (:logseq.property.asset/width block)
         asset-height (:logseq.property.asset/height block)
@@ -1154,16 +1139,28 @@
         ;; and graph-root-relative paths.
         href (or (:logseq.property.asset/external-url block)
                  (path/path-join (str "../" common-config/local-assets-dir) file))
+        _ (hooks/use-effect!
+           (fn []
+             (let [external-url? (not (string/blank? (:logseq.property.asset/external-url block)))
+                   path (path/path-join common-config/local-assets-dir file)]
+               (p/let [result (if (or external-url? config/publishing?)
+                                ;; publishing doesn't have window.pfs defined
+                                true
+                                (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path))]
+                 (reset! file-exists?* result))))
+           [file])
+        _ (hooks/use-effect!
+           #(maybe-request-asset-download! file-exists? requested?* block))
         content (cond
-                  file-ready?
-                  (asset-link (assoc config
-                                     :asset-block block
-                                     :image-placeholder img-placeholder)
+                  (or file-ready? gallery-image?)
+                  (asset-link (cond-> (assoc config :asset-block block)
+                                (not gallery-image?)
+                                (assoc :image-placeholder img-placeholder))
                               (:block/title block)
                               href
                               img-metadata
                               nil)
-                  image?
+                  (and image? (not gallery-image?) (false? file-exists?))
                   img-placeholder)]
     (if progress-view
       [:div.asset-transfer-shell
@@ -1181,18 +1178,21 @@
 
 (declare block-positioned-properties)
 
-(rum/defc page-reference < rum/reactive db-mixins/query
+(hsx/defc page-reference
   "Component for page reference"
   [{:keys [html-export? nested-link? show-brackets? id] :as config*} uuid-or-title* label]
-  (when uuid-or-title*
-    (let [uuid-or-title (if (string? uuid-or-title*)
+  (let [uuid-or-title (when uuid-or-title*
+                        (if (string? uuid-or-title*)
                           (let [str-id (string/trim uuid-or-title*)]
                             (if (util/uuid-string? str-id)
                               (parse-uuid str-id)
                               str-id))
-                          uuid-or-title*)
-          self-reference? (when (set? (:ref-set config*))
-                            (contains? (:ref-set config*) uuid-or-title))]
+                          uuid-or-title*))
+        block* (when uuid-or-title (db/get-page uuid-or-title))
+        reactive-block (db/sub-block (:db/id block*))
+        self-reference? (when (set? (:ref-set config*))
+                          (contains? (:ref-set config*) uuid-or-title))]
+    (when uuid-or-title*
       (when-not self-reference?
         (let [config (update config* :ref-set (fn [s]
                                                 (let [bid (:block/uuid (:block config*))]
@@ -1201,8 +1201,7 @@
                                                     (conj s bid uuid-or-title)))))
               show-brackets? (if (some? show-brackets?) show-brackets? (state/show-brackets?))
               contents-page? (= "contents" (string/lower-case (str id)))
-              block* (db/get-page uuid-or-title)
-              block (or (some-> (:db/id block*) db/sub-block) block*)
+              block (or reactive-block block*)
               config' (assoc config
                              :label (mldoc/plain->text label)
                              :contents-page? contents-page?
@@ -1273,7 +1272,7 @@
 (declare block-content)
 (declare breadcrumb)
 
-(rum/defc block-reference
+(hsx/defc block-reference
   [config id label]
   (let [block-id (and id (if (uuid? id) id (parse-uuid id)))
         [_block set-block!] (hooks/use-state (db/entity [:block/uuid block-id]))
@@ -1310,9 +1309,9 @@
         [:span.warning {:title (t :block.macro/unsupported-name name)}
          (macro->text name arguments)]]))))
 
-(rum/defc nested-link < rum/reactive
+(hsx/defc nested-link
   [config html-export? link]
-  (let [show-brackets? (state/show-brackets?)
+  (let [show-brackets? (not (false? (:ui/show-brackets? (state/use-sub-config))))
         {:keys [content children]} link]
     [:span.page-reference.nested
      (when (and show-brackets?
@@ -1363,7 +1362,7 @@
       file-path
       (relative-assets-path->absolute-path file-path))))
 
-(rum/defc audio-link
+(hsx/defc audio-link
   [config url href _label metadata full_text]
   (if (common-config/local-relative-asset? href)
     (asset-link config nil href metadata full_text)
@@ -1544,12 +1543,15 @@
           :map-inline map-inline
           :inline inline}))
 
-(rum/defc macro-function-cp < rum/reactive
+(hsx/defc macro-function-cp
   [config arguments]
-  (or
-   (some-> (:query-result config) rum/react (block-macros/function-macro arguments))
-   [:span.warning
-    (util/format "{{function %s}}" (first arguments))]))
+  (let [fallback* (hooks/use-memo #(atom nil) [])
+        query-result* (or (:query-result config) fallback*)
+        [query-result] (hooks/use-atom query-result*)]
+    (or
+     (some-> query-result (block-macros/function-macro arguments))
+     [:span.warning
+      (util/format "{{function %s}}" (first arguments))])))
 
 (defn- macro-vimeo-cp
   [_config arguments]
@@ -1823,7 +1825,7 @@
 
     ["Inline_Hiccup" s]                                ;; String to hiccup
     (ui/catch-error
-     [:div.warning {:title (t :block/invalid-hiccup)} s]
+    [:div.warning {:title (t :block/invalid-hiccup)} s]
      [:span {:dangerouslySetInnerHTML
              {:__html (hiccup->html s)}}])
 
@@ -1869,7 +1871,7 @@
 
     :else ""))
 
-(rum/defc block-child
+(hsx/defc block-child
   [block]
   block)
 
@@ -1939,18 +1941,24 @@
   [config root-block blocks anchor]
   (let [has-anchor? (not (string/blank? anchor))
         page-blocks-count (count (:block/_page root-block))
-        children-blocks-count (count blocks)]
-    (and
-     (:current-page? config)
-     (zero? (or (:level config) 0))
-     (not (or has-anchor?
-              (:ref? config)
-              (:custom-query? config)
-              (:sidebar? config)
-              (:embed? config)
-              (:library? config)
-              (:document/mode? config)))
-     (>= (- page-blocks-count children-blocks-count) 30))))
+        children-blocks-count (count blocks)
+        root-surface? (or (:current-page? config) (:journals? config))
+        root-level? (zero? (or (:level config) 0))
+        excluded-context? (or has-anchor?
+                              (:ref? config)
+                              (:custom-query? config)
+                              (:sidebar? config)
+                              (:embed? config)
+                              (:library? config)
+                              (:document/mode? config))
+        heavy-journal-root? (and (:journals? config)
+                                 (>= children-blocks-count 50))
+        heavy-descendant-tree? (>= (- page-blocks-count children-blocks-count) 30)]
+    (and root-surface?
+         root-level?
+         (not excluded-context?)
+         (or heavy-journal-root?
+             heavy-descendant-tree?))))
 
 (defn- defer-placeholder-element
   []
@@ -1975,7 +1983,7 @@
             ;; Keep one child visible for progressive feedback.
             (if (zero? idx) 1 idx)))))))
 
-(rum/defc block-children
+(hsx/defc block-children
   [config block children collapsed?]
   (let [ref? (:ref? config)
         query? (:custom-query? config)
@@ -2134,10 +2142,9 @@
 (declare flush-comment-thread-presence!)
 
 (defn- schedule-comment-thread-presence-check!
-  [state block]
+  [*comment-thread-present? block]
   (when-let [cache-key (comment-thread-presence-key block)]
-    (let [*comment-thread-present? (get state ::comment-thread-present?)
-          cached-entry (fresh-comment-thread-presence cache-key)]
+    (let [cached-entry (fresh-comment-thread-presence cache-key)]
       (cond
         (or (comments-model/protected-comment-block? block)
             (ui-comment-thread-for-block block))
@@ -2222,20 +2229,19 @@
          :uuid uuid
          :fallback-props {:style {:font-size 9}}})])))
 
-(rum/defcs ^:large-vars/cleanup-todo block-control < rum/reactive
-  (rum/local false ::dragging?)
-  [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected? top? bottom?]}]
-  (let [*bullet-dragging? (::dragging? state)
-        doc-mode? (state/sub :document/mode?)
-        control-show? (util/react *control-show?)
-        rtc-state (state/sub :rtc/state)
+(hsx/defc ^:large-vars/cleanup-todo block-control
+  [config block {:keys [uuid block-id collapsed? *control-show? edit? selected? top? bottom?]}]
+  (let [*bullet-dragging? (hooks/use-memo #(atom false) [])
+        doc-mode? (state/use-sub :document/mode?)
+        [control-show?] (hooks/use-atom *control-show?)
+        rtc-state (state/use-sub :rtc/state)
         online-users (:online-users rtc-state)
         current-user-uuid (user-handler/user-uuid)
         editing-user (editing-user-for-block uuid online-users current-user-uuid)
         ref? (:ref? config)
         container-id (:container-id config)
         empty-content? (block-content-empty? block)
-        fold-button-right? (state/enable-fold-button-right?)
+        fold-button-right? (state/use-enable-fold-button-right?)
         own-number-list? (:own-order-number-list? config)
         order-list? (boolean own-number-list?)
         order-list-idx (:own-order-list-index config)
@@ -2244,18 +2250,8 @@
                                                         :ignore-children? page-title?
                                                         :page-title? page-title?})
         link? (boolean (:original-block config))
-        ;; List/Gallery views render the bullet at the 20-slot scale that
-        ;; inline `[[page-refs]]`, sidebars, and table-cells already use:
-        ;; 16px non-photo glyph, 20px avatar. Outliner blocks keep their
-        ;; tighter 14/16 scale.
-        list-or-gallery? (or (:list-view? config) (:gallery-view? config))
-        icon-size (cond
-                    collapsed?       12
-                    list-or-gallery? 16
-                    :else            14)
-        icon (icon-component/get-node-icon-cp block
-                                              (cond-> {:size icon-size :color? true :link? link?}
-                                                list-or-gallery? (assoc :avatar-size 20)))
+        icon-size (if collapsed? 12 14)
+        icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
         with-icon? (and (some? icon)
                         (or (and (db/page? block)
                                  (not (:library? config)))
@@ -2290,7 +2286,7 @@
                      (when (and (state/developer-mode?) (.-metaKey event))
                        (js/console.debug "[block config]==" config)))}
         [:span {:class (if (or (and control-show? (or collapsed? collapsable?))
-                               (and collapsed? (or page-title? order-list? config/publishing? (util/mobile?))))
+                               (and collapsed? (or order-list? config/publishing? (util/mobile?))))
                          "control-show cursor-pointer"
                          "control-hide")}
          (ui/rotating-arrow collapsed?)]])
@@ -2360,7 +2356,7 @@
              [:div (t :block/created-label (date/int->local-time-2 (:block/created-at block)))]
              [:div (t :block/last-edited-label (date/int->local-time-2 (:block/updated-at block)))]]))))]))
 
-(rum/defc dnd-separator
+(hsx/defc dnd-separator
   [move-to]
   [:div.relative
    [:div.dnd-separator.absolute
@@ -2385,7 +2381,7 @@
 
 (declare src-cp)
 
-(rum/defc ^:large-vars/cleanup-todo text-block-title
+(hsx/defc ^:large-vars/cleanup-todo text-block-title
   [config block]
   (let [format :markdown
         block (if-not (:block.temp/ast-title block)
@@ -2446,9 +2442,9 @@
                          (assoc :parent-heading heading))]
            (map-inline config' block-ast-title))))))))
 
-(rum/defc block-title-aux
+(hsx/defc block-title-aux
   [config block {:keys [query? *show-query?]}]
-  (let [[hover? set-hover?] (rum/use-state false)
+  (let [[hover? set-hover?] (hooks/use-state false)
         blank? (string/blank? (:block/title block))
         opacity (if hover? "opacity-100" "opacity-0")
         query (:logseq.property/query block)
@@ -2479,7 +2475,7 @@
           {:on-click on-title-click})))
      (cond
        (and query? blank? (or advanced-query? show-query?))
-       [:span.opacity-75.hover:opacity-100 (t :block/untitled-query)]
+      [:span.opacity-75.hover:opacity-100 (t :block/untitled-query)]
        (and query? blank?)
        (query-builder-component/builder query {})
        :else
@@ -2488,16 +2484,16 @@
      (when (ldb/class-instance?
             (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards)
             block)
-       [(ui/tooltip
-         (shui/button
-          {:variant :ghost
-           :size :sm
-           :class "!px-1 text-xs text-muted-foreground"
-           :on-click (fn [e]
-                       (util/stop e)
-                       (state/pub-event! [:modal/show-cards (:db/id block)]))}
-          (t :block/practice))
-         [:div (t :block/practice-cards)])])
+       (ui/tooltip
+        (shui/button
+         {:variant :ghost
+          :size :sm
+          :class "!px-1 text-xs text-muted-foreground"
+          :on-click (fn [e]
+                      (util/stop e)
+                      (state/pub-event! [:modal/show-cards (:db/id block)]))}
+         (t :block/practice))
+        [:div (t :block/practice-cards)]))
      (when-let [property (:logseq.property/created-from-property block)]
        (when-let [message (when (= :url (:logseq.property/type property))
                             (first (outliner-property/validate-property-value (db/get-db) property (:db/id block))))]
@@ -2509,13 +2505,13 @@
            (ui/icon "alert-triangle"))
           [:div.opacity-75 message])))]))
 
-(rum/defc block-title < rum/reactive db-mixins/query
+(hsx/defc block-title
   [config block {:keys [*show-query?]}]
   (let [block' (db/entity (:db/id block))
-        node-display-type (:logseq.property.node/display-type block')
-        display-title (:display-title config)
-        db (db/get-db)
-        query? (ldb/class-instance? (entity-plus/entity-memoized db :logseq.class/Query) block')]
+           node-display-type (:logseq.property.node/display-type block')
+           display-title (:display-title config)
+           db (db/get-db)
+           query? (ldb/class-instance? (entity-plus/entity-memoized db :logseq.class/Query) block')]
     (cond
       (and (:page-title? config) (ldb/page? block) (string/blank? (:block/title block)))
       [:div.opacity-75 (t :ui/untitled)]
@@ -2549,22 +2545,21 @@
       (block-title-aux config block {:query? query?
                                      :*show-query? *show-query?}))))
 
-(rum/defcs db-properties-cp < rum/static
-  {:init (fn [state]
-           (let [container-id (or (:container-id (first (:rum/args state)))
-                                  (state/get-next-container-id))]
-             (assoc state ::initial-container-id container-id)))}
-  [state config block opts]
-  (property-component/properties-area block
-                                      (merge
-                                       config
-                                       {:inline-text inline-text
-                                        :page-cp page-cp
-                                        :block-cp blocks-container
-                                        :editor-box (state/get-component :editor/box)
-                                        :container-id (or (:container-id config)
-                                                          (::initial-container-id state))}
-                                       opts)))
+(hsx/defc db-properties-cp
+  [config block opts]
+  (let [initial-container-id (hooks/use-memo #(or (:container-id config)
+                                                 (state/get-next-container-id))
+                                             [(:container-id config)])]
+    (property-component/properties-area block
+                                        (merge
+                                         config
+                                         {:inline-text inline-text
+                                          :page-cp page-cp
+                                          :block-cp blocks-container
+                                          :editor-box (state/get-component :editor/box)
+                                          :container-id (or (:container-id config)
+                                                            initial-container-id)}
+                                         opts))))
 
 (defn- target-forbidden-edit?
   [target]
@@ -2623,6 +2618,8 @@
                                           util/caret-range)
                 mobile-range (when mobile? (get-cursor-range))]
             (when (and (not forbidden-edit?) (contains? #{1 0} button))
+              (when (= 1 button)
+                (block-selection/set-pointer-down!))
               (cond
                 (and meta? shift?)
                 (when-not (empty? selection-blocks)
@@ -2655,6 +2652,9 @@
                   (mobile-util/mobile-focus-hidden-input)
                   (editor-handler/clear-selection!)
                   (editor-handler/unhighlight-blocks!)
+                  (when-let [editing-block (state/get-edit-block)]
+                    (when-not (= (:block/uuid editing-block) (:block/uuid block))
+                      (editor-handler/save-current-block!)))
                   (p/do!
                    (state/pub-event! [:editor/save-code-editor])
 
@@ -2676,11 +2676,11 @@
 
                    (state/set-selection-start-block! block-dom-element)))))))))))
 
-(rum/defc dnd-separator-wrapper < rum/reactive
+(hsx/defc dnd-separator-wrapper
   [_block block-id top?]
-  (let [dragging? (rum/react *dragging?)
-        drag-to-block (rum/react *drag-to-block)
-        move-to (rum/react *move-to)]
+  (let [[dragging?] (hooks/use-atom *dragging?)
+        [drag-to-block] (hooks/use-atom *drag-to-block)
+        [move-to] (hooks/use-atom *move-to)]
     (when (and
            dragging?
            (= block-id drag-to-block)
@@ -2713,20 +2713,20 @@
                  config (if deprecated-org-quote? (assoc config :deprecated-org-quote? true) config)]
              (for [[idx child] (medley/indexed body)]
                (when-let [block (markup-element-cp config child)]
-                 (rum/with-key (block-child block)
-                   (str uuid "-" idx)))))])))))
+                 ^{:key (str uuid "-" idx)}
+                 [block-child block])))])))))
 
-(rum/defcs block-tag <
-  (rum/local false ::hover?)
-  (rum/local false ::hover-container?)
-  [state block tag config popup-opts]
-  (let [*hover? (::hover? state)
-        *hover-container? (::hover-container? state)
+(hsx/defc block-tag
+  [block tag config popup-opts]
+  (let [*hover? (hooks/use-memo #(atom false) [])
+        *hover-container? (hooks/use-memo #(atom false) [])
+        [hover?] (hooks/use-atom *hover?)
+        [_hover-container?] (hooks/use-atom *hover-container?)
         private-tag? (ldb/private-tags (:db/ident tag))]
     [:div.block-tag
      {:key (str "tag-" (:db/id tag))
       :class (str (when private-tag? "private-tag ")
-                  (when @*hover?
+                          (when hover?
                     (if private-tag? "!px-1" "!pl-0")))
       :on-mouse-over #(reset! *hover-container? true)
       :on-mouse-out #(reset! *hover-container? false)}
@@ -2760,9 +2760,9 @@
                                     :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
                                    (t :block/remove-tag)))])
                              popup-opts))}
-        (if (and @*hover? (not private-tag?) (not config/publishing?))
+                (if (and hover? (not private-tag?) (not config/publishing?))
           [:a.inline-flex.text-muted-foreground
-           {:title (t :block/remove-this-tag)
+             {:title (t :block/remove-this-tag)
             :style {:margin-top 1
                     :padding-left 2
                     :margin-right 2}
@@ -2779,7 +2779,7 @@
                         :hide-tag-symbol? true)
                  tag)])]))
 
-(rum/defc tags-cp
+(hsx/defc tags-cp
   "Tags without inline or hidden tags"
   [config block]
   (when (:block/raw-title block)
@@ -2799,11 +2799,10 @@
           tags-count (count block-tags)]
       (when (seq block-tags)
         (if (< tags-count 3)
-          [:div.block-tags.gap-1
+         [:div.block-tags.gap-1
            (for [tag block-tags]
-             (rum/with-key
-               (block-tag block tag config popup-opts)
-               (str "tag-" (:db/id tag))))]
+             ^{:key (str "tag-" (:db/id tag))}
+             [block-tag block tag config popup-opts])]
           [:div.block-tags.cursor-pointer
            {:on-pointer-down (fn [e]
                                (shui/popup-show! e
@@ -2832,7 +2831,7 @@
            [:div.text-sm.opacity-50.ml-1
             (str "+" (- tags-count 2))]])))))
 
-(rum/defc block-positioned-properties
+(hsx/defc block-positioned-properties
   [config block position]
   (let [properties (outliner-property/get-block-positioned-properties (db/get-db) (:db/id block) position)
         opts (merge config
@@ -2858,42 +2857,42 @@
         [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6.self-start
          {:class (name position)}
          (for [property properties]
-           (rum/with-key
-             (pv/property-value block property (assoc opts :show-tooltip? true))
-             (str (:db/id block) "-" (:db/id property))))]))))
+           ^{:key (str (:db/id block) "-" (:db/id property))}
+           [:<> (pv/property-value block property (assoc opts :show-tooltip? true))])]))))
 
-(rum/defc block-reactions < rum/reactive db-mixins/query
+(hsx/defc block-reactions
   [block]
   (let [repo (state/get-current-repo)
         target-id (:db/id block)
-        reactions-ref (react/q repo [:frontend.worker.react/block-reactions target-id]
-                               {}
-                               '[:find (pull ?r [*])
-                                 :in $ ?target
-                                 :where
-                                 [?r :logseq.property.reaction/target ?target]]
-                               target-id)
-        reactions (->> (or (util/react reactions-ref) [])
+        reactions-result (db-hooks/use-query
+                          (react/q repo [:frontend.worker.react/block-reactions target-id]
+                                   {}
+                                   '[:find (pull ?r [*])
+                                     :in $ ?target
+                                     :where
+                                     [?r :logseq.property.reaction/target ?target]]
+                                   target-id))
+        reactions (->> (or reactions-result [])
                        (map first))
         user-db-id (when-let [id-str (user-handler/user-uuid)]
                      (when-let [user-id (uuid id-str)]
                        (:db/id (db/entity repo [:block/uuid user-id]))))
         summary (reaction/summarize reactions user-db-id)
         read-only? config/publishing?
-        on-pick (fn [popup-id icon]
-                  (if (= :emoji (:type icon))
-                    (do
-                      (reaction-handler/toggle-reaction! (:block/uuid block) (:id icon))
-                      (shui/popup-hide! popup-id))
-                    (notification/show! (t :block.reaction/emoji-required-warning) :warning)))
+        on-pick (fn [popup-id emoji]
+                  (reaction-handler/toggle-reaction! (:block/uuid block) (:id emoji))
+                  (shui/popup-hide! popup-id))
         open-picker! (fn [^js e]
                        (util/stop e)
                        (shui/popup-show!
                         (.-target e)
                         (fn [{:keys [id]}]
                           (icon-component/icon-search
-                           (merge icon-component/reaction-picker-opts
-                                  {:on-chosen (fn [_e icon _keep-popup?] (on-pick id icon))})))
+                           {:on-chosen (fn [_emoji-event emoji _keep-popup?] (on-pick id emoji))
+                            :tabs [[:emoji "Emojis"]]
+                            :default-tab :emoji
+                            :show-used? true
+                            :icon-value nil}))
                         {:align :start
                          :content-props {:class "ls-icon-picker"}}))]
     (when (seq summary)
@@ -2927,11 +2926,11 @@
            :on-click open-picker!
            :on-pointer-down (fn [e]
                               (util/stop e))}
-          (ui/icon "plus" {:size 14})))])))
+                 (ui/icon "plus" {:size 14})))])))
 
-(rum/defc status-history-cp
+(hsx/defc status-history-cp
   [status-history]
-  (let [[sort-desc? set-sort-desc!] (rum/use-state true)]
+  (let [[sort-desc? set-sort-desc!] (hooks/use-state true)]
     [:div.p-2.text-muted-foreground.text-sm.max-h-96
      [:div.font-medium.mb-2.flex.flex-row.gap-2.items-center
       [:div (t :block/status-history)]
@@ -2949,10 +2948,10 @@
             [:div (:block/title status)]]
            [:div (date/int->local-time-2 (:block/created-at item))]]))]]))
 
-(rum/defc task-spent-time-cp
+(hsx/defc task-spent-time-cp
   [block]
   (when (ldb/class-instance? (db/entity :logseq.class/Task) block)
-    (let [[result set-result!] (rum/use-state nil)
+    (let [[result set-result!] (hooks/use-state nil)
           repo (state/get-current-repo)
           [status-history time-spent] result]
       (hooks/use-effect!
@@ -2970,7 +2969,7 @@
                        (shui/popup-show! (.-target e)
                                          (fn [] (status-history-cp status-history))
                                          {:align :end}))}
-          (clock/seconds->days:hours:minutes:seconds time-spent))]))))
+           (clock/seconds->days:hours:minutes:seconds time-spent))]))))
 
 (defn- sync-conflict-attr-label
   [attr]
@@ -2985,7 +2984,7 @@
                  (= value (get block attr))))
        vec))
 
-(rum/defc sync-conflict-item
+(hsx/defc sync-conflict-item
   [{:keys [id attr value created-at]}]
   [:div.border.rounded.p-3 {:key id}
    [:div.flex.flex-row.items-center.justify-between.gap-3.mb-2.text-xs.text-muted-foreground
@@ -3001,7 +3000,7 @@
                   (notification/show! (t :notification/copied) :success))}
      (t :ui/copy))]])
 
-(rum/defc sync-conflicts-popup
+(hsx/defc sync-conflicts-popup
   [conflicts on-mark-resolved]
   [:div.p-3.w-96
    {:style {:max-width "90vw"}}
@@ -3023,7 +3022,7 @@
           (map #(get-in % path))
           (dedupe)))))
 
-(rum/defc sync-conflicts-warning-button
+(hsx/defc sync-conflicts-warning-button
   [block]
   (let [repo (state/get-current-repo)
         block-id (:block/uuid block)
@@ -3061,7 +3060,7 @@
         (ui/icon "alert-triangle" {:size 14}))
        [:div (t :sync/show-conflicts)]))))
 
-(rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
+(hsx/defc ^:large-vars/cleanup-todo block-content
   [config {:block/keys [uuid] :as block} edit-input-id block-id *show-query?]
   (let [repo (state/get-current-repo)
         format :markdown
@@ -3142,7 +3141,7 @@
 
       (block-content-inner config block ast-body plugin-slotted? collapsed? block-ref-with-title?)]]))
 
-(rum/defc block-refs-count < rum/static
+(hsx/defc block-refs-count
   [block block-refs-count' *hide-block-refs?]
   (when (> block-refs-count' 0)
     [:div.h-6
@@ -3169,7 +3168,7 @@
     (state/set-editing! edit-input-id content block content {:db (db/get-db)
                                                              :container-id (:container-id config)})))
 
-(rum/defc block-content-with-error
+(hsx/defc block-content-with-error
   [config block edit-input-id block-id *show-query? editor-box custom-block-content]
   (let [[editing? set-editing!] (hooks/use-state false)
         query (:logseq.property/query block)]
@@ -3195,8 +3194,8 @@
                          {:on-click #(edit-block-content config block edit-input-id)}})])
      (or custom-block-content (block-content config block edit-input-id block-id *show-query?)))))
 
-(rum/defcs ^:large-vars/cleanup-todo block-content-or-editor < rum/reactive
-  [state config {:block/keys [uuid] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? refs-count *hide-block-refs? *show-query?]}]
+(hsx/defc ^:large-vars/cleanup-todo block-content-or-editor
+  [config {:block/keys [uuid] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? refs-count *hide-block-refs? *show-query?]}]
   (let [format :markdown
         editor-box (state/get-component :editor/box)
         editor-id (str "editor-" edit-input-id)
@@ -3206,7 +3205,7 @@
                                block-ref/block-ref?)
         named? (some? (:block/name block))
         table? (:table? config)
-        raw-mode-block (state/sub :editor/raw-mode-block)
+        raw-mode-block (state/use-sub :editor/raw-mode-block)
         type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
                                 (not= (:db/id block) (:db/id raw-mode-block)))
         config (assoc config :block-parent-id block-id)
@@ -3335,7 +3334,7 @@
       (-> (or (:on-redirect-to-page config) route-handler/redirect-to-page!)
           (apply [(str uuid)])))))
 
-(rum/defc breadcrumb-fragment
+(hsx/defc breadcrumb-fragment
   [config block label opts]
   [:a {:on-pointer-down (fn [e]
                           (when (some? (:sidebar-key config)) (util/stop e)))
@@ -3343,12 +3342,12 @@
                         (handle-breadcrumb-activate! config block opts e))}
    label])
 
-(rum/defc breadcrumb-separator
+(hsx/defc breadcrumb-separator
   []
   [:span.opacity-50.px-1
    "/"])
 
-(rum/defc breadcrumb-segment-label
+(hsx/defc breadcrumb-segment-label
   "Renders the visual label (icon + text) for a breadcrumb segment.
    Icon priority:
      1. code/query/note/quote/math → always show their fixed structural icon
@@ -3445,7 +3444,7 @@
     (when (seq ref-ids)
       (db-async/<get-blocks repo ref-ids {:children? false}))))
 
-(rum/defc breadcrumb-search-overflow-tooltip
+(hsx/defc breadcrumb-search-overflow-tooltip
   [title]
   (ui/tooltip
    [:span.opacity-40.px-0.5.text-xs
@@ -3456,12 +3455,14 @@
    title
    {:trigger-props {:as-child true}}))
 
-(rum/defcs breadcrumb-overflow-dropdown < (rum/local false ::open?)
-  (rum/local nil ::full-hidden)
+(hsx/defc breadcrumb-overflow-dropdown
   "Renders an ellipsis button that exposes hidden ancestor segments in a dropdown."
-  [{open? ::open? full-hidden ::full-hidden}
-   config repo target-entity from-property hidden-segs opts vopts show-page?]
-  (let [hidden-segs' (or @full-hidden hidden-segs)
+  [config repo target-entity from-property hidden-segs opts vopts show-page?]
+  (let [open? (hooks/use-memo #(atom false) [])
+        full-hidden (hooks/use-memo #(atom nil) [])
+        [open-value?] (hooks/use-atom open?)
+        [full-hidden-value] (hooks/use-atom full-hidden)
+        hidden-segs' (or full-hidden-value hidden-segs)
         target-db-id (:db/id target-entity)
         load-full-hidden! (fn []
                             (when (and target-db-id (nil? @full-hidden))
@@ -3479,7 +3480,7 @@
                                             (assoc vopts :show-page? show-page?))]
                                   (reset! full-hidden (:hidden view))))))]
     (shui/dropdown-menu
-     {:open @open?
+     {:open open-value?
       :on-open-change (fn [open]
                         (reset! open? open)
                         (when open (load-full-hidden!)))}
@@ -3491,7 +3492,7 @@
         "···"])
       (t :breadcrumb/more-ancestors)
       {:trigger-props {:as-child true}})
-     (when @open?
+     (when open-value?
        (shui/dropdown-menu-content
         {:class "max-h-[min(50vh,420px)] overflow-y-auto"}
         (for [seg hidden-segs']
@@ -3507,7 +3508,7 @@
              label))))))))
 
 ;; "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
-(rum/defc breadcrumb-aux < rum/reactive
+(hsx/defc breadcrumb-aux
   [config repo block-id {:keys [show-page? indent? end-separator? _navigating-block disabled? variant header?]
                          :or {show-page? true}
                          :as opts}]
@@ -3539,11 +3540,10 @@
                            nav-block (or entity
                                          {:db/id (:db/id seg)
                                           :block/uuid (:block/uuid seg)})]
-                       (rum/with-key
-                         (if (or disabled? (= effective-variant :search-result))
-                           label
-                           (breadcrumb-fragment config nav-block label opts))
-                         (str (:block/uuid seg)))))]
+                       ^{:key (str (:block/uuid seg))}
+                       [:<> (if (or disabled? (= effective-variant :search-result))
+                              label
+                              (breadcrumb-fragment config nav-block label opts))]))]
     (when (or (seq visible-prefix-raw) (seq visible-suffix-raw))
       [:div.breadcrumb.block-parents
        {:class (str " breadcrumb--" (name effective-variant)
@@ -3568,7 +3568,7 @@
           (interpose (breadcrumb-separator) (map render-seg visible-suffix-raw))))
        (when end-separator? (breadcrumb-separator))])))
 
-(rum/defc breadcrumb
+(hsx/defc breadcrumb
   [config repo block-id {:keys [_show-page? _indent? _end-separator? _navigating-block _disabled? variant header?]
                          :as opts}]
   (let [[block set-block!] (hooks/use-state (when (uuid? block-id)
@@ -3692,6 +3692,7 @@
 (defn- select-block-under-pointer!
   [selection-block-ids scroll-direction]
   (when (and (seq selection-block-ids)
+             (block-selection/pointer-down?)
              (or (state/get-selection-start-block)
                  (seq (state/get-selection-blocks))))
     (when-let [block-dom-node (or (visible-selection-boundary-block selection-block-ids scroll-direction)
@@ -3804,6 +3805,22 @@
     (nil? (:level config))
     (assoc :level 0)))
 
+(hsx/defc query-result
+  [config block query-block-id]
+  (let [query-block (db/sub-block query-block-id)
+        query (:block/title query-block)
+        result (common-util/safe-read-string {:log-error? false} query)
+        advanced-query? (map? result)]
+    (when query-block
+      [:div {:style {:padding-left 42}}
+       (query/custom-query (wrap-query-components (assoc config
+                                                    :dsl-query? (not advanced-query?)
+                                                    :cards? (ldb/class-instance? (entity-plus/entity-memoized
+                                                                                   (db/get-db)
+                                                                                   :logseq.class/Cards) block)))
+         (if advanced-query? result {:builder nil
+                                     :query (query-builder-component/sanitize-q query)}))])))
+
 (defn- build-block
   [config block* {:keys [navigating-block navigated?]}]
   (let [linked-block (:block/link (db/entity (:db/id block*)))
@@ -3833,14 +3850,14 @@
   (when-let [block-uuid (:block/uuid block)]
     (let [repo (state/get-current-repo)
           blocks (some->> (db/get-block-and-children repo block-uuid)
-                          (map (fn [child-block]
-                                 (dissoc (db/pull (:db/id child-block)) :block.temp/load-status))))]
+                   (map (fn [child-block]
+                          (dissoc (db/pull (:db/id child-block)) :block.temp/load-status))))]
       (or (some-> blocks
-                  (tree/blocks->vec-tree block-uuid)
-                  first
-                  :block/children
-                  sdk-util/normalize-keyword-for-json)
-          []))))
+            (tree/blocks->vec-tree block-uuid)
+            first
+            :block/children
+            sdk-util/normalize-keyword-for-json)
+        []))))
 
 (defn- build-block-renderer-match-context
   ([block]
@@ -3848,23 +3865,23 @@
   ([block include-children?]
    (let [uuid-str (some-> (:block/uuid block) str)
          page-title (or (some-> (:block/page block) :block/title)
-                        (when (ldb/page? block) (:block/title block)))
+                      (when (ldb/page? block) (:block/title block)))
          properties-map (if-let [db-id (:db/id block)]
                           (->> (outliner-property/get-block-full-properties (db/get-db) db-id)
-                               (map :db/ident)
-                               (remove #(= % :logseq.property.class/properties))
-                               (map (fn [property-id] [property-id (get block property-id)]))
-                               (into {}))
+                            (map :db/ident)
+                            (remove #(= % :logseq.property.class/properties))
+                            (map (fn [property-id] [property-id (get block property-id)]))
+                            (into {}))
                           (->> (:block/properties block)
-                               (remove (fn [[property-id _]] (= property-id :logseq.property.class/properties)))
-                               (into {})))
+                            (remove (fn [[property-id _]] (= property-id :logseq.property.class/properties)))
+                            (into {})))
          children (when include-children?
                     (build-block-renderer-children-props block))
          props (cond-> {:blockId uuid-str
                         :properties (into {} (map (fn [[k v]]
                                                     [(subs (str k) 1)
                                                      (plugin-handler/serialize-property-value-for-plugin v)])
-                                                  properties-map))}
+                                               properties-map))}
                  uuid-str (assoc :uuid uuid-str)
                  page-title (assoc :page page-title)
                  (:block/title block) (assoc :content (:block/title block))
@@ -3881,8 +3898,8 @@
 (defn- block-renderer-supported-view?
   [{:keys [sidebar?]} property? table?]
   (and (not sidebar?)
-       (not property?)
-       (not table?)))
+    (not property?)
+    (not table?)))
 
 (defn- block-renderer-display-mode
   [{:keys [matched-block-renderer use-plugin-renderer? editing? plugin-renderer-error?]}]
@@ -3898,23 +3915,23 @@
   [display-mode]
   (= :plugin display-mode))
 
-(rum/defc setup-plugin-renderer-effects!
+(hsx/defc setup-plugin-renderer-effects!
   [editing? switch-to-plugin-renderer!]
   (let [*previous-editing? (hooks/use-ref editing?)]
     (hooks/use-effect!
-     (fn []
-       (let [previous-editing? (.-current *previous-editing?)]
-         (when (and previous-editing? (not editing?))
-           (switch-to-plugin-renderer!))
-         (set! (.-current *previous-editing?) editing?))
-       (fn []))
-     [editing?])
+      (fn []
+        (let [previous-editing? (.-current *previous-editing?)]
+          (when (and previous-editing? (not editing?))
+            (switch-to-plugin-renderer!))
+          (set! (.-current *previous-editing?) editing?))
+        (fn []))
+      [editing?])
     [:<>]))
 
 (defn- block-renderer-hides-outline-children?
   [display-mode {:keys [matched-block-renderer]}]
   (boolean (and (= :plugin display-mode)
-                (true? (:include-children matched-block-renderer)))))
+             (true? (:include-children matched-block-renderer)))))
 
 (defn- block-renderer-outline-view
   [config block uuid title table? property? edit-input-id editing? refs-count *hide-block-refs? *show-query? page-icon block-id collapsed?]
@@ -3927,28 +3944,28 @@
      (let [comments-area? (comments-model/comments-area? block)
            parsed-block (merge block (block/parse-title-and-body uuid (get block :block/format :markdown) title))
            hide-block-refs-count? (or (and (:embed? config)
-                                           (= (:block/uuid parsed-block) (:embed-id config)))
-                                      table?)]
+                                        (= (:block/uuid parsed-block) (:embed-id config)))
+                                    table?)]
        (if comments-area?
          (block-comments/comments-area-view
           config
           block
           (ldb/get-children block)
-          collapsed?
-          *hide-block-refs?
-          *show-query?
-          {:block-content-or-editor block-content-or-editor
-           :block-reactions block-reactions}
+         collapsed?
+         *hide-block-refs?
+         *show-query?
+         {:block-content-or-editor block-content-or-editor
+          :block-reactions block-reactions}
           {})
          (block-content-or-editor config
-                                  parsed-block
-                                  {:edit-input-id edit-input-id
-                                   :block-id block-id
-                                   :edit? editing?
-                                   :refs-count refs-count
-                                   :*hide-block-refs? *hide-block-refs?
-                                   :hide-block-refs-count? hide-block-refs-count?
-                                   :*show-query? *show-query?})))]]
+           parsed-block
+           {:edit-input-id edit-input-id
+            :block-id block-id
+            :edit? editing?
+            :refs-count refs-count
+            :*hide-block-refs? *hide-block-refs?
+            :hide-block-refs-count? hide-block-refs-count?
+            :*show-query? *show-query?})))]]
 
    (when (and (not collapsed?) (not (or table? property?)))
      (block-positioned-properties config block :block-below))
@@ -3956,68 +3973,55 @@
    (when-not (or (:table? config) (:property? config))
      (block-reactions block))])
 
-(rum/defcs block-renderer-error-boundary
-  < {:init (fn [state]
-             (assoc state ::on-error (some-> state :rum/args first :on-error)))
-     :did-catch (fn [state error _info]
-                  (when-let [on-error (::on-error state)]
-                    (on-error error))
-                  (assoc state ::error error))}
-  [{error ::error} {:keys [fallback-view]} view]
-  (if (some? error)
-    fallback-view
-    view))
+(hsx/defc block-renderer-error-boundary
+  [{:keys [on-error fallback-view]} view]
+  (ui/error-boundary
+   {:fallback (constantly fallback-view)
+    :onError (fn [error _component-stack _event-id]
+               (when on-error
+                 (on-error error)))}
+   view))
 
-(rum/defcs ^:large-vars/cleanup-todo block-container-inner-aux < rum/reactive db-mixins/query
-  {:init (fn [state]
-           (let [*ref (atom nil)
-                 [_container-state _repo config block] (:rum/args state)
-                 current-block-page? (= (str (:block/uuid block)) (state/get-current-page))
-                 embed-self? (and (:embed? config)
-                                  (= (:block/uuid block) (:block/uuid (:block config))))
-                 default-hide? (or (not (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)))
-                                   (= (str (:id config)) (str (:block/uuid block))))
-                 *refs-count (atom nil)]
-             (when-not (or (:view? config) (ldb/page? block))
-               (when-let [id (:db/id block)]
-                 (p/let [count (db-async/<get-block-refs-count (state/get-current-repo) id)]
-                   (reset! *refs-count count))))
-             (assoc state
-                    ::ref *ref
-                    ::hide-block-refs? (atom default-hide?)
-                    ::show-query? (atom false)
-                    ::refs-count *refs-count
-                    ::plugin-renderer-error? (atom false)
-                    ::use-plugin-renderer? (atom true)
-                    ::hydrated-comment-thread (atom nil)
-                    ::comment-thread-present? (atom nil))))
-   :did-mount (fn [state]
-                (let [[_container-state _repo _config block] (:rum/args state)]
-                  (schedule-comment-thread-presence-check! state block))
-                state)
-   :did-update (fn [state]
-                 (let [[_container-state _repo _config block] (:rum/args state)]
-                   (schedule-comment-thread-presence-check! state block))
-                 state)}
-  (mixins/event-mixin
-   (fn [state]
-     (let [*ref (::ref state)]
-       ;; React doesn't let us directly control passive via onTouchMove
-       ;; So here we listen `touchmove` on the block node
-       (mixins/listen state @*ref "touchmove" block-handler/on-touch-move))))
-  [state container-state repo config* block {:keys [navigating-block navigated? editing? selected?] :as opts}]
-  (let [*ref (::ref state)
-        *hide-block-refs? (get state ::hide-block-refs?)
-        *show-query? (get state ::show-query?)
-        show-query? (rum/react *show-query?)
-        *plugin-renderer-error? (get state ::plugin-renderer-error?)
-        *use-plugin-renderer? (get state ::use-plugin-renderer?)
-        *hydrated-comment-thread (get state ::hydrated-comment-thread)
-        hydrated-comment-thread (rum/react *hydrated-comment-thread)
-        *comment-thread-present? (get state ::comment-thread-present?)
-        comment-thread-present? (rum/react *comment-thread-present?)
-        plugin-renderer-error? (rum/react *plugin-renderer-error?)
-        use-plugin-renderer? (rum/react *use-plugin-renderer?)
+(hsx/defc ^:large-vars/cleanup-todo block-container-inner-aux
+  [container-state repo config* block {:keys [navigating-block navigated? editing? selected?] :as opts}]
+  (let [current-block-page? (= (str (:block/uuid block)) (state/get-current-page))
+           embed-self? (and (:embed? config*)
+                            (= (:block/uuid block) (:block/uuid (:block config*))))
+           default-hide? (or (not (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)))
+                             (= (str (:id config*)) (str (:block/uuid block))))
+           *ref (hooks/use-memo #(atom nil) [])
+           *hide-block-refs? (hooks/use-memo #(atom default-hide?) [])
+           *show-query? (hooks/use-memo #(atom false) [])
+           *plugin-renderer-error? (hooks/use-memo #(atom false) [])
+           *use-plugin-renderer? (hooks/use-memo #(atom true) [])
+           *hydrated-comment-thread (hooks/use-memo #(atom nil) [])
+           *comment-thread-present? (hooks/use-memo #(atom nil) [])
+           *refs-count (hooks/use-memo #(atom nil) [(:db/id block)])
+           [show-query?] (hooks/use-atom *show-query?)
+           [hydrated-comment-thread] (hooks/use-atom *hydrated-comment-thread)
+           [comment-thread-present?] (hooks/use-atom *comment-thread-present?)
+           [plugin-renderer-error?] (hooks/use-atom *plugin-renderer-error?)
+           [use-plugin-renderer?] (hooks/use-atom *use-plugin-renderer?)
+           [hide-block-refs?] (hooks/use-atom *hide-block-refs?)
+           [refs-count] (hooks/use-atom *refs-count)
+           _ (hooks/use-effect!
+              (fn []
+                (when-not (or (:view? config*) (ldb/page? block))
+                  (when-let [id (:db/id block)]
+                    (p/let [count (db-async/<get-block-refs-count (state/get-current-repo) id)]
+                      (reset! *refs-count count)))))
+              [(:db/id block)])
+           _ (hooks/use-effect!
+              #(schedule-comment-thread-presence-check! *comment-thread-present? block))
+           _ (hooks/use-effect!
+              (fn []
+                ;; Mobile swipe handling calls preventDefault, so avoid registering
+                ;; the active touchmove listener on desktop blocks.
+                (when (or (util/mobile?) (mobile-util/native-platform?))
+                  (when-let [node @*ref]
+                    (.addEventListener node "touchmove" block-handler/on-touch-move)
+                    #(.removeEventListener node "touchmove" block-handler/on-touch-move))))
+              [])
         switch-to-plugin-renderer! (fn []
                                      (reset! *plugin-renderer-error? false)
                                      (reset! *use-plugin-renderer? true))
@@ -4025,9 +4029,6 @@
                                   (reset! *plugin-renderer-error? false)
                                   (reset! *use-plugin-renderer? false))
         set-plugin-renderer-error! #(reset! *plugin-renderer-error? %)
-        *refs-count (get state ::refs-count)
-        hide-block-refs? (rum/react *hide-block-refs?)
-        refs-count (rum/react *refs-count)
         [original-block block] (build-block config* block {:navigating-block navigating-block :navigated? navigated?})
         config* (if original-block
                   (assoc config* :original-block original-block)
@@ -4045,15 +4046,16 @@
         level (:level config)
         *control-show? (get container-state ::control-show?)
         db-collapsed? (util/collapsed? block)
+        temp-collapsed? (state/use-sub-block-collapsed uuid container-id)
         collapsed? (cond
                      (:ignore-block-collapsed? config)
                      false
 
                      (or ref-or-custom-query?
-                         (:view? config)
-                         (root-block? config block)
-                         (and (or (ldb/class? block) (ldb/property? block)) (:page-title? config)))
-                     (state/sub-block-collapsed uuid container-id)
+                       (:view? config)
+                       (root-block? config block)
+                       (and (or (ldb/class? block) (ldb/property? block)) (:page-title? config)))
+                     temp-collapsed?
 
                      :else
                      db-collapsed?)
@@ -4080,117 +4082,43 @@
                                (:thread hydrated-comment-thread))))
         has-comment-thread? (or comment-thread
                                 (true? comment-thread-present?))
-        inline-thread (state/sub :comments/inline-thread)
+        inline-thread (state/use-sub :comments/inline-thread)
         show-inline-comments? (inline-comment-thread? inline-thread uuid comment-thread)
         page-icon (when (:page-title? config)
-                    (let [icon' (get block :logseq.property/icon)
-                          ;; Class-default-icon inheritance. Delegate to
-                          ;; `get-node-icon` so the page-title heading
-                          ;; resolves inherited icons the same way every
-                          ;; other surface does (sidebar, list/table
-                          ;; view) — including mode-aware text derivation
-                          ;; (initials / abbreviated / custom). Strings
-                          ;; are type-based defaults ("file", "hash",
-                          ;; etc.); skip them here so the page-title's
-                          ;; own `:tabler-icon` fallbacks below stay in
-                          ;; charge of those.
-                          inherited-default-icon
-                          (when-not icon'
-                            (let [resolved (icon-component/get-node-icon block)]
-                              (when (map? resolved) resolved)))]
+                    (let [icon' (get block :logseq.property/icon)]
                       (when-let [icon (and (ldb/page? block)
-                                           ;; Guard the user-data branches with `renderable-icon?` so
-                                           ;; `{:type :none}` (and any other unrenderable value) does
-                                           ;; NOT reserve a 38×38 slot — otherwise the picker renders an
-                                           ;; empty shui ghost button (the "gray box" bug). Hardcoded
-                                           ;; class/property fallbacks bypass the predicate since they
-                                           ;; are guaranteed renderable once `js/tablerIcons` loads.
-                                           (let [user-candidate (or icon'
-                                                                    inherited-default-icon
-                                                                    (some :logseq.property/icon (:block/tags block)))
-                                                 user-icon (when (icon-component/renderable-icon? user-candidate)
-                                                             user-candidate)]
-                                             (or user-icon
-                                                 (when (ldb/class? block)
-                                                   {:type :tabler-icon
-                                                    :id "hash"})
-                                                 (when (ldb/property? block)
-                                                   {:type :tabler-icon
-                                                    :id "letter-p"}))))]
-                        [:div.ls-page-icon.flex.items-center
+                                        (or icon'
+                                          (some :logseq.property/icon (:block/tags block))
+                                          (when (ldb/class? block)
+                                            {:type :tabler-icon
+                                             :id "hash"})
+                                          (when (ldb/property? block)
+                                            {:type :tabler-icon
+                                             :id "letter-p"})))]
+                        [:div.ls-page-icon.flex.self-start
                          (icon-component/icon-picker icon
-                                                     {:on-chosen (fn [_e icon & [action]]
-                                                                   (if icon
-                                                                     (let [icon-data (icon-component/icon-data-for-storage icon)]
-                                                                       (db-property-handler/set-block-property!
-                                                                        (:db/id block)
-                                                                        :logseq.property/icon
-                                                                        icon-data)
-                                                                       ;; For classes, auto-sync the page-icon into
-                                                                       ;; default-icon when default-icon is empty so
-                                                                       ;; instances inherit it. If default-icon is already
-                                                                       ;; set we leave it alone to avoid clobbering a
-                                                                       ;; carefully configured tag default.
-                                                                       (when (and (ldb/class? block)
-                                                                                  (nil? (:logseq.property.class/default-icon block)))
-                                                                         (db-property-handler/set-block-property!
-                                                                          (:db/id block)
-                                                                          :logseq.property.class/default-icon
-                                                                          icon-data)))
-                                                                     ;; del — branch on action keyword from the dropdown.
-                                                                     ;; Use `cond` not `case` — CLJS `case` with keyword
-                                                                     ;; tests has shown subtle interaction bugs elsewhere
-                                                                     ;; in this file.
-                                                                     (cond
-                                                                       (= action :remove-entirely)
-                                                                       ;; Suppress inheritance: write the :none sentinel.
-                                                                       ;; Don't touch class default-icon — user wants
-                                                                       ;; "no icon" only on THIS entity.
-                                                                       (db-property-handler/set-block-property!
-                                                                        (:db/id block)
-                                                                        :logseq.property/icon
-                                                                        {:type :none})
-
-                                                                       :else
-                                                                       ;; :revert (from dropdown) or :remove / nil (from
-                                                                       ;; single-option immediate delete): retract the
-                                                                       ;; property so inheritance kicks in.
-                                                                       (do
-                                                                         (db-property-handler/remove-block-property!
-                                                                          (:db/id block)
-                                                                          :logseq.property/icon)
-                                                                         ;; For classes, only clear default-icon if it
-                                                                         ;; matches the page-icon being removed — i.e. the
-                                                                         ;; two were synced. Preserves independently-set
-                                                                         ;; default-icons.
-                                                                         (let [default-icon (:logseq.property.class/default-icon block)]
-                                                                           (when (and (ldb/class? block)
-                                                                                      default-icon
-                                                                                      (= default-icon icon'))
-                                                                             (db-property-handler/remove-block-property!
-                                                                              (:db/id block)
-                                                                              :logseq.property.class/default-icon)))))))
-                                                      :del-btn? (boolean (and icon' (not= (:type icon') :none)))
-                                                      :page-title (:block/title block)
-                                                      :preview-target-db-id (:db/id block)
-                                                      ;; Page-title scope — explicit so it doesn't
-                                                      ;; rely on the icon-picker's default. Makes
-                                                      ;; the contract visible at the call site
-                                                      ;; alongside the parallel default-icon-row
-                                                      ;; in property/value.cljs.
-                                                      :property :logseq.property/icon
-                                                      :button-opts (when (:page-title? config)
-                                                                     ;; Drop shui's default sizing/padding so the
-                                                                     ;; CSS rule on .ls-page-title .ls-page-icon
-                                                                     ;; button (38×38 flex-center) takes effect.
-                                                                     {:size nil
-                                                                      :class "!p-0"})
-                                                      :icon-props {:size (if (:page-title? config) 38 20)}})])))
+                           {:on-chosen (fn [_e icon]
+                                         (if icon
+                                           (db-property-handler/set-block-property!
+                                             (:db/id block)
+                                             :logseq.property/icon
+                                             (select-keys icon [:id :type :color]))
+                                           ;; del
+                                           (db-property-handler/remove-block-property!
+                                             (:db/id block)
+                                             :logseq.property/icon)))
+                            :del-btn? (boolean icon')
+                            :icon-props {:style {:width "1lh"
+                                                 :height "1lh"
+                                                 :font-size (cond
+                                                              (and (util/mobile?) (:page-title? config)) 24
+                                                              (:page-title? config) 38
+                                                              :else 18)}}})])))
         ;; --- block renderer (full-block plugin replacement) ---
         block-renderer-base-match-context
         (when (and config/lsp-enabled?
-                   (plugin-handler/any-block-renderers?)
-                   (block-renderer-supported-view? config property? table?))
+                (plugin-handler/any-block-renderers?)
+                (block-renderer-supported-view? config property? table?))
           (build-block-renderer-match-context block false))
         matched-block-renderer
         (when (and (:props block-renderer-base-match-context) (not editing?))
@@ -4214,75 +4142,75 @@
         [:div.flex.flex-col.w-full
          (block-renderer-outline-view config block uuid title table? property? edit-input-id editing? refs-count *hide-block-refs? *show-query? page-icon block-id collapsed?)
          (when (show-block-renderer-plugin-toggle?
-                renderer-display-mode
-                {:matched-block-renderer matched-block-renderer
-                 :editing? editing?})
+                 renderer-display-mode
+                 {:matched-block-renderer matched-block-renderer
+                  :editing? editing?})
            (shui/button
-            {:variant :ghost
-             :size :icon
-             :class "self-start h-5 w-5 opacity-20 hover:opacity-70"
-             :title switch-to-plugin-renderer-title
-             :aria-label switch-to-plugin-renderer-title
-             :on-pointer-down util/stop
-             :on-click (fn [e]
-                         (util/stop e)
-                         (switch-to-plugin-renderer!))}
-            (shui/tabler-icon "puzzle-piece" {:size 13})))]]
+             {:variant :ghost
+              :size :icon
+              :class "self-start h-5 w-5 opacity-20 hover:opacity-70"
+              :title switch-to-plugin-renderer-title
+              :aria-label switch-to-plugin-renderer-title
+              :on-pointer-down util/stop
+              :on-click (fn [e]
+                           (util/stop e)
+                           (switch-to-plugin-renderer!))}
+             (shui/tabler-icon "puzzle-piece" {:size 13})))]]
 
     [:div.ls-block.swipe-item
      (cond->
-      {:id (str "ls-block-"
+       {:id (str "ls-block-"
               ;; container-id "-"
-                uuid)
-       :blockid (str uuid)
-       :containerid container-id
-       :data-is-property (ldb/property? block)
-       :data-comments-area comments-area?
-       :ref #(when (nil? @*ref) (reset! *ref %))
-       :data-collapsed (and collapsed? has-child?)
-       :class (str (when selected? "selected")
-                   (when (ldb/recycled? block) " line-through opacity-70")
-                   (when order-list? " is-order-list")
-                   (when comments-area? " is-comments-area")
-                   (when has-comment-thread? " has-comment-thread")
-                   (when (string/blank? title) " is-blank")
-                   (when original-block " embed-block"))
-       :haschild (str (boolean has-child?))
-       :on-touch-start (fn [event uuid]
-                         (when-not (or @*dragging? (state/editing?))
-                           (block-handler/on-touch-start event uuid)))
-       :on-touch-end (fn [event]
-                       (when-not @*dragging?
-                         (block-handler/on-touch-end event))
-                       (reset! *dragging? false))
-       :on-touch-cancel (fn [e]
-                          (block-handler/on-touch-cancel e))}
+              uuid)
+        :blockid (str uuid)
+        :containerid container-id
+        :data-is-property (ldb/property? block)
+        :data-comments-area comments-area?
+        :ref #(when (nil? @*ref) (reset! *ref %))
+        :data-collapsed (and collapsed? (boolean has-child?))
+        :class (str (when selected? "selected")
+                 (when (ldb/recycled? block) " line-through opacity-70")
+                 (when order-list? " is-order-list")
+                 (when comments-area? " is-comments-area")
+                 (when has-comment-thread? " has-comment-thread")
+                 (when (string/blank? title) " is-blank")
+                 (when original-block " embed-block"))
+        :haschild (str (boolean has-child?))
+        :on-touch-start (fn [event uuid]
+                          (when-not (or @*dragging? (state/editing?))
+                            (block-handler/on-touch-start event uuid)))
+        :on-touch-end (fn [event]
+                        (when-not @*dragging?
+                          (block-handler/on-touch-end event))
+                        (reset! *dragging? false))
+        :on-touch-cancel (fn [e]
+                           (block-handler/on-touch-cancel e))}
 
        (and (util/capacitor?)
             (not (ldb/page? block))
             (not (comments-model/comment-block? block)))
        (assoc
-        :draggable true
-        :on-drag-start
-        (fn [event]
-          (when-not (state/editing?)
-            (util/stop-propagation event)
-            (let [target ^js (.-target event)
-                  blocks (or (seq (state/get-selection-blocks)) [target])
-                  multiple? (> (count blocks) 1)
-                  element (when multiple?
-                            (let [element (dom/create-element "div")]
-                              (-> element
-                                  (dom/set-attr! "id" "dragging-ghost-element")
-                                  (dom/set-text! (t :editor/moving-blocks-count (count blocks)))
-                                  (dom/set-class! "p-2 rounded text-sm"))
-                              element))]
-              (doseq [block blocks]
-                (dom/add-class! block "dragging"))
-              (on-drag-start event block block-id)
-              (when element
-                (dom/append! js/document.body element)
-                (dnd/set-drag-image! event element (/ (.-offsetWidth target) 2) (/ (.-offsetHeight target) 2)))))))
+         :draggable true
+         :on-drag-start
+         (fn [event]
+           (when-not (state/editing?)
+             (util/stop-propagation event)
+             (let [target ^js (.-target event)
+                   blocks (or (seq (state/get-selection-blocks)) [target])
+                   multiple? (> (count blocks) 1)
+                   element (when multiple?
+                             (let [element (dom/create-element "div")]
+                               (-> element
+                                 (dom/set-attr! "id" "dragging-ghost-element")
+                                 (dom/set-text! (t :editor/moving-blocks-count (count blocks)))
+                                 (dom/set-class! "p-2 rounded text-sm"))
+                               element))]
+               (doseq [block blocks]
+                 (dom/add-class! block "dragging"))
+               (on-drag-start event block block-id)
+               (when element
+                 (dom/append! js/document.body element)
+                 (dnd/set-drag-image! event element (/ (.-offsetWidth target) 2) (/ (.-offsetHeight target) 2)))))))
 
        (:property-default-value? config)
        (assoc :data-is-property-default-value (:property-default-value? config))
@@ -4315,36 +4243,33 @@
        (dnd-separator-wrapper block block-id true))
 
      (when-not (:hide-title? config)
-       [:div.block-main-container.flex.flex-row
-        {:class (util/classnames [{"is-page-title-row" (:page-title? config)
-                                   "is-list-view-row" (or (:list-view? config) (:gallery-view? config))
-                                   "gap-2" (or (:list-view? config) (:gallery-view? config))
-                                   "gap-1" (not (or (:list-view? config) (:gallery-view? config)))}])
+       [:div.block-main-container.flex.flex-row.gap-1
+        {:class (when (:page-title? config) "is-page-title-row")
          :style (when (:page-title? config)
                   {:margin-left (cond
-                                  (util/mobile?) 0
+                                  (util/capacitor?) 0
                                   page-icon -36
                                   :else -30)})
          :data-has-heading (block-heading-level block level)
          :on-mouse-enter (fn [e]
                            (block-mouse-over e block *control-show? block-id doc-mode?
                                              (:selection/block-ids config)))
-         :on-mouse-move (fn [e]
-                          (remember-block-pointer! e))
+           :on-mouse-move (fn [e]
+                            (remember-block-pointer! e))
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
-        (when (and (not property?) (not (:table-block-title? config)))
+        (when (and (not property?) (not (:table-block-title? config)) (not (:hide-block-control? config)))
           (let [edit? (or editing?
-                          (= uuid (:block/uuid (state/get-edit-block))))]
+                        (= uuid (:block/uuid (state/get-edit-block))))]
             (block-control (assoc config :hide-bullet? (:page-title? config))
-                           block
-                           (merge opts
-                                  {:uuid uuid
-                                   :block-id block-id
-                                   :collapsed? collapsed?
-                                   :*control-show? *control-show?
-                                   :edit? edit?}))))
+              block
+              (merge opts
+                {:uuid uuid
+                 :block-id block-id
+                 :collapsed? collapsed?
+                 :*control-show? *control-show?
+                 :edit? edit?}))))
 
         (if (= :plugin renderer-display-mode)
           ;; --- Plugin renderer: full-block replacement ---
@@ -4352,24 +4277,23 @@
            (when (show-block-renderer-outline-toggle? renderer-display-mode)
              [:div.block-renderer-action-bar
               (shui/button
-               {:variant :outline
-                :class "block-renderer-action-btn h-6 w-6"
-                :title switch-to-outline-view-title
-                :aria-label switch-to-outline-view-title
-                :on-pointer-down util/stop
-                :on-click (fn [e]
-                            (util/stop e)
-                            (switch-to-outline-view!))}
-               (shui/tabler-icon "list" {:size 13}))])
+                {:variant :outline
+                 :class "block-renderer-action-btn h-6 w-6"
+                 :title switch-to-outline-view-title
+                 :aria-label switch-to-outline-view-title
+                 :on-pointer-down util/stop
+                 :on-click (fn [e]
+                             (util/stop e)
+                             (switch-to-outline-view!))}
+                (shui/tabler-icon "list" {:size 13}))])
            [:div.ls-block-plugin-renderer
-            (rum/with-key
-              (block-renderer-error-boundary
-               {:on-error (fn [_error]
-                            (set-plugin-renderer-error! true))
-                :fallback-view outline-view-cp}
-               (when-some [renderer (:render matched-block-renderer)]
-                 (js/React.createElement renderer block-renderer-props-js)))
-              (str "block-renderer-" (:key matched-block-renderer) "-" uuid))]]
+            ^{:key (str "block-renderer-" (:key matched-block-renderer) "-" uuid)}
+            [block-renderer-error-boundary
+             {:on-error (fn [_error]
+                          (set-plugin-renderer-error! true))
+              :fallback-view outline-view-cp}
+             (when-some [renderer (:render matched-block-renderer)]
+               (js/React.createElement renderer block-renderer-props-js))]]]
 
           ;; --- Original outline ---
           outline-view-cp)
@@ -4384,7 +4308,7 @@
             :on-pointer-down util/stop
             :on-click (fn [e]
                         (util/stop e)
-                        (open-comment-thread-for-block! state block comment-thread))}
+                        (open-comment-thread-for-block! container-state block comment-thread))}
            (shui/tabler-icon "message-circle" {:size 15})))])
 
      (when show-inline-comments?
@@ -4404,10 +4328,10 @@
           :inline? true})])
 
      (when (and (not (:library? config))
-                (or (:tag-dialog? config)
-                    (and
-                     (not collapsed?)
-                     (not (or table? property?)))))
+             (or (:tag-dialog? config)
+               (and
+                 (not collapsed?)
+                 (not (or table? property?)))))
        [:div (when-not (:page-title? config) {:class "ls-block-content-indent"})
         (db-properties-cp config block {:in-block-container? true})])
 
@@ -4423,39 +4347,29 @@
              (block-container config query)])]))
 
      (when (and (not (or (:table? config) (:property? config)))
-                (not hide-block-refs?)
-                (> refs-count 0)
-                (not (:page-title? config)))
+             (not hide-block-refs?)
+             (> refs-count 0)
+             (not (:page-title? config)))
        (when-let [refs-cp (state/get-component :block/linked-references)]
          [:div.px-4.py-2.border.rounded.my-2.shadow-xs {:style {:margin-left 42}}
           (refs-cp block {})]))
 
      (when (and (not collapsed?) (not (or table? property?))
-                (ldb/class-instance? (entity-plus/entity-memoized (db/get-db) :logseq.class/Query) block))
-       (let [query-block (:logseq.property/query (db/entity (:db/id block)))
-             query-block (if query-block (db/sub-block (:db/id query-block)) query-block)
-             query (:block/title query-block)
-             result (common-util/safe-read-string {:log-error? false} query)
-             advanced-query? (map? result)]
+             (ldb/class-instance? (entity-plus/entity-memoized (db/get-db) :logseq.class/Query) block))
+        (let [query-block (:logseq.property/query (db/entity (:db/id block)))
+              query-block-id (:db/id query-block)]
          (when query-block
-           [:div {:style {:padding-left 42}}
-            (query/custom-query (wrap-query-components (assoc config
-                                                              :dsl-query? (not advanced-query?)
-                                                              :cards? (ldb/class-instance? (entity-plus/entity-memoized
-                                                                                            (db/get-db)
-                                                                                            :logseq.class/Cards) block)))
-                                (if advanced-query? result {:builder nil
-                                                            :query (query-builder-component/sanitize-q query)}))])))
+           (query-result config block query-block-id))))
 
      (when-not (or (:hide-children? config)
-                   table?
-                   property?
-                   comments-area?
-                   (block-renderer-hides-outline-children?
-                    renderer-display-mode
-                    {:matched-block-renderer matched-block-renderer}))
+                 table?
+                 property?
+                 comments-area?
+                 (block-renderer-hides-outline-children?
+                   renderer-display-mode
+                   {:matched-block-renderer matched-block-renderer}))
        (let [config' (-> (update config :level inc)
-                         (dissoc :original-block :data))]
+                       (dissoc :original-block :data))]
          (block-children config' block children collapsed?)))
 
      (when-not (or table? property?)
@@ -4464,33 +4378,49 @@
      (when config/lsp-enabled?
        (setup-plugin-renderer-effects! editing? switch-to-plugin-renderer!))]))
 
-(rum/defc block-container-inner
+(hsx/defc block-container-inner
   [container-state repo config* block opts]
   (let [container-id (:container-id config*)
         block-id (:block/uuid block)
-        v1 (state/sub-editing? [container-id block-id])
-        v2 (state/sub-editing? [:unknown-container block-id])
-        selected? (state/sub-block-selected? block-id)
+        v1 (state/use-sub-editing? [container-id block-id])
+        v2 (state/use-sub-editing? [:unknown-container block-id])
+        selected? (state/use-sub-block-selected? block-id)
         editing? (or v1 v2)]
     (block-container-inner-aux container-state repo config* block (assoc opts
                                                                          :editing? editing?
                                                                          :selected? selected?))))
 
+(def ^:private block-render-config-keys
+  [:show-cloze?
+   :hide-children?
+   :own-order-list-type
+   :own-order-list-index
+   :original-block
+   :edit?
+   :hide-bullet?
+   :hide-block-control?
+   :ref-matched-children-ids])
+
 (defn- block-changed?
   [old-block new-block]
   (not= (:block/tx-id old-block) (:block/tx-id new-block)))
 
-(defn- config-block-should-update?
-  [old-state new-state]
-  (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :edit? :hide-bullet? :ref-matched-children-ids]
-        b1 (second (:rum/args old-state))
-        b2 (second (:rum/args new-state))
-        result (or
-                (block-changed? b1 b2)
-                ;; config changed
-                (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
-                      (select-keys (first (:rum/args new-state)) config-compare-keys)))]
-    (boolean result)))
+(defn- same-block-render-input?
+  [[old-config old-block] [new-config new-block]]
+  (not (or (block-changed? old-block new-block)
+           (not= (select-keys old-config block-render-config-keys)
+                 (select-keys new-config block-render-config-keys)))))
+
+(defn- memo-react-component
+  [component same-args?]
+  (let [memo-class (js/React.memo
+                    (fn [^js props]
+                      (apply component (.-args props)))
+                    (fn [^js prev-props ^js next-props]
+                      (same-args? (.-args prev-props)
+                                  (.-args next-props))))]
+    (fn [& args]
+      (js/React.createElement memo-class #js {:args args}))))
 
 (defn- set-collapsed-block!
   [block-id v container-id]
@@ -4500,70 +4430,58 @@
       (state/set-collapsed-block! block-id v container-id))
     (state/set-collapsed-block! block-id v container-id)))
 
-(rum/defcs loaded-block-container < rum/reactive db-mixins/query
-  (rum/local false ::show-block-left-menu?)
-  (rum/local false ::show-block-right-menu?)
-  {:should-update config-block-should-update?}
-  {:init (fn [state]
-           (let [[config block] (:rum/args state)
-                 block-id (:block/uuid block)
-                 linked-block? (or (:block/link block)
-                                   (:original-block config))
-                 container-id (if (or linked-block? (nil? (:container-id config)))
-                                (state/get-next-container-id)
-                                (:container-id config))]
-             (when-not (:property-block? config)
-               (cond
-                 (and (:page-title? config) (or (ldb/class? block) (ldb/property? block)) (not config/publishing?))
-                 (let [collapsed? (state/get-block-collapsed block-id container-id)]
-                   (set-collapsed-block! block-id (if (some? collapsed?) collapsed? true) container-id))
-
-                 (root-block? config block)
-                 (set-collapsed-block! block-id false container-id)
-
-                 (or (:view? config) (:ref? config) (:custom-query? config))
-                 (set-collapsed-block! block-id
-                                       (boolean (editor-handler/block-default-collapsed? block config))
-                                       container-id)
-
-                 :else
-                 nil))
-             (cond->
-              (assoc state
-                     ::control-show? (atom false)
-                     ::navigating-block (atom (:block/uuid block)))
-               (and container-id (or linked-block? (nil? (:container-id config))))
-               (assoc ::container-id container-id))))
-   :will-unmount (fn [state]
-                                                     ;; restore root block's collapsed state
-                   (let [[config block] (:rum/args state)
-                         block-id (:block/uuid block)
-                         container-id (or (:container-id config) (::container-id state))]
-                     (when (root-block? config block)
-                       (set-collapsed-block! block-id nil container-id)))
-                   state)}
-  [state config block & {:as opts}]
+(hsx/defc loaded-block-container-inner
+  [config block & {:as opts}]
   (let [repo (state/get-current-repo)
-        *navigating-block (get state ::navigating-block)
-        navigating-block (rum/react *navigating-block)
+           linked-block? (or (:block/link block)
+                             (:original-block config))
+           container-id (hooks/use-memo
+                         #(if (or linked-block? (nil? (:container-id config)))
+                            (state/get-next-container-id)
+                            (:container-id config))
+                         [(:container-id config) (:block/uuid block)])
+           *control-show? (hooks/use-memo #(atom false) [])
+           *navigating-block (hooks/use-memo #(atom (:block/uuid block)) [(:block/uuid block)])
+           [navigating-block] (hooks/use-atom *navigating-block)
+           _ (hooks/use-effect!
+              (fn []
+                (let [block-id (:block/uuid block)]
+                  (when-not (:property-block? config)
+                    (cond
+                      (and (:page-title? config) (or (ldb/class? block) (ldb/property? block)) (not config/publishing?))
+                      (let [collapsed? (state/get-block-collapsed block-id container-id)]
+                        (set-collapsed-block! block-id (if (some? collapsed?) collapsed? true) container-id))
+
+                      (root-block? config block)
+                      (set-collapsed-block! block-id false container-id)
+
+                      (or (:view? config) (:ref? config) (:custom-query? config))
+                      (set-collapsed-block! block-id
+                                            (boolean (editor-handler/block-default-collapsed? block config))
+                                            container-id)
+
+                      :else
+                      nil))
+                  #(when (root-block? config block)
+                     (set-collapsed-block! block-id nil container-id))))
+              [])
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
         config' (->
-                 (if-let [container-id (::container-id state)]
-                   (assoc config :container-id container-id)
-                   config)
+                 (assoc config :container-id container-id)
                  (assoc :block/uuid (:block/uuid block)))]
     (when (:block/uuid block)
-      (rum/with-key
-        (block-container-inner state repo config' block
-                               (merge
-                                opts
-                                {:navigating-block navigating-block :navigated? navigated?}))
-        (str "block-inner-"
-             (:container-id config)
-             "-"
-             (:block/uuid block))))))
+      ^{:key (str "block-inner-" (:container-id config) "-" (:block/uuid block))}
+      [block-container-inner {::control-show? *control-show?
+                              ::navigating-block *navigating-block}
+       repo config' block
+       (merge
+        opts
+        {:navigating-block navigating-block :navigated? navigated?})])))
 
-(rum/defc block-container
+(def loaded-block-container
+  (memo-react-component loaded-block-container-inner same-block-render-input?))
+
+(hsx/defc block-container
   [config block* & {:as opts}]
   (let [[block set-block!] (hooks/use-state block*)
         id (or (:db/id block*) (:block/uuid block*))
@@ -4582,9 +4500,9 @@
                                              :include-collapsed-children? (and load-children?
                                                                                ignore-block-collapsed?)
                                              :skip-refresh? false})]
-           (set-block! block)))
+            (set-block! block)))
        nil)
-     [id load-children? ignore-block-collapsed? temporary-collapsed-state])
+    [id load-children? ignore-block-collapsed? temporary-collapsed-state])
     (when (or (:view? config) (:block/title block))
       (loaded-block-container config block opts))))
 
@@ -4715,7 +4633,7 @@
   [config col]
   (map #(inline config %) col))
 
-(rum/defc inline-title
+(hsx/defc inline-title
   [config title]
   (map-inline config
               (gp-mldoc/inline->edn title
@@ -4725,7 +4643,7 @@
   [lang]
   (some (fn [m] (when (= (.-name m) lang) (.-mode m))) js/window.CodeMirror.modeInfo))
 
-(rum/defc src-lang-picker
+(hsx/defc src-lang-picker
   [block on-select!]
   (when-let [langs (map (fn [m] (.-name m)) js/window.CodeMirror.modeInfo)]
     (let [options (map (fn [lang] {:label lang :value lang}) langs)]
@@ -4739,10 +4657,11 @@
                             (on-select! lang e)))
                         (shui/popup-hide!))}))))
 
-(rum/defc src-cp < rum/static
+(hsx/defc src-cp
   [config options]
   (let [block (or (:code-block config) (:block config))
         container-id (:container-id config)
+        editor-id (hooks/use-memo #(str (d/squuid)) [(:block/uuid block)])
         *mode-ref (hooks/use-ref nil)
         *actions-ref (hooks/use-ref nil)]
 
@@ -4800,7 +4719,7 @@
                                (notification/show! (t :notification/copied) :success)))}
                 (ui/icon "copy")
                 (t :ui/copy))]
-              (lazy-editor/editor config (str (d/squuid)) attr code options)
+              (lazy-editor/editor config editor-id attr code options)
               (let [options (:options options) block (:block config)]
                 (when (and (= language "clojure") (contains? (set options) ":results"))
                   (sci/eval-result code block)))]]))))))
@@ -4881,7 +4800,7 @@
                            {:__html (security/sanitize-html content)}}])
       ["Hiccup" content]
       (ui/catch-error
-       [:div.warning {:title (t :block/invalid-hiccup)}
+      [:div.warning {:title (t :block/invalid-hiccup)}
         content]
        [:div.hiccup_html.inline
         {:dangerouslySetInnerHTML
@@ -4971,8 +4890,7 @@
   [config col]
   (map #(markup-element-cp config %) col))
 
-(rum/defc block-item <
-  {:should-update config-block-should-update?}
+(hsx/defc block-item-inner
   [config item {:keys [top? bottom?]}]
   (let [original-block item
         linked-block (:block/link item)
@@ -4986,30 +4904,34 @@
         config' (assoc config
                        :loop-linked? loop-linked?)]
     (when-not (and loop-linked? (:block/name linked-block))
-      (rum/with-key (block-container config' item
-                                     (when (not (:block-children? config))
-                                       {:top? top?
-                                        :bottom? bottom?}))
-        (str
-         (:container-id config)
-         "-"
-         (:block/uuid item)
-         (when linked-block
-           (str "-" (:block/uuid original-block))))))))
+      ^{:key (str
+              (:container-id config)
+              "-"
+              (:block/uuid item)
+              (when linked-block
+                (str "-" (:block/uuid original-block))))}
+      [block-container config' item
+       (when (not (:block-children? config))
+         {:top? top?
+          :bottom? bottom?})])))
 
-(rum/defc ^:large-vars/cleanup-todo block-list
+(def block-item
+  (memo-react-component block-item-inner same-block-render-input?))
+
+(hsx/defc ^:large-vars/cleanup-todo block-list
   [config blocks]
   (let [blocks-count (count blocks)
         root-block (when-let [id (:db/id config)]
                      (db/entity id))
-        [virtualized? _] (hooks/use-state (not (or (util/rtc-test?)
-                                                   (and (util/mobile?) (:journals? config))
-                                                   (if (:journals? config)
-                                                     (< blocks-count 50)
-                                                     (< blocks-count 10))
-                                                   (and (:block-children? config)
-                                                        ;; zoom-in block's children
-                                                        (not (and (:id config) (= (:id config) (str (:block/uuid (:block/parent (first blocks)))))))))))
+        zoomed-child-blocks? (and (:block-children? config)
+                                  (not (and (:id config)
+                                            (= (:id config)
+                                               (str (:block/uuid (:block/parent (first blocks))))))))
+        disable-virtualized? (or (util/rtc-test?)
+                                 (:journals? config)
+                                 (< blocks-count 10)
+                                 zoomed-child-blocks?)
+        [virtualized? _] (hooks/use-state (not disable-virtualized?))
         root-level? (zero? (or (:level config) 0))
         anchor (get-in (state/get-route-match) [:query-params :anchor])
         fallback-ready-index* (hooks/use-memo #(atom -1) [])
@@ -5156,49 +5078,43 @@
        (ui/virtualized-list virtual-opts)
        :else
        (map-indexed (fn [idx block]
-                      (rum/with-key (render-item idx) (str (:container-id config) "-" (:db/id block))))
+                      ^{:key (str (:container-id config) "-" (:db/id block))}
+                      [:<> (render-item idx)])
                     blocks))]))
 
-(rum/defcs blocks-container < mixins/container-id rum/static
-  {:init (fn [state]
-           (assoc state
-                  ::id (str (random-uuid))
-                  ::defer-children-ready-index* (atom -1)
-                  ::defer-children-render-complete-by-root* (atom {})))}
-  [state config blocks]
+(hsx/defc blocks-container
+  [config blocks]
   (let [doc-mode? (:document/mode? config)
-        id (::id state)
-        *defer-children-ready-index (::defer-children-ready-index* state)
-        *defer-children-render-complete-by-root (::defer-children-render-complete-by-root* state)]
+        id (hooks/use-memo #(str (random-uuid)) [])
+        container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
+        container-id (or (:container-id config) (state/get-container-id container-key))
+        *defer-children-ready-index (hooks/use-memo #(atom -1) [])
+        *defer-children-render-complete-by-root (hooks/use-memo #(atom {}) [])]
     (when (seq blocks)
       [:div.blocks-container.flex-1
        {:id id
         :class (when doc-mode? "document-mode")
-        :containerid (:container-id state)}
+        :containerid container-id}
        (block-list (assoc config
                           :blocks-node-id id
                           :defer-children-ready-index* *defer-children-ready-index
                           :defer-children-render-complete-by-root* *defer-children-render-complete-by-root
-                          :container-id (:container-id state))
+                                  :container-id container-id)
                    blocks)])))
 
-(rum/defcs breadcrumb-with-container < rum/reactive db-mixins/query
-  {:init (fn [state]
-           (let [first-block (ffirst (:rum/args state))]
-             (assoc state
-                    ::initial-block first-block
-                    ::navigating-block (atom (:block/uuid first-block)))))}
-  [state blocks config]
-  (let [*navigating-block (::navigating-block state)
-        navigating-block (rum/react *navigating-block)
+(hsx/defc breadcrumb-with-container
+  [blocks config]
+  (let [initial-block (hooks/use-memo #(first blocks) [])
+           *navigating-block (hooks/use-memo #(atom (:block/uuid initial-block)) [])
+           [navigating-block] (hooks/use-atom *navigating-block)
         navigating-block-entity (db/entity [:block/uuid navigating-block])
         navigated? (and
                     navigating-block
-                    (not= (:db/id (:block/parent (::initial-block state)))
+                    (not= (:db/id (:block/parent initial-block))
                           (:db/id (:block/parent navigating-block-entity))))
+        navigating-block-reactive (model/sub-block (:db/id navigating-block-entity))
         blocks (if navigated?
-                 (let [block navigating-block-entity]
-                   [(model/sub-block (:db/id block))])
+                 [navigating-block-reactive]
                  blocks)]
     [:div
      (when (:breadcrumb-show? config)
@@ -5206,13 +5122,13 @@
                    {:show-page? false
                     :navigating-block *navigating-block
                     :indent? true}))
-     (let [config' (assoc config
-                          :breadcrumb-show? false
-                          :navigating-block *navigating-block
-                          :navigated? navigated?)]
-       (blocks-container config' blocks))]))
+             (let [config' (assoc config
+                                  :breadcrumb-show? false
+                                  :navigating-block *navigating-block
+                                  :navigated? navigated?)]
+                       (blocks-container config' blocks))]))
 
-(rum/defc ref-block-container
+(hsx/defc ref-block-container
   [config [page page-blocks]]
   (let [alias? (:block/alias? page)
         page (db/entity (:db/id page))
@@ -5226,9 +5142,8 @@
                                           (update b :block/children
                                                   (fn [col]
                                                     (tree/non-consecutive-blocks->vec-tree col))))) blocks)]
-                     (rum/with-key
-                       (breadcrumb-with-container blocks' config)
-                       (:db/id parent))))]
+                     ^{:key (:db/id parent)}
+                     [breadcrumb-with-container blocks' config]))]
        (if page
          (ui/foldable
           [:div.with-foldable-page
@@ -5239,77 +5154,75 @@
          [:div.only-page-blocks items]))]))
 
 ;; headers to hiccup
-(defn ->hiccup
-  [blocks config option]
-  [:div.content
-   (cond-> option
-     (:document/mode? config) (assoc :class "doc-mode"))
-   (cond
-     (and (:custom-query? config) (:group-by-page? config))
-     [:div.flex.flex-col
-      (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
-        (for [[page blocks] blocks]
-          (let [alias? (:block/alias? page)
-                page (db/entity (:db/id page))
-                blocks (tree/non-consecutive-blocks->vec-tree blocks)
-                parent-blocks (group-by :block/parent blocks)]
-            [:div.custom-query-page-result {:key (str "page-" (:db/id page))}
-             (ui/foldable
-              [:div
-               (page-cp config page)
-               (when alias? [:span.text-sm.font-medium.opacity-50 (str " " (t :property.built-in/alias))])]
-              (fn []
-                (let [{top-level-blocks true others false} (group-by
-                                                            (fn [b] (= (:db/id page) (:db/id (first b))))
-                                                            parent-blocks)
-                      sorted-parent-blocks (concat top-level-blocks others)]
-                  (for [[parent blocks] sorted-parent-blocks]
-                    (let [top-level? (= (:db/id parent) (:db/id page))]
-                      (rum/with-key
-                        (breadcrumb-with-container blocks (assoc config :top-level? top-level?))
-                        (:db/id parent))))))
-              {:debug-id page})])))]
+  (defn ->hiccup
+    [blocks config option]
+    [:div.content
+     (cond-> option
+       (:document/mode? config) (assoc :class "doc-mode"))
+     (cond
+       (and (:custom-query? config) (:group-by-page? config))
+       [:div.flex.flex-col
+        (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
+          (for [[page blocks] blocks]
+            (let [alias? (:block/alias? page)
+                  page (db/entity (:db/id page))
+                  blocks (tree/non-consecutive-blocks->vec-tree blocks)
+                  parent-blocks (group-by :block/parent blocks)]
+              [:div.custom-query-page-result {:key (str "page-" (:db/id page))}
+               (ui/foldable
+                [:div
+                 (page-cp config page)
+                 (when alias? [:span.text-sm.font-medium.opacity-50 (str " " (t :property.built-in/alias))])]
+                (fn []
+                  (let [{top-level-blocks true others false} (group-by
+                                                              (fn [b] (= (:db/id page) (:db/id (first b))))
+                                                              parent-blocks)
+                        sorted-parent-blocks (concat top-level-blocks others)]
+                    (for [[parent blocks] sorted-parent-blocks]
+                      (let [top-level? (= (:db/id parent) (:db/id page))]
+                        ^{:key (:db/id parent)}
+                        [breadcrumb-with-container blocks (assoc config :top-level? top-level?)]))))
+                {:debug-id page})])))]
 
-     (and (:ref? config) (:group-by-page? config) (vector? (first blocks)))
-     [:div.flex.flex-col.references-blocks-wrap
-      (let [blocks (sort-by (comp :block/journal-day first) > blocks)
-            scroll-container (or (:scroll-container config)
-                                 (util/app-scroll-container-node))
-            scroll-container (if (fn? scroll-container)
-                               (scroll-container) scroll-container)]
-        (when (seq blocks)
-          (if (:sidebar? config)
-            (for [block blocks]
-              (rum/with-key
-                (ref-block-container config block)
-                (str "ref-" (:container-id config) "-" (:db/id (first block)))))
-            (ui/virtualized-list
-             {:custom-scroll-parent scroll-container
-              :compute-item-key (fn [idx]
-                                  (let [block (nth blocks idx)]
-                                    (str "ref-" (:container-id config) "-" (:db/id (first block)))))
-              :total-count (count blocks)
-              :item-content (fn [idx]
-                              (let [block (nth blocks idx)]
-                                (ref-block-container config block)))}))))]
+       (and (:ref? config) (:group-by-page? config) (vector? (first blocks)))
+       [:div.flex.flex-col.references-blocks-wrap
+        (let [blocks (sort-by (comp :block/journal-day first) > blocks)
+              scroll-container (or (:scroll-container config)
+                                   (util/app-scroll-container-node))
+              scroll-container (if (fn? scroll-container)
+                                 (scroll-container) scroll-container)]
+          (when (seq blocks)
+            (if (:sidebar? config)
+              (for [block blocks]
+                ^{:key (str "ref-" (:container-id config) "-" (:db/id (first block)))}
+                [ref-block-container config block])
+              (ui/virtualized-list
+               {:custom-scroll-parent scroll-container
+                :compute-item-key (fn [idx]
+                                    (let [block (nth blocks idx)]
+                                      (str "ref-" (:container-id config) "-" (:db/id (first block)))))
+                :total-count (count blocks)
+                :item-content (fn [idx]
+                                (let [block (nth blocks idx)]
+                                  (ref-block-container config block)))}))))]
 
-     (and (:group-by-page? config)
-          (vector? (first blocks)))
-     [:div.flex.flex-col
-      (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
-        (for [[page blocks] blocks]
-          (let [blocks (remove nil? blocks)]
-            (when (seq blocks)
-              (let [alias? (:block/alias? page)
-                    page (db/entity (:db/id page))]
-                [:div.my-2 {:key (str "page-" (:db/id page))}
-                 (ui/foldable
-                  [:div
-                   (page-cp config page)
-                   (when alias? [:span.text-sm.font-medium.opacity-50 (str " " (t :property.built-in/alias))])]
-                  (fn []
-                    (blocks-container config blocks))
-                  {})])))))]
+       (and (:group-by-page? config)
+            (vector? (first blocks)))
+       [:div.flex.flex-col
+        (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
+          (for [[page blocks] blocks]
+            (let [blocks (remove nil? blocks)]
+              (when (seq blocks)
+                (let [alias? (:block/alias? page)
+                      page (db/entity (:db/id page))]
+                  [:div.my-2 {:key (str "page-" (:db/id page))}
+                   (ui/foldable
+                    [:div
+                     (page-cp config page)
+                     (when alias? [:span.text-sm.font-medium.opacity-50 (str " " (t :property.built-in/alias))])]
+                    (fn []
+                      (blocks-container config blocks))
+                    {})])))))]
 
-     :else
-     (blocks-container config blocks))])
+       :else
+       (blocks-container config blocks))])

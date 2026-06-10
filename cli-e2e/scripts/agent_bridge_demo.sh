@@ -6,8 +6,8 @@ usage() {
 Usage: agent_bridge_demo.sh [options]
 
 Creates a fresh Logseq graph, starts `logseq agent bridge`, writes a routable
-task after the bridge listener is ready, and verifies that a fake Codex worker
-executed the task and that AgentBridge wrote agent-session-id.
+task after the bridge listener is ready, and verifies that a fake Codex master
+session received the task dispatch.
 
 Options:
   --cli PATH          Path to static/logseq-cli.js. Default: <repo-root>/static/logseq-cli.js
@@ -26,7 +26,7 @@ root_dir=""
 graph="agent-bridge-demo-$(date +%s)"
 timeout_sec=45
 agent_name="AgentBridgeDemo"
-task_title="AgentBridge demo task: mark this block done"
+task_title="AgentBridge demo task: mark this block in review"
 expected_session="thread-agent-bridge-demo"
 bridge_pid=""
 graph_created=0
@@ -191,7 +191,27 @@ prompt = sys.argv[2]
 args = sys.argv[3:]
 log_path.parent.mkdir(parents=True, exist_ok=True)
 with log_path.open("a", encoding="utf8") as f:
-    f.write(json.dumps({"args": args, "prompt": prompt}, ensure_ascii=False) + "\n")
+    f.write(json.dumps({"event": "start", "args": args, "prompt": prompt}, ensure_ascii=False) + "\n")
+PY
+  printf '{"type":"thread.started","thread_id":"thread-agent-bridge-demo"}\n'
+  exit 0
+fi
+
+if [[ "$#" -ge 8 && "$1" == "--sandbox" && "$2" == "danger-full-access" && "$3" == "exec" && "$4" == "resume" && "$5" == "--json" && "$6" == "--skip-git-repo-check" ]]; then
+  session_id="$7"
+  prompt="$8"
+  python3 - "$CODEX_FAKE_LOG" "$session_id" "$prompt" "$@" <<'PY'
+import json
+import pathlib
+import sys
+
+log_path = pathlib.Path(sys.argv[1])
+session_id = sys.argv[2]
+prompt = sys.argv[3]
+args = sys.argv[4:]
+log_path.parent.mkdir(parents=True, exist_ok=True)
+with log_path.open("a", encoding="utf8") as f:
+    f.write(json.dumps({"event": "resume", "session": session_id, "args": args, "prompt": prompt}, ensure_ascii=False) + "\n")
 PY
   block_uuid="$(python3 - "$prompt" <<'PY'
 import re
@@ -203,8 +223,9 @@ if not match:
 print(match.group(1))
 PY
 )"
-  node "$DEMO_CLI" --root-dir "$DEMO_ROOT_DIR" --config "$DEMO_CONFIG" --output json upsert task --graph "$DEMO_GRAPH" --uuid "$block_uuid" --status done >/dev/null
-  printf '{"type":"thread.started","thread_id":"thread-agent-bridge-demo"}\n'
+  node "$DEMO_CLI" --root-dir "$DEMO_ROOT_DIR" --config "$DEMO_CONFIG" --output json upsert task --graph "$DEMO_GRAPH" --uuid "$block_uuid" --status in-review >/dev/null
+  node "$DEMO_CLI" --root-dir "$DEMO_ROOT_DIR" --config "$DEMO_CONFIG" --output json upsert block --graph "$DEMO_GRAPH" --uuid "$block_uuid" --update-properties '{"Agent Session ID" "thread-agent-bridge-demo"}' >/dev/null
+  printf '{"type":"thread.started","thread_id":"%s"}\n' "$session_id"
   exit 0
 fi
 
@@ -247,7 +268,7 @@ agent_session=""
 while (( SECONDS < deadline )); do
   task_status="$(query_task_status "$task_id")"
   agent_session="$(query_agent_session "$task_id")"
-  if [[ "$task_status" == "logseq.property/status.done" && "$agent_session" == "$expected_session" ]]; then
+  if [[ "$task_status" == "logseq.property/status.in-review" && "$agent_session" == "$expected_session" ]]; then
     break
   fi
   if [[ -n "${bridge_pid:-}" ]] && ! kill -0 "$bridge_pid" 2>/dev/null; then
@@ -259,8 +280,8 @@ while (( SECONDS < deadline )); do
   sleep 0.5
 done
 
-if [[ "$task_status" != "logseq.property/status.done" ]]; then
-  echo "Expected task status done, got: ${task_status:-<empty>}" >&2
+if [[ "$task_status" != "logseq.property/status.in-review" ]]; then
+  echo "Expected task status in-review, got: ${task_status:-<empty>}" >&2
   cat "$bridge_log" >&2
   cat "$bridge_err" >&2
   exit 1
@@ -282,17 +303,20 @@ log_path = pathlib.Path(sys.argv[1])
 task_title = sys.argv[2]
 graph = sys.argv[3]
 lines = [json.loads(line) for line in log_path.read_text(encoding="utf8").splitlines() if line.strip()]
-if len(lines) != 1:
-    raise SystemExit(f"expected one Codex invocation, got {len(lines)}")
-prompt = lines[0]["prompt"]
+resume_lines = [line for line in lines if line.get("event") == "resume"]
+if len(resume_lines) != 1:
+    raise SystemExit(f"expected one Codex resume invocation, got {len(resume_lines)}")
+prompt = resume_lines[0]["prompt"]
 if task_title not in prompt:
     raise SystemExit("task title missing from Codex prompt")
 if f"Graph: {graph}" not in prompt:
     raise SystemExit("graph missing from Codex prompt")
 if "Block UUID:" not in prompt:
     raise SystemExit("block uuid missing from Codex prompt")
+if "Request kind: task" not in prompt:
+    raise SystemExit("request kind missing from Codex prompt")
 PY
 
-echo "task status: done"
+echo "task status: in-review"
 echo "agent-session-id: $agent_session"
 echo "agent bridge demo completed"

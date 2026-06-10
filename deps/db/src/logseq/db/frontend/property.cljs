@@ -471,6 +471,41 @@
                                                :hide? true}
                                               :queryable? true}
 
+     :logseq.property.view/gallery-asset-property {:title "Gallery asset property"
+                                                   :schema
+                                                   {:type :property
+                                                    :hide? true
+                                                    :public? false}}
+
+     :logseq.property.view/gallery-display-properties {:title "Gallery display properties"
+                                                       :schema
+                                                       {:type :property
+                                                        :cardinality :many
+                                                        :hide? true
+                                                        :public? false}}
+
+     :logseq.property.view/gallery-card-size {:title "Gallery card size"
+                                              :schema
+                                              {:type :keyword
+                                               :hide? true
+                                               :public? false}
+                                              :properties {:logseq.property/scalar-default-value :default}
+                                              :rtc property-ignore-rtc}
+
+     :logseq.property.view/gallery-card-width {:title "Gallery card width"
+                                               :schema
+                                               {:type :raw-number
+                                                :hide? true
+                                                :public? false}
+                                               :rtc property-ignore-rtc}
+
+     :logseq.property.view/gallery-card-height {:title "Gallery card height"
+                                                :schema
+                                                {:type :raw-number
+                                                 :hide? true
+                                                 :public? false}
+                                                :rtc property-ignore-rtc}
+
      :logseq.property.view/sort-groups-by-property {:title "View sort groups by"
                                                     :schema
                                                     {:type :property

@@ -11,9 +11,9 @@
                                                         goto-level]]
             [frontend.util :as util]
             [hiccups.runtime :as h]
-            [logseq.cli.common.export.common :as cli-export-common :refer
+            [frontend.handler.export.common-impl :as common-impl :refer
              [*state* raw-text simple-asts->string space]]
-            [logseq.cli.common.util :refer-macros [concatv mapcatv removev]]))
+            [frontend.handler.export.util :refer-macros [concatv mapcatv removev]]))
 
 ;;; *opml-state*
 (def ^:private ^:dynamic
@@ -447,8 +447,8 @@
           first-block (and (coll? root-block-uuids-or-page-uuid)
                            (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
           format (get first-block :block/format :markdown)]
-      (binding [cli-export-common/*current-db* (conn/get-db repo)
-                cli-export-common/*content-config* (common/get-content-config)]
+      (binding [common-impl/*current-db* (conn/get-db repo)
+                common-impl/*content-config* (common/get-content-config)]
         (export-helper content format options :title title)))))
 
 ;;; export fns (ends)

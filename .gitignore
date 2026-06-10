@@ -86,6 +86,7 @@ deps/db-sync/data
 *.map
 /dist/db-worker-node.js
 /dist/build/
+/dist/cli-package/
 /dist/db-worker-node-assets.json
 /dist/*.wasm
 /dist/cljs-runtime/

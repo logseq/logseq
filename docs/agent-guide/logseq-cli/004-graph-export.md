@@ -27,7 +27,7 @@ The existing implementation therefore has a mismatch between current capability 
 
 There is also a discoverability and migration gap.
 
-The older CLI exposed several EDN graph export options in `/Users/rcmerci/gh-repos/logseq/deps/cli/src/logseq/cli/spec.cljs`, and several of those options still map cleanly onto the current worker export implementation.
+Before the legacy CLI package was removed, it exposed several EDN graph export options, and several of those options still map cleanly onto the current worker export implementation.
 
 The implementation plan should recover the useful options that still fit the new CLI architecture while explicitly rejecting old options that belonged to the legacy API-server workflow or to dev-only validation flows.
 
@@ -112,9 +112,9 @@ Preserve current import compatibility by continuing to emit the same EDN graph e
 
 ## Non-goals
 
-Do not reintroduce the legacy API-server-token export flow from `/Users/rcmerci/gh-repos/logseq/deps/cli/src/logseq/cli/commands/export_edn.cljs`.
+Do not reintroduce the legacy API-server-token export flow from the removed CLI package.
 
-Do not revive the legacy Markdown zip export command from `/Users/rcmerci/gh-repos/logseq/deps/cli/src/logseq/cli/commands/export.cljs` as part of this work.
+Do not revive the legacy Markdown zip export command from the removed CLI package as part of this work.
 
 Do not expose non-graph export types such as `:page`, `:block`, `:view-nodes`, or `:graph-ontology` under `graph export` in this phase.
 
@@ -124,7 +124,7 @@ Do not add a new streaming or file-writing thread API unless the existing `:thre
 
 ## Recommended option scope
 
-The old option inventory in `/Users/rcmerci/gh-repos/logseq/deps/cli/src/logseq/cli/spec.cljs` should be split into adopt, reject, and defer groups.
+The old option inventory from the removed CLI package should be split into adopt, reject, and defer groups.
 
 | Old option | Recommendation | Reason |
 | --- | --- | --- |

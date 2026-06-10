@@ -1,6 +1,5 @@
 (ns frontend.state
-  "Provides main application state, fns associated to set and state based rum
-  cursors"
+  "Provides main application state and subscriptions."
   (:require [cljs-bean.core :as bean]
             [cljs.core.async :as async :refer [>!]]
             [clojure.set :as set]
@@ -27,8 +26,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+            [promesa.core :as p]))
 
 (defonce *profile-state (volatile! {}))
 
@@ -145,7 +143,6 @@
       ;; graph => {container-id {:block-id bool}}
       :ui/collapsed-blocks                   {}
       :ui/sidebar-collapsed-blocks           {}
-      :ui/root-component                     nil
       :ui/file-component                     nil
       :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
                                                  false)
@@ -220,6 +217,7 @@
       :electron/auto-updater-downloaded      false
       :electron/updater-pending?             false
       :electron/updater                      {}
+      :electron/app-base-info                nil
       :electron/user-cfgs                    nil
       :electron/server                       nil
       :electron/window-maximized?            false
@@ -385,7 +383,7 @@
           :ui/hide-empty-properties? false}))
 
 ;; State that most user config is dependent on
-(declare get-current-repo sub set-state!)
+(declare get-current-repo set-state!)
 
 (defn merge-configs
   "Merges user configs in given orders. All values are overridden except for maps
@@ -537,14 +535,85 @@ should be done through this fn in order to get global config and config defaults
   []
   (:feature/enable-search-remove-accents? (get-config)))
 
-;; State cursor fns for use with rum components
-;; ============================================
+(defn enable-semantic-search?
+  []
+  (true? (get-in @state [:electron/user-cfgs :feature/enable-semantic-search?])))
+
+;; State subscription helpers
+;; ==========================
 
 (declare document-mode?)
 
-(defn sub
-  "Creates a rum cursor, https://github.com/tonsky/rum#cursors, for use in rum components.
-Similar to re-frame subscriptions"
+(deftype PathCursor [ref path meta]
+  IAtom
+
+  IMeta
+  (-meta [_] meta)
+
+  IEquiv
+  (-equiv [this other]
+    (identical? this other))
+
+  IDeref
+  (-deref [_]
+    (get-in (-deref ref) path))
+
+  IWatchable
+  (-add-watch [this key callback]
+    (add-watch ref (list this key)
+               (fn [_ _ oldv newv]
+                 (let [old (get-in oldv path)
+                       new (get-in newv path)]
+                   (when (not= old new)
+                     (callback key this old new)))))
+    this)
+
+  (-remove-watch [this key]
+    (remove-watch ref (list this key))
+    this)
+
+  (-notify-watches [_ _ _])
+
+  IHash
+  (-hash [this]
+    (goog/getUid this))
+
+  IReset
+  (-reset! [_ newv]
+    (swap! ref assoc-in path newv)
+    newv)
+
+  ISwap
+  (-swap! [this f]
+    (-reset! this (f (-deref this))))
+  (-swap! [this f a]
+    (-reset! this (f (-deref this) a)))
+  (-swap! [this f a b]
+    (-reset! this (f (-deref this) a b)))
+  (-swap! [this f a b xs]
+    (-reset! this (apply f (-deref this) a b xs)))
+
+  IPrintWithWriter
+  (-pr-writer [this writer _opts]
+    (-write writer "#object [frontend.state.PathCursor ")
+    (-write writer (pr-str {:val (-deref this)}))
+    (-write writer "]")))
+
+(defn- path-cursor-in
+  [ref path]
+  (if (instance? PathCursor ref)
+    (PathCursor. (.-ref ref) (into (.-path ref) path) nil)
+    (PathCursor. ref path nil)))
+
+(defn- path-cursor
+  [ref key]
+  (path-cursor-in ref [key]))
+
+(defn get-state
+  "Returns a plain state value.
+
+  Use this outside component rendering or when the caller does not need reactive
+  rendering. Components that render from state should use `use-sub`."
   [ks & {:keys [path-in-sub-atom]}]
   (let [ks-coll?               (coll? ks)
         get-fn                 (if ks-coll? get-in get)
@@ -553,14 +622,32 @@ Similar to re-frame subscriptions"
         path-coll?-in-sub-atom (coll? path-in-sub-atom)]
     (cond
       (and s-atom? path-in-sub-atom path-coll?-in-sub-atom)
-      (util/react (rum/cursor-in s path-in-sub-atom))
+      (get-in @s path-in-sub-atom)
 
       (and s-atom? path-in-sub-atom)
-      (util/react (rum/cursor s path-in-sub-atom))
+      (get @s path-in-sub-atom)
 
-      s-atom?  (util/react s)
-      ks-coll? (util/react (rum/cursor-in state ks))
-      :else    (util/react (rum/cursor state ks)))))
+      s-atom?  @s
+      :else    s)))
+
+(defn use-sub
+  "Returns a state subscription value for function components."
+  [ks & {:keys [path-in-sub-atom]}]
+  (let [ks-coll?               (coll? ks)
+        get-fn                 (if ks-coll? get-in get)
+        s                      (get-fn @state ks)
+        s-atom?                (util/atom? s)
+        path-coll?-in-sub-atom (coll? path-in-sub-atom)]
+    (cond
+      (and s-atom? path-in-sub-atom path-coll?-in-sub-atom)
+      (first (hooks/use-atom (path-cursor-in s path-in-sub-atom)))
+
+      (and s-atom? path-in-sub-atom)
+      (first (hooks/use-atom (path-cursor s path-in-sub-atom)))
+
+      s-atom?  (first (hooks/use-atom s))
+      ks-coll? (first (hooks/use-atom (path-cursor-in state ks)))
+      :else    (first (hooks/use-atom (path-cursor state ks))))))
 
 (defn set-editing-block-id!
   [container-block]
@@ -589,28 +676,34 @@ Similar to re-frame subscriptions"
                   (fn [s] (boolean (get s container-block)))
                   [container-block]))
 
-(defn sub-config
-  "Sub equivalent to get-config which should handle all sub user-config access"
-  ([] (sub-config (get-current-repo)))
+(def use-sub-editing? sub-editing?)
+
+(defn use-sub-config
+  "Returns reactive merged config for function components."
+  ([] (use-sub-config (get-current-repo)))
   ([repo]
-   (let [config (sub :config)]
+   (let [config (use-sub :config)]
      (merge-configs db-default-config
                     (get config ::global-config)
                     (get config repo)))))
 
 (defn enable-grammarly?
   []
-  (true? (:feature/enable-grammarly? (sub-config))))
+  (true? (:feature/enable-grammarly? (get-config))))
 
 (defn scheduled-deadlines-disabled?
   []
-  (true? (:feature/disable-scheduled-and-deadline-query? (sub-config))))
+  (true? (:feature/disable-scheduled-and-deadline-query? (get-config))))
 
 (defn enable-fold-button-right?
   []
-  (let [_ (sub :ui/viewport)]
-    (and (util/mobile?)
-         (util/sm-breakpoint?))))
+  (and (util/mobile?)
+       (util/sm-breakpoint?)))
+
+(defn use-enable-fold-button-right?
+  []
+  (let [_ (use-sub :ui/viewport)]
+    (enable-fold-button-right?)))
 
 (defn enable-journals?
   ([]
@@ -622,16 +715,16 @@ Similar to re-frame subscriptions"
   ([]
    (enable-flashcards? (get-current-repo)))
   ([repo]
-   (not (false? (:feature/enable-flashcards? (sub-config repo))))))
+   (not (false? (:feature/enable-flashcards? (get-config repo))))))
 
 ;; Enable by default
 (defn show-brackets?
   []
-  (not (false? (:ui/show-brackets? (sub-config)))))
+  (not (false? (:ui/show-brackets? (get-config)))))
 
-(defn sub-default-home-page
+(defn use-sub-default-home-page
   []
-  (get-in (sub-config) [:default-home :page] ""))
+  (get-in (use-sub-config) [:default-home :page] ""))
 
 (defn- get-selected-block-ids
   [blocks]
@@ -643,9 +736,9 @@ Similar to re-frame subscriptions"
 
 (defn block-content-max-length
   [repo]
-  (or (:block/title-max-length (sub-config repo))
+  (or (:block/title-max-length (get-config repo))
       ;; backward compatible
-      (:block/content-max-length (sub-config repo))
+      (:block/content-max-length (get-config repo))
       10000))
 
 (defn mobile?
@@ -656,27 +749,27 @@ Similar to re-frame subscriptions"
   []
   (if (mobile?)
     false
-    (get (sub-config) :ui/enable-tooltip? true)))
+    (get (get-config) :ui/enable-tooltip? true)))
 
 (defn show-command-doc?
   []
-  (get (sub-config) :ui/show-command-doc? true))
+  (get (get-config) :ui/show-command-doc? true))
 
 (defn logical-outdenting?
   []
-  (:editor/logical-outdenting? (sub-config)))
+  (:editor/logical-outdenting? (get-config)))
 
 (defn show-full-blocks?
   []
-  (:ui/show-full-blocks? (sub-config)))
+  (:ui/show-full-blocks? (get-config)))
 
 (defn preferred-pasting-file?
   []
-  (:editor/preferred-pasting-file? (sub-config)))
+  (:editor/preferred-pasting-file? (get-config)))
 
 (defn auto-expand-block-refs?
   []
-  (:ui/auto-expand-block-refs? (sub-config)))
+  (:ui/auto-expand-block-refs? (get-config)))
 
 (defn doc-mode-enter-for-new-line?
   []
@@ -685,7 +778,7 @@ Similar to re-frame subscriptions"
 
 (defn user-groups
   []
-  (set (sub [:user/info :UserGroups])))
+  (set (get-state [:user/info :UserGroups])))
 
 ;; State mutation helpers
 ;; ======================
@@ -887,13 +980,6 @@ Similar to re-frame subscriptions"
   (when-let [id (:block/uuid (get-edit-block))]
     (get @(:editor/content @state) id)))
 
-(defn sub-edit-content
-  ([]
-   (sub-edit-content (:block/uuid (get-edit-block))))
-  ([block-id]
-   (when block-id
-     (sub :editor/content {:path-in-sub-atom block-id}))))
-
 (defn set-selection-start-block!
   [start-block]
   (set-state! :selection/start-block start-block))
@@ -1007,6 +1093,8 @@ Similar to re-frame subscriptions"
                   (fn [blocks]
                     (some #{block-id} (get-selected-block-ids blocks)))
                   [block-id]))
+
+(def use-sub-block-selected? sub-block-selected?)
 
 (defn dom-clear-selection!
   []
@@ -1236,6 +1324,7 @@ Similar to re-frame subscriptions"
   (when clear-editing-block?
     (set-state! :editor/editing? nil)
     (set-state! :editor/block nil))
+  (set-state! :editor/args nil)
   (when clear-editing-block?
     (let [online-users (some-> @state :rtc/state deref :online-users)]
       (when (and (coll? online-users) (> (count online-users) 1))
@@ -1243,7 +1332,8 @@ Similar to re-frame subscriptions"
   (set-state! :editor/start-pos nil)
   (clear-editor-last-pos!)
   (clear-cursor-range!)
-  (set-state! :editor/content {})
+  (when clear-editing-block?
+    (set-state! :editor/content {}))
   (set-state! :ui/select-query-cache {})
   (set-state! :editor/block-refs #{})
   (set-state! :editor/action-data nil)
@@ -1349,14 +1439,6 @@ Similar to re-frame subscriptions"
         (util/set-theme-light)
         (util/set-theme-dark)))))
 
-(defn set-root-component!
-  [component]
-  (set-state! :ui/root-component component))
-
-(defn get-root-component
-  []
-  (get @state :ui/root-component))
-
 (defn load-app-user-cfgs
   ([] (load-app-user-cfgs false))
   ([refresh?]
@@ -1366,6 +1448,13 @@ Similar to re-frame subscriptions"
                     (:electron/user-cfgs @state))
              cfgs (if (object? cfgs) (bean/->clj cfgs) cfgs)]
        (set-state! :electron/user-cfgs cfgs)))))
+
+(defn load-electron-app-base-info
+  []
+  (when (util/electron?)
+    (p/let [info (ipc/ipc :getAppBaseInfo)
+            info (if (object? info) (bean/->clj info) info)]
+      (set-state! :electron/app-base-info info))))
 
 (defn setup-electron-updater!
   []
@@ -1377,10 +1466,6 @@ Similar to re-frame subscriptions"
          (set-state! :electron/updater-pending? pending?)
          (when pending? (set-state! :electron/updater data))
          nil)))))
-
-(defn set-file-component!
-  [component]
-  (set-state! :ui/file-component component))
 
 (defn clear-file-component!
   []
@@ -1614,7 +1699,7 @@ Similar to re-frame subscriptions"
 (defn slot-hook-exist?
   [uuid]
   (when-let [type (and uuid (string/replace (str uuid) "-" "_"))]
-    (when-let [hooks (sub :plugin/installed-hooks)]
+    (when-let [hooks (get-state :plugin/installed-hooks)]
       (contains? hooks (str "hook:editor:slot_" type)))))
 
 (defn set-editor-in-composition!
@@ -1920,11 +2005,12 @@ Similar to re-frame subscriptions"
          :plugin/updates-coming                 {}
          :plugin/updates-downloading?           false))
 
-(defn sub-right-sidebar-blocks
+(defn use-right-sidebar-blocks
   []
-  (when-let [current-repo (get-current-repo)]
-    (->> (sub :sidebar/blocks)
-         (filter #(= (first %) current-repo)))))
+  (let [current-repo (use-sub :git/current-repo)
+        blocks (use-sub :sidebar/blocks)]
+    (when current-repo
+      (filter #(= (first %) current-repo) blocks))))
 
 (defn get-current-editor-container-id
   []
@@ -1948,10 +2034,10 @@ Similar to re-frame subscriptions"
          container-id (resolve-container-id container-id)]
      (set-state! [:ui/collapsed-blocks current-repo container-id block-id] value))))
 
-(defn sub-block-collapsed
-  ([block-id] (sub-block-collapsed block-id nil))
+(defn use-sub-block-collapsed
+  ([block-id] (use-sub-block-collapsed block-id nil))
   ([block-id container-id]
-   (sub [:ui/collapsed-blocks (get-current-repo) (resolve-container-id container-id) block-id])))
+   (use-sub [:ui/collapsed-blocks (get-current-repo) (resolve-container-id container-id) block-id])))
 
 (defn get-block-collapsed
   ([block-id] (get-block-collapsed block-id nil))
@@ -1975,13 +2061,13 @@ Similar to re-frame subscriptions"
   (set-state! :auth/access-token access-token))
 
 (defn get-auth-id-token []
-  (sub :auth/id-token))
+  (get-state :auth/id-token))
 
 (defn get-auth-refresh-token []
   (:auth/refresh-token @state))
 
 (defn http-proxy-enabled-or-val? []
-  (when-let [{:keys [type protocol host port] :as agent-opts} (sub [:electron/user-cfgs :settings/agent])]
+  (when-let [{:keys [type protocol host port] :as agent-opts} (get-state [:electron/user-cfgs :settings/agent])]
     (when (and  (not (contains? #{"system"} type))
                 (every? not-empty (vals agent-opts)))
       (str protocol "://" host ":" port))))
@@ -2006,9 +2092,6 @@ Similar to re-frame subscriptions"
     (let [groups (:UserGroups info)]
       (when (seq groups)
         (storage/set :user-groups groups)))))
-
-(defn get-user-info []
-  (sub :user/info))
 
 (defn clear-user-info!
   []
@@ -2056,6 +2139,13 @@ Similar to re-frame subscriptions"
           (swap! (:ui/cached-key->container-id @state) assoc key id)
           id))
     (get-next-container-id)))
+
+(defn use-container-id
+  "Return a stable container id for the component lifetime."
+  ([]
+   (use-container-id nil))
+  ([key]
+   (hooks/use-memo #(get-container-id key) [key])))
 
 (comment
   (defn remove-container-key!
