@@ -35,6 +35,7 @@
    [logseq.db-sync.worker.handler.sync :as sync-handler]
    [logseq.db-sync.worker.ws :as ws]
    [logseq.db.common.normalize :as db-normalize]
+   [logseq.db.frontend.schema :as db-schema]
    [logseq.db.frontend.validate :as db-validate]
    [logseq.db.sqlite.util :as sqlite-util]
    [logseq.db.test.helper :as db-test]
@@ -5447,6 +5448,50 @@
                        (p/catch (fn [e]
                                   (is false (str e))))
                        (p/finally done)))))))))
+
+(deftest rehydrate-large-titles-from-db-skips-missing-object-attr-test
+  (let [conn (d/create-conn db-schema/schema)
+        calls (atom [])]
+    (with-datascript-conns conn nil
+      (fn []
+        (is (nil? (sync-large-title/rehydrate-large-titles-from-db!
+                   test-repo
+                   "graph-1"
+                   {:get-conn-f worker-state/get-datascript-conn
+                    :rehydrate-large-titles!-f (fn [& args]
+                                                (swap! calls conj args)
+                                                (p/resolved nil))})))
+        (is (empty? @calls))))))
+
+(deftest rehydrate-large-titles-from-db-reads-unindexed-object-attr-test
+  (async done
+         (let [conn (d/create-conn db-schema/schema)
+               obj {:asset-uuid "title-unindexed" :asset-type "txt"}
+               calls (atom [])]
+           (d/transact! conn [{:db/id 100
+                               :block/title ""
+                               :logseq.property.sync/large-title-object obj}])
+           (with-datascript-conns conn nil
+             (fn []
+               (-> (sync-large-title/rehydrate-large-titles-from-db!
+                    test-repo
+                    "graph-1"
+                    {:get-conn-f worker-state/get-datascript-conn
+                     :rehydrate-large-titles!-f (fn [repo opts]
+                                                 (swap! calls conj [repo opts])
+                                                 (p/resolved nil))})
+                   (p/then (fn [_]
+                             (is (= [[test-repo
+                                      {:tx-data [[:db/add
+                                                  100
+                                                  :logseq.property.sync/large-title-object
+                                                  obj]]
+                                       :graph-id "graph-1"}]]
+                                    @calls))
+                             (done)))
+                   (p/catch (fn [e]
+                              (is false (str e))
+                              (done)))))))))
 
 (defn- apply-template-to-empty-target!
   [conn template-root-uuid empty-target-uuid]
