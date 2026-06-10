@@ -83,6 +83,11 @@ let rec to_value t =
     | None -> fields
   in
   let fields =
+    match t.id with
+    | Some id -> (Edn_util.keyword "db/id", Edn_util.int64 id) :: fields
+    | None -> fields
+  in
+  let fields =
     match t.parent with
     | Some parent ->
         (Edn_util.keyword "block/parent", parent_to_value parent) :: fields
