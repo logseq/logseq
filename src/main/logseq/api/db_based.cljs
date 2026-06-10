@@ -200,22 +200,23 @@
 
 (defn get-tag-objects
   [class-uuid-or-ident-or-title]
-  (let [eid (if (util/uuid-string? class-uuid-or-ident-or-title)
-              (when-let [id (sdk-utils/uuid-or-throw-error class-uuid-or-ident-or-title)]
-                [:block/uuid id])
-              (let [k (keyword (api-block/sanitize-user-property-name class-uuid-or-ident-or-title))]
-                (if (qualified-keyword? k)
-                  k
-                  (some-> (ldb/get-case-page (db/get-db) class-uuid-or-ident-or-title) :db/id))))
-        class (db/entity eid)]
-    (when-not (ldb/class? class)
-      (throw (ex-info "Not a tag" {:input class-uuid-or-ident-or-title})))
-    (if-not class
-      (throw (ex-info (str "Tag not exists with id: " eid) {}))
-      (p/let [result (state/<invoke-db-worker :thread-api/get-class-objects
-                                              (state/get-current-repo)
-                                              (:db/id class))]
-        (sdk-utils/result->js result)))))
+  (when-let [db (db/get-db)]
+    (let [eid (if (util/uuid-string? class-uuid-or-ident-or-title)
+               (when-let [id (sdk-utils/uuid-or-throw-error class-uuid-or-ident-or-title)]
+                 [:block/uuid id])
+               (let [k (keyword (api-block/sanitize-user-property-name class-uuid-or-ident-or-title))]
+                 (if (qualified-keyword? k)
+                   k
+                   (some-> (ldb/get-case-page db class-uuid-or-ident-or-title) :db/id))))
+         class (db/entity eid)]
+     (when-not (ldb/class? class)
+       (throw (ex-info "Not a tag" {:input class-uuid-or-ident-or-title})))
+     (if-not class
+       (throw (ex-info (str "Tag not exists with id: " eid) {}))
+       (p/let [result (state/<invoke-db-worker :thread-api/get-class-objects
+                                               (state/get-current-repo)
+                                               (:db/id class))]
+         (sdk-utils/result->js result))))))
 
 (defn create-tag [title ^js opts]
   (this-as this
@@ -300,9 +301,10 @@
                api-block/resolve-property-prefix-for-db))
 
 (defn- get-tags [name]
-  (some->> (entity-util/get-pages-by-name (db-conn/get-db) name)
-           (map #(some-> % (first) (db/entity)))
-           (filter ldb/class?)))
+  (when-let [db (db-conn/get-db)]
+    (some->> (entity-util/get-pages-by-name db name)
+            (map #(some-> % (first) (db/entity)))
+            (filter ldb/class?))))
 
 (defn get-tag [class-uuid-or-ident-or-title]
   (this-as this
