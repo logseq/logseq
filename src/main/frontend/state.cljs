@@ -1587,7 +1587,7 @@ should be done through this fn in order to get global config and config defaults
 (defn get-plugin-resource
   [pid type key]
   (when-let [resources (get-plugin-resources-with-type pid type)]
-    (get resources key)))
+    (some->> key (keyword) (get resources))))
 
 (defn upt-plugin-resource
   [pid type key attr val]
