@@ -301,9 +301,15 @@
     (catch :default _
       nil)))
 
+(defn- ref-attr?
+  [db attr]
+  (= :db.type/ref (get-in (d/schema db) [attr :db/valueType])))
+
 (defn- ref-value
-  [db v]
-  (if-let [entity (and (number? v) (d/entity db v))]
+  [db attr v]
+  (if-let [entity (and (ref-attr? db attr)
+                       (number? v)
+                       (d/entity db v))]
     (if-let [block-uuid (:block/uuid entity)]
       [:block/uuid block-uuid]
       (or (:db/ident entity) v))
@@ -315,7 +321,7 @@
 
 (defn- assoc-repair-attr
   [db m attr value]
-  (let [value' (ref-value db value)]
+  (let [value' (ref-value db attr value)]
     (if (many-attr? db attr)
       (update m attr (fnil conj #{}) value')
       (assoc m attr value'))))
