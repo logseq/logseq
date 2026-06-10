@@ -567,22 +567,26 @@
     (let [{:keys [conn self]} (make-server-self)
           page-uuid (random-uuid)
           block-uuid (random-uuid)]
-      (d/transact! conn [{:db/id -1
-                          :block/uuid page-uuid
-                          :block/title "page"
-                          :block/name "page"}
-                         {:db/id -2
-                          :block/uuid block-uuid
-                          :block/title "child"
-                          :block/page [:block/uuid page-uuid]
-                          :block/parent [:block/uuid page-uuid]
-                          :block/order "a0"}])
+      (d/transact!
+       conn
+       [{:db/id -1
+         :block/uuid page-uuid
+         :block/title "page"
+         :block/name "page"}
+        {:db/id -2
+         :block/uuid block-uuid
+         :block/title "child"
+         :block/page [:block/uuid page-uuid]
+         :block/parent [:block/uuid page-uuid]
+         :block/level 1
+         :block/order "a0"}])
       (let [{:keys [tx]} (sync-handler/repair-blocks-response self [block-uuid])
             [block-map] (protocol/transit->tx tx)]
         (is (= block-uuid (:block/uuid block-map)))
         (is (= "child" (:block/title block-map)))
         (is (= [:block/uuid page-uuid] (:block/page block-map)))
         (is (= [:block/uuid page-uuid] (:block/parent block-map)))
+        (is (= 1 (:block/level block-map)))
         (is (= "a0" (:block/order block-map)))))))
 
 (deftest tx-batch-keeps-created-by-ref-lookup-payload-test
