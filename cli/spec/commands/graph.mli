@@ -9,6 +9,8 @@ type backup_remove_opts = { src : string }
 type export_opts = {
   export_type : export_type;
   file : Cli_primitive.path option;
+  edn_options : Melange_edn.any option;
+  pretty_print : bool;
   include_timestamps : bool;
   exclude_built_in_pages : bool;
   exclude_namespaces : string list;

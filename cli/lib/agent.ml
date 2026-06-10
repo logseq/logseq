@@ -31,6 +31,14 @@ type routed_task = { block : Melange_edn.any; session : string option }
 type prompt_templates = { task : string; comment : string }
 type inherited_session = { parent_block_uuid : string; session_id : string }
 
+let routed_blocks : (string, unit) Hashtbl.t = Hashtbl.create 32
+
+let claim_routing_block uuid =
+  if Hashtbl.mem routed_blocks uuid then false
+  else (
+    Hashtbl.add routed_blocks uuid ();
+    true)
+
 let default_master_prompt =
   String.concat "\n"
     [
@@ -311,6 +319,28 @@ let start_command_capture_session_line command =
   | bin :: args ->
       Cli_unix.start_process_capture_session_line bin args (shell_env ())
 
+let start_command_detached command =
+  match command with
+  | [] ->
+      Error
+        (Error.make (Edn_util.keyword_t "codex-start-failed")
+           "missing command")
+  | bin :: _ -> (
+      try
+        ignore
+          (Cli_unix.create_process_env bin (Array.of_list command)
+             (shell_env ()) 0 1 2);
+        Ok ()
+      with
+      | Cli_unix.Cli_unix_error (_, op, detail) ->
+          Error
+            (Error.make (Edn_util.keyword_t "codex-start-failed")
+               ("failed to start codex " ^ op ^ ": " ^ detail))
+      | exn ->
+          Error
+            (Error.make (Edn_util.keyword_t "codex-start-failed")
+               ("failed to start codex: " ^ Printexc.to_string exn)))
+
 let codex_available config =
   let result = run_command_capture [ codex_bin config; "--version" ] in
   result.Cli_unix.status = 0
@@ -359,6 +389,14 @@ let start_codex _config command =
 
 let ensure_master_session config master_prompt =
   start_codex config (build_codex_command config master_prompt)
+
+let resume_master_session config master_session prompt =
+  match
+    start_command_detached
+      (build_codex_resume_command config master_session prompt)
+  with
+  | Ok () -> Ok master_session
+  | Error err -> Error err
 
 let block_uuid value = Edn_util.get_string value "block/uuid"
 
@@ -422,7 +460,7 @@ let dispatch_task_to_master config ~graph ~agent_name ~master_session
     build_master_task_dispatch_prompt config ~graph ~agent_name
       ?inherited_session ?tree_text block
   in
-  start_codex config (build_codex_resume_command config master_session prompt)
+  resume_master_session config master_session prompt
 
 let build_master_comment_dispatch_prompt config ~graph ~agent_name
     ~comment_block ~target_tree_texts ~comments_area_tree_text
@@ -462,7 +500,7 @@ let dispatch_comment_to_master config ~graph ~agent_name ~master_session
       ~comment_block ~target_tree_texts ~comments_area_tree_text
       ~comment_tree_text
   in
-  start_codex config (build_codex_resume_command config master_session prompt)
+  resume_master_session config master_session prompt
 
 let command_id _ = Command_id.Agent_bridge
 let validate_parsed _ = Ok ()
@@ -1470,18 +1508,172 @@ let process_comment invoke_config repo graph agent_name config master_session
         in
         pure { block = comment_block; session = Some session }
 
-let datom_attr datom =
-  Option.map strip_keyword_prefix (Edn_util.get_string datom "a")
+let transit_cache_code_digits = 44
+let transit_cache_base = Char.code '0'
 
-let datom_value_string datom = Edn_util.get_string datom "v"
+type transit_reader = { mutable cache : string array }
+
+let transit_cache_code_index text =
+  match String.length text with
+  | 2 -> Some (Char.code text.[1] - transit_cache_base)
+  | 3 ->
+      Some
+        (((Char.code text.[1] - transit_cache_base)
+         * transit_cache_code_digits)
+        + (Char.code text.[2] - transit_cache_base))
+  | _ -> None
+
+let transit_cache_code text =
+  String.length text >= 2 && String.length text <= 3 && text.[0] = '^'
+  && text <> "^ "
+
+let transit_remember reader text =
+  if String.length text > 3 then
+    reader.cache <- Array.append reader.cache [| text |]
+
+let transit_lookup reader text =
+  match transit_cache_code_index text with
+  | Some index when index >= 0 && index < Array.length reader.cache ->
+      Some reader.cache.(index)
+  | _ -> None
+
+let transit_drop_prefix text =
+  String.sub text 2 (String.length text - 2)
+
+let rec decode_transit_string reader ?(cache_string_key = false)
+    ?(remember_value = true) text =
+  if transit_cache_code text then
+    match transit_lookup reader text with
+    | Some text ->
+        decode_transit_string reader ~cache_string_key ~remember_value:false
+          text
+    | None -> Edn_util.string text
+  else if text = "" then Edn_util.string text
+  else if text.[0] <> '~' then (
+    if cache_string_key && remember_value then transit_remember reader text;
+    Edn_util.string text)
+  else if String.length text = 1 then Edn_util.string text
+  else
+    match text.[1] with
+    | '~' | '^' | '`' -> Edn_util.string (String.sub text 1 (String.length text - 1))
+    | '_' when String.length text = 2 -> Edn_util.nil
+    | '?' -> (
+        match transit_drop_prefix text with
+        | "t" -> Edn_util.bool true
+        | "f" -> Edn_util.bool false
+        | _ -> Edn_util.string text)
+    | ':' ->
+        if remember_value then transit_remember reader text;
+        Edn_util.keyword (transit_drop_prefix text)
+    | '$' ->
+        if remember_value then transit_remember reader text;
+        Edn_util.any (Melange_edn.symbol (transit_drop_prefix text))
+    | 'u' -> Edn_util.uuid (transit_drop_prefix text)
+    | _ -> Edn_util.string text
+
+let decode_transit_tag reader text =
+  let raw =
+    if transit_cache_code text then transit_lookup reader text else Some text
+  in
+  match raw with
+  | Some raw when String.length raw >= 3 && String.sub raw 0 2 = "~#" ->
+      if not (transit_cache_code text) then transit_remember reader raw;
+      Some (String.sub raw 2 (String.length raw - 2))
+  | _ -> None
+
+let rec normalize_transit_value reader value =
+  match Edn_util.as_string value with
+  | Some text -> decode_transit_string reader text
+  | None -> (
+      match Edn_util.as_vector value with
+      | Some (tag_value :: [ rep ]) -> (
+          match Option.bind (Edn_util.as_string tag_value) (decode_transit_tag reader) with
+          | Some "set" ->
+              normalize_transit_rep_values reader rep |> Edn_util.set
+          | Some "list" ->
+              normalize_transit_rep_values reader rep |> Edn_util.list
+          | Some tag ->
+              Edn_util.any
+                (Melange_edn.tagged tag (normalize_transit_value reader rep))
+          | None -> normalize_transit_vector reader (tag_value :: [ rep ]))
+      | Some values -> normalize_transit_vector reader values
+      | None -> value)
+
+and normalize_transit_rep_values reader rep =
+  match Edn_util.as_seq rep with
+  | Some values -> List.map (normalize_transit_value reader) values
+  | None -> [ normalize_transit_value reader rep ]
+
+and normalize_transit_vector reader values =
+  match values with
+  | first :: rest when Edn_util.as_string first = Some "^ " ->
+      normalize_transit_map reader rest
+  | _ -> Edn_util.vector (List.map (normalize_transit_value reader) values)
+
+and normalize_transit_map reader flat =
+  let rec loop acc = function
+    | key :: value :: rest ->
+        let key =
+          match Edn_util.as_string key with
+          | Some text -> decode_transit_string reader ~cache_string_key:true text
+          | None -> normalize_transit_value reader key
+        in
+        let value = normalize_transit_value reader value in
+        loop ((key, value) :: acc) rest
+    | _ -> Edn_util.map (List.rev acc)
+  in
+  loop [] flat
+
+let normalize_event_payload payload =
+  let raw =
+    match Edn_util.as_string payload with
+    | Some text -> (
+        try Json_util.value_of_json_string text with _ -> payload)
+    | None -> payload
+  in
+  let normalized = normalize_transit_value { cache = [||] } raw in
+  match Edn_util.as_vector normalized with
+  | Some [ _event_type; payload ] -> payload
+  | _ -> normalized
+
+let datom_vector datom =
+  match datom with
+  | Melange_edn.Any (Melange_edn.Tagged ("datascript/Datom", value)) ->
+      Edn_util.as_vector value
+  | _ -> Edn_util.as_vector datom
+
+let datom_index datom index =
+  match datom_vector datom with
+  | Some values -> List.nth_opt values index
+  | None -> None
+
+let datom_attr datom =
+  match Edn_util.get_string datom "a" with
+  | Some attr -> Some (strip_keyword_prefix attr)
+  | None ->
+      Option.bind (datom_index datom 1) Edn_util.as_string_like
+      |> Option.map strip_keyword_prefix
+
+let datom_value_string datom =
+  match Edn_util.get_string datom "v" with
+  | Some value -> Some value
+  | None -> Option.bind (datom_index datom 2) Edn_util.as_string_like
 
 let datom_added datom =
-  match Edn_util.get_bool datom "added" with Some true -> true | _ -> false
+  match Edn_util.get_bool datom "added" with
+  | Some added -> added
+  | None -> (
+      match Option.bind (datom_index datom 4) Edn_util.as_bool with
+      | Some false -> false
+      | _ -> true)
 
 let datom_entity_id datom =
   match Edn_util.get_int64 datom "e" with
   | Some id -> Some id
-  | None -> Edn_util.get_int64 datom "db/id"
+  | None -> (
+      match Edn_util.get_int64 datom "db/id" with
+      | Some id -> Some id
+      | None -> Option.bind (datom_index datom 0) Edn_util.as_int64)
 
 let comment_title_datom datom agent_name =
   datom_added datom
@@ -1494,7 +1686,9 @@ let comment_title_datom datom agent_name =
          || string_contains ~needle:"[[" title)
   | None -> false
 
-let sync_payload_tx_data payload = value_list (Edn_util.get payload "tx-data")
+let sync_payload_tx_data payload =
+  let payload = normalize_event_payload payload in
+  value_list (Edn_util.get payload "tx-data")
 
 let route_comment_datom invoke_config repo graph agent_name config
     master_session datom =
@@ -1599,18 +1793,23 @@ let mark_task_started invoke_config repo block =
 let process_task invoke_config repo graph agent_name config master_session block
     =
   let open Cli_effect in
-  bind (show_task_tree config repo graph block) (fun tree_text ->
-      bind (nearest_ancestor_task_session invoke_config repo block)
-        (fun inherited_session ->
-          match
-            dispatch_task_to_master config
-              ~graph:(Cli_primitive.string_of_graph graph)
-              ~agent_name ~master_session ?inherited_session ~tree_text block
-          with
-          | Error err -> error (Failure err.Error.message)
-          | Ok session ->
-              bind (mark_task_started invoke_config repo block) (fun () ->
-                  pure { block; session = Some session })))
+  match block_uuid block with
+  | Some uuid when not (claim_routing_block uuid) ->
+      pure { block; session = None }
+  | _ ->
+      bind (show_task_tree config repo graph block) (fun tree_text ->
+          bind (nearest_ancestor_task_session invoke_config repo block)
+            (fun inherited_session ->
+              match
+                dispatch_task_to_master config
+                  ~graph:(Cli_primitive.string_of_graph graph)
+                  ~agent_name ~master_session ?inherited_session ~tree_text
+                  block
+              with
+              | Error err -> error (Failure err.Error.message)
+              | Ok session ->
+                  bind (mark_task_started invoke_config repo block) (fun () ->
+                      pure { block; session = Some session })))
 
 let process_tasks invoke_config repo graph agent_name config master_session
     tasks =
