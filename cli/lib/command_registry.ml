@@ -165,6 +165,9 @@ let options_for_known_path = function
       [
         value "type" "type" "Export type" ~choices:graph_data_choices;
         value "file" "path" "Output file";
+        value "edn-options" "edn"
+          "EDN map of export options; :export-type overrides the default :graph";
+        flag "pretty-print" "Pretty-print the exported EDN file";
         flag "include-timestamps" "Include timestamps";
         flag "exclude-built-in-pages" "Exclude built-in pages";
         value "exclude-namespaces" "namespaces"
@@ -310,11 +313,12 @@ let options_for_known_path = function
   | [ "doctor" ] -> [ flag "dev-script" "Use development script" ]
   | [ "login" ]
   | [ "logout" ]
-  | [ "skill"; "show" ]
-  | [ "completion" ]
   | [ "agent"; "bridge" ]
   | "example" :: _ ->
       []
+  | [ "skill"; "show" ] -> []
+  | [ "completion" ] ->
+      [ value "shell" "shell" "Completion shell" ~choices:[ "zsh"; "bash" ] ]
   | [ "skill"; "install" ] -> [ flag "global" "Install globally" ]
   | _ -> []
 
@@ -390,7 +394,7 @@ let format_options options =
   |> List.map (fun option -> (option_label option, option_doc option))
   |> format_rows
 
-let render_help ?group t =
+let render_help ?group (t : t) =
   let join_words words = String.concat " " words in
   let command_label command = join_words command.path in
   let global_options_help = format_options global_options in
@@ -416,6 +420,14 @@ let render_help ?group t =
         "";
         "Commands:";
         format_rows (top_level_entries ());
+        "";
+        "Available commands:";
+        format_rows
+          (t.commands
+          |> List.filter (fun (command : command_meta) ->
+                 command.category <> Hidden)
+          |> List.map (fun (command : command_meta) ->
+                 (command_label command, command.doc)));
         "";
         "Global options:";
         global_options_help;
