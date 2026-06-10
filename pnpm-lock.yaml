@@ -119,6 +119,9 @@ importers:
       bignumber.js:
         specifier: ^9.3.1
         version: 9.3.1
+      buffer:
+        specifier: ^6.0.3
+        version: 6.0.3
       chrono-node:
         specifier: 2.9.0
         version: 2.9.0

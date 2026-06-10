@@ -155,6 +155,7 @@
     "@tabler/icons-react": "3.44.0",
     "aws-amplify": "^6.16.3",
     "bignumber.js": "^9.3.1",
+    "buffer": "^6.0.3",
     "chrono-node": "2.9.0",
     "codemirror": "5.65.18",
     "comlink": "^4.4.2",

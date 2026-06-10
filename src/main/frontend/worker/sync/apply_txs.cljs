@@ -197,12 +197,30 @@
        (not (:redo? tx-meta))
        (not= :batch-import-edn (:outliner-op tx-meta))))
 
+(defn- tx-meta-outliner-op
+  [tx-meta]
+  (or (:outliner-op tx-meta)
+      (when (:db-migrate? tx-meta)
+        :db-migrate)))
+
+(defn- apply-tx-meta
+  [remote-tx]
+  (let [outliner-op (:outliner-op remote-tx)]
+    (cond-> {:transact-remote? true
+             :t (:t remote-tx)}
+      outliner-op
+      (assoc :outliner-op outliner-op)
+      (= outliner-op :db-migrate)
+      (assoc :db-migrate? true
+             :skip-validate-db? true))))
+
 (declare apply-history-action!)
 (defn- persist-local-tx!
   [repo {:keys [db-before db-after tx-data tx-meta] :as tx-report} normalized-tx-data reversed-datoms]
   (when (client-ops-conn repo)
     (let [tx-id (or (:db-sync/tx-id tx-meta) (random-uuid))
           now (.now js/Date)
+          outliner-op (tx-meta-outliner-op tx-meta)
           {:keys [forward-outliner-ops inverse-outliner-ops]}
           (derive-history-outliner-ops db-before db-after tx-data tx-meta)
           inferred-outliner-ops?' (inferred-outliner-ops? tx-meta)
@@ -213,7 +231,7 @@
             :created-at now
             :pending? true
             :failed? false
-            :outliner-op (:outliner-op tx-meta)
+            :outliner-op outliner-op
             :undo-redo (cond
                          (:undo? tx-meta) :undo
                          (:redo? tx-meta) :redo
@@ -551,8 +569,7 @@
                                (map (partial resolve-temp-id db))
                                (tx-sanitize/sanitize-tx db)
                                seq)
-              report (ldb/transact! conn tx-data {:transact-remote? true
-                                                  :t (:t remote-tx)})
+              report (ldb/transact! conn tx-data (apply-tx-meta remote-tx))
               results' (cond-> results
                          tx-data
                          (conj {:tx-data tx-data

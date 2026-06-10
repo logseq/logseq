@@ -152,28 +152,29 @@
    (fn []
      (when on-page-blocks-rendered
        (on-page-blocks-rendered))))
-  (when-let [id (:db/id block*)]
-    (let [block (db/sub-block id)
-          block-id (:block/uuid block)
-          block? (not (db/page? block))
-          full-children (->> (:block/_parent block)
-                             ldb/sort-by-order)
-          mobile-length-limit 50
-          [children more?] (if (and (> (count full-children) mobile-length-limit) (util/mobile?) journals?)
-                             [(take mobile-length-limit full-children) true]
-                             [full-children false])
-          quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) common-config/quick-add-page-name))
-          children (cond
-                     (and (= id quick-add-page-id)
-                          (user-handler/user-uuid)
-                          (ldb/get-graph-rtc-uuid (db/get-db)))
-                     (editor-handler/get-user-quick-add-blocks)
+  (let [document-mode? (state/use-sub :document/mode?)]
+    (when-let [id (:db/id block*)]
+      (let [block (db/sub-block id)
+            block-id (:block/uuid block)
+            block? (not (db/page? block))
+            full-children (->> (:block/_parent block)
+                               ldb/sort-by-order)
+            mobile-length-limit 50
+            [children more?] (if (and (> (count full-children) mobile-length-limit) (util/mobile?) journals?)
+                               [(take mobile-length-limit full-children) true]
+                               [full-children false])
+            quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) common-config/quick-add-page-name))
+            children (cond
+                       (and (= id quick-add-page-id)
+                            (user-handler/user-uuid)
+                            (ldb/get-graph-rtc-uuid (db/get-db)))
+                       (editor-handler/get-user-quick-add-blocks)
 
-                     (ldb/class? block)
-                     (remove (fn [b] (contains? (set (map :db/id (:block/tags b))) (:db/id block))) children)
+                       (ldb/class? block)
+                       (remove (fn [b] (contains? (set (map :db/id (:block/tags b))) (:db/id block))) children)
 
-                     (ldb/property? block)
-                     (remove (fn [b] (some? (get b (:db/ident block)))) children)
+                       (ldb/property? block)
+                       (remove (fn [b] (some? (get b (:db/ident block)))) children)
 
                      :else
                      children)
@@ -186,26 +187,26 @@
          (empty? children) block)
         (add-button block config)
 
-        :else
-        (let [hiccup-config (merge
-                             {:id (str (:block/uuid block))
-                              :db/id (:db/id block)
-                              :block? block?
-                              :editor-box editor/box
-                              :document/mode? document-mode?}
-                             config)
-              config hiccup-config
-              blocks (if block? [block] (db/sort-by-order children block))]
-          [:div.relative
-           (page-blocks-inner block blocks config sidebar? false block-id)
-           (when more?
-             (shui/button {:variant :ghost
-                           :class "text-muted-foreground w-full"
-                           :on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
-               (t :ui/load-more)))
-           (when-not more?
-             (when-not hide-add-button?
-               (add-button block config)))])))))
+          :else
+          (let [hiccup-config (merge
+                               {:id (str (:block/uuid block))
+                                :db/id (:db/id block)
+                                :block? block?
+                                :editor-box editor/box
+                                :document/mode? document-mode?}
+                               config)
+                config hiccup-config
+                blocks (if block? [block] (db/sort-by-order children block))]
+            [:div.relative
+             (page-blocks-inner block blocks config sidebar? false block-id)
+             (when more?
+               (shui/button {:variant :ghost
+                             :class "text-muted-foreground w-full"
+                             :on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
+                 (t :ui/load-more)))
+             (when-not more?
+               (when-not hide-add-button?
+                 (add-button block config)))]))))))
 
 (hsx/defc today-queries
   [repo today? sidebar?]

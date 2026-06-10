@@ -83,77 +83,86 @@
         (p/then #(delete-page! page))
         (p/catch #()))))
 
+(defn- latest-page
+  [page]
+  (or (when-let [id (:db/id page)]
+        (db/entity id))
+      page))
+
+(defn- toggle-public-attribute!
+  [page]
+  (when-let [page' (latest-page page)]
+    (page-handler/update-public-attribute!
+     page'
+     (not (true? (:logseq.property/publishing-public? page'))))))
+
 (defn ^:large-vars/cleanup-todo page-menu
   [page]
-  (when-let [page-name (and page (db/page? page) (:block/name page))]
-    (let [page-title (str (:block/uuid page))
-          block? (and page (util/uuid-string? page-name))
-          contents? (= page-name "contents")
-          public? (:logseq.property/publishing-public? page)
-          favorited? (page-handler/favorited? page-title)
-          developer-mode? (state/developer-mode?)]
-      (when (not block?)
-        (->>
-         [(when-not config/publishing?
-            {:title   (if favorited?
-                        (t :page/unfavorite)
-                        (t :page/add-to-favorites))
-             :options {:on-click
-                       (fn []
-                         (if favorited?
-                           (page-handler/<unfavorite-page! page-title)
-                           (page-handler/<favorite-page! page-title)))}})
+  (when-let [page' (latest-page page)]
+    (when-let [page-name (and (db/page? page') (:block/name page'))]
+      (let [page-title (str (:block/uuid page'))
+            block? (util/uuid-string? page-name)
+            contents? (= page-name "contents")
+            public? (true? (:logseq.property/publishing-public? page'))
+            favorited? (page-handler/favorited? page-title)
+            developer-mode? (state/developer-mode?)]
+        (when (not block?)
+          (->>
+           [(when-not config/publishing?
+              {:title   (if favorited?
+                          (t :page/unfavorite)
+                          (t :page/add-to-favorites))
+               :options {:on-click
+                         (fn []
+                           (if favorited?
+                             (page-handler/<unfavorite-page! page-title)
+                             (page-handler/<favorite-page! page-title)))}})
 
-          (when (or (util/electron?)
-                    (mobile-util/native-platform?))
-            {:title   (t :page/copy-url)
-             :options {:on-click #(page-handler/copy-page-url (:block/uuid page))}})
+            (when (or (util/electron?)
+                      (mobile-util/native-platform?))
+              {:title   (t :page/copy-url)
+               :options {:on-click #(page-handler/copy-page-url (:block/uuid page'))}})
 
-          (when-not (or contents?
-                        config/publishing?
-                        (:logseq.property/built-in? page))
-            {:title   (t :page/delete)
-             :options {:on-click #(delete-page-confirm! page)}})
+            (when-not (or contents?
+                          config/publishing?
+                          (:logseq.property/built-in? page'))
+              {:title   (t :page/delete)
+               :options {:on-click #(delete-page-confirm! page')}})
 
-          (when page
             {:title   (t :export/page)
              :options {:on-click #(shui/dialog-open!
                                    (fn []
-                                     (export/export-blocks [(:block/uuid page)] {:export-type :page}))
-                                   {:class "w-auto md:max-w-4xl max-h-[80vh] overflow-y-auto"})}})
+                                     (export/export-blocks [(:block/uuid page')] {:export-type :page}))
+                                   {:class "w-auto md:max-w-4xl max-h-[80vh] overflow-y-auto"})}}
 
-          (when (and page (not config/publishing?))
-            {:title   (t :publish/dialog-title)
-             :options {:on-click #(shui/dialog-open! (fn [] (publish-page-dialog page))
-                                                     {:class "w-auto max-w-md"})}})
+            (when-not config/publishing?
+              {:title   (t :publish/dialog-title)
+               :options {:on-click #(shui/dialog-open! (fn [] (publish-page-dialog page'))
+                                                       {:class "w-auto max-w-md"})}})
 
-          (when (util/electron?)
-            {:title   (t (if public? :page/make-private :page/make-public))
-             :options {:on-click
-                       (fn []
-                         (page-handler/update-public-attribute!
-                          page
-                          (if public? false true)))}})
+            (when (util/electron?)
+              {:title   (t (if public? :page/make-private :page/make-public))
+               :options {:on-click #(toggle-public-attribute! page')}})
 
-          (when config/lsp-enabled?
-            (for [[_ {:keys [label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
-              {:title label
-               :options {:on-click #(commands/exec-plugin-simple-command!
-                                     pid (assoc cmd :page page-name) action)}}))
+            (when config/lsp-enabled?
+              (for [[_ {:keys [label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
+                {:title label
+                 :options {:on-click #(commands/exec-plugin-simple-command!
+                                       pid (assoc cmd :page page-name) action)}}))
 
-          (when (and (ldb/internal-page? page) (not (:logseq.property/built-in? page)))
-            {:title (t :page/convert-to-tag)
-             :options {:on-click (fn []
-                                   (db-page-handler/convert-page-to-tag! page))}})
+            (when (and (ldb/internal-page? page') (not (:logseq.property/built-in? page')))
+              {:title (t :page/convert-to-tag)
+               :options {:on-click (fn []
+                                     (db-page-handler/convert-page-to-tag! page'))}})
 
-          (when (and (ldb/class? page) (not (:logseq.property/built-in? page)))
-            {:title (t :page.convert/tag-to-page-action)
-             :options {:on-click (fn []
-                                   (db-page-handler/convert-tag-to-page! page))}})
+            (when (and (ldb/class? page') (not (:logseq.property/built-in? page')))
+              {:title (t :page.convert/tag-to-page-action)
+               :options {:on-click (fn []
+                                     (db-page-handler/convert-tag-to-page! page'))}})
 
-          (when developer-mode?
-            {:title   (shortcut-dh/shortcut-desc-by-id :dev/show-page-data)
-             :options {:on-click (fn []
-                                   (dev-common-handler/show-entity-data (:db/id page)))}})]
-         (flatten)
-         (remove nil?))))))
+            (when developer-mode?
+              {:title   (shortcut-dh/shortcut-desc-by-id :dev/show-page-data)
+               :options {:on-click (fn []
+                                     (dev-common-handler/show-entity-data (:db/id page')))}})]
+           (flatten)
+           (remove nil?)))))))

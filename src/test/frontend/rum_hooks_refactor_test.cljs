@@ -114,9 +114,19 @@
   (let [start (string/index-of source marker)
         end (when start
               (or (string/index-of source "\n(hsx/defc " (inc start))
+                  (string/index-of source "\n(defn" (inc start))
                   (count source)))]
     (when (and start end)
       (subs source start end))))
+
+(defn- assert-form-does-not-match!
+  [relative-file marker pattern message]
+  (let [source (source-for relative-file)
+        form (form-source source marker)]
+    (is (some? form)
+        (str relative-file " should contain " marker))
+    (is (not (re-find pattern form))
+        message)))
 
 (defn- hook-var-defined? [source var-name]
   (or (string/includes? source (str "(defn " var-name))
