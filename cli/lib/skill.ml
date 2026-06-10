@@ -33,6 +33,14 @@ let skill_file_under base =
        skill_dir_name)
     skill_file_name
 
+external process_argv : string array = "argv" [@@mel.module "process"]
+
+let executable_dir_candidates () =
+  match Array.to_list process_argv with
+  | _node :: script :: _ -> [ skill_file_under (Filename.dirname script) ]
+  | script :: _ -> [ skill_file_under (Filename.dirname script) ]
+  | [] -> []
+
 let non_empty value =
   match Option.map String.trim value with
   | Some "" | None -> None
@@ -79,6 +87,7 @@ let write_file path content =
   Cli_unix.write_text_file path content
 
 let default_source_candidates config =
+  let executable = executable_dir_candidates () in
   let project =
     match config.Cli_config.project_dir with
     | Some project_dir -> [ skill_file_under project_dir ]
@@ -89,7 +98,7 @@ let default_source_candidates config =
     | Some home -> [ skill_file_under home ]
     | None -> []
   in
-  project @ home @ [ skill_file_under (Sys.getcwd ()) ]
+  executable @ project @ home @ [ skill_file_under (Sys.getcwd ()) ]
 
 let resolve_source_path ?source_path config =
   match non_empty source_path with
