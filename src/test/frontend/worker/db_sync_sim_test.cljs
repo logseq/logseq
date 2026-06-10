@@ -365,6 +365,61 @@
     (->> (filter (fn [{:keys [t]}] (> t since)) txs)
          (mapv :tx))))
 
+(defn- repair-ref-uuids [v]
+  (cond
+    (and (vector? v)
+         (= :block/uuid (first v))
+         (uuid? (second v)))
+    [(second v)]
+
+    (map? v)
+    (mapcat repair-ref-uuids (vals v))
+
+    (or (vector? v) (set? v) (seq? v))
+    (mapcat repair-ref-uuids v)
+
+    :else
+    nil))
+
+(defn- order-repair-tx-data [tx-data]
+  (let [repair-uuids (set (keep :block/uuid tx-data))]
+    (loop [remaining (vec tx-data)
+           ordered []
+           added #{}]
+      (if (seq remaining)
+        (let [ready? (fn [m]
+                       (let [deps (->> (repair-ref-uuids m)
+                                       (filter repair-uuids)
+                                       set)]
+                         (set/subset? deps added)))
+              {ready true blocked false} (group-by ready? remaining)]
+          (if (seq ready)
+            (recur (vec blocked)
+                   (into ordered ready)
+                   (into added (keep :block/uuid ready)))
+            ;; Keep the original order if the repair payload is cyclic or malformed.
+            (into ordered remaining)))
+        ordered))))
+
+(defn- server-repair-tx-data
+  [server block-uuids]
+  (let [server-db @(get @server :conn)
+        collect-deps (fn [tx-data seen]
+                       (->> tx-data
+                            (mapcat repair-ref-uuids)
+                            (remove seen)
+                            distinct
+                            vec))]
+    (loop [pending (vec block-uuids)
+           seen #{}
+           tx-data []]
+      (if (seq pending)
+        (let [repair-tx-data (#'sync-apply/local-repair-tx-data server-db pending)
+              seen' (into seen pending)
+              deps (collect-deps repair-tx-data seen')]
+          (recur deps seen' (into tx-data repair-tx-data)))
+        (order-repair-tx-data tx-data)))))
+
 (defn- server-upload! [server t-before tx-entries]
   (let [accepted? (atom false)]
     (swap! server
@@ -422,15 +477,15 @@
     (let [progress? (atom false)
           local-tx (or (client-op/get-local-tx repo) 0)
           server-t (:t @server)]
-      ;; (prn :debug :repo repo :local-tx local-tx :server-t server-t)
       (when (< local-tx server-t)
         (let [txs (server-pull server local-tx)]
-          ;; (prn :debug :apply-remote-tx :repo repo
-          ;;      :txs txs)
-          (#'sync-apply/apply-remote-txs! repo client
-                                          (mapv (fn [tx-data]
-                                                  {:tx-data tx-data})
-                                                txs))
+          (#'sync-apply/apply-remote-txs!
+           repo
+           (assoc client :repair-blocks-tx-data-fn
+                  (partial server-repair-tx-data server))
+           (mapv (fn [tx-data]
+                   {:tx-data tx-data})
+                 txs))
           (client-op/update-local-tx repo server-t)
           (reset! progress? true)))
       (let [pending (#'sync-apply/pending-txs repo)
