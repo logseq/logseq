@@ -391,7 +391,12 @@
         ;; Retraction is handled in the effect below by watching
         ;; `latest-tx :deleted-ids` and clearing `*url`.
         error? load-error?
-        size (or (:size opts) 20)
+        ;; Page-title icons convey size via `:style {:font-size N}` (no `:size`),
+        ;; same as emoji/tabler. Honor that here so image icons aren't stuck at
+        ;; the 20px default there — the page-title icon-props switched from
+        ;; `:size 38` to a CSS/`:style` approach (master refactor) that the
+        ;; `<span>`-based image path didn't get covered by.
+        size (or (:size opts) (get-in opts [:style :font-size]) 20)
         on-click-error (:on-click-error opts)]
     ;; Load on mount + on uuid change; clear+reload on retraction.
     ;; (was Rum :did-mount + :did-update)
