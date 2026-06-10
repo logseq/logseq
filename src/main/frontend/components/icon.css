@@ -1,48 +1,141 @@
+/* Themed picker separator. `--ls-border-color` is OG's themed border
+   (#0e5263, a one-shade-lighter teal that matches the picker hue). Radix
+   themes still pick up --lx-gray-05 at step 1. Unscoped so any picker
+   surface can apply it via `(shui/separator {:class "icon-picker-separator"})`. */
+.icon-picker-separator {
+  background-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05))) !important;
+}
+
 .cp__emoji-icon-picker {
   --ls-color-icon-preset: "inherit";
 
-  @apply w-[380px] max-h-[408px] relative flex flex-col overflow-hidden;
+  @apply w-[380px] max-h-[442px] relative flex flex-col overflow-hidden bg-gray-02;
 
-  > .hd {
-    @apply absolute w-full pt-2.5 pb-1 px-3 top-[38px] left-0;
+
+  /* Topbar wrapper for easier inspection */
+  .icon-picker-topbar {
+    @apply flex-shrink-0;
+  }
+
+  .search-section {
+    @apply flex items-center gap-2 py-1 pr-3;
+    @apply flex-shrink-0;
+    /* `bg-gray-03` (Tailwind utility) resolves through the full chain
+       `var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)))`
+       so the section is themed in OG (where `--lx-gray-03` is unset) by
+       falling back to `--ls-tertiary-background-color`. Raw
+       `var(--lx-gray-03)` would be invalid in OG → transparent. */
+    @apply bg-gray-03;
+    /* Themed bottom border (--ls-border-color middle step for OG). The
+       search input has no validation state to communicate, so the
+       border doesn't change on focus — the search icon's opacity
+       change provides enough active-state feedback. */
+    border-bottom: 1px solid var(--lx-gray-06, var(--ls-border-color, var(--rx-gray-06)));
+  }
+
+  /* Icon-picker-specific tab bar look (gray backdrop, right-side actions slot).
+     Base .tabs-section + .tab-item rules are defined unscoped below for
+     reuse by other picker surfaces. */
+  .tabs-section {
+    @apply bg-gray-03;
+    padding: 0 12px 0 0 !important;
   }
 
   > .bd {
-    @apply pt-[96px] py-1 h-full;
+    @apply flex-1 pt-1 overflow-y-auto;
+    @apply bg-gray-02;
+    min-height: 0;
+
+    /* Opt out of the themed scrollbar-color set at :root (theme.css).
+       Themed scrollbar colors force WebKit into classic-scrollbar
+       mode at 15px width on macOS, which steals 9px and collapses
+       the 9-column grid to 8 in themes like OG turquoise. With
+       `auto`, macOS returns to overlay scrollbars (6px reserved). */
+    scrollbar-color: auto;
 
     &.all {
       @apply overflow-y-auto;
     }
   }
 
-  > .ft {
-    @apply absolute w-full py-3 px-3 bg-gray-02 top-[-1px] left-0;
-    @apply flex items-center border-t h-[40px] overflow-hidden;
+  .content-pane {
+    @apply flex flex-col flex-1;
+    min-height: 0;
+  }
 
-    .tab-item {
-      @apply opacity-50 hover:opacity-100;
+  .search-empty-state {
+    @apply flex-1 flex flex-col items-center justify-center gap-1.5 select-none;
+    min-height: 160px;
+    /* Container `color` propagates via `currentColor` into the SVG
+       search-off icon. Themed via `--ls-primary-text-color` middle
+       step (#a4b5b6 muted teal-gray in OG). Opacity is applied per
+       child below for visual hierarchy. */
+    color: var(--lx-gray-08, var(--ls-primary-text-color, var(--rx-gray-08)));
 
-      &.active {
-        @apply opacity-100;
-      }
+    /* Icon: most muted (decorative aid). */
+    .ui__icon {
+      opacity: 0.5;
+    }
+
+    .title {
+      @apply text-sm font-medium;
+      /* Title: themed and at full opacity — the prominent line. */
+      color: var(--lx-gray-10, var(--ls-primary-text-color, var(--rx-gray-10)));
+    }
+
+    .subtitle {
+      @apply text-xs;
+      /* Subtitle: themed but muted slightly. */
+      color: var(--lx-gray-08, var(--ls-primary-text-color, var(--rx-gray-08)));
+      opacity: 0.7;
     }
   }
 
   .search-input {
-    @apply relative;
+    @apply relative flex-1 px-2;
 
     .ls-icon-search {
-      @apply absolute left-2.5 top-[8px] opacity-50;
+      @apply absolute left-[14px] top-[8px] opacity-50;
     }
 
     > .x {
-      @apply flex items-center h-full px-2 opacity-50;
-      @apply absolute right-0 top-0 hover:opacity-80;
+      @apply flex items-center justify-center;
+      @apply absolute right-2 top-1/2 -translate-y-1/2;
+      @apply w-5 h-5 rounded-full cursor-pointer;
+      @apply transition-colors duration-150;
+      /* `bg-gray-07` Tailwind chain includes `--ls-quaternary-background-color`
+         so OG gets a themed teal pill (#094b5a) instead of neutral gray. */
+      @apply bg-gray-07;
+      /* gray-12 chain has no `--ls-*` middle — inject `--ls-secondary-text-color`
+         manually so OG's glyph is a themed light (#dfdfdf). */
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+    }
+
+    > .x:hover {
+      /* gray-08 chain has no `--ls-*` middle — `--ls-border-color`
+         (#0e5263, one shade lighter than the quaternary teal) is a
+         natural hover step. */
+      background-color: var(--lx-gray-08, var(--ls-border-color, var(--rx-gray-08)));
     }
 
     .ui__input {
-      @apply leading-none pl-8 outline-none border-none bg-gray-03;
-      @apply focus:!shadow-accent-06 focus:bg-gray-02 !h-8;
+      /* Structurally borderless: no background, no rounded corners, no
+         focus shadow. The visible "search bar" is the parent
+         `.search-section`; the input is just text + cursor sitting on
+         the section's themed background. Theme-agnostic by construction
+         — no color-matching trick to break in OG. */
+      @apply leading-none pl-8 outline-none border-none bg-transparent rounded-none;
+      @apply focus:bg-transparent !h-8;
+      box-shadow: none !important;
+
+      /* Placeholder shares the themed label color with section headers
+         (muted teal-gray in OG) but at 60% opacity, so it recedes
+         visibly against the full-strength typed text. Avoids shadcn's
+         `text-muted-foreground` default (neutral). */
+      &::placeholder {
+        color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+        opacity: 0.6;
+      }
     }
 
     &:focus-within {
@@ -53,22 +146,58 @@
   }
 
   .pane-section {
-    @apply pl-2 overflow-y-auto h-full;
+    @apply h-full;
 
     color: var(--ls-color-icon-preset);
 
     > .its, .icons-row {
-      @apply flex gap-1 py-1 flex-wrap;
+      @apply flex gap-1 py-1 flex-wrap px-2;
 
       > button {
-        @apply flex items-center justify-center rounded-full hover:bg-gray-03 active:opacity-70;
+        @apply flex items-center justify-center rounded-lg active:opacity-70;
+        /* Animate width + offset so the ring grows/shrinks smoothly when
+           the highlight state changes. outline-color is intentionally NOT
+           transitioned — animating it from `currentColor` (the icon's
+           tint, e.g. red) would briefly tint the ring red before the
+           accent color landed. With color set instantly by the highlight
+           rules, the ring just grows in the right color from t=0.
 
-        @apply focus:outline-accent-09;
+           `color` is also transitioned, with a per-cell delay computed
+           from the inline --r / --c custom properties. When the user
+           commits a new icon color, --ls-color-icon-preset on the picker
+           root changes, and each cell's `color` (inherited via
+           currentColor) glides into the new value at its own delay,
+           producing a diagonal "wave" across the grid (top-left first,
+           bottom-right last). */
+        transition: background-color 150ms,
+                    outline-width 150ms,
+                    outline-offset 150ms,
+                    color 320ms cubic-bezier(0.4, 0, 0.2, 1);
+        transition-delay: 0ms, 0ms, 0ms,
+                          calc(var(--c, 0) * 22ms + var(--r, 0) * 36ms);
+
+        &:hover {
+          /* Hover should pop one shade above the ghost-highlight bg.
+             Tailwind's gray-04 and gray-05 chains both collapse to
+             `--ls-quaternary-background-color` in OG, so we'd get the
+             same color as ghost. Inject `--ls-border-color` (#0e5263,
+             a shade lighter than quaternary #094b5a) as the themed
+             middle step to give hover a real visual lift. */
+          background-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
+        }
       }
     }
 
     &.has-virtual-list {
-      @apply h-[300px] overflow-y-visible;
+      /* Definite height gives Virtuoso something to measure on first
+         render. Without it, when the popup container provides no
+         max-height, the pane collapses to 0 (Virtuoso hasn't rendered
+         yet → parent has no content → Virtuoso measures 0 viewport →
+         renders 0 items → never resolves). Coexists with
+         `:custom-scroll-parent` in `pane-section`: Virtuoso scrolls
+         `.bd-scroll`, not its own wrapper, so the fixed height does
+         NOT create a nested scrollbar / column collapse. */
+      @apply h-[358px] overflow-y-visible;
 
       &.searching-result {
         @apply h-auto;
@@ -76,7 +205,18 @@
     }
 
     .virtuoso-item-list {
-      @apply pb-4;
+      @apply pt-1 pb-4 px-2;
+    }
+
+    /* Honor reduced-motion: drop the staggered color transition so the
+       grid snaps to the new color rather than animating across cells. */
+    @media (prefers-reduced-motion: reduce) {
+      > .its > button,
+      .icons-row > button {
+        transition: background-color 150ms,
+                    outline-width 150ms,
+                    outline-offset 150ms;
+      }
     }
   }
 
@@ -84,49 +224,326 @@
     vertical-align: middle;
   }
 
-  .hover-preview {
-    @apply flex flex-1 items-center justify-between leading-none;
-
-    > strong {
-      @apply opacity-60 text-base whitespace-nowrap font-normal
-      overflow-ellipsis overflow-hidden mr-2;
-    }
-  }
-
-  .color-picker {
-    @apply rounded-md w-[24px] h-[24px] overflow-hidden flex relative p-0;
-
-    > strong {
-      @apply w-[18px] h-[18px] rounded-full absolute opacity-90
-      hover:opacity-100 font-normal text-sm;
-
-      .ui__icon {
-        @apply opacity-90 scale-90;
-      }
-    }
-  }
 
   .ui__button {
     &[data-action=del] {
-      @apply !w-6 !h-6 overflow-hidden rounded-md ml-1 opacity-60
+      @apply !w-6 !h-6 overflow-hidden rounded-md opacity-60
       hover:text-red-rx-09 hover:opacity-90;
+
+      /* Force opacity 1 on keyboard focus so the focus ring paints
+         crisply; the base opacity-60 otherwise dims the outline into
+         a muted glow. */
+      &:focus-visible {
+        opacity: 1;
+      }
     }
   }
 }
 
-.color-picker-presets {
-  @apply flex flex-row gap-[2px];
+/* Keyboard navigation highlights — React-props-driven via CSS classes.
+   The outline
+   follows each tile's own border-radius (browsers do this for outline
+   since 2021), so square tiles get a 4px ring and round tiles get
+   a circular ring without a per-shape override. */
+.cp__emoji-icon-picker button.is-highlighted {
+  /* Subtle themed bg (same quaternary teal as ghost in OG) so line
+     icons remain readable regardless of the user's icon-color preset
+     (e.g., green line icons against a bright accent-04 bg had poor
+     contrast). The bright accent-09 outline below carries the "I am
+     selected" signal — bg doesn't need to compete. */
+  @apply !bg-gray-04;
+  outline: 2px solid var(--lx-accent-09);
+  outline-offset: 2px;
+}
 
-  .it {
-    @apply w-[18px] h-[18px] overflow-hidden p-0
-    opacity-90 hover:opacity-100 active:opacity-80;
+.cp__emoji-icon-picker button.is-ghost-highlighted {
+  /* Same themed token chain as @apply bg-gray-04 (which resolves to
+     `--ls-quaternary-background-color` in OG), but rendered at 50%
+     alpha so it visibly recedes against the picker bg. The diluted
+     tint pulls ghost a couple shades closer to the picker bg, giving
+     hover (full `--ls-border-color`) a clearer pop. Important to
+     beat the .icons-row > button:hover bg. */
+  background-color: color-mix(
+    in srgb,
+    var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04))) 50%,
+    transparent
+  ) !important;
+  /* Tailwind's gray-08 chain stops at `--lx-gray-08, --rx-gray-08` —
+     no `--ls-*` step. Inject `--ls-border-color` manually so OG
+     (where `--lx-gray-08` is unset) picks up the themed teal border
+     (#0e5263, one step lighter than the bg) instead of falling to
+     neutral `--rx-gray-08`. */
+  outline: 1.5px solid var(--lx-gray-08, var(--ls-border-color, var(--rx-gray-08)));
+  outline-offset: -1.5px;
+}
+
+/* ── Shared tab-bar (underline-on-active). Scoped overrides above may
+   tweak the look per context. ── */
+.tabs-section {
+  @apply flex items-center gap-0 px-3 py-0;
+  @apply flex-shrink-0 h-auto;
+  border-radius: 0;
+
+  .tab-actions {
+    @apply flex items-center gap-1.5 ml-auto;
+  }
+
+  .tab-item {
+    @apply relative px-3 py-2.5 text-sm font-medium;
+    @apply opacity-60 hover:opacity-100;
+    @apply transition-all duration-150;
+    @apply rounded-none;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    height: auto !important;
+    /* `--ls-primary-text-color` is the themed middle step that gives
+       OG (#a4b5b6 — muted teal-gray) a label-appropriate tone instead
+       of falling all the way to neutral `--rx-gray-11`. Radix themes
+       still pick up `--lx-gray-11` in step 1. */
+    color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+
+    /* Reserve bold width to prevent layout shift on active */
+    &::before {
+      content: attr(data-text);
+      display: block;
+      font-weight: bold;
+      height: 0;
+      overflow: hidden;
+      visibility: hidden;
+    }
+
+    /* Underline for active state */
+    &[data-active="true"] {
+      @apply opacity-100 font-bold;
+      /* Active tab brighter; `--ls-secondary-text-color` (#dfdfdf in OG)
+         is the themed equivalent of gray-12. */
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+
+      &::after {
+        content: "";
+        @apply absolute bottom-0 left-0 right-0;
+        @apply h-[2px];
+        background-color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+      }
+    }
+
+    /* Hover state */
+    &:hover {
+      background: transparent !important;
+    }
+
+    /* Keyboard focus state. Force opacity 1 so the focus ring on an
+       inactive tab paints fully (the base rule sets opacity-60, which
+       would otherwise dim the outline). */
+    &:focus-visible {
+      opacity: 1;
+      outline: 2px solid var(--lx-accent-09);
+      outline-offset: -2px;
+      border-radius: 4px;
+    }
   }
 }
+
+/* ── Color Picker Trigger (topbar) ── */
+.color-picker-trigger {
+  @apply w-6 h-6 rounded-full p-0 flex items-center justify-center
+  cursor-pointer border-0 bg-transparent;
+  transition: box-shadow 150ms, opacity 150ms;
+
+  &:hover {
+    box-shadow: 0 0 0 2px var(--lx-gray-07, var(--rx-gray-07));
+  }
+
+  .color-picker-fill {
+    @apply w-5 h-5 rounded-full block;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+
+    /* Half-pie split: dark mode rendering (left) / light mode rendering
+       (right) — same motif as the recents lane and contrast indicator.
+       Activated when the picked color renders differently across themes. */
+    &.is-split {
+      background-image: linear-gradient(to right,
+        var(--dark-color) 50%,
+        var(--light-color) 50%);
+    }
+  }
+
+  .color-picker-empty {
+    @apply w-5 h-5 rounded-full relative overflow-hidden;
+    background-color: var(--lx-gray-05, var(--rx-gray-05));
+    box-shadow: inset 0 0 0 1px var(--lx-gray-07, var(--rx-gray-07));
+
+    /* CSS-only diagonal slash — matches .swatch-empty treatment */
+    &::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 1.5px;
+      height: 141%;
+      background-color: var(--lx-gray-09, var(--rx-gray-09));
+      border-radius: 1px;
+      transform: translate(-50%, -50%) rotate(45deg);
+    }
+
+    .ui__icon {
+      display: none;
+    }
+  }
+}
+
+
+.color-picker-popover {
+  @apply flex flex-col;
+  width: 175px;
+}
+
+/* Negate the dropdown wrapper's 4px (p-1) padding so the popover content
+   extends edge-to-edge of the dropdown surface. Each section inside
+   (presets / pane / recents) defines its own padding. Mirrors the same
+   trick used by .cp__emoji-icon-picker (icon.css:476-478). */
+.ui__dropdown-menu-content .color-picker-popover {
+  @apply -m-1;
+}
+
+/* ── Color Picker Popup Swatches ── */
+.color-picker-presets {
+  @apply flex flex-row items-stretch gap-1 p-2;
+
+  /* Control column: Default tile + Custom-rainbow tile, stacked. */
+  .control-col {
+    @apply flex flex-col gap-0.5 flex-shrink-0;
+  }
+
+  /* 1px vertical rule between control col and preset grid. Uses the
+     canonical separator chain so the line stays visible in OG/
+     OG-turquoise themes (where `--lx-gray-04` resolved to a tone
+     nearly identical to the popover surface). */
+  .divider-rule {
+    @apply self-stretch flex-shrink-0;
+    width: 1px;
+    margin: 4px 2px;
+    background-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
+  }
+
+  /* 4-wide × 2-row preset grid. */
+  .preset-grid {
+    @apply flex flex-col gap-0.5;
+  }
+
+  .preset-grid__row {
+    @apply flex flex-row gap-0.5;
+  }
+
+  /* Hit target 28px, fill 24px, gap 2px → 30px center-to-center.
+     Selection ring via box-shadow on fill: 1px bg spacer + 2.5px accent
+     = 3.5px beyond fill edge → 31px ring diameter. Safe against neighbor
+     hover-scale (1.1× → 26.4px fill) with ~1.3px clearance. */
+  .color-swatch {
+    @apply w-7 h-7 rounded-full p-0 flex items-center justify-center
+    cursor-pointer border-0 bg-transparent;
+    transition: transform 120ms, opacity 120ms;
+
+    &:hover { transform: scale(1.1); }
+    &:active { transform: scale(0.95); }
+    /* Suppress hover scale when selected so ring doesn't overflow into neighbors */
+    &.is-selected:hover { transform: none; }
+
+    /* Drop the system focus outline — focus state is rendered as a colored
+       halo on the inner .swatch-fill / .swatch-empty (rules below) so it
+       matches the selected ring's vocabulary instead of looking grafted on. */
+    &:focus, &:focus-visible { outline: none; }
+
+    .swatch-fill {
+      @apply w-6 h-6 rounded-full block;
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+      transition: box-shadow 120ms;
+    }
+
+    &.is-selected .swatch-fill {
+      box-shadow:
+        inset 0 0 0 1px rgba(0, 0, 0, 0.08),
+        0 0 0 1px var(--lx-gray-02),
+        0 0 0 3.5px color-mix(in srgb, var(--swatch-color, var(--lx-accent-09)) 65%, black);
+    }
+
+    /* Focus halo: same anatomy as the selected ring (inset edge + bg gap +
+       outer halo) but thinner and in the global accent color. Using the
+       swatch's own color blurs into "ring around a colored thing" — accent
+       blue is *never* the swatch's hue, so focus reads as a separate signal
+       no matter which swatch is hit. Skipped on .is-selected so the
+       selected ring isn't fighting a focus ring on top of itself. */
+    &:focus-visible:not(.is-selected) .swatch-fill {
+      box-shadow:
+        inset 0 0 0 1px rgba(0, 0, 0, 0.08),
+        0 0 0 1px var(--lx-gray-02),
+        0 0 0 2.5px var(--lx-accent-09);
+    }
+
+    .swatch-empty {
+      @apply w-6 h-6 rounded-full relative overflow-hidden;
+      background-color: var(--lx-gray-05, var(--rx-gray-05));
+      box-shadow: inset 0 0 0 1px var(--lx-gray-07, var(--rx-gray-07));
+      transition: box-shadow 120ms;
+
+      /* CSS-only diagonal slash — centered reliably without SVG viewBox quirks */
+      &::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 1.5px;
+        height: 141%;
+        background-color: var(--lx-gray-09, var(--rx-gray-09));
+        border-radius: 1px;
+        transform: translate(-50%, -50%) rotate(45deg);
+      }
+
+      /* Hide the SVG icon if still present in markup */
+      .ui__icon {
+        display: none;
+      }
+    }
+
+    &.is-selected .swatch-empty {
+      box-shadow:
+        inset 0 0 0 1px var(--lx-gray-07, var(--rx-gray-07)),
+        0 0 0 1px var(--lx-gray-02),
+        0 0 0 3.5px var(--lx-accent-09);
+    }
+
+    /* Empty swatch has no --swatch-color, so fall back to the global accent
+       so the focus halo is still visible on the slash tile. */
+    &:focus-visible:not(.is-selected) .swatch-empty {
+      box-shadow:
+        inset 0 0 0 1px var(--lx-gray-07, var(--rx-gray-07)),
+        0 0 0 1px var(--lx-gray-02),
+        0 0 0 2.5px var(--lx-accent-09);
+    }
+  }
+
+  /* Mute non-active siblings while the user is engaging with the palette.
+     Engagement = mouse-hovering anywhere in the group, OR any swatch has
+     keyboard/programmatic focus. Three swatches stay at full opacity:
+     the hovered one, the focused one, and the currently-selected one.
+     At rest (no hover, no focus inside), every swatch is at full opacity. */
+  &:is(:hover, :focus-within)
+    .color-swatch:not(:hover):not(:focus):not(.is-selected) {
+    opacity: 0.55;
+  }
+}
+
 
 .dropdown-wrapper .cp__emoji-icon-picker {
   @apply -m-4;
 }
 
+/* The picker renders as a direct child of the top-level
+   `ui__dropdown-menu-content` (via shui/popup-show!), so it needs a
+   `-m-1` to cancel the surface's baked-in p-1. The sub-menu case
+   (block-context-menu) uses a different mechanism: `{:class "!p-0"}`
+   on the sub-content + an inner `[:div.p-1]` wrapper. */
 .ui__dropdown-menu-content:has(> .cp__emoji-icon-picker) {
   @apply flex;
 }
@@ -162,15 +579,27 @@
 }
 
 .ls-icon-picker {
-  @apply w-auto overflow-hidden;
+  @apply overflow-hidden;
+  /* Ensure consistent width across picker views */
+  min-width: 380px;
 }
 
 .ls-icon-color-wrap em-emoji {
   @apply !w-auto !h-auto;
 }
 
-.ui__dropdown-menu-sub-content {
-  .cp__emoji-icon-picker {
-    @apply -m-2;
-  }
+/* Lift the global `.ui__icon svg { filter: brightness(.8) }` clamp (ui.css)
+   for icons rendered with an explicit color. Color IS the affordance here, so
+   the dark-theme dimming was visibly desaturating values applied via the
+   color picker (e.g. cyan-10 looked muted vs. the swatch it was picked from).
+   Sidebar opacity-70 (container.css) is intentional visual hierarchy and is
+   left intact — it pairs with hover→opacity-100 to give the active cue. */
+.ls-icon-color-wrap.icon-colored .ui__icon svg,
+.ls-icon-color-wrap.icon-colored .ui__icon:hover svg,
+.cp__emoji-icon-picker.icon-colored .pane-section .ui__icon svg,
+.cp__emoji-icon-picker.icon-colored .pane-section .ui__icon:hover svg,
+.icon-cp-container.icon-colored .ui__icon svg,
+.icon-cp-container.icon-colored .ui__icon:hover svg {
+  filter: none !important;
 }
+

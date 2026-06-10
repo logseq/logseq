@@ -46,6 +46,13 @@
     .block-main-container {
       @apply gap-2;
     }
+    /* Icon-to-title spacing in the page-title row. The base
+       `.block-main-content` is `gap-2` (8px) for regular blocks; the
+       page title's icon is bigger (38px box) and benefits from more
+       breathing room — bump to `gap-3` (12px) just here. */
+    .block-main-content {
+      @apply gap-3;
+    }
   }
 
   .edit-input {

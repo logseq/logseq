@@ -1,0 +1,298 @@
+/* ── Custom Color Picker Pane + Recents Lane ── */
+
+/* Custom-rainbow swatch fill: a conic-gradient covering the hue circle.
+   Anchored on the warm-cool diagonal to keep red top-left, green centre. */
+.color-swatch--custom .swatch-fill--rainbow {
+  @apply w-6 h-6 rounded-full block;
+  background: conic-gradient(from 90deg,
+    var(--rx-red-10) 0deg,
+    var(--rx-orange-10) 60deg,
+    var(--rx-green-10) 130deg,
+    var(--rx-cyan-10) 200deg,
+    var(--rx-indigo-10) 270deg,
+    var(--rx-pink-10) 340deg,
+    var(--rx-red-10) 360deg);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 120ms;
+}
+
+/* Picker pane animates open via the CSS-Grid 0fr↔1fr trick.
+   Inner element stays overflow:hidden so children clip during reveal.
+   Padding animates from 0 → full alongside the row height; otherwise the
+   inner's static padding contributes a few pixels of visible space below
+   the swatch grid even when the pane is "closed." */
+.color-picker-pane {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 220ms cubic-bezier(.32, .72, 0, 1),
+              opacity 160ms ease-out 60ms;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.color-picker-pane[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.color-picker-pane__inner {
+  @apply flex flex-col gap-2;
+  min-height: 0;
+  overflow: hidden;
+  /* Inner is full popover width with NO horizontal padding — each child
+     section (hex-row, pad-row, recents) owns its own internal padding so
+     all three sit at the same 175px outer width. Closed: zero vertical
+     padding + zero border so the box collapses cleanly. */
+  padding: 0;
+  border-top: 0 solid var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
+  /* Slightly darker than the popover surface so the picker pane reads as
+     a distinct pocket within the popover. Animates with the height. */
+  background-color: hsl(var(--popover));
+  transition: padding 220ms cubic-bezier(.32, .72, 0, 1),
+              border-top-width 160ms ease-out 60ms;
+}
+
+.color-picker-pane[data-open="true"] .color-picker-pane__inner {
+  /* No top padding: hex-row sits flush with the separator above. Bottom
+     padding gives recents (or pad-row, when no recents) breathing room. */
+  padding: 0 0 8px 0;
+  border-top-width: 1px;
+}
+
+/* Hex input row: styled like the icon-picker's search section.
+   Now sits flush with the popover edges (parent inner has 0 horizontal
+   padding) and owns its own internal padding. */
+.color-picker-hex-row {
+  @apply flex items-center;
+  position: relative;
+  height: 32px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
+}
+
+/* Inline indicator overlaid on the hex input's right edge. Visible when
+   the picked color renders differently in light vs dark theme. Shows a
+   half-pie preview — left half = dark mode, right half = light mode —
+   matching the recents lane's split-swatch motif. Tooltip shows hexes. */
+.color-picker-contrast-indicator {
+  @apply inline-flex items-center cursor-help;
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  opacity: 0.85;
+  transition: opacity 120ms;
+  /* Sits above the input so hovers register on the indicator. */
+  z-index: 1;
+  pointer-events: auto;
+
+  &:hover { opacity: 1; }
+}
+
+.contrast-split-swatch {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: linear-gradient(to right,
+    var(--dark-color, currentColor) 50%,
+    var(--light-color, currentColor) 50%);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18),
+              0 0 0 1px var(--lx-gray-04);
+}
+
+/* Small dot used inside the contrast tooltip to color-key each row. */
+.contrast-tooltip-dot {
+  @apply inline-block rounded-full;
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+/* Hex input: blends with the row (no own background, no border,
+   no focus shadow). Mirrors .ui__input inside .search-section. */
+.color-picker-hex-input {
+  @apply flex-1 outline-none;
+  /* min-width: 0 lets the input shrink below its intrinsic content width
+     in a flex container, preventing the row from being forced to grow
+     when padding-right: 90px (indicator visible) plus text would
+     otherwise overflow. */
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  background-color: transparent;
+  font-size: 12px;
+  color: var(--lx-gray-12);
+  border: none;
+  box-shadow: none;
+
+  /* Reserve room on the right when the contrast indicator is overlaid.
+     The indicator is roughly 84px wide (arrow + dot + hex + gaps); 90px
+     total padding leaves a small text gap before the indicator. */
+  .color-picker-hex-row:has(.color-picker-contrast-indicator) & {
+    padding-right: 90px;
+  }
+
+  &::placeholder {
+    color: var(--lx-gray-09);
+  }
+
+  &:focus {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+  }
+
+  /* Invalid state: subtly shift the row's bottom border to red so
+     feedback is visible without a per-input border. */
+  &.is-invalid {
+    color: var(--rx-red-10);
+  }
+}
+
+.color-picker-hex-row:has(.color-picker-hex-input.is-invalid) {
+  border-bottom-color: var(--rx-red-10);
+}
+
+/* Ghost suffix shown after typed text when a prefix match exists. Sits
+   on the same baseline as the input but in muted gray; pointer-events
+   none so it never intercepts clicks. */
+.color-picker-hex-input-ghost {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--lx-gray-09);
+  pointer-events: none;
+  white-space: pre;
+  user-select: none;
+}
+
+.color-picker-pad-row {
+  /* Owns its own horizontal padding now that .color-picker-pane__inner
+     extends children to full popover width. Top/bottom padding handled
+     by inner's gap-2. */
+  @apply flex flex-col;
+  padding: 0 8px;
+}
+
+/* react-colorful overrides — scope under the pane so we don't affect any
+   other instance of the library elsewhere in the app. */
+.color-picker-pane .react-colorful {
+  width: 100%;
+  height: 130px;
+}
+
+.color-picker-pane .react-colorful__saturation {
+  border-radius: 6px 6px 0 0;
+  border-bottom-width: 6px;
+  flex: 1;
+}
+
+.color-picker-pane .react-colorful__hue {
+  height: 14px;
+  flex: 0 0 14px;
+}
+
+.color-picker-pane .react-colorful__last-control {
+  border-radius: 0 0 6px 6px;
+}
+
+.color-picker-pane .react-colorful__pointer {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
+.color-picker-recents {
+  /* Lives inside .color-picker-pane__inner so it shares the popover bg
+     pocket. Owns its own horizontal padding now that __inner extends
+     children to full popover width. The border-top divides recents from
+     the pad-row above. */
+  padding: 8px 8px 0 8px;
+  margin-top: 2px;
+  border-top: 1px solid var(--lx-gray-04);
+}
+
+.color-picker-recents__header {
+  /* Match existing pane-section header typography (12px Inter Medium muted). */
+  @apply text-xs font-medium;
+  color: var(--lx-gray-11);
+  margin-bottom: 6px;
+}
+
+.color-picker-recents__row {
+  /* flex-wrap lets the row spill into a second row when recents > 7.
+     20px tile + 3px gap gives exactly 7 per row in 158px (flush with
+     the 159px content area inside .color-picker-recents). */
+  @apply flex flex-row flex-wrap;
+  gap: 3px;
+}
+
+/* Smaller, simpler swatch in the recents lane: round disk, no
+   selection ring (it's a one-shot pick, not a current-state radio). */
+.color-swatch--recent {
+  @apply rounded-full p-0 flex items-center justify-center
+         border-0 bg-transparent;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  transition: transform 120ms;
+
+  &:hover { transform: scale(1.1); }
+  &:active { transform: scale(0.95); }
+  &:focus,
+  &:focus-visible { outline: none; }
+
+  .swatch-fill {
+    @apply w-full h-full rounded-full block;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+    /* Default solid background. The CLJS sets `background-color` inline
+       when both modes match (no split). When `.is-split` is applied,
+       the background switches to a vertical half-pie gradient using the
+       inline --dark-color and --light-color CSS vars. */
+    background-color: var(--light-color, var(--dark-color, currentColor));
+
+    &.is-split {
+      background-color: transparent;
+      background-image: linear-gradient(to right,
+        var(--dark-color) 50%,
+        var(--light-color) 50%);
+    }
+  }
+
+  &:focus-visible .swatch-fill {
+    box-shadow:
+      inset 0 0 0 1px rgba(0, 0, 0, 0.08),
+      0 0 0 1px var(--lx-gray-02),
+      0 0 0 2.5px var(--lx-accent-09);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .color-picker-pane {
+    transition: none;
+  }
+  .color-picker-pane[data-open="true"] {
+    grid-template-rows: 1fr;
+  }
+  .color-picker-hex-input {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .color-swatch--custom .swatch-fill--rainbow,
+  .color-picker-pane .react-colorful__saturation,
+  .color-picker-pane .react-colorful__hue {
+    forced-color-adjust: none;
+    border: 1px solid CanvasText;
+  }
+  .color-picker-pane .react-colorful__pointer {
+    outline: 2px solid Highlight;
+  }
+}
+
