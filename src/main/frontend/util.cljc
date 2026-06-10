@@ -102,6 +102,9 @@
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
 #?(:cljs (defonce convert-to-roman utils/convertToRoman))
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
+;; HSL→hex utility used by frontend.colors for parsing computed CSS colors
+;; (e.g. `hsl(200 7% 8.8%)`) into canonical hex.
+#?(:cljs (defonce hsl2hex utils/hsl2hex))
 #?(:cljs (def string-join-path common-util/string-join-path))
 
 #?(:cljs

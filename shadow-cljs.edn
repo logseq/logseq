@@ -31,6 +31,9 @@
                         {:init-fn frontend.core/init}
                         :code-editor
                         {:entries [frontend.extensions.code]
+                         :depends-on #{:main}}
+                        :colors-named
+                        {:entries [frontend.colors.named]
                          :depends-on #{:main}}}
 
         :output-dir       "./static/js"
@@ -135,6 +138,9 @@
                            {:init-fn mobile.core/init}
                            :code-editor
                            {:entries [frontend.extensions.code]
+                            :depends-on #{:main}}
+                           :colors-named
+                           {:entries [frontend.colors.named]
                             :depends-on #{:main}}}
 
            :output-dir       "./static/mobile/js"
@@ -182,6 +188,9 @@
 
   :test {:target :node-test
          :output-to "static/tests.js"
+         ;; node-test has no :modules, so swap the lazy color-dict loader
+         ;; for the eager variant (shadow.lazy/loadable cannot compile here)
+         :build-options {:ns-aliases {frontend.colors.named-loader frontend.colors.named-loader-eager}}
          :build-hooks [(shadow.hooks/build-metadata-hook
                         {:build-time "test-build-time"
                          :revision "test-revision"})]
@@ -202,7 +211,8 @@
                                      frontend.worker-common.util/NODETEST true
                                      logseq.shui.util/NODETEST true}
                    :devtools {:enabled false}
-                   :build-options {:ns-exclude-regexp "^(frontend\\.worker|logseq\\.db-sync\\.worker)"}
+                   :build-options {:ns-exclude-regexp "^(frontend\\.worker|logseq\\.db-sync\\.worker)"
+                                   :ns-aliases {frontend.colors.named-loader frontend.colors.named-loader-eager}}
                    ;; disable :static-fns to allow for with-redefs and repl development
                    :compiler-options {:static-fns false}
                    :main frontend.test.frontend-node-test-runner/main}
@@ -232,6 +242,9 @@
                          {:init-fn frontend.publishing/init}
                          :code-editor
                          {:entries [frontend.extensions.code]
+                          :depends-on #{:main}}
+                         :colors-named
+                         {:entries [frontend.colors.named]
                           :depends-on #{:main}}}
 
                :output-dir "./static/js/publishing"
