@@ -152,7 +152,7 @@
    (fn []
      (when on-page-blocks-rendered
        (on-page-blocks-rendered))))
-  (let [document-mode? (state/use-sub :document/mode?)]
+  (let [_doc-mode? (rfx/use-sub [:document/mode?])]
     (when-let [id (:db/id block*)]
       (let [block (db/sub-block id)
             block-id (:block/uuid block)
