@@ -85,7 +85,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
-          cache-dependency-path: pnpm-lock.yaml
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            cli/pnpm-lock.yaml
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -110,6 +112,9 @@ jobs:
 
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
+
+      - name: Fetch CLI pnpm deps
+        run: pnpm --dir cli install --frozen-lockfile
 
       - name: Run logseq CLI tests
         run: opam exec -- pnpm --dir cli test
@@ -144,7 +149,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
-          cache-dependency-path: pnpm-lock.yaml
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            cli/pnpm-lock.yaml
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -169,6 +176,9 @@ jobs:
 
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
+
+      - name: Fetch CLI pnpm deps
+        run: pnpm --dir cli install --frozen-lockfile
 
       - name: Build logseq CLI
         run: |
