@@ -12,9 +12,17 @@
 (def ^:private retention-ms (* 30 24 3600 1000))
 (def gc-interval-ms (* 24 3600 1000))
 
+(defn- has-attr?
+  [db entity attr]
+  (boolean
+   (some #(= attr (:a %))
+         (d/datoms db :eavt (:db/id entity)))))
+
 (defn- recycled?
-  [entity]
-  (some? (:logseq.property/deleted-at entity)))
+  [db entity]
+  (or (ldb/recycled? entity)
+      (and (= recycle-page-title (:block/title (:block/page entity)))
+           (has-attr? db entity :logseq.property.recycle/original-page))))
 
 (defn- build-recycle-page-tx
   [db-id]
@@ -113,6 +121,26 @@
   [db tx-data]
   (distinct (concat tx-data (delete-blocks/update-refs-history db tx-data {}))))
 
+(defn- retract-entity-tx-data
+  [db db-id]
+  (map (fn [datom]
+         [:db/retract (:e datom) (:a datom) (:v datom)])
+       (d/datoms db :eavt db-id)))
+
+(defn- permanently-delete-entity-ids
+  [db root]
+  (if (ldb/page? root)
+    (page-tree-ids db root)
+    (map :db/id (block-subtree db root))))
+
+(defn- permanently-delete-entity-tx-data
+  [db root]
+  (let [entity-ids (permanently-delete-entity-ids db root)
+        retract-entities-tx (map (fn [id] [:db/retractEntity id]) entity-ids)
+        retract-datoms-tx (mapcat #(retract-entity-tx-data db %) entity-ids)]
+    (seq (distinct (concat retract-datoms-tx
+                           (delete-blocks/update-refs-history db retract-entities-tx {}))))))
+
 (defn recycle-blocks-tx-data
   [db blocks {:keys [deleted-by-uuid now-ms]}]
   (let [{:keys [page page-id tx-data]} (ensure-recycle-page db)
@@ -177,7 +205,7 @@
   (let [original-parent (resolve-entity db (:logseq.property.recycle/original-parent root))
         original-page (resolve-entity db (:logseq.property.recycle/original-page root))
         parent-valid? (and original-parent
-                           (not (recycled? original-parent))
+                           (not (recycled? db original-parent))
                            (d/entity db (:db/id original-parent)))]
     (cond
       (ldb/page? root)
@@ -194,7 +222,7 @@
 
       (and original-page
            (d/entity db (:db/id original-page))
-           (not (recycled? original-page)))
+           (not (recycled? db original-page)))
       {:parent original-page
        :page original-page
        :order (restore-order original-page)}
@@ -239,25 +267,28 @@
 
 (defn ^:api permanently-delete-tx-data
   [db root]
-  (when (and root (recycled? root))
-    (some->> (if (ldb/page? root)
-               (keep (fn [id]
-                       (some-> (d/entity db id) :block/uuid))
-                     (page-tree-ids db root))
-               (keep :block/uuid (block-subtree db root)))
-             (map (fn [block-uuid]
-                    [:db/retractEntity [:block/uuid block-uuid]]))
-             distinct
-             seq
-             (with-delete-cleanup-tx db)
-             seq)))
+  (when (and root (recycled? db root))
+    (permanently-delete-entity-tx-data db root)))
 
 (defn ^:api permanently-delete!
   [conn root-uuid]
   (when-let [root (d/entity @conn [:block/uuid root-uuid])]
-    (when-let [tx-data (permanently-delete-tx-data @conn root)]
-      (ldb/transact! conn tx-data {:outliner-op :recycle-delete-permanently})
-      true)))
+    (let [root-id (:db/id root)]
+      (loop [deleted? false]
+        (if-let [root' (d/entity @conn root-id)]
+          (let [datom-count-before (count (d/datoms @conn :eavt root-id))]
+            (if (zero? datom-count-before)
+              deleted?
+              (if-let [tx-data (permanently-delete-entity-tx-data @conn root')]
+                (do
+                  (ldb/transact! conn tx-data {:outliner-op :recycle-delete-permanently
+                                               :skip-validate-db? true})
+                  (when (>= (count (d/datoms @conn :eavt root-id)) datom-count-before)
+                    (throw (ex-info "Failed to make progress while permanently deleting recycled block"
+                                    {:root-id root-id})))
+                  (recur true))
+                deleted?)))
+          deleted?)))))
 
 (defn- gc-tx-data
   [db {:keys [now-ms] :or {now-ms (common-util/time-ms)}}]
@@ -270,7 +301,7 @@
             [(<= ?deleted-at ?cutoff)]]
           db cutoff)
      (map #(d/entity db %))
-     (filter recycled?)
+     (filter #(recycled? db %))
      (mapcat (fn [entity]
                (if (ldb/page? entity)
                  (map (fn [id] [:db/retractEntity id]) (page-tree-ids db entity))

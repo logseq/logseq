@@ -113,6 +113,13 @@
                 "pnpm exec nbb-logseq script/dump_datoms.cljs"
                 *command-line-args*)}
 
+  dev:validate-and-fix
+  {:doc "Validate a DB graph and run shared invalid data repairs"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "pnpm exec nbb-logseq -cp src:../../src/main:../cli/src:../graph-parser/src:../outliner/src:../db-sync/src script/validate_and_fix.cljs"
+                *command-line-args*)}
+
   dev:diff-datoms
   logseq.tasks.dev/diff-datoms
 

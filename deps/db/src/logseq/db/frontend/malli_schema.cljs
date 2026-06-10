@@ -183,8 +183,14 @@
                     (update acc e update a (fnil conj #{}) v)
                     ;; If there's already a val, don't clobber it and automatically start collecting it as a :many
                     (if-let [existing-val (get-in acc [e a])]
-                      (if (set? existing-val)
+                      (cond
+                        (= existing-val v)
+                        acc
+
+                        (set? existing-val)
                         (update acc e assoc a (conj existing-val v))
+
+                        :else
                         (update acc e assoc a #{existing-val v}))
                       (update acc e assoc a v))))
                 {}
