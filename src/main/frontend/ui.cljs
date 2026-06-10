@@ -346,7 +346,7 @@
           [:div.flex.items-start
            [:div.flex-shrink-0.pt-2
             svg]
-           [:div.ml-3.w-0.flex-1.pt-2
+           [:div.ml-3.w-0.flex-1.pt-2.pointer-events-auto
 
             [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}}
              content]]
