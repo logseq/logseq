@@ -3310,7 +3310,13 @@
         loading? (first (hooks/use-atom *loading?))
         ;; Use cached assets if available, otherwise try to get them
         assets (or (first (hooks/use-atom *loaded-assets)) [])
-        search-q @*search-q
+        ;; Reactive subscriptions (Rules of Hooks): under HSX a use-memo atom
+        ;; only re-renders when read through use-atom, so search filtering,
+        ;; keyboard focus-region and the avatar fallback menu need these to
+        ;; repaint. (Regression from the Rum→HSX port — these were `rum/local`.)
+        search-q (first (hooks/use-atom *search-q))
+        _ (hooks/use-atom *focus-region)
+        _ (hooks/use-atom *fallback-menu-open?)
         ;; Web search query: use search input if typing, otherwise use page title
         web-query (first (hooks/use-atom *web-query-debounced))
         effective-web-query (if (string/blank? search-q)
@@ -7045,6 +7051,18 @@
         ;; Subscribe at top level (Rules of Hooks); the nested read inside the
         ;; results branch then just derefs the value this subscription tracks.
         section-states (first (hooks/use-atom *section-states))
+        ;; Restore the reactivity Rum's `rum/local` gave for free: under HSX a
+        ;; use-memo atom only re-renders the component when read through
+        ;; use-atom, so these subscriptions are what make tab switches, search
+        ;; filtering, view changes and focus state actually repaint. The bare
+        ;; @derefs in the render below then read the fresh value each render.
+        ;; (Regression from the Rum→HSX port — these six were `rum/local`.)
+        _ (hooks/use-atom *tab)
+        _ (hooks/use-atom *q)
+        _ (hooks/use-atom *result)
+        _ (hooks/use-atom *view)
+        _ (hooks/use-atom *focus-region)
+        _ (hooks/use-atom *input-focused?)
         {flat-items :items sections :sections} (compute-flat-items @*tab result section-states
                                                                    {:show-used? (:show-used? opts)})
         highlighted-id (when-let [idx highlighted-idx]
