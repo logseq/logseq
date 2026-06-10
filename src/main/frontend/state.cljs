@@ -1354,6 +1354,29 @@ should be done through this fn in order to get global config and config defaults
     (set-edit-content! edit-input-id content)
     (set-editor-last-pos! new-pos)))
 
+(defn apply-theme-to-dom!
+  "Single source of truth for stamping the theme onto the DOM:
+   sets `data-theme` on <html>, adds/removes the `dark` class on <html>,
+   and the legacy `dark-theme`/`light-theme`/`white-theme` classes on
+   <body>. Idempotent.
+
+   Called synchronously from `set-theme-mode!` *before* `set-state!` so
+   subscribers that read CSS-var values at render time (contrast-adjusted
+   icon colors via `colors/read-bg-var`) see the new theme on their next
+   render. Also called from `components.theme/container`'s mount effect so
+   the initial DOM is stamped before any subscriber renders."
+  [mode]
+  (when (exists? js/document)
+    (let [^js doc js/document.documentElement
+          ^js cls (.-classList doc)
+          ^js cls-body (.-classList js/document.body)]
+      (.setAttribute doc "data-theme" mode)
+      (if (= mode "dark")
+        (do (.add cls "dark")
+            (doto cls-body (.remove "white-theme" "light-theme") (.add "dark-theme")))
+        (do (.remove cls "dark")
+            (doto cls-body (.remove "dark-theme") (.add "white-theme" "light-theme")))))))
+
 (defn set-theme-mode!
   ([mode] (set-theme-mode! mode (:ui/system-theme? @state)))
   ([mode system-theme?]
@@ -1363,6 +1386,7 @@ should be done through this fn in order to get global config and config defaults
        (util/set-theme-dark)))
    (when (mobile-util/native-platform?)
      (mobile-util/set-native-interface-style! mode system-theme?))
+   (apply-theme-to-dom! mode)
    (set-state! :ui/theme mode)
    (storage/set :ui/theme mode)))
 
