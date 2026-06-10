@@ -482,7 +482,7 @@
         ;; main-thread DB yet even though the file loads fine from the worker.
         latest-tx (state/use-sub :db/latest-transacted-entity-uuids)
         ;; Size from opts, default to 20px
-        size (or (:size opts) 20)
+        size (or (:size opts) (get-in opts [:style :font-size]) 20)
         ;; Fallback data from avatar
         avatar-value (get avatar-data :value "")
         explicit-bg (get avatar-data :backgroundColor)
@@ -647,7 +647,7 @@
                ;; CSS forces all svgs inside .ls-page-icon to 38x38,
                ;; ignoring the :size prop. Inline style outranks that
                ;; class selector and lets the plus actually shrink.
-               (let [size (or (:size opts) 20)
+               (let [size (or (:size opts) (get-in opts [:style :font-size]) 20)
                      inner (max 8 (int (* size 0.45)))
                      inner-px (str inner "px")]
                  [:span.ui__icon.image-placeholder-icon
@@ -675,7 +675,7 @@
                      display-text (if (> (count text-value) 8)
                                     (subs text-value 0 8)
                                     text-value)
-                     size (or (:size opts) 20)
+                     size (or (:size opts) (get-in opts [:style :font-size]) 20)
                      ;; Always split 5+ char text — icon should look identical at all sizes
                      lines (smart-split-text display-text)
                      multi-line? (> (count lines) 1)
@@ -737,7 +737,7 @@
                    (avatar-image-cp asset-uuid asset-type avatar-data opts)
                    ;; Text-only avatar (no image set). Renders either initials
                    ;; or a tabler icon depending on :fallback-type.
-                   (let [size (or (:size opts) 20)
+                   (let [size (or (:size opts) (get-in opts [:style :font-size]) 20)
                          avatar-value (get avatar-data :value)
                          explicit-bg (get avatar-data :backgroundColor)
                          explicit-color (get avatar-data :color)
