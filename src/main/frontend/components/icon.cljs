@@ -12,7 +12,6 @@
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
@@ -22,7 +21,6 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.icon-color :as icon-color]
             [frontend.handler.property :as property-handler]
-            [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -30,6 +28,7 @@
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
+            [io.factorhouse.hsx.core :as hsx]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
@@ -38,10 +37,9 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+            [promesa.core :as p]))
 
-(defonce hex-color-picker (r/adapt-class HexColorPicker))
+(defn hex-color-picker [props] [:> HexColorPicker props])
 
 (defonce emojis (vals (bean/->clj (gobj/get emoji-data "emojis"))))
 
@@ -50,9 +48,9 @@
 ;; cross-talk their drag highlights, upload progress, and asset-picker-open
 ;; flag, plus the OUTER icon-search root and INNER asset-picker overlapped
 ;; on the shared `*drag-active?` even within a single session. State now
-;; lives in `rum/local` on each owning component (asset-picker + icon-search),
-;; so each mount gets its own atoms and cleanup happens automatically when
-;; the component unmounts.
+;; lives in component-local atoms (via use-memo) on each owning component
+;; (asset-picker + icon-search), so each mount gets its own atoms and the
+;; React unmount drops them automatically.
 
 ;; ============================================================
 ;; Icon hover-preview helpers
@@ -123,8 +121,8 @@
 (defn- reset-picker-transient-state!
   "Clear every transient/optimistic atom that should not survive a
    trash-button click. Picker-instance atoms are passed explicitly
-   because rum/local atoms aren't reachable from outside the
-   component; global state is cleared unconditionally.
+   because the picker's component-local atoms aren't reachable from
+   outside the component; global state is cleared unconditionally.
 
    Fixes the race where an in-flight `<save-image-asset!` resolves
    AFTER a delete click and writes back to `::pending-icon`, leaving
@@ -364,86 +362,59 @@
                                        (reset! *error true))))))))]
           (attempt 0))))))
 
-(rum/defcs image-icon-cp < rum/reactive db-mixins/query
-  (rum/local nil ::url)
-  (rum/local false ::error)
-  (rum/local nil ::loaded-uuid)
-  (rum/local 0 ::load-id)
-  {:did-mount (fn [state]
-                (let [[asset-uuid asset-type-arg _opts] (:rum/args state)
-                      asset-type (or asset-type-arg
-                                     (get-asset-type-from-db asset-uuid))
-                      *url (::url state)
-                      *error (::error state)
-                      *loaded-uuid (::loaded-uuid state)]
-                  (when (and asset-uuid (not= @*loaded-uuid asset-uuid))
-                    (reset! *loaded-uuid asset-uuid)
-                    (<load-asset-url! *url *error asset-uuid asset-type
-                                      {:try-extensions? (nil? asset-type)
-                                       :*load-id (::load-id state)})))
-                state)
-   :did-update (fn [state]
-                 (let [[asset-uuid asset-type-arg _opts] (:rum/args state)
-                       *url (::url state)
-                       *error (::error state)
-                       *loaded-uuid (::loaded-uuid state)]
-                   (cond
-                     ;; New uuid → fresh load.
-                     (and asset-uuid (not= @*loaded-uuid asset-uuid))
-                     (let [asset-type (or asset-type-arg
-                                          (get-asset-type-from-db asset-uuid))]
-                       (reset! *loaded-uuid asset-uuid)
-                       (<load-asset-url! *url *error asset-uuid asset-type
-                                         {:try-extensions? (nil? asset-type)
-                                          :*load-id (::load-id state)}))
-                     ;; Retraction: this uuid appears in the latest tx's
-                     ;; :deleted-ids. Clear *url so the image vanishes; a
-                     ;; follow-up load attempt fails (file deleted by the
-                     ;; outliner pipeline) and *error flips → image-error
-                     ;; fallback renders.
-                     (and asset-uuid (string? asset-uuid) @*url
-                          (let [uuid-val (try (uuid asset-uuid) (catch :default _ nil))
-                                deleted (some-> @(get @state/state :db/latest-transacted-entity-uuids)
-                                                :deleted-ids)]
-                            (and uuid-val deleted (contains? deleted uuid-val))))
-                     (let [asset-type (or asset-type-arg
-                                          (get-asset-type-from-db asset-uuid))]
-                       (reset! *url nil)
-                       (reset! *error false)
-                       (<load-asset-url! *url *error asset-uuid asset-type
-                                         {:try-extensions? (nil? asset-type)
-                                          :*load-id (::load-id state)}))))
-                 state)}
+(hsx/defc image-icon-cp
   "Renders an image icon by loading the asset URL asynchronously.
    Tries common extensions if asset-type is unknown.
    Accepts optional :on-click-error callback in opts for error state clicks."
-  [state _asset-uuid _asset-type-arg opts]
-  (let [;; Re-render on any main-thread tx so we can react to retractions.
+  [asset-uuid asset-type-arg opts]
+  (let [*url (hooks/use-memo #(atom nil) [])
+        *error (hooks/use-memo #(atom false) [])
+        *loaded-uuid (hooks/use-memo #(atom nil) [])
+        *load-id (hooks/use-memo #(atom 0) [])
+        [url] (hooks/use-atom *url)
+        [load-error?] (hooks/use-atom *error)
+        ;; Re-render on any main-thread tx so we can react to retractions.
         ;; `model/sub-block` can't drive this — the worker's affected-keys
         ;; pipeline (worker/react.cljs:63-67) calls `(d/entity db-after id)`,
         ;; which returns nil for retracted entities, so no `[::block id]`
         ;; is emitted and subscriptions on retracted entities never fire.
         ;; `:db/latest-transacted-entity-uuids` (modules/outliner/pipeline.cljs:56-58)
         ;; flips on every tx and is the reliable retraction signal.
-        _latest-tx (state/sub :db/latest-transacted-entity-uuids)
-        url @(::url state)
-        load-error? @(::error state)
+        latest-tx (state/use-sub :db/latest-transacted-entity-uuids)
         ;; Render decision is driven purely by load outcome: URL set →
         ;; image; load-error → fallback; otherwise → loading placeholder.
         ;; Entity presence is *not* part of this gate — on cold reload
         ;; the asset block hasn't transacted into the main-thread DB yet
         ;; even though the file loads fine from the worker, so gating
         ;; the URL on `(db/entity …)` masks a working blob URL with the
-        ;; image-error fallback until an unrelated query (e.g. visiting
-        ;; `#Asset`) hydrates the block.
-        ;;
-        ;; Retraction is handled in `:did-update` by watching
-        ;; `:db/latest-transacted-entity-uuids :deleted-ids` and
-        ;; clearing `*url` so the next load attempt fails into the
-        ;; fallback (see below).
+        ;; image-error fallback until an unrelated query hydrates the block.
+        ;; Retraction is handled in the effect below by watching
+        ;; `latest-tx :deleted-ids` and clearing `*url`.
         error? load-error?
         size (or (:size opts) 20)
         on-click-error (:on-click-error opts)]
+    ;; Load on mount + on uuid change; clear+reload on retraction.
+    ;; (was Rum :did-mount + :did-update)
+    (hooks/use-effect!
+     (fn []
+       (let [asset-type (or asset-type-arg (get-asset-type-from-db asset-uuid))]
+         (cond
+           (and asset-uuid (not= @*loaded-uuid asset-uuid))
+           (do (reset! *loaded-uuid asset-uuid)
+               (<load-asset-url! *url *error asset-uuid asset-type
+                                 {:try-extensions? (nil? asset-type)
+                                  :*load-id *load-id}))
+           (and asset-uuid (string? asset-uuid) @*url
+                (let [uuid-val (try (uuid asset-uuid) (catch :default _ nil))
+                      deleted (some-> latest-tx :deleted-ids)]
+                  (and uuid-val deleted (contains? deleted uuid-val))))
+           (do (reset! *url nil)
+               (reset! *error false)
+               (<load-asset-url! *url *error asset-uuid asset-type
+                                 {:try-extensions? (nil? asset-type)
+                                  :*load-id *load-id}))))
+       js/undefined)
+     [asset-uuid asset-type-arg latest-tx])
     (cond
       error?
       ;; Broken/missing asset. Match the visual language of the "pick an image"
@@ -479,8 +450,8 @@
         {:src url
          :loading "lazy"
          :on-error (fn [_e]
-                     (reset! (::url state) nil)
-                     (reset! (::error state) true))
+                     (reset! *url nil)
+                     (reset! *error true))
          :style {:width "100%"
                  :height "100%"
                  :object-fit "contain"
@@ -490,59 +461,21 @@
       [:span.ui__icon.image-icon.bg-gray-04.animate-pulse
        {:style {:width size :height size}}])))
 
-(rum/defcs avatar-image-cp < rum/reactive db-mixins/query
-  (rum/local nil ::url)
-  (rum/local false ::error)
-  (rum/local nil ::loaded-for)
-  (rum/local 0 ::load-id)
-  {:did-mount (fn [state]
-                (let [[asset-uuid asset-type _avatar-data _opts] (:rum/args state)
-                      *url (::url state)
-                      *error (::error state)
-                      *loaded-for (::loaded-for state)]
-                  (when (and asset-uuid (not= @*loaded-for [asset-uuid asset-type]))
-                    (reset! *loaded-for [asset-uuid asset-type])
-                    (<load-asset-url! *url *error asset-uuid asset-type
-                                      {:try-extensions? (nil? asset-type)
-                                       :*load-id (::load-id state)})))
-                state)
-   :did-update (fn [state]
-                 (let [[asset-uuid asset-type _avatar-data _opts] (:rum/args state)
-                       *url (::url state)
-                       *error (::error state)
-                       *loaded-for (::loaded-for state)]
-                   (cond
-                     (and asset-uuid (not= @*loaded-for [asset-uuid asset-type]))
-                     (do (reset! *loaded-for [asset-uuid asset-type])
-                         (<load-asset-url! *url *error asset-uuid asset-type
-                                           {:try-extensions? (nil? asset-type)
-                                            :*load-id (::load-id state)}))
-                     ;; Retraction signal — see `image-icon-cp` :did-update.
-                     (and asset-uuid (string? asset-uuid) @*url
-                          (let [uuid-val (try (uuid asset-uuid) (catch :default _ nil))
-                                deleted (some-> @(get @state/state :db/latest-transacted-entity-uuids)
-                                                :deleted-ids)]
-                            (and uuid-val deleted (contains? deleted uuid-val))))
-                     (do (reset! *url nil)
-                         (reset! *error false)
-                         (<load-asset-url! *url *error asset-uuid asset-type
-                                           {:try-extensions? (nil? asset-type)
-                                            :*load-id (::load-id state)}))))
-                 state)}
+(hsx/defc avatar-image-cp
   "Renders an avatar with an image, with initials as fallback.
    Uses shui/avatar for circular display with object-fit: cover."
-  [state _asset-uuid _asset-type avatar-data opts]
-  (let [;; Re-render on every tx so :did-update can react to retractions
-        ;; (it watches `:deleted-ids` and clears `*url`).
-        _latest-tx (state/sub :db/latest-transacted-entity-uuids)
-        url @(::url state)
-        ;; Render is driven purely by load outcome. Don't gate on
-        ;; `(db/entity …)` presence: on cold reload the asset block
-        ;; hasn't transacted into the main-thread DB yet even though
-        ;; the file loads fine from the worker, and gating here masks a
-        ;; working blob URL with the initials fallback until an
-        ;; unrelated query hydrates the block.
-        _load-error? @(::error state)
+  [asset-uuid asset-type avatar-data opts]
+  (let [*url (hooks/use-memo #(atom nil) [])
+        *error (hooks/use-memo #(atom false) [])
+        *loaded-for (hooks/use-memo #(atom nil) [])
+        *load-id (hooks/use-memo #(atom 0) [])
+        [url] (hooks/use-atom *url)
+        ;; Re-render on every tx so the effect can react to retractions
+        ;; (it watches `latest-tx :deleted-ids` and clears `*url`). Render is
+        ;; driven purely by load outcome — don't gate on `(db/entity …)`
+        ;; presence: on cold reload the asset block hasn't transacted into the
+        ;; main-thread DB yet even though the file loads fine from the worker.
+        latest-tx (state/use-sub :db/latest-transacted-entity-uuids)
         ;; Size from opts, default to 20px
         size (or (:size opts) 20)
         ;; Fallback data from avatar
@@ -563,6 +496,27 @@
         fallback-style (avatar-fallback-style {:font-size font-size
                                                :bg explicit-bg
                                                :color explicit-color})]
+    ;; Load on mount + on [uuid type] change; clear+reload on retraction.
+    ;; (was Rum :did-mount + :did-update)
+    (hooks/use-effect!
+     (fn []
+       (cond
+         (and asset-uuid (not= @*loaded-for [asset-uuid asset-type]))
+         (do (reset! *loaded-for [asset-uuid asset-type])
+             (<load-asset-url! *url *error asset-uuid asset-type
+                               {:try-extensions? (nil? asset-type)
+                                :*load-id *load-id}))
+         (and asset-uuid (string? asset-uuid) @*url
+              (let [uuid-val (try (uuid asset-uuid) (catch :default _ nil))
+                    deleted (some-> latest-tx :deleted-ids)]
+                (and uuid-val deleted (contains? deleted uuid-val))))
+         (do (reset! *url nil)
+             (reset! *error false)
+             (<load-asset-url! *url *error asset-uuid asset-type
+                               {:try-extensions? (nil? asset-type)
+                                :*load-id *load-id})))
+       js/undefined)
+     [asset-uuid asset-type latest-tx])
     (shui/avatar
      {;; Force-remount when the URL transitions absent <-> present.
       ;; Radix's Avatar primitive tracks image-loading status in
@@ -963,12 +917,14 @@
           :else
           "point-filled")))))
 
-(rum/defc get-node-icon-cp < rum/reactive db-mixins/query
+(hsx/defc get-node-icon-cp
   [node-entity opts]
-  (let [;; Get fresh entity using db/sub-block to make it reactive to property changes
-        fresh-entity (when-let [db-id (:db/id node-entity)]
-                       (or (model/sub-block db-id) node-entity))
-        entity (or fresh-entity node-entity)
+  (let [;; `model/sub-block` wraps `use-query` (a hook), so it must be called
+        ;; unconditionally at the top — not inside the `when-let` it used to live
+        ;; in. Pass the (possibly nil) db-id; sub-block returns nil for a nil id.
+        db-id (:db/id node-entity)
+        reactive-block (model/sub-block db-id)
+        entity (or (when db-id reactive-block) node-entity)
         node-icon (cond
                     (:own-icon? opts)
                     (get entity :logseq.property/icon)
@@ -995,7 +951,7 @@
         ;; Defaults to `:logseq.property/icon` because that's what every
         ;; existing caller of this fn renders.
         preview-property (or (:property opts) :logseq.property/icon)
-        preview (state/sub :ui/icon-hover-preview)
+        preview (state/use-sub :ui/icon-hover-preview)
         preview-active? (and preview
                              (icon-preview-matches? preview (:db/id entity) preview-property))
         preview-icon (when preview-active? (:icon preview))
@@ -2006,11 +1962,11 @@
      :emojis emojis'
      :assets assets'}))
 
-(rum/defc icons-row
+(hsx/defc icons-row
   [items]
   [:div.its.icons-row items])
 
-(rum/defc icon-cp < rum/static
+(hsx/defc icon-cp
   [icon-item {:keys [on-chosen hover on-tile-hover! highlighted-id ghost-highlighted-id wave]}]
   (let [icon-id (get-in icon-item [:data :value])
         icon-name (or (:label icon-item) icon-id)
@@ -2039,7 +1995,7 @@
      (when icon-id'
        (ui/icon icon-id' {:size 24}))]))
 
-(rum/defc emoji-cp < rum/static
+(hsx/defc emoji-cp
   [icon-item {:keys [on-chosen hover on-tile-hover! highlighted-id ghost-highlighted-id wave]}]
   (let [emoji-id (get-in icon-item [:data :value])
         emoji-name (or (:label icon-item) emoji-id)
@@ -2061,7 +2017,7 @@
      [:em-emoji {:id emoji-id
                  :style {:line-height 1}}]]))
 
-(rum/defc text-cp < rum/static
+(hsx/defc text-cp
   [icon-item {:keys [on-chosen hover on-tile-hover! highlighted-id ghost-highlighted-id wave]}]
   (let [text-value (get-in icon-item [:data :value])
         text-color (get-in icon-item [:data :color])
@@ -2087,7 +2043,7 @@
       :on-mouse-out #()}
      display-text]))
 
-(rum/defc avatar-cp < rum/static
+(hsx/defc avatar-cp
   [icon-item {:keys [on-chosen hover on-tile-hover! highlighted-id ghost-highlighted-id wave]}]
   (let [avatar-value (get-in icon-item [:data :value])
         backgroundColor (or (get-in icon-item [:data :backgroundColor])
@@ -2122,7 +2078,7 @@
                                        :color color})}
        display-text))]))
 
-(rum/defc image-cp < rum/static
+(hsx/defc image-cp
   "Compact image-asset tile for the flex-wrap row layout (recently-used).
    Search-results assets render via a dedicated 5-col grid using
    `image-asset-item` directly — that path bypasses `render-item`."
@@ -2171,7 +2127,7 @@
 ;; Shared state for section expansion (persists during session)
 (defonce *section-states (atom {}))
 
-(rum/defc section-header
+(hsx/defc section-header
   [{:keys [title count total-count expanded? keyboard-hint on-toggle focus-region simple? title-extra]}]
   [:div.section-header.text-xs.py-1.5.px-3.flex.justify-between.items-center.gap-2.bg-gray-02.h-8
    {:style {:color "var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)))"}}
@@ -2212,11 +2168,11 @@
         (if expanded? (t :icon.section-header/hide) (t :icon.section-header/show))
         (shui/shortcut keyboard-hint {:style :compact})]))])
 
-(rum/defc pane-section
+(hsx/defc pane-section
   [label icon-items & {:keys [collapsible? keyboard-hint total-count searching? virtual-list? render-item-fn expanded? focus-region show-header? *virtuoso-ref header-cp]
                        :or {virtual-list? true collapsible? false expanded? true show-header? true}
                        :as opts}]
-  (let [*el-ref (rum/use-ref nil)
+  (let [*el-ref (hooks/use-ref nil)
         render-fn (or render-item-fn render-item)
         toggle-fn (when collapsible?
                     #(swap! *section-states update label (fn [v] (if (nil? v) false (not v)))))]
@@ -2261,7 +2217,7 @@
                      ;; the ref isn't attached yet and this is `nil`;
                      ;; Virtuoso falls back to internal scrolling for
                      ;; one frame, then re-renders with the parent.
-                     :custom-scroll-parent (some-> (rum/deref *el-ref) (.closest ".bd-scroll"))
+                     :custom-scroll-parent (some-> (hooks/deref *el-ref) (.closest ".bd-scroll"))
                      :item-content (fn [idx]
                                      (icons-row
                                       (let [last? (= (dec rows) idx)
@@ -2295,7 +2251,7 @@
 
 (declare get-used-items)
 
-(rum/defc emojis-cp < rum/static
+(hsx/defc emojis-cp
   [emojis* {:keys [show-used?] :as opts}]
   (let [used-emojis (when show-used?
                       (->> (get-used-items)
@@ -2320,7 +2276,7 @@
      (pane-section "Emojis" icon-items
                    (assoc opts :show-header? has-recents?))]))
 
-(rum/defc icons-cp < rum/static
+(hsx/defc icons-cp
   [icons opts]
   (let [icon-items (map (fn [icon-name]
                           {:type :icon
@@ -2493,7 +2449,7 @@
                 (when (not= result initials)
                   result)))))))))
 
-(rum/defc text-tab-cp
+(hsx/defc text-tab-cp
   [*q page-title *color opts]
   (let [query @*q
         text-value (if (string/blank? query)
@@ -2519,7 +2475,7 @@
        [:div.text-sm.text-gray-07.dark:opacity-80
         (t :icon.text-tab/empty-prompt)]])))
 
-(rum/defc avatar-tab-cp
+(hsx/defc avatar-tab-cp
   [*q page-title *color opts]
   (let [query @*q
         avatar-value (if (string/blank? query)
@@ -2548,7 +2504,7 @@
        [:div.text-sm.text-gray-07.dark:opacity-80
         (t :icon.avatar-tab/empty-prompt)]])))
 
-(rum/defc custom-tab-cp < rum/reactive
+(hsx/defc custom-tab-cp
   "Combined tab showing Text, Avatar, and Image options side by side"
   [*q page-title *color *view *asset-picker-initial-mode _icon-value opts]
   (let [query @*q
@@ -2572,7 +2528,7 @@
         preview-target-db-id (:preview-target-db-id opts)
         _preview-target-db-ids (:preview-target-db-ids opts)
         scope-property (or (:property opts) :logseq.property/icon)
-        hover-preview-state (state/sub :ui/icon-hover-preview)
+        hover-preview-state (state/use-sub :ui/icon-hover-preview)
         hover-color-match? (and hover-preview-state
                                 (icon-preview-matches? hover-preview-state preview-target-db-id scope-property))
         hover-color (when hover-color-match?
@@ -2740,18 +2696,7 @@
        :license     license
        :license-desc (license->description license)})))
 
-(rum/defcs image-asset-item < rum/reactive
-  (rum/local nil ::url)
-  (rum/local false ::error)
-  {:did-mount (fn [state]
-                (let [[asset _opts] (:rum/args state)
-                      *url (::url state)
-                      *error (::error state)
-                      asset-type (:logseq.property.asset/type asset)
-                      asset-uuid (:block/uuid asset)]
-                  (when (and asset-uuid asset-type)
-                    (<load-asset-url! *url *error asset-uuid asset-type {})))
-                state)}
+(hsx/defc image-asset-item
   "Renders a single image asset thumbnail in the asset picker grid.
    When avatar-context is provided, renders circular previews and returns avatar data.
    Returns nil if asset file doesn't exist (ghost asset).
@@ -2762,9 +2707,11 @@
    (web-downloaded assets do; locally-uploaded assets gracefully degrade
    to image + title only). Preview only renders once the blob URL has
    resolved; ghost assets (load errors) skip it."
-  [state asset {:keys [on-chosen avatar-context selected? item-id highlighted? ghost-highlighted? variant]}]
-  (let [url @(::url state)
-        error? @(::error state)
+  [asset {:keys [on-chosen avatar-context selected? item-id highlighted? ghost-highlighted? variant]}]
+  (let [*url (hooks/use-memo #(atom nil) [])
+        *error (hooks/use-memo #(atom false) [])
+        [url] (hooks/use-atom *url)
+        [error?] (hooks/use-atom *error)
         asset-type (:logseq.property.asset/type asset)
         asset-uuid (:block/uuid asset)
         asset-title (or (:block/title asset) (str asset-uuid))
@@ -2788,8 +2735,8 @@
                       (if (and error? (not search-variant?))
                         ;; Click-to-retry on ghost assets (only in the asset-picker
                         ;; surface; search variant doesn't surface the affordance).
-                        (do (reset! (::error state) false)
-                            (<load-asset-url! (::url state) (::error state) asset-uuid asset-type {}))
+                        (do (reset! *error false)
+                            (<load-asset-url! *url *error asset-uuid asset-type {}))
                         (do
                           ;; Track as recently used
                           (add-used-asset! asset-uuid)
@@ -2818,10 +2765,17 @@
                   :loading "lazy"
                   :on-error (fn [_e]
                               ;; Blob URL became invalid — mark as error so user can retry
-                              (reset! (::url state) nil)
-                              (reset! (::error state) true))}]
+                              (reset! *url nil)
+                              (reset! *error true))}]
            :else
            [:div.bg-gray-04 (when-not search-variant? {:class "animate-pulse"})])]]
+    ;; Load the asset thumbnail on mount (was Rum :did-mount).
+    (hooks/use-effect!
+     (fn []
+       (when (and asset-uuid asset-type)
+         (<load-asset-url! *url *error asset-uuid asset-type {}))
+       js/undefined)
+     [asset-uuid asset-type])
     (if-let [preview (and (not error?) (asset->preview-data asset url))]
       ;; Tooltip delay: 200ms in search (fast intent), 400ms in picker (browse intent).
       (shui/tooltip-provider
@@ -2851,7 +2805,7 @@
     ;; Skip for SVG (uses PNG thumbnail anyway) and potentially transparent formats
     (not (or is-svg? likely-transparent?))))
 
-(rum/defc web-image-card-content
+(hsx/defc web-image-card-content
   "Pure-render preview block: blurred-bg + sharp overlay + maximize button +
    title + source · license + license badge. Used as the tooltip content for
    web-image tiles AND for asset-block tiles in the recents / available
@@ -2967,7 +2921,7 @@
        (when license-desc
          [:div.license-badge license-desc])]]]))
 
-(rum/defc web-image-item
+(hsx/defc web-image-item
   "Renders a single web image thumbnail with external indicator and rich
    hover card. Hover (or keyboard focus) reveals title + source + license
    + larger preview + maximize affordance. Click commits."
@@ -3031,72 +2985,7 @@
         :side-offset 8 :collision-padding 8}
        (web-image-card-content web-image))))))
 
-(rum/defcs web-images-section < rum/reactive
-  (rum/local nil ::images)
-  (rum/local true ::loading?)
-  (rum/local nil ::current-query)
-  ;; True when the latest fetch reported a network error (both Wikipedia and
-  ;; Commons calls failed). Cleared when a fresh fetch begins.
-  (rum/local false ::search-error?)
-  ;; Generation counter — responses whose id no longer matches are stale
-  ;; (e.g. a "do" prefix response arriving after "donald trump" was issued)
-  ;; and must not overwrite the current images.
-  (rum/local 0 ::request-id)
-  {:did-mount (fn [state]
-                (let [[{:keys [query *result-sink]}] (:rum/args state)
-                      *images (::images state)
-                      *loading? (::loading? state)
-                      *current-query (::current-query state)
-                      *request-id (::request-id state)
-                      *search-error? (::search-error? state)
-                      publish! (fn [results error?]
-                                 (reset! *images results)
-                                 (reset! *search-error? (boolean error?))
-                                 (when *result-sink (reset! *result-sink (vec results))))]
-                  (when-not (string/blank? query)
-                    (reset! *current-query query)
-                    (reset! *loading? true)
-                    (reset! *search-error? false)
-                    (let [my-id (swap! *request-id inc)]
-                      (-> (<search-web-images query)
-                          (p/then (fn [{:keys [images network-error?]}]
-                                    (when (= my-id @*request-id)
-                                      (publish! images network-error?)
-                                      (reset! *loading? false))))
-                          (p/catch (fn [_err]
-                                     (when (= my-id @*request-id)
-                                       (publish! [] true)
-                                       (reset! *loading? false))))))))
-                state)
-   :did-update (fn [state]
-                 (let [[{:keys [query *result-sink]}] (:rum/args state)
-                       *images (::images state)
-                       *loading? (::loading? state)
-                       *current-query (::current-query state)
-                       *request-id (::request-id state)
-                       *search-error? (::search-error? state)
-                       current-query @*current-query
-                       publish! (fn [results error?]
-                                  (reset! *images results)
-                                  (reset! *search-error? (boolean error?))
-                                  (when *result-sink (reset! *result-sink (vec results))))]
-                   ;; Only refetch if query changed
-                   (when (and (not= query current-query)
-                              (not (string/blank? query)))
-                     (reset! *current-query query)
-                     (reset! *loading? true)
-                     (reset! *search-error? false)
-                     (let [my-id (swap! *request-id inc)]
-                       (-> (<search-web-images query)
-                           (p/then (fn [{:keys [images network-error?]}]
-                                     (when (= my-id @*request-id)
-                                       (publish! images network-error?)
-                                       (reset! *loading? false))))
-                           (p/catch (fn [_err]
-                                      (when (= my-id @*request-id)
-                                        (publish! [] true)
-                                        (reset! *loading? false))))))))
-                 state)}
+(hsx/defc web-images-section
   "Renders the web images section with loading states.
    query: search query (page title or user input)
    on-select: callback when user selects a web image
@@ -3106,22 +2995,23 @@
    highlighted-id: stable id of currently-highlighted tile (string), or nil
    ghost-highlighted-id: stable id of the ghost-highlighted tile (hint that
      Enter-from-search will pick this one), or nil"
-  [state {:keys [query on-select avatar-context user-typing?
-                 highlighted-id ghost-highlighted-id focus-region saved-source-urls]}]
-  (let [*images (::images state)
-        *loading? (::loading? state)
-        *current-query (::current-query state)
-        *search-error? (::search-error? state)
-        images (rum/react *images)
+  [{:keys [query on-select avatar-context user-typing?
+           highlighted-id ghost-highlighted-id focus-region saved-source-urls *result-sink]}]
+  (let [*images (hooks/use-memo #(atom nil) [])
+        *loading? (hooks/use-memo #(atom true) [])
+        *current-query (hooks/use-memo #(atom nil) [])
+        *search-error? (hooks/use-memo #(atom false) [])
+        *request-id (hooks/use-memo #(atom 0) [])
+        [images] (hooks/use-atom *images)
         ;; `saved-source-urls` is a set of source URLs for assets the user has
         ;; already downloaded locally. We don't filter those tiles out — hiding
         ;; them on a 5-wide row collapses the layout and reads as a broken
         ;; search when the user has saved 3 of the top hits. Instead, the per-
         ;; tile `saved?` flag swaps the corner globe overlay for a green check
         ;; badge, and the click routes through the existing asset (no redownload).
-        loading? (rum/react *loading?)
-        current-query (rum/react *current-query)
-        search-error? (rum/react *search-error?)
+        [loading?] (hooks/use-atom *loading?)
+        [current-query] (hooks/use-atom *current-query)
+        [search-error?] (hooks/use-atom *search-error?)
         ;; `pending?` captures two transition states where skeletons should
         ;; show even though `loading?` hasn't flipped yet:
         ;; 1. `user-typing?` — user has typed but the 500ms debounce hasn't
@@ -3133,7 +3023,31 @@
                           (not= query current-query)))
         show-loading? (or loading? pending?)
         avatar-mode? (some? avatar-context)
-        web-expanded? (get (rum/react *section-states) "Web images" true)]
+        web-expanded? (get (first (hooks/use-atom *section-states)) "Web images" true)]
+    ;; Fetch web images on mount + when the query changes. (was Rum :did-mount + :did-update)
+    (hooks/use-effect!
+     (fn []
+       (let [publish! (fn [results error?]
+                        (reset! *images results)
+                        (reset! *search-error? (boolean error?))
+                        (when *result-sink (reset! *result-sink (vec results))))]
+         (when (and (not (string/blank? query))
+                    (not= query @*current-query))
+           (reset! *current-query query)
+           (reset! *loading? true)
+           (reset! *search-error? false)
+           (let [my-id (swap! *request-id inc)]
+             (-> (<search-web-images query)
+                 (p/then (fn [{:keys [images network-error?]}]
+                           (when (= my-id @*request-id)
+                             (publish! images network-error?)
+                             (reset! *loading? false))))
+                 (p/catch (fn [_err]
+                            (when (= my-id @*request-id)
+                              (publish! [] true)
+                              (reset! *loading? false))))))))
+       js/undefined)
+     [query])
     ;; Hide only when a settled fetch returned no results AND there was no
     ;; network error. During any transition we keep the section mounted and
     ;; show skeletons so the layout below doesn't jump. When the network
@@ -3183,23 +3097,22 @@
                     :let [web-id (str "web-" (:url web-image))
                           saved? (and (seq saved-source-urls)
                                       (contains? saved-source-urls (:source-url web-image)))]]
-                (rum/with-key
-                  (web-image-item
-                   web-image
-                   {:item-id web-id
-                    :highlighted? (= highlighted-id web-id)
-                    :ghost-highlighted? (= ghost-highlighted-id web-id)
+                ^{:key web-id}
+                [web-image-item
+                 web-image
+                 {:item-id web-id
+                  :highlighted? (= highlighted-id web-id)
+                  :ghost-highlighted? (= ghost-highlighted-id web-id)
                     ;; True when this tile's source-url matches a locally saved
                     ;; asset. Drives the green "saved" badge (vs the default
                     ;; globe) and lets the parent's on-select route the click
                     ;; to the existing asset instead of re-downloading.
-                    :saved? saved?
+                  :saved? saved?
                   ;; Click commits directly. The hover card already showed the
                   ;; user the preview + license; a modal confirmation is excise
                   ;; work given click-to-revert is one click away.
-                    :on-click (fn [e img] (on-select e img))
-                    :avatar-mode? avatar-mode?})
-                  web-id)))]))])))
+                  :on-click (fn [e img] (on-select e img))
+                  :avatar-mode? avatar-mode?}]))]))])))
 
 ;; ============================================================================
 ;; URL Asset Save Error Copy
@@ -3251,7 +3164,7 @@
 ;; Multi-File Upload Preview
 ;; ============================================================================
 
-(rum/defc multi-file-preview
+(hsx/defc multi-file-preview
   [files on-confirm on-cancel]
   (let [image-files (filter #(contains? config/image-formats
                                         (keyword (second (string/split (.-type %) "/"))))
@@ -3348,192 +3261,53 @@
 (declare keyboard-nav-controller)
 (declare color-picker)
 
-(rum/defcs ^:large-vars/cleanup-todo asset-picker < rum/reactive db-mixins/query
-  (rum/local "" ::search-q)
-  (rum/local true ::loading?) ;; Start with loading state
-  (rum/local nil ::loaded-assets) ;; Cached assets loaded async
-  (rum/local nil ::web-query-debounced) ;; Debounced web search query
-  (rum/local :avatar ::mode) ;; :avatar | :image — live tab state, seeded in :will-mount
-  (rum/local false ::customize-expanded?) ;; Avatar customize band open/closed
-  ;; Controlled open state for the Fallback dropdown menu (the chip's
-  ;; menu that contains Letters / Icon… options). Controlled so we can
-  ;; programmatically close the whole menu chain after a sub-picker
-  ;; commit (Radix cascade-closes the sub-content when the parent
-  ;; closes). Without this, the user picks an icon in the sub-picker
-  ;; and the Fallback dropdown stays open until they manually click
-  ;; out — confusing and slow.
-  (rum/local false ::fallback-menu-open?)
-  (rum/local nil ::paste-handler) ;; Holds latest clipboard-paste closure for the DOM listener
-  ;; Keyboard-nav state, parallels the icon-picker's model.
-  (rum/local :search ::focus-region)    ;; :search | :grid
-  (rum/local nil    ::highlighted-index) ;; flat index into computed flat-items
-  (rum/local nil    ::web-images-result) ;; web-images-section publishes its current images here
-  ;; Monotonic counter for web-image saves. Captured per-click; only the
-  ;; latest captured id applies its on-chosen — so a quick A→B sequence ends
-  ;; up showing B regardless of resolution order.
-  (rum/local 0      ::web-image-save-id)
-  ;; Optimistic mirror of the just-committed icon. Set synchronously in the
-  ;; on-chosen* wrapper so the avatar tile renders the new value during the
-  ;; ~30-50ms window before the SharedWorker entity write lands and
-  ;; `current-icon` (a model/sub-block-derived prop) catches up. Without
-  ;; this, the tile briefly flashes the previous icon/color after Enter or
-  ;; click — same race the icon-picker solves with its `pending-icon`
-  ;; rum/use-state. Cleared in :will-remount when `current-icon` changes,
-  ;; matching icon-picker's `(use-effect! ... [icon-value])` semantics.
-  (rum/local nil    ::pending-icon)
-  ;; Drag-and-drop + upload-progress state, per picker instance. See the
-  ;; comment near the top of this ns for why this isn't module-global.
-  (rum/local false ::drag-active?)
-  (rum/local 0     ::drag-depth) ;; Track drag enter/leave depth to prevent flicker
-  (rum/local false ::asset-picker-open?)
-  (rum/local ""    ::upload-status)
-  ;; Create a single stable debounced setter. Must live in state (not the
-   ;; render `let`) so the debounce timer persists across renders — otherwise
-   ;; every keystroke gets a fresh timer and no debouncing happens, causing
-   ;; stale partial-prefix searches to race. Runs as :will-mount (not :init)
-   ;; because rum/local installs its atoms during :will-mount.
-  {:will-mount (fn [state]
-                 (let [*web-query-debounced (::web-query-debounced state)
-                       *mode (::mode state)
-                       {:keys [current-icon avatar-context initial-mode]} (first (:rum/args state))
-                       initial-mode (cond
-                                      ;; Caller-provided initial mode wins
-                                      ;; (e.g., Custom-tab Avatar/Image tiles
-                                      ;; want to land on a specific tab even
-                                      ;; when no current-icon hints at it).
-                                      (#{:avatar :image} initial-mode)   initial-mode
-                                      (= :image  (:type current-icon))   :image
-                                      (= :avatar (:type current-icon))   :avatar
-                                      (some?     avatar-context)         :avatar
-                                      :else                              :avatar)]
-                   (reset! *mode initial-mode)
-                   (assoc state ::update-web-query!
-                          (debounce (fn [q] (reset! *web-query-debounced q)) 500)
-                          ::search-input-ref (rum/create-ref))))
-   :did-mount (fn [state]
-                ;; Track picker open state
-                (let [*asset-picker-open? (::asset-picker-open? state)]
-                  (reset! *asset-picker-open? true)
-
-                  ;; Fetch assets - use sync as placeholder, always fire async for completeness
-                  (let [*loaded-assets (::loaded-assets state)
-                        *loading? (::loading? state)
-                        sync-assets (get-image-assets)]
-                    ;; Use sync data as immediate placeholder (avoids spinner if we have partial data)
-                    (when (seq sync-assets)
-                      (reset! *loaded-assets sync-assets)
-                      (reset! *loading? false))
-                    ;; Always fire async query to ensure complete asset list
-                    (-> (<get-image-assets)
-                        (p/then (fn [async-assets]
-                                  (when @*asset-picker-open?
-                                    (reset! *loaded-assets (vec async-assets))
-                                    (reset! *loading? false))))
-                        (p/catch (fn [_err]
-                                   (when @*asset-picker-open?
-                                     (reset! *loading? false)))))))
-
-                ;; Pre-warm the customize-band's expanded layout. The
-                ;; first expand from compact dropped frames because the
-                ;; expanded layout (cb-rail-wrap visible at 39px, avatar
-                ;; at 56px, cb-content at 14px padding + 14px gap) had
-                ;; never been computed before the user clicked. We
-                ;; briefly set `data-expanded` (with a `data-prewarming`
-                ;; sibling that suppresses every transition under the
-                ;; zone — see icon.css), force a synchronous reflow via
-                ;; `offsetHeight`, then revert. The browser keeps the
-                ;; expanded layout's box geometry warm; the user's first
-                ;; real click hits a hot cache and the morph runs at 60fps.
-                (when-let [^js zone (some-> (rum/dom-node state)
-                                            (.querySelector ".avatar-customize-zone"))]
-                  (.setAttribute zone "data-prewarming" "")
-                  (.setAttribute zone "data-expanded" "true")
-                  (.-offsetHeight zone)
-                  (.removeAttribute zone "data-expanded")
-                  (.-offsetHeight zone)
-                  (.removeAttribute zone "data-prewarming"))
-
-                ;; Attach a paste listener to the picker root so ⌘V anywhere in
-                ;; the modal routes through the render-time clipboard handler.
-                (let [node (rum/dom-node state)
-                      listener (fn [^js e]
-                                 (let [target (.-target e)
-                                       tag (some-> target .-tagName string/lower-case)
-                                       in-input? (contains? #{"input" "textarea"} tag)
-                                       clipboard-data (.-clipboardData e)
-                                       items (some-> clipboard-data .-items)
-                                       has-image? (when items
-                                                    (some (fn [i]
-                                                            (let [it (aget items i)]
-                                                              (and it
-                                                                   (some-> it .-type
-                                                                           (string/starts-with? "image/")))))
-                                                          (range (.-length items))))]
-                                   (when (or has-image? (not in-input?))
-                                     (.preventDefault e)
-                                     (when-let [h @(::paste-handler state)]
-                                       (h e)))))]
-                  (.addEventListener node "paste" listener)
-                  (assoc state ::paste-listener listener)))
-   :will-remount (fn [old-state new-state]
-                   ;; Clear the optimistic ::pending-icon mirror once the
-                   ;; entity-derived `current-icon` prop changes — i.e., the
-                   ;; SharedWorker write has landed and model/sub-block
-                   ;; refreshed. Mirrors icon-picker's
-                   ;; `(use-effect! ... [icon-value])` reset.
-                   (let [old-icon (:current-icon (first (:rum/args old-state)))
-                         new-icon (:current-icon (first (:rum/args new-state)))]
-                     (when (not= old-icon new-icon)
-                       (reset! (::pending-icon new-state) nil)))
-                   new-state)
-   :will-unmount (fn [state]
-                   ;; Remove paste listener first (best-effort — node may be gone)
-                   (when-let [listener (::paste-listener state)]
-                     (try
-                       (when-let [node (rum/dom-node state)]
-                         (.removeEventListener node "paste" listener))
-                       (catch :default _ nil)))
-                   ;; Track picker closed state
-                   (reset! (::asset-picker-open? state) false)
-
-                   state)}
-  [state {:keys [on-chosen on-back on-delete del-btn? delete-mode current-icon avatar-context page-title
-                 *color preview-target-db-id preview-target-db-ids preview-inheritor-db-ids property]
-          :or {property :logseq.property/icon}}]
-  (let [delete-mode (or delete-mode (if del-btn? :remove :hidden))
-        *search-q (::search-q state)
-        *loading? (::loading? state)
-        *loaded-assets (::loaded-assets state)
-        *web-query-debounced (::web-query-debounced state)
-        ;; Per-instance drag/upload state — atoms previously module-global.
-        *drag-active?       (::drag-active? state)
-        *drag-depth         (::drag-depth state)
-        _*asset-picker-open? (::asset-picker-open? state)
-        *upload-status      (::upload-status state)
-        ;; Optimistic local mirror — see ::pending-icon comment in mixins.
-        *pending-icon      (::pending-icon state)
-        pending-icon       (rum/react *pending-icon)
-        ;; Wrap on-chosen so every commit primes the optimistic mirror
-        ;; *before* the (async, ~30-50ms) entity write fires. The tile reads
-        ;; `pending-icon` ahead of the stale `current-icon` prop, so there's
-        ;; no flash of the previous value between commit and entity refresh.
+(hsx/defc asset-picker
+  [{:keys [on-chosen on-back on-delete del-btn? delete-mode current-icon avatar-context page-title
+           *color preview-target-db-id preview-target-db-ids preview-inheritor-db-ids property initial-mode]
+    :or {property :logseq.property/icon}}]
+  (let [*search-q (hooks/use-memo #(atom "") [])
+        *loading? (hooks/use-memo #(atom true) [])
+        *loaded-assets (hooks/use-memo #(atom nil) [])
+        *web-query-debounced (hooks/use-memo #(atom nil) [])
+        *mode (hooks/use-memo #(atom (cond (#{:avatar :image} initial-mode) initial-mode
+                                           (= :image (:type current-icon)) :image
+                                           (= :avatar (:type current-icon)) :avatar
+                                           (some? avatar-context) :avatar
+                                           :else :avatar)) [])
+        *customize-expanded? (hooks/use-memo #(atom false) [])
+        *fallback-menu-open? (hooks/use-memo #(atom false) [])
+        *paste-handler (hooks/use-memo #(atom nil) [])
+        *focus-region (hooks/use-memo #(atom :search) [])
+        *highlighted-index (hooks/use-memo #(atom nil) [])
+        *web-images-result (hooks/use-memo #(atom nil) [])
+        *web-image-save-id (hooks/use-memo #(atom 0) [])
+        *pending-icon (hooks/use-memo #(atom nil) [])
+        *drag-active? (hooks/use-memo #(atom false) [])
+        *drag-depth (hooks/use-memo #(atom 0) [])
+        *asset-picker-open? (hooks/use-memo #(atom false) [])
+        *upload-status (hooks/use-memo #(atom "") [])
+        *root-ref (hooks/use-ref nil)
+        *search-input-ref (hooks/use-ref nil)
+        *update-web-query! (hooks/use-memo #(debounce (fn [q] (reset! *web-query-debounced q)) 500) [])
+        delete-mode (or delete-mode (if del-btn? :remove :hidden))
         on-chosen* (fn [e v & remaining]
                      (reset! *pending-icon v)
                      (apply on-chosen e v remaining))
-        ;; Keyboard-nav state
-        *focus-region      (::focus-region state)
-        *highlighted-index (::highlighted-index state)
-        *web-images-result (::web-images-result state)
-        *web-image-save-id (::web-image-save-id state)
-        *search-input-ref  (::search-input-ref state)
-        web-images         (rum/react *web-images-result)
-        highlighted-idx    (rum/react *highlighted-index)
-        loading? (rum/react *loading?)
+        [pending-icon] (hooks/use-atom *pending-icon)
+        [web-images] (hooks/use-atom *web-images-result)
+        [highlighted-idx] (hooks/use-atom *highlighted-index)
+        ;; Subscribe to these atoms unconditionally at the top level (Rules of
+        ;; Hooks); the render-site reads below reference these bound values.
+        ;; The old code subscribed inside `(when avatar-mode? …)` and a
+        ;; results branch, changing hook order across renders.
+        section-states (first (hooks/use-atom *section-states))
+        customize-expanded? (first (hooks/use-atom *customize-expanded?))
+        loading? (first (hooks/use-atom *loading?))
         ;; Use cached assets if available, otherwise try to get them
-        assets (or (rum/react *loaded-assets) [])
+        assets (or (first (hooks/use-atom *loaded-assets)) [])
         search-q @*search-q
         ;; Web search query: use search input if typing, otherwise use page title
-        web-query (rum/react *web-query-debounced)
+        web-query (first (hooks/use-atom *web-query-debounced))
         effective-web-query (if (string/blank? search-q)
                               (or page-title "")
                               (or web-query page-title ""))
@@ -3555,8 +3329,8 @@
                                        (string/lower-case search-q))))
                                   assets))
         asset-count (count filtered-assets)
-        *mode (::mode state)
-        mode (rum/react *mode)
+        *mode *mode
+        mode (first (hooks/use-atom *mode))
         avatar-mode? (= :avatar mode)
         ;; Stable avatar "template" used both when synthesizing an avatar from
         ;; an :image icon and when the caller didn't supply an avatar-context.
@@ -3599,7 +3373,7 @@
                               (seq preview-inheritor-db-ids)
                               (assoc :inheritor-property :logseq.property/icon
                                      :inheritor-db-ids (set preview-inheritor-db-ids)))
-        hover-preview-state (state/sub :ui/icon-hover-preview)
+        hover-preview-state (state/use-sub :ui/icon-hover-preview)
         hover-shape-match? (and hover-preview-state
                                 (icon-preview-matches? hover-preview-state preview-target-db-id property))
         hover-shape (when hover-shape-match?
@@ -3639,7 +3413,7 @@
                                                       image-data)})]
                 (on-chosen* nil next-icon true)))))
         ;; Stable debounced web-query setter (created once in :init)
-        update-web-query! (::update-web-query! state)
+        update-web-query! *update-web-query!
         ;; SVG detection helper - checks if URL is an SVG file
         svg-url?
         (fn [url]
@@ -3892,11 +3666,59 @@
                           (shui/toast! (url-save-error-copy err) :error))))))
 
         ;; Keep the DOM paste listener pointed at the freshest closure.
-        _ (reset! (::paste-handler state) handle-clipboard-paste)]
+        _ (reset! *paste-handler handle-clipboard-paste)]
+    (hooks/use-effect!
+     (fn []
+       (reset! *asset-picker-open? true)
+       (let [sync-assets (get-image-assets)]
+         (when (seq sync-assets)
+           (reset! *loaded-assets sync-assets)
+           (reset! *loading? false))
+         (-> (<get-image-assets)
+             (p/then (fn [async-assets]
+                       (when @*asset-picker-open?
+                         (reset! *loaded-assets (vec async-assets))
+                         (reset! *loading? false))))
+             (p/catch (fn [_err]
+                        (when @*asset-picker-open?
+                          (reset! *loading? false))))))
+       (when-let [^js zone (some-> (hooks/deref *root-ref) (.querySelector ".avatar-customize-zone"))]
+         (.setAttribute zone "data-prewarming" "")
+         (.setAttribute zone "data-expanded" "true")
+         (.-offsetHeight zone)
+         (.removeAttribute zone "data-expanded")
+         (.-offsetHeight zone)
+         (.removeAttribute zone "data-prewarming"))
+       (let [node (hooks/deref *root-ref)
+             listener (fn [^js e]
+                        (let [target (.-target e)
+                              tag (some-> target .-tagName string/lower-case)
+                              in-input? (contains? #{"input" "textarea"} tag)
+                              clipboard-data (.-clipboardData e)
+                              items (some-> clipboard-data .-items)
+                              has-image? (when items
+                                           (some (fn [k]
+                                                   (let [it (aget items k)]
+                                                     (and it (some-> it .-type (string/starts-with? "image/")))))
+                                                 (range (.-length items))))]
+                          (when (or has-image? (not in-input?))
+                            (.preventDefault e)
+                            (when-let [h @*paste-handler]
+                              (h e)))))]
+         (when node (.addEventListener node "paste" listener))
+         (fn []
+           (when (and node listener)
+             (try (.removeEventListener node "paste" listener) (catch :default _ nil)))
+           (reset! *asset-picker-open? false))))
+     [])
+    (hooks/use-effect!
+     (fn [] (reset! *pending-icon nil) js/undefined)
+     [current-icon])
     [:div.asset-picker
      {:id "asset-picker-modal"
+      :ref *root-ref
       :class [(when avatar-mode? "avatar-mode")
-              (when (rum/react *drag-active?) "drag-active")]
+              (when (first (hooks/use-atom *drag-active?)) "drag-active")]
       ;; Cascades shape into the asset-grid tile rules so cropped
       ;; thumbnails match the avatar tile's silhouette. CSS reads
       ;; `[data-avatar-shape="rounded-rect"]` to swap the
@@ -3946,7 +3768,7 @@
       {:role "status"
        :aria-live "polite"
        :aria-atomic "true"}
-      (rum/react *upload-status)]
+      (first (hooks/use-atom *upload-status))]
 
      ;; Drag overlay hint
      (when @*drag-active?
@@ -4147,7 +3969,7 @@
                              (do (util/stop e)
                                  (reset! *focus-region :topbar)
                                  (reset! *highlighted-index nil)
-                                 (when-let [^js cnt (some-> (rum/deref *search-input-ref)
+                                 (when-let [^js cnt (some-> (hooks/deref *search-input-ref)
                                                             (.closest ".asset-picker"))]
                                    ;; Land on the active mode tab; fall back to the first
                                    ;; topbar stop if no tab is marked active.
@@ -4167,7 +3989,7 @@
                              ;; (first tile in document order that has the ghost class).
                              (= code 13)
                              (when (nil? @*highlighted-index)
-                               (when-let [^js cnt (some-> (rum/deref *search-input-ref)
+                               (when-let [^js cnt (some-> (hooks/deref *search-input-ref)
                                                           (.closest ".asset-picker"))]
                                  (when-let [btn (.querySelector cnt ".is-ghost-highlighted")]
                                    (util/stop e)
@@ -4180,7 +4002,7 @@
           [:a.x {:on-click (fn [_]
                              (reset! *search-q "")
                              (update-web-query! "")
-                             (some-> (rum/deref *search-input-ref) (.focus)))}
+                             (some-> (hooks/deref *search-input-ref) (.focus)))}
            (shui/tabler-icon "x" {:size 14})])]]]
 
      ;; Body - scrollable content area with top/bottom margin
@@ -4200,7 +4022,6 @@
                                ;; No current selection, just show recently used
                                (take 5 used-assets))
            recently-used-count (count recently-used-row)
-           section-states (rum/react *section-states)
            recently-used-expanded? (get section-states "Recently used" true)
            available-expanded? (get section-states "Available assets" true)
            ;; Set of source URLs already saved as assets locally. Threaded into
@@ -4309,13 +4130,16 @@
         ;; (expanded). The avatar itself is the only click target — tapping
         ;; it toggles the expanded state.
         (when avatar-mode?
-          (let [expanded? (rum/react (::customize-expanded? state))
+          (let [expanded? customize-expanded?
                 ;; Hover preview from a child sub-picker (Fallback → Icon…
                 ;; broadcasts a fully-wrapped avatar via icon-search's
                 ;; hover-wrap-fn). When the preview targets *this* page
                 ;; and is itself an avatar, overlay it so the band's tile
                 ;; mirrors what the page-title shows in lockstep.
-                hover-preview (state/sub :ui/icon-hover-preview)
+                ;; Reuses the top-level :ui/icon-hover-preview subscription
+                ;; (hover-preview-state) — can't re-subscribe inside this
+                ;; `when avatar-mode?` branch (Rules of Hooks).
+                hover-preview hover-preview-state
                 ;; Hover preview targets *this* picker when both the
                 ;; entity and the property scope match. Without the
                 ;; property gate, opening the Default Icon picker would
@@ -4376,7 +4200,7 @@
                 ;; "click an item to commit and dismiss" pattern.
                 close-fallback-menu! (fn []
                                        (dissoc-icon-preview-field! preview-base-target :icon)
-                                       (reset! (::fallback-menu-open? state) false))
+                                       (reset! *fallback-menu-open? false))
                 set-fallback-letters! (fn []
                                         (on-chosen* nil
                                                     (-> preview-icon
@@ -4530,7 +4354,7 @@
              (when-not expanded?
                [:button.cb-row-trigger
                 {:type "button"
-                 :on-click #(swap! (::customize-expanded? state) not)
+                 :on-click #(swap! *customize-expanded? not)
                  :aria-label (str scope-label " · " descriptor ". Customize avatar.")
                  :aria-expanded expanded?
                  :aria-controls "asset-picker-cb-rows"}])
@@ -4612,8 +4436,8 @@
                   ;; comment above. The map of props goes as the first
                   ;; arg to dropdown-menu, before the trigger/content
                   ;; children.
-                  {:open @(::fallback-menu-open? state)
-                   :on-open-change #(reset! (::fallback-menu-open? state) %)}
+                  {:open @*fallback-menu-open?
+                   :on-open-change #(reset! *fallback-menu-open? %)}
                   (shui/dropdown-menu-trigger
                    {:as-child true}
                    [:button.cb-chip
@@ -4791,7 +4615,7 @@
                 [:span (t :ui/reset)]]
                [:button.lx-toolbar-action.cb-done
                 {:type "button"
-                 :on-click #(reset! (::customize-expanded? state) false)
+                 :on-click #(reset! *customize-expanded? false)
                  :data-topbar-stop "done"
                  :aria-label (t :icon.avatar-band/close-aria-label)
                  :tab-index (if expanded? 0 -1)}
@@ -4811,14 +4635,13 @@
               {:class (when avatar-mode? "avatar-mode")}
               (for [asset recently-used-row
                     :let [item-id (str "recent-" (:block/uuid asset))]]
-                (rum/with-key
-                  (image-asset-item asset {:on-chosen on-chosen
-                                           :avatar-context effective-avatar-context
-                                           :selected? (= (str (:block/uuid asset)) current-asset-uuid)
-                                           :item-id item-id
-                                           :highlighted? (= highlighted-id item-id)
-                                           :ghost-highlighted? (= ghost-highlighted-id item-id)})
-                  item-id))])])
+                ^{:key item-id}
+                [image-asset-item asset {:on-chosen on-chosen
+                                         :avatar-context effective-avatar-context
+                                         :selected? (= (str (:block/uuid asset)) current-asset-uuid)
+                                         :item-id item-id
+                                         :highlighted? (= highlighted-id item-id)
+                                         :ghost-highlighted? (= ghost-highlighted-id item-id)}])])])
 
         ;; "Web images" section - Wikipedia Commons images
         (when-not (string/blank? effective-web-query)
@@ -4863,14 +4686,13 @@
               (seq filtered-assets)
               (for [asset filtered-assets
                     :let [item-id (str "asset-" (:block/uuid asset))]]
-                (rum/with-key
-                  (image-asset-item asset {:on-chosen on-chosen
-                                           :avatar-context effective-avatar-context
-                                           :selected? (= (str (:block/uuid asset)) current-asset-uuid)
-                                           :item-id item-id
-                                           :highlighted? (= highlighted-id item-id)
-                                           :ghost-highlighted? (= ghost-highlighted-id item-id)})
-                  item-id))
+                ^{:key item-id}
+                [image-asset-item asset {:on-chosen on-chosen
+                                         :avatar-context effective-avatar-context
+                                         :selected? (= (str (:block/uuid asset)) current-asset-uuid)
+                                         :item-id item-id
+                                         :highlighted? (= highlighted-id item-id)
+                                         :ghost-highlighted? (= ghost-highlighted-id item-id)}])
 
               :else
               (if (and (seq assets) (not (string/blank? search-q)))
@@ -4985,7 +4807,7 @@
     :content-props {:class "ls-icon-picker"
                     :onEscapeKeyDown #(.preventDefault %)}}))
 
-(rum/defc all-cp < rum/reactive
+(hsx/defc all-cp
   [opts]
   (let [used-items (->> (get-used-items)
                         ;; Drop context-dependent types: :text and :avatar derive
@@ -5009,7 +4831,7 @@
                                 :data {:value icon-name}})))
         opts (assoc opts :virtual-list? false)
         ;; Read section states reactively
-        section-states (rum/react *section-states)
+        section-states (first (hooks/use-atom *section-states))
         ;; Scope highlights to only the active section (prevents duplicate highlighting)
         scope-opts (fn [section-label o]
                      (cond-> o
@@ -5044,7 +4866,7 @@
                           :total-count (count (get-tabler-icons))
                           :expanded? (get section-states "Icons" true)))]))
 
-(rum/defc tab-observer
+(hsx/defc tab-observer
   "Re-runs the search when tab changes (if there's a query), preserving the search text."
   [tab {:keys [q *result assets no-assets?]}]
   (hooks/use-effect!
@@ -5251,7 +5073,7 @@
   []
   [:all :emoji :icon :custom])
 
-(rum/defc keyboard-nav-controller
+(hsx/defc keyboard-nav-controller
   "Unified keyboard navigation controller for picker-style popovers.
    Manages three tab stops: :tabs, :search, :grid.
    Highlighting is React-props-driven (no DOM attribute manipulation).
@@ -5288,13 +5110,13 @@
            section-shortcuts]
     :or {container-selector ".cp__emoji-icon-picker"
          on-escape          shui/popup-hide!}}]
-  (let [*el-ref (rum/use-ref nil)
-        get-cnt #(some-> (rum/deref *el-ref) (.closest container-selector))
+  (let [*el-ref (hooks/use-ref nil)
+        get-cnt #(some-> (hooks/deref *el-ref) (.closest container-selector))
 
         focus-search! (fn []
                         (reset! *focus-region :search)
                         (reset! *highlighted-index nil)
-                        (some-> (rum/deref *input-ref) (.focus)))
+                        (some-> (hooks/deref *input-ref) (.focus)))
 
         focus-grid! (fn [idx]
                       (let [idx (or idx 0)
@@ -5567,7 +5389,7 @@
                 (not= color "inherit")
                 (not (preset-hex? color preset-values)))))
 
-(rum/defc color-swatches-popover
+(hsx/defc color-swatches-popover
   "Popover content for the color-picker. Renders the **control column**
    (Default tile + custom-rainbow tile) on the left, a 1px vertical rule,
    then a 4×2 preset grid on the right. Auto-focuses the currently-
@@ -5578,7 +5400,7 @@
            on-hover! on-hover-end!
            on-custom-click! picker-open?]
     custom? :custom-active?}]
-  (let [*parent (rum/use-ref nil)
+  (let [*parent (hooks/use-ref nil)
         ;; Split entries: first is Default (no value), rest are presets
         default-entry (first colors)
         preset-entries (vec (rest colors))
@@ -5633,7 +5455,7 @@
      (fn []
        (js/setTimeout
         (fn []
-          (when-let [^js parent (rum/deref *parent)]
+          (when-let [^js parent (hooks/deref *parent)]
             (when-let [^js btn (or (.querySelector parent ".color-swatch.is-selected")
                                    (when custom?
                                      (.querySelector parent ".color-swatch--custom"))
@@ -5651,7 +5473,7 @@
                         (some-> on-hover-end! (apply [])))
       :on-key-down
       (fn [^js e]
-        (when-let [^js parent (rum/deref *parent)]
+        (when-let [^js parent (hooks/deref *parent)]
           (let [code      (.-keyCode e)
                 ;; All swatch stops in DOM order: control[0..1] then
                 ;; preset[0..7], grouped 4-per-row.
@@ -5848,7 +5670,7 @@
    it's a memorable demo value, not a designed color."
   "#a1b2c3")
 
-(rum/defc color-picker-pane
+(hsx/defc color-picker-pane
   "Custom-color picker pane shown below the swatch grid when the user
    clicks the rainbow tile. Hosts a hex input + react-colorful's
    HexColorPicker (combined SV pad + hue slider). Animates open/close
@@ -5859,9 +5681,9 @@
            on-commit! on-escape!
            recents
            open?]}]
-  (let [*hex-ref (rum/use-ref nil)
-        *pane-ref (rum/use-ref nil)
-        *pad-ref (rum/use-ref nil)
+  (let [*hex-ref (hooks/use-ref nil)
+        *pane-ref (hooks/use-ref nil)
+        *pad-ref (hooks/use-ref nil)
         ;; Resolve the typed value once. `:hex` is the canonical hex when
         ;; resolution succeeds (any kind of match). `picked` reflects only
         ;; exact-resolvable values for purposes of contrast indicator.
@@ -5879,14 +5701,14 @@
         ghost (colors/prefix-completion hex-input)
         ;; Capture the input's resolved CSS font shorthand once after mount.
         ;; Used by `colors/measure-text-px` to position the ghost <span>.
-        [input-font set-input-font!] (rum/use-state nil)]
+        [input-font set-input-font!] (hooks/use-state nil)]
     ;; When the pane opens, autofocus the hex input.
     (hooks/use-effect!
      (fn []
        (when open?
          (js/setTimeout
           (fn []
-            (when-let [^js el (rum/deref *hex-ref)]
+            (when-let [^js el (hooks/deref *hex-ref)]
               (.focus el)
               (.select el)))
           80)))
@@ -5895,7 +5717,7 @@
     ;; measured with pixel-perfect alignment.
     (hooks/use-effect!
      (fn []
-       (when-let [^js el (rum/deref *hex-ref)]
+       (when-let [^js el (hooks/deref *hex-ref)]
          (set-input-font! (.-font (js/getComputedStyle el)))))
      [])
     ;; Strip react-colorful's two interactive sliders (SV pad + hue) from
@@ -5905,7 +5727,7 @@
     ;; Tab/Shift+Tab and arrow shortcuts; the pad is mouse/touch only.
     (hooks/use-effect!
      (fn []
-       (when-let [^js root (rum/deref *pad-ref)]
+       (when-let [^js root (hooks/deref *pad-ref)]
          (doseq [^js node (array-seq (.querySelectorAll root ".react-colorful__interactive"))]
            (.setAttribute node "tabindex" "-1"))))
      [])
@@ -5916,7 +5738,7 @@
     ;; data-open transition in sync.
     (hooks/use-effect!
      (fn []
-       (when-let [^js el (rum/deref *pane-ref)]
+       (when-let [^js el (hooks/deref *pane-ref)]
          (set! (.-inert el) (not open?))))
      [open?])
     [:div.color-picker-pane
@@ -6107,18 +5929,18 @@
           :on-select! on-commit!
           :on-escape! on-escape!
           :on-up! (fn []
-                    (when-let [^js el (rum/deref *hex-ref)]
+                    (when-let [^js el (hooks/deref *hex-ref)]
                       (.focus el)
                       (.select el)))
           :on-down! (fn []
-                      (when-let [^js root (some-> (rum/deref *pane-ref)
+                      (when-let [^js root (some-> (hooks/deref *pane-ref)
                                                   (.closest ".color-picker-popover"))]
                         (when-let [^js btn (or (.querySelector root ".color-swatch.is-selected")
                                                (.querySelector root ".color-swatch--custom")
                                                (.querySelector root ".color-swatch"))]
                           (.focus btn))))}))]]))
 
-(rum/defc recents-lane
+(hsx/defc recents-lane
   "Horizontal row of recently-used custom colors (cap: `frontend.handler.icon-color/max-recents`).
    Header label matches existing pane-section typography (12px Inter Medium muted).
 
@@ -6129,10 +5951,10 @@
   [{:keys [recents hex-input color on-select! set-hover! on-hover!
            on-escape! on-up! on-down!]}]
   (when (seq recents)
-    (let [*parent (rum/use-ref nil)
+    (let [*parent (hooks/use-ref nil)
           ;; Active recent index for roving tabindex. Default 0 so the
           ;; first Tab into the row lands on the leftmost swatch.
-          [active-idx set-active-idx!] (rum/use-state 0)]
+          [active-idx set-active-idx!] (hooks/use-state 0)]
       [:div.color-picker-recents
        [:div.color-picker-recents__header (t :icon.color/recents-title)]
        [:div.color-picker-recents__row
@@ -6141,7 +5963,7 @@
          :aria-label (t :icon.color/recents-aria-label)
          :on-key-down
          (fn [^js e]
-           (when-let [^js parent (rum/deref *parent)]
+           (when-let [^js parent (hooks/deref *parent)]
              (let [stops   (vec (array-seq (.querySelectorAll parent ".color-swatch--recent")))
                    n       (count stops)
                    ;; Recents flex-wrap into rows of 7 (CSS-driven). Detect
@@ -6249,7 +6071,7 @@
                    [:div.flex.items-center.gap-1.justify-center
                     [:span.font-mono dark] [:span "·"] [:span.font-mono light]]])])))))]])))
 
-(rum/defc color-picker-popover
+(hsx/defc color-picker-popover
   "Whole popover body: swatch grid + animated picker pane + recents lane.
    Owns the local picker-mode / hex-input / hex-invalid? / recents state
    so it survives across pane open/close and recent-color picks while
@@ -6266,14 +6088,14 @@
                 (or (frontend.colors/->hex color) color)
                 color)
         custom? (custom-active? color preset-values)
-        [picker-mode set-picker-mode!] (rum/use-state (if custom? :custom :presets))
-        [hex-input set-hex-input!]     (rum/use-state (when custom? color))
-        [hex-invalid? set-hex-invalid!] (rum/use-state false)
-        [recents set-recents!]         (rum/use-state [])
+        [picker-mode set-picker-mode!] (hooks/use-state (if custom? :custom :presets))
+        [hex-input set-hex-input!]     (hooks/use-state (when custom? color))
+        [hex-invalid? set-hex-invalid!] (hooks/use-state false)
+        [recents set-recents!]         (hooks/use-state [])
         open? (= picker-mode :custom)
         ;; Ref captures the latest hex-input + committed color so the unmount
         ;; cleanup sees current values (the cleanup closure has empty deps).
-        *latest (rum/use-ref nil)
+        *latest (hooks/use-ref nil)
         commit! (fn [hex]
                   (icon-color/add-recent! hex)
                   (set-recents! (icon-color/get-recents))
@@ -6297,7 +6119,7 @@
     ;; Track the latest hex-input + color for the unmount cleanup.
     (hooks/use-effect!
      (fn []
-       (rum/set-ref! *latest {:hex-input hex-input :color color}))
+       (hooks/set-ref! *latest {:hex-input hex-input :color color}))
      [hex-input color])
     ;; Commit pending hex on unmount (e.g. user dragged the SV pad then
     ;; clicked outside the popover without releasing inside it — the
@@ -6306,7 +6128,7 @@
     (hooks/use-effect!
      (fn []
        (fn []
-         (let [{:keys [hex-input color]} (rum/deref *latest)
+         (let [{:keys [hex-input color]} (hooks/deref *latest)
                hex (colors/parse-hex hex-input)]
            (when (and hex (not= hex color))
              (icon-color/add-recent! hex)
@@ -6343,15 +6165,15 @@
        :recents recents
        :open? open?})]))
 
-(rum/defc color-picker
+(hsx/defc color-picker
   [*color on-select! & {:keys [on-hover! on-hover-end! button-attrs after-close! popup-id]}]
   (let [;; Defensive: never let the CSS sentinel "inherit" leak into React state.
         initial-color (let [v @*color] (when (and v (not= v "inherit")) v))
-        [color, set-color!] (rum/use-state initial-color)
-        [hover, set-hover!] (rum/use-state nil)
+        [color, set-color!] (hooks/use-state initial-color)
+        [hover, set-hover!] (hooks/use-state nil)
         ;; hover is nil = not hovering, or {:color X} where X may be nil ("no color")
         effective-color (if hover (:color hover) color)
-        *el (rum/use-ref nil)
+        *el (hooks/use-ref nil)
         palette [{:value nil :label "Default"
                   :hint "Inherits the surrounding text color"}
                  {:value (colors/variable :gray :09)   :label "Gray"}
@@ -6378,7 +6200,7 @@
     ;; because each cell's delay holds its current value until activation.
     (hooks/use-effect!
      (fn []
-       (when-let [^js picker (some-> (rum/deref *el) (.closest ".cp__emoji-icon-picker"))]
+       (when-let [^js picker (some-> (hooks/deref *el) (.closest ".cp__emoji-icon-picker"))]
          ;; Contrast surface = the popover's elevated background (one level
          ;; above the page bg). The icon-picker grid renders against this
          ;; surface, so contrast must be measured here, not against the page.
@@ -6460,79 +6282,22 @@
        [:span.color-picker-empty
         (shui/tabler-icon "slash" {:size 12})])]))
 
-(rum/defcs text-picker < rum/reactive
-  (rum/local nil ::text-value)
-  (rum/local nil ::alignment)
-  (rum/local nil ::color)
-  (rum/local nil ::mode)
-  (rum/local false ::deleted?)
-  (rum/local nil ::persist-timer)
-  {:will-mount (fn [s]
-                 (let [opts (first (:rum/args s))
-                       current-icon (:current-icon opts)
-                       ;; Only carry over prior icon data when it's a
-                       ;; text icon. For emoji/tabler, `normalize-icon`
-                       ;; stamps the shortcode (e.g. "smiley") into
-                       ;; `[:data :value]`; for avatars, the initials
-                       ;; ("BA") land there and the foreground color
-                       ;; lands in `[:data :color]`. Without this guard
-                       ;; both leak into the text-picker's atoms and
-                       ;; surface in the text input + Custom tile
-                       ;; preview when the user switches modes from a
-                       ;; non-text icon. `*mode = nil` is then masked
-                       ;; by the `valid-modes` fallback at render time,
-                       ;; so the Initials tile *looks* selected while
-                       ;; the input shows the leaked string — the
-                       ;; bug's signature.
-                       text-icon? (= :text (:type current-icon))
-                       title (or (:page-title opts)
-                                 (some-> (state/get-current-page)
-                                         (db/get-page)
-                                         (:block/title)))
-                       existing-value (when text-icon? (get-in current-icon [:data :value]))
-                       existing-alignment (when text-icon? (get-in current-icon [:data :alignment]))
-                       existing-color (when text-icon? (get-in current-icon [:data :color]))
-                       selected-color (:selected-color opts)
-                       existing-mode (when text-icon? (get-in current-icon [:data :mode]))]
-                   (reset! (::text-value s) (or existing-value (derive-initials title)))
-                   (reset! (::alignment s) (or existing-alignment "center"))
-                   (reset! (::color s) (or existing-color selected-color))
-                   (reset! (::mode s) (or existing-mode "initials"))
-                   s))
-   :will-unmount (fn [s]
-                   (when-let [t @(::persist-timer s)]
-                     (js/clearTimeout t))
-                   (when-not @(::deleted? s)
-                     (let [opts (first (:rum/args s))
-                           on-chosen (:on-chosen opts)
-                           *tv (::text-value s)
-                           *al (::alignment s)
-                           *co (::color s)
-                           *md (::mode s)
-                           title (or (:page-title opts)
-                                     (some-> (state/get-current-page)
-                                             (db/get-page)
-                                             (:block/title)))
-                           derived (or (derive-initials title) "?")
-                           text (if (string/blank? @*tv) derived @*tv)
-                           icon-item {:type :text
-                                      :id (str "text-" text)
-                                      :label text
-                                      :data (cond-> {:value text}
-                                              @*co (assoc :color @*co)
-                                              @*al (assoc :alignment @*al)
-                                              @*md (assoc :mode @*md))}]
-                       (on-chosen nil icon-item true)
-                       (add-used-item! icon-item)))
-                   s)}
-  [state {:keys [on-chosen on-back on-delete del-btn? delete-mode page-title
-                 preview-target-db-id preview-target-db-ids preview-inheritor-db-ids property]}]
-  (let [delete-mode (or delete-mode (if del-btn? :remove :hidden))
-        *text-value (::text-value state)
-        *alignment (::alignment state)
-        *color (::color state)
-        *mode (::mode state)
-        *deleted? (::deleted? state)
+(hsx/defc text-picker
+  [{:keys [on-chosen on-back on-delete del-btn? delete-mode page-title
+           preview-target-db-id preview-target-db-ids preview-inheritor-db-ids property
+           current-icon selected-color]}]
+  (let [*text-value (hooks/use-memo #(atom nil) [])
+        *alignment (hooks/use-memo #(atom nil) [])
+        *color (hooks/use-memo #(atom nil) [])
+        *mode (hooks/use-memo #(atom nil) [])
+        *deleted? (hooks/use-memo #(atom false) [])
+        *persist-timer (hooks/use-memo #(atom nil) [])
+        _ (hooks/use-atom *text-value)
+        _ (hooks/use-atom *alignment)
+        _ (hooks/use-atom *color)
+        _ (hooks/use-atom *mode)
+        _ (hooks/use-atom *deleted?)
+        delete-mode (or delete-mode (if del-btn? :remove :hidden))
         title (or page-title
                   (some-> (state/get-current-page)
                           (db/get-page)
@@ -6555,7 +6320,7 @@
         ;; swatches in the color popover. The text-picker subscribes
         ;; here so its gallery preview tiles tint along with the
         ;; page-icon as the user moves over swatches.
-        hover-preview-state (state/sub :ui/icon-hover-preview)
+        hover-preview-state (state/use-sub :ui/icon-hover-preview)
         hover-color-match? (and hover-preview-state
                                 (icon-preview-matches? hover-preview-state preview-target-db-id scope-property))
         hover-color (when hover-color-match?
@@ -6576,7 +6341,6 @@
                                 selected-color (assoc :color selected-color)
                                 @*alignment (assoc :alignment @*alignment)
                                 @*mode (assoc :mode @*mode))}))
-        *persist-timer (::persist-timer state)
         persist! (fn []
                    (when-let [t @*persist-timer]
                      (js/clearTimeout t)
@@ -6601,6 +6365,31 @@
         ;; never renders with zero selected tiles.
         valid-modes (set (map :mode gallery-options))
         current-mode (let [m @*mode] (if (valid-modes m) m "initials"))]
+    ;; Seed atoms on mount; auto-save on unmount. (was Rum :will-mount + :will-unmount)
+    (hooks/use-effect!
+     (fn []
+       (let [text-icon? (= :text (:type current-icon))
+             title (or page-title (some-> (state/get-current-page) (db/get-page) (:block/title)))]
+         (reset! *text-value (or (when text-icon? (get-in current-icon [:data :value])) (derive-initials title)))
+         (reset! *alignment (or (when text-icon? (get-in current-icon [:data :alignment])) "center"))
+         (reset! *color (or (when text-icon? (get-in current-icon [:data :color])) selected-color))
+         (reset! *mode (or (when text-icon? (get-in current-icon [:data :mode])) "initials")))
+       (fn []
+         (when-let [t @*persist-timer] (js/clearTimeout t))
+         (when-not @*deleted?
+           (let [title (or page-title (some-> (state/get-current-page) (db/get-page) (:block/title)))
+                 derived (or (derive-initials title) "?")
+                 text (if (string/blank? @*text-value) derived @*text-value)
+                 icon-item {:type :text
+                            :id (str "text-" text)
+                            :label text
+                            :data (cond-> {:value text}
+                                    @*color (assoc :color @*color)
+                                    @*alignment (assoc :alignment @*alignment)
+                                    @*mode (assoc :mode @*mode))}]
+             (on-chosen nil icon-item true)
+             (add-used-item! icon-item)))))
+     [])
     [:div.text-picker
      ;; Topbar
      [:div.text-picker-topbar
@@ -6810,10 +6599,11 @@
                           (persist!))}
              (shui/tabler-icon (str "align-" align) {:size 16}))))]]]]]))
 
-(rum/defc icon-hover-effects
+(hsx/defc icon-hover-effects
   "Phantom function-component hosting React hooks for icon-hover-preview.
-   `icon-search` is a class component (rum/defcs + rum/reactive mixin) and
-   can't host hooks itself, so the lifecycle effects live here. Renders nil.
+   Isolating the hover-preview effects here keys them off `current-id`
+   independently of the picker's own render cycle, so they refire on
+   hover changes without re-running the whole picker. Renders nil.
 
    - On `current-id` change → broadcast hovered item or clear when invalid.
      Deps on `current-id` (a stable string) so refires when flat-items
@@ -6887,174 +6677,11 @@
       (or class-default tag-icon)                :two-option
       :else                                      :remove)))
 
-(rum/defcs ^:large-vars/cleanup-todo icon-search < rum/reactive db-mixins/query
-  (rum/local "" ::q)
-  (rum/local nil ::result)
-  (rum/local :search ::focus-region)
-  (rum/local nil ::highlighted-index)
-  (rum/local :all ::tab)
-  (rum/local false ::input-focused?)
-  (rum/local nil ::virtuoso-ref)
-  (rum/local :icon-picker ::view) ;; Default view, updated in :will-mount for avatars/images
-  (rum/local nil ::asset-picker-initial-mode) ;; Optional :avatar | :image override when navigating from Custom tab tiles
-  ;; Holds the result of an async worker fetch for "all instances of
-  ;; the class being edited", used by the class default-icon picker
-  ;; to broadcast hover-preview to inheriting instance rows. Fetched
-  ;; in :will-mount because the main-thread conn doesn't have the
-  ;; full instance set (Logseq partial-replicates from worker) — so
-  ;; sync `(:block/_tags class)` access returns empty.
-  (rum/local nil ::fetched-inheritor-ids)
-  ;; Per-instance drag-and-drop state for the OUTER icon-search drop zone.
-  ;; Independent of the asset-picker's own drag state, even when nested —
-  ;; previously they collided on a shared module-global atom.
-  (rum/local false ::drag-active?)
-  (rum/local 0     ::drag-depth)
-  ;; Cached local image assets, loaded once on mount. Search filters in-memory
-  ;; against this atom on every keystroke (microsecond cost vs. DB-query
-  ;; latency). Sync `get-image-assets` populates it immediately; the worker's
-  ;; async result overwrites once it lands. Mirrors the asset-picker's pattern.
-  (rum/local nil ::loaded-assets)
-  {:will-mount (fn [s]
-                 (let [opts (first (:rum/args s))
-                       icon-value (:icon-value opts)
-                       normalized (normalize-icon icon-value)
-                       *view (::view s)
-                       *tab (::tab s)
-                       *fetched-inheritor-ids (::fetched-inheritor-ids s)
-                       ;; Prefer current icon's color; fall back to last-used preset.
-                       ;; "inherit" is a CSS-layer sentinel (--ls-color-icon-preset),
-                       ;; not a real color — drop it before it reaches React state.
-                       denull #(when (and % (not= % "inherit")) %)
-                       icon-color (denull (get-in normalized [:data :color]))
-                       ;; `initial-color` lets a parent (e.g. the avatar
-                       ;; customize band's "Icon…" sub-picker) seed the
-                       ;; color atom so the picker grid renders in the
-                       ;; parent's chosen tint instead of the last-used
-                       ;; preset. Takes precedence over icon-value's
-                       ;; color so a sub-picker for an icon-less avatar
-                       ;; still inherits the avatar's color.
-                       initial-color (denull (:initial-color opts))
-                       stored (let [raw (denull (storage/get :ls-icon-color-preset))]
-                                (when (and (string? raw)
-                                           (or (re-matches #"#[0-9a-fA-F]{6}" raw)
-                                               (re-matches #"var\(--rx-[A-Za-z0-9_-]+\)" raw)))
-                                  raw))
-                       ;; If the caller restricts the available tabs (e.g.
-                       ;; the avatar customize band's icon-fallback sub-picker
-                       ;; passes `:allowed-tabs [:all :emoji :icon]` to drop
-                       ;; the Custom tab), seed `*tab` to the first allowed
-                       ;; entry so we don't land on a hidden tab.
-                       allowed (some-> (:allowed-tabs opts) set)
-                       ;; For class default-icon edits, fetch the inheriting
-                       ;; instance ids from the worker — main-thread conn
-                       ;; doesn't have them. Resolves into the local atom;
-                       ;; the render reads via `(rum/react)` so re-render
-                       ;; fires when the promise lands.
-                       preview-target-db-id (:preview-target-db-id opts)
-                       property (or (:property opts) :logseq.property/icon)
-                       *loaded-assets (::loaded-assets s)
-                       no-assets? (:no-assets? opts)]
-                   ;; Load image assets once for search filtering. Skip
-                   ;; entirely when the caller opted out (avatar fallback
-                   ;; sub-picker etc.) — those contexts shouldn't surface
-                   ;; image assets in search results.
-                   (when-not no-assets?
-                     (let [sync-assets (get-image-assets)]
-                       (when (seq sync-assets)
-                         (reset! *loaded-assets sync-assets)))
-                     (-> (<get-image-assets)
-                         (p/then (fn [async-assets]
-                                   (when (some? @*loaded-assets)
-                                     (reset! *loaded-assets (vec async-assets)))
-                                   ;; First load may land empty when sync was
-                                   ;; empty too — populate so search can match.
-                                   (when (and (nil? @*loaded-assets)
-                                              (seq async-assets))
-                                     (reset! *loaded-assets (vec async-assets)))))
-                         (p/catch (fn [_] nil))))
-                   ;; Avatar/image icons open asset picker, text icons open text-picker
-                   (when (contains? #{:avatar :image :text} (:type normalized))
-                     (reset! *view (if (= :text (:type normalized)) :text-picker :asset-picker)))
-                   (when (and allowed (not (allowed @*tab)))
-                     (reset! *tab (first allowed)))
-                   (when (and preview-target-db-id
-                              (= property :logseq.property.class/default-icon)
-                              (not (seq (:preview-inheritor-db-ids opts))))
-                     (-> (db-async/<get-tag-objects (state/get-current-repo) preview-target-db-id)
-                         (p/then (fn [instances]
-                                   (reset! *fetched-inheritor-ids
-                                           (->> instances
-                                                (remove :logseq.property/icon)
-                                                (map :db/id)
-                                                set
-                                                not-empty))))
-                         (p/catch (fn [_] nil))))
-                   (assoc s ::color (atom (or initial-color icon-color stored))
-                          ::input-ref (rum/create-ref)
-                          ::result-ref (rum/create-ref))))
-   :did-mount (fn [s]
-                (let [*input-ref (::input-ref s)
-                      focus-input! (fn []
-                                     (when-let [^js input (rum/deref *input-ref)]
-                                       (when (not= js/document.activeElement input)
-                                         (.focus input))))]
-                  (js/setTimeout focus-input! 0)
-                  ;; Persistent focus-grab window. When the picker mounts
-                  ;; inside a Radix `dropdown-menu-sub-content`, the parent
-                  ;; `MenuContent` actively refocuses itself as the user's
-                  ;; cursor moves from the sub-trigger into the sub-content
-                  ;; area (see `onItemLeave` → `A.current?.focus()` in
-                  ;; @radix-ui/react-menu). That fires ~60–100ms after our
-                  ;; React `autoFocus` lands, stealing focus from the
-                  ;; search input. `onOpenAutoFocus` on the sub-content
-                  ;; can't intercept this: Radix's `MenuSubContent` hard-
-                  ;; codes its own handler (index.js:~807) that overrides
-                  ;; any prop we pass. The reliable counter is to listen
-                  ;; for focusin events at the document level for a short
-                  ;; post-mount window and bounce focus back whenever it
-                  ;; lands outside the picker. We do nothing if the new
-                  ;; focus target is inside the picker (tabs, color
-                  ;; swatch, emoji grid clicks), so legitimate user
-                  ;; interaction is respected.
-                  (let [done? (atom false)
-                        handler (fn [^js e]
-                                  (when-not @done?
-                                    (when-let [^js input (rum/deref *input-ref)]
-                                      (when-let [^js picker (.closest input ".cp__emoji-icon-picker")]
-                                        (let [^js tgt (.-target e)]
-                                          (when (and (not= tgt input)
-                                                     (not (.contains picker tgt)))
-                                            (.focus input)))))))]
-                    (.addEventListener js/document "focusin" handler true)
-                    (js/setTimeout
-                     (fn []
-                       (reset! done? true)
-                       (.removeEventListener js/document "focusin" handler true))
-                     300)))
-                ;; Apply the initial color tint to the picker root so the
-                ;; icon grid renders in the parent's color even when the
-                ;; color-picker swatch is suppressed (e.g. the avatar
-                ;; fallback sub-picker passes `:color-btn? false`). The
-                ;; visible tint is driven by the `--ls-color-icon-preset`
-                ;; CSS variable + the `icon-colored` class — both are
-                ;; normally set by the color-picker swatch's use-effect
-                ;; (icon.cljs:~5530); replicate that here on first paint
-                ;; so a `:color-btn? false` picker still picks up the
-                ;; caller's `:initial-color`.
-                (let [c @(::color s)]
-                  (when (and c (not (string/blank? c)) (not= c "inherit"))
-                    (js/setTimeout
-                     (fn []
-                       (when-let [^js input (rum/deref (::input-ref s))]
-                         (when-let [^js picker (.closest input ".cp__emoji-icon-picker")]
-                           (.setProperty (.-style picker) "--ls-color-icon-preset" c)
-                           (.add (.-classList picker) "icon-colored"))))
-                     0)))
-                s)}
-  [state {:keys [on-chosen del-btn? icon-value page-title preview-target-db-id preview-target-db-ids
-                 preview-inheritor-db-ids
-                 allowed-tabs hover-wrap-fn color-btn? property hide-topbar?]
-          :or {color-btn? true
+(hsx/defc icon-search
+  [{:keys [on-chosen del-btn? icon-value page-title preview-target-db-id preview-target-db-ids
+           preview-inheritor-db-ids
+           allowed-tabs hover-wrap-fn color-btn? property hide-topbar?]
+    :or {color-btn? true
                ;; `property` scopes hover-preview broadcasts so two pickers
                ;; on the same entity but different properties (e.g.
                ;; page-title's `:logseq.property/icon` and class
@@ -7062,26 +6689,131 @@
                ;; don't leak previews into each other's surfaces. Default
                ;; to `:logseq.property/icon` because that's the dominant
                ;; case; callers editing other fields pass their own.
-               property :logseq.property/icon}
-          :as opts}]
+         property :logseq.property/icon}
+    :as opts}]
   ;; `color-btn?` defaults to true so existing call sites are unchanged;
   ;; the avatar fallback sub-picker passes `:color-btn? false` because
   ;; the parent asset-picker already exposes a color swatch for the
   ;; whole avatar (and `del-btn?` is similarly suppressed).
-  (let [*q (::q state)
-        *result (::result state)
-        *tab (::tab state)
+  (let [*q (hooks/use-memo #(atom "") [])
+        *result (hooks/use-memo #(atom nil) [])
+        *focus-region (hooks/use-memo #(atom :search) [])
+        *highlighted-index (hooks/use-memo #(atom nil) [])
+        *input-focused? (hooks/use-memo #(atom false) [])
+        *virtuoso-ref (hooks/use-memo #(atom nil) [])
+        *asset-picker-initial-mode (hooks/use-memo #(atom nil) [])
+        *fetched-inheritor-ids (hooks/use-memo #(atom nil) [])
+        *drag-active? (hooks/use-memo #(atom false) [])
+        *drag-depth (hooks/use-memo #(atom 0) [])
+        *loaded-assets (hooks/use-memo #(atom nil) [])
+        ;; Seed view/tab/color synchronously (use-memo runs during first
+        ;; render) so the picker paints in the right surface/color without a
+        ;; flash — replaces the old :will-mount synchronous resets.
+        *tab (hooks/use-memo
+              #(atom (let [allowed (some-> allowed-tabs set)]
+                       (if (and allowed (not (allowed :all))) (first allowed) :all)))
+              [])
+        *view (hooks/use-memo
+               #(atom (let [normalized (normalize-icon icon-value)]
+                        (cond
+                          (= :text (:type normalized)) :text-picker
+                          (contains? #{:avatar :image} (:type normalized)) :asset-picker
+                          :else :icon-picker)))
+               [])
+        *color (hooks/use-memo
+                #(atom (let [denull (fn [x] (when (and x (not= x "inherit")) x))
+                             normalized (normalize-icon icon-value)
+                             icon-color (denull (get-in normalized [:data :color]))
+                             initial-color (denull (:initial-color opts))
+                             stored (let [raw (denull (storage/get :ls-icon-color-preset))]
+                                      (when (and (string? raw)
+                                                 (or (re-matches #"#[0-9a-fA-F]{6}" raw)
+                                                     (re-matches #"var\(--rx-[A-Za-z0-9_-]+\)" raw)))
+                                        raw))]
+                         (or initial-color icon-color stored)))
+                [])
+        *input-ref (hooks/use-ref nil)
+        *result-ref (hooks/use-ref nil)
+        ;; Async portion of the old :will-mount (asset prefetch + class
+        ;; inheritor-id fetch). Runs once post-mount; resets atoms on resolve.
+        _ (hooks/use-effect!
+           (fn []
+             (let [no-assets? (:no-assets? opts)]
+               (when-not no-assets?
+                 (let [sync-assets (get-image-assets)]
+                   (when (seq sync-assets)
+                     (reset! *loaded-assets sync-assets)))
+                 (-> (<get-image-assets)
+                     (p/then (fn [async-assets]
+                               (when (some? @*loaded-assets)
+                                 (reset! *loaded-assets (vec async-assets)))
+                               (when (and (nil? @*loaded-assets) (seq async-assets))
+                                 (reset! *loaded-assets (vec async-assets)))))
+                     (p/catch (fn [_] nil))))
+               (when (and preview-target-db-id
+                          (= property :logseq.property.class/default-icon)
+                          (not (seq preview-inheritor-db-ids)))
+                 (-> (db-async/<get-tag-objects (state/get-current-repo) preview-target-db-id)
+                     (p/then (fn [instances]
+                               (reset! *fetched-inheritor-ids
+                                       (->> instances
+                                            (remove :logseq.property/icon)
+                                            (map :db/id)
+                                            set
+                                            not-empty))))
+                     (p/catch (fn [_] nil)))))
+             js/undefined)
+           [])
+        ;; Old :did-mount: focus the search input, hold a brief focus-grab
+        ;; window against Radix's MenuSubContent refocus, and apply the
+        ;; initial color tint to the picker root.
+        _ (hooks/use-effect!
+           (fn []
+             (let [focus-input! (fn []
+                                  (when-let [^js input (hooks/deref *input-ref)]
+                                    (when (not= js/document.activeElement input)
+                                      (.focus input))))]
+               (js/setTimeout focus-input! 0)
+               (let [done? (atom false)
+                     handler (fn [^js e]
+                               (when-not @done?
+                                 (when-let [^js input (hooks/deref *input-ref)]
+                                   (when-let [^js picker (.closest input ".cp__emoji-icon-picker")]
+                                     (let [^js tgt (.-target e)]
+                                       (when (and (not= tgt input)
+                                                  (not (.contains picker tgt)))
+                                         (.focus input)))))))]
+                 (.addEventListener js/document "focusin" handler true)
+                 (js/setTimeout
+                  (fn []
+                    (reset! done? true)
+                    (.removeEventListener js/document "focusin" handler true))
+                  300)))
+             (let [c @*color]
+               (when (and c (not (string/blank? c)) (not= c "inherit"))
+                 (js/setTimeout
+                  (fn []
+                    (when-let [^js input (hooks/deref *input-ref)]
+                      (when-let [^js picker (.closest input ".cp__emoji-icon-picker")]
+                        (.setProperty (.-style picker) "--ls-color-icon-preset" c)
+                        (.add (.-classList picker) "icon-colored"))))
+                  0)))
+             js/undefined)
+           [])
+        *q *q
+        *result *result
+        *tab *tab
         ;; Per-instance drag state for the outer drop zone (see mixin comment).
-        *drag-active? (::drag-active? state)
-        *drag-depth   (::drag-depth state)
-        *color (::color state)
-        *input-focused? (::input-focused? state)
-        *view (::view state)
-        *asset-picker-initial-mode (::asset-picker-initial-mode state)
-        *loaded-assets (::loaded-assets state)
-        *input-ref (::input-ref state)
-        *result-ref (::result-ref state)
-        *virtuoso-ref (::virtuoso-ref state)
+        *drag-active? *drag-active?
+        *drag-depth   *drag-depth
+        *color *color
+        *input-focused? *input-focused?
+        *view *view
+        *asset-picker-initial-mode *asset-picker-initial-mode
+        *loaded-assets *loaded-assets
+        *input-ref *input-ref
+        *result-ref *result-ref
+        *virtuoso-ref *virtuoso-ref
         result @*result
         ;; Live preview broadcast: writes the hovered icon (mouse hover or
         ;; keyboard nav) into the global :ui/icon-hover-preview slot, which
@@ -7138,9 +6870,12 @@
         ;; Mirrors the precedent at `value.cljs:1131`.
         ;; Caller-passed `:preview-inheritor-db-ids` still wins so
         ;; explicit batch flows (selection toolbar) can override.
-        *fetched-inheritor-ids (::fetched-inheritor-ids state)
+        *fetched-inheritor-ids *fetched-inheritor-ids
+        ;; Subscribe unconditionally (Rules of Hooks): the `or` below would
+        ;; otherwise short-circuit past the hook when the caller passes ids.
+        fetched-inheritor-ids (first (hooks/use-atom *fetched-inheritor-ids))
         derived-inheritor-db-ids (or (not-empty (set preview-inheritor-db-ids))
-                                     (rum/react *fetched-inheritor-ids))
+                                     fetched-inheritor-ids)
         preview-targets-set? (or preview-target-db-id
                                  (seq preview-target-db-ids)
                                  (seq derived-inheritor-db-ids))
@@ -7227,7 +6962,10 @@
         ;; with downstream callers) and `delete-mode` (a keyword that drives
         ;; the new dropdown UX — see `compute-delete-mode`). Both subscribe
         ;; to the live entity via model/sub-block.
-        live-entity (when preview-target-db-id (model/sub-block preview-target-db-id))
+        ;; Subscribe unconditionally (Rules of Hooks): model/sub-block wraps
+        ;; use-query, so it can't sit inside a `when`. It's nil-safe for a nil
+        ;; id, so a nil preview-target-db-id just yields nil here.
+        live-entity (model/sub-block preview-target-db-id)
         delete-mode (if preview-target-db-id
                       (compute-delete-mode live-entity property)
                       (if del-btn? :remove :hidden))
@@ -7242,7 +6980,7 @@
         ;; entity update triggers a re-render of icon-search and refreshes the
         ;; downstream asset-picker's preview tile + Shape chip + body grid.
         icon-value (if preview-target-db-id
-                     (or (some-> (model/sub-block preview-target-db-id)
+                     (or (some-> live-entity
                                  ;; Pick the right entity attribute based on
                                  ;; scope — `:logseq.property/icon` for the
                                  ;; page-icon picker, `:logseq.property.class/
@@ -7282,9 +7020,9 @@
                                             m)]
                                    (and on-chosen (on-chosen e m' keep-popup?))
                                    (when (:type icon-item) (add-used-item! icon-item)))))
-        *focus-region (::focus-region state)
-        *highlighted-index (::highlighted-index state)
-        ;; Use `rum/react` (not bare deref) so changes to
+        *focus-region *focus-region
+        *highlighted-index *highlighted-index
+        ;; Subscribe via `use-atom` (not bare deref) so changes to
         ;; `*highlighted-index` from `keyboard-nav-controller` arrow-key
         ;; handlers re-render icon-search. Without this, `highlighted-id`
         ;; below was computed once at popup-show and never refreshed —
@@ -7293,8 +7031,15 @@
         ;; fresh `current-id`, so keyboard nav silently no-op'd while
         ;; mouse hover worked. One subscription is enough; the other
         ;; reads can stay as bare derefs once the component is hooked up.
-        highlighted-idx (rum/react *highlighted-index)
-        section-states @*section-states
+        highlighted-idx (first (hooks/use-atom *highlighted-index))
+        ;; Subscribe at top level (Rules of Hooks): both were read inside the
+        ;; `(case @*view …)` :icon-picker branch, so the hook ran only in that
+        ;; view — flipping views changed hook order and crashed React.
+        drag-active? (first (hooks/use-atom *drag-active?))
+        loaded-assets (first (hooks/use-atom *loaded-assets))
+        ;; Subscribe at top level (Rules of Hooks); the nested read inside the
+        ;; results branch then just derefs the value this subscription tracks.
+        section-states (first (hooks/use-atom *section-states))
         {flat-items :items sections :sections} (compute-flat-items @*tab result section-states
                                                                    {:show-used? (:show-used? opts)})
         highlighted-id (when-let [idx highlighted-idx]
@@ -7315,7 +7060,7 @@
                     :ghost-highlighted-id ghost-highlighted-id
                     :ghost-highlighted-section ghost-highlighted-section
                     :focus-region @*focus-region)
-        reset-q! #(when-let [^js input (rum/deref *input-ref)]
+        reset-q! #(when-let [^js input (hooks/deref *input-ref)]
                     (reset! *q "")
                     (reset! *result {})
                     (reset! *focus-region :search)
@@ -7326,7 +7071,7 @@
                      (fn []
                        (when (not= js/document.activeElement input)
                          (.focus input))
-                       (util/scroll-to (rum/deref *result-ref) 0 false))))]
+                       (util/scroll-to (hooks/deref *result-ref) 0 false))))]
     (case @*view
       :asset-picker
       ;; Level 2: Asset Picker view
@@ -7403,7 +7148,7 @@
       ;; Default - Level 1: Icon Picker view
       [:div.cp__emoji-icon-picker
        {:data-keep-selection true
-        :class (when (rum/react *drag-active?) "drag-active")
+        :class (when drag-active? "drag-active")
         :on-drag-enter (fn [e]
                          (.preventDefault e)
                          (.stopPropagation e)
@@ -7477,8 +7222,8 @@
            [:span.subtitle (t :icon.upload/format-list)]]])
 
        ;; Phantom component hosting hover-preview lifecycle hooks.
-       ;; Renders nothing; lives here because icon-search itself can't
-       ;; host React hooks (class component via rum/reactive mixin).
+       ;; Renders nothing; isolating these effects keys them off
+       ;; `current-id` without re-running the whole picker on each hover.
        (icon-hover-effects
         {:current-id   highlighted-id
          :current-item (when (and highlighted-idx
@@ -7492,7 +7237,7 @@
        ;; (reaction pickers). They render nil; mounting them anywhere in
        ;; the picker tree gives keyboard-nav + tab-change side-effects.
        (tab-observer @*tab {:q @*q :*result *result
-                            :assets (rum/react *loaded-assets)
+                            :assets loaded-assets
                             :no-assets? (:no-assets? opts)})
        (keyboard-nav-controller
         {:*focus-region      *focus-region
@@ -7535,7 +7280,7 @@
                         ;; because it isn't focused.
                           (when (and e (pos? (.-detail e)))
                             (reset! *focus-region :search)
-                            (some-> (rum/deref *input-ref) (.focus))))
+                            (some-> (hooks/deref *input-ref) (.focus))))
              :button-attrs {:data-topbar-stop "tab"}
              :tab-id-prefix "icon-picker"
              :panel-id "icon-picker-panel"})
@@ -7573,7 +7318,7 @@
                         ;; Radix's FocusScope trap which would otherwise
                         ;; undo the focus while the popover is mounted.
                             :after-close! (fn []
-                                            (let [^js cnt (some-> (rum/deref *input-ref) (.closest ".cp__emoji-icon-picker"))
+                                            (let [^js cnt (some-> (hooks/deref *input-ref) (.closest ".cp__emoji-icon-picker"))
                                                   idx @*highlighted-index
                                                   btn (when (and idx cnt)
                                                         (.querySelector cnt "button.is-highlighted"))]
@@ -7595,7 +7340,7 @@
                                             ;; visually open but reject all keys.
                                                 cnt
                                                 (do (reset! *focus-region :search)
-                                                    (some-> (rum/deref *input-ref) (.focus))))))
+                                                    (some-> (hooks/deref *input-ref) (.focus))))))
                             :on-hover! (when (or preview-target-db-id (seq preview-target-db-ids))
                                          (fn [c]
                                          ;; Additive — preserves any
@@ -7700,7 +7445,7 @@
                                 (do (util/stop e)
                                     (reset! *focus-region :topbar)
                                     (reset! *highlighted-index nil)
-                                    (when-let [^js cnt (some-> (rum/deref *input-ref) (.closest ".cp__emoji-icon-picker"))]
+                                    (when-let [^js cnt (some-> (hooks/deref *input-ref) (.closest ".cp__emoji-icon-picker"))]
                                       (when-let [active-tab (.querySelector cnt "[data-active='true'].tab-item")]
                                         (.focus active-tab))))
 
@@ -7718,7 +7463,7 @@
                                            (pos? (count flat-items)))
                                   (let [item (first flat-items)
                                         item-id (:id item)]
-                                    (when-let [^js cnt (some-> (rum/deref *input-ref) (.closest ".cp__emoji-icon-picker"))]
+                                    (when-let [^js cnt (some-> (hooks/deref *input-ref) (.closest ".cp__emoji-icon-picker"))]
                                       (when-let [btn (.querySelector cnt (str "[data-item-id='" item-id "']"))]
                                         (.click btn)
                                         (util/stop e))))))))
@@ -7786,7 +7531,7 @@
            ;; compute-flat-items so the visible grid and the keyboard-nav
            ;; flat-items list stay in sync.
            (if (seq result)
-             (let [section-states (rum/react *section-states)
+             (let [section-states @*section-states
                    tab-allows-emojis? (contains? #{:all :emoji} @*tab)
                    tab-allows-icons?  (contains? #{:all :icon} @*tab)
                    tab-allows-assets? (= :all @*tab)
@@ -7849,14 +7594,13 @@
                         (for [item (:assets result)
                               :let [my-id (:id item)
                                     asset (:asset item)]]
-                          (rum/with-key
-                            (image-asset-item asset
-                                              (assoc opts
-                                                     :variant :search
-                                                     :item-id my-id
-                                                     :highlighted? (= my-id (:highlighted-id opts))
-                                                     :ghost-highlighted? (= my-id (:ghost-highlighted-id opts))))
-                            my-id))])])]
+                          ^{:key my-id}
+                          [image-asset-item asset
+                           (assoc opts
+                                  :variant :search
+                                  :item-id my-id
+                                  :highlighted? (= my-id (:highlighted-id opts))
+                                  :ghost-highlighted? (= my-id (:ghost-highlighted-id opts)))])])])]
                  ;; Search returned no results
                  [:div.search-empty-state
                   (shui/tabler-icon "search-off" {:size 36})
@@ -7868,7 +7612,7 @@
                 :icon (icons-cp (get-tabler-icons) opts)
                 (all-cp opts))]))]]])))
 
-(rum/defc icon-picker-trigger-icon < rum/reactive
+(hsx/defc icon-picker-trigger-icon
   "Reactive sub-component so the trigger icon re-renders on hover-preview changes
   without forcing the parent (which uses React hooks) into a class component.
   `property` scopes the preview match — defaults to `:logseq.property/icon`
@@ -7877,7 +7621,9 @@
   trigger only reflects previews from a Default-Icon-scoped picker."
   [icon-value preview-target-db-id icon-props & [property]]
   (let [property (or property :logseq.property/icon)
-        preview (when preview-target-db-id (state/sub :ui/icon-hover-preview))
+        ;; Hook must run unconditionally (was `(when … (state/sub …))`).
+        preview (let [p (state/use-sub :ui/icon-hover-preview)]
+                  (when preview-target-db-id p))
         preview-active? (and preview
                              (icon-preview-matches? preview preview-target-db-id property))
         preview-icon (when preview-active? (:icon preview))
@@ -7906,10 +7652,10 @@
                                base-value)]
     (icon effective-icon-value (merge {:color? true} icon-props))))
 
-(rum/defc icon-picker
+(hsx/defc icon-picker
   [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts button-opts page-title preview-target-db-id preview-target-db-ids preview-inheritor-db-ids default-icon? property]
                :or {property :logseq.property/icon}}]
-  (let [*trigger-ref (rum/use-ref nil)
+  (let [*trigger-ref (hooks/use-ref nil)
         ;; Optimistic post-commit override. Holds the just-committed
         ;; icon-value during the ~15ms SharedWorker round-trip between
         ;; the DB write and the entity update propagating back via the
@@ -7922,7 +7668,7 @@
         ;; uses Clojure value equality (logseq.shui.hooks/memo-deps), so
         ;; the dep [icon-value] fires when the map's *content* changes,
         ;; not on every render reference flip.
-        [pending-icon set-pending-icon!] (rum/use-state nil)
+        [pending-icon set-pending-icon!] (hooks/use-state nil)
         _ (hooks/use-effect!
            (fn [] (set-pending-icon! nil))
            [icon-value])
@@ -7961,7 +7707,7 @@
     (hooks/use-effect!
      (fn []
        (when initial-open?
-         (js/setTimeout #(some-> (rum/deref *trigger-ref) (.click)) 32)))
+         (js/setTimeout #(some-> (hooks/deref *trigger-ref) (.click)) 32)))
      [initial-open?])
 
     ;; NOTE: an earlier auto-heal use-effect ran `heal-dangling-asset-icon` on
