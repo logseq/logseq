@@ -18,12 +18,12 @@
             [frontend.components.selection :as selection]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.dicts :as dicts]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.async :as db-async]
             [frontend.db.react :as react]
+            [frontend.dicts :as dicts]
             [frontend.handler.db-based.export :as db-export-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
@@ -309,7 +309,7 @@
 
 (hsx/defc ^:large-vars/cleanup-todo block-title
   "Used on table view"
-  [block* {:keys [create-new-block width row property]}]
+  [block* {:keys [create-new-block width row property property-ident]}]
   (let [*ref (hooks/use-ref nil)
         [opacity set-opacity!] (hooks/use-state 0)
         [focus-timeout set-focus-timeout!] (hooks/use-state nil)
@@ -371,9 +371,56 @@
                                               (save-block-and-focus *ref set-focus-timeout! false))})
                            (editor-handler/edit-block! block :max {:container-id :unknown-container})))))))}
      (if block
-       [:div.flex.flex-row
+       [:div.flex.flex-row.items-center.gap-2.min-w-0
+        (when (and (= property-ident :block/title) (not many?))
+          (when-let [icon-el (icon-component/get-node-icon-cp block* {:size 16 :avatar-size 20 :color? true})]
+            [:div.table-row-icon.flex-shrink-0.flex.items-center.justify-center
+             {:style {:width 20 :height 20}
+              :on-click (fn [^js e]
+                          (util/stop-propagation e)
+                          (let [own-icon (:logseq.property/icon block*)
+                                ;; Resolved icon includes class default-icon
+                                ;; inheritance — for instance rows of a class
+                                ;; whose default-icon is an avatar (e.g.
+                                ;; #Institution rows that don't have their own
+                                ;; `:logseq.property/icon` set), this returns
+                                ;; the inherited avatar config so icon-search's
+                                ;; `:will-mount` routes to the asset-picker
+                                ;; view (Avatar/Image tabs) rather than the
+                                ;; default emoji/icon grid. Falls back to
+                                ;; `own-icon` so existing rows with their own
+                                ;; icon are unaffected. The `:del-btn?` still
+                                ;; gates on `own-icon` since deletion only
+                                ;; makes sense for an explicitly-set icon.
+                                resolved-icon (or own-icon
+                                                  (icon-component/get-node-icon block*))]
+                            (shui/popup-show!
+                             (.-currentTarget e)
+                             (fn [{:keys [id]}]
+                               (icon-component/icon-search
+                                {:on-chosen (fn [_e icon-value keep-popup?]
+                                              (if icon-value
+                                                (property-handler/set-block-property!
+                                                 (:db/id block*)
+                                                 :logseq.property/icon
+                                                 (icon-component/icon-data-for-storage icon-value))
+                                                (property-handler/remove-block-property!
+                                                 (:db/id block*)
+                                                 :logseq.property/icon))
+                                              (when-not (true? keep-popup?)
+                                                (shui/popup-hide! id)))
+                                 :icon-value resolved-icon
+                                 :page-title (:block/title block*)
+                                 :del-btn? (some? own-icon)
+                                 :preview-target-db-id (:db/id block*)
+                                 :property :logseq.property/icon}))
+                             {:align :start
+                              :id :ls-icon-picker
+                              :content-props {:class "ls-icon-picker"
+                                              :onEscapeKeyDown #(.preventDefault %)}})))}
+             icon-el]))
         (let [render (fn [block]
-                       [:div
+                       [:div.min-w-0
                         (inline-title
                          {:table? true
                           :block/uuid (:block/uuid block)}

@@ -1,48 +1,167 @@
+/* Themed picker separator — shared between icon picker and asset
+   picker. `--ls-border-color` is OG's themed border (#0e5263, a
+   one-shade-lighter teal that matches the picker hue). Radix themes
+   still pick up --lx-gray-05 at step 1. Unscoped so it can be used
+   inside both `.cp__emoji-icon-picker` and `.asset-picker` (the
+   latter applies it via `(shui/separator {:class "icon-picker-separator"})`). */
+.icon-picker-separator {
+  background-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05))) !important;
+}
+
 .cp__emoji-icon-picker {
   --ls-color-icon-preset: "inherit";
 
-  @apply w-[380px] max-h-[408px] relative flex flex-col overflow-hidden;
+  @apply w-[380px] max-h-[442px] relative flex flex-col overflow-hidden bg-gray-02;
 
-  > .hd {
-    @apply absolute w-full pt-2.5 pb-1 px-3 top-[38px] left-0;
+  /* Drag-active state - frosted glass with edge glow */
+  &.drag-active::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    background: radial-gradient(
+      ellipse at center,
+      color-mix(in srgb, var(--lx-gray-02) 94%, transparent) 40%,
+      color-mix(in srgb, var(--lx-accent-09) 10%, transparent) 100%
+    );
+    z-index: 100;
+    pointer-events: none;
+    transition: opacity 200ms;
+  }
+
+  &.drag-active > .bd {
+    overflow-y: hidden;
+  }
+
+  &.drag-active [data-virtuoso-scroller] {
+    overflow-y: hidden !important;
+  }
+
+  /* Topbar wrapper for easier inspection */
+  .icon-picker-topbar {
+    @apply flex-shrink-0;
+  }
+
+  .search-section {
+    @apply flex items-center gap-2 py-1 pr-3;
+    @apply flex-shrink-0;
+    /* `bg-gray-03` (Tailwind utility) resolves through the full chain
+       `var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)))`
+       so the section is themed in OG (where `--lx-gray-03` is unset) by
+       falling back to `--ls-tertiary-background-color`. Raw
+       `var(--lx-gray-03)` would be invalid in OG → transparent. */
+    @apply bg-gray-03;
+    /* Themed bottom border (--ls-border-color middle step for OG). The
+       search input has no validation state to communicate, so the
+       border doesn't change on focus — the search icon's opacity
+       change provides enough active-state feedback. */
+    border-bottom: 1px solid var(--lx-gray-06, var(--ls-border-color, var(--rx-gray-06)));
+  }
+
+  /* Icon-picker-specific tab bar look (gray backdrop, right-side actions slot).
+     Base .tabs-section + .tab-item rules are defined unscoped below so the
+     asset picker can reuse them. */
+  .tabs-section {
+    @apply bg-gray-03;
+    padding: 0 12px 0 0 !important;
   }
 
   > .bd {
-    @apply pt-[96px] py-1 h-full;
+    @apply flex-1 pt-1 overflow-y-auto;
+    @apply bg-gray-02;
+    min-height: 0;
+
+    /* Opt out of the themed scrollbar-color set at :root (theme.css).
+       Themed scrollbar colors force WebKit into classic-scrollbar
+       mode at 15px width on macOS, which steals 9px and collapses
+       the 9-column grid to 8 in themes like OG turquoise. With
+       `auto`, macOS returns to overlay scrollbars (6px reserved). */
+    scrollbar-color: auto;
 
     &.all {
       @apply overflow-y-auto;
     }
   }
 
-  > .ft {
-    @apply absolute w-full py-3 px-3 bg-gray-02 top-[-1px] left-0;
-    @apply flex items-center border-t h-[40px] overflow-hidden;
+  .content-pane {
+    @apply flex flex-col flex-1;
+    min-height: 0;
+  }
 
-    .tab-item {
-      @apply opacity-50 hover:opacity-100;
+  .search-empty-state {
+    @apply flex-1 flex flex-col items-center justify-center gap-1.5 select-none;
+    min-height: 160px;
+    /* Container `color` propagates via `currentColor` into the SVG
+       search-off icon. Themed via `--ls-primary-text-color` middle
+       step (#a4b5b6 muted teal-gray in OG). Opacity is applied per
+       child below for visual hierarchy. */
+    color: var(--lx-gray-08, var(--ls-primary-text-color, var(--rx-gray-08)));
 
-      &.active {
-        @apply opacity-100;
-      }
+    /* Icon: most muted (decorative aid). */
+    .ui__icon {
+      opacity: 0.5;
+    }
+
+    .title {
+      @apply text-sm font-medium;
+      /* Title: themed and at full opacity — the prominent line. */
+      color: var(--lx-gray-10, var(--ls-primary-text-color, var(--rx-gray-10)));
+    }
+
+    .subtitle {
+      @apply text-xs;
+      /* Subtitle: themed but muted slightly. */
+      color: var(--lx-gray-08, var(--ls-primary-text-color, var(--rx-gray-08)));
+      opacity: 0.7;
     }
   }
 
   .search-input {
-    @apply relative;
+    @apply relative flex-1 px-2;
 
     .ls-icon-search {
-      @apply absolute left-2.5 top-[8px] opacity-50;
+      @apply absolute left-[14px] top-[8px] opacity-50;
     }
 
     > .x {
-      @apply flex items-center h-full px-2 opacity-50;
-      @apply absolute right-0 top-0 hover:opacity-80;
+      @apply flex items-center justify-center;
+      @apply absolute right-2 top-1/2 -translate-y-1/2;
+      @apply w-5 h-5 rounded-full cursor-pointer;
+      @apply transition-colors duration-150;
+      /* `bg-gray-07` Tailwind chain includes `--ls-quaternary-background-color`
+         so OG gets a themed teal pill (#094b5a) instead of neutral gray. */
+      @apply bg-gray-07;
+      /* gray-12 chain has no `--ls-*` middle — inject `--ls-secondary-text-color`
+         manually so OG's glyph is a themed light (#dfdfdf). */
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+    }
+
+    > .x:hover {
+      /* gray-08 chain has no `--ls-*` middle — `--ls-border-color`
+         (#0e5263, one shade lighter than the quaternary teal) is a
+         natural hover step. */
+      background-color: var(--lx-gray-08, var(--ls-border-color, var(--rx-gray-08)));
     }
 
     .ui__input {
-      @apply leading-none pl-8 outline-none border-none bg-gray-03;
-      @apply focus:!shadow-accent-06 focus:bg-gray-02 !h-8;
+      /* Structurally borderless: no background, no rounded corners, no
+         focus shadow. The visible "search bar" is the parent
+         `.search-section`; the input is just text + cursor sitting on
+         the section's themed background. Theme-agnostic by construction
+         — no color-matching trick to break in OG. */
+      @apply leading-none pl-8 outline-none border-none bg-transparent rounded-none;
+      @apply focus:bg-transparent !h-8;
+      box-shadow: none !important;
+
+      /* Placeholder shares the themed label color with section headers
+         (muted teal-gray in OG) but at 60% opacity, so it recedes
+         visibly against the full-strength typed text. Avoids shadcn's
+         `text-muted-foreground` default (neutral). */
+      &::placeholder {
+        color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+        opacity: 0.6;
+      }
     }
 
     &:focus-within {
@@ -53,22 +172,61 @@
   }
 
   .pane-section {
-    @apply pl-2 overflow-y-auto h-full;
+    @apply h-full;
 
     color: var(--ls-color-icon-preset);
 
     > .its, .icons-row {
-      @apply flex gap-1 py-1 flex-wrap;
+      @apply flex gap-1 py-1 flex-wrap px-2;
 
       > button {
-        @apply flex items-center justify-center rounded-full hover:bg-gray-03 active:opacity-70;
+        @apply flex items-center justify-center rounded-lg active:opacity-70;
+        /* Animate width + offset so the ring grows/shrinks smoothly when
+           the highlight state changes. outline-color is intentionally NOT
+           transitioned — animating it from `currentColor` (the icon's
+           tint, e.g. red) would briefly tint the ring red before the
+           accent color landed. With color set instantly by the highlight
+           rules, the ring just grows in the right color from t=0.
 
-        @apply focus:outline-accent-09;
+           `color` is also transitioned, with a per-cell delay computed
+           from the inline --r / --c custom properties. When the user
+           commits a new icon color, --ls-color-icon-preset on the picker
+           root changes, and each cell's `color` (inherited via
+           currentColor) glides into the new value at its own delay,
+           producing a diagonal "wave" across the grid (top-left first,
+           bottom-right last). Hover preview is intentionally NOT routed
+           through the CSS var (it goes to the trigger and page header
+           via :ui/icon-hover-preview state) so the wave has a real
+           old→new delta to interpolate at commit time. */
+        transition: background-color 150ms,
+                    outline-width 150ms,
+                    outline-offset 150ms,
+                    color 320ms cubic-bezier(0.4, 0, 0.2, 1);
+        transition-delay: 0ms, 0ms, 0ms,
+                          calc(var(--c, 0) * 22ms + var(--r, 0) * 36ms);
+
+        &:hover {
+          /* Hover should pop one shade above the ghost-highlight bg.
+             Tailwind's gray-04 and gray-05 chains both collapse to
+             `--ls-quaternary-background-color` in OG, so we'd get the
+             same color as ghost. Inject `--ls-border-color` (#0e5263,
+             a shade lighter than quaternary #094b5a) as the themed
+             middle step to give hover a real visual lift. */
+          background-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
+        }
       }
     }
 
     &.has-virtual-list {
-      @apply h-[300px] overflow-y-visible;
+      /* Definite height gives Virtuoso something to measure on first
+         render. Without it, when the popup container provides no
+         max-height, the pane collapses to 0 (Virtuoso hasn't rendered
+         yet → parent has no content → Virtuoso measures 0 viewport →
+         renders 0 items → never resolves). Coexists with
+         `:custom-scroll-parent` in `pane-section`: Virtuoso scrolls
+         `.bd-scroll`, not its own wrapper, so the fixed height does
+         NOT create a nested scrollbar / column collapse. */
+      @apply h-[358px] overflow-y-visible;
 
       &.searching-result {
         @apply h-auto;
@@ -76,7 +234,18 @@
     }
 
     .virtuoso-item-list {
-      @apply pb-4;
+      @apply pt-1 pb-4 px-2;
+    }
+
+    /* Honor reduced-motion: drop the staggered color transition so the
+       grid snaps to the new color rather than animating across cells. */
+    @media (prefers-reduced-motion: reduce) {
+      > .its > button,
+      .icons-row > button {
+        transition: background-color 150ms,
+                    outline-width 150ms,
+                    outline-offset 150ms;
+      }
     }
   }
 
@@ -93,33 +262,326 @@
     }
   }
 
-  .color-picker {
-    @apply rounded-md w-[24px] h-[24px] overflow-hidden flex relative p-0;
-
-    > strong {
-      @apply w-[18px] h-[18px] rounded-full absolute opacity-90
-      hover:opacity-100 font-normal text-sm;
-
-      .ui__icon {
-        @apply opacity-90 scale-90;
-      }
-    }
-  }
-
   .ui__button {
     &[data-action=del] {
-      @apply !w-6 !h-6 overflow-hidden rounded-md ml-1 opacity-60
+      @apply !w-6 !h-6 overflow-hidden rounded-md opacity-60
       hover:text-red-rx-09 hover:opacity-90;
+
+      /* Force opacity 1 on keyboard focus so the focus ring paints
+         crisply; the base opacity-60 otherwise dims the outline into
+         a muted glow. */
+      &:focus-visible {
+        opacity: 1;
+      }
     }
   }
 }
 
-.color-picker-presets {
-  @apply flex flex-row gap-[2px];
+/* Keyboard navigation highlights — React-props-driven via CSS classes.
+   Shared between icon-picker and asset-picker tile grids. The outline
+   follows each tile's own border-radius (browsers do this for outline
+   since 2021), so square tiles get a 4px ring and circular avatars get
+   a circular ring without a per-shape override. */
+.cp__emoji-icon-picker button.is-highlighted,
+.asset-picker button.is-highlighted {
+  /* Subtle themed bg (same quaternary teal as ghost in OG) so line
+     icons remain readable regardless of the user's icon-color preset
+     (e.g., green line icons against a bright accent-04 bg had poor
+     contrast). The bright accent-09 outline below carries the "I am
+     selected" signal — bg doesn't need to compete. */
+  @apply !bg-gray-04;
+  outline: 2px solid var(--lx-accent-09);
+  outline-offset: 2px;
+}
 
-  .it {
-    @apply w-[18px] h-[18px] overflow-hidden p-0
-    opacity-90 hover:opacity-100 active:opacity-80;
+.cp__emoji-icon-picker button.is-ghost-highlighted,
+.asset-picker button.is-ghost-highlighted {
+  /* Same themed token chain as @apply bg-gray-04 (which resolves to
+     `--ls-quaternary-background-color` in OG), but rendered at 50%
+     alpha so it visibly recedes against the picker bg. The diluted
+     tint pulls ghost a couple shades closer to the picker bg, giving
+     hover (full `--ls-border-color`) a clearer pop. Important to
+     beat the .icons-row > button:hover bg. */
+  background-color: color-mix(
+    in srgb,
+    var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04))) 50%,
+    transparent
+  ) !important;
+  /* Tailwind's gray-08 chain stops at `--lx-gray-08, --rx-gray-08` —
+     no `--ls-*` step. Inject `--ls-border-color` manually so OG
+     (where `--lx-gray-08` is unset) picks up the themed teal border
+     (#0e5263, one step lighter than the bg) instead of falling to
+     neutral `--rx-gray-08`. */
+  outline: 1.5px solid var(--lx-gray-08, var(--ls-border-color, var(--rx-gray-08)));
+  outline-offset: -1.5px;
+}
+
+/* Full-width zero-state rows use an inset ring + subtle tint instead of
+   the default outline box (which looks heavy on a wide rectangle).
+   Same approach as the icon picker's `is-highlighted` (subtle themed
+   bg + accent outline) so the row contents remain readable instead of
+   getting drowned by an accent-tinted bg. */
+.asset-picker .asset-picker-empty-row.is-highlighted {
+  @apply !bg-gray-04;
+  outline: 2px solid var(--lx-accent-09);
+  outline-offset: -2px;
+  border-radius: 8px !important;
+}
+
+/* ── Shared tab-bar (underline-on-active). Scoped overrides above may
+   tweak the look per context. ── */
+.tabs-section {
+  @apply flex items-center gap-0 px-3 py-0;
+  @apply flex-shrink-0 h-auto;
+  border-radius: 0;
+
+  .tab-actions {
+    @apply flex items-center gap-1.5 ml-auto;
+  }
+
+  .tab-item {
+    @apply relative px-3 py-2.5 text-sm font-medium;
+    @apply opacity-60 hover:opacity-100;
+    @apply transition-all duration-150;
+    @apply rounded-none;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    height: auto !important;
+    /* `--ls-primary-text-color` is the themed middle step that gives
+       OG (#a4b5b6 — muted teal-gray) a label-appropriate tone instead
+       of falling all the way to neutral `--rx-gray-11`. Radix themes
+       still pick up `--lx-gray-11` in step 1. */
+    color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+
+    /* Reserve bold width to prevent layout shift on active */
+    &::before {
+      content: attr(data-text);
+      display: block;
+      font-weight: bold;
+      height: 0;
+      overflow: hidden;
+      visibility: hidden;
+    }
+
+    /* Underline for active state */
+    &[data-active="true"] {
+      @apply opacity-100 font-bold;
+      /* Active tab brighter; `--ls-secondary-text-color` (#dfdfdf in OG)
+         is the themed equivalent of gray-12. */
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+
+      &::after {
+        content: "";
+        @apply absolute bottom-0 left-0 right-0;
+        @apply h-[2px];
+        background-color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+      }
+    }
+
+    /* Hover state */
+    &:hover {
+      background: transparent !important;
+    }
+
+    /* Keyboard focus state. Force opacity 1 so the focus ring on an
+       inactive tab paints fully (the base rule sets opacity-60, which
+       would otherwise dim the outline). */
+    &:focus-visible {
+      opacity: 1;
+      outline: 2px solid var(--lx-accent-09);
+      outline-offset: -2px;
+      border-radius: 4px;
+    }
+  }
+}
+
+/* ── Color Picker Trigger (shared: tab-bar + text-picker topbar) ── */
+.color-picker-trigger {
+  @apply w-6 h-6 rounded-full p-0 flex items-center justify-center
+  cursor-pointer border-0 bg-transparent;
+  transition: box-shadow 150ms, opacity 150ms;
+
+  &:hover {
+    box-shadow: 0 0 0 2px var(--lx-gray-07, var(--rx-gray-07));
+  }
+
+  .color-picker-fill {
+    @apply w-5 h-5 rounded-full block;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+
+    /* Half-pie split: dark mode rendering (left) / light mode rendering
+       (right) — same motif as the recents lane and contrast indicator.
+       Activated when the picked color renders differently across themes. */
+    &.is-split {
+      background-image: linear-gradient(to right,
+        var(--dark-color) 50%,
+        var(--light-color) 50%);
+    }
+  }
+
+  .color-picker-empty {
+    @apply w-5 h-5 rounded-full relative overflow-hidden;
+    background-color: var(--lx-gray-05, var(--rx-gray-05));
+    box-shadow: inset 0 0 0 1px var(--lx-gray-07, var(--rx-gray-07));
+
+    /* CSS-only diagonal slash — matches .swatch-empty treatment */
+    &::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 1.5px;
+      height: 141%;
+      background-color: var(--lx-gray-09, var(--rx-gray-09));
+      border-radius: 1px;
+      transform: translate(-50%, -50%) rotate(45deg);
+    }
+
+    .ui__icon {
+      display: none;
+    }
+  }
+}
+
+/* ── Color Picker Popover (overall layout) ── */
+.color-picker-popover {
+  @apply flex flex-col;
+  width: 175px;
+}
+
+/* Negate the dropdown wrapper's 4px (p-1) padding so the popover content
+   extends edge-to-edge of the dropdown surface. Each section inside
+   (presets / pane / recents) defines its own padding. Mirrors the same
+   trick used by .cp__emoji-icon-picker (icon.css:476-478). */
+.ui__dropdown-menu-content .color-picker-popover {
+  @apply -m-1;
+}
+
+/* ── Color Picker Popup Swatches ── */
+.color-picker-presets {
+  @apply flex flex-row items-stretch gap-1 p-2;
+
+  /* Control column: Default tile + Custom-rainbow tile, stacked. */
+  .control-col {
+    @apply flex flex-col gap-0.5 flex-shrink-0;
+  }
+
+  /* 1px vertical rule between control col and preset grid. Uses the
+     canonical separator chain so the line stays visible in OG/
+     OG-turquoise themes (where `--lx-gray-04` resolved to a tone
+     nearly identical to the popover surface). */
+  .divider-rule {
+    @apply self-stretch flex-shrink-0;
+    width: 1px;
+    margin: 4px 2px;
+    background-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
+  }
+
+  /* 4-wide × 2-row preset grid. */
+  .preset-grid {
+    @apply flex flex-col gap-0.5;
+  }
+
+  .preset-grid__row {
+    @apply flex flex-row gap-0.5;
+  }
+
+  /* Hit target 28px, fill 24px, gap 2px → 30px center-to-center.
+     Selection ring via box-shadow on fill: 1px bg spacer + 2.5px accent
+     = 3.5px beyond fill edge → 31px ring diameter. Safe against neighbor
+     hover-scale (1.1× → 26.4px fill) with ~1.3px clearance. */
+  .color-swatch {
+    @apply w-7 h-7 rounded-full p-0 flex items-center justify-center
+    cursor-pointer border-0 bg-transparent;
+    transition: transform 120ms, opacity 120ms;
+
+    &:hover { transform: scale(1.1); }
+    &:active { transform: scale(0.95); }
+    /* Suppress hover scale when selected so ring doesn't overflow into neighbors */
+    &.is-selected:hover { transform: none; }
+
+    /* Drop the system focus outline — focus state is rendered as a colored
+       halo on the inner .swatch-fill / .swatch-empty (rules below) so it
+       matches the selected ring's vocabulary instead of looking grafted on. */
+    &:focus, &:focus-visible { outline: none; }
+
+    .swatch-fill {
+      @apply w-6 h-6 rounded-full block;
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+      transition: box-shadow 120ms;
+    }
+
+    &.is-selected .swatch-fill {
+      box-shadow:
+        inset 0 0 0 1px rgba(0, 0, 0, 0.08),
+        0 0 0 1px var(--lx-gray-02),
+        0 0 0 3.5px color-mix(in srgb, var(--swatch-color, var(--lx-accent-09)) 65%, black);
+    }
+
+    /* Focus halo: same anatomy as the selected ring (inset edge + bg gap +
+       outer halo) but thinner and in the global accent color. Using the
+       swatch's own color blurs into "ring around a colored thing" — accent
+       blue is *never* the swatch's hue, so focus reads as a separate signal
+       no matter which swatch is hit. Skipped on .is-selected so the
+       selected ring isn't fighting a focus ring on top of itself. */
+    &:focus-visible:not(.is-selected) .swatch-fill {
+      box-shadow:
+        inset 0 0 0 1px rgba(0, 0, 0, 0.08),
+        0 0 0 1px var(--lx-gray-02),
+        0 0 0 2.5px var(--lx-accent-09);
+    }
+
+    .swatch-empty {
+      @apply w-6 h-6 rounded-full relative overflow-hidden;
+      background-color: var(--lx-gray-05, var(--rx-gray-05));
+      box-shadow: inset 0 0 0 1px var(--lx-gray-07, var(--rx-gray-07));
+      transition: box-shadow 120ms;
+
+      /* CSS-only diagonal slash — centered reliably without SVG viewBox quirks */
+      &::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 1.5px;
+        height: 141%;
+        background-color: var(--lx-gray-09, var(--rx-gray-09));
+        border-radius: 1px;
+        transform: translate(-50%, -50%) rotate(45deg);
+      }
+
+      /* Hide the SVG icon if still present in markup */
+      .ui__icon {
+        display: none;
+      }
+    }
+
+    &.is-selected .swatch-empty {
+      box-shadow:
+        inset 0 0 0 1px var(--lx-gray-07, var(--rx-gray-07)),
+        0 0 0 1px var(--lx-gray-02),
+        0 0 0 3.5px var(--lx-accent-09);
+    }
+
+    /* Empty swatch has no --swatch-color, so fall back to the global accent
+       so the focus halo is still visible on the slash tile. */
+    &:focus-visible:not(.is-selected) .swatch-empty {
+      box-shadow:
+        inset 0 0 0 1px var(--lx-gray-07, var(--rx-gray-07)),
+        0 0 0 1px var(--lx-gray-02),
+        0 0 0 2.5px var(--lx-accent-09);
+    }
+  }
+
+  /* Mute non-active siblings while the user is engaging with the palette.
+     Engagement = mouse-hovering anywhere in the group, OR any swatch has
+     keyboard/programmatic focus. Three swatches stay at full opacity:
+     the hovered one, the focused one, and the currently-selected one.
+     At rest (no hover, no focus inside), every swatch is at full opacity. */
+  &:is(:hover, :focus-within)
+    .color-swatch:not(:hover):not(:focus):not(.is-selected) {
+    opacity: 0.55;
   }
 }
 
@@ -127,11 +589,24 @@
   @apply -m-4;
 }
 
-.ui__dropdown-menu-content:has(> .cp__emoji-icon-picker) {
+/* icon-search switches its outermost class based on @*view: emoji/icon mode
+   renders `.cp__emoji-icon-picker`, while avatar/image mode renders
+   `.asset-picker` and text mode renders `.text-picker` as a complete
+   replacement. All three render as a direct child of the top-level
+   `ui__dropdown-menu-content` (via shui/popup-show!), so each needs the
+   same `-m-1` to cancel the surface's baked-in p-1 — otherwise switching
+   between modes via "< Back" produces a 4px visual jump. The sub-menu
+   case (block-context-menu) uses a different mechanism: `{:class "!p-0"}`
+   on the sub-content + an inner `[:div.p-1]` wrapper. */
+.ui__dropdown-menu-content:has(> .cp__emoji-icon-picker),
+.ui__dropdown-menu-content:has(> .asset-picker),
+.ui__dropdown-menu-content:has(> .text-picker) {
   @apply flex;
 }
 
-.ui__dropdown-menu-content .cp__emoji-icon-picker {
+.ui__dropdown-menu-content .cp__emoji-icon-picker,
+.ui__dropdown-menu-content .asset-picker,
+.ui__dropdown-menu-content .text-picker {
   @apply -m-1;
 }
 
@@ -162,15 +637,2336 @@
 }
 
 .ls-icon-picker {
-  @apply w-auto overflow-hidden;
+  @apply overflow-hidden;
+  /* Ensure consistent width for both icon picker and asset picker views */
+  min-width: 380px;
 }
 
 .ls-icon-color-wrap em-emoji {
   @apply !w-auto !h-auto;
 }
 
-.ui__dropdown-menu-sub-content {
-  .cp__emoji-icon-picker {
-    @apply -m-2;
+/* Lift the global `.ui__icon svg { filter: brightness(.8) }` clamp (ui.css)
+   for icons rendered with an explicit color. Color IS the affordance here, so
+   the dark-theme dimming was visibly desaturating values applied via the
+   color picker (e.g. cyan-10 looked muted vs. the swatch it was picked from).
+   Sidebar opacity-70 (container.css) is intentional visual hierarchy and is
+   left intact — it pairs with hover→opacity-100 to give the active cue. */
+.ls-icon-color-wrap.icon-colored .ui__icon svg,
+.ls-icon-color-wrap.icon-colored .ui__icon:hover svg,
+.cp__emoji-icon-picker.icon-colored .pane-section .ui__icon svg,
+.cp__emoji-icon-picker.icon-colored .pane-section .ui__icon:hover svg,
+.icon-cp-container.icon-colored .ui__icon svg,
+.icon-cp-container.icon-colored .ui__icon:hover svg {
+  filter: none !important;
+}
+
+/* Custom tab - Text, Avatar, Image options side by side */
+.custom-tab-content {
+  @apply flex flex-row gap-6 p-4 justify-center items-start;
+}
+
+.custom-tab-item {
+  @apply cursor-pointer;
+  @apply border-none bg-transparent p-0;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 8px !important;
+
+  /* Suppress the browser's default focus outline on the button. During
+     arrow-key navigation, focus briefly lands on the button before the
+     `.is-highlighted` class applies, which paints a chrome-default
+     rectangle around both the preview AND the label — visually choppy.
+     The `.is-highlighted .custom-tab-item-preview` ring (defined
+     below) is the canonical keyboard-nav indicator and remains
+     accessible. */
+  &:focus,
+  &:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  &:active {
+    @apply opacity-60;
   }
 }
+
+.custom-tab-item-preview {
+  @apply w-12 h-12 rounded-lg;
+  @apply flex items-center justify-center;
+  /* Baseline: zero-width transparent outline at offset 0. When
+     `.is-highlighted` applies, outline-width animates 0 → 2px and
+     outline-offset animates 0 → 2px in parallel, producing the same
+     scale-up feel the regular icon/emoji grid uses on arrow-key
+     navigation (icon.css :hover/transition block above). */
+  outline: 0 solid transparent;
+  outline-offset: 0;
+  transition: background-color 150ms, outline-color 150ms,
+              outline-width 150ms, outline-offset 150ms;
+
+  &:hover {
+    /* Themed hover bg via `--ls-border-color` middle step (matches the
+       regular icon grid's hover; see icon.css:&:hover above). */
+    background-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
+  }
+}
+
+/* Keyboard-nav highlight for custom tiles: neutralize the generic
+   button.is-highlighted rule (which paints the full column including
+   the label) and move the ring onto the 48x48 preview child instead. */
+.cp__emoji-icon-picker button.custom-tab-item.is-highlighted {
+  background-color: transparent !important;
+  outline: none;
+  border-radius: 0 !important;
+}
+
+.cp__emoji-icon-picker button.custom-tab-item.is-highlighted .custom-tab-item-preview {
+  /* Subtle themed bg (same color-mix as the ghost-highlight in the
+     regular grid) so line-icons inside the preview remain readable
+     regardless of the user's icon-color preset. Outline carries the
+     "I am selected" signal. */
+  background-color: color-mix(
+    in srgb,
+    var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04))) 50%,
+    transparent
+  );
+  /* Positive offset so the ring grows OUTSIDE the tile during the
+     transition (scale-up feel matches the regular icon/emoji grid). */
+  outline: 2px solid var(--lx-accent-09);
+  outline-offset: 2px;
+}
+
+.cp__emoji-icon-picker button.custom-tab-item.is-highlighted .custom-tab-item-label {
+  color: var(--lx-accent-11);
+}
+
+.custom-tab-item-label {
+  @apply text-xs;
+  /* Themed via `--ls-primary-text-color` middle step (matches section
+     headers and tab labels). */
+  color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+  transition: color 150ms;
+}
+
+.custom-tab-item:hover .custom-tab-item-label {
+  /* Brighter on hover via `--ls-secondary-text-color` middle step. */
+  color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+}
+
+/* Shared drag overlay hint — used by both icon picker and asset picker */
+.drag-overlay-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 101;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+
+  .corner {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+
+    &::before {
+      content: "";
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      color: var(--lx-gray-12);
+      opacity: 0.6;
+    }
+
+    &.tl { top: 20px; left: 20px;
+      &::before { top: 0; left: 0; border-top: 1.5px solid; border-left: 1.5px solid; border-radius: 3px 0 0 0; }
+    }
+    &.tr { top: 20px; right: 20px;
+      &::before { top: 0; right: 0; border-top: 1.5px solid; border-right: 1.5px solid; border-radius: 0 3px 0 0; }
+    }
+    &.bl { bottom: 20px; left: 20px;
+      &::before { bottom: 0; left: 0; border-bottom: 1.5px solid; border-left: 1.5px solid; border-radius: 0 0 0 3px; }
+    }
+    &.br { bottom: 20px; right: 20px;
+      &::before { bottom: 0; right: 0; border-bottom: 1.5px solid; border-right: 1.5px solid; border-radius: 0 0 3px 0; }
+    }
+  }
+
+  .tabler-icon {
+    color: var(--lx-gray-12, var(--rx-gray-12));
+  }
+
+  .text-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .title {
+    font-size: 14px;
+    color: var(--lx-gray-12, var(--rx-gray-12));
+    font-weight: 500;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .subtitle {
+    font-size: 11px;
+    color: var(--lx-gray-11, var(--rx-gray-11));
+    text-align: center;
+    white-space: nowrap;
+  }
+}
+
+/* Asset Picker (Level 2 view) - Figma aligned */
+.asset-picker {
+  @apply flex flex-col overflow-hidden relative;
+  /* Match icon-picker width for visual continuity */
+  width: 380px;
+  min-width: 380px;
+  max-height: 440px;
+  background-color: var(--lx-gray-02);
+  transition: background-color 200ms;
+
+  .section-header {
+    background-color: transparent;
+  }
+
+  /* Drag-active state - frosted glass with edge glow (matches icon picker) */
+  &.drag-active::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    background: radial-gradient(
+      ellipse at center,
+      color-mix(in srgb, var(--lx-gray-02) 94%, transparent) 40%,
+      color-mix(in srgb, var(--lx-accent-09) 10%, transparent) 100%
+    );
+    z-index: 100;
+    pointer-events: none;
+    transition: opacity 200ms;
+  }
+
+  &.drag-active > .bd {
+    overflow-y: hidden;
+  }
+
+  &.drag-active [data-virtuoso-scroller] {
+    overflow-y: hidden !important;
+  }
+
+  /* Body content - scrollable area */
+  > .bd {
+    @apply flex-1 py-1 overflow-y-auto;
+    min-height: 0;
+
+    /* Opt out of themed scrollbar-color (see icon-picker .bd above). */
+    scrollbar-color: auto;
+  }
+
+}
+
+/* Topbar wrapper for easier inspection */
+.asset-picker-topbar {
+  @apply flex-shrink-0;
+}
+
+/* No min-height: the tabs-section must define row height, otherwise it gets
+   vertically centered and the active-tab underline floats above the border. */
+.asset-picker-tabrow {
+  @apply flex-shrink-0;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  /* Symmetric 12px matches the icon-picker tabs (`.tabs-section`
+     uses `px-3`), so the back-chevron and trash button line up with
+     the "All / Emojis / Icons / Custom" tab strip and its right-side
+     trigger when switching between picker modes via `< Back`. */
+  padding: 0 12px;
+  height: 40px;
+  /* Tailwind utility for the full themed chain (matches the icon
+     picker's tabs-section so both topbars read as the same chrome).
+     No border-bottom here — the shui/separator immediately below
+     (with `.icon-picker-separator` class) draws the divider. Having
+     both produced a visible double-line in OG. */
+  @apply bg-gray-03;
+}
+
+.asset-picker-back {
+  justify-self: start;
+
+  .back-button {
+    @apply flex items-center gap-0.5;
+    @apply text-sm font-medium cursor-pointer;
+    @apply border-none bg-transparent p-0;
+    @apply transition-colors duration-150;
+    color: var(--lx-gray-10, var(--ls-primary-text-color, var(--rx-gray-10)));
+
+    &:hover {
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+    }
+  }
+}
+
+.asset-picker-tabs-slot {
+  justify-self: center;
+
+  .tabs-section {
+    background: transparent;
+    padding: 0;
+  }
+}
+
+/* Pilled segmented control — used for value/mode selection (Avatar | Image).
+   Visually distinct from tab-items: a wrapped pill shows the bounded set
+   of options, the active segment inverts to read as "current value". */
+.segmented-control {
+  @apply flex items-center;
+  /* Container bg steps one step up from the topbar so the control reads
+     as a bounded group. Tailwind `bg-gray-06` chains through
+     `--ls-quaternary-background-color` (#094b5a in OG) — themed teal
+     instead of neutral gray. */
+  @apply bg-gray-06;
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+
+  .segment {
+    @apply flex items-center justify-center;
+    @apply text-sm font-medium cursor-pointer select-none;
+    @apply transition-colors duration-100;
+    border: none;
+    background: transparent;
+    color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+    padding: 2px 10px;
+    border-radius: 4px;
+    min-width: 56px;
+    line-height: 1.4;
+
+    &:hover {
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+    }
+
+    &[data-active="true"] {
+      /* Active segment darkens to gray-01 — Tailwind chain hits
+         `--ls-primary-background-color` in OG, creating a "carved in"
+         feel against the lighter quaternary control bg. */
+      @apply bg-gray-01;
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+
+    /* Keyboard focus ring (matches the topbar's halo style) */
+    &:focus-visible {
+      outline: 2px solid var(--lx-accent-09);
+      outline-offset: 2px;
+    }
+  }
+}
+
+.asset-picker-topbar-actions {
+  justify-self: end;
+  /* Right-side group: holds the (avatar-mode-only) color trigger and the
+     trash button. Flex-row aligns them on a single baseline; the gap
+     mirrors the icon-picker's `.tab-actions gap-1.5` so the two topbars
+     read as the same chrome at different drill levels. */
+  @apply flex items-center gap-1.5;
+
+  /* Delete button - matching icon picker styling */
+  .ui__button[data-action=del] {
+    @apply !w-6 !h-6 overflow-hidden rounded-md opacity-60;
+    @apply hover:text-red-rx-09 hover:opacity-90;
+
+    /* Keyboard focus state. Force opacity 1 so the focus ring paints at
+       full alpha; otherwise the button's base opacity-60 dims the outline
+       and reads as a "muted glow" instead of a clear focus indicator. */
+    &:focus-visible {
+      opacity: 1;
+    }
+  }
+}
+
+/* Unified focus ring across the asset-picker topbar. Without this, three
+   different mechanisms render three different blues: back button uses the
+   browser-default outline (system blue), segments use our custom outline
+   (--lx-accent-09), and the trash button uses shui's box-shadow ring
+   (Tailwind --ring token). This rule overrides all three to match. */
+.asset-picker-topbar :is(
+  .back-button,
+  .segmented-control .segment,
+  .ui__button[data-action=del]
+):focus-visible {
+  outline: 2px solid var(--lx-accent-09);
+  outline-offset: 2px;
+  box-shadow: none;
+  border-radius: 4px;
+}
+
+/* Same unified treatment for the icon-picker topbar. The color-picker
+   trigger and the trash button each had their own focus stylings (browser
+   default + shui's --ring respectively); pulling them onto --lx-accent-09
+   so all topbar stops match. The .tab-item rule (above) already uses the
+   same token; keep it as-is. */
+.cp__emoji-icon-picker .tabs-section :is(
+  .color-picker-trigger,
+  .ui__button[data-action=del]
+):focus-visible {
+  outline: 2px solid var(--lx-accent-09);
+  outline-offset: 2px;
+  box-shadow: none;
+  border-radius: 4px;
+}
+
+/* Search input matching icon picker */
+.asset-picker-search {
+  @apply py-1 pr-3;
+  @apply flex-shrink-0;
+  /* Tailwind utility for the proper themed fallback chain (see icon
+     picker .search-section comment). */
+  @apply bg-gray-03;
+  /* Themed bottom border (matches icon picker — `--ls-border-color`
+     middle step for OG). No focus accent: search icon opacity is the
+     active-state signal. */
+  border-bottom: 1px solid var(--lx-gray-06, var(--ls-border-color, var(--rx-gray-06)));
+
+  .search-input {
+    @apply relative flex-1 px-2;
+
+    .ls-icon-search {
+      @apply absolute left-[14px] top-[8px] opacity-50;
+    }
+
+    .ui__input {
+      /* Borderless, transparent — see icon picker .ui__input comment. */
+      @apply leading-none pl-8 outline-none border-none bg-transparent rounded-none;
+      @apply focus:bg-transparent !h-8;
+      box-shadow: none !important;
+
+      /* Themed placeholder, muted via opacity (matches icon picker). */
+      &::placeholder {
+        color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+        opacity: 0.6;
+      }
+    }
+
+    /* Rounded-circle clear button — mirrors the icon-search affordance
+       (icon.css:94-104). Higher contrast than the icon-search variant
+       (gray-07 → gray-08 on hover, gray-12 glyph) because it sits on
+       the asset-picker's slightly lighter input background. */
+    > .x {
+      @apply flex items-center justify-center;
+      @apply absolute right-2 top-1/2 -translate-y-1/2;
+      @apply w-5 h-5 rounded-full cursor-pointer;
+      @apply transition-colors duration-150;
+      /* Themed via the same chains as the icon-picker .x button. */
+      @apply bg-gray-07;
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+    }
+
+    > .x:hover {
+      background-color: var(--lx-gray-08, var(--ls-border-color, var(--rx-gray-08)));
+    }
+
+    /* Focus-lift on the search-glyph mirrors the icon-picker's
+       `.search-input:focus-within .ls-icon-search` rule. Without it,
+       the asset-picker's search input gives no visual feedback when
+       focused — the comment at .asset-picker-search above documents
+       this lift as the active-state signal. opacity-50 → opacity-100
+       reads as "field is active" without needing a focus ring. */
+    &:focus-within {
+      .ls-icon-search {
+        @apply opacity-75;
+      }
+    }
+  }
+}
+
+/* `:type "search"` (added for semantics + mobile keyboard hint) makes
+   WebKit/Chrome render a native blue cancel-X inside the input. The
+   icon picker already provides its own rounded-circle clear button
+   (`a.x` at icon.cljs:6842 in icon-search; clearing in asset-picker
+   happens via Escape). Hide the native chrome so we have a single,
+   on-brand clear affordance. */
+.cp__emoji-icon-picker input[type="search"]::-webkit-search-cancel-button,
+.asset-picker input[type="search"]::-webkit-search-cancel-button,
+.cp__emoji-icon-picker input[type="search"]::-webkit-search-decoration,
+.asset-picker input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+/* Grid layout - 5 columns for larger, scannable images */
+.asset-picker-grid {
+  @apply grid gap-2 px-3 pt-1 pb-3;
+  @apply flex-1 overflow-y-auto;
+  grid-template-columns: repeat(5, 1fr);
+  align-content: start;
+
+  /* Recently used row - single row, no extra padding */
+  &.recently-used-row,
+  &.web-images-row {
+    @apply flex-none overflow-visible;
+    min-height: auto;
+  }
+
+  /* Search-results variant: parent (`.bd-scroll`) already scrolls, and we
+     don't want a 120px placeholder for tiny result sets. Override both. */
+  &.assets-search-grid {
+    @apply flex-none overflow-visible;
+    min-height: auto;
+  }
+}
+
+/* Empty state - spans all grid columns, centered */
+.asset-picker-empty {
+  @apply flex flex-col items-center justify-center gap-2 select-none;
+  grid-column: 1 / -1;
+  min-height: 120px;
+  color: var(--lx-gray-09, var(--rx-gray-09));
+}
+
+/* Image items - fill grid cell with proper aspect ratio */
+.image-asset-item {
+  @apply overflow-hidden rounded cursor-pointer;
+  @apply transition-all duration-150;
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%; /* Square aspect ratio */
+  background-color: var(--lx-gray-04, var(--rx-gray-04));
+
+  /* Use `outline` (not `border`) for hover/focus/selected. `outline`
+     draws OUTSIDE the element without compressing inner content — a
+     `border` here would push the clipped image to a smaller inner
+     radius than the visible outer curve, making rounded corners look
+     mismatched between the tile and its image. Outline follows
+     `border-radius` automatically in modern browsers, so the curves
+     stay consistent across all shapes (rounded, circle, rounded-rect).
+     Important: `--rx-accent-09` may be undefined in some themes. Inside
+     an `outline` shorthand, an unresolved var() invalidates the WHOLE
+     shorthand and reverts `outline-style` to `none` — so the ring
+     wouldn't draw at all. Pass an explicit `currentColor` fallback so
+     the shorthand stays valid; the visible color then matches the
+     neutral foreground (asset-picker's behavior). */
+  &:hover {
+    outline: 2px solid var(--rx-accent-09, currentColor);
+    outline-offset: 0;
+  }
+
+  &:focus {
+    outline: 2px solid var(--rx-accent-09, currentColor);
+    outline-offset: 0;
+  }
+
+  img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 4px;
+  }
+
+  > div {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 4px;
+  }
+
+  /* Avatar mode - circular previews */
+  &.avatar-mode {
+    @apply rounded-full;
+
+    img {
+      @apply rounded-full;
+      object-fit: cover;
+    }
+
+    > div {
+      @apply rounded-full;
+    }
+  }
+
+  /* Selected state - blue outline */
+  &.selected {
+    outline: 2px solid var(--lx-accent-09);
+    outline-offset: 0;
+    box-shadow: 0 0 0 1px var(--lx-accent-09);
+  }
+
+  /* Ghost asset - file missing from disk, click to retry. The dashed
+     visual is the broken-state cue, so we use a real border here (not
+     outline) — the dashing is a deliberate visual difference from the
+     hover/focus outline rings. */
+  &.ghost-asset {
+    @apply cursor-pointer;
+    opacity: 0.4;
+    border: 2px dashed var(--lx-gray-07, var(--rx-gray-07));
+    transition: opacity 150ms;
+
+    &:hover {
+      opacity: 0.7;
+    }
+
+    .ghost-asset-placeholder {
+      @apply absolute inset-0 flex items-center justify-center;
+      color: var(--lx-gray-09, var(--rx-gray-09));
+    }
+  }
+}
+
+/* Footer hint - thin static row at bottom when assets exist.
+   Mirrors the cmdk dropdown's .hints pattern: bg-gray-03 with a
+   border-top divider, "Tip:" label in font-medium gray-12, prose
+   in gray-11, inline links in accent-11. */
+.asset-picker-footer-hint {
+  @apply flex w-full items-center px-3 py-2 gap-1.5 text-sm;
+  /* Raw `var(--lx-gray-05)` / `var(--lx-gray-03)` were invalid in OG
+     (where those vars are unset) — the top border disappeared and the
+     bg fell to transparent, killing the elevated footer effect. The
+     Tailwind utility chain gives `--ls-border-color` / themed tertiary
+     teal in OG; Radix themes still use --lx-gray-N at step 1. */
+  border-top: 1px solid var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
+  @apply bg-gray-03;
+
+  .tip-label {
+    @apply font-medium;
+    color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+  }
+
+  .tip-body {
+    @apply flex flex-row flex-wrap items-center gap-1;
+    color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+  }
+
+  .tip-link,
+  button.tip-link {
+    cursor: pointer;
+    color: var(--lx-accent-11);
+    background: transparent;
+    border: 0;
+    padding: 0;
+    font: inherit;
+  }
+
+  .tip-link:hover,
+  button.tip-link:hover {
+    color: var(--lx-accent-12);
+    text-decoration: underline;
+  }
+
+  .tip-link:focus-visible {
+    outline: 2px solid var(--lx-accent-09);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  .tip-sep {
+    opacity: 0.5;
+  }
+}
+
+/* Zero-state action rows - shown when no assets exist, in place of grid.
+   Rows span full picker width; the grid's own p-3 is cancelled via :has()
+   below so rows reach the picker edges for full-width hover. */
+.asset-picker-empty-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+}
+
+/* Cancel the grid's own padding when its only child is the empty-actions block. */
+.asset-picker-grid:has(> .asset-picker-empty-actions) {
+  padding: 0;
+}
+
+.asset-picker-empty-row {
+  @apply flex items-center gap-4 cursor-pointer;
+  padding: 14px 18px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  transition: background-color 120ms ease;
+  position: relative;
+  width: 100%;
+
+  &:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    bottom: 0;
+    height: 1px;
+    /* Themed via `--ls-border-color` middle step (matches the rest of
+       the picker dividers). */
+    background-color: var(--lx-gray-06, var(--ls-border-color, var(--rx-gray-06)));
+  }
+
+  /* Hide the separator while the row is highlighted so it doesn't
+     paint over the blue focus outline along the bottom edge. */
+  &.is-highlighted::after {
+    display: none;
+  }
+
+  &:hover {
+    /* Tailwind chain for themed hover bg (tertiary teal in OG). */
+    @apply bg-gray-03;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--lx-accent-09);
+    outline-offset: -2px;
+    border-radius: 4px;
+  }
+
+  .row-icon {
+    @apply flex items-center justify-center;
+    flex-shrink: 0;
+    color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+  }
+
+  .row-body {
+    @apply flex flex-col;
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .row-title {
+    @apply text-sm font-medium;
+    color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+    line-height: 1.25;
+  }
+
+  .row-subtitle {
+    @apply text-sm;
+    color: var(--lx-gray-10, var(--ls-primary-text-color, var(--rx-gray-10)));
+    line-height: 1.3;
+  }
+
+  .row-chevron {
+    flex-shrink: 0;
+    color: var(--lx-gray-10, var(--ls-primary-text-color, var(--rx-gray-10)));
+  }
+
+  .row-shortcut {
+    flex-shrink: 0;
+    margin-left: 8px;
+    opacity: 0.7;
+  }
+
+  &.no-subtitle .row-title {
+    line-height: 1.4;
+  }
+}
+
+/* ============================================================================
+   Text Picker (Level 2 view) - matches asset-picker structure
+   ============================================================================ */
+
+.text-picker {
+  @apply flex flex-col overflow-hidden;
+  width: 380px;
+  min-width: 380px;
+  /* Tailwind utility for themed chain (matches asset-picker outer). */
+  @apply bg-gray-02;
+}
+
+.text-picker-topbar {
+  @apply flex-shrink-0;
+}
+
+.text-picker-back {
+  @apply flex-shrink-0 flex items-center justify-between;
+  /* Symmetric 12px matches the icon-picker tabs (`.tabs-section`
+     uses `px-3`) and `.asset-picker-tabrow` above, so the
+     back-chevron and trash button line up with the tab strip and
+     its right-side trigger when switching picker modes via `< Back`. */
+  padding: 8px 12px 7px;
+  /* Themed via Tailwind chain (matches the asset-picker and icon-picker topbars). */
+  @apply bg-gray-03;
+  border-bottom: 1px solid var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
+
+  .back-button {
+    @apply flex items-center gap-0.5;
+    @apply text-sm font-medium cursor-pointer;
+    @apply border-none bg-transparent p-0;
+    @apply transition-colors duration-150;
+    color: var(--lx-gray-10, var(--ls-primary-text-color, var(--rx-gray-10)));
+
+    &:hover {
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+    }
+  }
+
+  .ui__button[data-action=del] {
+    @apply !w-6 !h-6 overflow-hidden rounded-md opacity-60;
+    @apply hover:text-red-rx-09 hover:opacity-90;
+  }
+}
+
+.text-picker-actions {
+  @apply flex items-center gap-1.5;
+}
+
+.text-picker-body {
+  @apply flex flex-col gap-4 p-3;
+
+  .format-note {
+    @apply text-xs leading-relaxed;
+    color: var(--lx-gray-09, var(--ls-primary-text-color, var(--rx-gray-09)));
+  }
+}
+
+.text-picker-section {
+  @apply flex flex-col gap-1;
+
+  > label {
+    @apply text-xs font-medium;
+    color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+  }
+}
+
+.text-picker-gallery {
+  @apply flex justify-center gap-4;
+}
+
+.text-picker-gallery-item {
+  @apply cursor-pointer border-none bg-transparent p-0;
+  /* `gap-3` (12px) pushes the label below the preview tile clear of
+     the selected-state outline that grows 2px OUTSIDE the tile. With
+     the old `gap-1.5` (6px) the outline ring sat almost touching the
+     label baseline. */
+  @apply flex flex-col items-center gap-3;
+
+  /* No `opacity-80` on hover — that muted the label below the tile.
+     Hover/active feedback now lives on the preview tile itself
+     (bg-lift + outline) rather than dimming the whole column. */
+  &:active .text-picker-gallery-preview {
+    opacity: 0.85;
+  }
+}
+
+.text-picker-gallery-preview {
+  @apply w-14 h-14 rounded-lg;
+  @apply flex items-center justify-center;
+  border: 1px solid var(--lx-gray-06, var(--ls-border-color, var(--rx-gray-06)));
+  /* Tailwind chain → themed tertiary teal in OG (background for the
+     preview tile is meant to sit one step lighter than the picker bg). */
+  @apply bg-gray-03;
+  /* Baseline 0-width transparent outline so the selected state can
+     animate outline-width 0 → 2px and outline-offset 0 → 2px in
+     parallel — same scale-up effect the custom-tab tiles use on
+     keyboard nav. */
+  outline: 0 solid transparent;
+  outline-offset: 0;
+  transition: background-color 150ms, outline-width 150ms,
+              outline-offset 150ms, outline-color 150ms,
+              border-color 150ms;
+
+  &:hover {
+    /* Themed lift on hover (matches the custom-tab pattern — bg goes
+       up one step, no accent border). */
+    @apply bg-gray-04;
+  }
+}
+
+.text-picker-gallery-item.is-selected .text-picker-gallery-preview {
+  /* Subtle bg + accent outline OUTSIDE the tile (matches custom-tab
+     `.is-highlighted` — positive offset grows outward for the
+     "scale-up" feel). The default themed border stays, but the outline
+     carries the "I am selected" signal. */
+  @apply bg-gray-04;
+  outline: 2px solid var(--lx-accent-09);
+  outline-offset: 2px;
+}
+
+.text-picker-gallery-label {
+  @apply text-xs;
+  color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+  transition: color 150ms;
+}
+
+.text-picker-gallery-item:hover .text-picker-gallery-label {
+  /* Brighten the label on hover instead of muting the whole column. */
+  color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+}
+
+.text-picker-gallery-item.is-selected .text-picker-gallery-label {
+  /* Accent-text tier (matches custom-tab's `.is-highlighted` label). */
+  color: var(--lx-accent-11);
+  @apply font-medium;
+}
+
+.text-picker-controls-row {
+  @apply flex items-end gap-3;
+
+  .ui__input { @apply !h-8; }
+}
+
+.text-picker-alignment {
+  @apply flex;
+
+  .ui__button {
+    @apply !w-8 !h-8;
+    /* shadcn's :secondary / :outline variants resolve to neutral-gray
+       backgrounds in OG, making selected vs unselected almost
+       indistinguishable. Override per-state with themed chains. */
+    border: 1px solid var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05))) !important;
+    background-color: transparent !important;
+    color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11))) !important;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+
+    &:hover {
+      /* Themed tertiary teal lift in OG. */
+      @apply bg-gray-03 !important;
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12))) !important;
+    }
+  }
+
+  /* Active (selected) alignment — shadcn's button injects an
+     `as-secondary` class for `:variant :secondary`. Use a lifted-bg +
+     inset-shadow "pressed in" look (no accent border) so the selected
+     state reads as a clearly chosen segment without competing with
+     the focus-ring aesthetic. */
+  .ui__button.as-secondary {
+    @apply !bg-gray-04;
+    /* Keep the resting border color so the selected button matches the
+       chrome rhythm — the inset shadow + bolder glyph color carry the
+       "I am pressed" signal. */
+    border-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05))) !important;
+    color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12))) !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
+  }
+}
+
+/* Reveal the keyboard-shortcut hint when the cursor hovers over a section
+   header. Mirrors `.keyboard-shortcut` reveal in container.css for sidebar nav.
+   `!important` is required to override the `!opacity-0` Tailwind utility set
+   when focus is in the search input. The 250ms delay is hover-intent: a
+   user clicking straight through the chevron won't see the hint flash. */
+@media (hover: hover) and (pointer: fine) {
+  .section-header:hover .section-header-hint {
+    opacity: 0.5 !important;
+    pointer-events: auto !important;
+    transition-delay: 250ms;
+  }
+}
+
+/* ============================================================================
+   Web Image Search Section
+   ============================================================================ */
+
+/* Info icon used as a section-header `:title-extra` (e.g. Web images). Sits
+   next to the title inside the section-header's left cluster. The 2px
+   translateY corrects the optical center against the bolded title baseline
+   — flex `items-center` aligns geometric centers but the (i) glyph reads
+   as top-heavy. */
+.info-icon {
+  @apply p-0.5 rounded border-none bg-transparent cursor-help transition-colors;
+  color: var(--lx-gray-10, var(--ls-primary-text-color, var(--rx-gray-10)));
+  transform: translateY(2px);
+
+  &:hover {
+    color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+  }
+}
+
+/* Web image item - similar to image-asset-item.
+   Deliberately NOT overflow-hidden: the img clips itself via its own
+   border-radius, and dropping clipping lets the .external-badge sit on
+   the avatar circle's edge without being cropped. */
+.web-image-item {
+  @apply rounded cursor-pointer;
+  @apply transition-all duration-150;
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%; /* Square aspect ratio */
+  background-color: var(--lx-gray-04, var(--rx-gray-04));
+
+  /* Outline (not border) for hover/focus — same rationale as
+     `.image-asset-item`: avoids the inner-vs-outer radius mismatch
+     a border-with-clipped-content causes. `currentColor` fallback
+     keeps the outline shorthand valid when `--rx-accent-09` is
+     undefined; see `.image-asset-item` for the longhand-vs-shorthand
+     var() reasoning. */
+  &:hover {
+    outline: 2px solid var(--rx-accent-09, currentColor);
+    outline-offset: 0;
+  }
+
+  &:focus {
+    outline: 2px solid var(--rx-accent-09, currentColor);
+    outline-offset: 0;
+  }
+
+  img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 4px;
+  }
+
+  > div:not(.external-badge):not(.saved-badge) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 4px;
+  }
+
+  /* Avatar mode - circular previews. The badge keeps its default
+     bottom: 2px; right: 2px; position — with overflow no longer
+     clipping, it floats at the square corner, diagonally outside the
+     circle. */
+  &.avatar-mode {
+    @apply rounded-full;
+
+    img {
+      @apply rounded-full;
+      object-fit: cover;
+    }
+  }
+
+  /* Corner badge — `.external-badge` for unsaved web hits (globe), `.saved-badge`
+     for hits whose source-url already matches a local asset (green check). The
+     two share geometry so the tile silhouette is identical regardless of which
+     one is shown; only the disc color and the inner glyph differ. */
+  .external-badge,
+  .saved-badge {
+    @apply flex items-center justify-center;
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    color: white;
+    z-index: 1;
+  }
+
+  .external-badge {
+    background-color: rgba(0, 0, 0, 0.6);
+  }
+
+  .saved-badge {
+    /* Deep forest green, fixed across themes. Radix green-9/10 are the
+       "solid" tones intended for colored backgrounds, but the scale *flips*
+       between light and dark mode — they read brighter in dark theme,
+       which leaves the white check washed out at 10px. A fixed deep
+       saturated green (~5.5:1 contrast with white) keeps the check legible
+       in both themes and against any thumbnail. Distinct from the blue
+       selected-asset ring used elsewhere on tiles. */
+    background-color: #137333;
+  }
+}
+
+/* Web image placeholder (loading skeleton) */
+/* Mirrors `.web-image-item` geometry (border + aspect ratio) so the
+   skeleton circle lands in the exact same spot as the loaded image — no
+   vertical jump when results come in. */
+.web-image-placeholder {
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%; /* Square aspect ratio */
+  border: 2px solid transparent;
+  border-radius: 6px;
+  overflow: hidden;
+
+  > * {
+    position: absolute;
+    inset: 0;
+  }
+
+  &.avatar-mode,
+  &.avatar-mode > * {
+    border-radius: 50%;
+  }
+}
+
+/* Bordered tooltip arrow - CSS-positioned (Base UI technique) */
+/* Arrow is a regular child element, positioned via CSS - NOT Radix's TooltipPrimitive.Arrow */
+/* This gives us full control and prevents Radix's position recalculations that cause shift */
+/* Arrow SVG points UP by default (tip near top, base at bottom) */
+
+.ui__tooltip-arrow {
+  position: absolute;
+  display: flex;
+  pointer-events: none;
+}
+
+/* Tooltip ABOVE trigger - arrow at bottom pointing DOWN */
+.ui__tooltip-content[data-side="top"] .ui__tooltip-arrow {
+  bottom: -9px;
+  left: 50%;
+  transform: translateX(-50%) rotate(180deg);
+}
+
+/* Tooltip BELOW trigger - arrow at top pointing UP */
+.ui__tooltip-content[data-side="bottom"] .ui__tooltip-arrow {
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Tooltip LEFT of trigger - arrow at right pointing RIGHT */
+.ui__tooltip-content[data-side="left"] .ui__tooltip-arrow {
+  right: -14px;
+  top: 50%;
+  transform: translateY(-50%) rotate(90deg);
+}
+
+/* Tooltip RIGHT of trigger - arrow at left pointing LEFT */
+.ui__tooltip-content[data-side="right"] .ui__tooltip-arrow {
+  left: -14px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+}
+
+/* Web image tooltip with bordered arrow */
+/* Web image hover card (Radix Tooltip with rich content).
+   Tooltip-content has default px-3 py-1.5 + overflow-hidden. We strip the
+   padding so the preview block can go edge-to-edge to the rounded corners. */
+.web-image-card-popup {
+  padding: 0 !important;
+  /* Tooltip default keeps overflow-hidden; the popup's rounded-md corners
+     clip the preview image cleanly. */
+}
+
+.web-image-card {
+  @apply flex flex-col;
+  width: 280px;
+  background-color: var(--lx-gray-02);
+
+  /* Edge-to-edge preview area: blurred image fills the rectangle as a backdrop,
+     the sharp image is layered on top with object-fit: contain so any aspect
+     ratio displays without distortion. */
+  .preview-image {
+    @apply relative overflow-hidden;
+    height: 180px;
+    background-color: var(--lx-gray-03);
+
+    .blur-bg {
+      @apply absolute inset-0 w-full h-full;
+      object-fit: cover;
+      filter: blur(20px) saturate(1.4);
+      /* Scale slightly so the blur edges don't reveal the unblurred bounds. */
+      transform: scale(1.15);
+      opacity: 0.85;
+    }
+
+    .preview-img {
+      @apply absolute inset-0 w-full h-full;
+      object-fit: contain;
+    }
+
+    .maximize-btn {
+      @apply absolute top-2 right-2 inline-flex items-center justify-center;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background-color: rgba(0, 0, 0, 0.45);
+      color: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: background-color 120ms, color 120ms;
+
+      &:hover {
+        background-color: rgba(0, 0, 0, 0.65);
+        color: white;
+      }
+    }
+  }
+
+  .content-wrapper {
+    @apply flex flex-col gap-3 p-3;
+  }
+
+  .image-info {
+    @apply flex flex-col gap-1;
+
+    .image-title {
+      @apply font-medium text-sm;
+      color: var(--lx-gray-12, var(--rx-gray-12));
+    }
+
+    .image-source {
+      @apply text-xs;
+    }
+
+    .license-badge {
+      @apply text-xs px-2 py-0.5 rounded mt-1 self-start;
+      /* Tailwind utility for the full themed chain — raw
+         var(--lx-gray-04) was invalid in OG (where the var is unset),
+         making the pill background transparent. */
+      @apply bg-gray-04;
+      color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+    }
+  }
+}
+
+/* Inline message shown when both Wikipedia + Commons searches fail.
+   Distinct from the empty-result hidden state — surfaces a real connection
+   problem instead of silently hiding the section. */
+.web-images-error {
+  @apply flex items-center gap-2 px-3 py-2;
+  font-size: 12px;
+  color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+  /* Tailwind utility for themed chain. */
+  @apply bg-gray-03;
+  border-radius: 4px;
+  margin: 0 8px;
+}
+
+/* Compact license byline overlaid on the tile for touch devices (no hover).
+   Hidden on hover-capable devices since the rich card covers the same info. */
+.web-image-item .touch-byline {
+  display: none;
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  font-size: 10px;
+  line-height: 1.2;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.95);
+  pointer-events: none;
+  max-width: calc(100% - 8px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (hover: none) {
+  .web-image-item .touch-byline {
+    display: inline-block;
+  }
+}
+
+/* ── Custom Color Picker Pane + Recents Lane ── */
+
+/* Custom-rainbow swatch fill: a conic-gradient covering the hue circle.
+   Anchored on the warm-cool diagonal to keep red top-left, green centre. */
+.color-swatch--custom .swatch-fill--rainbow {
+  @apply w-6 h-6 rounded-full block;
+  background: conic-gradient(from 90deg,
+    var(--rx-red-10) 0deg,
+    var(--rx-orange-10) 60deg,
+    var(--rx-green-10) 130deg,
+    var(--rx-cyan-10) 200deg,
+    var(--rx-indigo-10) 270deg,
+    var(--rx-pink-10) 340deg,
+    var(--rx-red-10) 360deg);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 120ms;
+}
+
+/* Picker pane animates open via the CSS-Grid 0fr↔1fr trick.
+   Inner element stays overflow:hidden so children clip during reveal.
+   Padding animates from 0 → full alongside the row height; otherwise the
+   inner's static padding contributes a few pixels of visible space below
+   the swatch grid even when the pane is "closed." */
+.color-picker-pane {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 220ms cubic-bezier(.32, .72, 0, 1),
+              opacity 160ms ease-out 60ms;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.color-picker-pane[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.color-picker-pane__inner {
+  @apply flex flex-col gap-2;
+  min-height: 0;
+  overflow: hidden;
+  /* Inner is full popover width with NO horizontal padding — each child
+     section (hex-row, pad-row, recents) owns its own internal padding so
+     all three sit at the same 175px outer width. Closed: zero vertical
+     padding + zero border so the box collapses cleanly. */
+  padding: 0;
+  border-top: 0 solid var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
+  /* Slightly darker than the popover surface so the picker pane reads as
+     a distinct pocket within the popover. Animates with the height. */
+  background-color: hsl(var(--popover));
+  transition: padding 220ms cubic-bezier(.32, .72, 0, 1),
+              border-top-width 160ms ease-out 60ms;
+}
+
+.color-picker-pane[data-open="true"] .color-picker-pane__inner {
+  /* No top padding: hex-row sits flush with the separator above. Bottom
+     padding gives recents (or pad-row, when no recents) breathing room. */
+  padding: 0 0 8px 0;
+  border-top-width: 1px;
+}
+
+/* Hex input row: styled like the icon-picker's search section.
+   Now sits flush with the popover edges (parent inner has 0 horizontal
+   padding) and owns its own internal padding. */
+.color-picker-hex-row {
+  @apply flex items-center;
+  position: relative;
+  height: 32px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
+}
+
+/* Inline indicator overlaid on the hex input's right edge. Visible when
+   the picked color renders differently in light vs dark theme. Shows a
+   half-pie preview — left half = dark mode, right half = light mode —
+   matching the recents lane's split-swatch motif. Tooltip shows hexes. */
+.color-picker-contrast-indicator {
+  @apply inline-flex items-center cursor-help;
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  opacity: 0.85;
+  transition: opacity 120ms;
+  /* Sits above the input so hovers register on the indicator. */
+  z-index: 1;
+  pointer-events: auto;
+
+  &:hover { opacity: 1; }
+}
+
+.contrast-split-swatch {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: linear-gradient(to right,
+    var(--dark-color, currentColor) 50%,
+    var(--light-color, currentColor) 50%);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18),
+              0 0 0 1px var(--lx-gray-04);
+}
+
+/* Small dot used inside the contrast tooltip to color-key each row. */
+.contrast-tooltip-dot {
+  @apply inline-block rounded-full;
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+/* Hex input: blends with the row (no own background, no border,
+   no focus shadow). Mirrors .ui__input inside .search-section. */
+.color-picker-hex-input {
+  @apply flex-1 outline-none;
+  /* min-width: 0 lets the input shrink below its intrinsic content width
+     in a flex container, preventing the row from being forced to grow
+     when padding-right: 90px (indicator visible) plus text would
+     otherwise overflow. */
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  background-color: transparent;
+  font-size: 12px;
+  color: var(--lx-gray-12);
+  border: none;
+  box-shadow: none;
+
+  /* Reserve room on the right when the contrast indicator is overlaid.
+     The indicator is roughly 84px wide (arrow + dot + hex + gaps); 90px
+     total padding leaves a small text gap before the indicator. */
+  .color-picker-hex-row:has(.color-picker-contrast-indicator) & {
+    padding-right: 90px;
+  }
+
+  &::placeholder {
+    color: var(--lx-gray-09);
+  }
+
+  &:focus {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+  }
+
+  /* Invalid state: subtly shift the row's bottom border to red so
+     feedback is visible without a per-input border. */
+  &.is-invalid {
+    color: var(--rx-red-10);
+  }
+}
+
+.color-picker-hex-row:has(.color-picker-hex-input.is-invalid) {
+  border-bottom-color: var(--rx-red-10);
+}
+
+/* Ghost suffix shown after typed text when a prefix match exists. Sits
+   on the same baseline as the input but in muted gray; pointer-events
+   none so it never intercepts clicks. */
+.color-picker-hex-input-ghost {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--lx-gray-09);
+  pointer-events: none;
+  white-space: pre;
+  user-select: none;
+}
+
+.color-picker-pad-row {
+  /* Owns its own horizontal padding now that .color-picker-pane__inner
+     extends children to full popover width. Top/bottom padding handled
+     by inner's gap-2. */
+  @apply flex flex-col;
+  padding: 0 8px;
+}
+
+/* react-colorful overrides — scope under the pane so we don't affect any
+   other instance of the library elsewhere in the app. */
+.color-picker-pane .react-colorful {
+  width: 100%;
+  height: 130px;
+}
+
+.color-picker-pane .react-colorful__saturation {
+  border-radius: 6px 6px 0 0;
+  border-bottom-width: 6px;
+  flex: 1;
+}
+
+.color-picker-pane .react-colorful__hue {
+  height: 14px;
+  flex: 0 0 14px;
+}
+
+.color-picker-pane .react-colorful__last-control {
+  border-radius: 0 0 6px 6px;
+}
+
+.color-picker-pane .react-colorful__pointer {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
+.color-picker-recents {
+  /* Lives inside .color-picker-pane__inner so it shares the popover bg
+     pocket. Owns its own horizontal padding now that __inner extends
+     children to full popover width. The border-top divides recents from
+     the pad-row above. */
+  padding: 8px 8px 0 8px;
+  margin-top: 2px;
+  border-top: 1px solid var(--lx-gray-04);
+}
+
+.color-picker-recents__header {
+  /* Match existing pane-section header typography (12px Inter Medium muted). */
+  @apply text-xs font-medium;
+  color: var(--lx-gray-11);
+  margin-bottom: 6px;
+}
+
+.color-picker-recents__row {
+  /* flex-wrap lets the row spill into a second row when recents > 7.
+     20px tile + 3px gap gives exactly 7 per row in 158px (flush with
+     the 159px content area inside .color-picker-recents). */
+  @apply flex flex-row flex-wrap;
+  gap: 3px;
+}
+
+/* Smaller, simpler swatch in the recents lane: round disk, no
+   selection ring (it's a one-shot pick, not a current-state radio). */
+.color-swatch--recent {
+  @apply rounded-full p-0 flex items-center justify-center
+         border-0 bg-transparent;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  transition: transform 120ms;
+
+  &:hover { transform: scale(1.1); }
+  &:active { transform: scale(0.95); }
+  &:focus,
+  &:focus-visible { outline: none; }
+
+  .swatch-fill {
+    @apply w-full h-full rounded-full block;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+    /* Default solid background. The CLJS sets `background-color` inline
+       when both modes match (no split). When `.is-split` is applied,
+       the background switches to a vertical half-pie gradient using the
+       inline --dark-color and --light-color CSS vars. */
+    background-color: var(--light-color, var(--dark-color, currentColor));
+
+    &.is-split {
+      background-color: transparent;
+      background-image: linear-gradient(to right,
+        var(--dark-color) 50%,
+        var(--light-color) 50%);
+    }
+  }
+
+  &:focus-visible .swatch-fill {
+    box-shadow:
+      inset 0 0 0 1px rgba(0, 0, 0, 0.08),
+      0 0 0 1px var(--lx-gray-02),
+      0 0 0 2.5px var(--lx-accent-09);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .color-picker-pane {
+    transition: none;
+  }
+  .color-picker-pane[data-open="true"] {
+    grid-template-rows: 1fr;
+  }
+  .color-picker-hex-input {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .color-swatch--custom .swatch-fill--rainbow,
+  .color-picker-pane .react-colorful__saturation,
+  .color-picker-pane .react-colorful__hue {
+    forced-color-adjust: none;
+    border: 1px solid CanvasText;
+  }
+  .color-picker-pane .react-colorful__pointer {
+    outline: 2px solid Highlight;
+  }
+}
+
+/* ============================================================
+   Avatar shape — `data-shape` attribute on the Radix Avatar
+   chain (root + image + fallback). The TSX component always
+   emits `rounded-full` as the default; this rule overrides it
+   for the rounded-rect variant.
+
+   We use a percentage radius (22%) so the corner softness scales
+   with the avatar's size — at 56px this lands ~12px (visually
+   rich without looking like a tile), and at 16px sidebar avatars
+   it drops to ~3.5px (still reads as a square but with chamfered
+   corners).
+
+   The selector matches both the root (.ui__avatar) and any
+   descendant carrying the same data-shape (the Radix
+   AvatarFallback inherits the attribute via React props
+   pass-through), so initials chips and image clips both adopt
+   the rectangular silhouette.
+   ============================================================ */
+[data-shape="rounded-rect"].ui__avatar,
+.ui__avatar [data-shape="rounded-rect"] {
+  border-radius: 22%;
+}
+
+/* Asset-grid tiles follow the avatar shape. The base avatar-mode
+   rules above clip every grid tile (`.image-asset-item.avatar-mode`,
+   `.web-image-item.avatar-mode`, `.web-image-placeholder.avatar-mode`)
+   to a circle. When the avatar is set to rounded-rect, the asset-
+   picker root gets `data-avatar-shape="rounded-rect"`, and these
+   selectors override the circle clip with the same 22% radius the
+   avatar root uses — so the cropped thumbnails mirror the silhouette
+   the user just chose. The two `> div` clauses cover the loading
+   skeleton (`.bg-gray-04.animate-pulse`) and the ghost-asset
+   placeholder; `:not(.external-badge):not(.saved-badge)` exempts the
+   corner badges so they keep their own 4px chip radius. */
+.asset-picker[data-avatar-shape="rounded-rect"] .image-asset-item.avatar-mode,
+.asset-picker[data-avatar-shape="rounded-rect"] .image-asset-item.avatar-mode img,
+.asset-picker[data-avatar-shape="rounded-rect"] .image-asset-item.avatar-mode > div,
+.asset-picker[data-avatar-shape="rounded-rect"] .web-image-item.avatar-mode,
+.asset-picker[data-avatar-shape="rounded-rect"] .web-image-item.avatar-mode img,
+.asset-picker[data-avatar-shape="rounded-rect"] .web-image-item.avatar-mode > div:not(.external-badge):not(.saved-badge),
+.asset-picker[data-avatar-shape="rounded-rect"] .web-image-placeholder.avatar-mode {
+  border-radius: 22%;
+}
+
+/* ============================================================
+   Generic toolbar / footer-rail link utility.
+   Mirrors the pattern from Settings → Keymap shortcut popover
+   (see shortcut.css :490-503). Extracted here so the asset-
+   picker's customize-band Reset/Done rail and the keymap
+   shortcut popover stay in lockstep — same hit-state, same
+   color rest/hover, same focus-visible outline.
+   ============================================================ */
+.lx-toolbar-action {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 16px;
+  color: var(--lx-gray-11, var(--rx-gray-11));
+
+  &:hover {
+    color: var(--lx-gray-12, var(--rx-gray-12));
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--lx-accent-09, var(--rx-accent-09));
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  &[disabled],
+  &:disabled {
+    cursor: default;
+    opacity: 0.4;
+    pointer-events: none;
+  }
+}
+
+.lx-toolbar-reset-link {
+  color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary) / 0.8)));
+
+  &:hover {
+    color: var(--lx-accent-12, var(--ls-link-text-hover-color, hsl(var(--primary))));
+  }
+}
+
+/* ============================================================
+   Avatar customize zone — preview tile + (when expanded) inline
+   Shape/Fallback dropdowns + Reset/Done rail.
+
+   Layout: avatar always sits on the left. The right column swaps
+   between the meta text (resting) and a stack of dropdown rows
+   (expanded). The Reset/Done rail appears only when expanded,
+   separated from the rows by a 1px divider.
+   ============================================================ */
+.avatar-customize-zone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* Pull up by .bd's 4px top padding so the gradient (when expanded) sits
+     flush against the topbar's bottom border. Without this, a thin band of
+     body color shows above the gradient, breaking the visual continuity
+     between the elevated topbar and the customize panel. */
+  margin-top: -4px;
+  /* 12px horizontal padding on the wrapper — both the content row and
+     the rail are siblings of this padding, so the rail's border-top
+     is inset accordingly. Symmetric 12px on both sides matches the
+     topbar's `.asset-picker-tabrow` / `.text-picker-back` inset
+     (and the icon-picker tabs' `px-3`), so the avatar preview, the
+     banner text, and the Edit affordance share a single vertical
+     with the topbar chevron/trash above. */
+  padding: 0 12px;
+  /* Two-layer base background — visible in both compact and expanded
+     states so the customize zone reads as a quietly-recessed banner
+     distinct from the image grid below:
+     1. Bottom: `--lx-gray-02` (body-tone) — keeps the underlying surface
+        consistent with the image grid.
+     2. Top: a dark alpha veil that universally darkens the band in both
+        light and dark themes. rgba(0,0,0,0.X) is the codebase precedent
+        (icon.css:311, editor.css:40) and theme-portable in a way no
+        Radix gray var would be.
+     The expanded-state gradient (`::before`) layers on top — its peak
+     opacity is capped at 0.55 so this veil still reads through under
+     the gradient. */
+  /* Resting state: recessed band relative to the picker bg. We can't
+     use `--lx-gray-01` directly because in OG it chains to
+     `--ls-primary-bg` — the same color the page itself uses — making
+     the banner look like a hole punched through the picker. color-mix
+     darkens the picker bg with black; the mix amount differs by mode
+     because the same percentage reads very differently in light vs
+     dark themes (35% black on a near-white bg becomes a mid-gray that
+     kills text contrast, while 5% black on a near-black bg is invisible).
+     Default (light mode) gets a subtle darkening; `html.dark` ramps up. */
+  background-color: color-mix(
+    in srgb,
+    var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02))) 95%,
+    black
+  );
+  transition: background-color 120ms cubic-bezier(0.32, 0.72, 0, 1);
+  border-bottom: 1px solid var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
+  isolation: isolate;
+  /* Isolate the band's layout from siblings: when the rail expands or
+     collapses, the browser can compute layout for the band without
+     reflowing "Recently used" / "Web images" beneath it. This kills the
+     mid-animation overlap glitch where the rail and the section header
+     briefly stomped on each other while neighboring boxes were still
+     resolving their new positions. */
+  contain: layout;
+
+  /* Avatar size variable — drives the avatar's width/height and
+     proportional badge cue. Compact = 20px (identical to the left
+     sidebar's `.page-icon` so the same icon reads the same in both
+     places). Expanded = 56px tile. Animated by transitions on the
+     consuming elements. */
+  --avatar-size: 20px;
+  /* Font-size for letter fallbacks ("DD" initials) and tabler-icon /
+     emoji glyph size — driven by CSS so the text shrinks in lockstep
+     with the avatar container. Without this the JS renderer bakes the
+     expanded font-size (22px / 30px) inline at render time, and the
+     `:not([data-expanded])` overrides below used to snap to the
+     compact values via `!important`. That snap meant the font jumped
+     from compact → expanded at t=0 of the expand animation while the
+     container took 200ms to follow — "DD" rendered at 22px inside a
+     ~25px circle for ~80ms, clipping and wrapping to two lines.
+     Driving them through vars lets `transition: font-size` interpolate
+     in parallel with `--avatar-size`. */
+  --avatar-font-size: 10px;
+  --avatar-icon-size: 11px;
+  --avatar-emoji-size: 11px;
+}
+
+/* Dark-mode override: same color-mix recipe but with much more black
+   so the recessed effect is actually visible on a dark picker bg.
+   In light mode this would render as muddy mid-gray and kill text
+   contrast (see the parent rule's comment), hence the per-mode split. */
+html.dark .avatar-customize-zone {
+  background-color: color-mix(
+    in srgb,
+    var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02))) 65%,
+    black
+  );
+}
+
+/* Per-mode tweak for the expanded banner's inner rail (the line
+   between Shape/Fallback rows and Reset/Done).
+   - Light: default chain hits `--lx-gray-05` (#e8e8e8 in OG light,
+     ultra-subtle). Bump to `--ls-border-color` (#ccc) so the inner
+     divider has perceptual weight against the white banner.
+   - Dark: default chain falls to `--ls-border-color` (themed teal
+     #0e5263) which reads as too prominent against the recessed
+     banner bg. Use `--ls-secondary-border-color` for a softer line
+     that still belongs to the theme palette.
+
+   Scoped to `.cb-rail` only — the topbar separator and the
+   customize-zone bottom border keep their default chain (which
+   matches the rest of the picker chrome and was already calibrated). */
+html:not(.dark) .avatar-customize-zone .cb-rail {
+  border-top-color: var(--ls-border-color);
+}
+
+html.dark .avatar-customize-zone .cb-rail {
+  /* In dark OG, `--ls-secondary-border-color` (#126277) is actually
+     BRIGHTER than `--ls-border-color` (#0e5263) — wrong direction for
+     muting. Fade the border-color with 50% transparency instead, which
+     blends it half-and-half with the recessed banner bg behind it. The
+     resulting line is a subtle hue-aligned teal rather than a loud
+     ring. */
+  border-top-color: color-mix(
+    in srgb,
+    var(--ls-border-color),
+    transparent 50%
+  );
+}
+
+.avatar-customize-zone[data-expanded="true"] {
+  --avatar-size: 56px;
+  /* Expanded glyph sizes — match the JS-baked values for `:size 56`
+     so the steady-state expanded view is pixel-identical to before.
+     Letter font: 22px (icon.cljs:801, `(<= size 56) "22px"`).
+     Icon SVG: 30px (icon.cljs:804, `(int (* 56 0.55))`).
+     Emoji: 30px (icon.cljs:782 derives the same way). */
+  --avatar-font-size: 22px;
+  --avatar-icon-size: 30px;
+  --avatar-emoji-size: 30px;
+}
+
+/* Customize banner sits flush against the search topbar by design (see
+   `margin-top: -4px` above). The first content section that follows it,
+   however, should get a tiny gap so the grid doesn't read crammed against
+   the banner's bottom border. */
+.avatar-customize-zone + .pane-section {
+  margin-top: 4px;
+}
+
+/* Whole-row click target. Invisible overlay sitting above the resting
+   row so the entire avatar-customize-zone surface (edge to edge,
+   including its 18px horizontal padding) is one accessible <button>.
+   Spans only the collapsed row's height; the Reset/Done rail and the
+   expanded controls sit below and are reached without going through
+   this trigger. Mounted only in the collapsed state
+   (the `when-not expanded?` guard in the component), so there's no
+   nested-interactive risk when the chips render below.
+
+   Hover deepens the existing dark veil (zone's base is gray-02 +
+   rgba(0,0,0,0.15)) rather than lifting it — fits the zone's
+   "quietly-recessed banner" design intent. Compatible with both light
+   and dark themes via a theme-portable black overlay. */
+.cb-row-trigger {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px; /* matches collapsed .cb-content min-height */
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  z-index: 1;   /* above the visual content layer for clicks */
+  transition: background-color 120ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.cb-row-trigger:focus-visible {
+  /* Inset outline so the focus ring stays within the zone boundary
+     instead of bleeding past the popover edge. */
+  outline: 2px solid var(--lx-accent-09, var(--rx-accent-09));
+  outline-offset: -2px;
+}
+
+/* Hover state: lift the zone two steps up the gray scale (gray-01 →
+   gray-03). Solid color, no alpha layer — both themes get a clean
+   shift. Driven by `:has()` on the invisible row-trigger so the
+   hover fires off the actual click target, not off ambient hovers
+   of the rail-wrap or the avatar tile. */
+.avatar-customize-zone:has(.cb-row-trigger:hover) {
+  /* Hover LIFTS the banner from its recessed resting state up to the
+     tertiary-teal level (same shade as the topbar above) — clear
+     "interactive" cue. Tailwind chain handles theming in OG. */
+  @apply bg-gray-03;
+}
+
+/* Brighten the Edit label when the row is hovered. */
+.avatar-customize-zone:has(.cb-row-trigger:hover) .banner-edit {
+  color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+}
+
+/* Gradient lives on a pseudo-element so opacity can crossfade independently
+   of the wrapper's solid base background. translateZ(0) promotes the layer
+   to its own compositor row so the fade composes on the GPU and doesn't
+   repaint the sibling sections (Recently used / Web images / Tip)
+   underneath. Single easing curve shared with the rail-wrap so all band
+   motion reads as one event. */
+.avatar-customize-zone::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* Gradient stops adapted to the parent's new dark-veiled base:
+     - Top stop: `--lx-gray-03` — original elevation flourish (slightly
+       lighter than body, gives the "lifted" feel at the top edge).
+     - Bottom stop: a color-mix that matches the parent's veil-adjusted
+       background (`gray-02` + 15% black overlay). This way the bottom
+       of the gradient seamlessly merges into the veil instead of
+       fading to the lighter body color, so the gradient runs at full
+       opacity without obliterating the dark veil — the bottom IS the
+       veil. */
+  background: linear-gradient(
+    180deg,
+    var(--lx-gray-03, var(--rx-gray-03)) 0%,
+    color-mix(in srgb, var(--lx-gray-02, var(--rx-gray-02)) 85%, black) 100%
+  );
+  opacity: 0;
+  transition: opacity 200ms cubic-bezier(0.32, 0.72, 0, 1);
+  pointer-events: none;
+  transform: translateZ(0);
+  z-index: -1;
+}
+
+.avatar-customize-zone[data-expanded="true"]::before {
+  /* Gradient temporarily off — the dark veil alone reads as the
+     "expanded" state. Restore to 1 (or any 0..1) to bring the elevation
+     gradient back; bottom stop is already adapted to merge into the
+     veil so any opacity blends cleanly. */
+  opacity: 0;
+}
+
+.avatar-customize-zone .cb-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 0;
+  min-height: 32px;
+  /* Padding and gap snap rather than transition. Earlier this row
+     animated 2 layout properties concurrently with 4 more across
+     `.cb-avatar-trigger` and `.cb-rail-wrap` — six layout-triggering
+     properties on three nested elements per frame. Even on Chrome the
+     work is non-trivial; on browsers with weaker GPU acceleration
+     (Dia, etc.) it drops frames perceptibly. Snapping these two is a
+     ~14px height + 4px gap jump at t=0, which the avatar morph
+     immediately covers — effectively invisible during user testing,
+     but cuts ~33% of per-frame layout work. */
+}
+
+.avatar-customize-zone[data-expanded="true"] .cb-content {
+  padding: 14px 0;
+  gap: 14px;
+}
+
+/* Avatar tile — decorative preview, no longer interactive. The single
+   click target is `.cb-row-trigger` (invisible overlay) which spans
+   the whole resting row. The tile still morphs width/height in lock
+   with --avatar-size so the avatar grows from 20px (compact banner)
+   to 56px (expanded tile) inside `contain: layout`. */
+.cb-avatar-trigger {
+  flex-shrink: 0;
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  /* Compact state: vertically center the 20px avatar inside the 32px
+     banner row → (32 - 20) / 2 = 6px. In expanded state the cb-content
+     applies its own padding-top, so we drop this margin to 0 to avoid
+     double-spacing. */
+  margin-top: 6px;
+  /* Animate only width + height (the visible morph). The 6px → 0px
+     margin-top shift snaps because (a) on browsers that struggle with
+     layout-heavy per-frame work, every property dropped is one fewer
+     reflow, and (b) the snap happens at t=0 while the avatar starts
+     growing — the size morph hides the position snap. `will-change`
+     deliberately omitted: for layout properties it doesn't help and
+     can confuse some compositors into spurious layer creation. */
+  transition: width 200ms cubic-bezier(0.32, 0.72, 0, 1),
+              height 200ms cubic-bezier(0.32, 0.72, 0, 1);
+
+  .preview-avatar {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Override the inline width/height that `(icon ...)` applies via
+     :style, so the rendered avatar fills its CSS-controlled wrapper. */
+  .preview-avatar .ui__avatar {
+    width: 100% !important;
+    height: 100% !important;
+  }
+}
+
+/* Expanded state: drop the compact-state margin-top so the 56px avatar
+   sits at the natural top of `.cb-content` (which already applies its
+   own 14px padding-top). Otherwise the avatar would inherit the 6px
+   compact offset and read as crowding the search bar above. */
+.avatar-customize-zone[data-expanded="true"] .cb-avatar-trigger {
+  margin-top: 0;
+}
+
+/* Compact-state font-size override: the avatar in the resting banner
+   should read identically to the sidebar's `.page-icon` (20×20 / 10px /
+   500), since they show the *same* icon for the *same* page. The icon
+   function inlines a 22px font (and a ~30px tabler icon) when called
+   with `:size 56`, so we override both back down here. Scoped to the
+   resting state so the expanded 56px preview keeps its natural 22px /
+   30px sizes.
+   Selector targets `.ui__avatar > span` instead of `.avatar-fallback`
+   because AvatarFallback in `packages/ui/@/components/ui/avatar.tsx`
+   doesn't yet emit the `avatar-fallback` class in the built bundle.
+   `> span` is unambiguous — AvatarImage renders an <img>, so the only
+   span child is the fallback. */
+.avatar-customize-zone .cb-avatar-trigger
+.preview-avatar .ui__avatar > span {
+  font-size: var(--avatar-font-size) !important;
+  font-weight: 500 !important;
+  /* Interpolate in lockstep with `--avatar-size`'s width/height
+     transition on `.cb-avatar-trigger` (200ms / same easing). */
+  transition: font-size 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.avatar-customize-zone .cb-avatar-trigger
+.preview-avatar .ui__avatar > span svg {
+  width: var(--avatar-icon-size) !important;
+  height: var(--avatar-icon-size) !important;
+  transition: width 200ms cubic-bezier(0.32, 0.72, 0, 1),
+              height 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Same var-driven size for emoji fallbacks. The icon function renders
+   `<em-emoji size="30">` for the customize-band's underlying :size 56
+   React tree, so emoji-mart's nested spans carry their own *inline*
+   `font-size: 30px`. An `!important` rule on the em-emoji ancestor
+   doesn't reach those inner spans (inline styles on a child win over
+   the parent's external !important). So target the descendant spans
+   directly to clamp the glyph itself; the var interpolates between
+   11px (compact) and 30px (expanded) in parallel with the container. */
+.avatar-customize-zone .cb-avatar-trigger
+.preview-avatar .ui__avatar > span em-emoji,
+.avatar-customize-zone .cb-avatar-trigger
+.preview-avatar .ui__avatar > span em-emoji span {
+  font-size: var(--avatar-emoji-size) !important;
+  line-height: 1 !important;
+  transition: font-size 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* The right column hosts both .cb-banner (resting) and .cb-rows (expanded)
+   on top of each other. Only the "active" child claims layout space —
+   the other is `position: absolute` so it sits over the active one
+   without contributing to the meta-stage's height, then opacity-fades.
+   The banner's 32px height drives the resting cb-content height; the
+   rows' natural ~56px height drives the expanded one. */
+.avatar-customize-zone .cb-meta-stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Compact banner — resting state visual layer. 32px-tall row showing
+   state-as-label on the left (`Default · Letters, circle`) and a
+   muted "Edit" affordance on the right. NOT a click target — the
+   single accessible button is `.cb-row-trigger` (overlay) which
+   covers the avatar + this banner together. */
+.avatar-customize-zone .cb-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 1;
+  min-height: 32px;
+  /* Banner content fades out early in the expand sequence (Linear
+     pattern: right-side fades first, then the rest follows). The 0ms
+     delay on collapse is intentional — content reappears in lock with
+     the avatar shrinking. */
+  opacity: 1;
+  transition: opacity 80ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.avatar-customize-zone[data-expanded="true"] .cb-banner {
+  opacity: 0;
+  pointer-events: none;
+  /* Collapse the banner to zero so it doesn't reserve space inside the
+     expanded `.cb-meta-stage`. The cb-rows below take its place. */
+  position: absolute;
+  visibility: hidden;
+}
+
+/* Banner text container: holds scope, separator, descriptor inline.
+   Truncation rules apply here (single line, ellipsis on overflow) so
+   long humanized icon names like "3D cube sphere" degrade gracefully. */
+.avatar-customize-zone .cb-banner .banner-text {
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Scope word — "Default" / "Custom" / "From #Class". Higher contrast
+   and medium weight so it reads as the headline of the descriptor. */
+.avatar-customize-zone .cb-banner .banner-scope {
+  color: var(--lx-gray-12, var(--rx-gray-12));
+  font-weight: 500;
+}
+
+/* Middle dot separator between scope and descriptor. Slightly more
+   muted than the descriptor itself so the eye reads it as punctuation,
+   not content. */
+.avatar-customize-zone .cb-banner .banner-sep {
+  color: var(--lx-gray-09, var(--rx-gray-09));
+  margin: 0 6px;
+}
+
+/* Style descriptor — "Letters, circle" / "Briefcase, rounded". Muted
+   regular weight so it sits one rung below the scope word. */
+.avatar-customize-zone .cb-banner .banner-descriptor {
+  color: var(--lx-gray-11, var(--rx-gray-11));
+  font-weight: 400;
+}
+
+/* "Edit" affordance — right-aligned muted text. Replaces the earlier
+   chevron-down (which falsely implied "popover opens below" or
+   "stays-visible disclosure that rotates"; this row morphs in place
+   and the banner content fades out entirely on expand, so a rotating
+   chevron never lived long enough to read as feedback). The label is
+   muted by default and brightens when the user hovers the row (via
+   the sibling-combinator rule on `.cb-row-trigger:hover`). */
+.avatar-customize-zone .cb-banner .banner-edit {
+  flex-shrink: 0;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  color: var(--lx-gray-09, var(--rx-gray-09));
+  transition: color 120ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.avatar-customize-zone .preview-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--lx-gray-12, var(--rx-gray-12));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.avatar-customize-zone .preview-subtitle {
+  font-size: 12px;
+  color: var(--lx-gray-11, var(--rx-gray-11));
+}
+
+/* Expanded rows — Shape + Fallback stacked to the right of the avatar
+   in a flex column. Always rendered; visibility/layout-claim controlled
+   by [data-expanded]. In compact state the rows sit absolutely-
+   positioned (no layout claim) at zero opacity; in expanded state they
+   become flow content and fade in. Crossfades smoothly with .cb-banner
+   on the same spot. */
+.avatar-customize-zone .cb-rows {
+  display: flex;
+  flex-direction: column;
+  /* 4px gap × 2× 26px row = 56px total — pixel-perfect match against the
+     56px avatar tile to its left, no overflow tail under the avatar. */
+  gap: 4px;
+  min-width: 0;
+  /* Resting default: out of flow, invisible. Collapse-direction
+     transition: 120ms fade-out, NO delay so the rows start clearing
+     immediately while the banner fades in. */
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.avatar-customize-zone[data-expanded="true"] .cb-rows {
+  position: relative;
+  opacity: 1;
+  pointer-events: auto;
+  /* Expand-direction transition: 80ms delay so the rows wait for the
+     banner to fade out before fading in. CSS transitions apply the
+     timing of the *target* state, so this delay only fires on expand;
+     the base rule above governs collapse. Without this split the same
+     80ms wait kicked in during collapse too, leaving the expanded rows
+     held at opacity 1 for 80ms while `.cb-banner` faded back in — the
+     resting and expanded layers ghosted on top of each other for a
+     ~120ms window. */
+  transition: opacity 120ms cubic-bezier(0.32, 0.72, 0, 1) 80ms;
+}
+
+.avatar-customize-zone .cb-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 26px;
+}
+
+.avatar-customize-zone .cb-label {
+  /* Mirrors Settings' label style (`block text-sm font-medium leading-5
+     opacity-70`) so the customize band reads as a settings panel rather
+     than a tooltip caption. */
+  display: block;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--lx-gray-12, var(--rx-gray-12));
+  opacity: 0.7;
+  /* Hard rule: the label is structural — "Shape" / "Fallback" must
+     always display in full. `flex-shrink: 0` keeps it at its natural
+     width regardless of how long the chip's value is, and
+     `white-space: nowrap` belt-and-braces against any future style
+     that would otherwise wrap "Fallback" into "Fall / bac / k" when
+     the chip pushes back. The chip is the one that shrinks/ellipsizes
+     (see `.cb-chip` and `.cb-chip-label` below). */
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Dropdown chip — Linear/Notion ghost-chip aesthetic. The chip looks like
+   plain text + chevron at rest, then reveals a subtle background and
+   border on hover (or when its dropdown is open via Radix's
+   `data-state="open"`). 1px transparent border at rest keeps the chip's
+   geometry stable across states — without it the chip would shift 2px
+   when the border appears on hover. */
+.avatar-customize-zone .cb-chip {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  /* Match the cb-label's text-sm so label + value read as one continuous
+     "Shape: Circle" line. Tighter 18px line-height keeps the chip at
+     26px (3 + 18 + 3 + 2 border = 26px) so the two-row stack still
+     pixel-aligns to the 56px avatar. */
+  font-size: 14px;
+  color: var(--lx-gray-12, var(--rx-gray-12));
+  line-height: 18px;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out;
+  /* The chip is the shrinkable side of the row — when an icon name like
+     "Align box bottom left filled" exceeds the available width, the
+     chip's flex `min-width: auto` (default) would resolve to the full
+     min-content of its kids and push the structural label out. Setting
+     `min-width: 0` here lets the inner `.cb-chip-label`'s own
+     `min-width: 0 + ellipsis` actually take effect. */
+  min-width: 0;
+
+  &:hover {
+    /* Tailwind utility gives the full chain through
+       `--ls-tertiary-background-color`, so OG hover lifts the chip to
+       themed tertiary teal (#08404f) against the recessed banner —
+       a clear "interactive" signal in the picker's hue family rather
+       than neutral gray. */
+    @apply bg-gray-03;
+    border-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
+  }
+
+  /* Radix sets data-state="open" on the trigger while the dropdown menu
+     is visible; pin the chip to its hover-style fill so the user has a
+     clear "this is the open one" anchor while picking. */
+  &[data-state="open"] {
+    @apply bg-gray-03;
+    border-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--lx-accent-09, var(--rx-accent-09));
+    outline-offset: 1px;
+  }
+
+  .cb-chip-glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 11px;
+    height: 11px;
+  }
+
+  .cb-chip-glyph .glyph {
+    display: block;
+    width: 11px;
+    height: 11px;
+    border: 1.5px solid var(--lx-gray-12, var(--rx-gray-12));
+  }
+
+  .cb-chip-glyph .glyph-circle {
+    border-radius: 50%;
+  }
+
+  .cb-chip-glyph .glyph-rect {
+    border-radius: 3px;
+  }
+
+  /* "Aa" sigil for the Letters fallback chip — render a compact mono
+     hint at chip size so it reads as text-not-shape, distinct from the
+     circle/rect glyphs used by the Shape chip. The chip-glyph parent is
+     constrained to 11×11; widen here to fit "Aa" on one line. */
+  .cb-chip-glyph .glyph-letters {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    min-width: 14px;
+    height: 11px;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--lx-gray-12, var(--rx-gray-12));
+    letter-spacing: -0.04em;
+    line-height: 11px;
+    white-space: nowrap;
+    border: none;
+  }
+
+  /* Override the .cb-chip-glyph fixed 11×11 box width when the active
+     glyph is the "Aa" sigil — `:has` is supported in all modern browsers
+     Logseq targets. */
+  .cb-chip-glyph:has(.glyph-letters) {
+    width: auto;
+    min-width: 14px;
+  }
+
+  .cb-chip-label {
+    font-weight: 500;
+    /* No fixed max-width — let the chip grow into the available row
+       space (band is ~344px, label "Fallback" + glyph + chevron + gap
+       leave ~210px for the label). `min-width: 0` lets the label
+       actually shrink under a truly long icon name (e.g. "Brand
+       deviantart"); ellipsis then kicks in inside the row's natural
+       constraint, instead of an arbitrary 96px cap that truncated
+       common names like "Briefcase filled". */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cb-chip-chevron {
+    color: var(--lx-gray-11, var(--rx-gray-11));
+    margin-left: 2px;
+  }
+}
+
+
+/* Reset/Done rail — only shown when expanded; sits below the row stack
+   separated by a 1px divider that runs the band's full width. */
+/* Rail wrapper — height collapses to 0 in resting state, transitions to
+   its content's natural height when expanded.
+
+   Earlier this used `max-height: 0 → 80px` with `overflow: hidden`, which
+   made the click feel sluggish for two compounding reasons:
+   (1) browsers interpolate linearly between two pixel values, so when
+   the real content height was only ~46px the easing curve "stalled"
+   visibly across the unused 34px headroom; and (2) `max-height`
+   triggers paint+layout on every frame, never composes on the GPU.
+
+   `display: grid` with `grid-template-rows: 0fr → 1fr` is the
+   modern, content-fit interpolation pattern (works back to Chrome 117 /
+   Safari 17.4). The browser interpolates the row track to the child's
+   natural height — no phantom pixels, no easing stall.
+
+   Single easing curve everywhere on the band (cubic-bezier(0.32, 0.72,
+   0, 1) — the "Linear-style" decelerate-out-expo) keeps perceived
+   motion light. Opacity is staggered 40ms behind the height so content
+   fades in *into* an already-opening container, not concurrently —
+   reads as one motion instead of two competing ones. */
+.avatar-customize-zone .cb-rail-wrap {
+  /* Explicit height transition. We tried `grid-template-rows: 0fr → 1fr`
+     here, but in this layout — the wrap sits inside an auto-height flex
+     column — fr units resolve to their item's max-content (the cb-rail's
+     padding+border, ~30px) rather than 0px, so the wrap kept claiming
+     ~30px of layout in compact state.
+     The rail is fixed-height content (2 buttons in a single flex row),
+     so a fixed pixel target is honest: 39px = 1px border-top + 10px top
+     padding + 16px button line-height + 12px bottom padding. */
+  height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition:
+    height 200ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 160ms cubic-bezier(0.32, 0.72, 0, 1) 40ms;
+}
+
+.avatar-customize-zone[data-expanded="true"] .cb-rail-wrap {
+  height: 39px;
+  opacity: 1;
+}
+
+/* Pre-warming pass — see asset-picker `:did-mount` (icon.cljs ~2900).
+   On first mount we briefly set `data-expanded` so the browser computes
+   the expanded layout once (caching it for the user's first real
+   click); during that pass we suppress every transition under the zone
+   so the user doesn't see a flash. The `*::before` pseudo-element
+   (gradient backdrop) needs the same treatment so its opacity fade
+   doesn't run during the warm-up. */
+.avatar-customize-zone[data-prewarming],
+.avatar-customize-zone[data-prewarming] *,
+.avatar-customize-zone[data-prewarming] *::before,
+.avatar-customize-zone[data-prewarming] *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+.avatar-customize-zone .cb-rail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  /* Horizontal padding lives on the wrapper now; only vertical padding
+     here. The border-top therefore spans the inner 356px (band's 380px
+     minus 2 × 12px wrapper padding) instead of bleeding to the band
+     edges. */
+  padding: 10px 0 12px;
+  /* Themed via --ls-border-color middle step (matches the topbar
+     separator and the customize-zone bottom border). */
+  border-top: 1px solid var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
+}
+
+

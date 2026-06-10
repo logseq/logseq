@@ -2,8 +2,6 @@
   (:require
    ["remove-accents" :as remove-accents]
    [clojure.string :as string]
-   [frontend.components.icon :as icon-component]
-   [frontend.handler.block :as block-handler]
    [goog.string :as gstring]
    [logseq.shui.ui :as shui]
    [io.factorhouse.hsx.core :as hsx]))
@@ -90,9 +88,9 @@
      ;; header — single-line, overflow hidden so long paths don't push content off screen
      (when header
        [:div.text-xs.pl-8.font-light.flex.items-center.gap-2.overflow-hidden.min-w-0 {:class "-mt-1"
-                                                                        :style {:color "var(--lx-gray-11)"
-                                                                                :white-space "nowrap"
-                                                                                :text-overflow "ellipsis"}}
+                                                                                      :style {:color "var(--lx-gray-11)"
+                                                                                              :white-space "nowrap"
+                                                                                              :text-overflow "ellipsis"}}
         (highlight-query header)
         header-badge])
      ;; main row
@@ -100,7 +98,12 @@
       [:div.w-5.h-5.rounded.flex.items-center.justify-center
        {:style {:background (when (#{:gradient} icon-theme) "linear-gradient(-65deg, #8AE8FF, #5373E7, #369EFF, #00B1CC)")
                 :box-shadow (when (#{:gradient} icon-theme) "inset 0 0 0 1px rgba(255,255,255,0.3) ")}
-        :class (cond-> "w-5 h-5 rounded flex items-center justify-center"
+        ;; `cp__cmdk-list-item-icon` is a hook for the chip-suppression
+        ;; rule in cmdk.css — when this slot contains a photo-icon
+        ;; (avatar with image OR colored-circle initials fallback), the
+        ;; gray chip becomes transparent so the icon's own shape and
+        ;; color read cleanly. Tabler / text / emoji rows keep the chip.
+        :class (cond-> "w-5 h-5 rounded flex items-center justify-center cp__cmdk-list-item-icon"
                  (= icon-theme :color) (str
                                         " "
                                         (if highlighted "bg-accent-07-alpha" "bg-gray-05")
@@ -113,9 +116,15 @@
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])
        [:div {:class "cp__cmdk-item-main-text text-sm font-medium text-gray-12 flex items-center gap-2 flex-wrap"}
-        (block-handler/block-title-with-icon source-block
-                                             (highlight-query text)
-                                             icon-component/icon)
+        ;; Title only — the icon is already rendered in the dedicated
+        ;; slot above via the caller's `:icon` prop (`get-node-icon-cp`
+        ;; resolves own/inherited icons consistently). Prepending the
+        ;; block's own `:logseq.property/icon` inline next to the title
+        ;; would render the same icon twice for instance rows that
+        ;; diverge from their class default. Inheriting rows would mask
+        ;; the bug since the inline render is nil when the block has no
+        ;; own icon.
+        (or (highlight-query text) (:block/title source-block))
         text-badge
         (when info
           [:span.text-xs.text-gray-11 " — " (highlight-query info)])]]

@@ -278,6 +278,16 @@
           _ (fs/mkdir-if-not-exists (path/path-join repo-dir assets-dir))]
     [repo-dir assets-dir]))
 
+(defn <unlink-asset
+  "Delete an asset's file from disk. Used by the outliner pipeline when an
+   asset block is retracted (see modules/outliner/pipeline.cljs). Swallows
+   fs errors so a missing file (already deleted, sync mismatch) is a no-op."
+  [repo asset-block-id asset-type]
+  (let [file-path (path/path-join (config/get-repo-dir repo)
+                                  common-config/local-assets-dir
+                                  (str asset-block-id "." asset-type))]
+    (p/catch (fs/unlink! repo file-path {}) (constantly nil))))
+
 (defn get-asset-path
   "Get asset path from filename, ensure assets dir exists"
   [filename]

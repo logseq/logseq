@@ -70,9 +70,20 @@
            [:div.text-xs.opacity-70.mb-1 {:style {:margin-left 3}}
             (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block')
                         {:disabled? true})]))
-       [:div.flex.flex-row.items-start
+       [:div.flex.flex-row.items-start.gap-1
         (when-not db-tag?
-          [:div.flex.items-center.h-5.mr-1.opacity-50
+          ;; Single icon per row, same policy as CMD-K. `get-node-icon-cp`
+          ;; resolves the committed icon (own → tag default → type default),
+          ;; so the title text below can render alone — see cmdk/list_item.cljs
+          ;; for the de-dup rationale (instance rows that diverge from a class
+          ;; default would otherwise render the same icon twice).
+          ;;
+          ;; Fixed `w-5 h-5` slot with `justify-center` so 14px tabler glyphs
+          ;; center within a 20px column matching the avatar tile width. All
+          ;; row titles then start at the same x-axis regardless of icon type.
+          ;; `shrink-0` is load-bearing — keeps the column at 20px even when
+          ;; the cond branches return nil.
+          [:div.w-5.h-5.flex.items-center.justify-center.shrink-0
            (cond
              (:nlp-date? block')
              (ui/icon "calendar" {:size 14})
@@ -82,16 +93,11 @@
              (ui/icon "plus" {:size 14})
 
              :else
-             (icon-component/get-node-icon-cp block' {:ignore-current-icon? true}))])
+             (icon-component/get-node-icon-cp block' {}))])
 
         (let [title (let [alias (get-in block' [:alias :block/title])]
                       (block-handler/block-unique-title block' {:alias alias}))]
-          (if (or (string/starts-with? title (t :editor/new-tag))
-                  (string/starts-with? title (t :editor/new-page)))
-            title
-            (block-handler/block-title-with-icon block'
-                                                 (search-handler/highlight-exact-query title q)
-                                                 icon-component/icon)))]])))
+          (search-handler/highlight-exact-query title q))]])))
 
 (hsx/defc commands
   [id format]

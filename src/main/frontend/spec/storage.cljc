@@ -34,6 +34,9 @@
 ;; Dynamic keys which aren't as easily validated:
 ;; :ls-pdf-last-page-*
 ;; :ls-js-allowed-*
+;; Dynamic key family: icon-color-recents-<repo>
+;; Stores up to `frontend.handler.icon-color/max-recents` recent custom
+;; icon hex colors per graph. Managed by frontend.handler.icon-color.
 
 ;; Validates items that are stored in local storage. The validation is approximate here
 ;; e.g. we don't validate deeply into maps and collections.

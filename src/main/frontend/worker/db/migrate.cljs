@@ -44,16 +44,16 @@
                                      [:db/retract id property-key])))]
       (conj remove-datoms [:db/retractEntity property-key]))
     (let [eids (d/q
-                 '[:find [?e ...]
-                   :in $ ?property-key
-                   :where
-                   [?e ?property-key ?v]]
-                 db
-                 property-key)]
+                '[:find [?e ...]
+                  :in $ ?property-key
+                  :where
+                  [?e ?property-key ?v]]
+                db
+                property-key)]
       (map
-        (fn [eid]
-          [:db/retract eid property-key])
-        eids))))
+       (fn [eid]
+         [:db/retract eid property-key])
+       eids))))
 
 (defn remove-block-path-refs
   [db]
@@ -91,6 +91,29 @@
                (let [comments-area (d/entity db comments-area-id)]
                  (when-not (seq (:logseq.property.comments/blocks comments-area))
                    [:db/add comments-area-id :logseq.property.comments/blocks parent-id]))))))
+
+(defn- fix-asset-source-url-property-type
+  "65.34 mistakenly registered :logseq.property.asset/source-url with type :url
+   (a ref-typed schema), which made datascript treat string URLs as tempid
+   lookups during transact and block all asset saves. Coerce the existing
+   property's type to :string in any DB that ran the bad migration."
+  [db]
+  (when-let [e (d/entity db :logseq.property.asset/source-url)]
+    (when (= :url (:logseq.property/type e))
+      [[:db/add (:db/id e) :logseq.property/type :string]])))
+
+(defn- fix-asset-source-url-schema-lock
+  "65.35 changed :logseq.property/type to :string but left :db/valueType
+   :db.type/ref on the entity. In Logseq's datascript fork, :db/valueType
+   on a :db/ident-keyed entity IS the live schema entry — so the attribute
+   stayed ref-typed and string URLs continued to fail with 'Tempids used
+   only as value in transaction'. Mirror logseq.outliner.property's
+   ref→non-ref retraction (property.cljs:178-179) to release the lock."
+  [db]
+  (when-let [e (d/entity db :logseq.property.asset/source-url)]
+    (when (and (:db/valueType e)
+               (not= :url (:logseq.property/type e)))
+      [[:db/retract (:db/id e) :db/valueType]])))
 
 (defn- missing-class-extends?
   [class]
@@ -151,7 +174,36 @@
    ["65.30" {:properties [:logseq.property/assignee]}]
    ["65.31" {:properties [:logseq.property.agent/session-id]}]
    ["65.32" {:fix repair-comment-classes-and-targets}]
-   ["65.33" {:properties [:logseq.property.view/gallery-asset-property
+   ["65.33" {:properties [:logseq.property.class/default-icon]}]
+   ["65.34" {:properties [:logseq.property.asset/source-url
+                          :logseq.property.asset/source-name
+                          :logseq.property.asset/license
+                          :logseq.property.asset/attribution]}]
+   ["65.35" {:fix fix-asset-source-url-property-type}]
+   ["65.36" {:fix fix-asset-source-url-schema-lock}]
+   ;; 65.37 — orphan cleanup + catch-up for dev DBs whose kv was stuck at our
+   ;; pre-merge 65.30/65.31/65.32 (now renumbered to 65.33/65.34/65.35) and
+   ;; therefore skipped master's 65.30 (:assignee) and 65.31 (:agent/session-id),
+   ;; or stopped after the buggy property-type fix. `:properties` re-registration
+   ;; is idempotent (skipped if the ident already resolves); `:fix` re-runs the
+   ;; property-type coercion which is itself guarded by `(= :url ...)`.
+   ["65.37" {:properties [:logseq.property/assignee
+                          :logseq.property.agent/session-id]
+             :fix fix-asset-source-url-property-type
+             :delete-properties [:logseq.property/wikidata-id
+                                 :logseq.property/property-key-width]}]
+   ;; 65.38 — re-run master's repair for dev DBs that crossed past 65.32 on
+   ;; this branch before the merge (e.g. ours was 65.36 before renumber, so
+   ;; the runner would consider 65.32 already done and skip master's repair).
+   ;; `repair-comment-classes-and-targets` is idempotent: each datom it emits
+   ;; is guarded by a presence check, so re-running on an already-clean DB is
+   ;; a no-op.
+   ["65.38" {:fix repair-comment-classes-and-targets}]
+    ;; 65.39 — gallery view properties (master's 65.33), appended at the tail.
+    ;; This integration branch's dev graphs are already past master's 65.33, so the
+    ;; version runner would otherwise skip gallery; this backfills them. PR branches
+    ;; built from master keep gallery at 65.33 and omit this entry. Idempotent.
+   ["65.39" {:properties [:logseq.property.view/gallery-asset-property
                           :logseq.property.view/gallery-display-properties
                           :logseq.property.view/gallery-card-size
                           :logseq.property.view/gallery-card-width
@@ -251,10 +303,8 @@
   (let [version (db-schema/parse-schema-version version)
         db @conn
         new-properties (->> (select-keys db-property/built-in-properties properties)
-                            ;; property already exists, this should never happen
-                            (remove (fn [[k _]]
-                                      (when (d/entity db k)
-                                        (assert (str "DB migration: property already exists " k)))))
+                            ;; Skip props that already exist (e.g. imported from a backup ahead of schema-version); matches classes branch.
+                            (remove (fn [[k _]] (d/entity db k)))
                             (into {})
                             sqlite-create-graph/build-properties
                             (map (fn [b] (assoc b :logseq.property/built-in? true))))
@@ -272,9 +322,9 @@
         fixes (when (fn? fix)
                 (fix db))
         delete-properties-tx (mapcat
-                               (fn [property]
-                                 (delete-property db property))
-                               delete-properties)
+                              (fn [property]
+                                (delete-property db property))
+                              delete-properties)
         tx-data (concat new-class-idents new-properties new-classes fixes delete-properties-tx)
         tx-data' (concat
                   [(sqlite-util/kv :logseq.kv/schema-version version)]

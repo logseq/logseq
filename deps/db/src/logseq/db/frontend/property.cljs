@@ -184,6 +184,17 @@
                                                             :view-context :class}
                                                    :properties
                                                    {:logseq.property/description "When enabled, this tag will show reverse nodes that link to the current node via properties."}}
+     ;; Unified default icon property - stores icon data with type inferred from :type field
+     ;; For icon: {:type :tabler-icon :id "checkbox"}
+     ;; For emoji: {:type :emoji :id "🎯"}
+     ;; For avatar: {:type :avatar} (value derived from instance title)
+     ;; For text: {:type :text} (value derived from instance title)
+     :logseq.property.class/default-icon {:title "Default Icon"
+                                          :schema {:type :map
+                                                   :public? true
+                                                   :view-context :class}
+                                          :properties
+                                          {:logseq.property/description "Set the default icon for instances of this tag. Avatar/text are auto-generated from title."}}
      :logseq.property/hide-empty-value {:title "Hide empty value"
                                         :schema {:type :checkbox
                                                  :public? true
@@ -260,10 +271,10 @@
                                                            :cardinality :many
                                                            :hide? true}}
      :logseq.property.comments/blocks {:title "Commented blocks"
-                                        :schema {:type :node
-                                                 :cardinality :many
-                                                 :public? false
-                                                 :hide? true}}
+                                       :schema {:type :node
+                                                :cardinality :many
+                                                :public? false
+                                                :hide? true}}
 
      ;; Journal props
      :logseq.property.journal/title-format {:title "Title Format"
@@ -607,6 +618,26 @@
                                             :hide? true
                                             :public? false}
                                    :queryable? false}
+     :logseq.property.asset/source-url {:title "Source URL"
+                                        :schema {:type :string
+                                                 :hide? false
+                                                 :public? true}
+                                        :queryable? true}
+     :logseq.property.asset/source-name {:title "Source name"
+                                         :schema {:type :string
+                                                  :hide? false
+                                                  :public? true}
+                                         :queryable? true}
+     :logseq.property.asset/license {:title "License"
+                                     :schema {:type :string
+                                              :hide? false
+                                              :public? true}
+                                     :queryable? true}
+     :logseq.property.asset/attribution {:title "Attribution"
+                                         :schema {:type :string
+                                                  :hide? false
+                                                  :public? true}
+                                         :queryable? false}
      :logseq.property.fsrs/due {:title "Due"
                                 :schema
                                 {:type :datetime

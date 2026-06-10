@@ -8,11 +8,25 @@
   }
 
   .journal-item {
-    @apply border-b min-h-[250px] pb-[102px];
+    /* Split the 102px inter-day gap as pb-64 (below content, above the
+       border) + pt-38 (above the next day's title). Restores the breathing
+       room the removed `mb-[38px]` (#12760) used to give, so the border-b
+       separator no longer crosses the next day's `-top-5` hover actions
+       ("Add icon" / "Set property"). Total padding stays 102px, so the
+       Virtuoso item border-box height is unchanged (ADR 0020 safe; padding
+       stays inside the measured box, unlike the old margin).
+
+       NOTE: react-virtuoso wraps every row in its own [data-index] div, so
+       `.journal-item:first-child` matches EVERY item, not just the first.
+       We therefore can't scope pt-0 to the real first day; pt-38 applies to
+       all items (the top day just gets harmless extra top spacing). Keeping
+       pt-0 on :first-child here would override pt-38 on every item and
+       reinstate the overlap. */
+    @apply border-b min-h-[250px] pb-[64px] pt-[38px];
     overflow-anchor: none;
 
     &:first-child {
-      @apply pt-0 min-h-[500px];
+      @apply min-h-[500px];
     }
   }
 

@@ -46,6 +46,14 @@
     .multi-values {
       @apply !flex-nowrap;
     }
+
+    .table-row-icon {
+      @apply cursor-pointer rounded transition-colors duration-100;
+
+      &:hover {
+        background: var(--rx-gray-04);
+      }
+    }
   }
 
   .ls-table-header {

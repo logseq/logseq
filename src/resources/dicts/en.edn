@@ -1,5 +1,4 @@
-{
- :account/authentication "Authentication"
+{:account/authentication "Authentication"
  :account/benefits-desc "With a Logseq account, you can access cloud-based services like Logseq Sync and alpha/beta features."
  :account/billing "Billing"
  :account/billing-expired-on-label "Pro plan expired on: {1}"
@@ -177,6 +176,14 @@
  :class.built-in/task "Task"
  :class.built-in/template "Template"
  :class.built-in/whiteboard "Whiteboard"
+
+ :class.default-icon/clear-button-label (fn [n] (str "Clear " n " customized icon" (when (not= 1 n) "s")))
+ :class.default-icon/clear-confirm-desc (fn [n trailing] (str (if (= 1 n) "This " "These ") (if (= 1 n) "row" "rows") " will use the default icon instead of " (if (= 1 n) "its" "their") " custom one" (when (not= 1 n) "s") trailing))
+ :class.default-icon/clear-confirm-title (fn [n] (str "Clear " n " customized icon" (when (not= 1 n) "s") "?"))
+ :class.default-icon/more-count "and {1} more"
+ :class.default-icon/reset-tooltip-desc (fn [n] (str "Replaces " n " custom icon" (when (not= 1 n) "s")))
+ :class.default-icon/reset-tooltip-title "Reset to this default"
+ :class.default-icon/untitled "(untitled)"
 
  :class.validation/built-in-extends-change "Can't change the extends of a built-in tag."
  :class.validation/cant-add-tag-on-built-in "Can't add tag on built-in \"{1}\"."
@@ -866,15 +873,123 @@
  :help.shortcuts/title "Keyboard shortcuts"
  :help.shortcuts/triggers "Triggers"
 
+ :icon/back "Back"
  :icon/emojis-count "Emojis ({1})"
+ :icon/hide-inherited-icon "Hide inherited icon"
  :icon/icons-count "Icons ({1})"
  :icon/matched-count "Matched ({1})"
+ :icon/remove-entirely "Remove entirely"
+ :icon/remove-icon "Remove icon"
+ :icon/remove-icon-options "Remove icon…"
+ :icon/restore-icon "Restore icon"
+ :icon/revert-to-default "Revert to default"
  :icon/search-all "Search all"
+ :icon/search-all-aria-label "Search emojis, icons, and assets"
+ :icon/search-all-placeholder "Search emojis, icons, assets..."
  :icon/search-emojis "Search emojis"
+ :icon/search-empty-desc "Try a different search term"
+ :icon/search-empty-title "No results found"
  :icon/search-icons "Search icons"
  :icon/tab-all "All"
+ :icon/tab-custom "Custom"
  :icon/tab-emojis "Emojis"
  :icon/tab-icons "Icons"
+
+ :icon.asset/add-from-computer-desc "Browse or drop a file in"
+ :icon.asset/add-from-computer-title "Add from your computer"
+ :icon.asset/paste-from-clipboard-desc "An image, or a link to one"
+ :icon.asset/paste-from-clipboard-title "Paste from clipboard"
+ :icon.asset/retry-load-tooltip "Click to retry loading"
+ :icon.asset/tip-desktop "Drop an image, paste a link, or {1}"
+ :icon.asset/tip-label "Tip:"
+ :icon.asset/tip-link-browse "browse"
+ :icon.asset/tip-link-paste "Paste a link"
+ :icon.asset/tip-link-take-picture "take a picture"
+ :icon.asset/tip-mobile "{1}, {2}, or {3}"
+
+ :icon.asset-mode/avatar "Avatar"
+ :icon.asset-mode/image "Image"
+ :icon.asset-mode/picker-aria-label "Asset type"
+
+ :icon.asset-search/empty "No matching images"
+ :icon.asset-search/placeholder "Search images"
+
+ :icon.avatar-band/close-aria-label "Close customize panel"
+ :icon.avatar-band/done-button "Done"
+ :icon.avatar-band/edit "Edit"
+ :icon.avatar-band/fallback-aria-label "Avatar fallback"
+ :icon.avatar-band/fallback-label "Fallback"
+ :icon.avatar-band/region-aria-label "Avatar customization options"
+ :icon.avatar-band/reset-aria-label "Reset to default"
+ :icon.avatar-band/shape-aria-label "Avatar shape"
+ :icon.avatar-band/shape-label "Shape"
+
+ :icon.avatar-fallback/letters-glyph "Aa"
+
+ :icon.avatar-scope/custom "Custom"
+ :icon.avatar-scope/default "Default"
+
+ :icon.avatar-tab/empty-prompt "Enter initials or use page initials"
+
+ :icon.clipboard/no-image-or-url-warning "No image or URL found in clipboard"
+ :icon.clipboard/read-error "Couldn't read clipboard. Try Upload or Paste URL."
+
+ :icon.color/contrast-aria-label "{1} — contrast adjusted: dark {2}, light {3}"
+ :icon.color/contrast-dark-label "Dark"
+ :icon.color/contrast-light-label "Light"
+ :icon.color/contrast-title "Contrast adjusted"
+ :icon.color/custom "Custom color"
+ :icon.color/custom-hint "Pick any hex"
+ :icon.color/hex-aria-label "Hex color"
+ :icon.color/picker-aria-label "Icon color"
+ :icon.color/recents-aria-label "Recently used colors"
+ :icon.color/recents-title "Recently used"
+
+ :icon.fallback/emoji "Emoji"
+ :icon.fallback/icon "Icon"
+ :icon.fallback/icon-submenu "Icon…"
+ :icon.fallback/letters "Letters"
+
+ :icon.mode/avatar "Avatar"
+ :icon.mode/image "Image"
+ :icon.mode/text "Text"
+
+ :icon.section-header/hide "Hide"
+ :icon.section-header/show "Show"
+
+ :icon.shape/circle "Circle"
+ :icon.shape/circle-descriptor "circle"
+ :icon.shape/rectangle "Rectangle"
+ :icon.shape/rectangle-descriptor "rectangle"
+
+ :icon.text-picker/alignment-label "Alignment"
+ :icon.text-picker/text-input-label "Text"
+
+ :icon.text-tab/empty-prompt "Enter text or use page initials"
+
+ :icon.upload/action "Upload"
+ :icon.upload/all-existed-success (fn [n] (str n " image" (when (not= 1 n) "s") " already existed"))
+ :icon.upload/drop-icon-overlay-title "Drop to set as icon"
+ :icon.upload/drop-overlay-title "Drop images to upload"
+ :icon.upload/format-list "PNG, JPG, SVG, GIF, WebP"
+ :icon.upload/multi-file-confirm-title (fn [n] (str "Upload " n " image" (when (not= 1 n) "s") "?"))
+ :icon.upload/non-image-warning "Only image files are supported (PNG, JPG, SVG, GIF, WebP)"
+ :icon.upload/skip-non-image-warning (fn [n] (str "Will skip " n " non-image file" (when (not= 1 n) "s")))
+ :icon.upload/skipped-non-images-error (fn [n] (str "Skipped " n " file" (when (not= 1 n) "s") " (not images)"))
+ :icon.upload/uploaded-mixed-success "Uploaded {1} new, {2} already existed"
+ :icon.upload/uploaded-success (fn [n] (str "Uploaded " n " image" (when (not= 1 n) "s")))
+
+ :icon.web-images/commons-short "Commons"
+ :icon.web-images/image-alt-from-source "{1} from {2}"
+ :icon.web-images/image-fallback-title "Image"
+ :icon.web-images/info-desc "Check licensing before commercial use."
+ :icon.web-images/info-title "Images from Wikipedia Commons"
+ :icon.web-images/network-error "Couldn't reach Wikipedia. Check your connection."
+ :icon.web-images/untitled "Untitled image"
+ :icon.web-images/view-full-size "View full size"
+ :icon.web-images/web "Web"
+ :icon.web-images/wikipedia "Wikipedia"
+ :icon.web-images/wikipedia-commons "Wikipedia Commons"
 
  :import/all-tags "Import all tags"
  :import/asset-too-large-warning "Skipped copying asset {1} because it exceeds the 100 MB limit."
@@ -1970,5 +2085,4 @@
  :zotero/attachments "Attachments"
  :zotero/imported-file-warning "This is a Zotero imported file, set Zotero data directory to open the file in Logseq."
  :zotero/linked-file-warning "This is a Zotero linked file, set Zotero linked attachment base directory to open the file in Logseq."
- :zotero/notes "Notes"
-}
+ :zotero/notes "Notes"}

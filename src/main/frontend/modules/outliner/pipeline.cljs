@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [frontend.db :as db]
             [frontend.db.react :as react]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
@@ -76,9 +77,25 @@
                       (= :apply-template (:outliner-op tx-meta)))
               (update-editing-block-title-if-changed! tx-data))
 
-            ;; (when (seq deleted-assets)
-            ;;   (doseq [asset deleted-assets]
-            ;;     (fs/unlink! repo (path/path-join (config/get-current-repo-assets-root) (str (:block/uuid asset) "." (:ext asset))) {})))
+            ;; Unlink the on-disk file when an asset block is retracted.
+            ;; `<unlink-asset` swallows fs errors internally (p/catch),
+            ;; so we fire-and-forget the returned promise. Without this,
+            ;; asset files leak indefinitely and the renderer can still
+            ;; resolve a blob URL for a deleted asset.
+            ;; Skipped for replayed / remote-sourced / bulk-sync txs —
+            ;; those aren't fresh local deletes and shouldn't drop the
+            ;; on-disk file. TODO: real undo-preserves-asset needs a
+            ;; trash-folder pattern; gate alone doesn't recover the file
+            ;; the original delete already unlinked.
+            (when (and (seq deleted-assets)
+                       (not (or (:undo? tx-meta)
+                                (:redo? tx-meta)
+                                (:sync-download-graph? tx-meta)
+                                (:rtc-tx? tx-meta)
+                                (:rtc-download-graph? tx-meta))))
+              (doseq [{ext :ext block-uuid :block/uuid} deleted-assets]
+                (when (and block-uuid ext)
+                  (assets-handler/<unlink-asset repo (str block-uuid) ext))))
 
             (state/set-state! :editor/start-pos nil)
 

@@ -65,13 +65,24 @@ html.is-mobile .ls-block-content-indent {
 .page-ref {
   @apply inline;
 
+  /* .page-ref stays pure `inline` (not inline-flex) so its baseline
+     derives from text metrics, not from the tallest flex child. The
+     icon wrappers are inline-flex *internally* so the glyph centers
+     against parent x-height via `vertical-align: middle`. Wrappers
+     shrink-to-fit the 20px icon — at 20px tall they fit within the
+     24px body line-box (font 16 × line-height 1.5) without inflating
+     it. Heading line-boxes are taller still, so heading-sized icons
+     also fit. */
   .icon-emoji-wrap {
-    position: relative;
-    top: 0;
     display: inline-flex;
     align-items: center;
-    line-height: 1;
     vertical-align: middle;
+    /* Optical lift: `vertical-align: middle` centers on the parent's
+       x-height middle, but readers compare the icon against the cap-
+       height middle (~2px higher in Inter at body size). The pure
+       geometric answer reads as "icon sags." translateY corrects
+       the optical center without disturbing layout flow. */
+    transform: translateY(-1px);
     padding-left: 1px;
 
     &.as-emoji {
@@ -79,15 +90,46 @@ html.is-mobile .ls-block-content-indent {
     }
   }
 
+  /* 20×20 visual slot — same dimensions the left-sidebar's `.page-icon`
+     uses, so a `[[Page]]` icon reads at the same scale as its sidebar
+     entry. Photo icons (avatar / image) fill the slot. Tabler / text /
+     emoji glyphs render smaller (16px, see SVG / em-emoji rules below)
+     and center in the slot. `flex-shrink: 0` prevents wrapping text
+     from squeezing the slot. */
   .icon-cp-container {
-    @apply inline-flex items-center pr-0.5;
+    @apply inline-flex items-center justify-center pr-0.5;
+    width: 20px;
+    height: 20px;
+    box-sizing: content-box;
+    flex-shrink: 0;
+    vertical-align: middle;
+
+    &.photo-icon {
+      @apply pr-1.5;
+    }
   }
 
-  &:has(> .icon-emoji-wrap),
-  &:has(> .icon-cp-container) {
-    display: inline-flex;
-    align-items: center;
-    vertical-align: baseline;
+  /* Non-photo glyphs (tabler / text) render at 16 inside the slot —
+     same inset the sidebar uses. Avatars / images keep their inline
+     `style: { width: 20px }` and fill the 20×20 slot. */
+  .icon-cp-container:not(.photo-icon) svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* Emoji glyphs render via the native font (Apple Color Emoji etc.),
+     whose bounding box is ~32% taller than `font-size`. emoji-mart's
+     `<em-emoji size="20">` sets `font-size: 20px` on its inner span
+     and the visual lands at ~26.5px — overflowing the 20×20 slot.
+     Clamp the inner span's font-size to land at ~18-19px visual,
+     comfortably inside the slot. Both selectors are load-bearing:
+     emoji-mart's inline `font-size` on the descendant span wins over
+     `!important` on the ancestor, so we target both directly. (Same
+     pattern as icon.css:2214 for the customize-band's compact state.) */
+  .icon-cp-container:not(.photo-icon) em-emoji,
+  .icon-cp-container:not(.photo-icon) em-emoji span {
+    font-size: 16px !important;
+    line-height: 1 !important;
   }
 
   .icon-emoji-wrap em-emoji,
@@ -100,6 +142,17 @@ html.is-mobile .ls-block-content-indent {
   .block-title-wrap.as-heading {
     @apply inline text-[length:inherit];
   }
+}
+
+/* Center emoji icons in inline icon boxes (used by CMD+K, page refs, etc.) */
+.icon-inline .ui__icon {
+  @apply inline-flex items-center justify-center;
+}
+
+.icon-inline em-emoji,
+.icon-inline .emoji-mart-emoji,
+.icon-inline .emoji-mart-emoji > span {
+  line-height: 1 !important;
 }
 
 .breadcrumb {
@@ -177,6 +230,18 @@ html.is-mobile .ls-block-content-indent {
 
 .breadcrumb--search-result {
   --breadcrumb-segment-max-width: 18ch;
+}
+
+/* CMD-K breadcrumbs are 12px and tightly stacked. The avatar/page-icon
+   on each segment renders at 20px (uncapped from `get-node-icon-cp`),
+   which breaks the line box, competes with the row's main 20px icon
+   for attention, and causes a "double face" effect when the same
+   person appears as a row icon and a breadcrumb icon in nearby rows.
+   Text-only segments match peer command palettes (Linear, Raycast,
+   Notion, VS Code) and leave the row's own icon as the single focal
+   point per result. */
+.breadcrumb--search-result .breadcrumb__segment-icon {
+  display: none;
 }
 
 .breadcrumb--app-header {
@@ -728,6 +793,15 @@ html.is-mobile .ls-block-content-indent {
   top: calc((var(--ls-page-title-size, 32px) * var(--ls-page-title-line-height) - var(--ls-block-control-size)) / 2);
 }
 
+/* Ensure page title has correct font-size in both editing and non-editing mode */
+.ls-page-title-container {
+  font-size: var(--ls-page-title-size, 32px) !important;
+}
+
+.ls-page-title-container .block-title-wrap {
+  font-size: inherit;
+}
+
 .block-title-wrap {
   @apply w-full inline;
 
@@ -1271,6 +1345,15 @@ html.is-mobile .ls-block-content-indent {
   line-height: 1;
   vertical-align: middle;
 
+  /* List/Gallery views adopt the 20-slot scale used by inline [[page-refs]],
+     sidebars, and table-cells: room for 2-letter monograms and a roomier
+     avatar without crowding body text. */
+  .is-list-view-row & {
+    width: 1.25em;
+    min-width: 1.25em;
+    height: 1.25em;
+  }
+
   .bullet-heading {
     background-color: var(--ls-block-bullet-color, #8fbc8f);
   }
@@ -1652,6 +1735,15 @@ html.is-mac {
   white-space: nowrap;
 }
 
+/* Inline page-ref / tag icons set their own size via SVG width/height
+   attributes (icon.cljs text + tabler branches) or inline style (avatar).
+   The 18px clamp above overrides those attributes, so opt the icon
+   wrappers out — `auto` falls back to the attribute. */
+.block-content-wrapper :is(.icon-emoji-wrap, .icon-cp-container, .ls-icon-color-wrap) svg {
+  width: auto;
+  height: auto;
+}
+
 .katex svg {
   width: 100%;
   height: inherit;
@@ -1681,9 +1773,63 @@ html.is-mac {
   height: 14px;
 }
 
+/* Page-title icon container: vertically center the trigger button so the
+   icon optically aligns with the title text. The previous `.self-start`
+   on this element top-aligned the icon, which left every type relying on
+   its own intrinsic baseline (emoji on font baseline, SVG on bottom
+   anchor, etc.) — visible as cross-type misalignment when the hover
+   preview swapped types mid-row.
+
+   `align-self: flex-start` + fixed `height` constrain the icon box to
+   the title's first line. Without this, the flex parent stretches the
+   icon to the column height; in narrow viewports the inner row wraps
+   to a column (#tag below title) and the icon ends up centered between
+   title and tag instead of next to the title. */
+.ls-page-title .ls-page-icon {
+  display: flex;
+  align-items: center;
+  align-self: flex-start;
+  height: calc(var(--ls-page-title-size, 32px) * 1.38);
+  /* Optical alignment: a glyph's visual centroid sits a few px below the
+     line box's geometric center (cap-height + descender asymmetry), so
+     a mathematically centered icon reads as slightly too high. Nudge
+     the centered icon down to match what the eye expects. Applies to
+     every icon type because the shift happens on the container, not on
+     the inner button. */
+  padding-top: 4px;
+}
+
+/* Trigger button: fixed-size flex-center box. All icon types (emoji,
+   tabler, text, avatar, image, image-placeholder) render at :size 38
+   inside this box, so flex-centering puts every type's visual centroid
+   at the box midpoint — uniform vertical anchor regardless of the
+   element's intrinsic baseline. */
 .ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 38px;
   height: 38px;
+}
+
+/* Per-type fixups: avatar fallback font size and image asset fill. */
+.ls-page-title .ls-page-icon .ui__avatar span {
+  font-size: 16px;
+}
+
+/* Avatar's inner fallback glyph is a nested SVG, which the broad
+   `.ls-page-icon svg { 38px }` rule above would otherwise force to fill
+   the whole 38×38 box. Reset to intrinsic so `shui/tabler-icon`'s
+   computed `:size` (~0.55× the avatar) governs again. */
+.ls-page-title .ls-page-icon .ui__avatar svg {
+  width: auto;
+  height: auto;
+}
+
+.ls-page-title .ls-page-icon .image-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .ls-page-title .positioned-properties.block-left svg,
@@ -1702,10 +1848,6 @@ html.is-mac {
   height: initial;
 }
 
-.page-ref svg {
-  width: 16px;
-  height: 16px;
-}
 
 .ls-page-title {
   .positioned-properties, .time-spent {
@@ -1727,12 +1869,19 @@ html.is-mac {
     }
 }
 
-.ls-page-title .ls-page-icon button {
-  margin-top: 8px;
-}
-
 .ls-page-title .block-tags {
   @apply relative min-h-full;
+}
+
+/* In narrow containers the page-title row wraps and the tag drops below
+   the title. The 17px margin-top above offsets the tag for the inline
+   (flex-row) layout; once wrapped it creates a disconnected gap, so
+   collapse it. Must be placed after the rule above to win on source
+   order. */
+@container (max-width: 600px) {
+  .ls-page-title .block-tags {
+    margin-top: 0;
+  }
 }
 
 @media (hover: hover) and (pointer: fine) {
