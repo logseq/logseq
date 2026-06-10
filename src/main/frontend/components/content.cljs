@@ -11,8 +11,8 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
-            [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.comments :as comments-handler]
+            [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
@@ -27,14 +27,14 @@
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
-            [logseq.shui.ui :as shui]
             [logseq.shui.popup.core :as shui-popup]
-            [promesa.core :as p]
-            [io.factorhouse.hsx.core :as hsx]))
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]))
 
 (hsx/defc ^:large-vars/cleanup-todo custom-context-menu-content
   []
@@ -126,8 +126,8 @@
 
      (when (seq comment-targets)
        (shui/dropdown-menu-item
-         {:key "Add comment"
-          :on-click (fn [_e]
+        {:key "Add comment"
+         :on-click (fn [_e]
                      (p/let [comments-area (comments-handler/ensure-comments-area-for-selected-blocks!
                                             comment-targets)]
                        (when comments-area
@@ -197,182 +197,179 @@
                           (set-heading! false)
                           (editor-handler/remove-heading! block-id)))
 
-         (shui/dropdown-menu-separator)
+       (shui/dropdown-menu-separator)
 
-         (shui/dropdown-menu-item
-          {:key "Open in sidebar"
-           :on-click (fn [_e]
-                       (editor-handler/open-block-in-sidebar! block-id))}
-          (t :sidebar.right/open)
-          (ui/dropdown-shortcut "shift+click"))
+       (shui/dropdown-menu-item
+        {:key "Open in sidebar"
+         :on-click (fn [_e]
+                     (editor-handler/open-block-in-sidebar! block-id))}
+        (t :sidebar.right/open)
+        (ui/dropdown-shortcut "shift+click"))
 
-         (shui/dropdown-menu-item
-          {:key "Add comment"
-           :on-click (fn [_e]
-                       (p/let [comments-area (comments-handler/ensure-comments-area! block-id)]
-                         (comments-handler/reveal-comments-area! comments-area {:focus-editor? true})))}
-          (t :block.comments/add-comment))
+       (shui/dropdown-menu-item
+        {:key "Add comment"
+         :on-click (fn [_e]
+                     (p/let [comments-area (comments-handler/ensure-comments-area! block-id)]
+                       (comments-handler/reveal-comments-area! comments-area {:focus-editor? true})))}
+        (t :block.comments/add-comment))
 
-         (shui/dropdown-menu-sub
-          (shui/dropdown-menu-sub-trigger
-           (t :command.editor/add-reaction))
-          (shui/dropdown-menu-sub-content
-           [:div.p-1
+       (shui/dropdown-menu-sub
+        (shui/dropdown-menu-sub-trigger
+         (t :command.editor/add-reaction))
+        (shui/dropdown-menu-sub-content
+         [:div.p-1
+          (icon-component/icon-search
+           (merge icon-component/reaction-picker-opts
+                  {:on-chosen (fn [_e icon]
+                                (let [emoji-id (:id icon)
+                                      emoji? (= :emoji (:type icon))]
+                                  (if emoji?
+                                    (do
+                                      (reaction-handler/toggle-reaction! block-id emoji-id)
+                                      (state/hide-custom-context-menu!)
+                                      (shui/popup-hide!))
+                                    (notification/show! (t :block.reaction/emoji-required-warning) :warning))))}))]))
+
+       (shui/dropdown-menu-sub
+        {:open set-icon-sub-menu-open?
+         :onOpenChange (fn [v]
+                         (when (not= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
+                           (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
+                           (set-icon-sub-menu-open v)))}
+        (shui/dropdown-menu-sub-trigger
+         (t :context-menu/set-icon))
+        (shui/dropdown-menu-sub-content
+         [:div.p-1
+          (let [icon-value (:logseq.property/icon block)]
             (icon-component/icon-search
              {:on-chosen (fn [_e icon]
-                           (let [emoji-id (:id icon)
-                                 emoji? (= :emoji (:type icon))]
-                             (if emoji?
-                               (do
-                                 (reaction-handler/toggle-reaction! block-id emoji-id)
-                                 (state/hide-custom-context-menu!)
-                                 (shui/popup-hide!))
-                               (notification/show! (t :block.reaction/emoji-required-warning) :warning))))
-              :tabs [[:emoji (t :icon/tab-emojis)]]
-              :default-tab :emoji
-              :show-used? true
-              :icon-value nil})]))
+                           (if icon
+                             (property-handler/set-block-property!
+                              block-id
+                              :logseq.property/icon
+                              (select-keys icon [:type :id :color]))
+                             (property-handler/remove-block-property!
+                              block-id
+                              :logseq.property/icon))
+                           (state/hide-custom-context-menu!)
+                           (shui/popup-hide!))
+              :color-auto-chosen? false
+              :del-btn? (boolean icon-value)
+              :icon-value icon-value}))]))
 
-         (shui/dropdown-menu-sub
-          {:open set-icon-sub-menu-open?
-           :onOpenChange (fn [v]
-                           (when (not= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
-                             (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
-                             (set-icon-sub-menu-open v)))}
-          (shui/dropdown-menu-sub-trigger
-           (t :context-menu/set-icon))
-          (shui/dropdown-menu-sub-content
-           [:div.p-1
-            (let [icon-value (:logseq.property/icon block)]
-              (icon-component/icon-search
-               {:on-chosen (fn [_e icon]
-                             (if icon
-                               (property-handler/set-block-property!
-                                block-id
-                                :logseq.property/icon
-                                (select-keys icon [:type :id :color]))
-                               (property-handler/remove-block-property!
-                                block-id
-                                :logseq.property/icon))
-                             (state/hide-custom-context-menu!)
-                             (shui/popup-hide!))
-                :color-auto-chosen? false
-                :del-btn? (boolean icon-value)
-                :icon-value icon-value}))]))
+       (shui/dropdown-menu-separator)
 
-         (shui/dropdown-menu-separator)
-
-         (shui/dropdown-menu-item
-          {:key "Copy block ref"
-           :on-click (fn [_e]
-                       (editor-handler/copy-block-ref! block-id ref/->block-ref))}
-          (t :block/copy-ref))
+       (shui/dropdown-menu-item
+        {:key "Copy block ref"
+         :on-click (fn [_e]
+                     (editor-handler/copy-block-ref! block-id ref/->block-ref))}
+        (t :block/copy-ref))
 
          ;; TODO Logseq protocol mobile support
-         (when (util/electron?)
-           (shui/dropdown-menu-item
-            {:key "Copy block URL"
-             :on-click (fn [_e]
-                         (let [tap-f (fn [block-id]
-                                       (url-util/get-logseq-web-block-url config/app-website
-                                                                         (graph-handler/current-graph-id)
-                                                                         block-id))]
-                           (editor-handler/copy-block-ref! block-id tap-f)))}
-            (t :block/copy-url)))
-
-         (when (and (util/electron?) (ldb/asset? block))
-           (shui/dropdown-menu-item
-            {:key "Show asset in folder"
-             :on-click (fn [_e]
-                         (let [assets-dir (config/get-current-repo-assets-root)
-                               ext (name (:logseq.property.asset/type block))
-                               file-path (path/path-join assets-dir (str (:block/uuid block) "." ext))]
-                           (ipc/ipc "openFileInFolder" file-path)))}
-            (t :asset/show-file-in-folder)))
-
+       (when (util/electron?)
          (shui/dropdown-menu-item
-          {:key "Copy as"
-           :on-click (fn [_]
-                       (shui/dialog-open!
-                        #(export/export-blocks [block-id] {:export-type :block})))}
-          (t :export/copy-or-export-as))
-
-         (when-not property-default-value?
-           (shui/dropdown-menu-item
-            {:key "Cut"
-             :on-click (fn [_e]
-                         (editor-handler/cut-block! block-id))}
-            (t :editor/cut)
-            (ui/dropdown-shortcut :editor/cut)))
-
-         (when-not property-default-value?
-           (shui/dropdown-menu-item
-            {:key "delete"
-             :on-click #(editor-handler/delete-block-aux! block)}
-            (t :editor/delete-selection)
-            (ui/dropdown-shortcut :editor/delete)))
-
-         (shui/dropdown-menu-separator)
-
-         (cond
-           (state/enable-flashcards?)
-           (shui/dropdown-menu-item
-            {:key "Make a Card"
-             :on-click #(fsrs/batch-make-cards! [block-id])}
-            (t :context-menu/make-a-flashcard))
-           :else
-           nil)
-
-         (shui/dropdown-menu-item
-          {:key "Toggle number list"
-           :on-click #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
-          (t :context-menu/toggle-number-list))
-
-         (shui/dropdown-menu-separator)
-
-         (shui/dropdown-menu-item
-          {:key "Expand all"
+          {:key "Copy block URL"
            :on-click (fn [_e]
-                       (editor-handler/expand-all! block-id))}
-          (t :editor/expand-block-children)
-          (ui/dropdown-shortcut :editor/expand-block-children))
+                       (let [tap-f (fn [block-id]
+                                     (url-util/get-logseq-web-block-url config/app-website
+                                                                        (graph-handler/current-graph-id)
+                                                                        block-id))]
+                         (editor-handler/copy-block-ref! block-id tap-f)))}
+          (t :block/copy-url)))
 
+       (when (and (util/electron?) (ldb/asset? block))
          (shui/dropdown-menu-item
-          {:key "Collapse all"
+          {:key "Show asset in folder"
            :on-click (fn [_e]
-                       (editor-handler/collapse-all! block-id {}))}
-          (t :editor/collapse-block-children)
-          (ui/dropdown-shortcut :editor/collapse-block-children))
+                       (let [assets-dir (config/get-current-repo-assets-root)
+                             ext (name (:logseq.property.asset/type block))
+                             file-path (path/path-join assets-dir (str (:block/uuid block) "." ext))]
+                         (ipc/ipc "openFileInFolder" file-path)))}
+          (t :asset/show-file-in-folder)))
 
-         (when simple-commands
-           (when-let [cmds (state/get-plugins-commands-with-type :block-context-menu-item)]
-             (for [[_ {:keys [key label] :as cmd} action pid] cmds]
-               (shui/dropdown-menu-item
-                {:key key
-                 :on-click #(commands/exec-plugin-simple-command!
-                             pid (assoc cmd :uuid block-id) action)}
-                label))))
+       (shui/dropdown-menu-item
+        {:key "Copy as"
+         :on-click (fn [_]
+                     (shui/dialog-open!
+                      #(export/export-blocks [block-id] {:export-type :block})))}
+        (t :export/copy-or-export-as))
 
-         (when developer-mode?
-           [:<>
-            (shui/dropdown-menu-separator)
-            (shui/dropdown-menu-sub
-             (shui/dropdown-menu-sub-trigger
-              (t :context-menu/developer-tools))
+       (when-not property-default-value?
+         (shui/dropdown-menu-item
+          {:key "Cut"
+           :on-click (fn [_e]
+                       (editor-handler/cut-block! block-id))}
+          (t :editor/cut)
+          (ui/dropdown-shortcut :editor/cut)))
 
-             (shui/dropdown-menu-sub-content
-              (shui/dropdown-menu-item
-               {:key :dev/show-block-data
-                :on-click (fn []
-                            (dev-common-handler/show-entity-data [:block/uuid block-id]))}
-               (shortcut-dh/shortcut-desc-by-id :dev/show-block-data))
-              (shui/dropdown-menu-item
-               {:key :dev/show-block-ast
-                :on-click (fn []
-                            (let [block (db/entity [:block/uuid block-id])]
-                              (dev-common-handler/show-content-ast (:block/title block)
-                                                                   (get block :block/format :markdown))))}
-               (shortcut-dh/shortcut-desc-by-id :dev/show-block-ast))))])])))
+       (when-not property-default-value?
+         (shui/dropdown-menu-item
+          {:key "delete"
+           :on-click #(editor-handler/delete-block-aux! block)}
+          (t :editor/delete-selection)
+          (ui/dropdown-shortcut :editor/delete)))
+
+       (shui/dropdown-menu-separator)
+
+       (cond
+         (state/enable-flashcards?)
+         (shui/dropdown-menu-item
+          {:key "Make a Card"
+           :on-click #(fsrs/batch-make-cards! [block-id])}
+          (t :context-menu/make-a-flashcard))
+         :else
+         nil)
+
+       (shui/dropdown-menu-item
+        {:key "Toggle number list"
+         :on-click #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
+        (t :context-menu/toggle-number-list))
+
+       (shui/dropdown-menu-separator)
+
+       (shui/dropdown-menu-item
+        {:key "Expand all"
+         :on-click (fn [_e]
+                     (editor-handler/expand-all! block-id))}
+        (t :editor/expand-block-children)
+        (ui/dropdown-shortcut :editor/expand-block-children))
+
+       (shui/dropdown-menu-item
+        {:key "Collapse all"
+         :on-click (fn [_e]
+                     (editor-handler/collapse-all! block-id {}))}
+        (t :editor/collapse-block-children)
+        (ui/dropdown-shortcut :editor/collapse-block-children))
+
+       (when simple-commands
+         (when-let [cmds (state/get-plugins-commands-with-type :block-context-menu-item)]
+           (for [[_ {:keys [key label] :as cmd} action pid] cmds]
+             (shui/dropdown-menu-item
+              {:key key
+               :on-click #(commands/exec-plugin-simple-command!
+                           pid (assoc cmd :uuid block-id) action)}
+              label))))
+
+       (when developer-mode?
+         [:<>
+          (shui/dropdown-menu-separator)
+          (shui/dropdown-menu-sub
+           (shui/dropdown-menu-sub-trigger
+            (t :context-menu/developer-tools))
+
+           (shui/dropdown-menu-sub-content
+            (shui/dropdown-menu-item
+             {:key :dev/show-block-data
+              :on-click (fn []
+                          (dev-common-handler/show-entity-data [:block/uuid block-id]))}
+             (shortcut-dh/shortcut-desc-by-id :dev/show-block-data))
+            (shui/dropdown-menu-item
+             {:key :dev/show-block-ast
+              :on-click (fn []
+                          (let [block (db/entity [:block/uuid block-id])]
+                            (dev-common-handler/show-content-ast (:block/title block)
+                                                                 (get block :block/format :markdown))))}
+             (shortcut-dh/shortcut-desc-by-id :dev/show-block-ast))))])])))
 
 (hsx/defc block-ref-custom-context-menu-content
   [block block-ref-id]

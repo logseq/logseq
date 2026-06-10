@@ -17,10 +17,10 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
-            [io.factorhouse.hsx.core :as hsx]))
+            [promesa.core :as p]))
 
 (defn- comment-time-title
   [created-at]
@@ -183,9 +183,9 @@
          focus-on-mount? false}}]
   (let [[draft-uuid] (hooks/use-state (random-uuid))
         [draft set-draft!] (hooks/use-state
-                             (or initial-value
-                                 (comments-model/saved-comment-draft comments-block)
-                                 ""))
+                            (or initial-value
+                                (comments-model/saved-comment-draft comments-block)
+                                ""))
         draft' (when-not (string/blank? draft) draft)
         editor-block (or comment-block
                          (comments-model/comment-draft-block comments-block draft-uuid draft))
@@ -283,13 +283,10 @@
      target
      (fn [{:keys [id]}]
        (icon-component/icon-search
-        {:on-chosen (fn [_emoji-event emoji _keep-popup?]
-                      (reaction-handler/toggle-reaction! (:block/uuid comment-block) (:id emoji))
-                      (shui/popup-hide! id))
-         :tabs [[:emoji (t :icon/tab-emojis)]]
-         :default-tab :emoji
-         :show-used? true
-         :icon-value nil}))
+        (merge icon-component/reaction-picker-opts
+               {:on-chosen (fn [_emoji-event emoji _keep-popup?]
+                             (reaction-handler/toggle-reaction! (:block/uuid comment-block) (:id emoji))
+                             (shui/popup-hide! id))})))
      {:align :end
       :content-props {:class "ls-icon-picker"}})))
 
