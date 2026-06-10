@@ -2,7 +2,7 @@
  :deps
  {org.clojure/clojure                   {:mvn/version "1.12.4"}
   io.factorhouse/hsx                    {:git/url "https://github.com/logseq/hsx"
-                                         :sha     "7a4756b5e4ed52bbd2d8a1d3facf32107492c1ea"}
+                                         :sha     "21615ffa2aa530cc830e3464b793a53ef4fdd18c"}
 
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
                                          :sha     "3f141af97b70e1f14c65eaa119acd822ebece37e"}
