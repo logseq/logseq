@@ -1317,17 +1317,17 @@
    :covers {:commands ["skill show"], :options {:global ["--output"]}},
    :tags [:skill]}
   ;; Repo root already contains tracked `.agents/skills/logseq-cli/SKILL.md`,
-  ;; so this local-install case must run from an isolated cwd.
+  ;; so this local-install case must run from an isolated cwd and HOME.
   {:id "skill-install-local",
    :setup
-   ["rm -rf ./tmp/cli-e2e-skill-install-local"
-    "mkdir -p ./tmp/cli-e2e-skill-install-local"],
+   ["rm -rf ./tmp/cli-e2e-skill-install-local ./tmp/cli-e2e-skill-install-local-home"
+    "mkdir -p ./tmp/cli-e2e-skill-install-local ./tmp/cli-e2e-skill-install-local-home"],
    :cmds
-   ["cd ./tmp/cli-e2e-skill-install-local && {{cli}} skill install >/dev/null"
+   ["cd ./tmp/cli-e2e-skill-install-local && HOME=\"$(pwd)/../cli-e2e-skill-install-local-home\" {{cli}} skill install"
     "python3 -c 'import pathlib; p=pathlib.Path(\"./tmp/cli-e2e-skill-install-local/.agents/skills/logseq-cli/SKILL.md\"); print(\"installed\" if p.exists() else \"missing\")'"],
    :expect {:exit 0, :stdout-contains ["installed"]},
    :covers {:commands ["skill install"], :options {:skill []}},
-   :cleanup ["rm -rf ./tmp/cli-e2e-skill-install-local"],
+   :cleanup ["rm -rf ./tmp/cli-e2e-skill-install-local ./tmp/cli-e2e-skill-install-local-home"],
    :tags [:skill]}
   {:id "skill-install-global-preserves-other-skills",
    :setup
