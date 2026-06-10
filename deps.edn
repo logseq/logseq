@@ -3,7 +3,7 @@
  {org.clojure/clojure                   {:mvn/version "1.12.4"}
   org.clojure/clojurescript             {:mvn/version "1.12.134"}
   io.factorhouse/hsx                    {:git/url "https://github.com/logseq/hsx"
-                                         :sha     "c45cdaea9568d8dfe265761af79d3a78e1bfbf1f"}
+                                         :sha     "21615ffa2aa530cc830e3464b793a53ef4fdd18c"}
 
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
                                          :sha     "3f141af97b70e1f14c65eaa119acd822ebece37e"}

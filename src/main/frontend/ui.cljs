@@ -346,10 +346,10 @@
           [:div.flex.items-start
            [:div.flex-shrink-0.pt-2
             svg]
-           [:div.ml-3.w-0.flex-1.pt-2
+           [:div.ml-3.w-0.flex-1.pt-2.pointer-events-auto
 
             [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}}
-             content]]
+             (if (keyword? content) (name content) content)]]
            (when-not (contains? #{"exiting" "exited"} state)
              [:div.flex-shrink-0.flex.pointer-events-auto {:style {:margin-top -9
                                                                     :margin-right -18}}
@@ -749,8 +749,8 @@
                (log/error :exception error)
                (notification/show!
                 [:div.flex.flex-col.gap-2
-                 [:div (t :ui/error-boundary-error error)]
-                 (str (.-stack error))] `:error))}
+                 [:div (t :ui/error-boundary-error (if (instance? js/Error error) (.-message error) (str error)))]
+                 (when (instance? js/Error error) (str (.-stack error)))] :error))}
    view))
 
 (hsx/defc block-error
