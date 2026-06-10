@@ -34,7 +34,7 @@ let boolean_option = function
   | "include-built-in" | "include-journal" | "journal-only" | "include-hidden"
   | "with-properties" | "with-extends" | "with-classes" | "with-type"
   | "page-hierarchy" | "linked-references" | "ref-id-footer" | "progress"
-  | "upload-keys" ->
+  | "upload-keys" | "pretty-print" ->
       true
   | _ -> false
 
@@ -155,6 +155,8 @@ let allowed_options_for_path = function
       [
         "type";
         "file";
+        "edn-options";
+        "pretty-print";
         "include-timestamps";
         "exclude-built-in-pages";
         "exclude-namespaces";
@@ -272,9 +274,9 @@ let allowed_options_for_path = function
   | [ "login" ]
   | [ "logout" ]
   | [ "skill"; "show" ]
-  | [ "completion" ]
   | "example" :: _ ->
       []
+  | [ "completion" ] -> [ "shell" ]
   | [ "skill"; "install" ] -> [ "global" ]
   | _ -> []
 
@@ -382,6 +384,23 @@ let validate_graph_export_values options =
   | Some "edn", Some (_, None) -> Error empty_exclude_namespaces_error
   | _ -> Ok ()
 
+let parse_graph_export_edn_options options =
+  match option_value "edn-options" options with
+  | None -> Ok None
+  | Some text -> (
+      try
+        let value = Melange_edn.of_edn_string text in
+        match Edn_util.as_map value with
+        | Some _ -> Ok (Some value)
+        | None ->
+            Error
+              (Error.invalid_options
+                 "graph export --edn-options must be an EDN map")
+      with Melange_edn.Parse_error _ ->
+        Error
+          (Error.invalid_options
+             "graph export --edn-options must be an EDN map"))
+
 let validate_non_empty_csv_option key message options =
   match List.find_opt (fun (candidate, _) -> candidate = key) options with
   | Some (_, Some value) when parse_csv value = [] ->
@@ -423,6 +442,8 @@ let validate_option_values path options =
   | [ "list"; "asset" ] ->
       validate_list_common_values list_asset_sort_values options
   | [ "show" ] -> validate_integer_option "level" options
+  | [ "completion" ] ->
+      validate_member_option "shell" [ "zsh"; "bash" ] options
   | [ "upsert"; "task" ] ->
       Error.bind (validate_pos_value options) (fun () ->
           Error.bind (validate_time_option "scheduled" options) (fun () ->
@@ -717,22 +738,27 @@ let parse ?stdin argv =
     | [ "graph"; "export" ] -> (
         match graph_export_type options with
         | Some export_type ->
-            make [ "graph"; "export" ]
-              (Graph
-                 (Parsed_export
-                    {
-                      export_type;
-                      file = option_value "file" options;
-                      include_timestamps =
-                        option_present "include-timestamps" options;
-                      exclude_built_in_pages =
-                        option_present "exclude-built-in-pages" options;
-                      exclude_namespaces =
-                        Option.value
-                          (Option.map parse_csv
-                             (option_value "exclude-namespaces" options))
-                          ~default:[];
-                    }))
+            Error.bind
+              (parse_graph_export_edn_options options)
+              (fun edn_options ->
+                make [ "graph"; "export" ]
+                  (Graph
+                     (Parsed_export
+                        {
+                          export_type;
+                          file = option_value "file" options;
+                          edn_options;
+                          pretty_print = option_present "pretty-print" options;
+                          include_timestamps =
+                            option_present "include-timestamps" options;
+                          exclude_built_in_pages =
+                            option_present "exclude-built-in-pages" options;
+                          exclude_namespaces =
+                            Option.value
+                              (Option.map parse_csv
+                                 (option_value "exclude-namespaces" options))
+                              ~default:[];
+                        })))
         | None ->
             Error
               (Error.invalid_options "graph export --type must be edn or sqlite")
@@ -971,8 +997,21 @@ let parse ?stdin argv =
               (Error.invalid_options
                  ("unsupported shell: " ^ shell ^ "; expected zsh or bash")))
     | [ "completion" ] ->
-        make [ "completion" ]
-          (Completion (Completion.Parsed_completion { shell = None }))
+        let shell =
+          match option_value "shell" options with
+          | None -> Ok None
+          | Some shell -> (
+              match Cli_primitive.shell_of_string shell with
+              | Some shell -> Ok (Some shell)
+              | None ->
+                  Error
+                    (Error.invalid_options
+                       ("unsupported shell: " ^ shell
+                      ^ "; expected zsh or bash")))
+        in
+        Error.bind shell (fun shell ->
+            make [ "completion" ]
+              (Completion (Completion.Parsed_completion { shell })))
     | "example" :: selector ->
         make ("example" :: selector)
           (Example (Example.Parsed_example { selector }))

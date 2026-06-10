@@ -13,11 +13,17 @@ const staticJsDir = path.join(staticDir, "js");
 const distDir = path.join(repoRoot, "dist");
 const skillSourceDir = path.join(repoRoot, ".agents", "skills", "logseq-cli");
 const stagedSkillDir = path.join(staticDir, ".agents", "skills", "logseq-cli");
+const cliBundleRelativePath = "cli/_build/default/dist/logseq-cli.js";
+const stagedCliRelativePath = "static/logseq-cli.js";
+const desktopCliRelativePath = "static/js/logseq-cli.js";
+const cliBundlePath = path.join(repoRoot, ...cliBundleRelativePath.split("/"));
 
 const copyPairs = [
   {
-    from: path.join(staticDir, "logseq-cli.js"),
-    to: path.join(staticJsDir, "logseq-cli.js"),
+    from: path.join(repoRoot, ...stagedCliRelativePath.split("/")),
+    to: path.join(repoRoot, ...desktopCliRelativePath.split("/")),
+    generatedFrom: cliBundlePath,
+    refreshCommand: "pnpm cli:release",
   },
   {
     from: path.join(staticDir, "logseq-cli.js.map"),
@@ -77,11 +83,7 @@ async function main() {
     await copyOne(pair);
   }
 
-  // Keep release app runtime files only in static/js.
-  await fs.rm(path.join(staticDir, "logseq-cli.js"), { force: true });
-  await fs.rm(path.join(staticDir, "logseq-cli.js.map"), { force: true });
-  await fs.rm(path.join(staticDir, "db-worker-node.js"), { force: true });
-  await fs.rm(path.join(staticDir, "db-worker-node.js.map"), { force: true });
+  // Keep root staged runtime files available for local CLI E2E and npm packaging.
 }
 
 main().catch((error) => {

@@ -844,7 +844,7 @@ let build_task repo graph (opts : task_opts) =
                 Property.key =
                   Property.Key_ident
                     (Edn_util.keyword_t "logseq.property/scheduled");
-                value = Edn_util.string (Time.rfc3339_millis scheduled);
+                value = Edn_util.float (Js.Date.getTime scheduled);
               }
               :: properties
           | None -> properties
@@ -856,7 +856,7 @@ let build_task repo graph (opts : task_opts) =
                 Property.key =
                   Property.Key_ident
                     (Edn_util.keyword_t "logseq.property/deadline");
-                value = Edn_util.string (Time.rfc3339_millis deadline);
+                value = Edn_util.float (Js.Date.getTime deadline);
               }
               :: properties
           | None -> properties
@@ -1085,7 +1085,23 @@ let result_ids ids =
       (kw "result", Edn_util.vector (List.map (fun id -> Edn_util.int64 id) ids));
     ]
 
-let file_sha256 path = try Some (Sha256.file_hex path) with _ -> None
+module Node_crypto = struct
+  type hash
+
+  external create_hash : string -> hash = "createHash" [@@mel.module "crypto"]
+  external update_buffer : hash -> Node.Buffer.t -> hash = "update" [@@mel.send]
+  external digest : hash -> string -> string = "digest" [@@mel.send]
+end
+
+let file_sha256 path =
+  try
+    let payload = Cli_unix.read_binary_file path in
+    let hash = Node_crypto.create_hash "sha256" in
+    let payload_buffer =
+      Node.Buffer.fromStringWithEncoding payload ~encoding:`latin1
+    in
+    Some (Node_crypto.digest (Node_crypto.update_buffer hash payload_buffer) "hex")
+  with _ -> None
 let file_size path = (Cli_unix.stat path).Cli_unix.st_size
 
 let file_extension path =
@@ -1416,22 +1432,54 @@ let resolve_tag_id invoke_config repo tag =
                       (Edn_util.keyword_t "tag-not-found")
                       "tag not found")))
 
+let property_key_label = function
+  | Property.Key_ident ident ->
+      Edn_util.keyword_to_string ident |> strip_keyword_prefix
+  | Key_id id -> Int64.to_string id
+  | Key_name name -> name
+
+let string_starts_with ~prefix value =
+  let prefix_len = String.length prefix in
+  String.length value >= prefix_len && String.sub value 0 prefix_len = prefix
+
+let qualified_property_ident ident =
+  String.contains (property_key_label (Property.Key_ident ident)) '/'
+
+let property_not_found_error key =
+  let label = property_key_label key in
+  Error.make
+    (Edn_util.keyword_t "property-not-found")
+    ("property not found: " ^ label)
+
+let resolved_property_ident key entity =
+  match (id_of_entity entity, ident_of_entity entity) with
+  | Some _, Some ident -> Ok ident
+  | _ -> Error (property_not_found_error key)
+
+let resolved_property_ident_from_query key result =
+  match first_entity result with
+  | Some entity -> resolved_property_ident key entity
+  | None -> Error (property_not_found_error key)
+
 let resolve_property_ident invoke_config repo key =
   let open Cli_effect in
   match key with
+  | Property.Key_ident ident when qualified_property_ident ident -> pure (Ok ident)
   | Property.Key_ident ident ->
       bind
         (pull_entity_by_lookup invoke_config repo
            (vector [ kw "db/id" ])
            (vector [ kw "db/ident"; Edn_util.any ident ]))
         (fun result ->
-          if Option.is_some (id_of_entity result) then pure (Ok ident)
-          else
-            pure
-              (Error
-                 (Error.make
-                    (Edn_util.keyword_t "property-not-found")
-                    "property not found")))
+          match resolved_property_ident key result with
+          | Ok ident -> pure (Ok ident)
+          | Error _ when not (qualified_property_ident ident) ->
+              bind
+                (pull_property_by_name invoke_config repo
+                   (property_key_label key) property_selector)
+                (fun result ->
+                  pure (resolved_property_ident_from_query key result))
+          | Error err -> pure (Error err))
   | Key_id id ->
       bind
         (pull_entity_by_lookup invoke_config repo
@@ -1441,25 +1489,22 @@ let resolve_property_ident invoke_config repo key =
           match ident_of_entity result with
           | Some ident -> pure (Ok ident)
           | None ->
-              pure
-                (Error
-                   (Error.make
-                      (Edn_util.keyword_t "property-not-found")
-                      "property not found")))
+              pure (Error (property_not_found_error key)))
   | Key_name name ->
-      let ident = Edn_util.keyword_t name in
       bind
-        (pull_entity_by_lookup invoke_config repo
-           (vector [ kw "db/id" ])
-           (vector [ kw "db/ident"; Edn_util.any ident ]))
+        (pull_property_by_name invoke_config repo name property_selector)
         (fun result ->
-          if Option.is_some (id_of_entity result) then pure (Ok ident)
-          else
-            pure
-              (Error
-                 (Error.make
-                    (Edn_util.keyword_t "property-not-found")
-                    "property not found")))
+          match resolved_property_ident_from_query key result with
+          | Ok ident -> pure (Ok ident)
+          | Error _ ->
+              let ident = Edn_util.keyword_t name in
+              bind
+                (pull_entity_by_lookup invoke_config repo
+                   (vector [ kw "db/id" ])
+                   (vector [ kw "db/ident"; Edn_util.any ident ]))
+                (fun result ->
+                  if Option.is_some (id_of_entity result) then pure (Ok ident)
+                  else pure (Error (property_not_found_error key))))
 
 let rec resolve_tag_ids invoke_config repo = function
   | [] -> Cli_effect.pure (Ok [])
@@ -1483,6 +1528,65 @@ let rec resolve_property_keys invoke_config repo = function
               | Error err -> pure (Error err)
               | Ok idents -> pure (Ok (ident :: idents))))
 
+let block_uuid_lookup_ref value =
+  match (Edn_util.as_vector value, Edn_util.as_list value) with
+  | Some [ key; uuid ], _ | _, Some [ key; uuid ] -> (
+      match (Edn_util.as_string_like key, Edn_util.as_string_like uuid) with
+      | Some "block/uuid", Some uuid -> Some uuid
+      | _ -> None)
+  | _ -> None
+
+let resolve_block_uuid_ref invoke_config repo uuid =
+  let open Cli_effect in
+  bind
+    (pull_entity_by_lookup invoke_config repo
+       (vector [ kw "db/id"; kw "block/uuid" ])
+       (vector [ kw "block/uuid"; Edn_util.uuid uuid ]))
+    (fun entity ->
+      match id_of_entity entity with
+      | Some id -> pure (Ok (Edn_util.int64 id))
+      | None ->
+          pure
+            (Error
+               (Error.make
+                  (Edn_util.keyword_t "block-not-found")
+                  ("block not found: " ^ uuid))))
+
+let rec resolve_property_value_refs invoke_config repo value =
+  let open Cli_effect in
+  match block_uuid_lookup_ref value with
+  | Some uuid -> resolve_block_uuid_ref invoke_config repo uuid
+  | None -> (
+      let resolve_values wrap values =
+        let rec loop acc = function
+          | [] -> pure (Ok (wrap (List.rev acc)))
+          | value :: rest ->
+              bind (resolve_property_value_refs invoke_config repo value)
+                (function
+                | Error err -> pure (Error err)
+                | Ok value -> loop (value :: acc) rest)
+        in
+        loop [] values
+      in
+      match value with
+      | Melange_edn.Any (Melange_edn.Vector values) ->
+          resolve_values Edn_util.vector (Edn_util.iarray_to_list values)
+      | Any (List values) ->
+          resolve_values Edn_util.list (Edn_util.iarray_to_list values)
+      | Any (Set values) ->
+          resolve_values Edn_util.set (Edn_util.iarray_to_list values)
+      | Any (Map fields) ->
+          let rec loop acc = function
+            | [] -> pure (Ok (Edn_util.map (List.rev acc)))
+            | (key, value) :: rest ->
+                bind (resolve_property_value_refs invoke_config repo value)
+                  (function
+                  | Error err -> pure (Error err)
+                  | Ok value -> loop ((key, value) :: acc) rest)
+          in
+          loop [] (Edn_util.iarray_to_list fields)
+      | _ -> pure (Ok value))
+
 let rec resolve_property_assignments invoke_config repo = function
   | [] -> Cli_effect.pure (Ok [])
   | assignment :: rest ->
@@ -1491,11 +1595,148 @@ let rec resolve_property_assignments invoke_config repo = function
         (function
         | Error err -> pure (Error err)
         | Ok ident ->
-            bind (resolve_property_assignments invoke_config repo rest)
+            bind
+              (resolve_property_value_refs invoke_config repo assignment.value)
               (function
               | Error err -> pure (Error err)
-              | Ok assignments ->
-                  pure (Ok ((ident, assignment.value) :: assignments))))
+              | Ok value ->
+                  bind (resolve_property_assignments invoke_config repo rest)
+                    (function
+                    | Error err -> pure (Error err)
+                    | Ok assignments -> pure (Ok ((ident, value) :: assignments)))))
+
+let option_resolution_error option err =
+  {
+    err with
+    Error.context =
+      Some
+        (Edn_util.map
+           [
+             (kw "option", Edn_util.string option);
+             (kw "phase", Edn_util.string "resolve-options");
+           ]);
+  }
+
+let structural_block_field key =
+  match Edn_util.as_string_like key with
+  | Some key ->
+      key = "block/title" || key = "block/content" || key = "block/uuid"
+      || key = "block/children" || key = "block/tags"
+      || string_starts_with ~prefix:"db/" key
+      || string_starts_with ~prefix:"build/" key
+  | None -> false
+
+let inline_property_assignments block =
+  match Edn_util.as_map block.Block.raw with
+  | None -> Ok []
+  | Some fields ->
+      let rec loop acc = function
+        | [] -> Ok (List.rev acc)
+        | (key, value) :: rest ->
+            if structural_block_field key then loop acc rest
+            else
+              match Property.parse_key key with
+              | Some key -> loop ({ Property.key; value } :: acc) rest
+              | None ->
+                  Error
+                    (Error.invalid_options
+                       ("invalid block property key: "
+                       ^ Melange_edn.to_edn_string key))
+      in
+      loop [] fields
+
+let rec resolve_block_inline_properties invoke_config repo block =
+  let open Cli_effect in
+  match inline_property_assignments block with
+  | Error err -> pure (Error err)
+  | Ok assignments ->
+      bind (resolve_property_assignments invoke_config repo assignments)
+        (function
+        | Error err -> pure (Error (option_resolution_error "--blocks" err))
+        | Ok resolved_assignments ->
+            let resolved_properties =
+              List.map
+                (fun (ident, value) ->
+                  { Property.key = Property.Key_ident ident; value })
+                resolved_assignments
+            in
+            let rec resolve_children acc = function
+              | [] -> pure (Ok (List.rev acc))
+              | child :: rest ->
+                  bind
+                    (resolve_block_inline_properties invoke_config repo child)
+                    (function
+                    | Error err -> pure (Error err)
+                    | Ok child -> resolve_children (child :: acc) rest)
+            in
+            bind (resolve_children [] block.Block.children) (function
+              | Error err -> pure (Error err)
+              | Ok children ->
+                  pure
+                    (Ok
+                       {
+                         block with
+                         Block.properties =
+                           block.Block.properties @ resolved_properties;
+                         children;
+                       })))
+
+let rec resolve_blocks_inline_properties invoke_config repo = function
+  | [] -> Cli_effect.pure (Ok [])
+  | block :: rest ->
+      let open Cli_effect in
+      bind (resolve_block_inline_properties invoke_config repo block) (function
+        | Error err -> pure (Error err)
+        | Ok block ->
+            bind (resolve_blocks_inline_properties invoke_config repo rest)
+              (function
+              | Error err -> pure (Error err)
+              | Ok blocks -> pure (Ok (block :: blocks))))
+
+let rec strip_block_properties block =
+  {
+    block with
+    Block.properties = [];
+    children = List.map strip_block_properties block.Block.children;
+  }
+
+let property_key_value = function
+  | Property.Key_ident ident -> Edn_util.any ident
+  | Key_id id -> Edn_util.int64 id
+  | Key_name name -> Edn_util.string name
+
+let rec block_inline_property_ops block =
+  let own_ops =
+    match (block.Block.uuid, block.Block.properties) with
+    | Some uuid, properties ->
+        List.map
+          (fun assignment ->
+            Edn_util.vector
+              [
+                kw "batch-set-property";
+                Edn_util.vector
+                  [
+                    Edn_util.vector [ Edn_util.uuid uuid ];
+                    property_key_value assignment.Property.key;
+                    assignment.value;
+                    Edn_util.map [];
+                  ];
+              ])
+          properties
+    | None, _ -> []
+  in
+  own_ops @ List.concat_map block_inline_property_ops block.Block.children
+
+let inline_property_ops blocks =
+  List.concat_map block_inline_property_ops blocks
+
+let apply_inline_property_ops invoke_config repo blocks =
+  let open Cli_effect in
+  match inline_property_ops blocks with
+  | [] -> pure (Ok Edn_util.nil)
+  | ops ->
+      bind (apply_outliner_ops invoke_config repo ops) (fun result ->
+          pure (Ok result))
 
 let append_tag_and_property_ops block_uuids ~update_tag_ids ~remove_tag_ids
     ~update_properties ~remove_properties =
@@ -1555,20 +1796,28 @@ let append_tag_and_property_ops block_uuids ~update_tag_ids ~remove_tag_ids
 let resolve_update_plan invoke_config repo plan =
   let open Cli_effect in
   bind (resolve_tag_ids invoke_config repo plan.Property.update_tags) (function
-    | Error err -> pure (Error err)
+    | Error err -> pure (Error (option_resolution_error "--update-tags" err))
     | Ok update_tag_ids ->
         bind (resolve_tag_ids invoke_config repo plan.remove_tags) (function
-          | Error err -> pure (Error err)
+          | Error err ->
+              pure (Error (option_resolution_error "--remove-tags" err))
           | Ok remove_tag_ids ->
               bind
                 (resolve_property_assignments invoke_config repo
                    plan.update_properties) (function
-                | Error err -> pure (Error err)
+                | Error err ->
+                    pure
+                      (Error
+                         (option_resolution_error "--update-properties" err))
                 | Ok update_properties ->
                     bind
                       (resolve_property_keys invoke_config repo
                          plan.remove_properties) (function
-                      | Error err -> pure (Error err)
+                      | Error err ->
+                          pure
+                            (Error
+                               (option_resolution_error "--remove-properties"
+                                  err))
                       | Ok remove_properties ->
                           pure
                             (Ok
@@ -2252,54 +2501,94 @@ let execute_task_create mode config invoke_config repo target_page content
                                              mode err)
                                     | Ok _ -> pure (ok_task_ids mode ids)))))))
 
-let execute_create_block mode action config =
+let execute_create_block mode (action : block_create) config =
   let open Cli_effect in
-  let add_action = add_action_of_block_create action in
-  bind (Add.execute_add_block add_action config mode) (fun result ->
-      if Cli_result.is_error result || update_plan_empty action.update_plan then
-        pure result
-      else
-        match result_ids_of_cli_result result with
-        | None ->
-            pure
-              (Cli_result.error ~command:Command_id.Upsert_block mode
-                 (Error.make
-                    (Edn_util.keyword_t "add-id-resolution-failed")
-                    "unable to resolve created ids"))
-        | Some ids ->
-            bind
-              (Server_runtime.ensure_server config action.repo
-                 ~create_empty_db:false) (function
-              | Error err ->
-                  pure
-                    (Cli_result.error ~command:Command_id.Upsert_block mode err)
-              | Ok invoke_config ->
-                  bind
+  bind
+    (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
+    (function
+    | Error err ->
+        pure (Cli_result.error ~command:Command_id.Upsert_block mode err)
+    | Ok invoke_config ->
+        bind
+          (resolve_blocks_inline_properties invoke_config action.repo
+             action.blocks) (function
+          | Error err ->
+              pure (Cli_result.error ~command:Command_id.Upsert_block mode err)
+          | Ok blocks ->
+              let action = { action with blocks } in
+              let resolved_plan_effect =
+                if update_plan_empty action.update_plan then pure (Ok None)
+                else
+                  map
+                    (function
+                      | Ok plan -> Ok (Some plan)
+                      | Error err -> Error err)
                     (resolve_update_plan invoke_config action.repo
-                       action.update_plan) (function
-                    | Error err ->
-                        pure
-                          (Cli_result.error ~command:Command_id.Upsert_block
-                             mode err)
-                    | Ok resolved_plan ->
-                        bind
-                          (resolve_block_uuids_by_id invoke_config action.repo
-                             ids) (function
-                          | Error err ->
-                              pure
-                                (Cli_result.error
-                                   ~command:Command_id.Upsert_block mode err)
-                          | Ok block_uuids ->
-                              bind
-                                (apply_resolved_update_plan invoke_config
-                                   action.repo block_uuids resolved_plan)
-                                (function
-                                | Error err ->
-                                    pure
-                                      (Cli_result.error
-                                         ~command:Command_id.Upsert_block mode
-                                         err)
-                                | Ok _ -> pure result)))))
+                       action.update_plan)
+              in
+              bind resolved_plan_effect (function
+                | Error err ->
+                    pure
+                      (Cli_result.error ~command:Command_id.Upsert_block mode
+                         err)
+                | Ok resolved_plan ->
+                    let add_action =
+                      add_action_of_block_create
+                        {
+                          action with
+                          blocks = List.map strip_block_properties action.blocks;
+                        }
+                    in
+                    bind (Add.execute_add_block add_action config mode)
+                      (fun result ->
+                        if Cli_result.is_error result then pure result
+                        else
+                          bind
+                            (apply_inline_property_ops invoke_config action.repo
+                               action.blocks) (function
+                            | Error err ->
+                                pure
+                                  (Cli_result.error
+                                     ~command:Command_id.Upsert_block mode err)
+                            | Ok _ -> (
+                                match resolved_plan with
+                                | None -> pure result
+                                | Some resolved_plan -> (
+                                    match result_ids_of_cli_result result with
+                                    | None ->
+                                        pure
+                                          (Cli_result.error
+                                             ~command:Command_id.Upsert_block
+                                             mode
+                                             (Error.make
+                                                (Edn_util.keyword_t
+                                                   "add-id-resolution-failed")
+                                                "unable to resolve created ids"))
+                                    | Some ids ->
+                                        bind
+                                          (resolve_block_uuids_by_id
+                                             invoke_config action.repo ids)
+                                          (function
+                                          | Error err ->
+                                              pure
+                                                (Cli_result.error
+                                                   ~command:
+                                                     Command_id.Upsert_block
+                                                   mode err)
+                                          | Ok block_uuids ->
+                                              bind
+                                                (apply_resolved_update_plan
+                                                   invoke_config action.repo
+                                                   block_uuids resolved_plan)
+                                                (function
+                                                | Error err ->
+                                                    pure
+                                                      (Cli_result.error
+                                                         ~command:
+                                                           Command_id
+                                                           .Upsert_block
+                                                         mode err)
+                                                | Ok _ -> pure result)))))))))
 
 let execute action config mode =
   let open Cli_effect in

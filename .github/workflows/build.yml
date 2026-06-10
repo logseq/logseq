@@ -244,7 +244,7 @@ jobs:
 
       - name: Build logseq CLI runtime
         run: |
-          clojure -M:cljs release logseq-cli
+          pnpm cli:release
           pnpm db-worker-node:release:bundle
           pnpm --dir deps/db-sync build:node-adapter
           node scripts/prepare-cli-package.mjs

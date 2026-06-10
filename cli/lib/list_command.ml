@@ -400,6 +400,15 @@ let pull_property_by_ident config repo ident =
       (Edn_util.expect_vector_t "list property selector" property_selector)
     ~lookup:(vector [ kw "db/ident"; kw ident ])
 
+let pull_property_by_name config repo name =
+  Transport.thread_api_q config ~repo
+    ~query:
+      (Edn_util.vector_t
+         [
+           class_query property_selector "logseq.class/Property";
+           Edn_util.string (normalized_lookup_name name);
+         ])
+
 let pull_property_by_id config repo id =
   Transport.thread_api_pull config ~repo
     ~selector:
@@ -479,6 +488,23 @@ let property_ident_of_entity entity =
          (Edn_util.keyword_t "property-not-found")
          "property not found")
 
+let property_ident_of_query result =
+  match first_entity result with
+  | Some entity -> property_ident_of_entity entity
+  | None ->
+      Error
+        (Error.make
+           (Edn_util.keyword_t "property-not-found")
+           "property not found")
+
+let keyword_label ident =
+  let value = Edn_util.keyword_to_string ident in
+  if String.length value > 0 && value.[0] = ':' then
+    String.sub value 1 (String.length value - 1)
+  else value
+
+let qualified_keyword ident = String.contains (keyword_label ident) '/'
+
 let parse_tag_selector value =
   let value = String.trim value in
   match Int64.of_string_opt value with
@@ -531,15 +557,26 @@ let resolve_property_ident invoke_config repo selector =
       bind
         (pull_property_by_ident invoke_config repo
            (Edn_util.keyword_to_string ident))
-        (fun entity -> pure (property_ident_of_entity entity))
+        (fun entity ->
+          match property_ident_of_entity entity with
+          | Ok _ as result -> pure result
+          | Error _ when not (qualified_keyword ident) ->
+              bind
+                (pull_property_by_name invoke_config repo (keyword_label ident))
+                (fun result -> pure (property_ident_of_query result))
+          | Error _ as result -> pure result)
   | Key_id id ->
       bind (pull_property_by_id invoke_config repo id) (fun entity ->
           pure (property_ident_of_entity entity))
   | Key_name name ->
-      bind
-        (pull_property_by_ident invoke_config repo
-           (Edn_util.keyword_to_string (Edn_util.keyword_t name)))
-        (fun entity -> pure (property_ident_of_entity entity))
+      bind (pull_property_by_name invoke_config repo name) (fun result ->
+          match property_ident_of_query result with
+          | Ok _ as result -> pure result
+          | Error _ ->
+              bind
+                (pull_property_by_ident invoke_config repo
+                   (Edn_util.keyword_to_string (Edn_util.keyword_t name)))
+                (fun entity -> pure (property_ident_of_entity entity)))
 
 let rec resolve_property_idents invoke_config repo = function
   | [] -> Cli_effect.pure (Ok [])
