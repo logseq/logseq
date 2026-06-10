@@ -113,7 +113,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
-          cache-dependency-path: pnpm-lock.yaml
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            cli/pnpm-lock.yaml
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -152,6 +154,9 @@ jobs:
 
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
+
+      - name: Fetch CLI pnpm deps
+        run: pnpm --dir cli install --frozen-lockfile
 
       - name: Run CLI E2E tests
         run: opam exec -- bb dev:cli-e2e --jobs 1 --verbose
@@ -219,6 +224,7 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: |
             pnpm-lock.yaml
+            cli/pnpm-lock.yaml
             deps/db/pnpm-lock.yaml
             scripts/pnpm-lock.yaml
 
@@ -251,6 +257,9 @@ jobs:
 
       - name: Fetch root pnpm deps
         run: pnpm install --frozen-lockfile
+
+      - name: Fetch CLI pnpm deps
+        run: pnpm --dir cli install --frozen-lockfile
 
       - name: Create DB graph with properties
         run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ./cli-root/graphs/properties-graph
