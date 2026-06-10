@@ -36,9 +36,16 @@ let skill_file_under base =
 external process_argv : string array = "argv" [@@mel.module "process"]
 
 let executable_dir_candidates () =
+  let candidates_for_script script =
+    let script_dir = Filename.dirname script in
+    [
+      skill_file_under script_dir;
+      skill_file_under (Filename.dirname script_dir);
+    ]
+  in
   match Array.to_list process_argv with
-  | _node :: script :: _ -> [ skill_file_under (Filename.dirname script) ]
-  | script :: _ -> [ skill_file_under (Filename.dirname script) ]
+  | _node :: script :: _ -> candidates_for_script script
+  | script :: _ -> candidates_for_script script
   | [] -> []
 
 let non_empty value =
