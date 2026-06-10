@@ -8,5 +8,11 @@
                   frontend.worker.debug
                   ;; Ignore because of dev work
                   helper
-                  logseq.api]
+                  logseq.api
+                  ;; Facade API: consumers live outside carve's paths
+                  ;; (deps/shui demo2 refers emojis/emojis-cp/icon-search)
+                  frontend.components.icon
+                  ;; Selected per-build via :ns-aliases in shadow-cljs.edn
+                  ;; (module-less builds swap it in for the lazy loader)
+                  frontend.colors.named-loader-eager]
  :report {:format :ignore}}

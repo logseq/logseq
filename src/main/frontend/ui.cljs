@@ -1,9 +1,9 @@
 (ns frontend.ui
   "Main ns for reusable components"
   (:require ["@emoji-mart/data" :as emoji-data]
+            ["@sentry/react" :refer [ErrorBoundary]]
             ["emoji-mart" :as emoji-mart]
             ["react-intersection-observer" :as react-intersection-observer]
-            ["@sentry/react" :refer [ErrorBoundary]]
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             ["react-virtuoso" :refer [Virtuoso VirtuosoGrid]]
@@ -218,7 +218,7 @@
         k (hooks/use-memo #(inc (count (state/get-state :modal/dropdowns))) [])]
     (hooks/use-effect!
      (fn []
-      (state/set-state! [:modal/dropdowns k] close-fn)
+       (state/set-state! [:modal/dropdowns k] close-fn)
        #(state/update-state! :modal/dropdowns dissoc k))
      [])
     [:div.dropdown-wrapper.max-h-screen.overflow-y-auto
@@ -352,7 +352,7 @@
              (if (keyword? content) (name content) content)]]
            (when-not (contains? #{"exiting" "exited"} state)
              [:div.flex-shrink-0.flex.pointer-events-auto {:style {:margin-top -9
-                                                                    :margin-right -18}}
+                                                                   :margin-right -18}}
               (button
                {:button-props {"aria-label" (t :ui/close)}
                 :variant :ghost
@@ -598,6 +598,41 @@
       {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
        :aria-hidden "true"}]]]))
 
+(defn tab-items
+  "Render underline-style tab buttons. Caller wraps them in `.tabs-section`
+   and supplies any siblings (observers, `.tab-actions`, etc.).
+   opts: :tabs [[id label] ...], :active id, :on-change (fn [id event]),
+         :button-attrs (optional map merged into every button's attrs;
+                        does not override keys this fn sets)
+         :tab-id-prefix (optional; if set, emit id=\"<prefix>-tab-<id>\"
+                         per button for WAI-ARIA tab/tabpanel linkage)
+         :panel-id (optional; if set, emit aria-controls=<panel-id> per
+                    button — pair with the corresponding role=\"tabpanel\")"
+  [{:keys [tabs active on-change button-attrs tab-id-prefix panel-id]}]
+  (for [[id label] tabs
+        :let [active? (= active id)]]
+    [:button.tab-item
+     (merge button-attrs
+            {:key (name id)
+             :type "button"
+             :role "tab"
+             :aria-selected (str active?)
+             :tab-index (if active? "0" "-1")
+             :data-text label
+             :data-tab-id (name id)
+             :data-active (when active? "true")
+             ;; mousedown keeps focus where it was (e.g. on the search
+             ;; input) by preventing the default focus shift; click is
+             ;; what fires on-change so programmatic .click() from the
+             ;; keyboard-nav controller also works.
+             :on-mouse-down (fn [^js e] (util/stop e))
+             :on-click      (fn [^js e]
+                              (util/stop e)
+                              (when on-change (on-change id e)))}
+            (when tab-id-prefix {:id (str tab-id-prefix "-tab-" (name id))})
+            (when panel-id     {:aria-controls panel-id}))
+     label]))
+
 (defn keyboard-shortcut-from-config [shortcut-name & {:keys [pick-first?]}]
   (let [binding (shortcut-dh/shortcut-binding shortcut-name)]
     (cond
@@ -667,52 +702,52 @@
   [header content {:keys [title-trigger? on-pointer-down class
                           default-collapsed? init-collapsed]}]
   (let [collapsed? (hooks/use-memo #(atom (true? default-collapsed?)) [])
-           render-content? (hooks/use-memo #(atom (not (true? default-collapsed?))) [])
-           collapse-timeout (hooks/use-ref nil)
-           [collapsed-value] (hooks/use-atom collapsed?)
-           [render-content-value] (hooks/use-atom render-content?)
-           transition-ms 200
-           on-pointer-down (fn [e]
-                             (util/stop e)
-                             (let [next-collapsed? (not @collapsed?)]
-                               (when-let [timeout-id (hooks/deref collapse-timeout)]
-                                 (js/clearTimeout timeout-id)
-                                 (hooks/set-ref! collapse-timeout nil))
-                               (when (false? next-collapsed?)
-                                 (reset! render-content? true))
-                               (reset! collapsed? next-collapsed?)
-                               (when (true? next-collapsed?)
-                                 (hooks/set-ref!
-                                  collapse-timeout
-                                  (js/setTimeout
-                                   (fn []
-                                     (reset! render-content? false)
-                                     (hooks/set-ref! collapse-timeout nil))
-                                   transition-ms)))
-                               (when on-pointer-down
-                                 (on-pointer-down next-collapsed?))))]
-       (hooks/use-effect!
-        (fn []
-          (when-let [f init-collapsed]
-            (f collapsed?))
-          #(when-let [timeout-id (hooks/deref collapse-timeout)]
-             (js/clearTimeout timeout-id)))
-        [])
-       [:div.flex.flex-col
-        {:class class}
-        (foldable-title {:on-pointer-down on-pointer-down
-                         :header header
-                         :title-trigger? title-trigger?
-                         :collapsed? collapsed?})
+        render-content? (hooks/use-memo #(atom (not (true? default-collapsed?))) [])
+        collapse-timeout (hooks/use-ref nil)
+        [collapsed-value] (hooks/use-atom collapsed?)
+        [render-content-value] (hooks/use-atom render-content?)
+        transition-ms 200
+        on-pointer-down (fn [e]
+                          (util/stop e)
+                          (let [next-collapsed? (not @collapsed?)]
+                            (when-let [timeout-id (hooks/deref collapse-timeout)]
+                              (js/clearTimeout timeout-id)
+                              (hooks/set-ref! collapse-timeout nil))
+                            (when (false? next-collapsed?)
+                              (reset! render-content? true))
+                            (reset! collapsed? next-collapsed?)
+                            (when (true? next-collapsed?)
+                              (hooks/set-ref!
+                               collapse-timeout
+                               (js/setTimeout
+                                (fn []
+                                  (reset! render-content? false)
+                                  (hooks/set-ref! collapse-timeout nil))
+                                transition-ms)))
+                            (when on-pointer-down
+                              (on-pointer-down next-collapsed?))))]
+    (hooks/use-effect!
+     (fn []
+       (when-let [f init-collapsed]
+         (f collapsed?))
+       #(when-let [timeout-id (hooks/deref collapse-timeout)]
+          (js/clearTimeout timeout-id)))
+     [])
+    [:div.flex.flex-col
+     {:class class}
+     (foldable-title {:on-pointer-down on-pointer-down
+                      :header header
+                      :title-trigger? title-trigger?
+                      :collapsed? collapsed?})
         ;; Don't stop propagation for the pointer down event to the high level content container.
         ;; That may cause the drag function to not work.
-        [:div.ls-foldable-content
-         {:class (when collapsed-value "is-collapsed")
-          :aria-hidden (boolean collapsed-value)}
-         [:div.ls-foldable-content-inner
-          (if (fn? content)
-            (when render-content-value (content))
-            content)]]]))
+     [:div.ls-foldable-content
+      {:class (when collapsed-value "is-collapsed")
+       :aria-hidden (boolean collapsed-value)}
+      [:div.ls-foldable-content-inner
+       (if (fn? content)
+         (when render-content-value (content))
+         content)]]]))
 
 (hsx/defc admonition
   [type content]
