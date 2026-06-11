@@ -175,118 +175,149 @@ let tmp_sqlite_path dir =
     ^ string_of_int !tmp_sqlite_counter
     ^ ".tmp.sqlite")
 
+let validate_graph_name graph =
+  let graph_name = graph |> Cli_primitive.string_of_graph |> String.trim in
+  if graph_name = "" || graph_name = "." || graph_name = ".." then
+    Error (Error.invalid_options "graph name must not be empty, '.', or '..'")
+  else Ok (Cli_primitive.create_graph graph_name)
+
+let graph_and_repo graph =
+  Error.bind (validate_graph_name graph) (fun graph ->
+      Ok (graph, Cli_config.graph_to_repo graph))
+
+let optional_graph_and_repo graph =
+  match graph with
+  | None -> Ok (None, None)
+  | Some graph ->
+      Error.bind (graph_and_repo graph) (fun (graph, repo) ->
+          Ok (Some graph, Some repo))
+
 let explicit_graph_and_repo globals =
-  let graph =
-    Option.bind globals.Global_opts.graph (fun graph ->
-        graph |> Cli_primitive.string_of_graph |> Cli_primitive.non_empty
-        |> Option.map Cli_primitive.create_graph)
-  in
-  (graph, Option.map Cli_config.graph_to_repo graph)
+  optional_graph_and_repo globals.Global_opts.graph
 
 let build ?registry:_ config globals parsed =
   Error.bind (validate_parsed parsed) (fun () ->
-      let selected_graph = Cli_config.pick_graph config globals in
-      let selected_repo = Option.map Cli_config.graph_to_repo selected_graph in
-      match parsed with
-      | Parsed_list -> Ok Graph_list
-      | Parsed_create opts -> (
-          match explicit_graph_and_repo globals with
-          | Some graph, Some repo -> Ok (Graph_create { graph; repo; opts })
-          | _ -> Error (Error.missing_graph ()))
-      | Parsed_switch -> (
-          match explicit_graph_and_repo globals with
-          | Some graph, Some repo -> Ok (Graph_switch { graph; repo })
-          | _ -> Error (Error.missing_graph ()))
-      | Parsed_remove -> (
-          match explicit_graph_and_repo globals with
-          | Some graph, Some repo -> Ok (Graph_remove { graph; repo })
-          | _ -> Error (Error.missing_graph ()))
-      | Parsed_validate opts -> (
-          match (selected_graph, selected_repo) with
-          | Some graph, Some repo ->
-              Ok (Graph_validate { graph; repo; fix = opts.fix })
-          | _ -> Error (Error.missing_graph ()))
-      | Parsed_info -> (
-          match (selected_graph, selected_repo) with
-          | Some graph, Some repo -> Ok (Graph_info { graph; repo })
-          | _ -> Error (Error.missing_graph ()))
-      | Parsed_backup_list -> (
-          match (selected_graph, selected_repo) with
-          | Some graph, Some repo -> Ok (Graph_backup_list { graph; repo })
-          | _ -> Error (Error.missing_repo "repo is required for backup list"))
-      | Parsed_backup_create opts -> (
-          match (selected_graph, selected_repo) with
-          | Some graph, Some repo ->
-              let name =
-                Option.bind opts.name (fun value ->
-                    let value = String.trim value in
-                    if value = "" then None else Some value)
-              in
-              Ok
-                (Graph_backup_create
-                   {
-                     graph;
-                     repo;
-                     name;
-                     backup_name = Some (build_backup_name repo name);
-                   })
-          | _ -> Error (Error.missing_repo "repo is required for backup create")
-          )
-      | Parsed_backup_restore opts -> (
-          match (selected_graph, selected_repo) with
-          | Some source_graph, Some source_repo ->
-              let src = String.trim opts.src in
-              let dst = String.trim (Cli_primitive.string_of_graph opts.dst) in
-              if dst = "" then
-                Error
-                  (Error.make
-                     (Edn_util.keyword_t "missing-dst")
-                     "destination graph name is required")
-              else
-                let dst_graph = Cli_primitive.create_graph dst in
-                let dst_repo = Cli_config.graph_to_repo dst_graph in
-                Ok
-                  (Graph_backup_restore
-                     {
-                       source_repo;
-                       source_graph;
-                       dst_repo;
-                       dst_graph;
-                       src;
-                       dst;
-                     })
-          | _ ->
-              Error (Error.missing_repo "repo is required for backup restore"))
-      | Parsed_backup_remove opts -> (
-          match (selected_graph, selected_repo) with
-          | Some graph, Some repo ->
-              Ok
-                (Graph_backup_remove { graph; repo; src = String.trim opts.src })
-          | _ -> Error (Error.missing_repo "repo is required for backup remove")
-          )
-      | Parsed_export opts -> (
-          match (selected_graph, selected_repo) with
-          | Some graph, Some repo -> (
-              match (opts.export_type, opts.file) with
-              | Edn, None ->
-                  Error
-                    (Error.invalid_options
-                       "graph export --type edn requires --file")
-              | Sqlite, _ -> Ok (Graph_export { graph; repo; opts })
-              | Edn, Some _ -> Ok (Graph_export { graph; repo; opts }))
-          | _ -> Error (Error.missing_repo "repo is required for export"))
-      | Parsed_import opts -> (
-          match (selected_graph, selected_repo) with
-          | Some graph, Some repo ->
-              Ok
-                (Graph_import
-                   {
-                     graph;
-                     repo;
-                     opts;
-                     require_missing_graph = opts.import_type = Import_sqlite;
-                   })
-          | _ -> Error (Error.missing_repo "repo is required for import")))
+      Error.bind (explicit_graph_and_repo globals)
+        (fun (explicit_graph, explicit_repo) ->
+          Error.bind
+            (optional_graph_and_repo (Cli_config.pick_graph config globals))
+            (fun (selected_graph, selected_repo) ->
+              match parsed with
+              | Parsed_list -> Ok Graph_list
+              | Parsed_create opts -> (
+                  match (explicit_graph, explicit_repo) with
+                  | Some graph, Some repo ->
+                      Ok (Graph_create { graph; repo; opts })
+                  | _ -> Error (Error.missing_graph ()))
+              | Parsed_switch -> (
+                  match (explicit_graph, explicit_repo) with
+                  | Some graph, Some repo -> Ok (Graph_switch { graph; repo })
+                  | _ -> Error (Error.missing_graph ()))
+              | Parsed_remove -> (
+                  match (explicit_graph, explicit_repo) with
+                  | Some graph, Some repo -> Ok (Graph_remove { graph; repo })
+                  | _ -> Error (Error.missing_graph ()))
+              | Parsed_validate opts -> (
+                  match (selected_graph, selected_repo) with
+                  | Some graph, Some repo ->
+                      Ok (Graph_validate { graph; repo; fix = opts.fix })
+                  | _ -> Error (Error.missing_graph ()))
+              | Parsed_info -> (
+                  match (selected_graph, selected_repo) with
+                  | Some graph, Some repo -> Ok (Graph_info { graph; repo })
+                  | _ -> Error (Error.missing_graph ()))
+              | Parsed_backup_list -> (
+                  match (selected_graph, selected_repo) with
+                  | Some graph, Some repo ->
+                      Ok (Graph_backup_list { graph; repo })
+                  | _ ->
+                      Error
+                        (Error.missing_repo "repo is required for backup list"))
+              | Parsed_backup_create opts -> (
+                  match (selected_graph, selected_repo) with
+                  | Some graph, Some repo ->
+                      let name =
+                        Option.bind opts.name (fun value ->
+                            let value = String.trim value in
+                            if value = "" then None else Some value)
+                      in
+                      Ok
+                        (Graph_backup_create
+                           {
+                             graph;
+                             repo;
+                             name;
+                             backup_name = Some (build_backup_name repo name);
+                           })
+                  | _ ->
+                      Error
+                        (Error.missing_repo "repo is required for backup create")
+                  )
+              | Parsed_backup_restore opts -> (
+                  match (selected_graph, selected_repo) with
+                  | Some source_graph, Some source_repo ->
+                      let src = String.trim opts.src in
+                      let dst =
+                        String.trim (Cli_primitive.string_of_graph opts.dst)
+                      in
+                      if dst = "" then
+                        Error
+                          (Error.make
+                             (Edn_util.keyword_t "missing-dst")
+                             "destination graph name is required")
+                      else
+                        let dst_graph = Cli_primitive.create_graph dst in
+                        let dst_repo = Cli_config.graph_to_repo dst_graph in
+                        Ok
+                          (Graph_backup_restore
+                             {
+                               source_repo;
+                               source_graph;
+                               dst_repo;
+                               dst_graph;
+                               src;
+                               dst;
+                             })
+                  | _ ->
+                      Error
+                        (Error.missing_repo
+                           "repo is required for backup restore"))
+              | Parsed_backup_remove opts -> (
+                  match (selected_graph, selected_repo) with
+                  | Some graph, Some repo ->
+                      Ok
+                        (Graph_backup_remove
+                           { graph; repo; src = String.trim opts.src })
+                  | _ ->
+                      Error
+                        (Error.missing_repo "repo is required for backup remove")
+                  )
+              | Parsed_export opts -> (
+                  match (selected_graph, selected_repo) with
+                  | Some graph, Some repo -> (
+                      match (opts.export_type, opts.file) with
+                      | Edn, None ->
+                          Error
+                            (Error.invalid_options
+                               "graph export --type edn requires --file")
+                      | Sqlite, _ -> Ok (Graph_export { graph; repo; opts })
+                      | Edn, Some _ -> Ok (Graph_export { graph; repo; opts }))
+                  | _ ->
+                      Error (Error.missing_repo "repo is required for export"))
+              | Parsed_import opts -> (
+                  match (selected_graph, selected_repo) with
+                  | Some graph, Some repo ->
+                      Ok
+                        (Graph_import
+                           {
+                             graph;
+                             repo;
+                             opts;
+                             require_missing_graph =
+                               opts.import_type = Import_sqlite;
+                           })
+                  | _ ->
+                      Error (Error.missing_repo "repo is required for import")))))
 
 let graphs_dir config = Filename.concat config.Cli_config.root_dir "graphs"
 
