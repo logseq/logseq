@@ -213,9 +213,21 @@
                                (when-not @done?
                                  (when-let [^js input (hooks/deref *input-ref)]
                                    (when-let [^js picker (.closest input ".cp__emoji-icon-picker")]
-                                     (let [^js tgt (.-target e)]
+                                     (let [^js tgt (.-target e)
+                                           ;; A focus move onto a menu item is the user
+                                           ;; navigating the parent menu — Radix detects
+                                           ;; sibling-submenu closes through exactly that
+                                           ;; focusin, so bouncing it back would suppress
+                                           ;; the close and leave two submenus open side
+                                           ;; by side. The grab only needs to counter
+                                           ;; Radix's content-container refocus
+                                           ;; (role="menu"), which no [role=menuitem]
+                                           ;; ancestor matches.
+                                           menuitem? (and (instance? js/Element tgt)
+                                                          (some? (.closest ^js tgt "[role='menuitem']")))]
                                        (when (and (not= tgt input)
-                                                  (not (.contains picker tgt)))
+                                                  (not (.contains picker tgt))
+                                                  (not menuitem?))
                                          (.focus input)))))))]
                  (.addEventListener js/document "focusin" handler true)
                  (js/setTimeout

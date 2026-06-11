@@ -240,6 +240,32 @@
   }
 }
 
+/* `:type "search"` (kept for semantics + the mobile keyboard's search
+   key) makes WebKit/Chrome render a native cancel-X inside the input
+   (a fixed UA bitmap that ignores CSS color). The picker provides its
+   own themed clear button (`a.x` in icon-search), which also resets
+   highlight state and scrolls the results back to the top — hide the
+   native chrome so there is a single, on-brand clear affordance. */
+.cp__emoji-icon-picker input[type="search"]::-webkit-search-cancel-button,
+.cp__emoji-icon-picker input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+/* Reveal the keyboard-shortcut hint when the cursor hovers over a section
+   header. Mirrors `.keyboard-shortcut` reveal in container.css for sidebar nav.
+   `!important` is required to override the `!opacity-0` Tailwind utility set
+   when focus is in the search input. The 250ms delay is hover-intent: a
+   user clicking straight through the chevron won't see the hint flash. */
+@media (hover: hover) and (pointer: fine) {
+  .section-header:hover .section-header-hint {
+    opacity: 0.5 !important;
+    pointer-events: auto !important;
+    transition-delay: 250ms;
+  }
+}
+
 /* Keyboard navigation highlights — React-props-driven via CSS classes.
    The outline
    follows each tile's own border-radius (browsers do this for outline
@@ -343,6 +369,21 @@
       border-radius: 4px;
     }
   }
+}
+
+/* Same unified treatment for the icon-picker topbar. The color-picker
+   trigger and the trash button each had their own focus stylings (browser
+   default + shui's --ring respectively); pulling them onto --lx-accent-09
+   so all topbar stops match. The .tab-item rule (above) already uses the
+   same token; keep it as-is. */
+.cp__emoji-icon-picker .tabs-section :is(
+  .color-picker-trigger,
+  .ui__button[data-action=del]
+):focus-visible {
+  outline: 2px solid var(--lx-accent-09);
+  outline-offset: 2px;
+  box-shadow: none;
+  border-radius: 4px;
 }
 
 /* ── Color Picker Trigger (topbar) ── */

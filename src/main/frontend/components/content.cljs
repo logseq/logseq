@@ -60,6 +60,7 @@
       (shui/dropdown-menu-sub-trigger
        (t :context-menu/set-icon))
       (shui/dropdown-menu-sub-content
+       {:class "!p-0"}
        [:div.p-1
         (icon-component/icon-search
          {:on-chosen (fn [_e icon]
@@ -217,6 +218,7 @@
         (shui/dropdown-menu-sub-trigger
          (t :command.editor/add-reaction))
         (shui/dropdown-menu-sub-content
+         {:class "!p-0"}
          [:div.p-1
           (icon-component/icon-search
            (merge icon-component/reaction-picker-opts
@@ -239,6 +241,7 @@
         (shui/dropdown-menu-sub-trigger
          (t :context-menu/set-icon))
         (shui/dropdown-menu-sub-content
+         {:class "!p-0"}
          [:div.p-1
           (let [icon-value (:logseq.property/icon block)]
             (icon-component/icon-search
