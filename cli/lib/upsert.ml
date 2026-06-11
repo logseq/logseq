@@ -1031,7 +1031,7 @@ let build ?registry:_ config _globals parsed =
           | Parsed_task opts -> build_task repo graph opts))
 
 let kw value = Edn_util.keyword value
-let sym value = Edn_util.string ("~$" ^ value)
+let sym value = Edn_util.symbol value
 let vector values = Edn_util.vector values
 let list values = Edn_util.list values
 
