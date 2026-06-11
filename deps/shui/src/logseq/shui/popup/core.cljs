@@ -76,8 +76,7 @@
   [^js target ^js target']
   (and target target'
        (or (= target target')
-           (and (.-contains target) (.contains target target'))
-           (and (.-contains target') (.contains target' target)))))
+           (and (.-contains target) (.contains target target')))))
 
 (defn- element?
   [target]
