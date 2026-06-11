@@ -32,27 +32,6 @@
        (nil? (:block/updated-at entity))
        (int? (:block/created-at entity))))
 
-(defn delete-property
-  [db property-key]
-  (if (d/entity db property-key)
-    (let [remove-datoms (->> (d/datoms db :avet property-key)
-                             (map :e)
-                             (distinct)
-                             (mapv (fn [id]
-                                     [:db/retract id property-key])))]
-      (conj remove-datoms [:db/retractEntity property-key]))
-    (let [eids (d/q
-                 '[:find [?e ...]
-                   :in $ ?property-key
-                   :where
-                   [?e ?property-key ?v]]
-                 db
-                 property-key)]
-      (map
-        (fn [eid]
-          [:db/retract eid property-key])
-        eids))))
-
 (defn- ^:large-vars/cleanup-todo fix-invalid-blocks!
   [conn errors]
   (let [db @conn
@@ -61,7 +40,7 @@
                        (let [entity (d/entity db (:db/id entity))]
                          (cond
                            (= :logseq.property.embedding/hnsw-label (:db/ident entity))
-                           (delete-property db :logseq.property.embedding/hnsw-label)
+                           (db-migrate/delete-property db :logseq.property.embedding/hnsw-label)
                            (some? (:logseq.property/parent entity))
                            [[:db/retract (:db/id entity) :logseq.property/parent]]
                            (some? (:hide? entity))
