@@ -563,7 +563,7 @@
         (is (empty? (:txs pull-response)))))))
 
 (deftest repair-blocks-response-returns-server-block-data-test
-  (testing "repair block response returns transactable maps with lookup refs"
+  (testing "repair block response returns transactable datoms with lookup refs"
     (let [{:keys [conn self]} (make-server-self)
           page-uuid (random-uuid)
           block-uuid (random-uuid)]
@@ -580,14 +580,25 @@
          :block/parent [:block/uuid page-uuid]
          :user.property/rating 1
          :block/order "a0"}])
-      (let [{:keys [tx]} (sync-handler/repair-blocks-response self [block-uuid])
-            [block-map] (protocol/transit->tx tx)]
-        (is (= block-uuid (:block/uuid block-map)))
-        (is (= "child" (:block/title block-map)))
-        (is (= [:block/uuid page-uuid] (:block/page block-map)))
-        (is (= [:block/uuid page-uuid] (:block/parent block-map)))
-        (is (= 1 (:user.property/rating block-map)))
-        (is (= "a0" (:block/order block-map)))))))
+      (let [{:keys [tx]} (sync-handler/repair-blocks-response self [page-uuid block-uuid])
+            tx-data (protocol/transit->tx tx)
+            page-temp-id (str "repair-block-" page-uuid)
+            temp-id (str "repair-block-" block-uuid)
+            attr->value (->> tx-data
+                             (filter (fn [[_op e]] (= temp-id e)))
+                             (map (fn [[op e attr value]]
+                                    [attr {:op op :e e :value value}]))
+                             (into {}))]
+        (is (every? (fn [[op e _attr _value]]
+                      (and (= :db/add op)
+                           (contains? #{page-temp-id temp-id} e)))
+                    tx-data))
+        (is (= block-uuid (get-in attr->value [:block/uuid :value])))
+        (is (= "child" (get-in attr->value [:block/title :value])))
+        (is (= page-temp-id (get-in attr->value [:block/page :value])))
+        (is (= page-temp-id (get-in attr->value [:block/parent :value])))
+        (is (= 1 (get-in attr->value [:user.property/rating :value])))
+        (is (= "a0" (get-in attr->value [:block/order :value])))))))
 
 (deftest tx-batch-keeps-created-by-ref-lookup-payload-test
   (testing "created-by lookup payload is preserved for save-block tx"

@@ -8,6 +8,7 @@
             [logseq.db-sync.common :as common]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.protocol :as protocol]
+            [logseq.db-sync.repair :as repair]
             [logseq.db-sync.snapshot :as snapshot]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.tx-sanitize :as tx-sanitize]
@@ -301,47 +302,11 @@
     (catch :default _
       nil)))
 
-(defn- ref-attr?
-  [db attr]
-  (= :db.type/ref (get-in (d/schema db) [attr :db/valueType])))
-
-(defn- ref-value
-  [db attr v]
-  (if-let [entity (and (ref-attr? db attr)
-                       (number? v)
-                       (d/entity db v))]
-    (if-let [block-uuid (:block/uuid entity)]
-      [:block/uuid block-uuid]
-      (or (:db/ident entity) v))
-    v))
-
-(defn- many-attr?
-  [db attr]
-  (= :db.cardinality/many (get-in (d/schema db) [attr :db/cardinality])))
-
-(defn- assoc-repair-attr
-  [db m attr value]
-  (let [value' (ref-value db attr value)]
-    (if (many-attr? db attr)
-      (update m attr (fnil conj #{}) value')
-      (assoc m attr value'))))
-
-(defn- repair-block-map
-  [db block-uuid]
-  (when-let [eid (d/entid db [:block/uuid block-uuid])]
-    (let [datoms (d/datoms db :eavt eid)]
-      (reduce (fn [m datom]
-                (assoc-repair-attr db m (:a datom) (:v datom)))
-              {}
-              datoms))))
-
 (defn repair-blocks-response
   [^js self block-uuids]
   (ensure-conn! self)
   (let [db @(.-conn self)
-        tx-data (->> block-uuids
-                     (keep (partial repair-block-map db))
-                     vec)]
+        tx-data (repair/tx-data db block-uuids)]
     {:tx (protocol/tx->transit tx-data)}))
 
 (defn- block-uuid-lookup-ref
