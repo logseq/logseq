@@ -1,5 +1,6 @@
 (ns logseq.shui.demo
   (:require [dommy.core :refer-macros [sel1]]
+            [frontend.handler.notification :as notification]
             [logseq.shui.dialog.core :as dialog-core]
             [logseq.shui.form.core :refer [yup] :as form-core]
             [logseq.shui.hooks :as hooks]
@@ -244,6 +245,65 @@
             {:on-click #(set-open! false)
              :size :md} "🍄 * Footer"))))))
 
+(hsx/defc sample-notifications
+  []
+  (let [[last-dismissed set-last-dismissed!] (hooks/use-state nil)
+        progress-id :demo/notification-progress
+        callback-id :demo/notification-callback]
+    [:div.flex.flex-col.gap-3
+     [:div.flex.flex-row.flex-wrap.gap-2
+      (shui/button
+        {:variant :outline
+         :size :sm
+         :on-click #(notification/show! "Saved successfully" :success)}
+        "Success")
+      (shui/button
+        {:variant :outline
+         :size :sm
+         :on-click #(notification/show! "Background sync is running" :info)}
+        "Info")
+      (shui/button
+        {:variant :outline
+         :size :sm
+         :on-click #(notification/show! "Storage space is almost full" :warning false)}
+        "Warning")
+      (shui/button
+        {:variant :destructive
+         :size :sm
+         :on-click #(notification/show! "Upload failed. Fix it before retrying." :error false)}
+        "Persistent error")]
+
+     [:div.flex.flex-row.flex-wrap.gap-2
+      (shui/button
+        {:class "primary-green"
+         :size :sm
+         :on-click (fn []
+                     (notification/show! "Syncing notifications demo..." :info true progress-id 10000)
+                     (js/setTimeout
+                      #(notification/show! "Notifications demo synced" :success true progress-id 1500)
+                      1200))}
+        "Update same id")
+      (shui/button
+        {:variant :secondary
+         :size :sm
+         :on-click #(notification/clear! progress-id)}
+        "Clear updated one")
+      (shui/button
+        {:variant :secondary
+         :size :sm
+         :on-click #(notification/show! "Dismiss me to trigger callback" :warning true callback-id 4000
+                                      (fn [uid] (set-last-dismissed! (name uid))))}
+        "Dismiss callback")
+      (shui/button
+        {:variant :ghost
+         :size :sm
+         :on-click notification/clear-all!}
+        "Clear all")]
+
+     [:div.text-sm.opacity-70
+      "Last dismissed notification: "
+      [:code (or last-dismissed "none")]]]))
+
 (hsx/defc page []
   (shui/tooltip-provider
     [:div.sm:p-10
@@ -336,6 +396,9 @@
            :class "primary-orange"
            :size :md}
           "Custom icon")])
+
+     (section-item "Notification"
+       (sample-notifications))
 
      [:div.flex.flex-row.space-x-16.items-center
       ;; Tips
