@@ -347,7 +347,7 @@ let result_value result =
   | _ -> Edn_util.map [ (Edn_util.keyword "result", result) ]
 
 let kw name = Edn_util.keyword name
-let sym name = Edn_util.string ("~$" ^ name)
+let sym name = Edn_util.symbol name
 let vector values = Edn_util.vector values
 let repo_string repo = Cli_primitive.string_of_repo repo
 let graph_string graph = Cli_primitive.string_of_graph graph

@@ -201,7 +201,7 @@ let value_rank value =
   | Any (Bool _) -> 1
   | Any (Int _ | Bigint _ | Float _ | Decimal _) -> 2
   | Any (String _ | Symbol _ | Keyword _ | Tagged ("uuid", _)) -> 3
-  | Any (Tagged ("bytes", _)) -> 4
+  | Any (Tagged ("transit/bytes", _)) -> 4
   | Any (List _ | Vector _ | Set _) -> 5
   | Any (Map _) -> 6
   | Any (Char _ | Tagged _) -> 7
@@ -336,7 +336,7 @@ let status_query invoke_config repo =
          [ Edn_util.any Task_status.status_closed_values_query ])
 
 let kw value = Edn_util.keyword value
-let sym value = Edn_util.string ("~$" ^ value)
+let sym value = Edn_util.symbol value
 let vector values = Edn_util.vector values
 let list values = Edn_util.list values
 let normalized_lookup_name value = String.lowercase_ascii (String.trim value)
