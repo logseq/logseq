@@ -1050,15 +1050,30 @@
   [{:keys [name className value onChange _children]}]
   (let [year? (or (= name "years")
                   (and (string? className)
-                       (string/includes? className "year")))]
+                       (string/includes? className "year")))
+        [year-value set-year-value!] (hooks/use-state (str value))]
+    (hooks/use-effect!
+     (fn []
+       (set-year-value! (str value))
+       nil)
+     [value])
     [:div.months-years-nav {:class className}
      (if year?
        (shui/input
-        {:on-change (fn [v]
-                      (when v
-                        (onChange (day-picker-change-event v))))
+        {:on-change (fn [e]
+                      (let [input-value (util/evalue e)]
+                        (set-year-value! input-value)
+                        (when (re-matches #"\d{4}" input-value)
+                          (onChange (day-picker-change-event input-value)))))
+         :on-focus (fn [e]
+                     (some-> (.-target e) (.select)))
+         :on-click (fn [e]
+                     (some-> (.-target e) (.select)))
+         :on-blur (fn [_]
+                    (when-not (re-matches #"\d{4}" year-value)
+                      (set-year-value! (str value))))
          :class "h-8 ml-2 !w-[5.75rem] !px-3 !py-0"
-         :value value
+         :value year-value
          :type "number"
          :min 1
          :max 9999})
