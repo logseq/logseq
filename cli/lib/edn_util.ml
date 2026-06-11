@@ -70,7 +70,7 @@ let as_uuid = function
   | _ -> None
 
 let as_bytes = function
-  | Melange_edn.Any (Melange_edn.Tagged ("bytes", value)) ->
+  | Melange_edn.Any (Melange_edn.Tagged (("bytes" | "transit/bytes"), value)) ->
       Option.map Bytes.of_string (as_string value)
   | _ -> None
 
