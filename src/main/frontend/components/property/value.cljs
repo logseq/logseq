@@ -1615,6 +1615,17 @@
 (def asset-picker-items-grid-style
   {:grid-template-columns "repeat(auto-fill, minmax(140px, 1fr))"})
 
+(def ^:private asset-picker-page-size
+  "How many asset cells to add per lazy-load page. Each cell mounts an async
+   image load, so rendering every asset in a large graph (thousands) at once
+   saturates the main thread and makes the picker unresponsive. We render a
+   page at a time and grow on scroll; search is the fast path to narrow down."
+  60)
+
+(def ^:private asset-picker-scroll-threshold-px
+  "Distance from the bottom of the scroll area at which the next page loads."
+  240)
+
 (defn- asset-value-id
   [value]
   (cond
@@ -1756,7 +1767,10 @@
 
 (hsx/defc asset-grid-toolbar
   [saving? search-text set-search-text! open-file-picker!]
-  [:div.flex.items-center.gap-2.mb-2.min-w-0
+  ;; Sticky so the search stays reachable while scrolling through lazily
+  ;; loaded results (the negative margins cancel the scroll container's
+  ;; padding so the bar spans full width and content scrolls under it).
+  [:div.flex.items-center.gap-2.min-w-0.sticky.-top-3.-mx-3.px-3.pt-3.pb-2.mb-1.z-10.bg-popover
    [:input.form-input.flex-1.min-w-0.text-sm
     {:type "text"
      :value (or search-text "")
@@ -1787,7 +1801,12 @@
       :style {:aspect-ratio "1 / 1"}
       :class (when selected? "ring-2 ring-primary border-primary")
       :aria-pressed selected?
-      :on-click #(toggle-asset! asset)
+      ;; Capture the click before the inner asset-container's bubble-phase
+      ;; handler can stopPropagation/open the lightbox, so selecting always
+      ;; wins regardless of the thumbnail's own click handling.
+      :onClickCapture (fn [e]
+                        (util/stop e)
+                        (toggle-asset! asset))
       :on-key-down (fn [e]
                      (when (contains? #{" " "Enter"} (util/ekey e))
                        (util/stop e)
@@ -1810,10 +1829,11 @@
                       :aria-hidden true})]]))
 
 (hsx/defc asset-grid-assets
+  "Renders the given (already ordered and capped) assets as a grid."
   [assets selected-ids toggle-asset!]
   [:div.grid.gap-2
    {:style asset-picker-items-grid-style}
-   (for [asset (assets-selected-first assets selected-ids)]
+   (for [asset assets]
      ^{:key (str (:block/uuid asset))}
      [asset-grid-cell asset
       (contains? selected-ids (:db/id asset))
@@ -1825,6 +1845,7 @@
         [selected-ids set-selected-ids!] (hooks/use-state (asset-selected-ids block property))
         [saving? set-saving!] (hooks/use-state false)
         [search-text set-search-text!] (hooks/use-state "")
+        [visible-count set-visible-count!] (hooks/use-state asset-picker-page-size)
         repo (state/get-current-repo)
         many? (db-property/many? property)
         select-assets! #(<select-assets! block property many? selected-ids set-selected-ids! on-chosen %)
@@ -1845,7 +1866,30 @@
                                        (set-assets! (vec (concat (or assets []) saved-assets)))
                                        (select-assets! saved-assets)))))
                                 (p/catch #(show-asset-picker-error! "Failed to add assets from picker" %))
-                                (p/finally #(set-saving! false))))))]
+                                (p/finally #(set-saving! false))))))
+        query (some-> search-text string/trim string/lower-case)
+        ;; Memoized so scroll-driven re-renders (which only bump visible-count)
+        ;; don't re-filter/re-sort the whole asset list.
+        ordered (hooks/use-memo
+                 (fn []
+                   (when (seq assets)
+                     (-> (if (string/blank? query)
+                           assets
+                           (filterv (fn [asset]
+                                      (some-> (:block/title asset)
+                                              string/lower-case
+                                              (string/includes? query)))
+                                    assets))
+                         (assets-selected-first selected-ids))))
+                 [assets query selected-ids])
+        total (count ordered)
+        visible (vec (take visible-count ordered))
+        on-scroll (fn [^js e]
+                    (let [el (.-target e)]
+                      (when (and (< (count visible) total)
+                                 (<= (- (.-scrollHeight el) (.-scrollTop el) (.-clientHeight el))
+                                     asset-picker-scroll-threshold-px))
+                        (set-visible-count! (+ visible-count asset-picker-page-size)))))]
     (hooks/use-effect!
      (fn []
        (p/let [asset-class (db/entity :logseq.class/Asset)
@@ -1853,8 +1897,13 @@
                         (db-async/<get-tag-objects repo (:db/id asset-class)))]
          (set-assets! (vec result))))
      [])
+    ;; Restart paging from the first page whenever the search query changes.
+    (hooks/use-effect!
+     (fn [] (set-visible-count! asset-picker-page-size) nil)
+     [query])
     [:div.asset-picker-grid.p-3
-     {:style asset-picker-grid-style}
+     {:style asset-picker-grid-style
+      :on-scroll on-scroll}
      (asset-grid-toolbar saving? search-text set-search-text! #(open-asset-file-picker! upload-files!))
      (cond
        (nil? assets)
@@ -1865,18 +1914,15 @@
         [:div (t :asset/picker-empty)]
         [:div.text-sm (t :asset/picker-empty-hint)]]
 
+       (empty? ordered)
+       [:div.p-4.opacity-60 (t :asset/picker-no-results)]
+
        :else
-       (let [query (some-> search-text string/trim string/lower-case)
-             filtered (if (string/blank? query)
-                        assets
-                        (filterv (fn [asset]
-                                   (some-> (:block/title asset)
-                                           string/lower-case
-                                           (string/includes? query)))
-                                 assets))]
-         (if (empty? filtered)
-           [:div.p-4.opacity-60 (t :asset/picker-no-results)]
-           (asset-grid-assets filtered selected-ids toggle-asset!))))]))
+       [:<>
+        (asset-grid-assets visible selected-ids toggle-asset!)
+        (when (< (count visible) total)
+          [:div.px-1.pt-2.text-xs.opacity-60
+           (t :asset/picker-more-results (- total (count visible)))])])]))
 
 (hsx/defc asset-value-picker
   [block property value opts]
