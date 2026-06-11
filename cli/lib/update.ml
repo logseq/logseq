@@ -316,7 +316,7 @@ let pull_by_uuid invoke_config repo selector uuid =
     (vector [ kw "block/uuid"; Edn_util.uuid uuid ])
 
 let normalized_page_name value = String.lowercase_ascii (String.trim value)
-let variable value = Edn_util.string ("~$" ^ value)
+let variable value = Edn_util.symbol value
 let list values = Edn_util.list values
 
 let tag_query selector =
@@ -328,7 +328,7 @@ let tag_query selector =
       vector [ variable "?tag"; kw "block/tags"; kw "logseq.class/Tag" ];
       list
         [
-          Edn_util.string "~$clojure.string/includes?";
+          Edn_util.symbol "clojure.string/includes?";
           variable "?title";
           variable "?query";
         ];
@@ -338,21 +338,21 @@ let tag_query selector =
       kw "result-transform";
       list
         [
-          Edn_util.string "~$fn";
+          Edn_util.symbol "fn";
           vector [ variable "result" ];
           list
             [
-              Edn_util.string "~$map";
+              Edn_util.symbol "map";
               list
                 [
-                  Edn_util.string "~$fn";
+                  Edn_util.symbol "fn";
                   vector
                     [
                       Edn_util.map [ (kw "keys", vector [ variable "title" ]) ];
                     ];
                   list
                     [
-                      Edn_util.string "~$d/entity";
+                      Edn_util.symbol "d/entity";
                       variable "$";
                       vector [ kw "block/name"; variable "title" ];
                     ];
