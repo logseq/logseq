@@ -705,12 +705,6 @@ should be done through this fn in order to get global config and config defaults
   (let [_ (use-sub :ui/viewport)]
     (enable-fold-button-right?)))
 
-(defn enable-journals?
-  ([]
-   (enable-journals? (get-current-repo)))
-  ([_repo]
-   true))
-
 (defn enable-flashcards?
   ([]
    (enable-flashcards? (get-current-repo)))
