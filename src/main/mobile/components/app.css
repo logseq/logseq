@@ -220,12 +220,6 @@ ul {
 
 .latex.initial {
   @apply pt-1;
-
-  .katex-html {
-    &[aria-hidden="true"] {
-      @apply hidden;
-    }
-  }
 }
 
 .ui__popover-content, .ui__dropdown-menu-content {
