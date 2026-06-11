@@ -3812,9 +3812,8 @@ let () =
           (match lookup with
           | Debug.By_id 42L -> pass
           | _ -> fail_test "expected debug id lookup");
-          expect_named_contains "debug selector"
-            (Melange_edn.to_edn_string selector)
-            "~$*");
+          expect_equal "debug selector" "[*]"
+            (Melange_edn.to_edn_string selector));
       let ident =
         expect_ok "debug ident option"
           (Debug.parse_ident_option ":logseq.class/Tag")
@@ -5581,6 +5580,7 @@ let () =
       let root = temp_dir "logseq-cli-parity-transport-io-" in
       let edn_path = Node.Path.join [| root; "data.edn" |] in
       let edn_utf8_path = Node.Path.join [| root; "utf8.edn" |] in
+      let edn_bytes_path = Node.Path.join [| root; "bytes.edn" |] in
       let sqlite_path = Node.Path.join [| root; "graph.sqlite" |] in
       let db_path = Node.Path.join [| root; "graph.db" |] in
       try
@@ -5616,6 +5616,19 @@ let () =
           (expect_some "utf8 title"
              (Edn_util.get_string edn_utf8_value "title"));
         ignore
+          (expect_ok "write bytes edn"
+             (effect_result "write bytes edn"
+                (Transport.write_output ~format:(Edn_util.keyword_t "edn")
+                   ~path:edn_bytes_path
+                   ~data:
+                     (Edn_util.map
+                        [
+                          ( Edn_util.keyword "payload",
+                            Edn_util.bytes (Bytes.of_string "payload") );
+                        ]))));
+        expect_named_contains "edn bytes use transit tag"
+          (read_file edn_bytes_path) "#transit/bytes";
+        ignore
           (expect_ok "write sqlite"
              (effect_result "write sqlite"
                 (Transport.write_output
@@ -5632,6 +5645,8 @@ let () =
         expect_equal "sqlite bytes" "sqlite-bytes"
           (Bytes.to_string
              (expect_some "sqlite bytes" (Edn_util.as_bytes sqlite_value)));
+        expect_named_contains "read sqlite uses transit bytes tag"
+          (Melange_edn.to_edn_string sqlite_value) "#transit/bytes";
         ignore
           (expect_ok "write db"
              (effect_result "write db"
@@ -5647,6 +5662,8 @@ let () =
         expect_equal "db bytes" "db"
           (Bytes.to_string
              (expect_some "db bytes" (Edn_util.as_bytes db_value)));
+        expect_named_contains "read db uses transit bytes tag"
+          (Melange_edn.to_edn_string db_value) "#transit/bytes";
         expect_error_code "bad write format" ":unsupported-output-format"
           (effect_result "bad write format"
              (Transport.write_output
@@ -5667,12 +5684,23 @@ let () =
     "CLI parity transport thread-api invoke sends transit args and decodes \
      resultTransit" (fun () ->
       let request_count = ref 0 in
+      let large_int = 1_773_666_723_828L in
       let server =
         invoke_server (fun body ->
             incr request_count;
             expect_named_contains "invoke method" body "thread-api/q";
             expect_named_contains "invoke repo" body "logseq_db_alpha";
             expect_named_contains "invoke args transit field" body "argsTransit";
+            let args =
+              expect_some "invoke args" (Edn_util.as_seq (invoke_args body))
+            in
+            let query =
+              expect_some "invoke query"
+                (Edn_util.as_seq (List.nth args 1))
+            in
+            expect_int64 "invoke large int" large_int
+              (expect_some "invoke large int value"
+                 (Edn_util.as_int64 (List.nth query 5)));
             "\"ok\"")
       in
       with_server server (fun base_url ->
@@ -5691,19 +5719,57 @@ let () =
                    (Edn_util.vector_t
                       [
                         Edn_util.keyword "find";
-                        Edn_util.string "~$?title";
+                        Edn_util.symbol "?title";
                         Edn_util.keyword "where";
                         Edn_util.vector
                           [
-                            Edn_util.string "~$?b";
+                            Edn_util.symbol "?b";
                             Edn_util.keyword "block/title";
-                            Edn_util.string "~$?title";
+                            Edn_util.symbol "?title";
                           ];
+                        Edn_util.keyword "created-at";
+                        Edn_util.int64 large_int;
                       ]))
           in
           expect_equal "decoded invoke result" "ok"
             (expect_some "invoke result string" (Edn_util.as_string result));
           expect_int "one invoke request" 1 !request_count;
+          Js.Promise.resolve pass));
+
+  test_promise
+    "CLI parity transport keeps prefixed symbol-looking strings as strings"
+    (fun () ->
+      let server =
+        invoke_server (fun body ->
+            let args =
+              expect_some "invoke args" (Edn_util.as_seq (invoke_args body))
+            in
+            let query =
+              expect_some "invoke query" (Edn_util.as_seq (List.nth args 1))
+            in
+            expect_equal "string stays string" "~$?title"
+              (expect_some "string value"
+                 (Edn_util.as_string (List.nth query 1)));
+            "\"ok\"")
+      in
+      with_server server (fun base_url ->
+          let invoke_config =
+            {
+              Transport.base_url;
+              timeout_span = Time.span_of_ms 1_000L;
+              profile_session = None;
+            }
+          in
+          let* result =
+            effect_to_promise
+              (Transport.thread_api_q invoke_config
+                 ~repo:(Cli_primitive.create_repo "logseq_db_alpha")
+                 ~query:
+                   (Edn_util.vector_t
+                      [ Edn_util.keyword "find"; Edn_util.string "~$?title" ]))
+          in
+          expect_equal "decoded invoke result" "ok"
+            (expect_some "invoke result string" (Edn_util.as_string result));
           Js.Promise.resolve pass));
 
   test_promise

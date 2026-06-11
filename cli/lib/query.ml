@@ -353,8 +353,7 @@ let command_id = function
 let validate_parsed _ = Ok ()
 
 let symbol_is name = function
-  | Melange_edn.Any (Melange_edn.String value) -> value = "~$" ^ name
-  | Any (Symbol value) -> value = name
+  | Melange_edn.Any (Melange_edn.Symbol value) -> value = name
   | _ -> false
 
 let query_in_ends_with_percent query =

@@ -1,7 +1,7 @@
 type status = { ident : Cli_primitive.keyword; value : string }
 
 let kw value = Edn_util.keyword value
-let sym value = Edn_util.string ("~$" ^ value)
+let sym value = Edn_util.symbol value
 let vector values = Edn_util.vector values
 let vector_t values = Edn_util.vector_t values
 
