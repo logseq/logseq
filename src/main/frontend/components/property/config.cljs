@@ -259,7 +259,7 @@
                      :icon (:logseq.property/icon block)
                      :description (or (db-property/property-value-content (:logseq.property/description block)) "")})
         [form-data, set-form-data!] (hooks/use-state (hooks/deref *form-data))
-        [scoped-to-owner?, set-scoped-to-owner!] (hooks/use-state false)
+        [scoped-to-owner?, set-scoped-to-owner!] (hooks/use-state (and create? (ldb/class? owner-block)))
         *input-ref (hooks/use-ref nil)]
 
     (hooks/use-effect!
@@ -325,25 +325,28 @@
                       item-props)
         [sub-open? set-sub-open!] (hooks/use-state false)
         toggle? (boolean? toggle-checked?)
-        id1 (str (or id (random-uuid)))
+        id1 (hooks/use-memo #(str (or id (random-uuid))) [id])
         id2 (str "d2-" id1)
-        or-close-menu-sub! (fn []
-                             (when (and (not (shui-popup/get-popup :ls-icon-picker))
-                                        (not (shui-popup/get-popup :ls-base-edit-form))
-                                        (not (shui-popup/get-popup :ls-node-tags-sub-pane)))
-                               (set-sub-open! false)
-                               (restore-root-highlight-item! id1)))
+        or-close-menu-sub! (fn [event-details]
+                             (if (or (shui-popup/get-popup :ls-icon-picker)
+                                     (shui-popup/get-popup :ls-base-edit-form)
+                                     (shui-popup/get-popup :ls-node-tags-sub-pane))
+                               (some-> event-details (.cancel))
+                               (do
+                                 (set-sub-open! false)
+                                 (restore-root-highlight-item! id1))))
         wrap-menuitem (if submenu-content
-                        #(shui/dropdown-menu-sub
-                          {:open sub-open?
-                           :on-open-change (fn [v] (if v (set-sub-open! true) (or-close-menu-sub!)))}
+                          #(shui/dropdown-menu-sub
+                            {:open sub-open?
+                           :on-open-change (fn [v event-details]
+                                             (if v
+                                               (set-sub-open! true)
+                                               (or-close-menu-sub! event-details)))}
                           (shui/dropdown-menu-sub-trigger (merge {:id id1} item-props') %)
-                          (shui/dropdown-menu-portal
-                           (shui/dropdown-menu-sub-content
-                            (merge {:hideWhenDetached true
-                                    :onEscapeKeyDown or-close-menu-sub!} sub-content-props)
-                            (if (fn? submenu-content)
-                              (submenu-content {:set-sub-open! set-sub-open! :id id1}) submenu-content))))
+                          (shui/dropdown-menu-sub-content
+                           sub-content-props
+                           (if (fn? submenu-content)
+                             (submenu-content {:set-sub-open! set-sub-open! :id id1}) submenu-content)))
                         #(shui/dropdown-menu-item
                           (merge {:on-select (fn []
                                                (when toggle?
@@ -361,7 +364,7 @@
         (fn? desc)
         (desc)
         (boolean? toggle-checked?)
-        [:span.scale-90.flex.items-center
+        [:span.flex.items-center
          (let [f (if checkbox? shui/checkbox shui/switch)]
            (f {:id id2 :size "sm" :checked toggle-checked?
                :disabled disabled? :on-click #(util/stop-propagation %)
@@ -487,6 +490,7 @@
                            (shui/popup-show! (.-target e)
                                              (fn [] (choice-base-edit-form property block owner-block))
                                              {:id :ls-base-edit-form
+                                              :force-popover? true
                                               :align "start"}))
                :title value}
       value]
@@ -576,6 +580,7 @@
                            (add-existing-values property values' opts)
                            (choice-base-edit-form property {:create? true} owner-block))))
                      {:id :ls-base-edit-form
+                      :force-popover? true
                       :align "start"})))
 
 (defn- add-choice-menuitem
@@ -584,7 +589,8 @@
    {:icon :plus
     :title (t :property/add-choice)
     :item-props
-    {:on-click
+    {:close-on-click false
+     :on-click
      (fn [^js e]
        (p/let [values (db-async/<get-property-values (:db/ident property) {})
                existing-values (seq (:property/closed-values property))
@@ -980,10 +986,9 @@
           :item-props {:class "opacity-60 focus:!text-red-rx-09 focus:opacity-100"
                        :on-select (fn [^js e]
                                     (util/stop e)
-                                    (-> (p/do!
-                                         (handle-delete-property! owner-block property {:class-schema? class-schema?})
-                                         (shui/popup-hide-all!))
-                                        (p/catch (fn [] (restore-root-highlight-item! :delete-property)))))}}))
+                                    (shui/popup-hide-all!)
+                                    (-> (handle-delete-property! owner-block property {:class-schema? class-schema?})
+                                        (p/catch (fn [] nil))))}}))
       (when debug?
         [:<>
          (shui/dropdown-menu-separator)

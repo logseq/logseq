@@ -46,10 +46,9 @@
            "use-hide-on-esc-or-outside"
            "use-modal-state"]}
    {:file "src/main/frontend/state.cljs"
-    :vars ["use-sub"
-           "use-sub-config"
-           "use-sub-editing?"
-           "use-container-id"]}
+    :vars ["use-container-id"]}
+   {:file "src/main/frontend/rfx.cljs"
+    :vars ["use-sub"]}
    {:file "src/main/frontend/db/hooks.cljs"
     :vars ["use-query"]}])
 
@@ -162,74 +161,73 @@
         hook-ui-items-source (form-source source "(hsx/defc hook-ui-items")]
     (is (some? hook-ui-items-source)
         "hook-ui-items component should exist")
-    (is (re-find #"(?s)\(let\s+\[[^\]]*installed-ui-items\s+\(state/use-sub \[:plugin/installed-ui-items\]\)[^\]]*pinned-items\s+\(state/use-sub \[:plugin/preferences :pinnedToolbarItems\]\)[^\]]*updates-coming\s+\(state/use-sub :plugin/updates-coming\)"
+    (is (re-find #"(?s)\(let\s+\[[^\]]*installed-ui-items\s+\(rfx/use-sub \[:plugin/installed-ui-items\]\)[^\]]*pinned-items\s+\(rfx/use-sub \[:plugin/preferences :pinnedToolbarItems\]\)[^\]]*updates-coming\s+\(rfx/use-sub \[:plugin/updates-coming\]\)"
                  hook-ui-items-source)
         "hook-ui-items should call plugin state subscriptions unconditionally at the top of the component so plugin startup state changes do not alter React hook order")))
 
-(deftest react-hooks-are-not-called-behind-render-guards
-  (doseq [[relative-file marker pattern message]
-          [["src/main/frontend/components/rtc/indicator.cljs"
-            "(hsx/defc downloading-detail"
-            #"(?s)\(when\s+[^\n]*\(hooks/use-flow-state"
-            "downloading-detail should subscribe before deciding whether to render the button"]
-           ["src/main/frontend/components/rtc/indicator.cljs"
-            "(hsx/defc uploading-detail"
-            #"(?s)\(when\s+[^\n]*\(hooks/use-flow-state"
-            "uploading-detail should subscribe before deciding whether to render the button"]
-           ["deps/shui/src/logseq/shui/table/core.cljc"
-            "(hsx/defc table-header"
-            #"(?s)\(when-not\s+\(mobile\?\)\s+\(use-sticky-element!"
-            "table-header should call its sticky hook on every render and branch inside the effect"]
-           ["src/main/frontend/components/editor.cljs"
-            "(hsx/defc page-search\n"
-            #"(?s)\(when\s+input[\s\S]*\(use-current-edit-content"
-            "page-search should read editor hook state before branching on DOM input availability"]
-           ["src/main/frontend/components/editor.cljs"
-            "(hsx/defc template-search\n"
-            #"(?s)\(when\s+input[\s\S]*\(use-current-edit-content"
-            "template-search should read editor hook state before branching on DOM input availability"]
-           ["src/main/frontend/components/editor.cljs"
-            "(hsx/defc code-block-mode-picker"
-            #"(?s)\(when-let[\s\S]*\(hooks/use-memo"
-            "code-block-mode-picker should call hooks before CodeMirror/input guards"]
-           ["src/main/frontend/components/property/dialog.cljs"
-            "(hsx/defc dialog"
-            #"(?s)\(when\s+\(seq blocks\)[\s\S]*\(hooks/use-"
-            "property dialog should create hook state before checking whether blocks are present"]
-           ["src/main/frontend/components/reference.cljs"
-            "(hsx/defc references\n"
-            #"(?s)\(when-let\s+\[id \(:db/id entity\)\][\s\S]*\(hooks/use-"
-            "references should call hooks before checking entity id"]
-           ["src/main/frontend/components/reference.cljs"
-            "(hsx/defc unlinked-references"
-            #"(?s)\(when-let\s+\[id \(:db/id entity\)\][\s\S]*\(hooks/use-"
-            "unlinked-references should call hooks before checking entity id"]
-           ["src/main/frontend/components/page.cljs"
-            "(hsx/defc page-blocks-cp"
-            #"(?s)\(when-let\s+\[id \(:db/id block\*\)\][\s\S]*\(state/use-sub"
-            "page-blocks-cp should subscribe before checking block id"]
-           ["src/main/frontend/components/page.cljs"
-            "(hsx/defc today-queries"
-            #"(?s)\(when\s+\(and today\? \(not sidebar\?\)\)[\s\S]*\(state/use-sub-config"
-            "today-queries should subscribe before checking whether today queries are visible"]
-           ["src/main/frontend/components/left_sidebar.cljs"
-            "(hsx/defc ^:large-vars/cleanup-todo sidebar-navigations"
-            #"(?s)\(when\s+\(state/enable-flashcards\?[\s\S]*\(state/use-sub"
-            "sidebar-navigations should subscribe before checking flashcards feature availability"]
-           ["src/main/frontend/components/container.cljs"
-            "(hsx/defc new-block-mode"
-            #"(?s)\(when\s+\(state/use-sub"
-            "new-block-mode should subscribe before deciding whether to render the mode toggle"]
-           ["src/main/frontend/components/settings.cljs"
-            "(hsx/defc markdown-mirror-row"
-            #"(?s)\(when\s+repo\s+\(state/use-sub"
-            "markdown-mirror-row should subscribe before checking current repo"]
-           ["src/main/frontend/components/settings.cljs"
-            "(hsx/defc auto-chmod-row"
-            #"(?s)\(if\s+\(= nil \(state/use-sub"
-            "auto-chmod-row should subscribe once before deriving its enabled state"]
-           ["src/main/frontend/page.cljs"
-            "(hsx/defc current-page"
-            #"(?s)\(if-let\s+\[route-match \(state/use-sub"
-            "current-page should subscribe before branching on the route match"]]]
-    (assert-form-does-not-match! relative-file marker pattern message)))
+(deftest frontend-events-use-rfx-dispatch
+  (let [state-source (source-for "src/main/frontend/state.cljs")
+        events-source (source-for "src/main/frontend/handler/events.cljs")
+        event-ui-source (source-for "src/main/frontend/handler/events/ui.cljs")
+        event-rtc-source (source-for "src/main/frontend/handler/events/rtc.cljs")
+        event-export-source (source-for "src/main/frontend/handler/events/export.cljs")]
+    (testing "frontend.state no longer owns a core.async system event channel"
+      (is (not (string/includes? state-source ":system/events")))
+      (is (not (string/includes? state-source "get-events-chan"))))
+
+    (testing "event namespaces register RFX handlers instead of starting a channel loop or multimethod bridge"
+      (is (string/includes? events-source "[frontend.rfx :as rfx]"))
+      (is (string/includes? events-source "register-rfx-handlers!"))
+      (is (string/includes? events-source "rfx/reg-event-fx!"))
+      (is (not (string/includes? events-source "async/go-loop")))
+      (is (not (string/includes? events-source "async/<! chan")))
+      (doseq [source [events-source event-ui-source event-rtc-source event-export-source]]
+        (is (not (re-find #"\(defmethod\s+(?:events/)?handle\b" source)))))))
+
+(deftest root-render-provides-rfx-context
+  (testing "app roots provide the Logseq RFX context"
+    (doseq [file ["src/main/frontend/core.cljs"
+                  "src/main/frontend/publishing.cljs"]]
+      (let [source (source-for file)]
+        (is (string/includes? source "[frontend.rfx :as rfx]")
+            (str file " should require frontend.rfx"))
+        (is (string/includes? source "(rfx/provider (page/current-page))")
+            (str file " should wrap current-page with rfx/provider"))))))
+
+(deftest db-query-hook-uses-rfx-subscriptions
+  (let [hooks-source (source-for "src/main/frontend/db/hooks.cljs")
+        react-source (source-for "src/main/frontend/db/react.cljs")]
+    (testing "UI-facing DB query hook subscribes through RFX"
+      (is (string/includes? hooks-source "[frontend.rfx :as rfx]"))
+      (is (string/includes? hooks-source "(rfx/use-sub [:db/query-results query-key])"))
+      (is (not (string/includes? hooks-source "hooks/use-state")))
+      (is (not (string/includes? hooks-source "add-watch"))))
+
+    (testing "DB query refresh writes query results into RFX state"
+      (is (string/includes? react-source "[frontend.state :as state]"))
+      (is (string/includes? react-source "sync-query-result!"))
+      (is (string/includes? react-source "(state/set-state! :db/query-results"))
+      (is (string/includes? react-source ":nested-path [k]")))
+
+    (testing "DB query render path does not write RFX state"
+      (is (not (string/includes? react-source "(doto (set-query-key! result-atom k)"))
+          "Cached react/q calls should only tag the atom during render.")
+      (is (not (re-find #"set! \(\.-state result-atom\) result'\s+\(sync-query-result!" react-source))
+          "Synchronous react/q calls should let use-query sync from an effect."))))
+
+(deftest frontend-state-flows-derive-from-rfx
+  (let [flows-source (source-for "src/main/frontend/flows.cljs")
+        state-source (source-for "src/main/frontend/state.cljs")
+        user-source (source-for "src/main/frontend/handler/user.cljs")]
+    (testing "frontend.flows derives app state streams from RFX app-db"
+      (is (string/includes? flows-source "[frontend.rfx :as rfx]"))
+      (is (string/includes? flows-source "sub-atom"))
+      (is (string/includes? flows-source "(sub-atom [:git/current-repo])"))
+      (is (string/includes? flows-source "(sub-atom [:auth/current-login-user])"))
+      (is (string/includes? flows-source "(sub-atom [:network/online?])"))
+      (is (not (re-find #"\(def\s+\*current-(?:repo|login-user)" flows-source)))
+      (is (not (string/includes? flows-source "*network-online?"))))
+
+    (testing "state writers no longer write parallel flow atoms"
+      (doseq [source [state-source user-source]]
+        (is (not (re-find #"flows/\*current-|flows/\*network-online" source)))))))

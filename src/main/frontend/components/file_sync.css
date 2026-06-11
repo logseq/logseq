@@ -4,7 +4,7 @@
   --ls-color-file-sync-idle: var(--color-green-600);
 }
 
-.cp__file-sync, .cp__rtc-sync {
+.cp__rtc-sync {
   &-indicator {
       .ui__button.cloud {
           @apply relative;
@@ -59,10 +59,10 @@
         transform: translateY(8px);
       }
 
-      .cp__file-sync-indicator-progress-pane {
+      .cp__rtc-sync-indicator-progress-pane {
       }
 
-      @screen md {
+      @media (min-width: 768px) {
         width: 400px;
         position: absolute;
         right: -10px;
@@ -264,7 +264,7 @@
     overflow: hidden;
     border-top: 1px solid var(--ls-tertiary-border-color);
 
-    @screen md {
+    @media (min-width: 768px) {
       width: 90vw;
     }
 
@@ -332,7 +332,7 @@
         }
       }
 
-      @screen md {
+      @media (min-width: 768px) {
         flex-basis: 60%;
       }
     }
@@ -346,53 +346,9 @@
       padding-bottom: 50px;
       overflow-y: auto;
 
-      @screen md {
+      @media (min-width: 768px) {
         display: block;
       }
-    }
-
-    &.is-list-ready {
-      .cp__file-sync-page-histories {
-        &-left, &-right {
-          visibility: visible;
-        }
-      }
-
-      .ready-loading {
-        display: none;
-      }
-    }
-  }
-
-  &-welcome-logseq-sync, &-unavailable-logseq-sync {
-    > .head-bg {
-      @apply flex m-auto mb-10 w-auto sm:w-[500px];
-
-      background-image: url("../img/file-sync-welcome-backer-dark.png");
-      background-size: contain;
-      background-repeat: no-repeat;
-      background-position: center;
-      padding-top: 86px;
-      max-width: 90vw;
-
-      > strong {
-        @apply block bg-gray-200 rounded text-gray-700 text-[10px] font-semibold px-2 py-0.5 opacity-40
-        m-auto translate-y-8;
-      }
-    }
-
-    > h1, > h2 {
-      @apply flex justify-center text-center;
-    }
-
-    > h2 {
-      @apply text-sm opacity-80 pt-3;
-    }
-  }
-
-  &-unavailable-logseq-sync {
-    > .head-bg {
-      background-image: url("../img/file-sync-unavailale-nonbacker-dark.png");
     }
   }
 

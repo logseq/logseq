@@ -23,6 +23,7 @@
             [frontend.handler.publish :as publish-handler]
             [frontend.handler.route :as route-handler]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.rfx :as rfx]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -70,6 +71,12 @@
   (if (and (coll? value) (not (map? value)))
     (keep value->db-id value)
     (some-> value value->db-id vector)))
+
+(defn- property-value-popup-blocked-link?
+  [target]
+  (when-let [node (some-> target (.closest "a"))]
+    (not (or (d/has-class? node "page-ref")
+             (d/has-class? node "tag")))))
 
 (hsx/defc property-empty-btn-value
   [property & opts]
@@ -268,7 +275,7 @@
   [block property]
   (let [opts {:exit-edit? false}
         block (db/sub-block (:db/id block))]
-    [:div.p-4.hidden.sm:flex.flex-col.gap-4.w-64
+    [:div.p-4.hidden.sm:flex.flex-col.gap-4.w-64.text-sm
      [:div.mb-4
       [:div.flex.flex-row.items-center.gap-1
        [:div.w-4
@@ -286,36 +293,41 @@
          [:div (t (if (= :date (:logseq.property/type property))
                     :property.repeat/date
                     :property.repeat/datetime))])]]
-     [:div.flex.flex-row.gap-2.ls-repeat-task-frequency
+     [:div.flex.flex-row.gap-2.ls-repeat-task-frequency.text-sm
       [:div.flex.text-muted-foreground
        (t :property.repeat/every)]
       [:div.w-10.mr-2
        (property-value block (db/entity :logseq.property.repeat/recur-frequency) opts)]
       [:div.w-20
        (property-value block (db/entity :logseq.property.repeat/recur-unit) (assoc opts :property property))]]
-     [:div.flex.flex-col.gap-1.min-w-0.ls-repeat-type-setting
+     [:div.flex.flex-col.gap-1.min-w-0.ls-repeat-type-setting.text-sm
       [:div.text-muted-foreground
        (t :property.repeat/next-date)]
       (property-value block (db/entity :logseq.property.repeat/repeat-type) opts)]
      (let [properties (->>
                        (outliner-property/get-block-full-properties (db/get-db) (:db/id block))
-                       (filter (fn [property]
-                                 (and (not (ldb/built-in? property))
-                                      (>= (count (:property/closed-values property)) 2))))
+                       (filter (fn [property']
+                                 (and (not (ldb/built-in? property'))
+                                      (>= (count (:property/closed-values property')) 2))))
                        (concat [(db/entity :logseq.property/status)])
                        (util/distinct-by :db/id))
+           property-options (mapv (fn [property']
+                                    {:label (db-property/built-in-display-title property' t)
+                                     :value (:db/id property')})
+                                  properties)
            status-property (or (:logseq.property.repeat/checked-property block)
                                (db/entity :logseq.property/status))
            property-id (:db/id status-property)
            done-choice (or
                         (some (fn [choice] (when (true? (:logseq.property/choice-checkbox-state choice)) choice)) (:property/closed-values status-property))
                         (db/entity :logseq.property/status.done))]
-       [:div.flex.flex-col.gap-2
+       [:div.flex.flex-col.gap-2.text-sm
         [:div.text-muted-foreground
          (t :property.repeat/when)]
         (shui/select
           (cond->
-            {:on-value-change (fn [v]
+            {:items property-options
+             :on-value-change (fn [v]
                                 (db-property-handler/set-block-property! (:db/id block)
                                                                          :logseq.property.repeat/checked-property
                                                                          v))}
@@ -325,9 +337,10 @@
            (shui/select-value {:placeholder (t :property/select-property-placeholder)}))
           (shui/select-content
            (map (fn [choice]
-                  (shui/select-item {:key (str (:db/id choice))
-                                     :value (:db/id choice)} (db-property/built-in-display-title choice t))) properties)))
-        [:div.flex.flex-row.gap-1
+               (shui/select-item {:key (str (:db/id choice))
+                                  :value (:db/id choice)}
+                                 (db-property/built-in-display-title choice t))) properties)))
+        [:div.flex.flex-row.gap-1.text-sm
          [:div.text-muted-foreground
           (t :property.repeat/is-label)]
          (when done-choice
@@ -414,7 +427,7 @@
           (state/set-editor-action! nil)))
      [])
     [:div.ls-property-date-picker.flex.flex-row.gap-2
-     [:div.flex.flex-1.items-center
+     [:div.flex.items-center
       (ui/nlp-calendar
        (cond->
          {:initial-focus true
@@ -1389,14 +1402,16 @@
                            (property-value-select-node block property select-opts' (assoc opts :target target)))])
         trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
         show-popup! (fn [target]
-                      (shui/popup-show! target (fn [] (popup-content target))
-                                        (cond->
-                                         {:align "start"
-                                          :as-dropdown? true
-                                          :auto-focus? (not (false? popup-auto-focus-trigger?))
-                                          :trigger-id trigger-id}
-                                          (some? popup-focus-trigger?)
-                                          (assoc :focus-trigger? popup-focus-trigger?))))]
+                      (when-let [anchor (hooks/deref *el)]
+                        (shui/popup-show! anchor (fn [] (popup-content target))
+                                          (cond->
+                                           {:align "start"
+                                            :as-dropdown? true
+                                            :auto-focus? (not (false? popup-auto-focus-trigger?))
+                                            :force-popover? true
+                                            :trigger-id trigger-id}
+                                            (some? popup-focus-trigger?)
+                                            (assoc :focus-trigger? popup-focus-trigger?)))))]
     (if editing?
       (popup-content nil)
       (let [show! (fn [e]
@@ -1406,10 +1421,7 @@
                       (when-not (or config/publishing?
                                     (util/shift-key? e)
                                     (util/meta-key? e)
-                                    (util/link? target)
-                                    (when-let [node (.closest target "a")]
-                                      (not (or (d/has-class? node "page-ref")
-                                               (d/has-class? node "tag")))))
+                                    (property-value-popup-blocked-link? target))
                         (show-popup! target))))]
         (shui/trigger-as
          (if (:other-position? opts) :div.jtrigger :div.jtrigger.flex.flex-1.w-full.cursor-pointer)
@@ -1530,7 +1542,7 @@
        (shui/input
         {:ref *input-ref
          :auto-focus true
-         :class (str "ls-number-input h-6 px-0 py-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
+         :class (str "ls-number-input !h-6 min-h-0 px-0 !py-0 border-none bg-transparent leading-6 focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
                      (when table-view? " text-sm"))
          :value value
          :type "number"
@@ -1587,7 +1599,7 @@
   (contains? config/video-formats (some-> asset-type keyword)))
 
 (def ^:private asset-embedded-control-selector
-  ".asset-action-bar, [data-radix-popper-content-wrapper], [role='menu'], [role='menuitem'], button, a, input, textarea, select")
+  ".asset-action-bar, .ui__popover-content, .ui__dropdown-menu-content, .ui__context-menu-content, [role='menu'], [role='menuitem'], button, a, input, textarea, select")
 
 (defn- asset-embedded-control-click?
   [^js target]
@@ -1964,25 +1976,28 @@
                                 (when-let [on-checked-change (:on-checked-change opts)]
                                   (on-checked-change value)))]
             [:label.flex.w-full.as-scalar-value-wrap.cursor-pointer
-             (shui/checkbox {:class "jtrigger flex flex-row items-center"
-                             :disabled config/publishing?
-                             :auto-focus editing?
-                             :checked value
-                             :on-checked-change (fn []
-                                                  (add-property! (not value)))
-                             :on-key-down (fn [e]
-                                            (when (= (util/ekey e) "Enter")
-                                              (add-property! (not value)))
-                                            (when (contains? #{"Backspace" "Delete"} (util/ekey e))
-                                              (delete-block-property! block property)))})])
+             ^{:key "checkbox"}
+             [:<> (shui/checkbox {:class "jtrigger flex flex-row items-center"
+                                  :disabled config/publishing?
+                                  :auto-focus editing?
+                                  :checked value
+                                  :on-checked-change (fn []
+                                                       (add-property! (not value)))
+                                  :on-key-down (fn [e]
+                                                 (when (= (util/ekey e) "Enter")
+                                                   (add-property! (not value)))
+                                                 (when (contains? #{"Backspace" "Delete"} (util/ekey e))
+                                                   (delete-block-property! block property)))})]])
           ;; :others
           [:div.flex.flex-1
-           (property-value-inner block property value opts)])))))
+           ^{:key "property-value-inner"}
+           [:<> (property-value-inner block property value opts)]])))))
 
 (hsx/defc property-scalar-value
   [block property value* {:keys [container-id editing?]
                           :as opts}]
-  (let [block-editing? (state/use-sub-editing? [container-id (:block/uuid block)])
+  (let [block-editing? (boolean (get (rfx/use-sub [:editor/editing?])
+                                     [container-id (:block/uuid block)]))
         editing (or editing?
                     (and block-editing?
                          (= (:db/id property) (:db/id (:property (state/get-editor-action-data))))))]
@@ -2021,7 +2036,8 @@
                          (select-cp {:content-props content-props} target))
             show-popup! (fn [^js e]
                           (let [target (.-target e)]
-                            (when-not (or (util/link? target) (.closest target "a") config/publishing?)
+                            (when-not (or config/publishing?
+                                          (property-value-popup-blocked-link? target))
                               (shui/popup-show! (hooks/deref *el)
                                                 (fn [opts]
                                                   (content-fn opts target))
@@ -2040,19 +2056,23 @@
                            (delete-block-property! block property)
                            :dune))
           :class "flex flex-1 flex-row items-center flex-wrap gap-1"}
-         (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
-           (if (and (seq items) not-empty-value?)
-             (if (= type :asset)
-               (for [item items]
-                 ^{:key (or (:block/uuid item) (str item))}
-                 [asset-value-content item])
-               (concat
-                (->> (for [item items]
-                       ^{:key (or (:block/uuid item) (str item))}
-                       [select-item property type item (assoc opts :show-popup! show-popup!)])
-                     (interpose [:span.opacity-50.-ml-1 ","]))
-                (when date?
-                  [(property-value-date-picker block property nil {:toggle-fn toggle-fn})])))
+                 (let [items' (vec items)
+                       not-empty-value? (not= (map :db/ident items') [:logseq.property/empty-placeholder])]
+                   (if (and (seq items) not-empty-value?)
+                     (if (= type :asset)
+                       (for [item items']
+                         ^{:key (or (:block/uuid item) (str item))}
+                         [asset-value-content item])
+                       (concat
+                        (for [[idx item] (map-indexed vector items')]
+                          ^{:key (str "value-" (or (:block/uuid item) item) "-" idx)}
+                          [:<>
+                           [select-item property type item (assoc opts :show-popup! show-popup!)]
+                           (when (< idx (dec (count items')))
+                             [:span.opacity-50.-ml-1 ","])])
+                        (when date?
+                          [^{:key "empty-date-picker"}
+                           (property-value-date-picker block property nil {:toggle-fn toggle-fn})])))
              (if date?
                (property-value-date-picker block property nil {:toggle-fn toggle-fn})
                (if (= type :asset)
@@ -2132,7 +2152,8 @@
                          :class (str (when empty-value? "empty-value")
                                      (when-not (:other-position? opts) " w-full"))
                          :on-pointer-down (fn [e]
-                                            (when-not (some-> (.-target e) (.closest "[data-radix-popper-content-wrapper]"))
+                                            (when-not (some-> (.-target e)
+                                                             (.closest ".ui__popover-content, .ui__dropdown-menu-content, .ui__context-menu-content"))
                                               (state/clear-selection!)))}
                         (cond
                           (and multiple-values? (contains? #{:default :url} type) (not closed-values?) (not editing?))
@@ -2150,7 +2171,7 @@
           (if show-tooltip?
             (shui/tooltip-provider
              (shui/tooltip
-              {:delayDuration 1200}
+              {:delay 1200}
               (shui/tooltip-trigger
                {:onFocusCapture #(util/stop-propagation %)
                 :as-child true}

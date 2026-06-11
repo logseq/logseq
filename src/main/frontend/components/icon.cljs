@@ -1,5 +1,7 @@
 (ns frontend.components.icon
   (:require ["@emoji-mart/data" :as emoji-data]
+            ["react" :as react]
+            ["@tabler/icons-react" :as tabler-icons]
             ["emoji-mart" :refer [SearchIndex]]
             [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
@@ -81,7 +83,7 @@
       [:div.icon-cp-container.flex.items-center
        (merge {:style {:color (or (:color node-icon) "inherit")}}
               (select-keys opts [:class]))
-       (icon node-icon (dissoc opts' :not-text-or-page? :link?))])))
+       (icon node-icon (dissoc opts' :not-text-or-page? :link? :ignore-current-icon?))])))
 
 (defn- search-emojis
   [q]
@@ -93,7 +95,7 @@
   []
   (if @*tabler-icons
     @*tabler-icons
-    (let [result (->> (keys (bean/->clj js/tablerIcons))
+    (let [result (->> (keys (bean/->clj tabler-icons))
                       (map (fn [k]
                              (-> (string/replace (csk/->Camel_Snake_Case (name k)) "_" " ")
                                  (string/replace-first "Icon " ""))))
@@ -121,7 +123,7 @@
   [icon' {:keys [on-chosen hover]}]
   [:button.w-9.h-9.transition-opacity
    (when-let [icon' (cond-> icon' (string? icon') (string/replace " " ""))]
-     {:key icon'
+     {:key (str "tabler-icon-" icon')
       :tabIndex "0"
       :title icon'
       :on-click (fn [e]
@@ -140,7 +142,8 @@
   [{:keys [id name] :as emoji} {:keys [on-chosen hover]}]
   [:button.text-2xl.w-9.h-9.transition-opacity
    (cond->
-    {:tabIndex "0"
+    {:key (str "emoji-" id)
+     :tabIndex "0"
      :title name
      :on-click (fn [e]
                  (on-chosen e (assoc emoji :type :emoji)))
@@ -159,6 +162,21 @@
     (icon-cp (if (string? item) item (:id item)) opts)
     (emoji-cp item opts)))
 
+(defn- item-render-key
+  [item idx]
+  (str (cond
+         (string? item) "tabler-icon"
+         (:type item) (name (:type item))
+         :else "item")
+       "-"
+       (or (:id item) item idx)))
+
+(defn- keyed-item-render
+  [idx item opts]
+  (react/cloneElement
+   (item-render item opts)
+   #js {:key (item-render-key item idx)}))
+
 (hsx/defc pane-section
   [label items & {:keys [searching? virtual-list?]
                   :or {virtual-list? true}
@@ -172,29 +190,23 @@
      [:div.hd.px-1.pb-1.leading-none
       [:strong.text-xs.font-medium.text-gray-07.dark:opacity-80 label]]
      (if virtual-list?
-       (let [total (count items)
-             step 9
-             rows (quot total step)
-             mods (mod total step)
-             rows (if (zero? mods) rows (inc rows))
-             items (vec items)]
-         (ui/virtualized-list
-          (cond-> {:total-count rows
-                   :item-content (fn [idx]
-                                   (icons-row
-                                    (let [last? (= (dec rows) idx)
-                                          start (* idx step)
-                                          end (* (inc idx) (if (and last? (not (zero? mods))) mods step))
-                                          icons (try (subvec items start end)
-                                                     (catch js/Error e
-                                                       (js/console.error e)
-                                                       nil))]
-                                      (mapv #(item-render % opts) icons))))}
+       (let [items-per-row 9
+             rows (vec (partition-all items-per-row items))]
+          (ui/virtualized-list
+           (cond-> {:total-count (count rows)
+                    :item-content (fn [idx]
+                                    (icons-row
+                                     (map-indexed
+                                      (fn [item-idx item]
+                                        (keyed-item-render item-idx item opts))
+                                      (nth rows idx []))))}
 
-            searching?
-            (assoc :custom-scroll-parent (some-> (hooks/deref *el-ref) (.closest ".bd-scroll"))))))
+             searching?
+             (assoc :custom-scroll-parent (some-> (hooks/deref *el-ref) (.closest ".bd-scroll"))))))
        [:div.its
-        (map #(item-render % opts) items)])]))
+        (map-indexed (fn [idx item]
+                       (keyed-item-render idx item opts))
+                     items)])]))
 
 (defn- normalize-tabs
   [tabs default-tab]
@@ -257,7 +269,7 @@
         icon-items (take 48 (get-tabler-icons))
         opts (assoc opts :virtual-list? false)]
     [:div.all-pane.pb-10
-     (when (count used-items)
+     (when (seq used-items)
        (pane-section (t :ui/frequently-used) used-items opts))
      (pane-section (t :icon/emojis-count (count emojis))
                    emoji-items
@@ -526,10 +538,11 @@
                     "font-normal text-sm px-[0.5px] text-muted-foreground hover:text-foreground")
          :on-click (fn [^js e]
                      (when-not disabled?
-                       (shui/popup-show! (.-target e) content-fn
+                       (shui/popup-show! (.-currentTarget e) content-fn
                                          (medley/deep-merge
                                           {:align :start
                                            :id :ls-icon-picker
+                                           :force-popover? true
                                            :content-props {:class "ls-icon-picker"
                                                            :onEscapeKeyDown #(.preventDefault %)}}
                                           popup-opts))))}

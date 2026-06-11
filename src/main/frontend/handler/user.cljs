@@ -8,12 +8,10 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [electron.ipc :as ipc]
-            [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.debug :as debug]
-            [frontend.flows :as flows]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -22,7 +20,6 @@
             [goog.crypt.Hmac]
             [goog.crypt.Sha256]
             [goog.crypt.base64 :as base64]
-            [missionary.core :as m]
             [promesa.core :as p]))
 
 ;;; userinfo, token, login/logout, ...
@@ -105,13 +102,13 @@
 
 (defn- auth-file-path
   []
-  (when-let [home-dir (get-in @state/state [:system/info :home-dir])]
+  (when-let [home-dir (state/get-state [:system/info :home-dir])]
     (path/path-join home-dir "logseq" "auth.json")))
 
 (defn- auth-file-payload
   []
   {:id-token (state/get-auth-id-token)
-   :access-token (:auth/access-token @state/state)
+   :access-token (state/get-state :auth/access-token)
    :refresh-token (state/get-auth-refresh-token)
    :updated-at (.now js/Date)})
 
@@ -174,7 +171,7 @@
    (set-token-to-localstorage! id-token access-token)
    (persist-auth-file!)
    (some->> (parse-jwt (state/get-auth-id-token))
-            (reset! flows/*current-login-user)))
+            (state/set-state! :auth/current-login-user)))
   ([id-token access-token refresh-token]
    (state/set-auth-id-token id-token)
    (state/set-auth-access-token access-token)
@@ -182,7 +179,7 @@
    (set-token-to-localstorage! id-token access-token refresh-token)
    (persist-auth-file!)
    (some->> (parse-jwt (state/get-auth-id-token))
-            (reset! flows/*current-login-user))))
+            (state/set-state! :auth/current-login-user))))
 
 (defn- <refresh-tokens
   "return refreshed id-token, access-token"
@@ -311,7 +308,7 @@
   (.clear js/localStorage)
   (state/clear-user-info!)
   (state/pub-event! [:user/logout])
-  (reset! flows/*current-login-user :logout))
+  (state/set-state! :auth/current-login-user :logout))
 
 (defn upgrade []
   (let [base-upgrade-url "https://logseqdemo.lemonsqueezy.com/checkout/buy/13e194b5-c927-41a8-af58-ed1a36d6000d"
@@ -335,20 +332,21 @@
                   (-> (state/get-auth-id-token) parse-jwt expired?))
           (ex-info "empty or expired token and refresh failed" {:anom :expired-token}))))))
 
-(def task--ensure-id&access-token
-  (m/sp
-    (let [id-token (state/get-auth-id-token)]
-      (when (or (nil? id-token)
-                (-> id-token parse-jwt almost-expired-or-expired?))
+(defn <ensure-id&access-token!
+  []
+  (let [id-token (state/get-auth-id-token)]
+    (if (or (nil? id-token)
+            (-> id-token parse-jwt almost-expired-or-expired?))
+      (p/let [_ (<refresh-id-token&access-token)]
         (prn (str "refresh tokens... " (tc/to-string (t/now))))
-        (c.m/<? (<refresh-id-token&access-token))
         (when (or (nil? (state/get-auth-id-token))
                   (-> (state/get-auth-id-token) parse-jwt expired?))
-          (throw (ex-info "empty or expired token and refresh failed" {:type :expired-token})))))))
+          (throw (ex-info "empty or expired token and refresh failed" {:type :expired-token}))))
+      (p/resolved nil))))
 
 (def-thread-api :thread-api/ensure-id&access-token
   []
-  (p/let [_ (js/Promise. task--ensure-id&access-token)]
+  (p/let [_ (<ensure-id&access-token!)]
     {:id-token (state/get-auth-id-token)}))
 
 ;;; user groups
@@ -388,20 +386,18 @@
     [repo]
     (= (get-user-type repo) "member"))
 
-(defn new-task--upload-user-avatar
+(defn <upload-user-avatar
   [avatar-str]
-  (m/sp
-    (when-let [token (state/get-auth-id-token)]
-      (let [{:keys [status body] :as resp}
-            (c.m/<?
-             (http/post
-              (str "https://" config/API-DOMAIN "/logseq/get_presigned_user_avatar_put_url")
-              {:oauth-token token
-               :with-credentials? false}))]
-        (when-not (http/unexceptional-status? status)
-          (throw (ex-info "failed to get presigned url" {:resp resp})))
-        (let [presigned-url (:presigned-url body)
-              {:keys [status]} (c.m/<? (http/put presigned-url {:body avatar-str :with-credentials? false}))]
+  (when-let [token (state/get-auth-id-token)]
+    (p/let [{:keys [status body] :as resp}
+            (http/post
+             (str "https://" config/API-DOMAIN "/logseq/get_presigned_user_avatar_put_url")
+             {:oauth-token token
+              :with-credentials? false})]
+      (when-not (http/unexceptional-status? status)
+        (throw (ex-info "failed to get presigned url" {:resp resp})))
+      (let [presigned-url (:presigned-url body)]
+        (p/let [{:keys [status]} (http/put presigned-url {:body avatar-str :with-credentials? false})]
           (when-not (http/unexceptional-status? status)
             (throw (ex-info "failed to upload avatar" {:resp resp}))))))))
 

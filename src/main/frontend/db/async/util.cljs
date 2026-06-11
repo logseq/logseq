@@ -29,18 +29,18 @@
           :or {transact-db? true}
           :as opts} & inputs]
   (assert (not-any? fn? inputs) "Async query inputs can't include fns because fn can't be serialized")
-  (let [*async-queries (:db/async-queries @state/state)
-        async-requested? (get @*async-queries [inputs opts])
-        inputs' (if advanced-query?
+  (let [inputs' (if advanced-query?
                   (cons (transform-pull-query (first inputs))
                         (rest inputs))
-                  inputs)]
+                  inputs)
+        query-key [inputs' opts]
+        async-requested? (state/async-query-requested? query-key)]
     (if (and async-requested? transact-db?)
       (p/promise
        (let [db (db-conn/get-db graph)]
          (apply d/q (first inputs') db (rest inputs'))))
       (p/let [result (state/<invoke-db-worker :thread-api/q graph inputs')]
-        (swap! *async-queries assoc [inputs' opts] true)
+        (state/mark-async-query-requested! query-key)
         (when result
           (when (and transact-db? (seq result) (coll? result))
             (when-let [conn (db-conn/get-db graph false)]

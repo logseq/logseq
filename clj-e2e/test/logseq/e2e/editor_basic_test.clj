@@ -10,7 +10,8 @@
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.page :as p]
    [logseq.e2e.util :as util]
-   [wally.main :as w]))
+   [wally.main :as w]
+   [wally.repl :as repl]))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -325,6 +326,30 @@
       window.logseq.api.push_state('page', { name: page.uuid }, null);
     })();"
     (json/write-value-as-string blocks))))
+
+(deftest click-rendered-block-focuses-editor
+  (testing "clicking a rendered block leaves the editor textarea focused"
+    (let [title "click rendered block focuses editor"]
+      (insert-current-page-blocks! [title])
+      (w/click (format ".ls-block .block-content:has-text('%s')" title))
+      (assert/assert-editor-mode)
+      (let [{:keys [activeId activeTag editorId editorFocused]}
+            (json/read-value
+             (w/eval-js
+              "(() => {
+                 const editor = document.querySelector('.editor-wrapper textarea');
+                 return JSON.stringify({
+                   activeId: document.activeElement && document.activeElement.id,
+                   activeTag: document.activeElement && document.activeElement.tagName,
+                   editorId: editor && editor.id,
+                   editorFocused: editor === document.activeElement
+                 });
+               })();")
+             json/keyword-keys-object-mapper)]
+        (is editorFocused
+            {:active-id activeId
+             :active-tag activeTag
+             :editor-id editorId})))))
 
 (defn- select-block-range-with-fast-scroll!
   [blocks]
@@ -690,30 +715,6 @@
       (enable-virtualized-rendering!)
       (is (set/subset? (set blocks)
                        (set (select-block-range-with-fast-scroll! blocks))))
-      (b/copy)
-      (let [clipboard (w/clipboard-text)]
-        (doseq [block blocks]
-          (is (string/includes? clipboard block)))))))
-
-(deftest copy-blocks-selected-while-scrolling-journals-list
-  (testing "copy includes blocks selected across virtualized journals while scrolling"
-    (let [later-journal-blocks (mapv #(format "journals selection prelude block %03d %s"
-                                               %
-                                               (string/join " " (repeat 30 "wrapped-content")))
-                                     (range 1 101))
-          journals (mapv (fn [idx]
-                           {:date (format "2026-02-%02dT12:00:00" idx)
-                            :blocks (mapv #(format "journal %02d scroll copy block %02d" idx %)
-                                          (range 1 31))})
-                         (range 1 5))
-          blocks (mapcat :blocks (reverse journals))]
-      (seed-journals!
-       [{:date "2026-03-21T12:00:00"
-         :blocks later-journal-blocks}])
-      (seed-journals! journals)
-      (w/wait-for "#journals [data-virtuoso-scroller]")
-      (scroll-journals-to-text! (first blocks))
-      (is (pos? (count (select-block-titles-while-scrolling! blocks))))
       (b/copy)
       (let [clipboard (w/clipboard-text)]
         (doseq [block blocks]

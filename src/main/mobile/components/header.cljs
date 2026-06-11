@@ -9,13 +9,14 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as db-conn]
-            [frontend.flows :as flows]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.mobile.util :as mobile-util]            [frontend.state :as state]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.rfx :as rfx]
+            [frontend.state :as state]
             [frontend.ui :as ui]
             [goog.date :as gdate]
             [logseq.common.util :as common-util]
@@ -23,7 +24,6 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [mobile.components.settings :as mobile-settings]
             [mobile.components.ui :as ui-component]
             [mobile.state :as mobile-state]
@@ -310,9 +310,9 @@
         native-ios-graphs? (and (mobile-util/native-ios?) (= tab "graphs"))
         page-route? (and (= route-name :page) (not native-ios-graphs?))
         [*configure-top-bar-f _] (hooks/use-state (atom nil))
-        detail-info (hooks/use-flow-state (m/watch rtc-indicator/*detail-info))
-        _ (hooks/use-flow-state flows/current-login-user-flow)
-        online? (hooks/use-flow-state flows/network-online-event-flow)
+        detail-info (hooks/use-atom-value rtc-indicator/*detail-info)
+        _ (rfx/use-sub [:auth/current-login-user])
+        online? (rfx/use-sub [:network/online?])
         rtc-state (:rtc-state detail-info)
         graph-uuid (or (:graph-uuid detail-info)
                        (ldb/get-graph-rtc-uuid (db/get-db)))
@@ -392,7 +392,7 @@
 
 (hsx/defc header
   [current-repo tab]
-  (let [route-match (state/use-sub :route-match)
+  (let [route-match (rfx/use-sub [:route-match])
         [flashcards-header] (hooks/use-atom mobile-state/*flashcards-header)]
     (header-inner current-repo tab
                   route-match

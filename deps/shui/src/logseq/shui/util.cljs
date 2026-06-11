@@ -1,11 +1,14 @@
 (ns logseq.shui.util
   (:require
+   ["uniqolor" :as uniqolor]
+   ["react" :as react]
    [cljs-bean.core :as bean]
    [clojure.set :refer [rename-keys]]
    [clojure.string :as string]
    [clojure.walk :as w]
    [goog.object :as gobj]
    [io.factorhouse.hsx.core :as hsx]
+   [logseq.shui.components :as components]
    [logseq.shui.hooks :as hooks]))
 
 (goog-define NODETEST false)
@@ -38,16 +41,14 @@
                     x))
                 data)))
 
-(defn $LSUtils [] (aget js/window "LSUtils"))
-(def dev? (some-> ($LSUtils) (aget "isDev")))
+(def dev? goog.DEBUG)
 
 (defn uuid-color
   [uuid-str]
-  (some-> ($LSUtils) (aget "uniqolor")
-          (apply [uuid-str
-                  #js {:saturation #js [55, 70],
-                       :lightness 70,
-                       :differencePoint 60}])
+  (some-> (uniqolor uuid-str
+                    #js {:saturation #js [55, 70]
+                         :lightness 70
+                         :differencePoint 60})
           (aget "color")))
 
 (defn get-path
@@ -70,7 +71,7 @@
                                 [key val]))
         new-options (into {} (map vector->react-elems opts))
         react-class (if dev? (react-class) react-class)]
-    (apply js/React.createElement react-class
+    (apply react/createElement react-class
       ;; sablono html-to-dom-attrs does not work for nested hash-maps
            (bean/->js (map-keys->camel-case new-options :html-props true))
            children)))
@@ -87,11 +88,11 @@
   (if static?
     (let [class (fn [^js props]
                   (apply adapt-class c (.-args props)))
-          memo-class (if-some [memo (.-memo js/React)]
+          memo-class (if-some [memo (.-memo react)]
                        (memo class same-args?)
                        class)]
       (fn [& args]
-        (js/React.createElement memo-class #js {:args args})))
+        (react/createElement memo-class #js {:args args})))
     (partial adapt-class c)))
 
 (defn component-wrap
@@ -102,11 +103,11 @@
         cp #(gobj/getValueByKeys ns (clj->js path))]
     (react->component (if dev? cp (cp)) static?)))
 
-(def lsui-wrap
-  (partial component-wrap js/window.LSUI))
+(def ui-wrap
+  (partial component-wrap components/registry))
 
-(defn lsui-get
+(defn ui-get
   [name]
   (if NODETEST
     #js {}
-    (some-> js/window.LSUI (aget name))))
+    (some-> components/registry (aget name))))

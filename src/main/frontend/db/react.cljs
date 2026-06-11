@@ -47,15 +47,22 @@
   (when result-atom
     (gobj/get result-atom query-key-prop)))
 
+(defn sync-query-result!
+  [result-atom]
+  (when-let [k (query-key result-atom)]
+    (state/set-state! :db/query-results @result-atom :nested-path [k])))
+
 (defn set-new-result!
   [k new-result]
   (when-let [result-atom (get-in @*query-state [k :result])]
-    (reset! result-atom new-result)))
+    (reset! result-atom new-result)
+    (state/set-state! :db/query-results new-result :nested-path [k])))
 
 (defn clear-query-state!
   []
   (reset! *query-state {})
-  (reset! *collapsed-queries {}))
+  (reset! *collapsed-queries {})
+  (state/set-state! :db/query-results {}))
 
 (defn add-q!
   [k query inputs result-atom transform-fn query-fn inputs-fn]
@@ -90,16 +97,6 @@
       (when (empty? (get @query-key->components query))
         (remove-q! query))))
   (vswap! component->query-key dissoc component))
-
-(defn- request-query-component-render!
-  [component]
-  (when (fn? component)
-    (component)))
-
-(defn- refresh-query-components!
-  [k]
-  (doseq [component (get @query-key->components k)]
-    (request-query-component-render! component)))
 
 ;; Reactive query
 
@@ -165,7 +162,8 @@
               (do
                 (p/let [result p-or-value
                         result' (transform-fn result)]
-                  (reset! result-atom result'))
+                  (reset! result-atom result')
+                  (sync-query-result! result-atom))
                 result-atom)
 
               :else
@@ -180,8 +178,7 @@
   (p/let [p-or-value (<q-aux graph db query-fn inputs-fn k query inputs built-in-query?)
           result' (transform-fn p-or-value)]
     (when-not (= result' result)
-      (set-new-result! k result'))
-    (refresh-query-components! k)))
+      (set-new-result! k result'))))
 
 (defn refresh-affected-queries!
   [repo-url affected-keys & {:keys [skip-kv-custom-keys?]

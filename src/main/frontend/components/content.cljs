@@ -1,5 +1,6 @@
 (ns frontend.components.content
-  (:require [clojure.string :as string]
+  (:require ["react" :as react]
+            [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.components.block.comments-model :as comments-model]
@@ -20,6 +21,7 @@
             [frontend.handler.property.util :as pu]
             [frontend.handler.reaction :as reaction-handler]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -53,10 +55,12 @@
 
      (shui/dropdown-menu-sub
       {:open set-icon-sub-menu-open?
-       :onOpenChange (fn [v]
-                       (when (not= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
-                         (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
-                         (set-icon-sub-menu-open v)))}
+       :onOpenChange (fn [v event-details]
+                       (if (= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
+                         (some-> event-details (.cancel))
+                         (do
+                           (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
+                           (set-icon-sub-menu-open v))))}
       (shui/dropdown-menu-sub-trigger
        (t :context-menu/set-icon))
       (shui/dropdown-menu-sub-content
@@ -168,8 +172,8 @@
 (hsx/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id property-default-value?]
   (let [block (db/entity [:block/uuid block-id])
-        simple-commands (state/use-sub [:plugin/simple-commands])
-        developer-mode? (state/use-sub [:ui/developer-mode?])
+        simple-commands (rfx/use-sub [:plugin/simple-commands])
+        developer-mode? (rfx/use-sub [:ui/developer-mode?])
         [set-icon-sub-menu-open? set-icon-sub-menu-open] (hooks/use-state false)
         [heading set-heading!] (hooks/use-state (or (pu/lookup block :logseq.property/heading) false))
         [current-color set-current-color!] (hooks/use-state (pu/lookup block :logseq.property/background-color))]
@@ -235,10 +239,12 @@
 
          (shui/dropdown-menu-sub
           {:open set-icon-sub-menu-open?
-           :onOpenChange (fn [v]
-                           (when (not= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
-                             (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
-                             (set-icon-sub-menu-open v)))}
+           :onOpenChange (fn [v event-details]
+                           (if (= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
+                             (some-> event-details (.cancel))
+                             (do
+                               (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
+                               (set-icon-sub-menu-open v))))}
           (shui/dropdown-menu-sub-trigger
            (t :context-menu/set-icon))
           (shui/dropdown-menu-sub-content
@@ -409,14 +415,17 @@
   (when page
     (let [page-menu-options (page-menu/page-menu page)]
       [:<>
-       (for [{:keys [title options]} page-menu-options]
-         (let [on-click (:on-click options)]
-           (shui/dropdown-menu-item
-            (assoc options
-                   :on-click (fn [e]
-                               (when-not (false? (when on-click (on-click e)))
-                                 (shui/popup-hide! popup-id))))
-            title)))])))
+       (for [[idx {:keys [title options]}] (map-indexed vector page-menu-options)]
+         (let [on-click (:on-click options)
+               key (or (:key options) (str "page-menu-" idx))]
+           (react/cloneElement
+            (shui/dropdown-menu-item
+             (assoc options
+                    :on-click (fn [e]
+                                (when-not (false? (when on-click (on-click e)))
+                                  (shui/popup-hide! popup-id))))
+             title)
+            #js {:key (str key)})))])))
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
@@ -430,7 +439,7 @@
 
 (hsx/defc non-hiccup-content
   [id content on-click on-hide config format]
-  (let [edit? (state/use-sub-editing? id)]
+  (let [edit? (boolean (get (rfx/use-sub [:editor/editing?]) id))]
     (if edit?
       (editor/box {:on-hide on-hide
                    :format format}

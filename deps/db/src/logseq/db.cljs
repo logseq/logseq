@@ -833,18 +833,21 @@
       (and (or (db-property/user-property-namespace? attr-ns)
                (db-property/plugin-property? attr))
            (when-let [property (d/entity db attr)]
-             (= :db.type/ref (:db/valueType property)))))))
+             (and (= :db.type/ref (:db/valueType property))
+                  (seq (:logseq.property/classes property))))))))
 
 (defn- get-ea-by-v
   [db v]
-  (d/q '[:find ?e ?a
-         :in $ ?v
-         :where
-         [?e ?a ?v]
-         [?ea :db/ident ?a]
-         [?ea :logseq.property/classes ?c]]
-       db
-       v))
+  (->> (d/datoms db :avet :logseq.property/classes)
+       (keep (fn [datom]
+               (let [property (d/entity db (:e datom))
+                     attr (:db/ident property)]
+                 (when (bidirectional-property-attr? db attr)
+                   attr))))
+       distinct
+       (mapcat (fn [attr]
+                 (map (fn [datom] [(:e datom) attr])
+                      (d/datoms db :avet attr v))))))
 
 (defn- add-entity
   [acc class-id entity]

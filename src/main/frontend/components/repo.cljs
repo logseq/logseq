@@ -11,6 +11,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -60,7 +61,7 @@
         dialog-config {:cancel-label (t :ui/cancel)
                        :ok-label (t :ui/confirm)}]
     (-> (shui/dialog-confirm!
-         [:p.font-medium.-my-4 (t :graph/upload-local-confirm-desc graph-name)]
+         [:p.font-medium.-my-4.mb-6 (t :graph/upload-local-confirm-desc graph-name)]
          dialog-config)
         (p/then
          (fn []
@@ -283,11 +284,11 @@
 
 (hsx/defc repos-cp
   []
-  (let [login? (boolean (state/use-sub :auth/id-token))
-        repos (state/use-sub [:me :repos])
+  (let [login? (boolean (rfx/use-sub [:auth/id-token]))
+        repos (rfx/use-sub [:me :repos])
         repos (util/distinct-by :url repos)
-        remotes (state/use-sub :rtc/graphs)
-        remotes-loading? (state/use-sub :rtc/loading-graphs?)
+        remotes (rfx/use-sub [:rtc/graphs])
+        remotes-loading? (rfx/use-sub [:rtc/loading-graphs?])
         repos (->> (if (and login? (seq remotes))
                      (repo-handler/combine-local-&-remote-graphs repos remotes)
                      repos)
@@ -428,12 +429,12 @@
 (hsx/defc repos-dropdown-content
   [& {:keys [contentid footer?] :as opts
       :or {footer? true}}]
-  (let [current-repo (state/use-sub :git/current-repo)
-        login? (boolean (state/use-sub :auth/id-token))
-        repos (state/use-sub [:me :repos])
-        rtc-graphs (state/use-sub :rtc/graphs)
-        downloading-graph-id (state/use-sub :rtc/downloading-graph-uuid)
-        remotes-loading? (state/use-sub :rtc/loading-graphs?)
+  (let [current-repo (rfx/use-sub [:git/current-repo])
+        login? (boolean (rfx/use-sub [:auth/id-token]))
+        repos (rfx/use-sub [:me :repos])
+        rtc-graphs (rfx/use-sub [:rtc/graphs])
+        downloading-graph-id (rfx/use-sub [:rtc/downloading-graph-uuid])
+        remotes-loading? (rfx/use-sub [:rtc/loading-graphs?])
         repos (sort-repos-with-metadata-local repos)
         repos (->>
                (if (and (seq rtc-graphs) login?)
@@ -464,14 +465,17 @@
      {:class (when (<= (count repos) 1) "no-repos")}
      (header-fn)
      [:div.cp__repos-list-wrap
-      (for [{:keys [hr item hover-detail title options icon]} (items-fn)]
+      (for [[idx {:keys [hr item hover-detail title options icon]}] (map-indexed vector (items-fn))]
         (let [on-click' (:on-click options)
               href' (:href options)
               menu-item (if (util/mobile?) ui/menu-link shui/dropdown-menu-item)]
           (if hr
-            (if (util/mobile?) [:hr.py-2] (shui/dropdown-menu-separator))
+            (if (util/mobile?)
+              [:hr.py-2 {:key (str "separator-" idx)}]
+              (shui/dropdown-menu-separator {:key (str "separator-" idx)}))
             (menu-item
              (assoc options
+                    :key (or href' hover-detail (str "repo-" idx))
                     :title hover-detail
                     :on-click (fn [^js e]
                                 (when on-click'
@@ -512,8 +516,8 @@
 
 (hsx/defc graphs-selector
   []
-  (let [current-repo (state/use-sub :git/current-repo)
-        user-repos (state/use-sub [:me :repos])
+  (let [current-repo (rfx/use-sub [:git/current-repo])
+        user-repos (rfx/use-sub [:me :repos])
         current-repo' (some->> user-repos (medley/find-first #(= current-repo (:url %))))
         repo-name (when current-repo (db/get-repo-name current-repo))
         remote? (:remote? current-repo')
@@ -524,6 +528,7 @@
                                            (shui/popup-show! (.closest (.-target e) "a")
                                                              (fn [{:keys [id]}] (repos-dropdown-content {:contentid id}))
                                                              {:as-dropdown? true
+                                                              :focus-trigger? false
                                                               :content-props {:class "repos-list"}
                                                               :align :start}))}
                         (and (util/electron?) (:root current-repo'))

@@ -2,7 +2,7 @@
   "Debug UI for undo/redo history"
   (:require [fipp.edn :as fipp]
             [frontend.handler.history :as history-handler]
-            [frontend.state :as state]
+            [frontend.rfx :as rfx]
             [frontend.ui :as ui]
             [frontend.undo-redo :as undo-redo]
             [io.factorhouse.hsx.core :as hsx]
@@ -100,7 +100,7 @@
 
 (hsx/defc undo-redo-debug-ui
   []
-  (let [repo (state/use-sub :git/current-repo)
+  (let [repo (rfx/use-sub [:git/current-repo])
         expanded?* (hooks/use-memo #(atom #{}) [])
         filter-ui-state?* (hooks/use-memo #(atom false) [])
         history* (hooks/use-memo #(atom nil) [])

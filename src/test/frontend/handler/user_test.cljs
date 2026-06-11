@@ -36,7 +36,7 @@
 (deftest set-tokens-persists-auth-json-with-latest-token-values-test
   (let [writes* (atom [])
         old-state @state/state]
-    (reset! state/state (assoc-in old-state [:system/info :home-dir] "/tmp/home"))
+    (state/replace-state! (assoc-in old-state [:system/info :home-dir] "/tmp/home"))
     (try
       (with-mocked-local-storage
         (fn []
@@ -55,14 +55,14 @@
                    (select-keys (js->clj (js/JSON.parse (:content (first @writes*))) :keywordize-keys true)
                                 [:id-token :access-token :refresh-token]))))))
       (finally
-        (reset! state/state old-state)))))
+        (state/replace-state! old-state)))))
 
 (deftest set-tokens-without-refresh-token-persists-existing-refresh-token-test
   (let [writes* (atom [])
         old-state @state/state]
-    (reset! state/state (-> old-state
-                            (assoc :auth/refresh-token "refresh-token-existing")
-                            (assoc-in [:system/info :home-dir] "/tmp/home")))
+    (state/replace-state! (-> old-state
+                              (assoc :auth/refresh-token "refresh-token-existing")
+                              (assoc-in [:system/info :home-dir] "/tmp/home")))
     (try
       (with-mocked-local-storage
         (fn []
@@ -81,7 +81,7 @@
                    (select-keys (js->clj (js/JSON.parse (:content (first @writes*))) :keywordize-keys true)
                                 [:id-token :access-token :refresh-token]))))))
       (finally
-        (reset! state/state old-state)))))
+        (state/replace-state! old-state)))))
 
 (deftest logout-clears-e2ee-password-when-db-worker-ready-test
   (testing "logout should request db-worker to clear persisted e2ee password"
