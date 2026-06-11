@@ -420,12 +420,9 @@ a.chosen {
   background: var(--ls-a-chosen-bg);
 }
 
-a.warning,
-span.warning,
-div.warning:not(.admonitionblock),
-p.warning {
+a.warning {
   @apply bg-yellow-rx-05-alpha text-yellow-rx-08 dark:bg-yellow-rx-07-alpha
-  dark:text-yellow-rx-10 rounded px-1.5 py-[2px] leading-none;
+  dark:text-yellow-rx-10 rounded px-1.5 py-0.5 leading-none;
 }
 
 .text-warning {

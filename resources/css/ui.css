@@ -145,6 +145,13 @@
   transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s, height 0.15s;
 }
 
+.ui__toaster-viewport .ui__toast.warning {
+  border-radius: calc(var(--radius) - 2px);
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  padding: 0px;
+}
+
 .ui__toaster-viewport .ui__toast[data-expanded] {
   transform: translateX(var(--toast-swipe-movement-x)) translateY(var(--offset-y));
   height: var(--toast-height);
