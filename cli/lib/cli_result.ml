@@ -275,6 +275,21 @@ let example_human value =
   in
   human_table (List.map (fun line -> [ line ]) lines)
 
+let contains_substring ~needle text =
+  let needle_len = String.length needle in
+  let text_len = String.length text in
+  let rec loop index =
+    index + needle_len <= text_len
+    && (String.sub text index needle_len = needle || loop (index + 1))
+  in
+  loop 0
+
+let sensitive_field label =
+  let label = String.lowercase_ascii label in
+  List.exists
+    (fun needle -> contains_substring ~needle label)
+    [ "token"; "secret"; "password" ]
+
 let graph_info_human value =
   match Edn_util.as_map value with
   | Some fields ->
@@ -291,7 +306,11 @@ let graph_info_human value =
                 List.map
                   (fun (key, value) ->
                     let label = field_label key in
-                    [ label; graph_info_field_value_text label value ])
+                    [
+                      label;
+                      (if sensitive_field label then "[REDACTED]"
+                       else graph_info_field_value_text label value);
+                    ])
                   kv_fields
             | None -> [])
         | None -> []
