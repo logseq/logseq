@@ -513,7 +513,7 @@ let build ?registry:_ config _globals = function
       | None -> Error (Error.missing_repo "repo is required for agent bridge"))
 
 let kw value = Edn_util.keyword value
-let sym value = Edn_util.string ("~$" ^ value)
+let sym value = Edn_util.symbol value
 let vector values = Edn_util.vector values
 let list values = Edn_util.list values
 let empty_rules = vector []
