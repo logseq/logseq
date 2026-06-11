@@ -16,11 +16,12 @@ let int value = any (Melange_edn.int (Int64.of_int value))
 let int64 value = any (Melange_edn.int value)
 let float value = any (Melange_edn.float value)
 let string value = any (Melange_edn.string value)
+let symbol value = any (Melange_edn.symbol value)
 let keyword value = any (keyword_t value)
 let uuid value = any (Melange_edn.tagged "uuid" (string value))
 
 let bytes value =
-  any (Melange_edn.tagged "bytes" (string (Bytes.to_string value)))
+  any (Melange_edn.tagged "transit/bytes" (string (Bytes.to_string value)))
 
 let list values = any (list_t values)
 let vector values = any (vector_t values)
@@ -56,6 +57,10 @@ let as_string = function
   | Melange_edn.Any (Melange_edn.String value) -> Some value
   | _ -> None
 
+let as_symbol = function
+  | Melange_edn.Any (Melange_edn.Symbol value) -> Some value
+  | _ -> None
+
 let as_keyword = function
   | Melange_edn.Any (Melange_edn.Keyword value) -> Some (keyword_text value)
   | _ -> None
@@ -70,7 +75,7 @@ let as_uuid = function
   | _ -> None
 
 let as_bytes = function
-  | Melange_edn.Any (Melange_edn.Tagged (("bytes" | "transit/bytes"), value)) ->
+  | Melange_edn.Any (Melange_edn.Tagged ("transit/bytes", value)) ->
       Option.map Bytes.of_string (as_string value)
   | _ -> None
 
