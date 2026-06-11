@@ -299,6 +299,27 @@ let validate_integer_option key options =
       Error (invalid_value key value "Expected integer")
   | _ -> Ok ()
 
+let validate_integer_options keys options =
+  List.fold_left
+    (fun result key ->
+      Error.bind result (fun () -> validate_integer_option key options))
+    (Ok ()) keys
+
+let validate_boolean_option_values options =
+  match
+    List.find_opt
+      (fun (key, value) ->
+        boolean_option key
+        &&
+        match value with
+        | Some value -> not (boolean_literal value)
+        | None -> false)
+      options
+  with
+  | Some (key, Some value) ->
+      Error (invalid_value key value "Expected true or false")
+  | _ -> Ok ()
+
 let validate_member_option key values options =
   match option_value key options with
   | Some value when not (List.mem value values) ->
@@ -422,39 +443,53 @@ let validate_pos_value options =
     [ "first-child"; "last-child"; "sibling" ]
     options
 
-let validate_option_values path options =
+let validate_selector_integer_values path options =
   match path with
-  | [ "graph"; "export" ] -> validate_graph_export_values options
-  | [ "list"; "page" ] ->
-      Error.bind (validate_list_common_values list_page_sort_values options)
-        (fun () ->
-          Error.bind (validate_time_option "updated-after" options) (fun () ->
-              validate_time_option "created-after" options))
-  | [ "list"; "tag" ] ->
-      validate_list_common_values list_tag_sort_values options
-  | [ "list"; "property" ] ->
-      validate_list_common_values list_property_sort_values options
-  | [ "list"; "task" ] ->
-      validate_list_common_values list_task_sort_values options
-  | [ "list"; "node" ] ->
-      Error.bind (validate_list_node_values options) (fun () ->
-          validate_list_common_values list_node_sort_values options)
-  | [ "list"; "asset" ] ->
-      validate_list_common_values list_asset_sort_values options
-  | [ "show" ] -> validate_integer_option "level" options
-  | [ "completion" ] ->
-      validate_member_option "shell" [ "zsh"; "bash" ] options
-  | [ "upsert"; "task" ] ->
-      Error.bind (validate_pos_value options) (fun () ->
-          Error.bind (validate_time_option "scheduled" options) (fun () ->
-              validate_time_option "deadline" options))
-  | [ "upsert"; "block" ] | [ "upsert"; "asset" ] -> validate_pos_value options
+  | [ "remove"; ("page" | "tag" | "property") ]
+  | [ "upsert"; ("page" | "tag" | "property") ]
+  | [ "sync"; "asset"; "download" ]
+  | [ "debug"; "pull" ] ->
+      validate_integer_option "id" options
+  | [ "upsert"; ("block" | "asset" | "task") ] ->
+      validate_integer_options [ "id"; "target-id" ] options
   | _ -> Ok ()
+
+let validate_option_values path options =
+  Error.bind (validate_selector_integer_values path options) (fun () ->
+      match path with
+      | [ "graph"; "export" ] -> validate_graph_export_values options
+      | [ "list"; "page" ] ->
+          Error.bind (validate_list_common_values list_page_sort_values options)
+            (fun () ->
+              Error.bind (validate_time_option "updated-after" options)
+                (fun () -> validate_time_option "created-after" options))
+      | [ "list"; "tag" ] ->
+          validate_list_common_values list_tag_sort_values options
+      | [ "list"; "property" ] ->
+          validate_list_common_values list_property_sort_values options
+      | [ "list"; "task" ] ->
+          validate_list_common_values list_task_sort_values options
+      | [ "list"; "node" ] ->
+          Error.bind (validate_list_node_values options) (fun () ->
+              validate_list_common_values list_node_sort_values options)
+      | [ "list"; "asset" ] ->
+          validate_list_common_values list_asset_sort_values options
+      | [ "show" ] -> validate_integer_option "level" options
+      | [ "completion" ] ->
+          validate_member_option "shell" [ "zsh"; "bash" ] options
+      | [ "upsert"; "task" ] ->
+          Error.bind (validate_pos_value options) (fun () ->
+              Error.bind (validate_time_option "scheduled" options) (fun () ->
+                  validate_time_option "deadline" options))
+      | [ "upsert"; "block" ] | [ "upsert"; "asset" ] ->
+          validate_pos_value options
+      | _ -> Ok ())
 
 let validate_options path options =
   Error.bind (validate_known_options path options) (fun () ->
-      Error.bind (validate_global_values options) (fun () ->
-          validate_option_values path options))
+      Error.bind (validate_boolean_option_values options) (fun () ->
+          Error.bind (validate_global_values options) (fun () ->
+              validate_option_values path options)))
 
 let sync_config_key_or_error = function
   | None -> Ok None
