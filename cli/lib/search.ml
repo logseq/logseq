@@ -63,7 +63,7 @@ let build ?registry:_ config _globals parsed =
 let items_value items =
   Edn_util.map [ (Edn_util.keyword "items", Edn_util.vector items) ]
 
-let sym name = Edn_util.string ("~$" ^ name)
+let sym name = Edn_util.symbol name
 let kw name = Edn_util.keyword name
 let vector values = Edn_util.vector values
 let list values = Edn_util.list values

@@ -69,7 +69,7 @@ let selector_value = function
   | By_ident ident ->
       Edn_util.vector [ Edn_util.keyword "db/ident"; Edn_util.any ident ]
 
-let default_selector = Edn_util.vector [ Edn_util.string "~$*" ]
+let default_selector = Edn_util.vector [ Edn_util.symbol "*" ]
 
 let build ?registry:_ config _globals (Parsed_pull opts) =
   Error.bind (resolve_selector opts) (fun lookup ->
