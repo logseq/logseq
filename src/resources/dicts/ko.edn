@@ -1587,10 +1587,8 @@
  :settings.editor/wide-mode "와이드 모드"
 
  :settings.features/enable-flashcards "플래시 카드 활성화"
- :settings.features/enable-journals "일지 활성화"
  :settings.features/home-default-page "기본 홈 페이지 설정"
  :settings.features/home-default-page-update-success "홈 기본 페이지가 업데이트되었습니다"
- :settings.features/journals-enable-success "저널 활성화"
  :settings.features/login-prompt "Logseq의 새로운 기능을 먼저 체험하기 위해서는, Open Collective Sponsor가 되거나 Logseq의 Backer가 되어야 합니다. 먼저, 로그인 하십시오."
  :settings.features/page-not-found "\"{1}\" 페이지가 아직 존재하지 않습니다. 먼저 해당 페이지를 만든 후 다시 시도하세요."
  :settings.features/plugin-system "플러그인 시스템"

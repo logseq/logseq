@@ -1587,10 +1587,8 @@
  :settings.editor/wide-mode "Mode lebar"
 
  :settings.features/enable-flashcards "Kartu Belajar"
- :settings.features/enable-journals "Jurnal"
  :settings.features/home-default-page "Atur halaman beranda default"
  :settings.features/home-default-page-update-success "Halaman default diperbarui"
- :settings.features/journals-enable-success "Jurnal diaktifkan"
  :settings.features/login-prompt "Untuk mengakses fitur-fitur baru sebelum orang lain, Anda harus menjadi Sponsor atau Pendukung Logseq di Open Collective dan oleh karena itu harus masuk terlebih dahulu."
  :settings.features/page-not-found "Halaman \"{1}\" belum ada. Harap buat halaman itu terlebih dahulu, lalu coba lagi."
  :settings.features/plugin-system "Pengaya"

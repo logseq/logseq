@@ -1587,10 +1587,8 @@
  :settings.editor/wide-mode "Breitbildmodus"
 
  :settings.features/enable-flashcards "Karteikarten"
- :settings.features/enable-journals "Journale einschalten"
  :settings.features/home-default-page "Standard-Homepage einrichten"
  :settings.features/home-default-page-update-success "Standard-Startseite aktualisiert"
- :settings.features/journals-enable-success "Journale aktiviert"
  :settings.features/login-prompt "Um vor allen anderen auf neue Funktionen zugreifen zu können, müssen Sie ein Open Collective Sponsor oder Backer von Logseq sein und sich daher zuerst anmelden."
  :settings.features/page-not-found "Die Seite „{1}“ existiert noch nicht. Bitte erstellen Sie zuerst diese Seite und versuchen Sie es dann erneut."
  :settings.features/plugin-system "Plugin-System"

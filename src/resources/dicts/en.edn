@@ -1691,10 +1691,8 @@
  :settings.editor/wide-mode "Wide mode"
 
  :settings.features/enable-flashcards "Flashcards"
- :settings.features/enable-journals "Journals"
  :settings.features/home-default-page "Set the default home page"
  :settings.features/home-default-page-update-success "Home default page updated successfully!"
- :settings.features/journals-enable-success "Journals enabled"
  :settings.features/login-prompt "To access new features before anyone else you must be an Open Collective Sponsor or Backer of Logseq and therefore log in first."
  :settings.features/markdown-mirror "Markdown Mirror"
  :settings.features/markdown-mirror-desc "Write a derived Markdown copy of edited pages to the graph's mirror/markdown folder. Desktop only."
