@@ -312,6 +312,33 @@ let run app input =
     time "cli.format-result" (fun () ->
         Cli_effect.pure (format_result app result config))
   in
+  let requested_output_format () =
+    globals_of_options options |> fun globals ->
+    Option.value globals.Global_opts.output_format ~default:Output_mode.default
+  in
+  let result_output_text ?human_message = function
+    | Result result -> (
+        match result.Cli_result.output with
+        | Output.Human _ -> (
+            match (result.Cli_result.status, human_message, result.error) with
+            | Ok, Some message, _ -> message
+            | Error, _, Some err -> Format_types.format_error err result.command
+            | _ -> "")
+        | Output.Json _ -> Format_types.to_json result
+        | Output.Edn _ -> Format_types.to_edn result)
+  in
+  let message_result ?command output_format message =
+    let pack (Output.Mode.Packed mode) =
+      Result (Cli_result.ok ?command mode (Message message))
+    in
+    pack output_format
+  in
+  let error_result ?command output_format err =
+    let pack (Output.Mode.Packed mode) =
+      Result (Cli_result.error ?command mode err)
+    in
+    pack output_format
+  in
   let finish_command_error config request err =
     let packed_result =
       let pack (Output.Mode.Packed mode) =
@@ -343,26 +370,32 @@ let run app input =
       }
   in
   if option_present "version" options then
+    let* request =
+      time "cli.parse-args" (fun () ->
+          Cli_effect.pure
+            (Cli_request.make ~globals:(globals_of_options options) ~path:[]
+               ~command:Cli_request.Version ~raw_args:input.argv))
+    in
     let version = version_output () in
     let packed_result =
-      Result
-        (Cli_result.ok ~command:Command_id.Version Output.Mode.Human
-           (Message version))
+      message_result ~command:Command_id.Version (requested_output_format ())
+        version
     in
-    finish None
+    let output = result_output_text ~human_message:version packed_result in
+    finish (Some request)
       {
         result = packed_result;
-        stdout = Some (version ^ "\n");
+        stdout = Some (output ^ "\n");
         stderr = [];
         exit_code = 0;
         lifecycle =
           {
             argv = input.argv;
-            request = None;
+            request = Some request;
             config = None;
             action = None;
             result = Some packed_result;
-            output = Some version;
+            output = Some output;
             exit_code = Some 0;
             current_phase = Exit;
           };
@@ -372,12 +405,13 @@ let run app input =
     | Some group ->
         let help = Command_registry.render_help ~group app.registry in
         let packed_result =
-          Result (Cli_result.ok Output.Mode.Human (Message help))
+          message_result (requested_output_format ()) help
         in
+        let output = result_output_text ~human_message:help packed_result in
         finish None
           {
             result = packed_result;
-            stdout = Some (help ^ "\n");
+            stdout = Some (output ^ "\n");
             stderr = [];
             exit_code = 0;
             lifecycle =
@@ -387,7 +421,7 @@ let run app input =
                 config = None;
                 action = None;
                 result = Some packed_result;
-                output = Some help;
+                output = Some output;
                 exit_code = Some 0;
                 current_phase = Exit;
               };
@@ -397,48 +431,11 @@ let run app input =
           time "cli.parse-args" (fun () -> parse_request app input)
         in
         match parsed with
-        | Error err when err.Error.code = Edn_util.keyword_t "invalid-options"
-          ->
-            let output_format =
-              globals_of_options options |> fun globals ->
-              globals.Global_opts.output_format
-            in
-            let result = Cli_result.error Output.Mode.Human err in
-            let packed_result = Result result in
-            let* output =
-              time "cli.format-result" (fun () ->
-                  Cli_effect.pure
-                    (match output_format with
-                    | Some (Output.Mode.Packed Output.Mode.Json) ->
-                        Format_types.to_json result
-                    | Some (Output.Mode.Packed Output.Mode.Edn) ->
-                        Format_types.to_edn result
-                    | _ -> Format_types.format_error err None))
-            in
-            finish None
-              {
-                result = packed_result;
-                stdout = Some (output ^ "\n");
-                stderr = [];
-                exit_code = 1;
-                lifecycle =
-                  {
-                    argv = input.argv;
-                    request = None;
-                    config = None;
-                    action = None;
-                    result = Some packed_result;
-                    output = Some output;
-                    exit_code = Some 1;
-                    current_phase = Exit;
-                  };
-              }
         | Error err ->
-            let result = Cli_result.error Output.Mode.Human err in
-            let packed_result = Result result in
+            let packed_result = error_result (requested_output_format ()) err in
             let* output =
               time "cli.format-result" (fun () ->
-                  Cli_effect.pure (Format_types.format_error err None))
+                  Cli_effect.pure (result_output_text packed_result))
             in
             finish None
               {

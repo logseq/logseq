@@ -406,10 +406,13 @@ let command_id _ = Command_id.Completion
 let validate_parsed _ = Ok ()
 
 let build ?registry _config _ = function
-  | Parsed_completion { shell } ->
+  | Parsed_completion { shell = Some shell } ->
       Ok
-        (Completion
-           { shell = Option.value shell ~default:Cli_primitive.Zsh; registry })
+        (Completion { shell; registry })
+  | Parsed_completion { shell = None } ->
+      Error
+        (Error.invalid_options
+           "completion shell is required; expected zsh or bash")
 
 let execute (Completion { shell; registry }) _config mode =
   Cli_effect.pure

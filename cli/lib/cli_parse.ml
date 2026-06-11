@@ -999,7 +999,10 @@ let parse ?stdin argv =
     | [ "completion" ] ->
         let shell =
           match option_value "shell" options with
-          | None -> Ok None
+          | None ->
+              Error
+                (Error.invalid_options
+                   "completion shell is required; expected zsh or bash")
           | Some shell -> (
               match Cli_primitive.shell_of_string shell with
               | Some shell -> Ok (Some shell)
