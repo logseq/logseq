@@ -590,7 +590,7 @@ let graph_validate_result mode _config result =
            ^ " with errors:\n"
            ^ Melange_edn.to_edn_string (Edn_util.vector errors)))
 
-let sym name = Edn_util.string ("~$" ^ name)
+let sym name = Edn_util.symbol name
 let vector values = Edn_util.vector values
 let vector_t values = Edn_util.vector_t values
 let list values = Edn_util.list values
@@ -612,12 +612,12 @@ let graph_info_key value =
   match Edn_util.as_keyword value with
   | Some value -> value
   | None -> (
-      match Edn_util.as_string value with
-      | Some value ->
-          if String.length value >= 2 && String.sub value 0 2 = "~$" then
-            String.sub value 2 (String.length value - 2)
-          else value
-      | None -> Melange_edn.to_edn_string value)
+      match Edn_util.as_symbol value with
+      | Some value -> value
+      | None -> (
+          match Edn_util.as_string value with
+          | Some value -> value
+          | None -> Melange_edn.to_edn_string value))
 
 let graph_info_kv rows =
   let row_fields row =
