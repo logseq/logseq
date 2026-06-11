@@ -103,6 +103,9 @@ let execute action config mode =
   | Agent action -> Agent.execute action config mode
 
 let requires_missing_graph = function
+  | Graph (Graph.Graph_import { opts = { import_type = Graph.Import_sqlite; _ }; _ })
+    ->
+      true
   | Sync (Sync.Sync_download { require_missing_graph; _ }) ->
       require_missing_graph
   | _ -> false

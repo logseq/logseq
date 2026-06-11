@@ -53,6 +53,49 @@ let data_to_value = function
   | Entity v | Query_result v | Raw v -> v
   | Empty -> Edn_util.nil
 
+let contains_substring ~needle text =
+  let needle_len = String.length needle in
+  let text_len = String.length text in
+  let rec loop index =
+    index + needle_len <= text_len
+    && (String.sub text index needle_len = needle || loop (index + 1))
+  in
+  loop 0
+
+let sensitive_field key =
+  let key = String.lowercase_ascii (strip_leading_colon key) in
+  List.exists
+    (fun needle -> contains_substring ~needle key)
+    [ "token"; "secret"; "password" ]
+
+let rec redact_sensitive_value value =
+  match Edn_util.as_map value with
+  | Some fields ->
+      fields
+      |> List.map (fun (key, value) ->
+             let value =
+               match Edn_util.as_string_like key with
+               | Some key when sensitive_field key ->
+                   Edn_util.string "[REDACTED]"
+               | _ -> redact_sensitive_value value
+             in
+             (key, value))
+      |> Edn_util.map
+  | None -> (
+      match Edn_util.as_seq value with
+      | Some values -> Edn_util.vector (List.map redact_sensitive_value values)
+      | None -> value)
+
+let result_data_value result =
+  let data =
+    match result.Cli_result.data with
+    | Some data -> data_to_value data
+    | None -> Edn_util.nil
+  in
+  match result.Cli_result.command with
+  | Some Command_id.Graph_info -> redact_sensitive_value data
+  | _ -> data
+
 let candidate_to_value (candidate : Error.candidate) =
   let fields =
     match candidate.name with
@@ -121,11 +164,7 @@ let to_json result =
   let object_ = Js.Dict.empty () in
   match result.Cli_result.status with
   | Ok ->
-      let data =
-        match result.data with
-        | Some data -> data_to_value data
-        | None -> Edn_util.nil
-      in
+      let data = result_data_value result in
       Js.Dict.set object_ "status" (Js.Json.string "ok");
       Js.Dict.set object_ "data" (json_of_value data);
       Js.Json.stringify (Js.Json.object_ object_)
@@ -143,11 +182,7 @@ let to_edn result =
   let status, payload_key, payload =
     match result.Cli_result.status with
     | Ok ->
-        let data =
-          match result.data with
-          | Some data -> data_to_value data
-          | None -> Edn_util.nil
-        in
+        let data = result_data_value result in
         (Edn_util.keyword "ok", Edn_util.keyword "data", data)
     | Error ->
         let error =
