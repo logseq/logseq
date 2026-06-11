@@ -27,42 +27,8 @@ let strip_prefix prefix value =
 
 let transit_keyword_name keyword = strip_prefix ":" keyword
 
-let rec transit_of_value value =
-  match value with
-  | Melange_edn.Any Melange_edn.Nil -> T.Null
-  | Any (Bool value) -> T.Bool value
-  | Any (Int value) -> (
-      match Edn_util.int64_to_int_opt value with
-      | Some value -> T.Int value
-      | None -> T.Int64 value)
-  | Any (Bigint value) | Any (Decimal value) -> T.String value
-  | Any (Float value) -> T.Float value
-  | Any (String value) -> T.String value
-  | Any (Symbol value) -> T.Symbol value
-  | Any (Keyword keyword) -> T.Keyword (Melange_edn.keyword_to_string keyword)
-  | Any (Tagged ("uuid", value)) -> (
-      match Edn_util.as_string value with
-      | Some uuid -> T.Uuid uuid
-      | None -> T.of_edn value)
-  | Any (Tagged ("transit/bytes", value)) -> (
-      match Edn_util.as_string value with
-      | Some value -> T.Binary value
-      | None -> T.of_edn value)
-  | Any (List values) ->
-      T.List (List.map transit_of_value (Edn_util.iarray_to_list values))
-  | Any (Vector values) ->
-      T.Array (List.map transit_of_value (Edn_util.iarray_to_list values))
-  | Any (Set values) ->
-      T.Set (List.map transit_of_value (Edn_util.iarray_to_list values))
-  | Any (Map fields) ->
-      T.Map
-        (List.map
-           (fun (key, value) -> (transit_of_value key, transit_of_value value))
-           (Edn_util.iarray_to_list fields))
-  | _ -> T.of_edn value
-
 let value_of_transit = T.to_edn
-let transit_json_of_value value = T.to_string (transit_of_value value)
+let transit_json_of_value value = T.to_string (T.of_edn value)
 let value_of_transit_string text = T.of_string text |> value_of_transit
 let edn_of_value value = value
 let value_of_edn value = value
