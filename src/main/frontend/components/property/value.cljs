@@ -1643,12 +1643,12 @@
         #{}))))
 
 (defn- assets-selected-first
-  "Sorts selected assets first, then by most recently updated."
+  "Sorts selected assets first, then by most recently created."
   [assets selected-ids]
   (->> assets
        (sort-by (fn [asset]
                   [(if (contains? selected-ids (:db/id asset)) 0 1)
-                   (- (or (:block/updated-at asset) 0))]))
+                   (- (or (:block/created-at asset) 0))]))
        (vec)))
 
 (defn- show-asset-picker-error!
