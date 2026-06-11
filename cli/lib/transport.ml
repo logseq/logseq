@@ -27,11 +27,6 @@ let strip_prefix prefix value =
 
 let transit_keyword_name keyword = strip_prefix ":" keyword
 
-let symbol_name value =
-  if starts_with ~prefix:"~$" value then
-    Some (String.sub value 2 (String.length value - 2))
-  else None
-
 let rec transit_of_value value =
   match value with
   | Melange_edn.Any Melange_edn.Nil -> T.Null
@@ -39,20 +34,17 @@ let rec transit_of_value value =
   | Any (Int value) -> (
       match Edn_util.int64_to_int_opt value with
       | Some value -> T.Int value
-      | None -> T.String (Int64.to_string value))
+      | None -> T.Int64 value)
   | Any (Bigint value) | Any (Decimal value) -> T.String value
   | Any (Float value) -> T.Float value
-  | Any (String value) -> (
-      match symbol_name value with
-      | Some symbol -> T.Symbol symbol
-      | None -> T.String value)
+  | Any (String value) -> T.String value
   | Any (Symbol value) -> T.Symbol value
   | Any (Keyword keyword) -> T.Keyword (Melange_edn.keyword_to_string keyword)
   | Any (Tagged ("uuid", value)) -> (
       match Edn_util.as_string value with
       | Some uuid -> T.Uuid uuid
       | None -> T.of_edn value)
-  | Any (Tagged ("bytes", value)) | Any (Tagged ("transit/bytes", value)) -> (
+  | Any (Tagged ("transit/bytes", value)) -> (
       match Edn_util.as_string value with
       | Some value -> T.Binary value
       | None -> T.of_edn value)
