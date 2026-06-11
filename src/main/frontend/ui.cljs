@@ -661,8 +661,8 @@
                (log/error :exception error)
                (notification/show!
                 [:div.flex.flex-col.gap-2
-                 [:div (t :ui/error-boundary-error error)]
-                 (str (.-stack error))] `:error))}
+                 [:div (t :ui/error-boundary-error (if (instance? js/Error error) (.-message error) (str error)))]
+                 (when (instance? js/Error error) (str (.-stack error)))] :error))}
    view))
 
 (hsx/defc block-error
