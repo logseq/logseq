@@ -1587,10 +1587,8 @@
  :settings.editor/wide-mode "Bred modus"
 
  :settings.features/enable-flashcards "Aktiver flashkort"
- :settings.features/enable-journals "Aktiver dagbøker"
  :settings.features/home-default-page "Angi standard hjemmeside"
  :settings.features/home-default-page-update-success "Standardside oppdatert"
- :settings.features/journals-enable-success "Dagbøker aktivert"
  :settings.features/login-prompt "Logg inn for å synkronisere"
  :settings.features/page-not-found "Siden \"{1}\" eksisterer ikke ennå. Opprett den siden først, og prøv deretter på nytt."
  :settings.features/plugin-system "Utvidelses-system"
