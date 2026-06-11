@@ -27,7 +27,7 @@ type action = {
 let kw value = Edn_util.keyword value
 let vector values = Edn_util.vector values
 let list values = Edn_util.list values
-let sym value = Edn_util.string ("~$" ^ value)
+let sym value = Edn_util.symbol value
 let normalized_lookup_name value = String.lowercase_ascii (String.trim value)
 
 let edn_value_of_string ~label text =

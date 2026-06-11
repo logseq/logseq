@@ -159,7 +159,7 @@ let build ?registry:_ config _globals (Parsed_show opts) =
                 }))
 
 let kw value = Edn_util.keyword value
-let sym value = Edn_util.string ("~$" ^ value)
+let sym value = Edn_util.symbol value
 let vector values = Edn_util.vector values
 let wildcard = sym "*"
 
