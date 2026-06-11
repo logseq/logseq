@@ -1423,6 +1423,19 @@ let () =
           expect_parse_error_code "bad limit" ":invalid-options"
             [ "list"; "page"; "--limit"; "nope" ]);
 
+  test "CLI parity parse rejects malformed boolean and selector values"
+    (fun () ->
+      expect_parse_error_code "bad boolean equals" ":invalid-options"
+        [ "list"; "page"; "--include-built-in=maybe" ];
+      expect_parse_error_code "bad boolean value" ":invalid-options"
+        [ "show"; "--id"; "1"; "--linked-references=maybe" ];
+      expect_parse_error_code "bad remove page id" ":invalid-options"
+        [ "remove"; "page"; "--id"; "abc"; "--page"; "Home" ];
+      expect_parse_error_code "bad sync asset id" ":invalid-options"
+        [ "sync"; "asset"; "download"; "--id"; "abc"; "--uuid"; "id" ];
+      expect_parse_error_code "bad debug id" ":invalid-options"
+        [ "debug"; "pull"; "--id"; "abc"; "--uuid"; "id" ]);
+
   test "CLI parity parse supports list tag property task node and asset options"
     (fun () ->
       let tag =
@@ -4084,6 +4097,18 @@ let () =
         (Graph.build (config ()) globals
            (Graph.Parsed_create
               { enable_sync = false; e2ee_password = Some "pw" }));
+      List.iter
+        (fun graph_name ->
+          expect_error_code
+            ("reject graph name " ^ graph_name)
+            "invalid-options"
+            (Graph.build (config ())
+               (Global_opts.create
+                  ~graph:(Cli_primitive.create_graph graph_name)
+                  ())
+               (Graph.Parsed_create
+                  { enable_sync = false; e2ee_password = None })))
+        [ ""; "   "; "."; " .. " ];
       let create =
         expect_ok "graph create build"
           (Graph.build (config ()) globals

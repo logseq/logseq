@@ -1308,12 +1308,12 @@ let metadata () =
         ]
       Sync_grant_access "Grant graph access to an email";
     meta
-      ~examples:[ "logseq sync config set --key sync-enabled --value true" ]
+      ~examples:[ "logseq sync config set sync-enabled true" ]
       Sync_config_set "Set sync config key";
     meta
-      ~examples:[ "logseq sync config get --key sync-enabled" ]
+      ~examples:[ "logseq sync config get sync-enabled" ]
       Sync_config_get "Get sync config key";
     meta
-      ~examples:[ "logseq sync config unset --key sync-enabled" ]
+      ~examples:[ "logseq sync config unset sync-enabled" ]
       Sync_config_unset "Unset sync config key";
   ]
