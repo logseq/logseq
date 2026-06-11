@@ -1,6 +1,5 @@
 (ns logseq.db-sync.worker.handler.sync
   (:require [clojure.string :as string]
-            [datascript.core :as d]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.batch :as batch]
