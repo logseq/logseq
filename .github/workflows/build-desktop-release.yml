@@ -643,9 +643,6 @@ jobs:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
     needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64 ]
     runs-on: ubuntu-22.04
-    permissions:
-      actions: read
-      contents: write
     steps:
       - name: Download MacOS x64 Artifacts
         uses: actions/download-artifact@v4
@@ -701,72 +698,26 @@ jobs:
         run: ls -rl
 
       - name: Update Nightly Release
+        uses: andelf/nightly-release@main
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          tag_name="nightly"
-          release_name="Desktop app Nightly Release $(date -u +%Y%m%d)"
-          current_sha="${GITHUB_SHA}"
-          ref_path="repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag_name}"
-          existing_sha="$(gh api "$ref_path" --jq '.object.sha' 2>/dev/null || true)"
-
-          if [[ "$existing_sha" == "$current_sha" ]]; then
-            echo "${tag_name} already points at ${current_sha}; skipping nightly release update."
-            exit 0
-          fi
-
-          if [[ -z "$existing_sha" ]]; then
-            gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
-              -f "ref=refs/tags/${tag_name}" \
-              -f "sha=${current_sha}" >/dev/null
-          else
-            gh api --method PATCH "$ref_path" \
-              -f "sha=${current_sha}" \
-              -F "force=true" >/dev/null
-          fi
-
-          cat > release-notes.md <<'EOF'
-          This is a nightly release of the Logseq desktop app.
-          It's unstable compared to the official releases, **use it with caution**!
-          EOF
-
-          if gh release view "$tag_name" >/dev/null 2>&1; then
-            gh release edit "$tag_name" --draft
-
-            gh release view "$tag_name" --json assets --jq '.assets[].name' |
-              while IFS= read -r asset; do
-                if [[ -n "$asset" ]]; then
-                  gh release delete-asset "$tag_name" "$asset" -y
-                fi
-              done
-
-            gh release edit "$tag_name" \
-              --title "$release_name" \
-              --notes-file release-notes.md \
-              --prerelease
-          else
-            gh release create "$tag_name" \
-              --target "$current_sha" \
-              --title "$release_name" \
-              --notes-file release-notes.md \
-              --prerelease \
-              --draft
-          fi
-
-          gh release upload "$tag_name" \
-            ./SHA256SUMS.txt \
-            ./*.zip \
-            ./*.dmg \
-            ./*.exe \
-            ./*.yml \
-            ./*.blockmap \
-            ./*.AppImage \
-            ./*.apk \
-            --clobber
-
-          gh release edit "$tag_name" --prerelease --draft=false
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: nightly
+          name: 'Desktop app Nightly Release $$'
+          draft: false
+          prerelease: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.is-pre-release) || (github.event_name == 'schedule')}}
+          body: |
+            This is a nightly release of the Logseq desktop app.
+            It's unstable compared to the official releases, **use it with caution**!
+          files: |
+            ./SHA256SUMS.txt
+            ./*.zip
+            ./*.dmg
+            ./*.exe
+            ./*.yml
+            ./*.blockmap
+            ./*.AppImage
+            ./*.apk
 
   release:
     if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') }}
