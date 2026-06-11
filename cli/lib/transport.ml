@@ -52,9 +52,9 @@ let rec transit_of_value value =
       match Edn_util.as_string value with
       | Some uuid -> T.Uuid uuid
       | None -> T.of_edn value)
-  | Any (Tagged ("bytes", value)) -> (
+  | Any (Tagged ("bytes", value)) | Any (Tagged ("transit/bytes", value)) -> (
       match Edn_util.as_string value with
-      | Some value -> T.Bytes value
+      | Some value -> T.Binary value
       | None -> T.of_edn value)
   | Any (List values) ->
       T.List (List.map transit_of_value (Edn_util.iarray_to_list values))
@@ -400,6 +400,8 @@ let connect_events config on_event =
        ~on_chunk:(consume_sse_chunk on_event buffer))
 
 let normalize_format format = Edn_util.keyword_to_string format |> String.trim
+let write_file_text path content = Cli_unix.write_text_file path content
+let read_file_text path = Cli_unix.read_text_file path
 let write_file_binary path content = Cli_unix.write_binary_file path content
 let read_file_binary path = Bytes.of_string (Cli_unix.read_binary_file path)
 
@@ -425,7 +427,7 @@ let write_output ~format ~path ~data =
     let result =
       match format with
       | "edn" ->
-          write_file_binary path (E.to_edn_string (edn_of_value data));
+          write_file_text path (E.to_edn_string (edn_of_value data));
           Ok ()
       | "db" | "sqlite" ->
           write_file_binary path (bytes_of_output_data data);
@@ -441,7 +443,7 @@ let read_input ~format ~path =
     let result =
       match format with
       | "edn" ->
-          let content = read_file_binary path |> Bytes.to_string in
+          let content = read_file_text path in
           Ok (E.of_edn_string content |> value_of_edn)
       | "db" | "sqlite" -> Ok (Edn_util.bytes (read_file_binary path))
       | _ -> Error (unsupported_input_format format)

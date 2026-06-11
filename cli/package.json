@@ -7,5 +7,8 @@
   },
   "devDependencies": {
     "vite": "^8.0.16"
+  },
+  "dependencies": {
+    "transit-js": "0.8.874"
   }
 }
