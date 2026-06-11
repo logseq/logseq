@@ -5580,6 +5580,7 @@ let () =
     (fun () ->
       let root = temp_dir "logseq-cli-parity-transport-io-" in
       let edn_path = Node.Path.join [| root; "data.edn" |] in
+      let edn_utf8_path = Node.Path.join [| root; "utf8.edn" |] in
       let sqlite_path = Node.Path.join [| root; "graph.sqlite" |] in
       let db_path = Node.Path.join [| root; "graph.db" |] in
       try
@@ -5591,17 +5592,29 @@ let () =
                    ~data:
                      (Edn_util.map
                         [
-                          (Edn_util.keyword "title", Edn_util.string "Home");
+                          (Edn_util.keyword "title", Edn_util.string "中文标题");
                           (Edn_util.keyword "count", Edn_util.int 2);
                         ]))));
+        expect_named_contains "edn file preserves utf8"
+          (read_file edn_path) "中文标题";
         let edn_value =
           expect_ok "read edn"
             (effect_result "read edn"
                (Transport.read_input ~format:(Edn_util.keyword_t "edn")
                   ~path:edn_path))
         in
-        expect_equal "edn title" "Home"
+        expect_equal "edn title" "中文标题"
           (expect_some "title" (Edn_util.get_string edn_value "title"));
+        write_file edn_utf8_path "{:title \"导入中文\"}";
+        let edn_utf8_value =
+          expect_ok "read utf8 edn"
+            (effect_result "read utf8 edn"
+               (Transport.read_input ~format:(Edn_util.keyword_t "edn")
+                  ~path:edn_utf8_path))
+        in
+        expect_equal "utf8 edn title" "导入中文"
+          (expect_some "utf8 title"
+             (Edn_util.get_string edn_utf8_value "title"));
         ignore
           (expect_ok "write sqlite"
              (effect_result "write sqlite"
@@ -5692,6 +5705,43 @@ let () =
             (expect_some "invoke result string" (Edn_util.as_string result));
           expect_int "one invoke request" 1 !request_count;
           Js.Promise.resolve pass));
+
+  test_promise
+    "CLI parity transport thread-api invoke decodes cached keyword vectors"
+    (fun () ->
+      let server =
+        invoke_server (fun body ->
+            expect_named_contains "invoke method" body "thread-api/q";
+            "[\"~:block/uuid\",[\"^0\",\"x\"]]")
+      in
+      with_server server (fun base_url ->
+          let invoke_config =
+            {
+              Transport.base_url;
+              timeout_span = Time.span_of_ms 1_000L;
+              profile_session = None;
+            }
+          in
+          let* result =
+            effect_to_promise
+              (Transport.thread_api_q invoke_config
+                 ~repo:(Cli_primitive.create_repo "logseq_db_alpha")
+                 ~query:(Edn_util.vector_t [ Edn_util.keyword "find" ]))
+          in
+          match Edn_util.as_seq result with
+          | Some [ key; nested ] ->
+              expect_equal "decoded key" "block/uuid"
+                (expect_some "keyword" (Edn_util.as_keyword key));
+              (match Edn_util.as_seq nested with
+              | Some [ nested_key; value ] ->
+                  expect_equal "decoded nested key" "block/uuid"
+                    (expect_some "nested keyword"
+                       (Edn_util.as_keyword nested_key));
+                  expect_equal "decoded nested value" "x"
+                    (expect_some "nested value" (Edn_util.as_string value));
+                  Js.Promise.resolve pass
+              | _ -> fail_promise "expected nested vector")
+          | _ -> fail_promise "expected decoded vector"));
 
   test_promise
     "CLI parity transport connect-events decodes rtc-log and closes \
