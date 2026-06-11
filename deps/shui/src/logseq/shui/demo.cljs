@@ -160,20 +160,19 @@
           (fn [field]
             (shui/form-item
               {:class "space-y-3 my-4"}
-              (shui/form-label "Notify me about...")
               (shui/form-control
                 (shui/radio-group
                   {:value (:value field)
                    :on-value-change (:onChange field)
                    :class "flex flex-col space-y-3"}
                   (shui/form-item
-                    {:class "flex flex-row space-x-3 items-center space-y-0"}
+                    {:class "flex flex-row space-x-2 items-center space-y-0"}
                     (shui/form-control
                       (shui/radio-group-item {:value "all"}))
                     (shui/form-label "All"))
 
                   (shui/form-item
-                    {:class "flex flex-row space-x-3 items-center space-y-0"}
+                    {:class "flex flex-row space-x-2 items-center space-y-0"}
                     (shui/form-control
                       (shui/radio-group-item {:value "direct"}))
                     (shui/form-label "Direct messages and mentions")))))))
@@ -184,7 +183,7 @@
         (shui/form-field {:name "agreement"}
           (fn [field]
             (shui/form-item
-              {:class "flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
+              {:class "flex justify-start items-center space-x-2 space-y-0 my-3 pr-3"}
               (shui/form-control
                 (shui/checkbox {:checked (:value field)
                                 :on-checked-change (:onChange field)}))
