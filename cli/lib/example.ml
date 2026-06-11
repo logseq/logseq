@@ -237,13 +237,11 @@ let default_entries =
       ];
     entry
       [ "sync"; "config"; "set" ]
-      [ "logseq sync config set --key sync-enabled --value true" ];
-    entry
-      [ "sync"; "config"; "get" ]
-      [ "logseq sync config get --key sync-enabled" ];
+      [ "logseq sync config set sync-enabled true" ];
+    entry [ "sync"; "config"; "get" ] [ "logseq sync config get sync-enabled" ];
     entry
       [ "sync"; "config"; "unset" ]
-      [ "logseq sync config unset --key sync-enabled" ];
+      [ "logseq sync config unset sync-enabled" ];
   ]
 
 let example_groups =
