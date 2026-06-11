@@ -474,6 +474,12 @@
 
 (declare history-action-error-reason)
 
+(defn- expected-history-action-error-reason?
+  [reason]
+  (contains? #{:invalid-history-action-ops
+               :invalid-history-action-tx}
+             reason))
+
 (defn- inline-history-action
   [tx-meta]
   (let [forward-outliner-ops (or (:db-sync/forward-outliner-ops tx-meta)
@@ -490,7 +496,11 @@
   (if-let [conn (worker-state/get-datascript-conn repo)]
     (if-let [action (or (pending-tx-by-id repo tx-id)
                         (inline-history-action tx-meta))]
-      (let [{:keys [tx reversed-tx forward-outliner-ops inverse-outliner-ops]} action
+      (if (= :fix (:outliner-op action))
+        {:applied? false
+         :reason :unsupported-history-action
+         :action action}
+        (let [{:keys [tx reversed-tx forward-outliner-ops inverse-outliner-ops]} action
             ops (->> (if undo? inverse-outliner-ops forward-outliner-ops)
                      (filter (fn [op-entry]
                                (and (sequential? op-entry)
@@ -540,12 +550,14 @@
             {:applied? true
              :history-tx-id history-tx-id}
             (catch :default e
-              (log/error ::undo-redo-failed e)
-              {:applied? false
-               :reason (history-action-error-reason e)
-               :action action}))
+              (let [reason (history-action-error-reason e)]
+                (when-not (expected-history-action-error-reason? reason)
+                  (log/error ::undo-redo-failed e))
+                {:applied? false
+                 :reason reason
+                 :action action})))
           {:applied? false :reason :unsupported-history-action
-           :action action}))
+           :action action})))
       {:applied? false
        :reason :missing-history-action
        :tx-id tx-id})
@@ -783,6 +795,11 @@
 (defn- invalid-rebase-op!
   [op data]
   (throw (ex-info "invalid rebase op" (assoc data :op op))))
+
+(defn- expected-stale-rebase-error?
+  [error]
+  (or (= "invalid rebase op" (ex-message error))
+      (= :entity-id/missing (:error (ex-data error)))))
 
 (defn- history-action-error-reason
   [error]
@@ -1078,7 +1095,7 @@
         forward-ops' (if (seq forward-ops)
                        forward-ops
                        (let [tx-data (-> (:tx local-tx) normalize-tx-data-for-rebase)]
-                         [[:transact [tx-data nil]]]))]
+                         [[:transact [tx-data {:db-sync/suppress-stale-rebase-transact-failed-log? true}]]]))]
     (try
       (let [rebase-tx-report
             (ldb/batch-transact-with-temp-conn!
@@ -1096,7 +1113,8 @@
                         :undo? (:undo? local-tx)
                         :redo? (:redo? local-tx)
                         :error error}]
-          (log/warn :db-sync/drop-op-driven-pending-tx drop-log)
+          (when-not (expected-stale-rebase-error? error)
+            (log/warn :db-sync/drop-op-driven-pending-tx drop-log))
           {:tx-id (:tx-id local-tx)
            :status :failed})))))
 

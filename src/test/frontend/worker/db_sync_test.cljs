@@ -960,8 +960,11 @@
               (is (not= 1 (aget failed-ent "failed")))
               (is (= :fix (:outliner-op repair-entry)))
               (is (= failed-tx-id (:tx-id failed-entry)))
-              (is (some #(and (map? %)
-                              (= missing-uuid (:block/uuid %)))
+              (is (some #(= [:db/add
+                             (str "repair-block-" missing-uuid)
+                             :block/uuid
+                             missing-uuid]
+                            %)
                         (:tx-data repair-entry))))))))))
 
 (deftest tx-reject-stale-keeps-inflight-op-pending-test
@@ -2447,6 +2450,24 @@
             (is (= true
                    (:applied? (#'sync-apply/apply-history-action! test-repo action-tx-id true {}))))
             (is (empty? (:user.property/x7 (d/entity @conn block-ref))))))))))
+
+(deftest apply-history-action-skips-sync-fix-pending-tx-test
+  (testing "sync maintenance fix txs are not replayed through undo/redo"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          tx-id (random-uuid)
+          missing-block-ref [:block/uuid (random-uuid)]]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (seed-client-op-txs!
+           test-repo
+           [{:db-sync/tx-id tx-id
+             :db-sync/outliner-op :fix
+             :db-sync/pending? true
+             :db-sync/normalized-tx-data [[:db/add missing-block-ref :block/title "missing"]]
+             :db-sync/reversed-tx-data [[:db/retract missing-block-ref :block/title "missing"]]}])
+          (let [result (#'sync-apply/apply-history-action! test-repo tx-id true {})]
+            (is (false? (:applied? result)))
+            (is (= :unsupported-history-action (:reason result)))))))))
 
 (deftest replay-recycle-delete-permanently-removes-recycled-page-test
   (testing "replay should permanently delete a recycled page subtree"
@@ -4223,26 +4244,27 @@
             (is (= page-id (:db/id (:block/page child1'))))
             (is (= "local title" (:block/title child1')))))))))
 
-(deftest decrypt-repair-tx-data-decrypts-e2ee-block-map-test
-  (testing "repair tx data decrypts encrypted server block maps"
+(deftest decrypt-repair-tx-data-decrypts-e2ee-block-datoms-test
+  (testing "repair tx data decrypts encrypted server block datoms"
     (async done
            (let [block-uuid (random-uuid)
+                 temp-id (str "repair-block-" block-uuid)
                  title "encrypted repair block"
                  name "encrypted repair page"]
              (-> (p/let [aes-key (crypt/<generate-aes-key)
                          encrypted-title (sync-crypt/<encrypt-text-value aes-key title)
                          encrypted-name (sync-crypt/<encrypt-text-value aes-key name)
-                         [block-map] (sync-repair/<decrypt-tx-data
-                                      aes-key
-                                      [{:block/uuid block-uuid
-                                        :block/title encrypted-title
-                                        :block/name encrypted-name
-                                        :block/order "a0"}])]
-                   (is (= {:block/uuid block-uuid
-                           :block/title title
-                           :block/name name
-                           :block/order "a0"}
-                          block-map)))
+                         tx-data (sync-repair/<decrypt-tx-data
+                                  aes-key
+                                  [[:db/add temp-id :block/uuid block-uuid]
+                                   [:db/add temp-id :block/title encrypted-title]
+                                   [:db/add temp-id :block/name encrypted-name]
+                                   [:db/add temp-id :block/order "a0"]])]
+                   (is (= [[:db/add temp-id :block/uuid block-uuid]
+                           [:db/add temp-id :block/title title]
+                           [:db/add temp-id :block/name name]
+                           [:db/add temp-id :block/order "a0"]]
+                          tx-data)))
                  (p/catch (fn [e]
                             (is false (str e))))
                  (p/finally (fn []

@@ -382,26 +382,6 @@
     :else
     nil))
 
-(defn- order-repair-tx-data [tx-data]
-  (let [repair-uuids (set (keep :block/uuid tx-data))]
-    (loop [remaining (vec tx-data)
-           ordered []
-           added #{}]
-      (if (seq remaining)
-        (let [ready? (fn [m]
-                       (let [deps (->> (repair-ref-uuids m)
-                                       (filter repair-uuids)
-                                       set)]
-                         (set/subset? deps added)))
-              {ready true blocked false} (group-by ready? remaining)]
-          (if (seq ready)
-            (recur (vec blocked)
-                   (into ordered ready)
-                   (into added (keep :block/uuid ready)))
-            ;; Keep the original order if the repair payload is cyclic or malformed.
-            (into ordered remaining)))
-        ordered))))
-
 (defn- server-repair-tx-data
   [server block-uuids]
   (let [server-db @(get @server :conn)
@@ -413,13 +393,13 @@
                             vec))]
     (loop [pending (vec block-uuids)
            seen #{}
-           tx-data []]
+           ordered []]
       (if (seq pending)
         (let [repair-tx-data (sync-repair/local-repair-tx-data server-db pending)
               seen' (into seen pending)
               deps (collect-deps repair-tx-data seen')]
-          (recur deps seen' (into tx-data repair-tx-data)))
-        (order-repair-tx-data tx-data)))))
+          (recur deps seen' (into ordered pending)))
+        (sync-repair/local-repair-tx-data server-db ordered)))))
 
 (defn- server-upload! [server t-before tx-entries]
   (let [accepted? (atom false)]
