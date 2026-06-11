@@ -441,7 +441,10 @@ let () =
            "logseq graph list");
       ignore
         (expect_named_contains "example all json sync example" result##stdout
-           "logseq sync config unset --key sync-enabled");
+           "logseq sync config unset sync-enabled");
+      ignore
+        (expect_named_not_contains "example all json old sync flag"
+           result##stdout "--key sync-enabled");
       pass);
 
   test "example human output uses readable command and example lists" (fun () ->
@@ -466,7 +469,9 @@ let () =
         (expect_named_contains "example human example bullet" result##stdout
            "  - logseq graph list");
       expect_named_contains "example human sync example bullet" result##stdout
-        "  - logseq sync config unset --key sync-enabled")
+        "  - logseq sync config unset sync-enabled";
+      expect_named_not_contains "example human old sync flag" result##stdout
+        "--key sync-enabled")
 
 let () =
   test_promise "graph info formats kv metadata" (fun () ->
