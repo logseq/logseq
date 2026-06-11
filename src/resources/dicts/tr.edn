@@ -1587,10 +1587,8 @@
  :settings.editor/wide-mode "Geniş mod"
 
  :settings.features/enable-flashcards "Bilgi kartlarını etkinleştir"
- :settings.features/enable-journals "Günlük"
  :settings.features/home-default-page "Varsayılan ana sayfayı ayarla"
  :settings.features/home-default-page-update-success "Ana sayfa güncellendi"
- :settings.features/journals-enable-success "Günlükler etkinleştirildi"
  :settings.features/login-prompt "Yeni özelliklere herkesten önce erişmek için bir Open Collective Sponsoru veya Logseq'in Destekçisi olmanız ve oturum açmanız gerekir."
  :settings.features/page-not-found "\"{1}\" sayfası henüz mevcut değil. Lütfen önce o sayfayı oluşturun ve sonra tekrar deneyin."
  :settings.features/plugin-system "Eklenti sistemi"
