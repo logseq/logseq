@@ -5701,6 +5701,14 @@ let () =
             expect_int64 "invoke large int" large_int
               (expect_some "invoke large int value"
                  (Edn_util.as_int64 (List.nth query 5)));
+            (match List.nth query 6 with
+            | Melange_edn.Any (Melange_edn.Bigint value) ->
+                expect_equal "invoke bigint" "900719925474099312345" value
+            | _ -> fail_test "invoke bigint: expected Bigint");
+            (match List.nth query 7 with
+            | Melange_edn.Any (Melange_edn.Decimal value) ->
+                expect_equal "invoke decimal" "1234567890.123456789" value
+            | _ -> fail_test "invoke decimal: expected Decimal");
             "\"ok\"")
       in
       with_server server (fun base_url ->
@@ -5729,6 +5737,10 @@ let () =
                           ];
                         Edn_util.keyword "created-at";
                         Edn_util.int64 large_int;
+                        Edn_util.any
+                          (Melange_edn.bigint "900719925474099312345");
+                        Edn_util.any
+                          (Melange_edn.decimal "1234567890.123456789");
                       ]))
           in
           expect_equal "decoded invoke result" "ok"
