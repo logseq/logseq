@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      transit-js:
+        specifier: 0.8.874
+        version: 0.8.874
     devDependencies:
       vite:
         specifier: ^8.0.16
@@ -254,6 +258,10 @@ packages:
     resolution: {integrity: sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==}
     engines: {node: '>=12.0.0'}
 
+  transit-js@0.8.874:
+    resolution: {integrity: sha512-IDJJGKRzUbJHmN0P15HBBa05nbKor3r2MmG6aSt0UxXIlJZZKcddTk67/U7WyAeW9Hv/VYI02IqLzolsC4sbPA==}
+    engines: {node: '>= 0.10.0'}
+
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
@@ -480,6 +488,8 @@ snapshots:
     dependencies:
       fdir: 6.5.0(picomatch@4.0.4)
       picomatch: 4.0.4
+
+  transit-js@0.8.874: {}
 
   tslib@2.8.1:
     optional: true
