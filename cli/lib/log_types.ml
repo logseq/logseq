@@ -14,7 +14,11 @@ let handler_installed = ref false
 
 let truncate_preview ?(max_len = default_preview_limit) value =
   let limit = max 0 max_len in
-  let text = Melange_edn.to_edn_string value in
+  let text =
+    match Edn_util.as_string value with
+    | Some value -> value
+    | None -> Melange_edn.to_edn_string value
+  in
   let length = String.length text in
   let truncated = length > limit in
   let preview = if truncated then String.sub text 0 limit else text in
