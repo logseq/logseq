@@ -1643,13 +1643,13 @@
         #{}))))
 
 (defn- assets-selected-first
+  "Sorts selected assets first, then by most recently updated."
   [assets selected-ids]
   (->> assets
-       (map-indexed vector)
-       (sort-by (fn [[idx asset]]
+       (sort-by (fn [asset]
                   [(if (contains? selected-ids (:db/id asset)) 0 1)
-                   idx]))
-       (mapv second)))
+                   (- (or (:block/updated-at asset) 0))]))
+       (vec)))
 
 (defn- show-asset-picker-error!
   [message err]
@@ -1754,13 +1754,20 @@
     (.appendChild js/document.body input)
     (.click input)))
 
-(hsx/defc asset-grid-upload-button
-  [saving? open-file-picker!]
-  [:div.flex.items-center.justify-end.mb-2.min-w-0
+(hsx/defc asset-grid-toolbar
+  [saving? search-text set-search-text! open-file-picker!]
+  [:div.flex.items-center.gap-2.mb-2.min-w-0
+   [:input.form-input.flex-1.min-w-0.text-sm
+    {:type "text"
+     :value (or search-text "")
+     :placeholder (t :asset/picker-search)
+     :auto-focus true
+     :on-change (fn [e]
+                  (set-search-text! (.. e -target -value)))}]
    (shui/button
     {:size :sm
      :variant :outline
-     :class "max-w-full whitespace-nowrap"
+     :class "shrink-0 whitespace-nowrap"
      :disabled saving?
      :on-click (fn [e]
                  (util/stop e)
@@ -1817,6 +1824,7 @@
   (let [[assets set-assets!] (hooks/use-state nil)
         [selected-ids set-selected-ids!] (hooks/use-state (asset-selected-ids block property))
         [saving? set-saving!] (hooks/use-state false)
+        [search-text set-search-text!] (hooks/use-state "")
         repo (state/get-current-repo)
         many? (db-property/many? property)
         select-assets! #(<select-assets! block property many? selected-ids set-selected-ids! on-chosen %)
@@ -1847,7 +1855,7 @@
      [])
     [:div.asset-picker-grid.p-3
      {:style asset-picker-grid-style}
-     (asset-grid-upload-button saving? #(open-asset-file-picker! upload-files!))
+     (asset-grid-toolbar saving? search-text set-search-text! #(open-asset-file-picker! upload-files!))
      (cond
        (nil? assets)
        [:div.p-4.opacity-60 (t :ui/loading)]
@@ -1858,7 +1866,17 @@
         [:div.text-sm (t :asset/picker-empty-hint)]]
 
        :else
-       (asset-grid-assets assets selected-ids toggle-asset!))]))
+       (let [query (some-> search-text string/trim string/lower-case)
+             filtered (if (string/blank? query)
+                        assets
+                        (filterv (fn [asset]
+                                   (some-> (:block/title asset)
+                                           string/lower-case
+                                           (string/includes? query)))
+                                 assets))]
+         (if (empty? filtered)
+           [:div.p-4.opacity-60 (t :asset/picker-no-results)]
+           (asset-grid-assets filtered selected-ids toggle-asset!))))]))
 
 (hsx/defc asset-value-picker
   [block property value opts]
