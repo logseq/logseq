@@ -6,6 +6,8 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.op :as outliner-op]
@@ -112,6 +114,35 @@
             "Tagging an existing empty child block with #Comments should target its parent"))
       (finally
         ;; return global fn back to previous behavior
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest batch-import-edn-datom-format-with-shifted-builtin-eids-test
+  (let [source-conn (d/create-conn db-schema/schema)
+        _ (d/transact! source-conn [{:block/uuid (random-uuid)}])
+        _ (d/transact! source-conn (sqlite-create-graph/build-db-initial-data "{}"))
+        export-edn (sqlite-export/build-export @source-conn {:export-type :graph})
+        source-purple-eid (some (fn [[e a v]]
+                                  (when (and (= a :db/ident)
+                                             (= v :logseq.property/color.purple))
+                                    e))
+                                (:datoms export-edn))
+        conn (sqlite-export/create-conn)
+        dest-purple-eid (:db/id (d/entity @conn :logseq.property/color.purple))]
+    (assert (= :datoms (::sqlite-export/graph-format export-edn))
+            "Test relies on a datom-format export")
+    (assert (and source-purple-eid dest-purple-eid (not= source-purple-eid dest-purple-eid))
+            "Test relies on shifted built-in eids between source and dest")
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (let [result (outliner-op/apply-ops!
+                    conn
+                    [[:batch-import-edn [export-edn {:tx-meta {:import-db? true}}]]]
+                    {})]
+        (is (nil? (:error result)))
+        (is (= :logseq.property/color.purple
+               (:db/ident (d/entity @conn :logseq.property/color.purple)))
+            "color.purple ident is preserved after datom import despite eid shift"))
+      (finally
         (ldb/register-transact-pipeline-fn! identity)))))
 
 (deftest permanent-delete-recycled-page-with-transact-pipeline-test
