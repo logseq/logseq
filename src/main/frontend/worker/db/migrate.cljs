@@ -12,7 +12,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [frontend.worker.db.validate :as db-validate]))
 
 ;; Frontend migrations
 ;; ===================
@@ -34,30 +35,9 @@
             :block/name (common-util/page-name-sanity-lc (:block/title page))})))
      pages)))
 
-(defn- delete-property
-  [db property-key]
-  (if (d/entity db property-key)
-    (let [remove-datoms (->> (d/datoms db :avet property-key)
-                             (map :e)
-                             (distinct)
-                             (mapv (fn [id]
-                                     [:db/retract id property-key])))]
-      (conj remove-datoms [:db/retractEntity property-key]))
-    (let [eids (d/q
-                 '[:find [?e ...]
-                   :in $ ?property-key
-                   :where
-                   [?e ?property-key ?v]]
-                 db
-                 property-key)]
-      (map
-        (fn [eid]
-          [:db/retract eid property-key])
-        eids))))
-
 (defn remove-block-path-refs
   [db]
-  (delete-property db :block/path-refs))
+  (db-validate/delete-property db :block/path-refs))
 
 (defn- remove-position-property-from-url-properties
   [db]
@@ -273,7 +253,7 @@
                 (fix db))
         delete-properties-tx (mapcat
                                (fn [property]
-                                 (delete-property db property))
+                                 (db-validate/delete-property db property))
                                delete-properties)
         tx-data (concat new-class-idents new-properties new-classes fixes delete-properties-tx)
         tx-data' (concat
