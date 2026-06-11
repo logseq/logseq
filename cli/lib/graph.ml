@@ -719,12 +719,13 @@ let unlink_graph_dir config graph repo =
   let repo_name = Cli_primitive.string_of_repo repo in
   let graph_name = Cli_primitive.string_of_graph graph in
   let repo_path = Filename.concat graphs_root repo_name in
-  let graph_path = graph_path config graph in
+  let graph_dir_name = Graph_dir.encode_graph_dir_name graph_name in
+  let graph_path = Filename.concat graphs_root graph_dir_name in
   let source =
     if Cli_unix.file_exists repo_path && Cli_unix.is_directory repo_path then
       Some (repo_name, repo_path)
     else if Cli_unix.file_exists graph_path && Cli_unix.is_directory graph_path
-    then Some (graph_name, graph_path)
+    then Some (graph_dir_name, graph_path)
     else None
   in
   match source with
@@ -790,29 +791,42 @@ let graph_backup_create_result mode config graph repo name backup_name =
           reserve_backup_target config graph base_name
         in
         let tmp_path = tmp_sqlite_path dir in
-        bind
-          (Transport.thread_api_backup_db_sqlite invoke_config ~repo
-             ~path:tmp_path) (fun _ ->
-            if Cli_unix.file_exists tmp_path then (
-              Cli_unix.rename tmp_path db_path;
-              write_backup_metadata dir ~backup_name ~repo ~db_path;
-              pure
-                (Cli_result.ok ~command:Command_id.Graph_backup_create mode
-                   (Raw
-                      (Edn_util.map
-                         [
-                           (kw "backup-name", string backup_name);
-                           (kw "path", string db_path);
-                           ( kw "message",
-                             string ("Created backup " ^ backup_name) );
-                         ]))))
-            else (
-              remove_tree dir;
-              pure
-                (Cli_result.error ~command:Command_id.Graph_backup_create mode
-                   (Error.make
-                      (Edn_util.keyword_t "missing-snapshot")
-                      ("snapshot did not create sqlite backup: " ^ tmp_path))))))
+        let success_result () =
+          Cli_result.ok ~command:Command_id.Graph_backup_create mode
+            (Raw
+               (Edn_util.map
+                  [
+                    (kw "backup-name", string backup_name);
+                    (kw "path", string db_path);
+                    (kw "message", string ("Created backup " ^ backup_name));
+                  ]))
+        in
+        let error_result code message =
+          Cli_result.error ~command:Command_id.Graph_backup_create mode
+            (Error.make (Edn_util.keyword_t code) message)
+        in
+        let backup_effect =
+          bind
+            (Transport.thread_api_backup_db_sqlite invoke_config ~repo
+               ~path:tmp_path)
+            (fun _ ->
+              if Cli_unix.file_exists tmp_path then (
+                Cli_unix.rename tmp_path db_path;
+                write_backup_metadata dir ~backup_name ~repo ~db_path;
+                pure (success_result ()))
+              else (
+                remove_tree dir;
+                pure
+                  (error_result "missing-snapshot"
+                     ("snapshot did not create sqlite backup: " ^ tmp_path))))
+        in
+        catch backup_effect (fun exn ->
+            remove_tree dir;
+            pure
+              (Cli_result.error ~command:Command_id.Graph_backup_create mode
+                 (Error.make ~context:(Edn_util.string (Printexc.to_string exn))
+                    (Edn_util.keyword_t "backup-create-failed")
+                    "backup create failed"))))
 
 let graph_create_data result =
   Option.value (Cli_result.data_value result) ~default:Edn_util.nil

@@ -1,6 +1,6 @@
 (melange.emit
  (target node)
- (modules test_support test_cases fake_codex)
+ (modules test_support cli_parity_test_cases test_cases fake_codex)
  (module_systems commonjs)
  (libraries
   logseq_cli_platform_node
