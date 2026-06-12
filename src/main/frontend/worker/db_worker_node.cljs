@@ -385,27 +385,39 @@
 
          (= request-path "/v1/invoke")
          (if (= method "POST")
-           (->
-            (p/let [body (<read-body req)
-                    payload (js/JSON.parse body)
-                    {:keys [method argsTransit args]} (js->clj payload :keywordize-keys true)
-                    method-kw (normalize-method-kw method)
-                    method-str (normalize-method-str method)]
-              (-> (p/let [args' (or argsTransit args)
-                          args-for-validation (if (string? args')
-                                                (ldb/read-transit-str args')
-                                                args')]
-                    (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
-                      (send-json! res status {:ok false :error error})
-                      (p/let [_ (when (contains? write-methods method-kw)
-                                  (let [{:keys [path lock]} @*lock-info]
-                                    (db-lock/assert-lock-owner! path lock)))
-                              result (<invoke! proxy method-str method-kw args')]
-                        (send-json! res 200 {:ok true :resultTransit result}))))
-                  (p/catch (fn [error]
-                             (log-invoke-error! res error method-kw)))))
-            (p/catch (fn [error]
-                       (log-invoke-error! res error nil))))
+           (-> (p/let [body (<read-body req)
+                       payload (js/JSON.parse body)
+                       {:keys [method argsTransit args]} (js->clj payload :keywordize-keys true)
+                       method-kw (normalize-method-kw method)
+                       method-str (normalize-method-str method)
+                       args' (or argsTransit args)
+                       args-for-validation (if (string? args')
+                                             (ldb/read-transit-str args')
+                                             args')]
+                 (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
+                   (send-json! res status {:ok false :error error})
+                   (p/let [_ (when (contains? write-methods method-kw)
+                               (let [{:keys [path lock]} @*lock-info]
+                                 (db-lock/assert-lock-owner! path lock)))
+                           result (<invoke! proxy method-str method-kw args')]
+                     (send-json! res 200 {:ok true :resultTransit result}))))
+               (p/catch (fn [error]
+                          (let [data (ex-data error)
+                                status (invoke-error-status data)
+                                code (invoke-error-code data)
+                                message (invoke-error-message error data)
+                                payload {:ok false
+                                         :error {:code code
+                                                 :message message}}]
+                            (log/error :db-worker-node-invoke-failed
+                                       {:status status
+                                        :code code
+                                        :message message
+                                        :ex-data-keys (str (keys data))
+                                        :raw-data (str (.-data error))
+                                        :validation-errors (str (or (:errors data)
+                                                                     (get (js->clj (.-data error)) "errors")))})
+                            (send-json! res status payload)))))
            (send-text! res 405 "method-not-allowed"))
 
          (= url "/v1/shutdown")

@@ -251,6 +251,7 @@
                (case type
                  :number "number"
                  :date "calendar"
+                 :daterange "calendar-range"
                  :datetime "calendar"
                  :checkbox "checkbox"
                  :url "link"
@@ -559,6 +560,7 @@
                                      (= :logseq.property/empty-placeholder (:db/ident (first v))))))
                         (contains? #{:default :url} type))
             date? (= type :date)
+            date-range? (= type :daterange)
             datetime? (= type :datetime)
             checkbox? (= type :checkbox)
             number-type? (= type :number)
@@ -568,7 +570,7 @@
                                                                     :page-cp page-cp))]
         [:div {:key (str "property-pair-" (:db/id block) "-" (:db/id property))
                :class (cond
-                        (or date? datetime? checkbox? number-type?)
+                        (or date? date-range? datetime? checkbox? number-type?)
                         "property-pair items-center"
                         :else
                         "property-pair items-start")
@@ -582,7 +584,7 @@
                                (:logseq.property/description property))
                block' (assoc block (:db/ident property) v)]
            [:div.ls-block.property-value-container.flex.flex-row.gap-1
-            {:class (if (contains? #{:checkbox :date :datetime} type)
+            {:class (if (contains? #{:checkbox :date :daterange :datetime} type)
                       "items-center"
                       "items-start")}
 

@@ -128,7 +128,10 @@
      :logseq.property.history/property :logseq.property.history/ref-value
      :logseq.property.class/extends
      :logseq.property.reaction/emoji-id
-     :logseq.property.reaction/target}))
+     :logseq.property.reaction/target
+     :logseq.property.date/precision
+     :logseq.property.date/start
+     :logseq.property.date/end}))
 
 (defn- property-entity->map
   "Provide the minimal number of property attributes to validate the property
@@ -435,6 +438,15 @@
     (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
     page-or-block-attrs)))
 
+(def date-range-value
+  "Malli schema for a :date-range property value entity.
+  These entities have no :block/uuid — they are pure scalar containers
+  identified at dispatch time by :logseq.property.date/precision."
+  [:map {:error/path ["date-range-value"]}
+   [:logseq.property.date/precision [:enum :day :month :year]]
+   [:logseq.property.date/start :int]
+   [:logseq.property.date/end {:optional true} [:maybe :int]]])
+
 (def reaction-entity
   "A reaction entity referencing a target node"
   (vec
@@ -558,6 +570,10 @@
   (let [d (if (:block/uuid ent) (d/entity db [:block/uuid (:block/uuid ent)]) ent)
         ;; order matters as some block types are a subset of others e.g. :whiteboard
         dispatch-key (cond
+                       ;; daterange value entities have no :block/uuid — check
+                       ;; before the generic :block/uuid branch below.
+                       (:logseq.property.date/precision d)
+                       :daterange-value
                        (:logseq.property.reaction/target d)
                        :reaction-entity
                        (entity-util/property? d)
@@ -597,6 +613,7 @@
     :class class-page
     :hidden hidden-page
     :normal-page normal-page
+    :daterange-value date-range-value
     :reaction-entity reaction-entity
     :property-history-block property-history-block
     :closed-value-block closed-value-block
@@ -637,7 +654,8 @@
 
 (let [malli-non-ref-attrs (->> (concat property-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
                                (concat (rest file-block) (rest property-value-block)
-                                       (rest db-ident-key-val) (rest internal-property))
+                                       (rest db-ident-key-val) (rest internal-property)
+                                       (rest date-range-value))
                                (remove #(= (last %) [:set :int]))
                                (map first)
                                set)]

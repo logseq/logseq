@@ -760,7 +760,7 @@
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
     "logseq.property.user" "logseq.property.history"
     "logseq.property.reaction" "logseq.property.sync" "logseq.property.publish"
-    "logseq.property.recycle" "logseq.property.comments" "logseq.property.agent"})
+    "logseq.property.recycle" "logseq.property.date"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"

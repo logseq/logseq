@@ -1,4 +1,4 @@
-{:paths ["src/main" "src/electron" "src/resources"]
+{:paths ["src/main" "src/electron" "src/resources" "src/dev-cljs"]
  :deps
  {org.clojure/clojure                   {:mvn/version "1.12.4"}
   org.clojure/clojurescript             {:mvn/version "1.12.134"}

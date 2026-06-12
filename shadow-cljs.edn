@@ -1,7 +1,7 @@
 ;; shadow-cljs configuration
 {:deps true
  :nrepl {:port 8701}
- :source-paths ["src/main" "src/electron" "src/resources"]
+ :source-paths ["src/main" "src/electron" "src/resources" "src/dev-cljs"]
 
  ;; :ssl {:enabled #shadow/env ["LOGSEQ_SHADOW_HTTPS" :as :bool :default false]
  ;;       :keystore "ssl/mobile-dev/keystore.jks"

@@ -980,12 +980,31 @@
     :else
     property-id))
 
+(defn- resolve-block-ref-attrs
+  "Resolve raw integer values for ref attributes in a block map to stable
+  entity refs (UUID lookup refs or db/ident keywords). This prevents
+  'Non-transact outliner ops contain numeric entity ids' errors in
+  derive-history-outliner-ops when a block has ref-type properties
+  (e.g. :daterange) whose values are raw DataScript db-ids."
+  [db block]
+  (when (map? block)
+    (reduce-kv (fn [m k v]
+                 (assoc m k
+                        (if (and (keyword? k)
+                                 (= :db.type/ref (:db/valueType (d/entity db k)))
+                                 (integer? v) (not (neg? v)))
+                          (stable-entity-ref db v)
+                          v)))
+               {}
+               block)))
+
 (defn- normalize-block-op-entry-ids
-  [id ids op args]
+  [db id ids op args]
   (case op
     :save-block
-    (let [[block opts] args]
-      [op [block opts]])
+    (let [[block opts] args
+          block' (or (resolve-block-ref-attrs db block) block)]
+      [op [block' opts]])
 
     :insert-blocks
     [op [(first args) (id (second args)) (nth args 2)]]
@@ -1056,7 +1075,7 @@
   (let [id (fn [v] (canonical-block-id db v))
         property-id (fn [v] (canonical-property-id db v))
         ids (fn [vs] (mapv id vs))
-        normalized (or (normalize-block-op-entry-ids id ids op args)
+        normalized (or (normalize-block-op-entry-ids db id ids op args)
                        (normalize-property-op-entry-ids id ids property-id op args))]
     (or normalized op-entry)))
 
