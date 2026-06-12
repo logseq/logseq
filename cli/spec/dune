@@ -22,6 +22,7 @@
   Error
   Output
   Time
+  Ustring
   ; domain
   Selector
   Property
