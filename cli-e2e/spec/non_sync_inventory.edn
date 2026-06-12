@@ -84,6 +84,8 @@
              "--update-properties"
              "--remove-tags"
              "--remove-properties"
+             "--add-properties"
+             "--remove-properties"
              "--page"
              "--name"
              "--type"
