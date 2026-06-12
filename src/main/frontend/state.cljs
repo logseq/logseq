@@ -72,6 +72,21 @@
       (throw (ex-info "db-worker has not been initialized" {})))
     (apply worker qkw args)))
 
+(def ^:private export-block-text-indent-styles #{"dashes" "spaces" "no-indent"})
+
+(def ^:private legacy-export-block-text-indent-styles
+  {"indent-style-dashes" "dashes"
+   "indent-style-spaces" "spaces"
+   "indent-style-none" "no-indent"})
+
+(defn- normalize-export-block-text-indent-style
+  [v]
+  (cond
+    (nil? v) nil
+    (contains? export-block-text-indent-styles v) v
+    (contains? legacy-export-block-text-indent-styles v) (get legacy-export-block-text-indent-styles v)
+    :else (throw (ex-info "Invalid export block text indent style" {:value v}))))
+
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
@@ -270,7 +285,8 @@
       ;; all notification contents as k-v pairs
       :notification/contents                 {}
 
-      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
+      :copy/export-block-text-indent-style   (or (normalize-export-block-text-indent-style
+                                                  (storage/get :copy/export-block-text-indent-style))
                                                  "dashes")
       :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
                                                  #{})
@@ -1748,12 +1764,13 @@ should be done through this fn in order to get global config and config defaults
             (util/scroll-to elem 0)))))))
 
 (defn get-export-block-text-indent-style []
-  (:copy/export-block-text-indent-style @state))
+  (normalize-export-block-text-indent-style (:copy/export-block-text-indent-style @state)))
 
 (defn set-export-block-text-indent-style!
   [v]
-  (set-state! :copy/export-block-text-indent-style v)
-  (storage/set :copy/export-block-text-indent-style v))
+  (let [v* (normalize-export-block-text-indent-style v)]
+    (set-state! :copy/export-block-text-indent-style v*)
+    (storage/set :copy/export-block-text-indent-style v*)))
 
 (defn get-recent-pages
   []
