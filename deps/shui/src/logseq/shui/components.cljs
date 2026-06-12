@@ -1290,3 +1290,6 @@
        "useFormField" useFormField
        "yupResolver" yupResolver
        "yup" yup})
+
+;; export registry to global scope `window.LSUI` for dynamic component rendering in Logseq
+(set! (.-LSUI js/window) registry)
