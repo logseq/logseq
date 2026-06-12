@@ -19,6 +19,8 @@ let expect_int64 name expected actual =
       (Printf.sprintf "%s: expected %s, got %s" name (Int64.to_string expected)
          (Int64.to_string actual))
 
+external string_char_code_at : string -> int -> int = "charCodeAt" [@@mel.send]
+
 let expect_some name = function
   | Some value -> value
   | None ->
@@ -68,6 +70,8 @@ let keyword_text value = Edn_util.keyword_to_string value
 let edn_of_string text = Melange_edn.of_edn_string text
 let repo_text repo = Cli_primitive.string_of_repo repo
 let graph_text graph = Cli_primitive.string_of_graph graph
+let unicode_text codepoints =
+  String.concat "" (List.map Js.String.fromCodePoint codepoints)
 
 let property_key_text = function
   | Property.Key_ident ident -> keyword_text ident
@@ -345,6 +349,18 @@ let () =
       | Cli_primitive.Bash -> pass
       | _ -> fail_test "expected bash shell");
       expect_none "unknown shell" (Cli_primitive.shell_of_string "fish"));
+
+  test "CLI parity ustring decodes utf8 byte strings to JS unicode strings"
+    (fun () ->
+      let utf8_byte_string =
+        Js.String.fromCharCode 0xe4
+        ^ Js.String.fromCharCode 0xb8
+        ^ Js.String.fromCharCode 0xad
+      in
+      let decoded = Ustring.of_string utf8_byte_string |> Ustring.to_string in
+      expect_equal "decoded unicode text" (unicode_text [ 0x4e2d ]) decoded;
+      expect_int "decoded JS length" 1 (String.length decoded);
+      expect_int "decoded char code" 0x4e2d (string_char_code_at decoded 0));
 
   test
     "CLI parity id parser accepts single multi comma whitespace and vector \
@@ -5583,6 +5599,8 @@ let () =
       let edn_bytes_path = Node.Path.join [| root; "bytes.edn" |] in
       let sqlite_path = Node.Path.join [| root; "graph.sqlite" |] in
       let db_path = Node.Path.join [| root; "graph.db" |] in
+      let title = unicode_text [ 0x4e2d; 0x6587; 0x6807; 0x9898 ] in
+      let imported_title = unicode_text [ 0x5bfc; 0x5165; 0x4e2d; 0x6587 ] in
       try
         ignore
           (expect_ok "write edn"
@@ -5596,23 +5614,23 @@ let () =
                           (Edn_util.keyword "count", Edn_util.int 2);
                         ]))));
         expect_named_contains "edn file preserves utf8"
-          (read_file edn_path) "中文标题";
+          (read_file edn_path) title;
         let edn_value =
           expect_ok "read edn"
             (effect_result "read edn"
                (Transport.read_input ~format:(Edn_util.keyword_t "edn")
                   ~path:edn_path))
         in
-        expect_equal "edn title" "中文标题"
+        expect_equal "edn title" title
           (expect_some "title" (Edn_util.get_string edn_value "title"));
-        write_file edn_utf8_path "{:title \"导入中文\"}";
+        write_file edn_utf8_path ("{:title \"" ^ imported_title ^ "\"}");
         let edn_utf8_value =
           expect_ok "read utf8 edn"
             (effect_result "read utf8 edn"
                (Transport.read_input ~format:(Edn_util.keyword_t "edn")
                   ~path:edn_utf8_path))
         in
-        expect_equal "utf8 edn title" "导入中文"
+        expect_equal "utf8 edn title" imported_title
           (expect_some "utf8 title"
              (Edn_util.get_string edn_utf8_value "title"));
         ignore
