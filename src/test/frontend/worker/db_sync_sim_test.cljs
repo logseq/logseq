@@ -366,40 +366,9 @@
     (->> (filter (fn [{:keys [t]}] (> t since)) txs)
          (mapv :tx))))
 
-(defn- repair-ref-uuids [v]
-  (cond
-    (and (vector? v)
-         (= :block/uuid (first v))
-         (uuid? (second v)))
-    [(second v)]
-
-    (map? v)
-    (mapcat repair-ref-uuids (vals v))
-
-    (or (vector? v) (set? v) (seq? v))
-    (mapcat repair-ref-uuids v)
-
-    :else
-    nil))
-
 (defn- server-repair-tx-data
   [server block-uuids]
-  (let [server-db @(get @server :conn)
-        collect-deps (fn [tx-data seen]
-                       (->> tx-data
-                            (mapcat repair-ref-uuids)
-                            (remove seen)
-                            distinct
-                            vec))]
-    (loop [pending (vec block-uuids)
-           seen #{}
-           ordered []]
-      (if (seq pending)
-        (let [repair-tx-data (sync-repair/local-repair-tx-data server-db pending)
-              seen' (into seen pending)
-              deps (collect-deps repair-tx-data seen')]
-          (recur deps seen' (into ordered pending)))
-        (sync-repair/local-repair-tx-data server-db ordered)))))
+  (sync-repair/local-repair-tx-data @(get @server :conn) block-uuids))
 
 (defn- server-upload! [server t-before tx-entries]
   (let [accepted? (atom false)]

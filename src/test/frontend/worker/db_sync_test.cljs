@@ -4020,6 +4020,76 @@
                                (swap! repair-calls conj (vec block-uuids))
                                (tx-data-f block-uuids))})
 
+(defn- transact-repair-dependency-fixture!
+  [conn {:keys [class-uuid property-uuid view-uuid history-uuid recycled-uuid delete-uuid]}]
+  (d/transact!
+   conn
+   [{:db/id -1
+     :db/ident :user.class/repair-view-target
+     :block/uuid class-uuid
+     :block/title "Repair View Target"
+     :block/name "repair view target"
+     :block/tags #{:logseq.class/Tag}
+     :block/order "a0"
+     :block/created-at 1
+     :block/updated-at 1
+     :logseq.property.class/extends :logseq.class/Root}
+    {:db/id -2
+     :db/ident :user.property/repair-property
+     :block/uuid property-uuid
+     :block/title "Repair Property"
+     :block/name "repair property"
+     :block/tags #{:logseq.class/Property}
+     :block/order "a1"
+     :block/created-at 1
+     :block/updated-at 1
+     :logseq.property/type :default
+     :db/cardinality :db.cardinality/one
+     :db/index true}
+    {:db/id -3
+     :block/uuid view-uuid
+     :block/title "Repair View"
+     :block/page -1
+     :block/parent -1
+     :block/order "a2"
+     :block/created-at 1
+     :block/updated-at 1
+     :logseq.property/view-for -1
+     :logseq.property.view/group-by-property -2}
+    {:db/id -4
+     :block/uuid recycled-uuid
+     :block/title "Repair Recycled"
+     :block/page -1
+     :block/parent -1
+     :block/order "a3"
+     :block/created-at 1
+     :block/updated-at 1
+     :logseq.property/deleted-at 2
+     :logseq.property.recycle/original-parent -1
+     :logseq.property.recycle/original-page -1}
+    {:db/id -5
+     :block/uuid history-uuid
+     :block/title "Repair History"
+     :block/page -1
+     :block/parent -1
+     :block/order "a4"
+     :block/created-at 1
+     :block/updated-at 1
+     :logseq.property.history/block -4
+     :logseq.property.history/property -2
+     :logseq.property.history/ref-value -1}
+    {:db/id -6
+     :block/uuid delete-uuid
+     :block/title "Repair Delete Target"
+     :block/page -1
+     :block/parent -1
+     :block/order "a5"
+     :block/created-at 1
+     :block/updated-at 1
+     :logseq.property/deleted-at 3
+     :logseq.property.recycle/original-parent -1
+     :logseq.property.recycle/original-page -1}]))
+
 (deftest prepare-upload-tx-entries-does-not-repair-missing-block-datoms-test
   (testing "upload preparation should not infer missing required block datoms before a server reject"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
@@ -4178,6 +4248,52 @@
             (is (= "remote missing parent" (:block/title parent')))
             (is (= "remote child" (:block/title child')))
             (is (= parent-uuid (:block/uuid (:block/parent child'))))))))))
+
+(deftest apply-remote-txs-repairs-view-history-recycled-and-delete-dependencies-test
+  (testing "remote tx application fetches dependent repair blocks from the server"
+    (let [ids {:class-uuid (random-uuid)
+               :property-uuid (random-uuid)
+               :view-uuid (random-uuid)
+               :history-uuid (random-uuid)
+               :recycled-uuid (random-uuid)
+               :delete-uuid (random-uuid)}
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "client page"}
+                   :blocks []}]})
+          server-conn (db-test/create-conn-with-blocks
+                       {:pages-and-blocks
+                        [{:page {:block/title "server page"}
+                          :blocks []}]})
+          client-ops-conn (new-client-ops-db)
+          repair-calls (atom [])
+          client (repair-client repair-calls
+                                (fn [block-uuids]
+                                  (sync-repair/local-repair-tx-data @server-conn block-uuids)))]
+      (transact-repair-dependency-fixture! server-conn ids)
+      (with-datascript-conns
+        conn client-ops-conn
+        (fn []
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           client
+           [[:db/add [:block/uuid (:view-uuid ids)] :block/collapsed? true]
+            [:db/add [:block/uuid (:history-uuid ids)] :block/title "Repair History Remote"]
+            [:db/retractEntity [:block/uuid (:delete-uuid ids)]]])
+          (let [view (d/entity @conn [:block/uuid (:view-uuid ids)])
+                history (d/entity @conn [:block/uuid (:history-uuid ids)])
+                property (d/entity @conn [:block/uuid (:property-uuid ids)])
+                recycled (d/entity @conn [:block/uuid (:recycled-uuid ids)])
+                deleted (d/entity @conn [:block/uuid (:delete-uuid ids)])]
+            (is (= [[(:view-uuid ids) (:history-uuid ids) (:delete-uuid ids)]]
+                   @repair-calls))
+            (is (= "Repair View Target" (:block/title (:logseq.property/view-for view))))
+            (is (= "Repair Property" (:block/title (:logseq.property.view/group-by-property view))))
+            (is (true? (:block/collapsed? view)))
+            (is (= "Repair History Remote" (:block/title history)))
+            (is (= (:db/id recycled) (:db/id (:logseq.property.history/block history))))
+            (is (= (:db/id property) (:db/id (:logseq.property.history/property history))))
+            (is (nil? deleted))))))))
 
 (deftest apply-remote-txs-with-local-changes-repairs-missing-block-lookup-ref-test
   (testing "remote tx application fetches missing block lookup refs before rebasing local changes"
