@@ -45,6 +45,7 @@
   Tree_text_types
   Db_worker_types
   Common_cli_types
+  Pretty_print
   ; cli
   Global_opts
   Cli_config
