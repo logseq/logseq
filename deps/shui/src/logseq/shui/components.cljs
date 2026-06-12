@@ -137,6 +137,7 @@
 (def ToastProvider (gobj/get ToastPrimitive "Provider"))
 (def ToastPortal (gobj/get ToastPrimitive "Portal"))
 (def ToastViewport (gobj/get ToastPrimitive "Viewport"))
+(def ToastPositioner (gobj/get ToastPrimitive "Positioner"))
 (def ToastRoot (gobj/get ToastPrimitive "Root"))
 (def ToastContent (gobj/get ToastPrimitive "Content"))
 (def ToastTitle (gobj/get ToastPrimitive "Title"))
@@ -1124,7 +1125,8 @@
                                          variant
                                          (prop data "className"))}
            (react/createElement
-            ToastContent #js {:className "ui__toast-content"}
+            ToastContent #js {:className "ui__toast-content"
+                              :data-base-ui-swipe-ignore "true"}
             (react/createElement
              "div" #js {:className "ui__toast-header"}
              icon

@@ -148,7 +148,7 @@
         --height: var(--toast-frontmost-height, var(--toast-height));
         --offset-y: calc(var(--toast-offset-y) * -1 + (var(--toast-index) * var(--gap) * -1) + var(--toast-swipe-movement-y));
 
-        @apply absolute bottom-0 w-full overflow-hidden rounded-md border bg-background text-foreground shadow-lg select-none cursor-default;
+        @apply absolute bottom-0 w-full overflow-hidden rounded-md border bg-background text-foreground shadow-lg cursor-default;
         border-color: hsl(var(--border));
         box-sizing: border-box;
         height: var(--height);
