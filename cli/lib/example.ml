@@ -34,8 +34,8 @@ let default_entries =
     entry [ "graph"; "export" ]
       [
         "logseq graph export --graph my-graph --type edn --file \
-         /tmp/my-graph.edn --include-timestamps --exclude-built-in-pages \
-         --exclude-namespaces user,project";
+         /tmp/my-graph.edn --edn-options '{:export-type :graph \
+         :include-timestamps? true}' --pretty-print";
         "logseq graph export --graph my-graph --type sqlite --file \
          /tmp/my-graph.sqlite";
       ];
