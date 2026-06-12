@@ -150,7 +150,7 @@
                        (t :youtube/player-not-ready)
                        :warning
                        false)))))}
-   svg/clock
+   [:span.inline-flex.relative.-bottom-1 svg/clock]
    (seconds->display seconds)])
 
 (defn gen-youtube-ts-macro []
