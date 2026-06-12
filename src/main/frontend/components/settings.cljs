@@ -562,8 +562,17 @@
           enabled?
           (fn []
             (let [enabled?' (not enabled?)]
-              (state/set-state! [:electron/user-cfgs :feature/enable-semantic-search?] enabled?')
-              (ipc/ipc :userAppCfgs :feature/enable-semantic-search? enabled?')))
+              (if enabled?'
+                (-> (ipc/ipc :userAppCfgs :feature/enable-semantic-search? true)
+                    (p/then (fn [_]
+                              (state/set-state! [:electron/user-cfgs :feature/enable-semantic-search?] true)))
+                    (p/catch (fn [_error]
+                               (notification/show!
+                                (t :settings.features/semantic-search-python3-missing)
+                                :warning))))
+                (do
+                  (state/set-state! [:electron/user-cfgs :feature/enable-semantic-search?] false)
+                  (ipc/ipc :userAppCfgs :feature/enable-semantic-search? false)))))
           [:div.text-sm.opacity-50 (t :settings.features/semantic-search-desc)]))
 
 (hsx/defc plugin-enabled-switcher

@@ -95,6 +95,24 @@
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest python-command-available-detects-missing-python
+  (async done
+    (let [commands (atom [])
+          run-command! (fn [cmd args _opts]
+                         (swap! commands conj {:cmd cmd
+                                               :args args})
+                         (p/rejected (js/Error. "spawn python3 ENOENT")))]
+      (-> (p/let [available? (embedding-server/python-command-available!
+                              "python3"
+                              {:run-command! run-command!})]
+            (is (false? available?))
+            (is (= [{:cmd "python3"
+                     :args ["--version"]}]
+                   @commands)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest start-allocates-port-creates-local-venv-installs-deps-and-spawns-server
   (async done
     (embedding-server/stop!)
