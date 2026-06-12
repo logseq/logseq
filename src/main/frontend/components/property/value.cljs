@@ -2155,6 +2155,7 @@
                {:onFocusCapture #(util/stop-propagation %)
                 :as-child true}
                value-cp)
-              (shui/tooltip-content
-               (t :property/change-tooltip (db-property/built-in-display-title property t)))))
+              (shui/tooltip-portal
+               (shui/tooltip-content
+                (t :property/change-tooltip (db-property/built-in-display-title property t))))))
             value-cp))))))
