@@ -4,6 +4,7 @@ let () = ignore Cli_parity_test_cases.touch
 
 let tree_pipe = decode_uri_component "%E2%94%82"
 let tree_corner = decode_uri_component "%E2%94%94%E2%94%80%E2%94%80"
+let tree_middle = decode_uri_component "%E2%94%9C%E2%94%80%E2%94%80"
 
 let () =
   test "json output renders transit quoted uuid as string" (fun () ->
@@ -1461,6 +1462,65 @@ let () =
                  ("Linked References (1)\n16760 May 31st, 2026\n16763 "
                 ^ tree_corner
                 ^ " [[type system to strengthen codebase examples]]"));
+            Js.Promise.resolve pass)));
+
+  test_promise "show human tree aligns guides when ids have different widths"
+    (fun () ->
+      let responses =
+        [|
+          ( "thread-api/pull",
+            "[\"^ \",\"~:db/id\",1,\"~:block/title\",\"Root\"]" );
+          ( "thread-api/q",
+            "[[[\"^ \
+             \",\"~:db/id\",9,\"~:block/title\",\"Short\",\"~:block/order\",\"a\",\"~:block/parent\",[\"^ \
+             \",\"~:db/id\",1]]],[[\"^ \
+             \",\"~:db/id\",12345,\"~:block/title\",\"Wide\",\"~:block/order\",\"b\",\"~:block/parent\",[\"^ \
+             \",\"~:db/id\",1]]],[[\"^ \
+             \",\"~:db/id\",4395,\"~:block/title\",\"Nested\",\"~:block/order\",\"a\",\"~:block/parent\",[\"^ \
+             \",\"~:db/id\",9]]]]" );
+        |]
+      in
+      let index = ref 0 in
+      let server =
+        invoke_server (fun body ->
+            if !index >= Array.length responses then
+              fail_test ("unexpected extra request: " ^ body);
+            let method_, transit = responses.(!index) in
+            incr index;
+            if not (Js.String.includes ~search:method_ body) then
+              fail_test (Printf.sprintf "expected %s, got %s" method_ body);
+            transit)
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [
+                "--graph";
+                "alpha";
+                "show";
+                "--id";
+                "1";
+                "--linked-references=false";
+              ]
+          in
+          ignore (expect_cli_exit_zero "show human tree aligned ids" output);
+          if !index <> Array.length responses then
+            fail_promise
+              (Printf.sprintf "handled %d requests, expected %d" !index
+                 (Array.length responses))
+          else (
+            ignore
+              (expect_named_contains "aligned root" output.stdout "1     Root");
+            ignore
+              (expect_named_contains "aligned short id branch" output.stdout
+                 ("9     " ^ tree_middle ^ " Short"));
+            ignore
+              (expect_named_contains "aligned nested guide" output.stdout
+                 ("\n4395  " ^ tree_pipe ^ "   " ^ tree_corner ^ " Nested\n"));
+            ignore
+              (expect_named_contains "aligned wide id branch" output.stdout
+                 ("12345 " ^ tree_corner ^ " Wide"));
             Js.Promise.resolve pass)));
 
   test_promise "show human properties renders task status and property values"
