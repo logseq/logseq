@@ -5,6 +5,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.html-parser :as html-parser]
+            [frontend.extensions.video :as video]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.editor :as editor-handler]
@@ -12,7 +13,6 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.text :as text-util]
             [frontend.util.thingatpt :as thingatpt]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -58,7 +58,7 @@
 (defn- wrap-macro-url
   [url]
   (cond
-    (boolean (text-util/get-matched-video url))
+    (boolean (video/get-matched-video url))
     (util/format "{{video %s}}" url)
 
     (or (re-matches #"^https://twitter\.com.*?$" url)
