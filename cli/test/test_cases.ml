@@ -5,6 +5,8 @@ let () = ignore Cli_parity_test_cases.touch
 let tree_pipe = decode_uri_component "%E2%94%82"
 let tree_corner = decode_uri_component "%E2%94%94%E2%94%80%E2%94%80"
 let tree_middle = decode_uri_component "%E2%94%9C%E2%94%80%E2%94%80"
+let unicode_text codepoints =
+  String.concat "" (List.map Js.String.fromCodePoint codepoints)
 
 let () =
   test "json output renders transit quoted uuid as string" (fun () ->
@@ -309,20 +311,21 @@ let () =
         in
         let config_path = Node.Path.join [| root; "cli.edn" |] in
         let auth_path = Node.Path.join [| root; "auth.json" |] in
-        let state = "fixed-test-state" in
+        let state, encoded_state =
+          if index = 1 then
+            (unicode_text [ 0x4e2d ], "%E4%B8%AD")
+          else ("fixed-test-state", "fixed-test-state")
+        in
         let code = "auth-code-" ^ string_of_int index in
         write_file config_path
-          (Printf.sprintf
-             "{:open-browser false\n\
-             \ :login-timeout-ms 5000\n\
-             \ :auth-path %S\n\
-             \ :oauth-authorize-endpoint %S\n\
-             \ :oauth-token-endpoint %S\n\
-             \ :oauth-client-id \"test-client\"\n\
-             \ :oauth-state %S}\n"
-             auth_path (base_url ^ "/authorize")
-             (base_url ^ "/oauth2/token")
-             state);
+          ("{:open-browser false\n :login-timeout-ms 5000\n :auth-path "
+          ^ Printf.sprintf "%S" auth_path
+          ^ "\n :oauth-authorize-endpoint "
+          ^ Printf.sprintf "%S" (base_url ^ "/authorize")
+          ^ "\n :oauth-token-endpoint "
+          ^ Printf.sprintf "%S" (base_url ^ "/oauth2/token")
+          ^ "\n :oauth-client-id \"test-client\"\n :oauth-state \"" ^ state
+          ^ "\"}\n");
         let login =
           run_cli_p
             [
@@ -337,16 +340,19 @@ let () =
         in
         let callback_url =
           Printf.sprintf "http://localhost:8765/auth/callback?state=%s&code=%s"
-            state code
+            encoded_state code
         in
         let* () = fetch_with_retry 100 callback_url in
         let* result = login in
         remove_tree root;
         ignore (expect_cli_exit_zero "login pkce" result);
         let authorize_url = json_data_string result.stdout "authorize-url" in
-        match query_param authorize_url "code_challenge" with
-        | Some challenge -> Js.Promise.resolve challenge
-        | None -> fail_promise ("missing code_challenge: " ^ authorize_url)
+        if query_param authorize_url "state" <> Some encoded_state then
+          fail_promise ("unexpected state: " ^ authorize_url)
+        else
+          match query_param authorize_url "code_challenge" with
+          | Some challenge -> Js.Promise.resolve challenge
+          | None -> fail_promise ("missing code_challenge: " ^ authorize_url)
       in
       with_server (oauth_server ()) (fun base_url ->
           let* first = login_once base_url 1 in
@@ -1521,6 +1527,53 @@ let () =
             ignore
               (expect_named_contains "aligned wide id branch" output.stdout
                  ("12345 " ^ tree_corner ^ " Wide"));
+            Js.Promise.resolve pass)));
+
+  test_promise "show human output writes unicode text from worker strings"
+    (fun () ->
+      let responses =
+        [|
+          ( "thread-api/pull",
+            "[\"^ \",\"~:db/id\",1,\"~:block/title\",\"\\u4e2d\\u6587\"]" );
+          ("thread-api/q", "[]");
+        |]
+      in
+      let index = ref 0 in
+      let server =
+        invoke_server (fun body ->
+            if !index >= Array.length responses then
+              fail_test ("unexpected extra request: " ^ body);
+            let method_, transit = responses.(!index) in
+            incr index;
+            if not (Js.String.includes ~search:method_ body) then
+              fail_test (Printf.sprintf "expected %s, got %s" method_ body);
+            transit)
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [
+                "--graph";
+                "alpha";
+                "show";
+                "--id";
+                "1";
+                "--linked-references=false";
+              ]
+          in
+          ignore (expect_cli_exit_zero "show human unicode output" output);
+          if !index <> Array.length responses then
+            fail_promise
+              (Printf.sprintf "handled %d requests, expected %d" !index
+                 (Array.length responses))
+          else (
+            ignore
+              (expect_named_contains "unicode stdout" output.stdout
+                 (unicode_text [ 0x4e2d; 0x6587 ]));
+            ignore
+              (expect_named_not_contains "mojibake stdout" output.stdout
+                 "\195\164\194\184\194\173");
             Js.Promise.resolve pass)));
 
   test_promise "show human properties renders task status and property values"
