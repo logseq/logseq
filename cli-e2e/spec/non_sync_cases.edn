@@ -521,6 +521,26 @@
      :list ["--with-properties" "--sort" "--order" "--limit"]}},
    :tags [:upsert :list],
    :extends :non-sync/graph-json-env}
+  {:id "tag-upsert-schema-properties-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name SchemaOwner --type default --cardinality one >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name SchemaTag --add-properties '[\"SchemaOwner\"]' >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find [?title ...] :where [?tag :block/title \"SchemaTag\"] [?tag :logseq.property.class/properties ?prop] [?prop :block/title ?title]]' | grep -q SchemaOwner"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name SchemaTag --remove-properties '[\"SchemaOwner\"]' >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find [?title ...] :where [?tag :block/title \"SchemaTag\"] [?tag :logseq.property.class/properties ?prop] [?prop :block/title ?title]]'"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths {[:status] "ok"},
+    :stdout-not-contains ["SchemaOwner"]},
+   :covers
+   {:commands ["upsert property" "upsert tag" "query"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--name" "--type" "--cardinality" "--add-properties" "--remove-properties"],
+     :query ["--query"]}},
+   :tags [:upsert :query],
+   :extends :non-sync/graph-json-env}
   {:id "property-upsert-and-list-json",
    :cmds
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name score --type number --cardinality one >/dev/null"
