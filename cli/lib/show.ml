@@ -1077,6 +1077,15 @@ let prepare_property_render_metadata config invoke_config action root
 let id_text value =
   match id_of value with Some id -> Int64.to_string id | None -> "-"
 
+let rec tree_id_width value =
+  children_of value
+  |> List.fold_left
+       (fun width child -> max width (tree_id_width child))
+       (String.length (id_text value))
+
+let pad_id width id =
+  id ^ String.make (max 0 (width - String.length id)) ' '
+
 let rstrip_spaces value =
   let rec loop idx =
     if idx < 0 then ""
@@ -1087,11 +1096,12 @@ let rstrip_spaces value =
   in
   loop (String.length value - 1)
 
-let append_label_lines lines ~id ~prefix ~branch ~continuation_prefix label =
+let append_label_lines lines ~id_width ~id ~prefix ~branch ~continuation_prefix
+    label =
   match String.split_on_char '\n' label with
   | [] -> lines
   | first :: rest ->
-      let id_padding = String.make (String.length id + 1) ' ' in
+      let id_padding = String.make (id_width + 1) ' ' in
       let continuation_prefix =
         if rest = [] then continuation_prefix
         else id_padding ^ continuation_prefix
@@ -1101,7 +1111,7 @@ let append_label_lines lines ~id ~prefix ~branch ~continuation_prefix label =
         rstrip_spaces line
       in
       lines
-      @ [ id ^ " " ^ prefix ^ branch ^ first ]
+      @ [ pad_id id_width id ^ " " ^ prefix ^ branch ^ first ]
       @ List.map continuation_line rest
 
 let property_title metadata key = List.assoc_opt key metadata.property_titles
@@ -1171,8 +1181,8 @@ let property_line metadata (key, _, value) =
 let property_lines metadata value =
   property_entries value |> List.filter_map (property_line metadata)
 
-let append_property_lines lines ~id ~prefix metadata value =
-  let line_prefix = String.make (String.length id + 1) ' ' ^ prefix in
+let append_property_lines lines ~id_width ~prefix metadata value =
+  let line_prefix = String.make (id_width + 1) ' ' ^ prefix in
   let append_line lines line =
     match String.split_on_char '\n' line with
     | [] -> lines
@@ -1185,11 +1195,12 @@ let append_property_lines lines ~id ~prefix metadata value =
 
 let render_tree_text_value ?(metadata = empty_render_metadata) root =
   let lines = ref [] in
+  let id_width = tree_id_width root in
   let root_id = id_text root in
   lines :=
-    append_label_lines !lines ~id:root_id ~prefix:"" ~branch:""
+    append_label_lines !lines ~id_width ~id:root_id ~prefix:"" ~branch:""
       ~continuation_prefix:"" (label_of root);
-  lines := append_property_lines !lines ~id:root_id ~prefix:"" metadata root;
+  lines := append_property_lines !lines ~id_width ~prefix:"" metadata root;
   let rec walk prefix node =
     let children = children_of node in
     let total = List.length children in
@@ -1204,11 +1215,11 @@ let render_tree_text_value ?(metadata = empty_render_metadata) root =
           prefix ^ if last_child then "    " else Cli_platform.Symbols.tree_pipe
         in
         lines :=
-          append_label_lines !lines ~id:(id_text child) ~prefix ~branch
+          append_label_lines !lines ~id_width ~id:(id_text child) ~prefix ~branch
             ~continuation_prefix:next_prefix (label_of child);
         lines :=
-          append_property_lines !lines ~id:(id_text child) ~prefix:next_prefix
-            metadata child;
+          append_property_lines !lines ~id_width ~prefix:next_prefix metadata
+            child;
         walk next_prefix child)
       children
   in
