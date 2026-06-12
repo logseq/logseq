@@ -2498,7 +2498,10 @@
                        block (db/entity [:block/uuid new-uuid])]
                    (edit-block! block
                                 (or (:pos move-opts)
-                                    (when input [direction (util/get-line-pos (.-value input) (util/get-selection-start input))])
+                                    (when input
+                                      [direction (if (cursor/end-of-line? input)
+                                                   :end
+                                                   (util/get-line-pos (.-value input) (util/get-selection-start input)))])
                                     0)
                                 {:container-id container-id
                                  :direction direction}))))))

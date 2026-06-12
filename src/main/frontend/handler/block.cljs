@@ -69,14 +69,16 @@
 (defn- text-range-by-lst-fst-line [content [direction pos]]
   (case direction
     :up
-    (let [last-new-line (or (string/last-index-of content \newline) -1)
-          end (+ last-new-line pos 1)]
-      (subs content 0 end))
+    (if (= :end pos)
+      content
+      (let [last-new-line (or (string/last-index-of content \newline) -1)
+            end (+ last-new-line pos 1)]
+        (subs content 0 end)))
     :down
-    (-> (string/split-lines content)
-        first
-        (or "")
-        (subs 0 pos))))
+    (let [fst-line (or (first (string/split-lines content)) "")]
+      (if (= :end pos)
+        fst-line
+        (subs fst-line 0 pos)))))
 
 (defn mark-last-input-time!
   [repo]
