@@ -12,6 +12,7 @@
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.apply-txs :as sync-apply]
             [frontend.worker.sync.client-op :as client-op]
+            [frontend.worker.sync.repair :as sync-repair]
             [frontend.worker.undo-redo :as undo-redo]
             [logseq.db :as ldb]
             [logseq.db-sync.checksum :as sync-checksum]
@@ -365,6 +366,10 @@
     (->> (filter (fn [{:keys [t]}] (> t since)) txs)
          (mapv :tx))))
 
+(defn- server-repair-tx-data
+  [server block-uuids]
+  (sync-repair/local-repair-tx-data @(get @server :conn) block-uuids))
+
 (defn- server-upload! [server t-before tx-entries]
   (let [accepted? (atom false)]
     (swap! server
@@ -422,15 +427,15 @@
     (let [progress? (atom false)
           local-tx (or (client-op/get-local-tx repo) 0)
           server-t (:t @server)]
-      ;; (prn :debug :repo repo :local-tx local-tx :server-t server-t)
       (when (< local-tx server-t)
         (let [txs (server-pull server local-tx)]
-          ;; (prn :debug :apply-remote-tx :repo repo
-          ;;      :txs txs)
-          (#'sync-apply/apply-remote-txs! repo client
-                                          (mapv (fn [tx-data]
-                                                  {:tx-data tx-data})
-                                                txs))
+          (#'sync-apply/apply-remote-txs!
+           repo
+           (assoc client :repair-blocks-tx-data-fn
+                  (partial server-repair-tx-data server))
+           (mapv (fn [tx-data]
+                   {:tx-data tx-data})
+                 txs))
           (client-op/update-local-tx repo server-t)
           (reset! progress? true)))
       (let [pending (#'sync-apply/pending-txs repo)

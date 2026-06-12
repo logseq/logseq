@@ -5,6 +5,7 @@
    [clojure.string :as string]
    [datascript.core :as d]
    [frontend.common.crypt :as crypt]
+   [frontend.test.noise :as test-noise]
    [frontend.worker-common.util :as worker-util]
    [frontend.worker.handler.page :as worker-page]
    [frontend.worker.pipeline :as worker-pipeline]
@@ -21,10 +22,10 @@
    [frontend.worker.sync.large-title :as sync-large-title]
    [frontend.worker.sync.log-and-state :as sync-log-state]
    [frontend.worker.sync.presence :as sync-presence]
+   [frontend.worker.sync.repair :as sync-repair]
    [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
    [frontend.worker.sync.transport :as sync-transport]
    [frontend.worker.sync.util :as sync-util]
-   [frontend.test.noise :as test-noise]
    [frontend.worker.undo-redo :as undo-redo]
    [logseq.common.config :as common-config]
    [logseq.common.util :as common-util]
@@ -35,6 +36,7 @@
    [logseq.db-sync.worker.handler.sync :as sync-handler]
    [logseq.db-sync.worker.ws :as ws]
    [logseq.db.common.normalize :as db-normalize]
+   [logseq.db.frontend.schema :as db-schema]
    [logseq.db.frontend.validate :as db-validate]
    [logseq.db.sqlite.util :as sqlite-util]
    [logseq.db.test.helper :as db-test]
@@ -65,7 +67,28 @@
       (finally
         (aset js/console "error" original-console-error)))))
 
+(def ^:private *logseq-db-hooks (atom nil))
+
+(def reset-logseq-db-hooks-fixture
+  {:before
+   (fn []
+     (reset! *logseq-db-hooks
+             {:transact-fn @ldb/*transact-fn
+              :transact-pipeline-fn @ldb/*transact-pipeline-fn
+              :transact-invalid-callback @ldb/*transact-invalid-callback})
+     (reset! ldb/*transact-fn nil)
+     (reset! ldb/*transact-pipeline-fn nil)
+     (reset! ldb/*transact-invalid-callback nil))
+   :after
+   (fn []
+     (let [{:keys [transact-fn transact-pipeline-fn transact-invalid-callback]} @*logseq-db-hooks]
+       (reset! ldb/*transact-fn transact-fn)
+       (reset! ldb/*transact-pipeline-fn transact-pipeline-fn)
+       (reset! ldb/*transact-invalid-callback transact-invalid-callback)
+       (reset! *logseq-db-hooks nil)))})
+
 (use-fixtures :once (test-noise/mute-console-fixture ::db-sync-test))
+(use-fixtures :each reset-logseq-db-hooks-fixture)
 
 (defn- js-row
   [m]
@@ -625,7 +648,7 @@
                "pending upload debug gate test"]]}])
           (with-redefs [worker-state/online? (constantly true)
                         sync-apply/prepare-upload-tx-entries
-                        (fn [_conn _pending]
+                        (fn [& _args]
                           (swap! prepare-calls inc)
                           {:tx-entries []
                            :drop-tx-ids []})]
@@ -889,6 +912,60 @@
               (is (= 1 (aget failed-ent "failed")))
               (is (= 1 (aget untouched-ent "pending")))
               (is (not= 1 (aget untouched-ent "failed"))))))))))
+
+(deftest tx-reject-missing-blocks-keeps-failed-tx-pending-and-retries-with-repair-test
+  (testing "recoverable tx/reject should keep failed tx pending and prepend a repair entry for retry"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          failed-tx-id (random-uuid)
+          missing-uuid (:block/uuid parent)
+          raw-message (js/JSON.stringify
+                       (clj->js {:type "tx/reject"
+                                 :reason "db transact failed"
+                                 :t 0
+                                 :failed-tx-id (str failed-tx-id)
+                                 :missing-block-uuids [(str missing-uuid)]}))
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [failed-tx-id])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}]
+      (with-datascript-conns
+        conn client-ops-conn
+        (fn []
+          (seed-client-op-txs!
+           test-repo
+           [{:db-sync/tx-id failed-tx-id
+             :db-sync/created-at 1
+             :db-sync/pending? true
+             :db-sync/outliner-op :save-block
+             :db-sync/normalized-tx-data [[:db/add [:block/uuid missing-uuid] :block/title "local title"]]}])
+          (with-redefs [client-op/get-local-tx (constantly 0)]
+            (let [error (try
+                          (with-silenced-console-error
+                            #(sync-handle-message/handle-message! test-repo client raw-message))
+                          nil
+                          (catch :default e
+                            e))
+                  failed-ent (client-op-tx-row client-ops-conn failed-tx-id)
+                  {:keys [tx-entries]} (#'sync-apply/prepare-upload-tx-entries
+                                        conn
+                                        (#'sync-apply/pending-txs test-repo))
+                  repair-entry (first tx-entries)
+                  failed-entry (second tx-entries)]
+              (is (some? error))
+              (is (= :db-sync/tx-rejected (:type (ex-data error))))
+              (is (= [missing-uuid] (:missing-block-uuids (ex-data error))))
+              (is (= [] @(:inflight client)))
+              (is (= 1 (aget failed-ent "pending")))
+              (is (not= 1 (aget failed-ent "failed")))
+              (is (= :fix (:outliner-op repair-entry)))
+              (is (= failed-tx-id (:tx-id failed-entry)))
+              (is (some #(= [:db/add
+                             (str "repair-block-" missing-uuid)
+                             :block/uuid
+                             missing-uuid]
+                            %)
+                        (:tx-data repair-entry))))))))))
 
 (deftest tx-reject-stale-keeps-inflight-op-pending-test
   (testing "stale tx/reject should keep inflight ops pending for retry"
@@ -1164,7 +1241,7 @@
                     @tx-metas))
           (is (= "remote-migration-only"
                  (:block/title (first (d/q '[:find [(pull ?e [:block/title]) ...]
-                                          :where [?e :block/title "remote-migration-only"]]
+                                             :where [?e :block/title "remote-migration-only"]]
                                         @conn))))))))))
 
 (deftest apply-remote-txs-preserves-many-page-property-values-test
@@ -1416,8 +1493,8 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
-                                  local-tx-meta)
+                      [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
+                      local-tx-meta)
           (let [pending (#'sync-apply/pending-txs test-repo)
                 txs (mapcat :tx pending)]
             (is (seq pending))
@@ -1453,8 +1530,8 @@
         (fn []
           (worker-page/create! conn "Rename Me" :uuid page-uuid)
           (apply-ops! conn
-                                  [[:rename-page [page-uuid "Renamed"]]]
-                                  local-tx-meta)
+                      [[:rename-page [page-uuid "Renamed"]]]
+                      local-tx-meta)
           (let [{:keys [forward-outliner-ops]} (last (#'sync-apply/pending-txs test-repo))]
             (is (= :save-block (ffirst forward-outliner-ops)))
             (is (= {:block/uuid page-uuid
@@ -1467,8 +1544,8 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:move-blocks-up-down [[(:db/id child2)] true]]]
-                                  local-tx-meta)
+                      [[:move-blocks-up-down [[(:db/id child2)] true]]]
+                      local-tx-meta)
           (let [{:keys [forward-outliner-ops]} (first (#'sync-apply/pending-txs test-repo))
                 [op [ids up?]] (first forward-outliner-ops)]
             (is (= :move-blocks-up-down op))
@@ -1481,8 +1558,8 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:indent-outdent-blocks [[(:db/id child2)] true {}]]]
-                                  local-tx-meta)
+                      [[:indent-outdent-blocks [[(:db/id child2)] true {}]]]
+                      local-tx-meta)
           (let [{:keys [forward-outliner-ops]} (first (#'sync-apply/pending-txs test-repo))
                 [_ [_ target-id opts]] (first forward-outliner-ops)]
             (is (= :move-blocks (ffirst forward-outliner-ops)))
@@ -1497,9 +1574,9 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:indent-outdent-blocks [[(:db/id child3)] false {:parent-original nil
-                                                                                     :logical-outdenting? nil}]]]
-                                  tx-meta)
+                      [[:indent-outdent-blocks [[(:db/id child3)] false {:parent-original nil
+                                                                         :logical-outdenting? nil}]]]
+                      tx-meta)
           (let [source-row (first (#'sync-apply/pending-txs test-repo))
                 forward-ops (:forward-outliner-ops source-row)
                 inverse-ops (:inverse-outliner-ops source-row)]
@@ -1523,9 +1600,9 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:indent-outdent-blocks [[(:db/id child2)] false {:parent-original nil
-                                                                                     :logical-outdenting? nil}]]]
-                                  tx-meta)
+                      [[:indent-outdent-blocks [[(:db/id child2)] false {:parent-original nil
+                                                                         :logical-outdenting? nil}]]]
+                      tx-meta)
           (let [source-row (first (#'sync-apply/pending-txs test-repo))
                 forward-ops (:forward-outliner-ops source-row)
                 inverse-ops (:inverse-outliner-ops source-row)]
@@ -1551,9 +1628,9 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:indent-outdent-blocks [[(:db/id child2)] false {:parent-original nil
-                                                                                     :logical-outdenting? nil}]]]
-                                  local-tx-meta)
+                      [[:indent-outdent-blocks [[(:db/id child2)] false {:parent-original nil
+                                                                         :logical-outdenting? nil}]]]
+                      local-tx-meta)
           (let [source-row (first (#'sync-apply/pending-txs test-repo))
                 source-tx-id (:tx-id source-row)
                 child3-after-outdent (d/entity @conn [:block/uuid child3-uuid])]
@@ -1581,9 +1658,9 @@
                                               :errors errors})))
           (try
             (apply-ops! conn
-                                    [[:indent-outdent-blocks [[(:db/id child2)] false {:parent-original nil
-                                                                                       :logical-outdenting? nil}]]]
-                                    local-tx-meta)
+                        [[:indent-outdent-blocks [[(:db/id child2)] false {:parent-original nil
+                                                                           :logical-outdenting? nil}]]]
+                        local-tx-meta)
             (let [source-row (first (#'sync-apply/pending-txs test-repo))
                   source-tx-id (:tx-id source-row)
                   undo-result (#'sync-apply/apply-history-action! test-repo source-tx-id true {})
@@ -1717,9 +1794,9 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:save-block [{:block/uuid child-uuid
-                                                  :block/title "hello"} nil]]]
-                                  local-tx-meta)
+                      [[:save-block [{:block/uuid child-uuid
+                                      :block/title "hello"} nil]]]
+                      local-tx-meta)
           (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))]
             (let [{:keys [applied? history-tx-id]} (#'sync-apply/apply-history-action! test-repo
                                                                                        tx-id
@@ -1742,9 +1819,9 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:save-block [{:block/uuid child-uuid
-                                                  :block/title "hello"} nil]]]
-                                  local-tx-meta)
+                      [[:save-block [{:block/uuid child-uuid
+                                      :block/title "hello"} nil]]]
+                      local-tx-meta)
           (let [{source-tx-id :tx-id} (first (#'sync-apply/pending-txs test-repo))]
             (let [{undo-applied? :applied?
                    undo-history-tx-id :history-tx-id}
@@ -2209,12 +2286,12 @@
           (outliner-page/create! conn "Page y" {})
           (let [page-y (db-test/find-page-by-title @conn "Page y")]
             (apply-ops! conn
-                                    [[:batch-set-property [[(:db/id block-1)
-                                                            (:db/id block-2)]
-                                                           property-id
-                                                           (:db/id page-y)
-                                                           {}]]]
-                                    {})
+                        [[:batch-set-property [[(:db/id block-1)
+                                                (:db/id block-2)]
+                                               property-id
+                                               (:db/id page-y)
+                                               {}]]]
+                        {})
             (let [pending (#'sync-apply/pending-txs test-repo)
                   property-tx (some (fn [{:keys [forward-outliner-ops]}]
                                       (when (= :batch-set-property (ffirst forward-outliner-ops))
@@ -2374,6 +2451,24 @@
                    (:applied? (#'sync-apply/apply-history-action! test-repo action-tx-id true {}))))
             (is (empty? (:user.property/x7 (d/entity @conn block-ref))))))))))
 
+(deftest apply-history-action-skips-sync-fix-pending-tx-test
+  (testing "sync maintenance fix txs are not replayed through undo/redo"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          tx-id (random-uuid)
+          missing-block-ref [:block/uuid (random-uuid)]]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (seed-client-op-txs!
+           test-repo
+           [{:db-sync/tx-id tx-id
+             :db-sync/outliner-op :fix
+             :db-sync/pending? true
+             :db-sync/normalized-tx-data [[:db/add missing-block-ref :block/title "missing"]]
+             :db-sync/reversed-tx-data [[:db/retract missing-block-ref :block/title "missing"]]}])
+          (let [result (#'sync-apply/apply-history-action! test-repo tx-id true {})]
+            (is (false? (:applied? result)))
+            (is (= :unsupported-history-action (:reason result)))))))))
+
 (deftest replay-recycle-delete-permanently-removes-recycled-page-test
   (testing "replay should permanently delete a recycled page subtree"
     (let [conn (db-test/create-conn-with-blocks
@@ -2504,11 +2599,11 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:insert-blocks [[{:block/title "history insert"
-                                                      :block/uuid requested-uuid}]
-                                                    (:db/id parent)
-                                                    {:sibling? false}]]]
-                                  local-tx-meta)
+                      [[:insert-blocks [[{:block/title "history insert"
+                                          :block/uuid requested-uuid}]
+                                        (:db/id parent)
+                                        {:sibling? false}]]]
+                      local-tx-meta)
           (let [pending (first (#'sync-apply/pending-txs test-repo))
                 inserted (db-test/find-block-by-content @conn "history insert")
                 inserted-uuid (:block/uuid inserted)
@@ -2535,9 +2630,9 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:save-block [{:block/uuid child-uuid
-                                                  :block/title "child 1 inline edit"} {}]]]
-                                  local-tx-meta)
+                      [[:save-block [{:block/uuid child-uuid
+                                      :block/title "child 1 inline edit"} {}]]]
+                      local-tx-meta)
           (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))]
             (is (= true
                    (:applied? (#'sync-apply/apply-history-action! test-repo tx-id true {}))))
@@ -2663,10 +2758,10 @@
         (fn []
           (let [before-ids (property-page-ids @conn)]
             (apply-ops! conn
-                                    [[:upsert-property [nil
-                                                        {:logseq.property/type :default}
-                                                        {:property-name property-name}]]]
-                                    local-tx-meta)
+                        [[:upsert-property [nil
+                                            {:logseq.property/type :default}
+                                            {:property-name property-name}]]]
+                        local-tx-meta)
             (let [after-ids (property-page-ids @conn)
                   created-id (first (seq (set/difference after-ids before-ids)))
                   created-ident (some-> (d/entity @conn created-id) :db/ident)
@@ -2711,11 +2806,11 @@
           (try
             (d/transact! conn [[:db/add property-id :logseq.property/classes :logseq.class/Root]])
             (apply-ops! conn
-                                    [[:upsert-property [property-id
-                                                        {:logseq.property/type :node
-                                                         :db/cardinality :many}
-                                                        {}]]]
-                                    local-tx-meta)
+                        [[:upsert-property [property-id
+                                            {:logseq.property/type :node
+                                             :db/cardinality :many}
+                                            {}]]]
+                        local-tx-meta)
             (let [{:keys [inverse-outliner-ops]} (last (#'sync-apply/pending-txs test-repo))]
               (is (= :upsert-property
                      (ffirst inverse-outliner-ops)))
@@ -2747,11 +2842,11 @@
                 left-uuid (:block/uuid left)
                 right-uuid (:block/uuid right)]
             (apply-ops! conn
-                                    [[:delete-blocks [[(:db/id right)]
-                                                      {:deleted-by-uuid (random-uuid)}]]
-                                     [:save-block [{:block/uuid left-uuid
-                                                    :block/title "hellohellohello"} nil]]]
-                                    local-tx-meta)
+                        [[:delete-blocks [[(:db/id right)]
+                                          {:deleted-by-uuid (random-uuid)}]]
+                         [:save-block [{:block/uuid left-uuid
+                                        :block/title "hellohellohello"} nil]]]
+                        local-tx-meta)
             (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))]
               (is (= "hellohellohello"
                      (:block/title (d/entity @conn [:block/uuid left-uuid]))))
@@ -2776,13 +2871,13 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:save-block [{:block/uuid child-uuid
-                                                  :block/title "child 1 edited"} {}]]
-                                   [:insert-blocks [[{:block/title "inserted after save"
-                                                      :block/uuid inserted-uuid}]
-                                                    child-id
-                                                    {:sibling? true}]]]
-                                  local-tx-meta)
+                      [[:save-block [{:block/uuid child-uuid
+                                      :block/title "child 1 edited"} {}]]
+                       [:insert-blocks [[{:block/title "inserted after save"
+                                          :block/uuid inserted-uuid}]
+                                        child-id
+                                        {:sibling? true}]]]
+                      local-tx-meta)
           (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))
                 inserted-id (d/q '[:find ?e .
                                    :in $ ?title
@@ -2823,12 +2918,12 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:insert-blocks [copied-blocks
-                                                    (:db/id empty-target)
-                                                    {:sibling? true
-                                                     :outliner-op :paste
-                                                     :replace-empty-target? true}]]]
-                                  local-tx-meta)
+                      [[:insert-blocks [copied-blocks
+                                        (:db/id empty-target)
+                                        {:sibling? true
+                                         :outliner-op :paste
+                                         :replace-empty-target? true}]]]
+                      local-tx-meta)
           (let [pending (first (#'sync-apply/pending-txs test-repo))
                 {:keys [tx-id]} pending
                 pasted-id (d/q '[:find ?e .
@@ -2875,17 +2970,17 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:insert-blocks [[{:block/title "draft"
-                                                      :block/uuid inserted-uuid}]
-                                                    (:db/id parent)
-                                                    {:sibling? false}]]]
-                                  local-tx-meta)
+                      [[:insert-blocks [[{:block/title "draft"
+                                          :block/uuid inserted-uuid}]
+                                        (:db/id parent)
+                                        {:sibling? false}]]]
+                      local-tx-meta)
           (let [inserted (db-test/find-block-by-content @conn "draft")
                 inserted-uuid' (:block/uuid inserted)]
             (apply-ops! conn
-                                    [[:save-block [{:block/uuid inserted-uuid'
-                                                    :block/title "published"} {}]]]
-                                    local-tx-meta)
+                        [[:save-block [{:block/uuid inserted-uuid'
+                                        :block/title "published"} {}]]]
+                        local-tx-meta)
             (outliner-core/delete-blocks! conn
                                           [(d/entity @conn [:block/uuid inserted-uuid'])]
                                           {})
@@ -2937,9 +3032,9 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:save-block [{:block/uuid child-uuid
-                                                  :block/title "local-2"} {}]]]
-                                  local-tx-meta)
+                      [[:save-block [{:block/uuid child-uuid
+                                      :block/title "local-2"} {}]]]
+                      local-tx-meta)
           (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))]
             (#'sync-apply/apply-remote-tx!
              test-repo
@@ -3021,11 +3116,11 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:move-blocks [[(:db/id a-child-1)
-                                                   (:db/id b-child-1)]
-                                                  (:db/id parent-b)
-                                                  {:sibling? false}]]]
-                                  local-tx-meta)
+                      [[:move-blocks [[(:db/id a-child-1)
+                                       (:db/id b-child-1)]
+                                      (:db/id parent-b)
+                                      {:sibling? false}]]]
+                      local-tx-meta)
           (let [move-action (->> (#'sync-apply/pending-txs test-repo)
                                  (filter #(= :move-blocks (:outliner-op %)))
                                  last)
@@ -3053,11 +3148,11 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:move-blocks [[(:db/id a-child-1)
-                                                   (:db/id b-child-1)]
-                                                  (:db/id parent-b)
-                                                  {:sibling? false}]]]
-                                  local-tx-meta)
+                      [[:move-blocks [[(:db/id a-child-1)
+                                       (:db/id b-child-1)]
+                                      (:db/id parent-b)
+                                      {:sibling? false}]]]
+                      local-tx-meta)
           (let [move-action (->> (#'sync-apply/pending-txs test-repo)
                                  (filter #(= :move-blocks (:outliner-op %)))
                                  last)]
@@ -3123,10 +3218,10 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:create-page [page-title {:redirect? false
-                                                              :split-namespace? true
-                                                              :tags ()}]]]
-                                  local-tx-meta)
+                      [[:create-page [page-title {:redirect? false
+                                                  :split-namespace? true
+                                                  :tags ()}]]]
+                      local-tx-meta)
           (let [page-before (db-test/find-page-by-title @conn page-title)
                 page-uuid (:block/uuid page-before)
                 pending-before (last (#'sync-apply/pending-txs test-repo))]
@@ -3144,17 +3239,52 @@
               (is (some? page-after))
               (is (= page-uuid (:block/uuid page-after))))))))))
 
+(deftest rebase-duplicate-create-page-keeps-remote-children-test
+  (testing "rebased duplicate create-page should not remove remote children"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          page-title "shared rebase page"
+          child-uuid (random-uuid)
+          now 1760000000000]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (apply-ops! conn
+                      [[:create-page [page-title {:redirect? false
+                                                  :split-namespace? true
+                                                  :tags ()}]]]
+                      local-tx-meta)
+          (let [page-uuid (:block/uuid (db-test/find-page-by-title @conn page-title))
+                pending-before (last (#'sync-apply/pending-txs test-repo))
+                remote-page-tx (:tx pending-before)
+                remote-child-tx [[:db/add (str child-uuid) :block/uuid child-uuid]
+                                 [:db/add (str child-uuid) :block/title "remote child"]
+                                 [:db/add (str child-uuid) :block/page [:block/uuid page-uuid]]
+                                 [:db/add (str child-uuid) :block/parent [:block/uuid page-uuid]]
+                                 [:db/add (str child-uuid) :block/order "a0"]
+                                 [:db/add (str child-uuid) :block/created-at now]
+                                 [:db/add (str child-uuid) :block/updated-at now]]]
+            (#'sync-apply/apply-remote-txs!
+             test-repo
+             nil
+             [{:tx-data remote-page-tx}
+              {:tx-data remote-child-tx}])
+            (let [page-after (db-test/find-page-by-title @conn page-title)
+                  child-after (d/entity @conn [:block/uuid child-uuid])]
+              (is (some? page-after))
+              (is (= page-uuid (:block/uuid page-after)))
+              (is (= "remote child" (:block/title child-after)))
+              (is (= page-uuid (:block/uuid (:block/page child-after)))))))))))
+
 (deftest rebase-insert-blocks-keeps-block-uuid-test
   (testing "rebased insert-blocks should preserve the original block uuid"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:insert-blocks [[{:block/title "rebase uuid block"
-                                                      :block/uuid (random-uuid)}]
-                                                    (:db/id parent)
-                                                    {:sibling? false}]]]
-                                  local-tx-meta)
+                      [[:insert-blocks [[{:block/title "rebase uuid block"
+                                          :block/uuid (random-uuid)}]
+                                        (:db/id parent)
+                                        {:sibling? false}]]]
+                      local-tx-meta)
           (let [block-before (db-test/find-block-by-content @conn "rebase uuid block")
                 block-uuid (:block/uuid block-before)
                 pending-before (last (#'sync-apply/pending-txs test-repo))]
@@ -3221,29 +3351,29 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
-                                  local-tx-meta)
+                      [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
+                      local-tx-meta)
           (let [reaction-eid (-> (d/datoms @conn :avet :logseq.property.reaction/target (:db/id parent))
                                  first
                                  :e)
                 before-count (count (#'sync-apply/pending-txs test-repo))]
             (is (some? reaction-eid))
             (apply-ops! conn
-                                    [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
-                                    local-tx-meta)
+                        [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
+                        local-tx-meta)
             (let [after-count (count (#'sync-apply/pending-txs test-repo))]
               (is (> after-count before-count)))))))))
 
-(deftest rebase-marks-stale-reaction-tx-non-pending-immediately-test
-  (testing "stale pending reaction tx is marked non-pending during rebase to avoid re-upload"
+(deftest rebase-keeps-pending-reaction-tx-for-server-ack-or-reject-test
+  (testing "pending reaction tx remains pending after remote rebase until server ack or reject"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
           target-uuid (:block/uuid parent)
           remote-delete-tx (:tx-data (outliner-core/delete-blocks @conn [parent] {}))]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (apply-ops! conn
-                                  [[:toggle-reaction [target-uuid "+1" nil]]]
-                                  local-tx-meta)
+                      [[:toggle-reaction [target-uuid "+1" nil]]]
+                      local-tx-meta)
           (let [pending-before (#'sync-apply/pending-txs test-repo)
                 tx-id-before (:tx-id (first pending-before))]
             (is (= 1 (count pending-before)))
@@ -3253,9 +3383,9 @@
              remote-delete-tx)
             (let [pending-after (#'sync-apply/pending-txs test-repo)
                   tx-ent-after (client-op-tx-row client-ops-conn tx-id-before)]
-              (is (empty? pending-after))
+              (is (= 1 (count pending-after)))
               (is (some? tx-ent-after))
-              (is (= 0 (aget tx-ent-after "pending"))))))))))
+              (is (= 1 (aget tx-ent-after "pending"))))))))))
 
 (deftest tx-batch-ok-removes-acked-pending-txs-test
   (testing "tx/batch/ok clears inflight and removes acked pending txs"
@@ -3882,6 +4012,380 @@
             (is (some? (:block/order child1')))
             (is (not= (:block/order child1') (:block/order child2')))))))))
 
+(defn- repair-client
+  [repair-calls tx-data-f]
+  {:repo test-repo
+   :graph-id "graph-1"
+   :repair-blocks-tx-data-fn (fn [block-uuids]
+                               (swap! repair-calls conj (vec block-uuids))
+                               (tx-data-f block-uuids))})
+
+(defn- transact-repair-dependency-fixture!
+  [conn {:keys [class-uuid property-uuid view-uuid history-uuid recycled-uuid delete-uuid]}]
+  (d/transact!
+   conn
+   [{:db/id -1
+     :db/ident :user.class/repair-view-target
+     :block/uuid class-uuid
+     :block/title "Repair View Target"
+     :block/name "repair view target"
+     :block/tags #{:logseq.class/Tag}
+     :block/order "a0"
+     :block/created-at 1
+     :block/updated-at 1
+     :logseq.property.class/extends :logseq.class/Root}
+    {:db/id -2
+     :db/ident :user.property/repair-property
+     :block/uuid property-uuid
+     :block/title "Repair Property"
+     :block/name "repair property"
+     :block/tags #{:logseq.class/Property}
+     :block/order "a1"
+     :block/created-at 1
+     :block/updated-at 1
+     :logseq.property/type :default
+     :db/cardinality :db.cardinality/one
+     :db/index true}
+    {:db/id -3
+     :block/uuid view-uuid
+     :block/title "Repair View"
+     :block/page -1
+     :block/parent -1
+     :block/order "a2"
+     :block/created-at 1
+     :block/updated-at 1
+     :logseq.property/view-for -1
+     :logseq.property.view/group-by-property -2}
+    {:db/id -4
+     :block/uuid recycled-uuid
+     :block/title "Repair Recycled"
+     :block/page -1
+     :block/parent -1
+     :block/order "a3"
+     :block/created-at 1
+     :block/updated-at 1
+     :logseq.property/deleted-at 2
+     :logseq.property.recycle/original-parent -1
+     :logseq.property.recycle/original-page -1}
+    {:db/id -5
+     :block/uuid history-uuid
+     :block/title "Repair History"
+     :block/page -1
+     :block/parent -1
+     :block/order "a4"
+     :block/created-at 1
+     :block/updated-at 1
+     :logseq.property.history/block -4
+     :logseq.property.history/property -2
+     :logseq.property.history/ref-value -1}
+    {:db/id -6
+     :block/uuid delete-uuid
+     :block/title "Repair Delete Target"
+     :block/page -1
+     :block/parent -1
+     :block/order "a5"
+     :block/created-at 1
+     :block/updated-at 1
+     :logseq.property/deleted-at 3
+     :logseq.property.recycle/original-parent -1
+     :logseq.property.recycle/original-page -1}]))
+
+(deftest prepare-upload-tx-entries-does-not-repair-missing-block-datoms-test
+  (testing "upload preparation should not infer missing required block datoms before a server reject"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          child-id (:db/id child1)
+          page-id (:db/id (:block/page child1))]
+      (with-datascript-conns
+        conn client-ops-conn
+        (fn []
+          (d/transact! conn [[:db/retract child-id :block/page page-id]])
+          (let [pending-before (#'sync-apply/pending-txs test-repo)
+                {:keys [tx-entries]} (#'sync-apply/prepare-upload-tx-entries conn pending-before)
+                child1' (d/entity @conn child-id)]
+            (is (nil? (:block/page child1')))
+            (is (not-any? #(= :fix (:outliner-op %)) tx-entries))))))))
+
+(deftest prepare-upload-tx-entries-does-not-repair-missing-block-lookup-ref-test
+  (testing "upload preparation should leave missing block lookup refs for the server to reject"
+    (let [{:keys [conn parent]} (setup-parent-child)
+          page-id (:db/id (:block/page parent))
+          block-uuid (random-uuid)
+          tx-id (random-uuid)
+          now 1760000000000
+          tx-data [[:db/add [:block/uuid block-uuid] :block/title "missing block"]
+                   [:db/add [:block/uuid block-uuid] :block/page page-id]
+                   [:db/add [:block/uuid block-uuid] :block/parent page-id]
+                   [:db/add [:block/uuid block-uuid] :block/order "a0"]
+                   [:db/add [:block/uuid block-uuid] :block/created-at now]
+                   [:db/add [:block/uuid block-uuid] :block/updated-at now]]
+          pending [{:tx-id tx-id
+                    :outliner-op :save-block
+                    :tx tx-data}]
+          {:keys [tx-entries]} (#'sync-apply/prepare-upload-tx-entries conn pending)]
+      (is (= [tx-id] (mapv :tx-id tx-entries)))
+      (is (= tx-data (:tx-data (first tx-entries))))
+      (is (not-any? #(= :fix (:outliner-op %)) tx-entries)))))
+
+(deftest apply-remote-txs-without-local-changes-repairs-missing-block-datoms-test
+  (testing "remote-only tx application fetches missing required block datoms from server"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          child-id (:db/id child1)
+          child-uuid (:block/uuid child1)
+          page-id (:db/id (:block/page child1))
+          repair-calls (atom [])
+          client (repair-client repair-calls
+                                (fn [_block-uuids]
+                                  [[:db/add child-id :block/page page-id]]))]
+      (with-datascript-conns
+        conn client-ops-conn
+        (fn []
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           client
+           [[:db/retract child-id :block/page page-id]])
+          (let [child1' (d/entity @conn child-id)
+                pending (#'sync-apply/pending-txs test-repo)]
+            (is (= [[child-uuid]] @repair-calls))
+            (is (= page-id (:db/id (:block/page child1'))))
+            (is (some #(= :fix (:outliner-op %)) pending))))))))
+
+(deftest apply-remote-txs-repairs-missing-block-lookup-ref-test
+  (testing "remote tx application fetches missing block lookup refs from server"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          page-id (:db/id (:block/page parent))
+          block-uuid (random-uuid)
+          now 1760000000000
+          repair-calls (atom [])
+          client (repair-client repair-calls
+                                (fn [_block-uuids]
+                                  [{:block/uuid block-uuid
+                                    :block/title "remote missing block"
+                                    :block/page page-id
+                                    :block/parent page-id
+                                    :block/order "a0"
+                                    :block/created-at now
+                                    :block/updated-at now}]))]
+      (with-datascript-conns
+        conn client-ops-conn
+        (fn []
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           client
+           [[:db/add [:block/uuid block-uuid] :block/title "remote missing block"]
+            [:db/add [:block/uuid block-uuid] :block/page page-id]
+            [:db/add [:block/uuid block-uuid] :block/parent page-id]
+            [:db/add [:block/uuid block-uuid] :block/order "a0"]
+            [:db/add [:block/uuid block-uuid] :block/created-at now]
+            [:db/add [:block/uuid block-uuid] :block/updated-at now]])
+          (let [block (d/entity @conn [:block/uuid block-uuid])]
+            (is (= [[block-uuid]] @repair-calls))
+            (is (some? block))
+            (is (= "remote missing block" (:block/title block)))))))))
+
+(deftest apply-remote-txs-repairs-missing-block-retract-lookup-ref-test
+  (testing "remote retract tx application fetches missing block lookup refs from server"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          page-id (:db/id (:block/page parent))
+          block-uuid (random-uuid)
+          now 1760000000000
+          repair-calls (atom [])
+          client (repair-client repair-calls
+                                (fn [_block-uuids]
+                                  [{:block/uuid block-uuid
+                                    :block/title "remote missing block"
+                                    :block/page page-id
+                                    :block/parent page-id
+                                    :block/order "a0"
+                                    :block/created-at now
+                                    :block/updated-at now
+                                    :block/collapsed? true}]))]
+      (with-datascript-conns
+        conn client-ops-conn
+        (fn []
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           client
+           [[:db/retract [:block/uuid block-uuid] :block/collapsed? true]])
+          (let [block (d/entity @conn [:block/uuid block-uuid])]
+            (is (= [[block-uuid]] @repair-calls))
+            (is (some? block))
+            (is (= "remote missing block" (:block/title block)))
+            (is (nil? (:block/collapsed? block)))))))))
+
+(deftest apply-remote-txs-repairs-missing-block-ref-value-test
+  (testing "remote tx application fetches missing block lookup refs used as datom values"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          page-id (:db/id (:block/page parent))
+          parent-uuid (random-uuid)
+          child-uuid (random-uuid)
+          now 1760000000000
+          repair-calls (atom [])
+          client (repair-client repair-calls
+                                (fn [_block-uuids]
+                                  [{:block/uuid parent-uuid
+                                    :block/title "remote missing parent"
+                                    :block/page page-id
+                                    :block/parent page-id
+                                    :block/order "a0"
+                                    :block/created-at now
+                                    :block/updated-at now}]))]
+      (with-datascript-conns
+        conn client-ops-conn
+        (fn []
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           client
+           [[:db/add (str child-uuid) :block/uuid child-uuid]
+            [:db/add (str child-uuid) :block/title "remote child"]
+            [:db/add (str child-uuid) :block/page page-id]
+            [:db/add (str child-uuid) :block/parent [:block/uuid parent-uuid]]
+            [:db/add (str child-uuid) :block/order "a0"]
+            [:db/add (str child-uuid) :block/created-at now]
+            [:db/add (str child-uuid) :block/updated-at now]])
+          (let [parent' (d/entity @conn [:block/uuid parent-uuid])
+                child' (d/entity @conn [:block/uuid child-uuid])]
+            (is (= [[parent-uuid]] @repair-calls))
+            (is (= "remote missing parent" (:block/title parent')))
+            (is (= "remote child" (:block/title child')))
+            (is (= parent-uuid (:block/uuid (:block/parent child'))))))))))
+
+(deftest apply-remote-txs-repairs-view-history-recycled-and-delete-dependencies-test
+  (testing "remote tx application fetches dependent repair blocks from the server"
+    (let [ids {:class-uuid (random-uuid)
+               :property-uuid (random-uuid)
+               :view-uuid (random-uuid)
+               :history-uuid (random-uuid)
+               :recycled-uuid (random-uuid)
+               :delete-uuid (random-uuid)}
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "client page"}
+                   :blocks []}]})
+          server-conn (db-test/create-conn-with-blocks
+                       {:pages-and-blocks
+                        [{:page {:block/title "server page"}
+                          :blocks []}]})
+          client-ops-conn (new-client-ops-db)
+          repair-calls (atom [])
+          client (repair-client repair-calls
+                                (fn [block-uuids]
+                                  (sync-repair/local-repair-tx-data @server-conn block-uuids)))]
+      (transact-repair-dependency-fixture! server-conn ids)
+      (with-datascript-conns
+        conn client-ops-conn
+        (fn []
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           client
+           [[:db/add [:block/uuid (:view-uuid ids)] :block/collapsed? true]
+            [:db/add [:block/uuid (:history-uuid ids)] :block/title "Repair History Remote"]
+            [:db/retractEntity [:block/uuid (:delete-uuid ids)]]])
+          (let [view (d/entity @conn [:block/uuid (:view-uuid ids)])
+                history (d/entity @conn [:block/uuid (:history-uuid ids)])
+                property (d/entity @conn [:block/uuid (:property-uuid ids)])
+                recycled (d/entity @conn [:block/uuid (:recycled-uuid ids)])
+                deleted (d/entity @conn [:block/uuid (:delete-uuid ids)])]
+            (is (= [[(:view-uuid ids) (:history-uuid ids) (:delete-uuid ids)]]
+                   @repair-calls))
+            (is (= "Repair View Target" (:block/title (:logseq.property/view-for view))))
+            (is (= "Repair Property" (:block/title (:logseq.property.view/group-by-property view))))
+            (is (true? (:block/collapsed? view)))
+            (is (= "Repair History Remote" (:block/title history)))
+            (is (= (:db/id recycled) (:db/id (:logseq.property.history/block history))))
+            (is (= (:db/id property) (:db/id (:logseq.property.history/property history))))
+            (is (nil? deleted))))))))
+
+(deftest apply-remote-txs-with-local-changes-repairs-missing-block-lookup-ref-test
+  (testing "remote tx application fetches missing block lookup refs before rebasing local changes"
+    (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
+          page-id (:db/id (:block/page parent))
+          block-uuid (random-uuid)
+          now 1760000000000
+          repair-calls (atom [])
+          client (repair-client repair-calls
+                                (fn [_block-uuids]
+                                  [{:block/uuid block-uuid
+                                    :block/title "remote missing block"
+                                    :block/page page-id
+                                    :block/parent page-id
+                                    :block/order "a0"
+                                    :block/created-at now
+                                    :block/updated-at now}]))]
+      (with-datascript-conns
+        conn client-ops-conn
+        (fn []
+          (outliner-core/save-block! conn
+                                     {:block/uuid (:block/uuid child1)
+                                      :block/title "local title"})
+          (is (seq (#'sync-apply/pending-txs test-repo)))
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           client
+           [[:db/add [:block/uuid block-uuid] :block/title "remote missing block"]
+            [:db/add [:block/uuid block-uuid] :block/page page-id]
+            [:db/add [:block/uuid block-uuid] :block/parent page-id]
+            [:db/add [:block/uuid block-uuid] :block/order "a0"]
+            [:db/add [:block/uuid block-uuid] :block/created-at now]
+            [:db/add [:block/uuid block-uuid] :block/updated-at now]])
+          (let [block (d/entity @conn [:block/uuid block-uuid])
+                child1' (d/entity @conn (:db/id child1))]
+            (is (= [[block-uuid]] @repair-calls))
+            (is (some? block))
+            (is (= "remote missing block" (:block/title block)))
+            (is (= "local title" (:block/title child1')))))))))
+
+(deftest apply-remote-txs-with-local-changes-repairs-missing-block-datoms-test
+  (testing "remote tx application fetches missing required block datoms after rebasing local changes"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          child-id (:db/id child1)
+          child-uuid (:block/uuid child1)
+          page-id (:db/id (:block/page child1))
+          repair-calls (atom [])
+          client (repair-client repair-calls
+                                (fn [_block-uuids]
+                                  [[:db/add child-id :block/page page-id]]))]
+      (with-datascript-conns
+        conn client-ops-conn
+        (fn []
+          (outliner-core/save-block! conn
+                                     {:block/uuid child-uuid
+                                      :block/title "local title"})
+          (is (seq (#'sync-apply/pending-txs test-repo)))
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           client
+           [[:db/retract child-id :block/page page-id]])
+          (let [child1' (d/entity @conn child-id)]
+            (is (= [[child-uuid]] @repair-calls))
+            (is (= page-id (:db/id (:block/page child1'))))
+            (is (= "local title" (:block/title child1')))))))))
+
+(deftest decrypt-repair-tx-data-decrypts-e2ee-block-datoms-test
+  (testing "repair tx data decrypts encrypted server block datoms"
+    (async done
+           (let [block-uuid (random-uuid)
+                 temp-id (str "repair-block-" block-uuid)
+                 title "encrypted repair block"
+                 name "encrypted repair page"]
+             (-> (p/let [aes-key (crypt/<generate-aes-key)
+                         encrypted-title (sync-crypt/<encrypt-text-value aes-key title)
+                         encrypted-name (sync-crypt/<encrypt-text-value aes-key name)
+                         tx-data (sync-repair/<decrypt-tx-data
+                                  aes-key
+                                  [[:db/add temp-id :block/uuid block-uuid]
+                                   [:db/add temp-id :block/title encrypted-title]
+                                   [:db/add temp-id :block/name encrypted-name]
+                                   [:db/add temp-id :block/order "a0"]])]
+                   (is (= [[:db/add temp-id :block/uuid block-uuid]
+                           [:db/add temp-id :block/title title]
+                           [:db/add temp-id :block/name name]
+                           [:db/add temp-id :block/order "a0"]]
+                          tx-data)))
+                 (p/catch (fn [e]
+                            (is false (str e))))
+                 (p/finally (fn []
+                              (done))))))))
+
 (deftest two-clients-extends-cycle-test
   (testing "class extends updates from two clients can retain the cycle edges"
     (let [conn (db-test/create-conn)
@@ -3983,10 +4487,10 @@
             (let [pending-before (#'sync-apply/pending-txs test-repo)
                   tx-ids-before (mapv :tx-id pending-before)]
               (is (= 2 (count pending-before)))
-            (#'sync-apply/apply-remote-tx!
-             test-repo
-             nil
-             [[:db/add (:db/id parent) :block/title "parent remote"]])
+              (#'sync-apply/apply-remote-tx!
+               test-repo
+               nil
+               [[:db/add (:db/id parent) :block/title "parent remote"]])
               (let [pending-after (#'sync-apply/pending-txs test-repo)
                     tx-ids-after (mapv :tx-id pending-after)]
                 (is (= 2 (count pending-after)))
@@ -4435,9 +4939,9 @@
         (with-datascript-conns conn client-ops-conn
           (fn []
             (apply-ops! conn
-                                    [[:save-block [{:block/uuid (:block/uuid block)
-                                                    :block/title "test"} nil]]]
-                                    local-tx-meta)
+                        [[:save-block [{:block/uuid (:block/uuid block)
+                                        :block/title "test"} nil]]]
+                        local-tx-meta)
             (is (= 1 (count (#'sync-apply/pending-txs test-repo))))
             (#'sync-apply/apply-remote-tx!
              test-repo
@@ -4454,7 +4958,7 @@
                               {:pages-and-blocks
                                [{:page {:block/title "page 1"}
                                  :blocks [{:block/title "target"}]}]})
-                             client-ops-conn
+        client-ops-conn
         (fn []
           (client-op/add-sync-conflicts!
            test-repo
@@ -4477,7 +4981,7 @@
                               {:pages-and-blocks
                                [{:page {:block/title "page 1"}
                                  :blocks [{:block/title "target"}]}]})
-                             client-ops-conn
+        client-ops-conn
         (fn []
           (client-op/add-sync-conflicts!
            test-repo
@@ -4516,7 +5020,7 @@
                               {:pages-and-blocks
                                [{:page {:block/title "page 1"}
                                  :blocks [{:block/title "target"}]}]})
-                             client-ops-conn
+        client-ops-conn
         (fn []
           (client-op/add-sync-conflicts!
            test-repo
@@ -4647,7 +5151,9 @@
           target-uuid (:block/uuid target)
           page-uuid (:block/uuid (:block/page target))
           page-id (:db/id (:block/page target))
+          target-order (:block/order target)
           now 1760000000000
+          repair-calls (atom [])
           remote-tx [[:db/retractEntity [:block/uuid target-uuid]]
                      [:db/add -1 :block/uuid target-uuid]
                      [:db/add -1 :block/title "remote-restored"]
@@ -4657,11 +5163,18 @@
                      [:db/add -1 :block/updated-at now]
                      [:db/add -1 :block/created-at now]
                      [:db/add -1 :logseq.property/created-by-ref page-id]]
-          client {:repo test-repo
-                  :graph-id "graph-1"
-                  :inflight (atom [])
-                  :online-users (atom [])
-                  :ws-state (atom :open)}]
+          client (merge (repair-client repair-calls
+                                       (fn [_block-uuids]
+                                         [{:block/uuid target-uuid
+                                           :block/title "target"
+                                           :block/page [:block/uuid page-uuid]
+                                           :block/parent [:block/uuid page-uuid]
+                                           :block/order target-order
+                                           :block/created-at 1
+                                           :block/updated-at 1}]))
+                        {:inflight (atom [])
+                         :online-users (atom [])
+                         :ws-state (atom :open)})]
       (with-datascript-conns conn client-ops-conn
         (fn []
           ;; Local client deletes target and has pending txs.
@@ -4669,6 +5182,7 @@
           (is (seq (#'sync-apply/pending-txs test-repo)))
           ;; Remote side deletes then recreates same uuid in one batch.
           (#'sync-apply/apply-remote-tx! test-repo client remote-tx)
+          (is (= [[target-uuid]] @repair-calls))
           (let [target' (d/entity @conn [:block/uuid target-uuid])
                 pending (#'sync-apply/pending-txs test-repo)]
             ;; Current bug: target disappears locally while pending is empty.
@@ -4721,26 +5235,36 @@
           mover-2-uuid (:block/uuid mover-2)
           mover-1-order (:block/order mover-1)
           mover-2-order (:block/order mover-2)
+          parent-order (:block/order parent)
+          repair-calls (atom [])
           remote-txs [{:tx-data [[:db/retract [:block/uuid mover-1-uuid] :block/parent [:block/uuid page-uuid]]
                                  [:db/add [:block/uuid mover-1-uuid] :block/parent [:block/uuid parent-uuid]]
                                  [:db/retract [:block/uuid mover-1-uuid] :block/order mover-1-order]
                                  [:db/add [:block/uuid mover-1-uuid] :block/order "ZxV"]]}
-                     {:tx-data [[:db/retract [:block/uuid mover-2-uuid] :block/parent [:block/uuid page-uuid]]
+                      {:tx-data [[:db/retract [:block/uuid mover-2-uuid] :block/parent [:block/uuid page-uuid]]
                                  [:db/add [:block/uuid mover-2-uuid] :block/parent [:block/uuid parent-uuid]]
                                  [:db/retract [:block/uuid mover-2-uuid] :block/order mover-2-order]
                                  [:db/add [:block/uuid mover-2-uuid] :block/order "ZxG"]]}
-                     {:tx-data [[:db/retractEntity [:block/uuid parent-uuid]]]}]
-          client {:repo test-repo
-                  :graph-id "graph-1"
-                  :inflight (atom [])
-                  :online-users (atom [])
-                  :ws-state (atom :open)}]
+                      {:tx-data [[:db/retractEntity [:block/uuid parent-uuid]]]}]
+          client (merge (repair-client repair-calls
+                                       (fn [_block-uuids]
+                                         [{:block/uuid parent-uuid
+                                           :block/title "parent"
+                                           :block/page [:block/uuid page-uuid]
+                                           :block/parent [:block/uuid page-uuid]
+                                           :block/order parent-order
+                                           :block/created-at 1
+                                           :block/updated-at 1}]))
+                        {:inflight (atom [])
+                         :online-users (atom [])
+                         :ws-state (atom :open)})]
       (with-datascript-conns conn client-ops-conn
         (fn []
           ;; Local delete creates pending tx requiring reverse before remote apply.
           (outliner-core/delete-blocks! conn [parent] {})
           (is (seq (#'sync-apply/pending-txs test-repo)))
           (#'sync-apply/apply-remote-txs! test-repo client remote-txs)
+          (is (= [[parent-uuid]] @repair-calls))
           (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
           (is (nil? (d/entity @conn [:block/uuid mover-1-uuid])))
           (is (nil? (d/entity @conn [:block/uuid mover-2-uuid])))
@@ -4748,8 +5272,8 @@
             (is (empty? (non-recycle-validation-entities validation))
                 (str (:errors validation)))))))))
 
-(deftest apply-remote-txs-overlap-out-of-order-parent-delete-then-move-repro-test
-  (testing "reproduces missing-parent transact-remote failure when overlapping remote slices arrive out of order"
+(deftest apply-remote-txs-overlap-out-of-order-parent-delete-then-move-repairs-test
+  (testing "repairs missing parent refs when overlapping remote slices arrive out of order"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
                  [{:page {:block/title "page 1"}
@@ -4762,19 +5286,28 @@
           local-delete (db-test/find-block-by-content @conn "local-pending-delete")
           page-uuid (:block/uuid (:block/page parent))
           parent-uuid (:block/uuid parent)
+          parent-order (:block/order parent)
           mover-uuid (:block/uuid mover)
           mover-order (:block/order mover)
+          repair-calls (atom [])
           tx-delete-parent {:tx-data [[:db/retractEntity [:block/uuid parent-uuid]]]}
           tx-move-under-parent
           {:tx-data [[:db/retract [:block/uuid mover-uuid] :block/parent [:block/uuid page-uuid]]
                      [:db/add [:block/uuid mover-uuid] :block/parent [:block/uuid parent-uuid]]
                      [:db/retract [:block/uuid mover-uuid] :block/order mover-order]
                      [:db/add [:block/uuid mover-uuid] :block/order "ZxV"]]}
-          client {:repo test-repo
-                  :graph-id "graph-1"
-                  :inflight (atom [])
-                  :online-users (atom [])
-                  :ws-state (atom :open)}]
+          client (merge (repair-client repair-calls
+                                       (fn [_block-uuids]
+                                         [{:block/uuid parent-uuid
+                                           :block/title "parent"
+                                           :block/page [:block/uuid page-uuid]
+                                           :block/parent [:block/uuid page-uuid]
+                                           :block/order parent-order
+                                           :block/created-at 1
+                                           :block/updated-at 1}]))
+                        {:inflight (atom [])
+                         :online-users (atom [])
+                         :ws-state (atom :open)})]
       (with-datascript-conns conn client-ops-conn
         (fn []
           ;; Keep one unrelated local pending tx so apply-remote uses reverse+rebase path.
@@ -4790,10 +5323,11 @@
                          nil
                          (catch :default e
                            e))]
-            (is (instance? js/Error result))
-            (is (string/includes? (or (ex-message result) "")
-                                  "Nothing found for entity id")
-                (str "unexpected error: " (ex-message result)))))))))
+            (is (nil? result))
+            (is (= [[parent-uuid]] @repair-calls))
+            (let [validation (db-validate/validate-local-db! @conn)]
+              (is (empty? (non-recycle-validation-entities validation))
+                  (str (:errors validation))))))))))
 
 (deftest rebase-persisted-row-contains-forward-and-inverse-outliner-ops-test
   (testing "rebased pending tx should always persist both forward and inverse outliner ops"
@@ -5195,6 +5729,50 @@
                        (p/catch (fn [e]
                                   (is false (str e))))
                        (p/finally done)))))))))
+
+(deftest rehydrate-large-titles-from-db-skips-missing-object-attr-test
+  (let [conn (d/create-conn db-schema/schema)
+        calls (atom [])]
+    (with-datascript-conns conn nil
+      (fn []
+        (is (nil? (sync-large-title/rehydrate-large-titles-from-db!
+                   test-repo
+                   "graph-1"
+                   {:get-conn-f worker-state/get-datascript-conn
+                    :rehydrate-large-titles!-f (fn [& args]
+                                                 (swap! calls conj args)
+                                                 (p/resolved nil))})))
+        (is (empty? @calls))))))
+
+(deftest rehydrate-large-titles-from-db-reads-unindexed-object-attr-test
+  (async done
+         (let [conn (d/create-conn db-schema/schema)
+               obj {:asset-uuid "title-unindexed" :asset-type "txt"}
+               calls (atom [])]
+           (d/transact! conn [{:db/id 100
+                               :block/title ""
+                               :logseq.property.sync/large-title-object obj}])
+           (with-datascript-conns conn nil
+             (fn []
+               (-> (sync-large-title/rehydrate-large-titles-from-db!
+                    test-repo
+                    "graph-1"
+                    {:get-conn-f worker-state/get-datascript-conn
+                     :rehydrate-large-titles!-f (fn [repo opts]
+                                                  (swap! calls conj [repo opts])
+                                                  (p/resolved nil))})
+                   (p/then (fn [_]
+                             (is (= [[test-repo
+                                      {:tx-data [[:db/add
+                                                  100
+                                                  :logseq.property.sync/large-title-object
+                                                  obj]]
+                                       :graph-id "graph-1"}]]
+                                    @calls))
+                             (done)))
+                   (p/catch (fn [e]
+                              (is false (str e))
+                              (done)))))))))
 
 (defn- apply-template-to-empty-target!
   [conn template-root-uuid empty-target-uuid]
