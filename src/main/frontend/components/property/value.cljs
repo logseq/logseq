@@ -1840,6 +1840,41 @@
       (contains? selected-ids (:db/id asset))
       toggle-asset!])])
 
+(defn- <upload-picker-assets!
+  "Uploads picker files and selects the saved assets.
+
+   The picker has no editing/target context, so the asset needs an explicit
+   home page: today's journal. Target it by its deterministic uuid (derived
+   from the journal-day) rather than reading the page entity back after
+   creating it — in a DB graph the create transact resolves before the
+   frontend conn syncs, so a read-back races and returns nil (the \"invalid
+   target\" failure on large graphs). The db-worker resolves [:block/uuid uuid]
+   against its own authoritative DB, so the uuid is a reliable target."
+  [repo ^js files {:keys [assets set-assets! set-saving! select-assets!]}]
+  (let [files (array-seq files)]
+    (when (seq files)
+      (set-saving! true)
+      (-> (p/let [journal-day (date/today-journal-day)
+                  page-uuid (common-uuid/gen-uuid :journal-page-uuid journal-day)
+                  ;; Ensure the journal exists in the worker DB; await a real
+                  ;; creation promise. Idempotent — the journal's uuid is fixed
+                  ;; by journal-day.
+                  _ (when-not (db/entity [:block/uuid page-uuid])
+                      (page-handler/<create!
+                       (date/today)
+                       {:redirect? false
+                        :today-journal? true}))
+                  ;; Pass the bare uuid (not a lookup ref): it flows through
+                  ;; ->block-id unchanged and the worker resolves it.
+                  saved-assets (editor-handler/db-based-save-assets!
+                                repo files :save-to-page page-uuid)]
+            (let [saved-assets (vec (remove nil? saved-assets))]
+              (when (seq saved-assets)
+                (set-assets! (vec (concat (or assets []) saved-assets)))
+                (select-assets! saved-assets))))
+          (p/catch #(show-asset-picker-error! "Failed to add assets from picker" %))
+          (p/finally #(set-saving! false))))))
+
 (hsx/defc asset-grid-popup-content
   [block property {:keys [on-chosen]}]
   (let [[assets set-assets!] (hooks/use-state nil)
@@ -1856,39 +1891,11 @@
                           (unselect-asset! asset)
                           (select-assets! [asset])))
         upload-files! (fn [^js files]
-                        (let [files (array-seq files)]
-                          (when (seq files)
-                            (set-saving! true)
-                            ;; The picker has no editing/target context, so the asset
-                            ;; needs an explicit home page: today's journal. Target it
-                            ;; by its deterministic uuid (derived from the journal-day)
-                            ;; rather than reading the page entity back after creating
-                            ;; it — in a DB graph the create transact resolves before
-                            ;; the frontend conn syncs, so a read-back races and returns
-                            ;; nil (the "invalid target" failure on large graphs). The
-                            ;; db-worker resolves [:block/uuid uuid] against its own
-                            ;; authoritative DB, so the uuid is a reliable target.
-                            (-> (p/let [journal-day (date/today-journal-day)
-                                        page-uuid (common-uuid/gen-uuid :journal-page-uuid journal-day)
-                                        ;; Ensure the journal exists in the worker DB;
-                                        ;; await a real creation promise. Idempotent —
-                                        ;; the journal's uuid is fixed by journal-day.
-                                        _ (when-not (db/entity [:block/uuid page-uuid])
-                                            (page-handler/<create!
-                                             (date/today)
-                                             {:redirect? false
-                                              :today-journal? true}))
-                                        ;; Pass the bare uuid (not a lookup ref): it
-                                        ;; flows through ->block-id unchanged and the
-                                        ;; worker resolves it.
-                                        saved-assets (editor-handler/db-based-save-assets!
-                                                      repo files :save-to-page page-uuid)]
-                                  (let [saved-assets (vec (remove nil? saved-assets))]
-                                    (when (seq saved-assets)
-                                      (set-assets! (vec (concat (or assets []) saved-assets)))
-                                      (select-assets! saved-assets))))
-                                (p/catch #(show-asset-picker-error! "Failed to add assets from picker" %))
-                                (p/finally #(set-saving! false))))))
+                        (<upload-picker-assets! repo files
+                                                {:assets assets
+                                                 :set-assets! set-assets!
+                                                 :set-saving! set-saving!
+                                                 :select-assets! select-assets!}))
         query (some-> search-text string/trim string/lower-case)
         ;; Memoized so scroll-driven re-renders (which only bump visible-count)
         ;; don't re-filter/re-sort the whole asset list.
