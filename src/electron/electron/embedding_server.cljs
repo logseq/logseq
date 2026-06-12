@@ -113,6 +113,17 @@
                                         cmd " " (pr-str args)
                                         " exited with " code))))))))))
 
+(defn python-command-available!
+  ([cmd] (python-command-available! cmd {}))
+  ([cmd opts]
+   (let [run-command-fn (or (:run-command! opts) run-command!)
+         logger (or (:logger opts)
+                    {:debug (fn [& _args])
+                     :warn (fn [& _args])})]
+     (-> (run-command-fn cmd ["--version"] {:logger logger})
+         (p/then (fn [_] true))
+         (p/catch (fn [_error] false))))))
+
 (defn- find-port!
   [host]
   (js/Promise.
