@@ -594,6 +594,7 @@
 
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]
+    (.removeHandler ipcMain main-channel)
     (.handle ipcMain main-channel
              (fn [^js event args-js]
                (let [message* (volatile! nil)]
