@@ -257,7 +257,12 @@ let options_for_known_path = function
           flag "no-deadline" "Remove deadline date";
         ]
   | [ "upsert"; "tag" ] ->
-      [ value "id" "id" "Tag id"; value "name" "name" "Tag name" ]
+      [
+        value "id" "id" "Tag id";
+        value "name" "name" "Tag name";
+        value "add-properties" "edn" "Tag schema properties to add";
+        value "remove-properties" "edn" "Tag schema properties to remove";
+      ]
   | [ "upsert"; "property" ] ->
       [
         value "id" "id" "Property id";

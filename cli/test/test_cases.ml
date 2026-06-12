@@ -934,6 +934,206 @@ let () =
              ^ "\nstderr:\n" ^ output.stderr)
           else Js.Promise.resolve pass));
 
+  test_promise "upsert tag applies schema property outliner ops" (fun () ->
+      let step = ref 0 in
+      let tag_uuid = "22222222-2222-4222-8222-222222222222" in
+      let add_ident = "user.property/status" in
+      let remove_ident = "user.property/owner" in
+      let server =
+        invoke_server (fun body ->
+            incr step;
+            match !step with
+            | 1
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"project" body ->
+                "[]"
+            | 2
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                if not (Js.String.includes ~search:"create-page" body) then
+                  fail_test ("missing tag create op: " ^ body);
+                "[]"
+            | 3
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"project" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",42,\"~:block/uuid\",\"~u22222222-2222-4222-8222-222222222222\",\"~:block/name\",\"project\",\"~:block/tags\",[[\"^ \
+                 \",\"~:db/ident\",\"~:logseq.class/Tag\"]]]]"
+            | 4
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"status" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",77,\"~:db/ident\",\"~:user.property/status\",\"~:logseq.property/type\",\"default\"]]"
+            | 5
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"owner" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",78,\"~:db/ident\",\"~:user.property/owner\",\"~:logseq.property/type\",\"default\"]]"
+            | 6
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                if not (Js.String.includes ~search:"class-add-property" body)
+                then fail_test ("missing class-add-property op: " ^ body);
+                if not (Js.String.includes ~search:"class-remove-property" body)
+                then fail_test ("missing class-remove-property op: " ^ body);
+                if not (Js.String.includes ~search:tag_uuid body) then
+                  fail_test ("missing tag uuid: " ^ body);
+                if not (Js.String.includes ~search:add_ident body) then
+                  fail_test ("missing add property ident: " ^ body);
+                if not (Js.String.includes ~search:remove_ident body) then
+                  fail_test ("missing remove property ident: " ^ body);
+                "[]"
+            | _ ->
+                fail_test
+                  (Printf.sprintf "unexpected request at step %d: %s" !step body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "tag";
+                "--name";
+                "Project";
+                "--add-properties";
+                "[\"status\"]";
+                "--remove-properties";
+                "[\"owner\"]";
+              ]
+          in
+          ignore (expect_cli_exit_zero "upsert tag schema properties" output);
+          if !step = 6 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected six invoke requests, got %d" !step)));
+
+  test_promise "upsert tag reports missing schema property name" (fun () ->
+      let step = ref 0 in
+      let server =
+        invoke_server (fun body ->
+            incr step;
+            match !step with
+            | 1
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"project" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",42,\"~:block/uuid\",\"~u22222222-2222-4222-8222-222222222222\",\"~:block/name\",\"project\",\"~:block/tags\",[[\"^ \
+                 \",\"~:db/ident\",\"~:logseq.class/Tag\"]]]]"
+            | 2
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"missing-prop" body ->
+                "[]"
+            | 3
+              when Js.String.includes ~search:"thread-api/pull" body
+                   && Js.String.includes ~search:"missing-prop" body ->
+                "null"
+            | _ ->
+                fail_test
+                  (Printf.sprintf "unexpected request at step %d: %s" !step body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "tag";
+                "--name";
+                "Project";
+                "--add-properties";
+                "[\"missing-prop\"]";
+              ]
+          in
+          if output.code = 0 then
+            fail_promise
+              ("expected missing tag schema property to fail\n" ^ output.stdout)
+          else if
+            not (Js.String.includes ~search:"property-not-found" output.stdout)
+          then fail_promise ("missing property code\nstdout:\n" ^ output.stdout)
+          else if not (Js.String.includes ~search:"missing-prop" output.stdout)
+          then fail_promise ("missing property name\nstdout:\n" ^ output.stdout)
+          else if
+            not
+              (Js.String.includes ~search:"\"option\":\"--add-properties\""
+                 output.stdout)
+          then
+            fail_promise
+              ("missing add-properties context\nstdout:\n" ^ output.stdout)
+          else if !step = 3 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected three invoke requests, got %d" !step)));
+
+  test_promise "upsert tag reports missing schema property ident" (fun () ->
+      let step = ref 0 in
+      let server =
+        invoke_server (fun body ->
+            incr step;
+            match !step with
+            | 1
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"project" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",42,\"~:block/uuid\",\"~u22222222-2222-4222-8222-222222222222\",\"~:block/name\",\"project\",\"~:block/tags\",[[\"^ \
+                 \",\"~:db/ident\",\"~:logseq.class/Tag\"]]]]"
+            | 2
+              when Js.String.includes ~search:"thread-api/pull" body
+                   && Js.String.includes ~search:"user.property/missing-prop"
+                        body ->
+                "null"
+            | _ ->
+                fail_test
+                  (Printf.sprintf "unexpected request at step %d: %s" !step body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "tag";
+                "--name";
+                "Project";
+                "--add-properties";
+                "[:user.property/missing-prop]";
+              ]
+          in
+          if output.code = 0 then
+            fail_promise
+              ("expected missing tag schema property to fail\n" ^ output.stdout)
+          else if
+            not (Js.String.includes ~search:"property-not-found" output.stdout)
+          then fail_promise ("missing property code\nstdout:\n" ^ output.stdout)
+          else if not (Js.String.includes ~search:"missing-prop" output.stdout)
+          then fail_promise ("missing property ident\nstdout:\n" ^ output.stdout)
+          else if
+            not
+              (Js.String.includes ~search:"\"option\":\"--add-properties\""
+                 output.stdout)
+          then
+            fail_promise
+              ("missing add-properties context\nstdout:\n" ^ output.stdout)
+          else if !step = 2 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected two invoke requests, got %d" !step)));
+
   test_promise "upsert page resolves unqualified update property keywords by name"
     (fun () ->
       let step = ref 0 in
