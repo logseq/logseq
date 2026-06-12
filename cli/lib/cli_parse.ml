@@ -233,7 +233,8 @@ let allowed_options_for_path = function
         "no-scheduled";
         "no-deadline";
       ]
-  | [ "upsert"; "tag" ] -> [ "id"; "name" ]
+  | [ "upsert"; "tag" ] ->
+      [ "id"; "name"; "add-properties"; "remove-properties" ]
   | [ "upsert"; "property" ] ->
       [ "id"; "name"; "type"; "cardinality"; "hide"; "public" ]
   | [ "search"; ("block" | "page" | "property" | "tag") ] -> [ "content" ]
@@ -602,6 +603,8 @@ let parsed_upsert_command ?(args = []) options = function
               {
                 id = int64_option "id" options;
                 name = option_value "name" options;
+                add_properties_edn = option_value "add-properties" options;
+                remove_properties_edn = option_value "remove-properties" options;
               }))
   | "property" ->
       Some
