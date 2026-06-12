@@ -32,6 +32,7 @@
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.util.macro :as macro-util]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-util :as entity-util]
@@ -1858,13 +1859,34 @@
                         (let [files (array-seq files)]
                           (when (seq files)
                             (set-saving! true)
-                            (-> (editor-handler/db-based-save-assets! repo files)
-                                (p/then
-                                 (fn [saved-assets]
-                                   (let [saved-assets (vec (remove nil? saved-assets))]
-                                     (when (seq saved-assets)
-                                       (set-assets! (vec (concat (or assets []) saved-assets)))
-                                       (select-assets! saved-assets)))))
+                            ;; The picker has no editing/target context, so the asset
+                            ;; needs an explicit home page: today's journal. Target it
+                            ;; by its deterministic uuid (derived from the journal-day)
+                            ;; rather than reading the page entity back after creating
+                            ;; it — in a DB graph the create transact resolves before
+                            ;; the frontend conn syncs, so a read-back races and returns
+                            ;; nil (the "invalid target" failure on large graphs). The
+                            ;; db-worker resolves [:block/uuid uuid] against its own
+                            ;; authoritative DB, so the uuid is a reliable target.
+                            (-> (p/let [journal-day (date/today-journal-day)
+                                        page-uuid (common-uuid/gen-uuid :journal-page-uuid journal-day)
+                                        ;; Ensure the journal exists in the worker DB;
+                                        ;; await a real creation promise. Idempotent —
+                                        ;; the journal's uuid is fixed by journal-day.
+                                        _ (when-not (db/entity [:block/uuid page-uuid])
+                                            (page-handler/<create!
+                                             (date/today)
+                                             {:redirect? false
+                                              :today-journal? true}))
+                                        ;; Pass the bare uuid (not a lookup ref): it
+                                        ;; flows through ->block-id unchanged and the
+                                        ;; worker resolves it.
+                                        saved-assets (editor-handler/db-based-save-assets!
+                                                      repo files :save-to-page page-uuid)]
+                                  (let [saved-assets (vec (remove nil? saved-assets))]
+                                    (when (seq saved-assets)
+                                      (set-assets! (vec (concat (or assets []) saved-assets)))
+                                      (select-assets! saved-assets))))
                                 (p/catch #(show-asset-picker-error! "Failed to add assets from picker" %))
                                 (p/finally #(set-saving! false))))))
         query (some-> search-text string/trim string/lower-case)
