@@ -1558,7 +1558,7 @@
   (let [conn (worker-state/get-datascript-conn repo)]
     (graph-view/build-graph @conn option)))
 
-(def ^:private *get-all-page-titles-cache (volatile! (cache/lru-cache-factory {})))
+(def ^:private *get-all-page-titles-cache (volatile! (cache/lru-cache-factory {} :threshold 32)))
 (defn- get-all-page-titles
   [db]
   (let [pages (ldb/get-all-pages db)]
@@ -1577,6 +1577,12 @@
 (def-thread-api :thread-api/get-all-page-titles
   [repo]
   (get-all-page-titles-with-cache repo))
+
+(def-thread-api :thread-api/clear-query-caches
+  []
+  (vreset! *get-blocks-cache (cache/lru-cache-factory {} :threshold 1000))
+  (vreset! *get-all-page-titles-cache (cache/lru-cache-factory {} :threshold 32))
+  nil)
 
 (def-thread-api :thread-api/gc-graph
   [repo]

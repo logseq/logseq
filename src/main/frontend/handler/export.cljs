@@ -10,6 +10,7 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.export.common :as export-common-handler]
             [frontend.handler.notification :as notification]
+            [frontend.image :as image]
             [frontend.common.idb :as idb]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
@@ -114,7 +115,7 @@
           (p/let [export-path (<export-zipfile-to-desktop! repo zipfile)]
             (notification/show! (t :export/zip-exported export-path) :success false))
           (when-let [anchor (gdom/getElement "download-as-zip")]
-            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+            (.setAttribute anchor "href" (image/create-replacing-object-url! :download/zip zipfile))
             (.setAttribute anchor "download" (.-name zipfile))
             (.click anchor))))
       (p/catch (fn [error]
@@ -157,11 +158,11 @@
                    writable (.createWritable handle)
                    _ (.write writable data)]
              (.close writable))
-           (let [url (js/URL.createObjectURL (js/Blob. #js [data]))]
-             (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
-               (.setAttribute anchor "href" url)
-               (.setAttribute anchor "download" filename)
-               (.click anchor))))))
+            (let [url (image/create-replacing-object-url! :download/sqlite (js/Blob. #js [data]))]
+              (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
+                (.setAttribute anchor "href" url)
+                (.setAttribute anchor "download" filename)
+                (.click anchor))))))
      (p/catch (fn [error]
                 (when-not (= "AbortError" (.-name error))
                   (js/console.error error)))))))

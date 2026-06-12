@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.fs :as fs]
+            [frontend.image :as image]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
@@ -120,7 +121,7 @@
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))]
     (p/let [binary (fs/read-file-raw repo-dir path {})
             blob (js/Blob. (array binary) (clj->js {:type "image"}))]
-      (when blob (js/URL.createObjectURL blob)))))
+      (when blob (image/create-object-url blob)))))
 
 (defn <expand-assets-links-for-db-graph
   "Expand ../assets/ links in custom.css file to blob url.
@@ -172,7 +173,7 @@
                  svg? (string/ends-with? path ".svg")
                  type (if svg? "image/svg+xml" "image")
                  blob (js/Blob. (array binary) (clj->js {:type type}))]
-           (when blob (js/URL.createObjectURL blob))))))))
+           (when blob (image/create-object-url blob))))))))
 
 (defn get-file-checksum
   [^js file]

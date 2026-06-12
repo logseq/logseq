@@ -1246,14 +1246,23 @@
      (let [image (js/Image.)
            off-canvas (js/document.createElement "canvas")
            data-url (js/URL.createObjectURL blob)
-           ctx (.getContext off-canvas "2d")]
+           ctx (.getContext off-canvas "2d")
+           cleanup! #(do
+                       (js/URL.revokeObjectURL data-url)
+                       (set! (.-src image) ""))]
        (set! (.-onload image)
              #(let [width (.-width image)
                     height (.-height image)]
                 (set! (.-width off-canvas) width)
                 (set! (.-height off-canvas) height)
                 (.drawImage ctx image 0 0 width height)
-                (.toBlob off-canvas cb)))
+                (.toBlob off-canvas
+                         (fn [blob]
+                           (set! (.-width off-canvas) 0)
+                           (set! (.-height off-canvas) 0)
+                           (cleanup!)
+                           (cb blob)))))
+       (set! (.-onerror image) cleanup!)
        (set! (.-src image) data-url))))
 
 #?(:cljs

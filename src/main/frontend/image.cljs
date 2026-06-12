@@ -1,6 +1,7 @@
 (ns frontend.image
   "Image related utility fns"
   (:require ["/frontend/exif" :as exif]
+            [clojure.string :as string]
             [goog.object :as gobj]))
 
 (defn reverse?
@@ -63,8 +64,49 @@
    (fn [orientation]
      (fix-orientation img orientation cb max-width max-height))))
 
+(defonce ^:private *object-urls (atom #{}))
+(defonce ^:private *keyed-object-urls (atom {}))
+(defonce ^:private *object-url-cleanup-installed? (atom false))
+
 (defn create-object-url
   [file]
-  (.createObjectURL (or (.-URL js/window)
-                        (.-webkitURL js/window))
-                    file))
+  (let [url (.createObjectURL (or (.-URL js/window)
+                                  (.-webkitURL js/window))
+                              file)]
+    (swap! *object-urls conj url)
+    url))
+
+(defn revoke-object-url
+  [url]
+  (when (and (string? url)
+             (string/starts-with? url "blob:"))
+    (.revokeObjectURL (or (.-URL js/window)
+                          (.-webkitURL js/window))
+                      url)
+    (swap! *object-urls disj url)
+    (swap! *keyed-object-urls
+           (fn [m]
+             (into {} (remove (fn [[_ url']]
+                                (= url url'))
+                              m))))))
+
+(defn create-replacing-object-url!
+  [k file]
+  (when-let [url (get @*keyed-object-urls k)]
+    (revoke-object-url url))
+  (let [url (create-object-url file)]
+    (swap! *keyed-object-urls assoc k url)
+    url))
+
+(defn revoke-all-object-urls!
+  []
+  (doseq [url @*object-urls]
+    (revoke-object-url url))
+  (reset! *keyed-object-urls {}))
+
+(defn init-object-url-cleanup!
+  []
+  (when (and (exists? js/window)
+             (fn? (.-addEventListener js/window))
+             (compare-and-set! *object-url-cleanup-installed? false true))
+    (.addEventListener js/window "pagehide" revoke-all-object-urls!)))
