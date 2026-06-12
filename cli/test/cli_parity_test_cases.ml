@@ -2567,6 +2567,37 @@ let () =
             (property_key_text (List.hd update.update_properties).Property.key)
       | _ -> fail_test "expected Upsert_block update action");
 
+  test "CLI parity upsert tag parses schema property vectors" (fun () ->
+      let action =
+        expect_ok "valid tag schema properties"
+          (Upsert.build (config ~repo:"demo" ()) (Global_opts.create ())
+             (Upsert.Parsed_tag
+                {
+                  id = None;
+                  name = Some "Project";
+                  add_properties_edn = Some "[\"status\" :user.property/owner]";
+                  remove_properties_edn = Some "[123]";
+                }))
+      in
+      (match action with
+      | Upsert.Upsert_tag
+          { mode = Upsert.Create; add_properties; remove_properties; _ } ->
+          expect_int "add property count" 2 (List.length add_properties);
+          expect_equal "add property by name" "status"
+            (property_key_text (List.hd add_properties));
+          expect_equal "remove property by id" "123"
+            (property_key_text (List.hd remove_properties))
+      | _ -> fail_test "expected Upsert_tag create action");
+      expect_error_code "add-properties map" "invalid-options"
+        (Upsert.build (config ~repo:"demo" ()) (Global_opts.create ())
+           (Upsert.Parsed_tag
+              {
+                id = None;
+                name = Some "Project";
+                add_properties_edn = Some "{\"status\" true}";
+                remove_properties_edn = None;
+              })));
+
   test
     "CLI parity upsert task build preserves create update and clear semantics"
     (fun () ->
@@ -5622,6 +5653,27 @@ let () =
           expect_bool "hide false" false (expect_some "hide" opts.hide);
           expect_bool "public true" true (expect_some "public" opts.public)
       | _ -> fail_test "expected upsert property");
+      let tag =
+        expect_parse_ok "upsert tag schema properties"
+          [
+            "upsert";
+            "tag";
+            "--name";
+            "project";
+            "--add-properties";
+            "[\"status\"]";
+            "--remove-properties";
+            "[:user.property/owner]";
+          ]
+      in
+      (match tag.command with
+      | Cli_request.Upsert (Upsert.Parsed_tag opts) ->
+          expect_equal "tag name" "project" (expect_some "name" opts.name);
+          expect_equal "add properties" "[\"status\"]"
+            (expect_some "add-properties" opts.add_properties_edn);
+          expect_equal "remove properties" "[:user.property/owner]"
+            (expect_some "remove-properties" opts.remove_properties_edn)
+      | _ -> fail_test "expected upsert tag");
       let sync_download =
         expect_parse_ok "sync download"
           [ "sync"; "download"; "--progress"; "--e2ee-password"; "secret" ]

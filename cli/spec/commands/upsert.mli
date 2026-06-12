@@ -55,7 +55,12 @@ type asset_opts = {
   content : string option;
 }
 
-type tag_opts = { id : Cli_primitive.db_id option; name : string option }
+type tag_opts = {
+  id : Cli_primitive.db_id option;
+  name : string option;
+  add_properties_edn : string option;
+  remove_properties_edn : string option;
+}
 
 type property_opts = {
   id : Cli_primitive.db_id option;
@@ -152,6 +157,8 @@ type action =
       mode : mode;
       id : Cli_primitive.db_id option;
       name : string option;
+      add_properties : Property.key list;
+      remove_properties : Property.key list;
     }
   | Upsert_property of {
       repo : Cli_primitive.repo;
