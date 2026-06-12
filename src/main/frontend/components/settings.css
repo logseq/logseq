@@ -270,7 +270,7 @@
 
     > i {
       @apply block w-[92px] rounded overflow-hidden bg-gray-04;
-      aspect-ratio: 160 / 92;
+      aspect-ratio: 160 / 110;
 
       background: url('/static/img/light-theme.png') no-repeat center / cover;
 
