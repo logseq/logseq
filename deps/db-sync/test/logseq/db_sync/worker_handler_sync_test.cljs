@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker-handler-sync-test
   (:require [cljs.test :refer [async deftest is testing]]
+            [clojure.set :as set]
             [datascript.core :as d]
             [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db-sync.common :as common]
@@ -599,6 +600,106 @@
         (is (= page-temp-id (get-in attr->value [:block/parent :value])))
         (is (= 1 (get-in attr->value [:user.property/rating :value])))
         (is (= "a0" (get-in attr->value [:block/order :value])))))))
+
+(deftest repair-blocks-response-includes-dependent-blocks-test
+  (testing "view, history, recycled, and delete repair responses include referenced block data"
+    (let [{:keys [conn self]} (make-server-self)
+          class-uuid (random-uuid)
+          property-uuid (random-uuid)
+          view-uuid (random-uuid)
+          history-uuid (random-uuid)
+          recycled-uuid (random-uuid)]
+      (d/transact!
+       conn
+       [{:db/id -10
+         :db/ident :logseq.property/view-for
+         :db/cardinality :db.cardinality/one
+         :db/valueType :db.type/ref}
+        {:db/id -11
+         :db/ident :logseq.property.view/group-by-property
+         :db/cardinality :db.cardinality/one
+         :db/valueType :db.type/ref}
+        {:db/id -12
+         :db/ident :logseq.property.recycle/original-parent
+         :db/cardinality :db.cardinality/one
+         :db/valueType :db.type/ref}
+        {:db/id -13
+         :db/ident :logseq.property.recycle/original-page
+         :db/cardinality :db.cardinality/one
+         :db/valueType :db.type/ref}
+        {:db/id -14
+         :db/ident :logseq.property.history/block
+         :db/cardinality :db.cardinality/one
+         :db/valueType :db.type/ref}
+        {:db/id -15
+         :db/ident :logseq.property.history/property
+         :db/cardinality :db.cardinality/one
+         :db/valueType :db.type/ref}
+        {:db/id -16
+         :db/ident :logseq.property.history/ref-value
+         :db/cardinality :db.cardinality/one
+         :db/valueType :db.type/ref}
+        {:db/id -1
+         :db/ident :user.class/repair-view-target
+         :block/uuid class-uuid
+         :block/title "Repair View Target"
+         :block/name "repair view target"
+         :block/order "a0"
+         :block/created-at 1
+         :block/updated-at 1}
+        {:db/id -2
+         :db/ident :user.property/repair-property
+         :block/uuid property-uuid
+         :block/title "Repair Property"
+         :block/name "repair property"
+         :block/order "a1"
+         :block/created-at 1
+         :block/updated-at 1
+         :logseq.property/type :default
+         :db/cardinality :db.cardinality/one
+         :db/index true}
+        {:db/id -3
+         :block/uuid view-uuid
+         :block/title "Repair View"
+         :block/page -1
+         :block/parent -1
+         :block/order "a2"
+         :block/created-at 1
+         :block/updated-at 1
+         :logseq.property/view-for -1
+         :logseq.property.view/group-by-property -2}
+        {:db/id -4
+         :block/uuid recycled-uuid
+         :block/title "Repair Recycled"
+         :block/page -1
+         :block/parent -1
+         :block/order "a3"
+         :block/created-at 1
+         :block/updated-at 1
+         :logseq.property/deleted-at 2
+         :logseq.property.recycle/original-parent -1
+         :logseq.property.recycle/original-page -1}
+        {:db/id -5
+         :block/uuid history-uuid
+         :block/title "Repair History"
+         :block/page -1
+         :block/parent -1
+         :block/order "a4"
+         :block/created-at 1
+         :block/updated-at 1
+         :logseq.property.history/block -4
+         :logseq.property.history/property -2
+         :logseq.property.history/ref-value -1}])
+      (let [{:keys [tx]} (sync-handler/repair-blocks-response self [view-uuid history-uuid recycled-uuid])
+            tx-data (protocol/transit->tx tx)
+            repaired-uuids (->> tx-data
+                                (filter (fn [[op _e attr _value]]
+                                          (and (= :db/add op)
+                                               (= :block/uuid attr))))
+                                (map (fn [[_op _e _attr value]] value))
+                                set)]
+        (is (set/subset? #{class-uuid property-uuid view-uuid history-uuid recycled-uuid}
+                         repaired-uuids))))))
 
 (deftest tx-batch-keeps-created-by-ref-lookup-payload-test
   (testing "created-by lookup payload is preserved for save-block tx"
