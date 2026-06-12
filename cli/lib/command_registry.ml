@@ -165,13 +165,10 @@ let options_for_known_path = function
       [
         value "type" "type" "Export type" ~choices:graph_data_choices;
         value "file" "path" "Output file";
-        value "edn-options" "edn"
+        option [ "-e"; "--edn-options" ] (Required_value "edn")
           "EDN map of export options; :export-type overrides the default :graph";
-        flag "pretty-print" "Pretty-print the exported EDN file";
-        flag "include-timestamps" "Include timestamps";
-        flag "exclude-built-in-pages" "Exclude built-in pages";
-        value "exclude-namespaces" "namespaces"
-          "Comma-separated namespaces to exclude";
+        option [ "-p"; "--pretty-print" ] Flag
+          "Pretty-print the exported EDN file";
       ]
   | [ "graph"; "import" ] ->
       [
