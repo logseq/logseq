@@ -3,19 +3,24 @@
   (:require ["fs" :as fs]
             ["os" :as os]
             ["path" :as node-path]
-            [logseq.common.graph :as common-graph]))
+            [clojure.string :as string]
+            [logseq.common.graph :as common-graph]
+            [logseq.common.path :as path]))
 
 (defn default-root-dir
   []
-  (node-path/join (.homedir os) "logseq"))
+  (path/path-join (.homedir os) "logseq"))
 
 (defn normalize-root-dir
   [path]
-  (node-path/resolve (common-graph/expand-home (or path (default-root-dir)))))
+  (-> (or path (default-root-dir))
+      common-graph/expand-home
+      node-path/resolve
+      (string/replace #"\\" "/")))
 
 (defn graphs-dir
   [root-dir]
-  (node-path/join (normalize-root-dir root-dir) "graphs"))
+  (path/path-join (normalize-root-dir root-dir) "graphs"))
 
 (defn ensure-root-dir!
   [path]

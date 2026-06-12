@@ -347,6 +347,11 @@ a.control-link {
 
 .property-select {
   max-width: 600px;
+
+  .cp__select-main {
+    --palettle-container-height: min(75vh, calc(var(--radix-dropdown-menu-content-available-height, 75vh) - 12px));
+  }
+
   .menu-link:hover, a.menu-link.chosen {
     .iconTablerExtBacklog {
       @apply text-gray-08;
@@ -356,6 +361,11 @@ a.control-link {
       @apply text-red-rx-09;
     }
   }
+}
+
+.ui__dropdown-menu-content.ls-property-select-dropdown-content,
+div.ls-property-select-dropdown-content[data-radix-menu-content] {
+  overflow-y: hidden;
 }
 
 .ls-page-title .ls-page-properties {

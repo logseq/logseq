@@ -46,6 +46,19 @@
   min-height: 20px;
 }
 
+.ls-property-choice-chip {
+  @apply inline-flex items-center justify-center min-w-0 max-w-full h-6 px-1 rounded-sm border border-border text-sm leading-5;
+  background-color: var(--lx-gray-05, hsl(var(--secondary)));
+}
+
+.dark .ls-property-choice-chip {
+  background-color: hsl(var(--secondary));
+}
+
+.ls-property-choice-chip-content {
+  @apply inline-flex items-center justify-center min-w-0 max-w-full truncate;
+}
+
 .ls-repeat-task-frequency .property-value-inner {
   @apply border rounded pl-2;
   min-width: 3em;

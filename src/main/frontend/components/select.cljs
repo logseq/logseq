@@ -71,6 +71,27 @@
                              (set-input! v)))}
              input-opts)]]))
 
+(defn- sync-local-selected-choices!
+  [*selected-choices *prev-selected-choices selected-choices selected-choices-atom]
+  (let [new-choices (set selected-choices)]
+    (when (nil? selected-choices-atom)
+      (when (and (not= @*prev-selected-choices new-choices)
+                 (not= new-choices @*selected-choices))
+        (reset! *selected-choices new-choices)))
+    (reset! *prev-selected-choices new-choices)))
+
+(defn- toggle-selected-choice!
+  [*selected-choices chosen]
+  (let [selected-choices @*selected-choices
+        selected? (contains? selected-choices chosen)]
+    (if selected?
+      (do
+        (swap! *selected-choices disj chosen)
+        false)
+      (do
+        (swap! *selected-choices conj chosen)
+        true))))
+
 (hsx/defc ^:large-vars/cleanup-todo select
   "Provides a select dropdown powered by a fuzzy search. Takes the following options:
    * :items - Vec of things to select from. Assumes a vec of maps with :value key by default. Required option
@@ -90,7 +111,7 @@
            item-cp transform-fn tap-*input-val
            multiple-choices? on-apply new-case-sensitive?
            dropdown? show-new-when-not-exact-match? exact-match-exclude-items
-           input-container initial-open? loading?
+           input-container initial-open? loading? selected-choices-atom
            choose-first-on-enter?
            clear-input-on-chosen?]
     :or {limit 100
@@ -106,15 +127,19 @@
   (shortcut/use-disable-all-shortcuts!)
   (let [*input (hooks/use-memo #(atom "") [])
         *toggle (hooks/use-memo #(atom nil) [])
-        *selected-choices (hooks/use-memo #(atom (set (:selected-choices opts))) [])
+        *local-selected-choices (hooks/use-memo #(atom (set (:selected-choices opts))) [])
+        *prev-selected-choices (hooks/use-memo #(atom (set (:selected-choices opts))) [])
+        *selected-choices (or selected-choices-atom *local-selected-choices)
         [input] (hooks/use-atom *input)
         [selected-choices] (hooks/use-atom *selected-choices)
         _ (hooks/use-effect!
            (fn []
-             (let [choices (set (:selected-choices opts))]
-               (when (not= choices @*selected-choices)
-                 (reset! *selected-choices choices))))
-           [(:selected-choices opts)])
+             (sync-local-selected-choices!
+              *selected-choices
+              *prev-selected-choices
+              (:selected-choices opts)
+              selected-choices-atom))
+           [(:selected-choices opts) selected-choices-atom])
         _ (hooks/use-effect!
            (fn []
              #(shui/dialog-close! :ls-select-modal))
@@ -169,15 +194,12 @@
                          (util/stop-propagation e)
                          (when clear-input-on-chosen?
                            (reset! *input ""))
-                         (let [chosen (extract-chosen-fn raw-chosen)]
+                         (let [chosen (extract-chosen-fn raw-chosen)
+                               selected? (when multiple-choices?
+                                           (toggle-selected-choice! *selected-choices chosen))]
                            (if multiple-choices?
-                             (if (selected-choices chosen)
-                               (do
-                                 (swap! *selected-choices disj chosen)
-                                 (when on-chosen (on-chosen chosen false @*selected-choices e)))
-                               (do
-                                 (swap! *selected-choices conj chosen)
-                                 (when on-chosen (on-chosen chosen true @*selected-choices e))))
+                             (when on-chosen
+                               (on-chosen chosen selected? @*selected-choices e))
                              (do
                                (when (and close-modal? (not multiple-choices?))
                                  (state/close-modal!))

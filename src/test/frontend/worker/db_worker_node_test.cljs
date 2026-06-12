@@ -920,7 +920,7 @@
                            (is (= host (:host health-body)))
                            (is (= port (:port health-body)))
                            (is (= (.-pid js/process) (:pid health-body)))
-                           (is (= (node-path/resolve data-dir) (:root-dir health-body)))
+                           (is (= (string/replace (node-path/resolve data-dir) #"\\" "/") (:root-dir health-body)))
                            (is (contains? health-body :owner-source))
                            (is (contains? health-body :revision))
                            (is (string/includes? server-list-contents (str (.-pid js/process) " " port))))

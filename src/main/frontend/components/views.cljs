@@ -16,13 +16,15 @@
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
             [frontend.components.selection :as selection]
+            [frontend.components.table.columns :as table-columns]
+            [frontend.components.table.core :as table-core]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.dicts :as dicts]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.hooks :as db-hooks]
             [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.db.react :as react]
             [frontend.handler.db-based.export :as db-export-handler]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -42,6 +44,7 @@
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.property :as db-property]
             [logseq.shui.hooks :as hooks]
+            [logseq.shui.table.core :as shui-table]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [missionary.core :as m]
@@ -68,7 +71,7 @@
       (util/app-scroll-container-node view-el)
       (util/app-scroll-container-node))))
 
-(defn- view-container-id
+(defn view-container-id
   [config]
   (let [container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])]
     (or (:container-id config) (state/get-container-id container-key))))
@@ -84,28 +87,66 @@
       {:id "header-checkbox"
        :checked (or selected-all? (and selected-some? "indeterminate"))
        :on-checked-change (fn [value]
-                            (p/do
-                              (when value
-                                (db-async/<get-blocks (state/get-current-repo) (:rows table) {}))
-                              (toggle-selected-all! table value)))
+                            (let [row-ids (keep shui-table/table-row-id (:rows table))]
+                              (p/do
+                                (when (and value (seq row-ids))
+                                  (db-async/<get-blocks (state/get-current-repo) row-ids {}))
+                                (toggle-selected-all! table value))))
        :aria-label (t :view.table/select-all)
        :class (str "flex transition-opacity "
                    (if (or show? selected-all? selected-some?) "opacity-100" "opacity-0"))})]))
 
 (hsx/defc header-index
   []
-  [:label.h-8.w-6.flex.items-center.justify-center
-   {:html-for "header-index"
-    :title (t :view.table/row-number)}
-   "#"])
+  (ui/tooltip
+   [:label.h-8.w-full.flex.items-center.justify-end.pr-2
+    {:html-for "header-index"}
+    "#"]
+   (t :view.table/row-number)))
+
+(defn- toggle-row-selection-with-related!
+  [table row value]
+  (let [row-id (:db/id row)
+        related-ids (when-let [f (:row-selection-related-ids-fn table)]
+                      (f row))
+        row-ids (set (remove nil? (cons row-id related-ids)))
+        row-selection (get-in table [:state :row-selection])
+        set-row-selection! (get-in table [:data-fns :set-row-selection!])]
+    (if (seq (disj row-ids row-id))
+      (set-row-selection!
+       (if (:selected-all? row-selection)
+         (update row-selection :excluded-ids
+                 (fn [ids]
+                   ((if value set/difference set/union) (set ids) row-ids)))
+         (update row-selection :selected-ids
+                 (fn [ids]
+                   ((if value set/union set/difference) (set ids) row-ids)))))
+      ((:row-toggle-selected! table) row-selection row value))))
+
+(defn- table-row-id-with-related
+  [table row]
+  (let [row-id (shui-table/table-row-id row)
+        related-ids (when-let [f (:row-selection-related-ids-fn table)]
+                      (f row))]
+    (remove nil? (cons row-id related-ids))))
+
+(defn- table-row-index
+  [rows row-id]
+  (first
+   (keep-indexed
+    (fn [idx item]
+      (when (= row-id (shui-table/table-row-id item))
+        idx))
+    rows)))
 
 (hsx/defc row-checkbox
-  [{:keys [row-selected? row-toggle-selected! data state data-fns]} row _column]
-  (let [id (str (:db/id row) "-" "checkbox")
+  [{:keys [row-selected? state data-fns] :as table} row _column]
+  (let [row-id (shui-table/table-row-id row)
+        id (str (:db/id row) "-" "checkbox")
         [show? set-show!] (hooks/use-state false)
         checked? (row-selected? row)
-        {:keys [last-selected-idx row-selection]} state
-        {:keys [set-last-selected-idx! set-row-selection!]} data-fns]
+        {:keys [last-selected-row-id row-selection]} state
+        {:keys [set-last-selected-row-id! set-row-selection!]} data-fns]
     [:label.h-8.w-8.flex.items-center.justify-center.cursor-pointer
      {:html-for (str (:db/id row) "-" "checkbox")
       :on-mouse-over #(set-show! true)
@@ -114,12 +155,17 @@
       {:id id
        :checked checked?
        :on-click (fn [e]
-                   (when (and (.-shiftKey e) last-selected-idx)
-                     ;; add selection
-                     (util/stop e)
-                     (let [idx (.indexOf data (:db/id row))]
-                       (when (not= last-selected-idx idx)
-                         (let [new-ids (keep (fn [idx] (util/nth-safe data idx)) (range (min last-selected-idx idx) (inc (max last-selected-idx idx))))]
+                   (when (and (.-shiftKey e) last-selected-row-id)
+                     (let [rows (:rows table)
+                           last-idx (table-row-index rows last-selected-row-id)
+                           idx (table-row-index rows row-id)]
+                       (when (and last-idx idx (not= last-idx idx))
+                         ;; add selection
+                         (util/stop e)
+                         (let [new-ids (mapcat (fn [idx]
+                                                 (some->> (util/nth-safe rows idx)
+                                                          (table-row-id-with-related table)))
+                                               (range (min last-idx idx) (inc (max last-idx idx))))]
                            (when (seq new-ids)
                              (let [row-selection' (update row-selection :selected-ids set/union (set new-ids))]
                                (set-row-selection! row-selection'))))))))
@@ -128,11 +174,10 @@
                              (when v (db-async/<get-block (state/get-current-repo) (:db/id row) {:skip-refresh? true
                                                                                                  :children? false}))
                              (if v
-                               (let [idx (.indexOf data (:db/id row))]
-                                 (set-last-selected-idx! idx))
-                               (when (= (:db/id row) last-selected-idx)
-                                 (set-last-selected-idx! nil)))
-                             (row-toggle-selected! row-selection row v)))
+                               (set-last-selected-row-id! row-id)
+                               (when (= row-id last-selected-row-id)
+                                 (set-last-selected-row-id! nil)))
+                             (toggle-row-selection-with-related! table row v)))
        :aria-label (t :view.table/select-row)
        :class (str "flex transition-opacity "
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
@@ -192,12 +237,31 @@
           menu-item
           (not submenu-trigger?)))))
 
+(def ^:private sort-excluded-column-ids
+  #{:select :id :add-new-property})
+
+(defn- column-list-enabled?
+  "Whether this column should participate in column-level option lists.
+  Normal columns default to true; synthetic/internal columns can opt out with
+  `:column-list? false` so they do not look or behave like editable properties."
+  [column]
+  (:column-list? column true))
+
+(defn- sorting-column-option?
+  "Whether this column can appear in the explicit sorting field picker.
+  This builds on `column-list-enabled?` so columns hidden from column operations
+  are also excluded from sorting options."
+  [{:keys [id name] :as column}]
+  (and (column-list-enabled? column)
+       (not (contains? sort-excluded-column-ids id))
+       (not (string/blank? (str name)))))
+
 (defn header-cp
-  [{:keys [view-entity column-set-sorting! state]} column]
+  [{:keys [view-entity column-replace-sorting! state]} column]
   (let [sorting (:sorting state)
-        [asc?] (some (fn [item] (when (= (:id item) (:id column))
-                                  (when-some [asc? (:asc? item)]
-                                    [asc?]))) sorting)
+        first-sorting (first sorting)
+        asc? (when (= (:id first-sorting) (:id column))
+               (:asc? first-sorting))
         property (db/entity (:id column))
         pinned? (when property
                   (contains? (set (map :db/id (:logseq.property.table/pinned-columns view-entity)))
@@ -205,13 +269,13 @@
         sub-content (fn [{:keys [id]}]
                       (let [table-options [(shui/dropdown-menu-item
                                             {:key "asc"
-                                             :on-click #(column-set-sorting! sorting column true)}
+                                             :on-click #(column-replace-sorting! column true)}
                                             [:div.flex.flex-row.items-center.gap-1
                                              (ui/icon "arrow-up" {:size 15})
                                              [:div (t :view.table/sort-ascending)]])
                                            (shui/dropdown-menu-item
                                             {:key "desc"
-                                             :on-click #(column-set-sorting! sorting column false)}
+                                             :on-click #(column-replace-sorting! column false)}
                                             [:div.flex.flex-row.items-center.gap-1
                                              (ui/icon "arrow-down" {:size 15})
                                              [:div (t :view.table/sort-descending)]])
@@ -238,32 +302,34 @@
                                      (some? tag)
                                      (assoc :class-schema? true))]
                         [:div.ls-property-dropdown
-                         (property-config/property-dropdown property tag option)]))]
+                         (property-config/property-dropdown property tag option)]))
+        open-column-menu! (fn [^js e]
+                            (util/stop e)
+                            (let [popup-id (str "table-column-" (:id column))]
+                              (when-let [^js el (some-> (.-target e) (.closest "[aria-roledescription=sortable]"))]
+                                (when (and (or (nil? @*last-header-action-target)
+                                               (not= el @*last-header-action-target))
+                                           (string/blank? (some-> el (.-style) (.-transform))))
+                                  (shui/popup-show! el sub-content
+                                                    {:id popup-id
+                                                     :align "start"
+                                                     :as-dropdown? true
+                                                     :dropdown-menu? true
+                                                     :content-props {:on-click (fn [^js e]
+                                                                                 (when-let [target (.-target e)]
+                                                                                   (when (header-dropdown-click-should-hide? target)
+                                                                                     (shui/popup-hide! popup-id))))}
+                                                     :on-before-hide (fn []
+                                                                       (reset! *last-header-action-target el)
+                                                                       (js/setTimeout #(reset! *last-header-action-target nil) 128))})))))]
     (shui/button
      {:variant "text"
       :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
-      :on-click (fn [^js e]
-                  (let [popup-id (str "table-column-" (:id column))]
-                    (when-let [^js el (some-> (.-target e) (.closest "[aria-roledescription=sortable]"))]
-                      (when (and (or (nil? @*last-header-action-target)
-                                     (not= el @*last-header-action-target))
-                                 (string/blank? (some-> el (.-style) (.-transform))))
-                        (shui/popup-show! el sub-content
-                                          {:id popup-id
-                                           :align "start"
-                                           :as-dropdown? true
-                                           :dropdown-menu? true
-                                           :content-props {:on-click (fn [^js e]
-                                                                       (when-let [target (.-target e)]
-                                                                         (when (header-dropdown-click-should-hide? target)
-                                                                           (shui/popup-hide! popup-id))))}
-                                           :on-before-hide (fn []
-                                                             (reset! *last-header-action-target el)
-                                                             (js/setTimeout #(reset! *last-header-action-target nil) 128))})))))}
+      :on-click open-column-menu!}
      (let [title (str (:name column))]
-       [:span {:title title
-               :class "max-w-full overflow-hidden text-ellipsis"}
-        title])
+       (ui/tooltip
+        [:span.max-w-full.overflow-hidden.text-ellipsis title]
+        title))
      (case asc?
        true
        (ui/icon "arrow-up")
@@ -291,21 +357,57 @@
        (container config' row)
        [:div])]))
 
-(defn- save-block-and-focus
-  [*ref set-focus-timeout! hide-popup?]
+(defn- focus-table-title-cell
+  [*ref set-focus-timeout!]
   (let [node (hooks/deref *ref)
         cell (util/rec-get-node node "ls-table-cell")]
-    (p/do!
-     (editor-handler/save-current-block!)
-     (when hide-popup?
-       (shui/popup-hide!))
-     (state/exit-editing-and-set-selected-blocks! [cell])
-     (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))
+    (when cell
+      (state/exit-editing-and-set-selected-blocks! [cell])
+      (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))
+
+(defn- save-block-and-focus
+  [*ref set-focus-timeout! hide-popup?]
+  (p/do!
+   (editor-handler/save-current-block!)
+   (when hide-popup?
+     (shui/popup-hide!))
+   (focus-table-title-cell *ref set-focus-timeout!)))
+
+(defn- save-table-title-if-changed!
+  [block title]
+  (let [value (or title "")
+        current (or (:block/title (db/entity (:db/id block))) "")]
+    (when-not (= current value)
+      (editor-handler/save-block-if-changed! block value {:force? true}))))
+
+(defn- table-title-editor-popup
+  [width *title]
+  [:div.ls-table-block
+   {:style {:width width :max-width width}
+    :on-click util/stop-propagation}
+   (ui/ls-textarea
+    {:auto-focus true
+     :class "block-editor w-full resize-none border-none bg-transparent px-0 pt-2 pb-1 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+     :default-value @*title
+     :on-change #(reset! *title (util/evalue %))
+     :on-focus (fn [e]
+                 (let [target (.-target e)
+                       value (or (.-value target) "")
+                       length (.-length value)]
+                   (.setSelectionRange target length length)))
+     :on-key-down (fn [e]
+                    (util/stop-propagation e)
+                    (case (util/ekey e)
+                      ("Enter" "Escape")
+                      (do
+                        (util/stop e)
+                        (shui/popup-hide! :ls-table-block-editor))
+                      nil))})])
 
 (defn- mobile-btn-class
   "The sole purpose of this function is to avoid false positives in hardcoded UI detection."
   [opacity]
-  (str "h-6 w-6 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 opacity-" opacity))
+  (str "h-6 w-6 !p-0 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 opacity-" opacity))
 
 (hsx/defc ^:large-vars/cleanup-todo block-title
   "Used on table view"
@@ -316,6 +418,7 @@
         inline-title (state/get-component :block/inline-title)
         many? (db-property/many? property)
         block (if many? (first block*) block*)
+        leading-action (:table/title-leading-action block)
         add-to-sidebar! #(state/sidebar-add-block! (state/get-current-repo)
                                                    (or (and many? (:db/id row)) (:db/id block))
                                                    :block)
@@ -324,8 +427,9 @@
      (fn []
        #(some-> focus-timeout js/clearTimeout))
      [])
-    [:div.table-block-title.relative.flex.items-center.w-full.h-full.cursor-pointer.items-center
+    [:div.table-block-title.relative.flex.items-center.w-full.h-full.items-center
      {:ref *ref
+      :class (or (:table/title-cursor-class block) "cursor-pointer")
       :on-mouse-over #(set-opacity! 100)
       :on-mouse-out #(set-opacity! 0)
       :on-click (fn [e]
@@ -339,13 +443,25 @@
                         (add-to-sidebar!)
 
                         :else
-                        (let [popup (fn []
+                        (let [edit-block (or (:table/title-edit-block block) block)
+                              title-only-editor? (and (not many?)
+                                                      (or (:table/title-only-editor? block)
+                                                          (and (ldb/asset? block)
+                                                               (not (:asset-table/nested? block)))))
+                              *title (when title-only-editor? (atom (or (:block/title edit-block) "")))
+                              popup (fn []
                                       (let [width (-> (max 160 width) (- 18))]
-                                        (if many?
+                                        (cond
+                                          many?
                                           [:div.ls-table-block
                                            {:style {:width width :max-width width}
                                             :on-click util/stop-propagation}
                                            (pv/property-value row property {})]
+
+                                          title-only-editor?
+                                          (table-title-editor-popup width *title)
+
+                                          :else
                                           [:div.ls-table-block
                                            {:style {:width width :max-width width}
                                             :on-click util/stop-propagation}
@@ -361,142 +477,104 @@
                                                  (util/stop e)
                                                  (save-block-and-focus *ref set-focus-timeout! true)))}
                                             block)])))]
-                          (p/do!
-                           (shui/popup-show!
-                            (.closest (.-target e) ".ls-table-cell")
-                            popup
-                            {:id :ls-table-block-editor
-                             :as-mask? true
-                             :on-after-hide (fn []
-                                              (save-block-and-focus *ref set-focus-timeout! false))})
-                           (editor-handler/edit-block! block :max {:container-id :unknown-container})))))))}
+                          (state/clear-selection!)
+                          (shui/popup-show!
+                           (.closest (.-target e) ".ls-table-cell")
+                           popup
+                           {:id :ls-table-block-editor
+                            :as-mask? true
+                            :on-after-hide (fn []
+                                             (if title-only-editor?
+                                               (p/do!
+                                                (save-table-title-if-changed! edit-block @*title)
+                                                (focus-table-title-cell *ref set-focus-timeout!))
+                                               (save-block-and-focus *ref set-focus-timeout! false)))})
+                          (when-not title-only-editor?
+                            (editor-handler/edit-block! block :max {:container-id :unknown-container})))))))}
+     (when leading-action
+       [:div.mr-1.flex.shrink-0.items-center.justify-center
+        leading-action])
+
      (if block
-       [:div.flex.flex-row
-        (let [render (fn [block]
+       [:div.flex.min-w-0.flex-row
+        (let [title-renderer (:table/title-renderer block)
+              render (fn [block]
                        [:div
-                        (inline-title
-                         {:table? true
-                          :block/uuid (:block/uuid block)}
-                         (some->> (:block/title block)
-                                  string/trim
-                                  string/split-lines
-                                  first))])]
+                        (if title-renderer
+                          (title-renderer block)
+                          (inline-title
+                           {:table? true
+                            :block/uuid (:block/uuid block)}
+                           (some->> (:block/title block)
+                                    string/trim
+                                    string/split-lines
+                                    first)))])]
           (if many?
             (->> (map render block*)
                  (interpose [:div.mr-1 ","]))
             (render block*)))]
        [:div])
 
-     (when-not (util/mobile?)
+     (when-not (or (util/mobile?)
+                   (:table/hide-title-actions? block))
        (let [class (mobile-btn-class opacity)]
-         [:div.absolute.-right-1
+         [:div.absolute.right-0
           [:div.flex.flex-row.items-center
-           (shui/button
-            {:variant :ghost
-             :title (t :ui/open)
-             :on-click (fn [e]
-                         (util/stop-propagation e)
-                         (redirect!))
-             :class class}
-            (ui/icon "arrow-right"))
-           (shui/button
-            {:variant :ghost
-             :title (t :sidebar.right/open)
-             :class class
-             :on-click (fn [e]
-                         (util/stop-propagation e)
-                         (add-to-sidebar!))}
-            (ui/icon "layout-sidebar-right"))]]))]))
+           (ui/tooltip
+            (shui/button
+             {:variant :ghost
+              :aria-label (t :ui/open)
+              :on-click (fn [e]
+                          (util/stop-propagation e)
+                          (redirect!))
+              :class class}
+             (ui/icon "arrow-right"))
+            (t :ui/open))
+           (ui/tooltip
+            (shui/button
+             {:variant :ghost
+              :aria-label (t :sidebar.right/open)
+              :class class
+              :on-click (fn [e]
+                          (util/stop-propagation e)
+                          (add-to-sidebar!))}
+             (ui/icon "layout-sidebar-right"))
+            (t :sidebar.right/open))]]))]))
 
 (defn build-columns
-  [config properties & {:keys [with-object-name? with-id? add-tags-column? advanced-query?]
+  "Builds table columns with view-owned renderers.
+
+  Options:
+
+  | key                         | description
+  |-----------------------------|-------------
+  | `:with-object-name?`        | Include the object title column.
+  | `:with-id?`                 | Include the `#` index column.
+  | `:add-tags-column?`         | Add `:block/tags` when it is not already present.
+  | `:advanced-query?`          | Only include requested timestamp columns for advanced query tables.
+  | `:readonly-property-idents` | Property idents that should render as readonly columns.
+  | `:class-ident`              | Class ident used by column editability policy."
+  [config properties & {:keys [with-object-name? with-id? add-tags-column? advanced-query?
+                               readonly-property-idents class-ident]
                         :or {with-object-name? true
                              with-id? true
-                             add-tags-column? true}}]
-  (let [properties' (->>
-                     (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?))
-                       properties
-                       (conj properties (db/entity :block/tags)))
-                     (remove (fn [property]
-                               (or (nil? property)
-                                   (contains? #{:logseq.property/hide?} (:db/ident property))))))
-        property-keys (set (map :db/ident properties'))]
-    (->> (concat
-          [{:id :select
-            :name (t :view.table/select-column)
-            :header (fn [table _column] (header-checkbox table))
-            :cell (fn [table row column]
-                    (row-checkbox table row column))
-            :column-list? false
-            :resizable? false}
-           (when with-id?
-             {:id :id
-              :name "#"
-              :header (fn [_table _column] (header-index))
-              :cell (fn [table row _column]
-                      (inc (.indexOf (:rows table) (:db/id row))))
-              :resizable? false})
-           (when with-object-name?
-             {:id :block/title
-              :name (t :view.table/name-column)
-              :type :string
-              :header header-cp
-              :cell (fn [_table row _column style]
-                      (block-title row {:property-ident :block/title
-                                        :sidebar? (:sidebar? config)
-                                        :width (:width style)}))
-              :disable-hide? true})]
-          (keep
-           (fn [property]
-             (when-let [ident (or (:db/ident property) (:id property))]
-               ;; Hide properties that shouldn't ever be editable or that do not display well in a table
-               (when-not (or (contains? #{:logseq.property/built-in? :logseq.property.asset/checksum :logseq.property.class/properties
-                                          :block/created-at :block/updated-at :block/order :block/collapsed?
-                                          :logseq.property/created-from-property}
-                                        ident)
-                             (and with-object-name? (= :block/title ident))
-                             (contains? #{:map :entity} (:logseq.property/type property)))
-                 (let [property (if (de/entity? property)
-                                  property
-                                  (or (merge (db/entity ident) property) property)) ; otherwise, :cell/:header/etc. will be removed
-                       get-value (when (de/entity? property)
-                                   (fn [row] (db-view/get-property-value-for-search row property)))]
-                   {:id ident
-                    :name (or (:name property)
-                              (db-property/built-in-display-title property t))
-                    :header (or (:header property)
-                                header-cp)
-                    :cell (or (:cell property)
-                              (when (de/entity? property)
-                                (fn [_table row _column style]
-                                  (pv/property-value row property {:view? true
-                                                                   :table-view? true
-                                                                   :table-text-property-render
-                                                                   (fn [block opts]
-                                                                     (block-title block (assoc opts
-                                                                                               :row row
-                                                                                               :property property
-                                                                                               :width (:width style)
-                                                                                               :sidebar? (:sidebar? config))))}))))
-                    :get-value get-value
-                    :type (:type property)}))))
-           properties')
-
-          [(when (or (not advanced-query?)
-                     (and advanced-query? (property-keys :block/created-at)))
-             {:id :block/created-at
-              :name (t :page/created-at)
-              :type :datetime
-              :header header-cp
-              :cell timestamp-cell-cp})
-           (when (or (not advanced-query?)
-                     (and advanced-query? (property-keys :block/updated-at)))
-             {:id :block/updated-at
-              :name (t :page/updated-at)
-              :type :datetime
-              :header header-cp
-              :cell timestamp-cell-cp})])
-         (remove nil?))))
+                             add-tags-column? true
+                             readonly-property-idents #{}}}]
+  (table-columns/build-columns
+   config
+   properties
+   {:header-checkbox (fn [table _column] (header-checkbox table))
+    :row-checkbox row-checkbox
+    :header-index header-index
+    :header-cp header-cp
+    :block-title block-title
+    :timestamp-cell timestamp-cell-cp}
+   :with-object-name? with-object-name?
+   :with-id? with-id?
+   :add-tags-column? add-tags-column?
+   :advanced-query? advanced-query?
+   :readonly-property-idents readonly-property-idents
+   :class-ident class-ident))
 
 (defn sort-columns
   [columns ordered-column-ids]
@@ -512,6 +590,31 @@
         (fn [column] (ordered-id-set (:id column)))
         columns)))
     columns))
+
+(defn view-row-key
+  [prefix rows idx]
+  (let [row (util/nth-safe rows idx)
+        row-id (cond
+                 (map? row) (:db/id row)
+                 (number? row) row
+                 :else nil)]
+    (str prefix (or row-id idx))))
+
+(def ^:private asset-row-meta-keys
+  [:asset-table/nested?
+   :asset-table/annotation-id
+   :asset-table/expanded?])
+
+(defn- asset-row-meta
+  [row]
+  (when (map? row)
+    (not-empty (select-keys row asset-row-meta-keys))))
+
+(defn- merge-row-meta
+  [row row-meta]
+  (if (and row row-meta)
+    (merge row row-meta)
+    row))
 
 (defonce groups-sort-by-options
   [[:view.table/group-journal-date :block/journal-day]
@@ -840,7 +943,7 @@
           (shui/dropdown-menu-sub-trigger
            (t :view.table/columns-visibility))
           (shui/dropdown-menu-sub-content
-           (for [column (remove #(or (false? (:column-list? %))
+           (for [column (remove #(or (not (column-list-enabled? %))
                                      (:disable-hide? %)) columns)]
              (shui/dropdown-menu-checkbox-item
               {:key (str (:id column))
@@ -881,35 +984,15 @@
          :on-click #(db-export-handler/export-view-nodes-data rows {:group-by? (some? group-by-property-ident)})}
         (t :view/export-edn)))))))
 
-(defn- get-column-size
-  [column sized-columns]
-  (let [id (:id column)
-        size (get sized-columns id)]
-    (cond
-      (= id :id)
-      48
-
-      (number? size)
-      size
-
-      (= id :logseq.property/query)
-      400
-
-      :else
-      (case id
-        :select 32
-        :add-property 160
-        (:block/title :block/name) 360
-        (:block/created-at :block/updated-at) 160
-        180))))
-
 (hsx/defc add-property-button
   []
   [:div.ls-table-header-cell.!border-0
-   (shui/button
-    {:variant "text"
-     :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"}
-    (ui/icon "plus")
+   (ui/tooltip
+    (shui/button
+     {:variant "text"
+      :aria-label (t :view/new-property)
+      :class "h-8 w-8 !px-0 !py-0 hover:text-foreground justify-center"}
+     (ui/icon "plus"))
     (t :view/new-property))])
 
 (hsx/defc action-bar
@@ -1012,78 +1095,87 @@
   (let [header-fn (:header column)
         sized-columns (get-in table [:state :sized-columns])
         set-sized-columns! (get-in table [:data-fns :set-sized-columns!])
-        width (get-column-size column sized-columns)
-        select? (= :select (:id column))]
+        width (table-core/get-column-size column sized-columns)
+        select? (= :select (:id column))
+        column-actions-enabled? (column-list-enabled? column)]
     [:div.ls-table-header-cell
      {:style {:width width
               :min-width width}
-      :class (when select? "!border-0")}
+      :class (string/join " " (remove nil? [(when select? "!border-0")
+                                            (when-not column-actions-enabled?
+                                              "!cursor-default hover:!bg-transparent")]))}
      (if (fn? header-fn)
        (header-fn table column)
        header-fn)
-                                   ;; resize handle
+
      (when-not (false? (:resizable? column))
        (column-resizer column
                        (fn [size]
                          (set-sized-columns! (assoc sized-columns (:id column) size)))))]))
 
 (defn- on-delete-rows
-  [view-parent view-feature-type table selected-ids]
-  (let [selected-rows (->> (map db/entity selected-ids)
-                           (remove :logseq.property/built-in?))
-        pages (filter ldb/page? selected-rows)
-        blocks (remove ldb/page? selected-rows)
-        page-ids (map :db/id pages)
-        {:keys [set-data! set-row-selection!]} (:data-fns table)
-        update-table-state! (fn []
-                              (let [data (:full-data table)
-                                    selected-ids (set (map :db/id selected-rows))
-                                    new-data (if (every? number? data)
-                                               (remove selected-ids data)
-                                               ;; group
-                                               (map (fn [[by-value col]]
-                                                      [by-value (remove selected-ids col)]) data))]
-                                (set-data! new-data)
-                                (set-row-selection! {})))]
-    (p/do!
-     (ui-outliner-tx/transact!
-      {:outliner-op :delete-blocks}
-      (when (seq blocks)
-        (outliner-op/delete-blocks! blocks nil))
-      (case view-feature-type
-        :class-objects
-        (when (seq page-ids)
-          (when-not (= :logseq.class/Page (:db/ident view-parent))
-            (doseq [page pages]
-              (when-let [id (:block/uuid page)]
-                (outliner-op/delete-page! id)))))
+  ([view-parent view-feature-type table selected-ids]
+   (on-delete-rows view-parent view-feature-type table selected-ids nil))
+  ([view-parent view-feature-type table selected-ids delete-rows-fn]
+   (if delete-rows-fn
+     (delete-rows-fn table selected-ids)
+     (let [selected-rows (->> (map db/entity selected-ids)
+                            (remove :logseq.property/built-in?))
+          pages (filter ldb/page? selected-rows)
+          blocks (remove ldb/page? selected-rows)
+          page-ids (map :db/id pages)
+          {:keys [set-data! set-row-selection!]} (:data-fns table)
+          update-table-state! (fn []
+                                (let [data (:full-data table)
+                                      selected-ids (set (map :db/id selected-rows))
+                                      new-data (if (every? number? data)
+                                                 (remove selected-ids data)
+                                                 ;; group
+                                                 (map (fn [[by-value col]]
+                                                        [by-value (remove selected-ids col)]) data))]
+                                  (set-data! new-data)
+                                  (set-row-selection! {})))]
+      (p/do!
+       (ui-outliner-tx/transact!
+        {:outliner-op :delete-blocks}
+        (when (seq blocks)
+          (outliner-op/delete-blocks! blocks nil))
+        (case view-feature-type
+          :class-objects
+          (when (seq page-ids)
+            (when-not (= :logseq.class/Page (:db/ident view-parent))
+              (doseq [page pages]
+                (when-let [id (:block/uuid page)]
+                  (outliner-op/delete-page! id)))))
 
-        :property-objects
-        ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
-        (when-not (:logseq.property/built-in? view-parent)
-          (let [tx-data (map (fn [pid] [:db/retract pid (:db/ident view-parent)]) page-ids)]
-            (when (seq tx-data)
-              (outliner-op/transact! tx-data {:outliner-op :save-block}))))
+          :property-objects
+          ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
+          (when-not (:logseq.property/built-in? view-parent)
+            (let [tx-data (map (fn [pid] [:db/retract pid (:db/ident view-parent)]) page-ids)]
+              (when (seq tx-data)
+                (outliner-op/transact! tx-data {:outliner-op :save-block}))))
 
-        :query-result
-        (doseq [page pages]
-          (when-let [id (:block/uuid page)]
-            (outliner-op/delete-page! id)))
+          :query-result
+          (doseq [page pages]
+            (when-let [id (:block/uuid page)]
+              (outliner-op/delete-page! id)))
 
-        :all-pages
-        (state/pub-event! [:page/show-delete-dialog selected-rows update-table-state!])
+          :all-pages
+          (state/pub-event! [:page/show-delete-dialog selected-rows update-table-state!])
 
-        nil))
+          nil))
 
-     (when-not (or (= view-feature-type :all-pages)
-                   (and (= view-feature-type :property-objects) (:logseq.property/built-in? view-parent)))
-       (update-table-state!)))))
+       (when-not (or (= view-feature-type :all-pages)
+                     (and (= view-feature-type :property-objects) (:logseq.property/built-in? view-parent)))
+         (update-table-state!)))))))
 
 (defn- table-header
-  [table {:keys [show-add-property? add-property! view-parent view-feature-type] :as option} selected-rows]
+  [table {:keys [show-add-property? add-property! view-parent view-feature-type delete-rows-fn] :as option} selected-rows]
   (let [set-ordered-columns! (get-in table [:data-fns :set-ordered-columns!])
         pinned (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
+        sized-columns (get-in table [:state :sized-columns])
+        add-property-width (table-core/get-column-size {:id :add-property} sized-columns)
         build-item (fn [column]
                      {:id (:name column)
                       :value (:id column)
@@ -1093,235 +1185,50 @@
         unpinned-items (if show-add-property?
                          (conj (mapv build-item unpinned)
                                {:id "add property"
-                                :prop {:style {:width "-webkit-fill-available"
-                                               :min-width 160}
+                                :prop {:style {:width add-property-width
+                                               :min-width add-property-width}
                                        :on-click (fn [e] (when (fn? add-property!) (add-property! e)))}
                                 :value :add-new-property
                                 :content (add-property-button)
                                 :disabled? true})
                          (mapv build-item unpinned))
-        selection-rows-count (count selected-rows)]
+        selection-rows-count (count selected-rows)
+        action-bar-el (when (pos? selection-rows-count)
+                        [:div.table-action-bar.absolute.top-0.left-8
+                         (action-bar table selected-rows
+                                     (assoc option
+                                            :on-delete-rows (fn [table selected-ids]
+                                                              (on-delete-rows view-parent view-feature-type table selected-ids delete-rows-fn))))])]
     (shui/table-header
      {:main-container (util/app-scroll-container-node)}
-     (when (seq pinned-items)
+     (when (or (seq pinned-items) action-bar-el)
        [:div.sticky-columns.flex.flex-row
-        (dnd/items pinned-items {:vertical? false
-                                 :on-drag-end (fn [ordered-columns _m]
-                                                (set-ordered-columns! ordered-columns))})])
+        (when (seq pinned-items)
+          (dnd/items pinned-items {:vertical? false
+                                   :on-drag-end (fn [ordered-columns _m]
+                                                  (set-ordered-columns! ordered-columns))}))
+        action-bar-el])
      (when (seq unpinned-items)
        [:div.flex.flex-row
         (dnd/items unpinned-items
                    {:vertical? false
                     :on-drag-end (fn [ordered-columns _m]
-                                   (set-ordered-columns! ordered-columns))})])
-     (when (pos? selection-rows-count)
-       [:div.table-action-bar.absolute.top-0.left-8
-        (action-bar table selected-rows
-                    (assoc option
-                           :on-delete-rows (fn [table selected-ids]
-                                             (on-delete-rows view-parent view-feature-type table selected-ids))))]))))
-
-(hsx/defc lazy-table-cell
-  [cell-render-f cell-placeholder]
-  (let [^js state (ui/useInView #js {:rootMargin "0px"})
-        in-view? (.-inView state)]
-    [:div.h-full
-     {:ref (.-ref state)}
-     (if in-view?
-       (cell-render-f)
-       cell-placeholder)]))
-
-(defn- click-cell
-  [node]
-  (when-let [trigger (dom/sel1 node ".jtrigger")]
-    (.click trigger)))
-
-(defn navigate-to-cell
-  [e cell direction]
-  (util/stop e)
-  (let [row (util/rec-get-node cell "ls-table-row")
-        cells (dom/sel row ".ls-table-cell")
-        idx (.indexOf cells cell)
-        rows-container (util/rec-get-node row "ls-table-rows")
-        rows (dom/sel rows-container ".ls-table-row")
-        row-idx (.indexOf rows row)
-        container-left (.-left (.getBoundingClientRect rows-container))
-        next-cell (case direction
-                    :left (if (> idx 1)               ; don't focus on checkbox
-                            (nth cells (dec idx))
-                            ;; last cell in the prev row
-                            (let [prev-row (when (> row-idx 0)
-                                             (nth rows (dec row-idx)))]
-                              (when prev-row
-                                (let [cells (dom/sel prev-row ".ls-table-cell")]
-                                  (last cells)))))
-                    :right (if (< idx (dec (count cells)))
-                             (nth cells (inc idx))
-                             ;; first cell in the next row
-                             (let [next-row (when (< row-idx (dec (count rows)))
-                                              (nth rows (inc row-idx)))]
-                               (when next-row
-                                 (let [cells (dom/sel next-row ".ls-table-cell")]
-                                   (second cells)))))
-                    :up (let [prev-row (when (> row-idx 0)
-                                         (nth rows (dec row-idx)))]
-                          (when prev-row
-                            (let [cells (dom/sel prev-row ".ls-table-cell")]
-                              (nth cells idx))))
-                    :down (let [next-row (when (< row-idx (dec (count rows)))
-                                           (nth rows (inc row-idx)))]
-                            (when next-row
-                              (let [cells (dom/sel next-row ".ls-table-cell")]
-                                (nth cells idx)))))]
-    (when next-cell
-      (let [next-cell-left (.-left (.getBoundingClientRect next-cell))]
-        (state/clear-selection!)
-        (dom/add-class! next-cell "selected")
-        (.focus next-cell)
-        (when (< next-cell-left container-left)
-          (.scrollIntoView next-cell #js {:inline "center"
-                                          :block "nearest"}))))))
-
-(hsx/defc table-cell-container
-  [cell-opts body]
-  (let [*ref (hooks/use-ref nil)]
-    (shui/table-cell
-     (assoc cell-opts
-            :tabIndex 0
-            :ref *ref
-            :on-click (fn [e]
-                        (when-not (dom/has-class? (.-target e) "jtrigger")
-                          (click-cell (hooks/deref *ref))))
-            :on-key-down (fn [e]
-                           (let [container (hooks/deref *ref)]
-                             (case (util/ekey e)
-                               "Escape"
-                               (do
-                                 (if (util/input? (.-target e))
-                                   (do
-                                     (state/exit-editing-and-set-selected-blocks! [container])
-                                     (.focus container))
-                                   (do
-                                     (dom/remove-class! container "selected")
-                                     (let [row (util/rec-get-node container "ls-table-row")]
-                                       (state/exit-editing-and-set-selected-blocks! [row]))))
-                                 (util/stop e))
-                               "Enter"
-                               (do
-                                 (if (util/input? (.-target e)) ; number
-                                   (do
-                                     (state/exit-editing-and-set-selected-blocks! [container])
-                                     (.focus container))
-                                   (click-cell container))
-                                 (util/stop e))
-                               "ArrowUp"
-                               (navigate-to-cell e container :up)
-                               "ArrowDown"
-                               (navigate-to-cell e container :down)
-                               "ArrowLeft"
-                               (navigate-to-cell e container :left)
-                               "ArrowRight"
-                               (navigate-to-cell e container :right)
-                               nil))))
-     body)))
-
-(hsx/defc table-row-inner
-  [{:keys [row-selected?] :as table} row props {:keys [show-add-property? scrolling?]}]
-  (let [*ref (hooks/use-ref nil)
-        pinned-columns (get-in table [:state :pinned-columns])
-        unpinned (get-in table [:state :unpinned-columns])
-        unpinned-columns (if show-add-property?
-                           (conj (vec unpinned)
-                                 {:id :add-property
-                                  :cell (fn [_table _row _column])})
-                           unpinned)
-        sized-columns (get-in table [:state :sized-columns])
-        row-cell-f (fn [column {:keys [_lazy?]}]
-                     (let [id (str (:id row) "-" (:id column))
-                           width (get-column-size column sized-columns)
-                           select? (= (:id column) :select)
-                           add-property? (= (:id column) :add-property)
-                           style {:width width :min-width width}
-                           cell-opts {:key id
-                                      :select? select?
-                                      :add-property? add-property?
-                                      :style style}
-                           cell-placeholder (table-cell-container cell-opts nil)]
-                       (if (and scrolling? (not (:block/title row)))
-                         cell-placeholder
-                         (when-let [render (get column :cell)]
-                           (lazy-table-cell
-                            (fn []
-                              (table-cell-container
-                               cell-opts (render table row column style)))
-                            cell-placeholder)))))]
-    (shui/table-row
-     (merge
-      props
-      {:key (str (:db/id row))
-       :tabIndex 0
-       :ref *ref
-       :data-state (when (row-selected? row) "selected")
-       :data-id (:db/id row)
-       :blockid (str (:block/uuid row))
-       :on-pointer-down (fn [_e] (db-async/<get-block (state/get-current-repo) (:db/id row) {:children? false}))
-       :on-key-down (fn [e]
-                      (let [container (hooks/deref *ref)]
-                        (when (dom/has-class? container "selected")
-                          (case (util/ekey e)
-                            "Enter"
-                            (do
-                              (state/sidebar-add-block! (state/get-current-repo) (:db/id row) :block)
-                              (state/clear-selection!)
-                              (util/stop e))
-                            "ArrowLeft"
-                            (do
-                              (when-let [cell (->> (dom/sel container ".ls-table-cell")
-                                                   (remove (fn [node]
-                                                             (some? (dom/sel1 node ".ui__checkbox"))))
-                                                   first)]
-                                (state/clear-selection!)
-                                (dom/add-class! cell "selected")
-                                (.focus cell))
-                              (util/stop e))
-                            "ArrowRight"
-                            (do
-                              (when-let [cell (->> (dom/sel container ".ls-table-cell")
-                                                   (remove (fn [node]
-                                                             (some? (dom/sel1 node ".ui__checkbox"))))
-                                                   last)]
-                                (state/clear-selection!)
-                                (dom/remove-class! container "selected")
-                                (dom/add-class! cell "selected")
-                                (.focus cell))
-                              (util/stop e))
-                            "Escape"
-                            (do
-                              (state/clear-selection!)
-                              (util/stop e))
-                            nil))))})
-     (when (seq pinned-columns)
-       (into
-        [:div.sticky-columns.flex.flex-row]
-        (map #(row-cell-f % {}) pinned-columns)))
-     (when (seq unpinned-columns)
-       (into
-        [:div.flex.flex-row]
-        (map #(row-cell-f % {:lazy? true}) unpinned-columns))))))
+                                   (set-ordered-columns! ordered-columns))})]))))
 
 (hsx/defc table-row
   [table row props option]
   (let [block (db/sub-block (:db/id row))
         block' (if (contains? #{:self :full} (:block.temp/load-status block)) block row)
+        row-meta (asset-row-meta row)
         row' (when block'
-               (-> block'
+               (-> (merge-row-meta block' row-meta)
                    (update :block/tags (fn [tags]
                                          (keep (fn [tag]
                                                  (when-let [id (:db/id tag)]
                                                    (db/entity id)))
                                                tags)))
                    (assoc :block.temp/refs-count (:block.temp/refs-count row))))]
-    (table-row-inner table row' props option)))
+    (table-core/table-row-inner table row' props option)))
 
 (hsx/defc search
   [input {:keys [on-change set-input!]}]
@@ -1387,7 +1294,7 @@
         timestamp? (datetime-property? property)
         set-filters! (:set-filters! data-fns)
         filters (get-in table [:state :filters])
-        columns (remove #(or (false? (:column-list? %))
+        columns (remove #(or (not (column-list-enabled? %))
                              (= :id (:id %))) columns)
         items (map (fn [column]
                      {:label (:name column)
@@ -1774,7 +1681,7 @@
 
       (filter-value-select view-entity table property value operator idx opts))))
 
-(hsx/defc filters-row
+(hsx/defc filters-row      ;
   [view-entity {:keys [data-fns columns] :as table} opts]
   (let [filters (get-in table [:state :filters])
         {:keys [set-filters!]} data-fns]
@@ -1839,14 +1746,32 @@
       (ui/icon (if asset? "upload" "plus")))
      [:div (t :node/new)])))
 
+(defn- table-content-width
+  [table show-add-property?]
+  (let [sized-columns (get-in table [:state :sized-columns])
+        columns (concat (get-in table [:state :pinned-columns])
+                        (get-in table [:state :unpinned-columns])
+                        (when show-add-property?
+                          [{:id :add-property}]))]
+    (reduce + (map #(table-core/get-column-size % sized-columns) columns))))
+
 (hsx/defc add-new-row
-  [view-entity table]
-  [:div.py-1.px-2.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm.border-b
-   {:on-click (fn [_]
-                (let [f (get-in table [:data-fns :add-new-object!])]
-                  (f view-entity table)))}
-   (ui/icon "plus" {:size 14})
-   [:div (t :view/new)]])
+  [view-entity table {:keys [show-add-property?]}]
+  [:div.ls-table-new-row.py-1.px-2.flex.flex-row.items-center.w-full.text-sm
+   {:style {:width (table-content-width table show-add-property?)
+            :min-width "100%"}
+    :data-empty (str (empty? (:rows table)))}
+   [:div.ls-table-new-row-content
+    {:style {:background "transparent"}}
+    [:button.inline-flex.cursor-pointer.flex-row.items-center.gap-1.rounded-md.bg-transparent.px-1.text-muted-foreground.hover:bg-gray-03.hover:text-foreground
+     {:type "button"
+      :style {:cursor "pointer"}
+      :on-click (fn [e]
+                  (util/stop e)
+                  (let [f (get-in table [:data-fns :add-new-object!])]
+                    (f view-entity table)))}
+     (ui/icon "plus" {:size 14})
+     [:span (t :view/new)]]]])
 
 (defn- table-filters->persist-state
   [filters]
@@ -1866,9 +1791,27 @@
          [property operator])))
    filters))
 
+(defn- visible-ordered-column-ids
+  [columns visible-columns]
+  (->> columns
+       (remove (fn [column]
+                 (or (= :select (:id column))
+                     (false? (get visible-columns (:id column))))))
+       (keep :id)
+       vec))
+
+(defn- ordered-columns-sync-for-empty-hidden
+  [entity columns visible-columns hidden-columns]
+  (when (and (empty? hidden-columns)
+             (seq (:logseq.property.table/ordered-columns entity)))
+    (let [current-ordered-columns (:logseq.property.table/ordered-columns entity)
+          next-ordered-columns (visible-ordered-column-ids columns visible-columns)]
+      (when (not= next-ordered-columns current-ordered-columns)
+        next-ordered-columns))))
+
 (defn- db-set-table-state!
   [entity {:keys [set-sorting! set-filters! set-visible-columns!
-                  set-ordered-columns! set-sized-columns!]}]
+                  set-ordered-columns! set-sized-columns! columns]}]
   {:set-sorting!
    (fn [sorting]
      (p/do!
@@ -1882,13 +1825,19 @@
         (property-handler/set-block-property! (:db/id entity) :logseq.property.table/filters filters)
         (set-filters! filters))))
    :set-visible-columns!
-   (fn [columns]
+   (fn [visible-columns]
      (let [hidden-columns (vec (keep (fn [[column visible?]]
                                        (when (false? visible?)
-                                         column)) columns))]
+                                         column)) visible-columns))]
        (p/do!
         (property-handler/set-block-property! (:db/id entity) :logseq.property.table/hidden-columns hidden-columns)
-        (set-visible-columns! columns))))
+        (let [next-ordered-columns (ordered-columns-sync-for-empty-hidden entity columns visible-columns hidden-columns)]
+          ;; Empty hidden-columns is removed by generic property writes, so ordered-columns
+          ;; must carry the visible column set when it is the only persisted fallback.
+          (when next-ordered-columns
+            (property-handler/set-block-property! (:db/id entity) :logseq.property.table/ordered-columns next-ordered-columns)
+            (set-ordered-columns! (vec (cons :select next-ordered-columns)))))
+        (set-visible-columns! visible-columns))))
    :set-ordered-columns!
    (fn [ordered-columns]
      (let [ids (vec (remove #{:select} ordered-columns))]
@@ -1903,14 +1852,15 @@
 
 (hsx/defc lazy-item
   [data idx {:keys [properties list-view? gallery-view? scrolling?]} item-render]
-  (let [item (util/nth-safe data idx)
-        db-id (cond (map? item) (:db/id item)
-                    (number? item) item
+  (let [source-item (util/nth-safe data idx)
+        source-item-meta (asset-row-meta source-item)
+        db-id (cond (map? source-item) (:db/id source-item)
+                    (number? source-item) source-item
                     :else nil)
         entity (when db-id
                  (let [e (db/entity db-id)]
                    (when (= :full (:block.temp/load-status e))
-                     e)))
+                     (merge-row-meta e source-item-meta))))
         [item set-item!] (hooks/use-state entity)
         list-or-gallery? (or list-view? gallery-view?)
         opts (if list-or-gallery?
@@ -1925,10 +1875,14 @@
        (m/sp
          (when (and db-id (not item) (not scrolling?))
            (let [block (c.m/<? (db-async/<get-block (state/get-current-repo) db-id opts))
-                 block' (if list-or-gallery? (db/entity db-id) block)]
+                 block' (if list-or-gallery? (db/entity db-id) block)
+                 block' (merge-row-meta block' source-item-meta)]
              (set-item! block')))))
      [db-id scrolling?])
-    (let [item' (cond (map? item) item (number? item) {:db/id item})]
+    (let [item' (cond
+                  (map? item) (merge-row-meta item source-item-meta)
+                  (number? item) (merge-row-meta {:db/id item} source-item-meta)
+                  (and source-item-meta (map? source-item)) source-item)]
       (item-render item'))))
 
 (hsx/defc table-body
@@ -1942,8 +1896,12 @@
                                (-> (:config option)
                                    (assoc :viewel (js/document.getElementById (:viewid option)))))
         :compute-item-key (fn [idx]
-                            (let [block-id (util/nth-safe rows idx)]
-                              (str "table-row-" block-id)))
+                            (let [base-key (view-row-key "table-row-" rows idx)
+                                  row (util/nth-safe rows idx)
+                                  expanded? (:asset-table/expanded? row)]
+                              (if (some? expanded?)
+                                (str base-key (if expanded? "-e" "-c"))
+                                base-key)))
         :skipAnimationFrameInResizeObserver true
         :total-count (count rows)
         :context {:scrolling scrolling?}
@@ -1963,6 +1921,9 @@
 (hsx/defc table-view
   [table option row-selection *scroller-ref]
   (let [selected-rows (shui/table-get-selection-rows row-selection (:rows table))
+        selected-rows (if-let [f (:expand-selected-rows-fn option)]
+                        (f selected-rows row-selection (:rows table))
+                        selected-rows)
         [items-rendered? set-items-rendered!] (hooks/use-state false)]
     (shui/table
      (let [rows (:rows table)]
@@ -1973,7 +1934,7 @@
          (table-body table option rows *scroller-ref set-items-rendered!)
 
          (when (and (get-in table [:data-fns :add-new-object!]) (or (empty? rows) items-rendered?))
-           (shui/table-footer (add-new-row (:view-entity option) table)))]]))))
+           (shui/table-footer (add-new-row (:view-entity option) table option)))]]))))
 
 (hsx/defc list-view
   [{:keys [config ref-matched-children-ids disable-virtualized?] :as option} view-entity {:keys [rows]} *scroller-ref]
@@ -1996,8 +1957,7 @@
                       :custom-scroll-parent (get-scroll-parent config)
                       :increase-viewport-by {:top 64 :bottom 64}
                       :compute-item-key (fn [idx]
-                                          (let [block-id (util/nth-safe rows idx)]
-                                            (str "list-row-" block-id)))
+                                          (view-row-key "list-row-" rows idx))
                       :total-count (count rows)
                       :skipAnimationFrameInResizeObserver true
                       :item-content (fn [idx] (lazy-item-render rows idx))}
@@ -2079,8 +2039,8 @@
        (for [property-ident display-property-idents
              :let [property-value (gallery-property-value block property-ident)]
              :when property-value]
-         ^{:key (str "gallery-property-" (:db/id block) "-" property-ident)}
-         [:<> property-value])]]]))
+          ^{:key (str "gallery-property-" (:db/id block) "-" property-ident)}
+          [:<> property-value])]]]))
 
 (defn gallery-lazy-item-opts
   [option]
@@ -2162,7 +2122,8 @@
                                  (fn [block]
                                    (gallery-card-item table view-entity block config'
                                                       {:asset-property-ident asset-property-ident
-                                                       :display-property-idents display-property-idents}))))]
+                                                       :display-property-idents display-property-idents}))))
+        card-key #(view-row-key (str (:db/id view-entity) "-card-") blocks %)]
     [:div.ls-cards
      {:style {"--ls-gallery-card-width" (str (:width dimensions) "px")
               "--ls-gallery-card-height" (str (:height dimensions) "px")}}
@@ -2171,19 +2132,17 @@
          [:div.virtuoso-grid-list
           (for [idx (range (count blocks))]
             [:div.virtuoso-grid-item
-             {:key (str (:db/id view-entity) "-card-" (util/nth-safe blocks idx))}
+             {:key (card-key idx)}
              (render-card idx)])]
          (ui/virtualized-grid
           {:ref #(reset! *scroller-ref %)
            :total-count (count blocks)
            :custom-scroll-parent (get-scroll-parent config)
            :skipAnimationFrameInResizeObserver true
-           :compute-item-key (fn [idx]
-                               (str (:db/id view-entity) "-card-" (util/nth-safe blocks idx)))
+           :compute-item-key card-key
            :item-content render-card})))
      (when-not (:hide-action-bar? option)
        (gallery-action-bar table option view-parent view-feature-type selected-rows))]))
-
 (hsx/defc gallery-group
   [view-entity option row-selection *scroller-ref groups idx table-map group-by-page? group-by-property]
   (let [[value group] (nth groups idx)
@@ -2243,88 +2202,215 @@
      (util/schedule #(set-ready? true)))
    []))
 
+(defn- view-sorting-row-icon
+  ([icon]
+   [:span.flex.h-5.w-4.shrink-0.items-center.justify-center
+    icon])
+  ([attrs icon]
+   [:span.flex.h-5.w-4.shrink-0.items-center.justify-center
+    attrs
+    icon]))
+
+(def ^:private view-sorting-action-row-class
+  "flex h-9 w-full min-w-0 cursor-pointer flex-row items-center gap-2 rounded-md bg-transparent px-2 text-left hover:bg-accent hover:text-accent-foreground")
+
+(defn- view-sorting-action-row
+  [{:keys [class icon label on-click role row-attrs]}]
+  [:div.px-1 (or row-attrs {})
+   [:button
+    (cond-> {:type "button"
+             :class (string/join " " (remove string/blank? [view-sorting-action-row-class class]))
+             :style {:cursor "pointer"}
+             :on-pointer-down util/stop-propagation
+             :on-click on-click}
+      role
+      (assoc :role role))
+    (view-sorting-row-icon icon)
+    [:span.min-w-0.truncate label]]])
+
 (hsx/defc view-sorting-item
   [table sorting id name asc? set-sorting!]
-  [:div.flex.flex-row.gap-2.items-center.justify-between.px-2
-   [:div:div.flex.flex-row.gap-1.items-center
-    (shui/button
-     {:size :sm
-      :class "!px-1"
-      :variant :ghost
-      :title (t :view.table/drag-to-reorder)}
-     (shui/tabler-icon "grip-vertical" {:size 14}))
-    [:div.text-muted-foreground.whitespace-nowrap (str name ":")]]
+  [:div.px-1
+   [:div.flex.h-9.w-full.min-w-0.flex-row.items-center.justify-between.gap-2.rounded-md.px-2.hover:bg-accent.hover:text-accent-foreground
+    [:div.flex.min-w-0.flex-row.items-center.gap-2.text-muted-foreground
+     (view-sorting-row-icon
+      {:title (t :view.table/drag-to-reorder)}
+      (shui/tabler-icon "grip-vertical" {:size 14}))
+     [:div.min-w-0.truncate.text-muted-foreground (str name ":")]]
 
-   [:div.flex.flex-row.gap-2.items-center
-    (shui/select
-     {:default-value (if asc? "asc" "desc")
-      :on-value-change (fn [v]
-                         (let [asc? (= v "asc")
-                               f (:column-set-sorting! table)]
-                           (when f
-                             (f sorting {:id id} asc?))))}
-     (shui/select-trigger
-      {:class "order-button !px-2 !py-0 !h-8"}
-      (shui/select-value
-       {:placeholder (t :view.table/select-order)}))
-     (shui/select-content
-      (shui/select-group
-       (shui/select-item {:value "asc"} (t :view.table/ascending))
-       (shui/select-item {:value "desc"} (t :view.table/descending)))))
-    (shui/button
-     {:variant "ghost"
-      :class "text-muted-foreground !px-1"
-      :size :sm
-      :on-click (fn []
-                  (let [f (:column-set-sorting! table)
-                        new-sorting (f sorting {:id id} nil)
-                        f (get-in table [:data-fns :set-sorting!])]
-                    (set-sorting! new-sorting)
-                    (f new-sorting)
-                    (when (empty? new-sorting)
-                      (shui/popup-hide!))))}
-     (ui/icon "x"))]])
+    [:div.flex.shrink-0.flex-row.items-center.gap-1
+     (shui/select
+      {:value (if asc? "asc" "desc")
+       :on-value-change (fn [v]
+                          (let [asc? (= v "asc")
+                                f (:column-set-sorting! table)]
+                            (when f
+                              (let [new-sorting (f sorting {:id id} asc?)]
+                                (set-sorting! new-sorting)
+                                (some-> js/document .-activeElement (.blur))))))}
+      (shui/select-trigger
+       {:class "order-button !h-8 !px-2 !py-0 focus:!ring-0 focus:!ring-offset-0 focus-visible:!ring-0 focus-visible:!ring-offset-0"}
+       (shui/select-value
+        {:placeholder (t :view.table/select-order)}))
+      (shui/select-content
+       (shui/select-group
+        (shui/select-item {:value "asc"} (t :view.table/ascending))
+        (shui/select-item {:value "desc"} (t :view.table/descending)))))
+     (shui/button
+      {:variant "ghost"
+       :class "text-muted-foreground !h-6 !px-1"
+       :size :sm
+       :on-click (fn []
+                   (let [f (:column-set-sorting! table)
+                         new-sorting (f sorting {:id id} nil)]
+                     (set-sorting! new-sorting)
+                     (when (empty? new-sorting)
+                       (shui/popup-hide!))))}
+      (ui/icon "x"))]]])
+
+(defn- available-sorting-columns
+  [sorting columns]
+  (let [sorting-ids (set (map :id sorting))]
+    (->> columns
+         (filter sorting-column-option?)
+         (remove (fn [{:keys [id]}]
+                   (contains? sorting-ids id)))
+         vec)))
+
+(defn- sorting-column-match?
+  [search-key {:keys [name]}]
+  (let [search-key (string/lower-case (string/trim (or search-key "")))]
+    (or (string/blank? search-key)
+        (string/includes? (string/lower-case (str name)) search-key))))
+
+(hsx/defc view-sorting-column-picker
+  [table sorting columns set-sorting! set-adding-sort?!]
+  (let [input-ref (hooks/use-ref nil)
+        [search-key set-search-key!] (hooks/use-state "")
+        [input-focused? set-input-focused?!] (hooks/use-state false)
+        items (available-sorting-columns sorting columns)
+        items (filter #(sorting-column-match? search-key %) items)]
+    (hooks/use-effect!
+     (fn []
+       (let [timeout (js/setTimeout #(some-> (hooks/deref input-ref) (.focus)) 0)]
+         #(js/clearTimeout timeout)))
+     [])
+    [:div.w-full.max-h-72.overflow-y-auto.pb-1
+     [:div.px-1.py-1
+      ;; shui/input accepts class overrides, but its default form focus ring is
+      ;; the behavior this compact menu opts out of: focus only recolors the existing border.
+      [:input
+       {:class (str "h-8 w-full appearance-none rounded-md border bg-transparent px-2 text-sm "
+                    "text-foreground placeholder:text-muted-foreground outline-none transition-colors "
+                    (if input-focused? "border-primary" "border-border"))
+        :style {:box-shadow "none"
+                :outline "none"}
+        :type "text"
+        :ref input-ref
+        :value search-key
+        :placeholder (t :view.table/search-property)
+        :on-pointer-down util/stop-propagation
+        :on-click util/stop-propagation
+        :on-key-down util/stop-propagation
+        :on-focus #(set-input-focused?! true)
+        :on-blur #(set-input-focused?! false)
+        :on-change #(set-search-key! (util/evalue %))}]]
+     (if (seq items)
+       (for [{:keys [id name] :as column} items]
+         (view-sorting-action-row
+          {:row-attrs {:key (str id)}
+           :icon (ui/icon "columns" {:size 15})
+           :label name
+           :on-click (fn [e]
+                       (util/stop e)
+                       (when-let [f (:column-append-sorting! table)]
+                         (let [new-sorting (f sorting column true)]
+                           (set-sorting! new-sorting)
+                           (set-adding-sort?! false))))}))
+       [:div.mx-1.rounded-md.px-2.py-1.5.text-sm.text-muted-foreground
+        (t :search/no-result)])]))
+
+(defn- view-sorting-config-width
+  [sorting columns]
+  (let [sorting-ids (set (map :id sorting))
+        sorted-name-lens (keep (fn [{:keys [id]}]
+                                 (some (fn [column]
+                                         (when (= id (:id column))
+                                           (count (str (:name column)))))
+                                       columns))
+                               sorting)
+        available-name-lens (->> columns
+                                 (filter sorting-column-option?)
+                                 (remove (fn [{:keys [id]}]
+                                           (contains? sorting-ids id)))
+                                 (map (comp count str :name)))
+        max-name-len (apply max 0 (concat sorted-name-lens available-name-lens))
+        width (+ 220 (* 7 (min max-name-len 24)))]
+    (-> width
+        (max 300)
+        (min 420))))
 
 (hsx/defc view-sorting-config
   [table sorting columns]
-  (let [[sorting set-sorting!] (hooks/use-state sorting)]
-    [:div.ls-view-order-setting.flex.flex-col.gap-2.py-2.text-sm
-     (let [items (for [{:keys [id asc?]} sorting]
-                   (when-let [name (some (fn [column] (when (= id (:id column))
-                                                        (:name column))) columns)]
-                     {:id (str id)
-                      :value id
-                      :content (view-sorting-item table sorting id name asc? set-sorting!)}))]
+  (let [[sorting set-sorting!] (hooks/use-state (vec sorting))
+        [adding-sort? set-adding-sort?!] (hooks/use-state false)
+        width (hooks/use-memo #(view-sorting-config-width sorting columns)
+                              [sorting columns])]
+    [:div.ls-view-order-setting.flex.flex-col.py-1.text-sm
+     {:style {:width width
+              :min-width width
+              :max-width width}}
+     (let [items (keep (fn [{:keys [id asc?]}]
+                         (when-let [name (some (fn [column] (when (= id (:id column))
+                                                              (:name column))) columns)]
+                           {:id (str id)
+                            :value id
+                            :content (view-sorting-item table sorting id name asc? set-sorting!)}))
+                       sorting)]
        (dnd/items items
                   {:on-drag-end (fn [ordered-columns]
                                   (let [f (get-in table [:data-fns :set-sorting!])
                                         new-sorting (mapv (fn [column] (some #(when (= column (:id %)) %) sorting)) ordered-columns)]
                                     (set-sorting! new-sorting)
                                     (f new-sorting)))}))
-     (shui/dropdown-menu-item
-      {:class "text-muted-foreground pl-3"
-       :on-click (fn []
+     (view-sorting-action-row
+      {:class (if adding-sort?
+                "bg-accent text-accent-foreground"
+                "text-muted-foreground")
+       :icon (ui/icon "plus" {:size 15})
+       :label (t :view.table/add-sort)
+       :on-click (fn [e]
+                   (util/stop e)
+                   (set-adding-sort?! (not adding-sort?)))})
+     (when adding-sort?
+       (view-sorting-column-picker table sorting columns set-sorting! set-adding-sort?!))
+     (view-sorting-action-row
+      {:class "text-muted-foreground"
+       :icon (ui/icon "trash" {:size 15})
+       :label (t :view.table/delete-sort)
+       :role "menuitem"
+       :on-click (fn [e]
+                   (util/stop e)
                    (let [f (get-in table [:data-fns :set-sorting!])]
                      (set-sorting! nil)
                      (f nil)
-                     (shui/popup-hide!)))}
-      (ui/icon "trash" {:size 15})
-      [:span.ml-1 (t :view.table/delete-sort)])]))
+                     (shui/popup-hide!)))})]))
 
 (hsx/defc view-sorting
   [table columns sorting]
-  (shui/button
-   {:variant "ghost"
-    :class "text-muted-foreground !px-1"
-    :size :sm
-    :on-click (fn [e]
-                (shui/popup-show! (.-target e)
-                                  (fn [] (view-sorting-config table sorting columns))
-                                  {:align :end
-                                   :dropdown-menu? true
-                                   :focus-trigger? false
-                                   :content-props {:onCloseAutoFocus #(.preventDefault %)}}))}
-   (ui/icon "arrows-up-down")))
+  (ui/tooltip
+   (shui/button
+    {:variant "ghost"
+     :class "text-muted-foreground !px-1"
+     :size :sm
+     :aria-label (t :view.table/sort)
+     :on-click (fn [e]
+                 (shui/popup-show! (.-target e)
+                                   (fn [] (view-sorting-config table sorting columns))
+                                   {:align :end
+                                    :dropdown-menu? true}))}
+    (ui/icon "arrows-up-down" {:size 15}))
+   (t :view.table/sort)))
 
 (hsx/defc view-cp
   [view-entity table option* {:keys [*scroller-ref display-type row-selection]}]
@@ -2416,80 +2502,75 @@
       :else
       title)))
 
-(hsx/defc view-tab-button
-  [view-parent current-view view* {:keys [views data items-count set-view-entity! set-data! set-views! show-items-count? config references?]}]
-  (let [refs-total-count (:refs-total-count config)
-        view (db/sub-block (:db/id view*))
-        current-view? (= (:db/id current-view) (:db/id view))]
-    (shui/button
-     {:variant :text
-      :size :sm
-      :class (str "text-sm px-0 py-0 h-6 " (when-not current-view? "text-muted-foreground"))
-      :on-click (fn [e]
-                  (if (and current-view? (not= (:db/id view) (:db/id view-parent)))
-                    (shui/popup-show!
-                     (.-target e)
-                     (fn []
-                       [:<>
-                        (shui/dropdown-menu-sub
-                         (shui/dropdown-menu-sub-trigger
-                          (t :view/rename))
-                         (shui/dropdown-menu-sub-content
-                          (when-let [block-container-cp (state/get-component :block/container)]
-                            (block-container-cp {:display-title (display-view-title view)
-                                                 :hide-block-control? true} view))))
-                        (when (> (count views) 1)
-                          (shui/dropdown-menu-item
-                           {:key "Delete"
-                            :on-click (fn []
-                                        (p/do!
-                                         (editor-handler/delete-block-aux! view)
-                                         (let [views' (remove (fn [v] (= (:db/id v) (:db/id view))) views)]
-                                           (set-views! views')
-                                           (set-view-entity! (first views'))
-                                           (shui/popup-hide!))))}
-                           (t :ui/delete)))])
-                     {:as-dropdown? true
-                      :dropdown-menu? true
-                      :align "start"
-                      :focus-trigger? false
-                      :content-props {:onClick shui/popup-hide!
-                                      :onCloseAutoFocus #(.preventDefault %)}})
-                    (do
-                      (set-view-entity! view)
-                      (set-data! nil))))}
-     (when-not references?
-       (let [display-type (or (:db/ident (get view :logseq.property.view/type))
-                              :logseq.property.view/type.table)]
-         (when-let [icon (:logseq.property/icon (db/entity display-type))]
-           (icon-component/icon icon {:color? true
-                                      :size 15}))))
-     (display-view-title view)
-     (when (and current-view? show-items-count? (> items-count 0) (seq data))
-       [:span.text-muted-foreground.text-xs
-        items-count
-        (when (and refs-total-count
-                   (> refs-total-count items-count))
-          [:span
-           [:span "/"]
-           [:span {:title (t :view.table/total-refs-count)} refs-total-count]])]))))
-
 (hsx/defc views-tab
-  [view-parent current-view {:keys [views set-views! view-feature-type opacity] :as opts}]
-  [:div.views
-   (for [view* views]
-     ^{:key (:db/id view*)}
-     (view-tab-button view-parent current-view view* opts))
+  [view-parent current-view {:keys [views data items-count set-view-entity! set-data! set-views! view-feature-type show-items-count? config references? opacity]}]
+  (let [refs-total-count (:refs-total-count config)]
+    [:div.views
+     (for [view* views]
+       (let [view (db/sub-block (:db/id view*))
+             current-view? (= (:db/id current-view) (:db/id view))]
+         (shui/button
+          {:variant :text
+           :size :sm
+           :class (str "text-sm px-0 py-0 h-6 " (when-not current-view? "text-muted-foreground"))
+           :on-click (fn [e]
+                       (if (and current-view? (not= (:db/id view) (:db/id view-parent)))
+                         (shui/popup-show!
+                          (.-target e)
+                          (fn []
+                            [:<>
+                             (shui/dropdown-menu-sub
+                              (shui/dropdown-menu-sub-trigger
+                               (t :view/rename))
+                              (shui/dropdown-menu-sub-content
+                               (when-let [block-container-cp (state/get-component :block/container)]
+                                 (block-container-cp {:display-title (display-view-title view)
+                                                      :hide-block-control? true} view))))
+                             (when (> (count views) 1)
+                               (shui/dropdown-menu-item
+                                {:key "Delete"
+                                 :on-click (fn []
+                                             (p/do!
+                                              (editor-handler/delete-block-aux! view)
+                                              (let [views' (remove (fn [v] (= (:db/id v) (:db/id view))) views)]
+                                                (set-views! views')
+                                                (set-view-entity! (first views'))
+                                                (shui/popup-hide!))))}
+                                (t :ui/delete)))])
+                          {:as-dropdown? true
+                           :dropdown-menu? true
+                           :align "start"
+                           :focus-trigger? false
+                           :content-props {:onClick shui/popup-hide!
+                                           :onCloseAutoFocus #(.preventDefault %)}})
+                         (do
+                           (set-view-entity! view)
+                           (set-data! nil))))}
+          (when-not references?
+            (let [display-type (or (:db/ident (get view :logseq.property.view/type))
+                                   :logseq.property.view/type.table)]
+              (when-let [icon (:logseq.property/icon (db/entity display-type))]
+                (icon-component/icon icon {:color? true
+                                           :size 15}))))
+          (display-view-title view)
+          (when (and current-view? show-items-count? (> items-count 0) (seq data))
+            [:span.text-muted-foreground.text-xs
+             items-count
+             (when (and refs-total-count
+                        (> refs-total-count items-count))
+               [:span
+                [:span "/"]
+                [:span {:title (t :view.table/total-refs-count)} refs-total-count]])]))))
 
      (shui/button
-       {:variant :text
+      {:variant :text
        :size :sm
-        :title (t :view/add-new-view)
-        :class (str "!px-1 -ml-1 text-muted-foreground hover:text-foreground transition-opacity ease-in duration-300 " opacity)
-        :on-click (fn []
-                    (p/let [view (create-view! view-parent view-feature-type {:auto-triggered? false})]
-                      (set-views! (concat views [view]))))}
-       (ui/icon "plus" {:size 15}))])
+       :title (t :view/add-new-view)
+       :class (str "!px-1 -ml-1 text-muted-foreground hover:text-foreground transition-opacity ease-in duration-300 " opacity)
+       :on-click (fn []
+                   (p/let [view (create-view! view-parent view-feature-type {:auto-triggered? false})]
+                     (set-views! (concat views [view]))))}
+      (ui/icon "plus" {:size 15}))]))
 
 (hsx/defc view-head
   [view-parent view-entity table columns input sorting
@@ -2526,8 +2607,7 @@
                  (action option)
                  action))])
 
-      (when (seq sorting)
-        (view-sorting table columns sorting))
+      (view-sorting table columns sorting)
 
       (filter-properties view-entity columns table option)
 
@@ -2551,13 +2631,10 @@
                (cond
                          group-by-page?
                          (if value
-                           (let [c (state/get-component :block/page-cp)
-                                 page (if (de/entity? value)
-                                        (select-keys value [:db/id :block/uuid :block/title :block/name])
-                                        value)]
+                           (let [c (state/get-component :block/page-cp)]
                              (if (fn? c)
-                               (c {:disable-preview? true} page)
-                               (readable-property-value page)))
+                               (c {:disable-preview? true} value)
+                               (readable-property-value value)))
                            [:div.text-muted-foreground.text-sm
                             (t :view.table/pages)])
 
@@ -2585,6 +2662,21 @@
       [:div.flex.flex-1.flex-col  title (body-fn)]
       (ui/foldable title body-fn {:title-trigger? false}))))
 
+(defn- default-visible-columns
+  [view-entity columns]
+  (cond
+    (contains? view-entity :logseq.property.table/hidden-columns)
+    (zipmap (:logseq.property.table/hidden-columns view-entity) (repeat false))
+
+    (seq (:logseq.property.table/ordered-columns view-entity))
+    (zipmap (set/difference (set (map :id columns))
+                            (set (:logseq.property.table/ordered-columns view-entity))
+                            #{:select :id :block/created-at :block/updated-at})
+            (repeat false))
+
+    :else
+    {:id false}))
+
 (hsx/defc ^:large-vars/cleanup-todo view-inner
   [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! display-type group-by-property-ident config] :as option*}
    *scroller-ref]
@@ -2593,29 +2685,22 @@
                       (-> (remove #{:id :select} (map :id columns))
                           (conj :block/uuid :block/name)
                           vec))
-        default-visible-columns (if-let [hidden-columns (conj (:logseq.property.table/hidden-columns view-entity) :id)]
-                                  (zipmap hidden-columns (repeat false))
-                                  ;; This case can happen for imported tables
-                                  (if (seq (:logseq.property.table/ordered-columns view-entity))
-                                    (zipmap (set/difference (set (map :id columns))
-                                                            (set (:logseq.property.table/ordered-columns view-entity))
-                                                            #{:select :block/created-at :block/updated-at})
-                                            (repeat false))
-                                    {}))
-        [visible-columns set-visible-columns!] (hooks/use-state default-visible-columns)
+        initial-visible-columns (default-visible-columns view-entity columns)
+        [visible-columns set-visible-columns!] (hooks/use-state initial-visible-columns)
         ordered-columns (vec (concat [:select] (:logseq.property.table/ordered-columns view-entity)))
         sized-columns (:logseq.property.table/sized-columns view-entity)
         [ordered-columns set-ordered-columns!] (hooks/use-state ordered-columns)
         [sized-columns set-sized-columns!] (hooks/use-state sized-columns)
+        columns (sort-columns columns ordered-columns)
         {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns! set-sized-columns!]}
         (db-set-table-state! view-entity {:set-sorting! set-sorting!
                                           :set-filters! set-filters!
                                           :set-visible-columns! set-visible-columns!
                                           :set-sized-columns! set-sized-columns!
-                                          :set-ordered-columns! set-ordered-columns!})
+                                          :set-ordered-columns! set-ordered-columns!
+                                          :columns columns})
         [row-selection set-row-selection!] (hooks/use-state {})
-        [last-selected-idx set-last-selected-idx!] (hooks/use-state nil)
-        columns (sort-columns columns ordered-columns)
+        [last-selected-row-id set-last-selected-row-id!] (hooks/use-state nil)
         select? (first (filter (fn [item] (= (:id item) :select)) columns))
         id? (first (filter (fn [item] (= (:id item) :id)) columns))
         pinned-properties (set (cond->> (map :db/ident (:logseq.property.table/pinned-columns view-entity))
@@ -2635,6 +2720,7 @@
                    :data data
                    :full-data full-data
                    :columns columns
+                   :row-selection-related-ids-fn (:row-selection-related-ids-fn option)
                    :state {:sorting sorting
                            :filters filters
                            :row-selection row-selection
@@ -2644,7 +2730,7 @@
                            :pinned-columns pinned
                            :unpinned-columns unpinned
                            :group-by-property group-by-property
-                           :last-selected-idx last-selected-idx}
+                           :last-selected-row-id last-selected-row-id}
                    :data-fns {:set-data! set-data!
                               :set-filters! set-filters!
                               :set-sorting! set-sorting!
@@ -2653,7 +2739,7 @@
                               :set-sized-columns! set-sized-columns!
                               :set-row-selection! set-row-selection!
                               :add-new-object! add-new-object!
-                              :set-last-selected-idx! set-last-selected-idx!}}
+                              :set-last-selected-row-id! set-last-selected-row-id!}}
         table (shui/table-option table-map)
         *view-ref (hooks/use-ref nil)
         gallery? (= display-type :logseq.property.view/type.gallery)
@@ -2832,13 +2918,20 @@
         (:filters view-parent)
         query-entity-ids
         (:data-changes-version option)]))
-    (if loading?
-      [:div.flex.flex-col.space-2.gap-2.my-2
-       (for [idx (range 3)]
-         (shui/skeleton {:key idx :class "h-6 w-full"}))]
-      [:div.flex.flex-col.gap-2
-       (view-container view-entity (assoc option
-                                          :data data
+    (let [table-data-transform (:table-data-transform option)
+          table-display? (= display-type :logseq.property.view/type.table)
+          data' (hooks/use-memo
+                 #(if (and table-display? table-data-transform)
+                    (table-data-transform data)
+                    data)
+                 [table-display? table-data-transform data])]
+      (if loading?
+        [:div.flex.flex-col.space-2.gap-2.my-2
+         (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
+        (let [flat-rows? (every? #(or (number? %) (map? %)) data')]
+          [:div.flex.flex-col.gap-2
+           (view-container view-entity (assoc option
+                                          :data data'
                                           :full-data data
                                           :filters filters
                                           :sorting sorting
@@ -2847,8 +2940,8 @@
                                           :set-data! set-data!
                                           :set-input! set-input!
                                           :input input
-                                          :items-count (if (every? number? data)
-                                                         (count data)
+                                          :items-count (if flat-rows?
+                                                         (count data')
                                                          ;; grouped
                                                          (let [f (fn count-col
                                                                    [data]
@@ -2861,13 +2954,13 @@
                                                                                           (uuid? (ffirst col)))
                                                                                    (+ total (count-col col))
                                                                                    (+ total (count col)))))) 0 data))]
-                                                           (f data)))
+                                                           (f data')))
                                           :group-by-property-ident group-by-property-ident
                                           :ref-pages-count ref-pages-count
                                           :ref-matched-children-ids ref-matched-children-ids
                                           :display-type display-type
                                           :load-view-data load-view-data
-                                          :set-view-entity! set-view-entity!))])))
+                                          :set-view-entity! set-view-entity!))])))))
 
 (defn sub-view-data-changes
   [view-parent view-feature-type]
@@ -2886,34 +2979,32 @@
 
 (hsx/defc sub-view
   [view-entity option]
-  (let [view (or (db/sub-block (:db/id view-entity)) view-entity)
+  (let [view (or (some-> (:db/id view-entity) db/sub-block) view-entity)
         data-changes-version (sub-view-data-changes (:view-parent option) (:view-feature-type option))]
     (view-aux view (assoc option :data-changes-version data-changes-version))))
 
 (hsx/defc view
-  [{:keys [view-parent view-feature-type] view-entity* :view-entity :as option}]
+  [{:keys [view-parent view-feature-type view-entity] :as option}]
   (let [[views set-views!] (hooks/use-state nil)
-        [view-entity set-view-entity!] (hooks/use-state view-entity*)
+        [view-entity set-view-entity!] (hooks/use-state view-entity)
         query? (= view-feature-type :query-result)]
     (hooks/use-effect!
      #(c.m/run-task*
        (m/sp
          (when-not query?
            (let [repo (state/get-current-repo)]
-             (set-views! nil)
-             (set-view-entity! view-entity*)
-             (when-not view-entity*
+             (when-not view-entity
                (c.m/<? (db-async/<get-views repo (:db/id view-parent) view-feature-type))
                (let [views (get-views view-parent view-feature-type)]
                  (if-let [v (first views)]
                    (do
                      (set-views! views)
-                     (when-not view-entity* (set-view-entity! v)))
-                   (when (and view-parent view-feature-type (not view-entity*))
+                     (when-not view-entity (set-view-entity! v)))
+                   (when (and view-parent view-feature-type (not view-entity))
                      (let [new-view (c.m/<? (create-view! view-parent view-feature-type {:auto-triggered? true}))]
                        (set-views! (concat views [new-view]))
                        (set-view-entity! new-view))))))))))
-     [(:db/id view-parent) view-feature-type (:db/id view-entity*) query?])
+     [])
     (when view-entity
       (let [option' (assoc option
                            :view-feature-type (or view-feature-type
