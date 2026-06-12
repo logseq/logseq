@@ -624,8 +624,8 @@
      (let [size (or (prop-name (prop props "size")) "default")
            small? (= size "sm")
            props' (with-class-props props
-                    (cn "ui__switch peer inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[checked]:justify-end data-[checked]:bg-primary data-[unchecked]:justify-start data-[unchecked]:bg-input"
-                        (if small? "h-4 w-8" "h-6 w-11"))
+                    (cn "ui__switch peer inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[checked]:justify-end data-[checked]:bg-primary data-[unchecked]:justify-start data-[unchecked]:bg-input pr-[1px] pl-[1px]"
+                        (if small? "h-4.5 w-8" "h-6 w-11"))
                     nil)]
        (clean-props! props' "size")
        (when ref (set-prop! props' "ref" ref))
