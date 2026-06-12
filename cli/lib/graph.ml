@@ -122,19 +122,10 @@ let validate_parsed = function
            "graph export --type sqlite does not accept --edn-options or \
             --pretty-print")
   | Parsed_export opts
-    when opts.export_type = Sqlite
-         && (opts.include_timestamps || opts.exclude_built_in_pages
-            || opts.exclude_namespaces <> []) ->
-      Error
-        (Error.invalid_options
-           "graph export --type sqlite does not accept --include-timestamps, \
-            --exclude-built-in-pages, or --exclude-namespaces")
-  | Parsed_export opts
     when Option.is_some opts.edn_options
          && Option.is_none (Option.bind opts.edn_options Edn_util.as_map) ->
       Error
-        (Error.invalid_options
-           "graph export --edn-options must be an EDN map")
+        (Error.invalid_options "graph export --edn-options must be an EDN map")
   | _ -> Ok ()
 
 let utc_timestamp () =
@@ -503,26 +494,6 @@ let default_sqlite_export_path config repo =
   Filename.concat export_root
     (graph_name ^ "_" ^ string_of_int timestamp_seconds ^ ".sqlite")
 
-let export_graph_option_fields opts =
-  let fields = ref [] in
-  if opts.include_timestamps then
-    fields := (kw "include-timestamps?", bool true) :: !fields;
-  if opts.exclude_built_in_pages then
-    fields := (kw "exclude-built-in-pages?", bool true) :: !fields;
-  if opts.exclude_namespaces <> [] then
-    fields :=
-      ( kw "exclude-namespaces",
-        Edn_util.set
-          (List.map
-             (fun value ->
-               kw
-                 (if String.length value > 0 && value.[0] = ':' then
-                    String.sub value 1 (String.length value - 1)
-                  else value))
-             opts.exclude_namespaces) )
-      :: !fields;
-  List.rev !fields
-
 let export_payload opts =
   let edn_option_fields =
     match opts.edn_options with
@@ -539,8 +510,8 @@ let export_payload opts =
   in
   let graph_options =
     edn_option_fields
-    |> List.filter (fun (key, _) -> not (Edn_util.key_matches "export-type" key))
-    |> List.append (export_graph_option_fields opts)
+    |> List.filter (fun (key, _) ->
+        not (Edn_util.key_matches "export-type" key))
     |> Edn_util.map
   in
   let fields = ref [ (kw "export-type", export_type) ] in
@@ -548,6 +519,13 @@ let export_payload opts =
   | value when Edn_util.as_map value = Some [] -> ()
   | _ -> fields := (kw "graph-options", graph_options) :: !fields);
   Edn_util.map (List.rev !fields)
+
+let write_pretty_edn path data =
+  try
+    Cli_unix.write_text_file path
+      Ustring.(of_string (Pretty_print.pprint_edn data) |> to_string);
+    Cli_effect.pure (Ok ())
+  with exn -> Cli_effect.pure (Error (Error.exception_error exn))
 
 let graph_export_message mode _config path =
   Cli_result.ok ~command:Command_id.Graph_export mode
@@ -961,9 +939,12 @@ let execute_graph_export mode _graph repo opts config =
                       (export_payload opts)))
               (fun exported ->
                 bind
-                  (Transport.write_output
-                     ~format:(export_format opts.export_type)
-                     ~path:output_path ~data:exported)
+                  (if opts.pretty_print then
+                     write_pretty_edn output_path exported
+                   else
+                     Transport.write_output
+                       ~format:(export_format opts.export_type)
+                       ~path:output_path ~data:exported)
                   (function
                     | Ok () ->
                         pure (graph_export_message mode config output_path)
@@ -1205,8 +1186,8 @@ let metadata () =
       ~examples:
         [
           "logseq graph export --graph my-graph --type edn --file \
-           /tmp/my-graph.edn --include-timestamps --exclude-built-in-pages \
-           --exclude-namespaces user,project";
+           /tmp/my-graph.edn --edn-options '{:export-type :graph \
+           :include-timestamps? true}' --pretty-print";
           "logseq graph export --graph my-graph --type sqlite --file \
            /tmp/my-graph.sqlite";
         ]
