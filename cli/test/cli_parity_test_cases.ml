@@ -70,6 +70,7 @@ let keyword_text value = Edn_util.keyword_to_string value
 let edn_of_string text = Melange_edn.of_edn_string text
 let repo_text repo = Cli_primitive.string_of_repo repo
 let graph_text graph = Cli_primitive.string_of_graph graph
+
 let unicode_text codepoints =
   String.concat "" (List.map Js.String.fromCodePoint codepoints)
 
@@ -1323,6 +1324,32 @@ let () =
       in
       expect_equal "vector preview" "[1 2 3]" vector_preview.preview;
       expect_bool "vector not truncated" false vector_preview.truncated);
+
+  test "CLI parity pretty edn matches jet command formatting" (fun () ->
+      expect_equal "flat pretty edn" "{:a 1, :bb 22, :ccc 333, :dddd 4444}\n"
+        (Pretty_print.pprint_edn
+           (edn_of_string "{:a 1 :bb 22 :ccc 333 :dddd 4444}"));
+      expect_equal "escaped string pretty edn"
+        "{:text \"a { b [ c ] } \\\" q\", :empty [], :m {}}\n"
+        (Pretty_print.pprint_edn
+           (edn_of_string "{:text \"a { b [ c ] } \\\" q\" :empty [] :m {}}"));
+      expect_equal "nested pretty edn"
+        "{:classes {:user.class/DUOL {:block/title \"DUOL\",\n\
+        \                             :block/created-at 1773581891284,\n\
+        \                             :block/updated-at 1773581891284},\n\
+        \           :user.class/NVDA {:block/title \"NVDA\",\n\
+        \                             :block/created-at 1773583745410,\n\
+        \                             :block/updated-at 1773583745410}},\n\
+        \ :pages [{:block/title \"A\", :block/tags [:x :y]}\n\
+        \         {:block/title \"B\", :block/properties {:k \"v\"}}]}\n"
+        (Pretty_print.pprint_edn
+           (edn_of_string
+              "{:classes {:user.class/DUOL {:block/title \"DUOL\" \
+               :block/created-at 1773581891284 :block/updated-at \
+               1773581891284} :user.class/NVDA {:block/title \"NVDA\" \
+               :block/created-at 1773583745410 :block/updated-at \
+               1773583745410}} :pages [{:block/title \"A\" :block/tags [:x \
+               :y]} {:block/title \"B\" :block/properties {:k \"v\"}}]}")));
 
   test "CLI parity json output preserves namespaced keys and keyword values"
     (fun () ->
@@ -4080,10 +4107,9 @@ let () =
             "edn";
             "--file";
             "/tmp/export.edn";
+            "--edn-options";
+            "{:export-type :graph :include-timestamps? true}";
             "--pretty-print";
-            "--include-timestamps";
-            "--exclude-namespaces";
-            "journal,whiteboard";
           ]
       in
       (match export.command with
@@ -4092,9 +4118,55 @@ let () =
           expect_equal "export file" "/tmp/export.edn"
             (expect_some "file" opts.file);
           expect_bool "pretty" true opts.pretty_print;
-          expect_int "exclude namespaces" 2
-            (List.length opts.exclude_namespaces)
+          expect_some "edn options" opts.edn_options |> ignore
       | _ -> fail_test "expected graph export");
+      let export_aliases =
+        expect_parse_ok "graph export aliases"
+          [
+            "graph";
+            "export";
+            "-t";
+            "edn";
+            "--file";
+            "/tmp/export.edn";
+            "-e";
+            "{:export-type :graph}";
+            "-p";
+          ]
+      in
+      (match export_aliases.command with
+      | Cli_request.Graph (Graph.Parsed_export opts) ->
+          expect_bool "export alias edn" true (opts.export_type = Graph.Edn);
+          expect_bool "export alias pretty" true opts.pretty_print;
+          expect_some "export alias edn options" opts.edn_options |> ignore
+      | _ -> fail_test "expected graph export");
+      List.iter
+        (fun flag ->
+          expect_parse_error_code
+            ("retired export option " ^ flag)
+            ":invalid-options"
+            [
+              "graph";
+              "export";
+              "--type";
+              "edn";
+              "--file";
+              "/tmp/export.edn";
+              flag;
+            ])
+        [ "--include-timestamps"; "--exclude-built-in-pages" ];
+      expect_parse_error_code "retired export option --exclude-namespaces"
+        ":invalid-options"
+        [
+          "graph";
+          "export";
+          "--type";
+          "edn";
+          "--file";
+          "/tmp/export.edn";
+          "--exclude-namespaces";
+          "journal";
+        ];
       expect_parse_error_code "missing backup src" ":invalid-options"
         [ "graph"; "backup"; "restore"; "--dst"; "demo" ];
       expect_parse_error_code "bad sync config key" ":invalid-options"
@@ -4181,11 +4253,14 @@ let () =
                 {
                   export_type = Graph.Edn;
                   file = Some "/tmp/demo.edn";
-                  edn_options = Some (Edn_util.map []);
+                  edn_options =
+                    Some
+                      (edn_of_string
+                         "{:export-type :graph :include-timestamps? true}");
                   pretty_print = true;
-                  include_timestamps = true;
-                  exclude_built_in_pages = true;
-                  exclude_namespaces = [ "journal"; "whiteboard" ];
+                  include_timestamps = false;
+                  exclude_built_in_pages = false;
+                  exclude_namespaces = [];
                 }))
       in
       match export with
@@ -4196,9 +4271,7 @@ let () =
           expect_equal "export file" "/tmp/demo.edn"
             (expect_some "export file" opts.file);
           expect_bool "export pretty" true opts.pretty_print;
-          expect_bool "export timestamps" true opts.include_timestamps;
-          expect_bool "export built-ins" true opts.exclude_built_in_pages;
-          expect_int "export namespaces" 2 (List.length opts.exclude_namespaces)
+          expect_some "export edn options" opts.edn_options |> ignore
       | _ -> fail_test "expected Graph_export action");
 
   test_promise "CLI parity graph validate result reports ok and error states"
@@ -4484,7 +4557,8 @@ let () =
                     let target_exists = Node.Fs.existsSync backup_dir in
                     if target_exists then
                       close_and_fail
-                        "reserved backup target removed: expected false, got true"
+                        "reserved backup target removed: expected false, got \
+                         true"
                     else (
                       remove_tree root;
                       resolve_after_close ()))
@@ -4654,7 +4728,7 @@ let () =
               edn_options =
                 Some
                   (edn_of_string
-                     "{:export-type :graph-human :include-timestamps? true}");
+                     "{:export-type :graph :include-timestamps? true}");
               pretty_print = true;
               include_timestamps = false;
               exclude_built_in_pages = false;
@@ -4681,6 +4755,8 @@ let () =
           expect_bool "edn export ok" false (Cli_result.is_error edn_result);
           expect_named_contains "export file content" (read_file edn_export)
             ":exported true";
+          expect_named_contains "pretty export writes multiline edn"
+            (read_file edn_export) "\n";
           let* sqlite_result =
             effect_to_promise
               (Graph.execute
@@ -4875,8 +4951,8 @@ let () =
       let example_help = run_cli [ "example"; "upsert"; "--help" ] in
       expect_named_contains "example upsert usage" example_help
         "Usage: logseq example upsert";
-      expect_named_not_contains "example upsert group has no examples" example_help
-        "Examples:");
+      expect_named_not_contains "example upsert group has no examples"
+        example_help "Examples:");
 
   test
     "CLI parity structured example output keeps selector matched commands and \
@@ -4956,8 +5032,7 @@ let () =
       let zsh = Completion.generate Cli_primitive.Zsh registry in
       expect_named_contains "zsh graph helper" zsh "_logseq_graphs";
       expect_named_not_contains "zsh page helper removed" zsh "_logseq_pages";
-      expect_named_not_contains "zsh query helper removed" zsh
-        "_logseq_queries";
+      expect_named_not_contains "zsh query helper removed" zsh "_logseq_queries";
       expect_named_not_contains "zsh current graph helper removed" zsh
         "_logseq_current_graph";
       let bash = Completion.generate Cli_primitive.Bash registry in
@@ -4970,7 +5045,8 @@ let () =
       expect_named_not_contains "bash current graph helper removed" bash
         "_logseq_current_graph_bash");
 
-  test "CLI parity zsh completion keeps current global option contracts" (fun () ->
+  test "CLI parity zsh completion keeps current global option contracts"
+    (fun () ->
       let registry = (Cli.make_app ()).Cli.registry in
       let zsh = Completion.generate Cli_primitive.Zsh registry in
       expect_named_contains "zsh top dispatcher" zsh "_logseq()";
@@ -5068,8 +5144,21 @@ let () =
         (export_type.choices = [ "edn"; "sqlite" ]);
       expect_bool "export edn options" true
         (Option.is_some (option_by_name "--edn-options" graph_export.options));
+      expect_bool "export edn options alias" true
+        (Option.is_some (option_by_name "-e" graph_export.options));
       expect_bool "export pretty print" true
         (Option.is_some (option_by_name "--pretty-print" graph_export.options));
+      expect_bool "export pretty print alias" true
+        (Option.is_some (option_by_name "-p" graph_export.options));
+      expect_bool "export timestamps retired" true
+        (Option.is_none
+           (option_by_name "--include-timestamps" graph_export.options));
+      expect_bool "export built-ins retired" true
+        (Option.is_none
+           (option_by_name "--exclude-built-in-pages" graph_export.options));
+      expect_bool "export namespaces retired" true
+        (Option.is_none
+           (option_by_name "--exclude-namespaces" graph_export.options));
       let graph_import =
         expect_some "graph import"
           (Command_registry.find_by_path [ "graph"; "import" ] registry)
@@ -5613,8 +5702,8 @@ let () =
                           (Edn_util.keyword "title", Edn_util.string "中文标题");
                           (Edn_util.keyword "count", Edn_util.int 2);
                         ]))));
-        expect_named_contains "edn file preserves utf8"
-          (read_file edn_path) title;
+        expect_named_contains "edn file preserves utf8" (read_file edn_path)
+          title;
         let edn_value =
           expect_ok "read edn"
             (effect_result "read edn"
@@ -5664,7 +5753,8 @@ let () =
           (Bytes.to_string
              (expect_some "sqlite bytes" (Edn_util.as_bytes sqlite_value)));
         expect_named_contains "read sqlite uses transit bytes tag"
-          (Melange_edn.to_edn_string sqlite_value) "#transit/bytes";
+          (Melange_edn.to_edn_string sqlite_value)
+          "#transit/bytes";
         ignore
           (expect_ok "write db"
              (effect_result "write db"
@@ -5681,7 +5771,8 @@ let () =
           (Bytes.to_string
              (expect_some "db bytes" (Edn_util.as_bytes db_value)));
         expect_named_contains "read db uses transit bytes tag"
-          (Melange_edn.to_edn_string db_value) "#transit/bytes";
+          (Melange_edn.to_edn_string db_value)
+          "#transit/bytes";
         expect_error_code "bad write format" ":unsupported-output-format"
           (effect_result "bad write format"
              (Transport.write_output
@@ -5713,8 +5804,7 @@ let () =
               expect_some "invoke args" (Edn_util.as_seq (invoke_args body))
             in
             let query =
-              expect_some "invoke query"
-                (Edn_util.as_seq (List.nth args 1))
+              expect_some "invoke query" (Edn_util.as_seq (List.nth args 1))
             in
             expect_int64 "invoke large int" large_int
               (expect_some "invoke large int value"
@@ -5825,10 +5915,10 @@ let () =
                  ~query:(Edn_util.vector_t [ Edn_util.keyword "find" ]))
           in
           match Edn_util.as_seq result with
-          | Some [ key; nested ] ->
+          | Some [ key; nested ] -> (
               expect_equal "decoded key" "block/uuid"
                 (expect_some "keyword" (Edn_util.as_keyword key));
-              (match Edn_util.as_seq nested with
+              match Edn_util.as_seq nested with
               | Some [ nested_key; value ] ->
                   expect_equal "decoded nested key" "block/uuid"
                     (expect_some "nested keyword"
@@ -6118,8 +6208,7 @@ let () =
           (config ~graph:"old/name" ~root_dir:"/tmp/logseq-root" ())
       in
       expect_named_contains "current graph marker" output "* old/name";
-      expect_named_not_contains "old graph marker" output
-        "old/name [legacy]";
+      expect_named_not_contains "old graph marker" output "old/name [legacy]";
       expect_named_not_contains "old graph warning" output
         "legacy graph directories detected";
       expect_named_not_contains "rename guidance" output "old++name");
@@ -6346,8 +6435,7 @@ let () =
              (raw_ids [ 201L; 202L ]))
           (config ())
       in
-      expect_equal "upsert block table" "Value\n201\n202\nCount: 2"
-        upsert_block;
+      expect_equal "upsert block table" "Value\n201\n202\nCount: 2" upsert_block;
       let upsert_page =
         Format_types.format_result
           (Cli_result.ok ~command:Command_id.Upsert_page Output.Mode.Human
@@ -6381,7 +6469,8 @@ let () =
       in
       expect_equal "remove block result table" "result  {:ok true}" block_output);
 
-  test "CLI parity format graph sync and auth summaries use current generic output"
+  test
+    "CLI parity format graph sync and auth summaries use current generic output"
     (fun () ->
       let graph_export =
         Format_types.format_result

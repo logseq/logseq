@@ -9,9 +9,10 @@ let normalize_key = function
   | "-g" -> Some "graph"
   | "-o" -> Some "output"
   | "-c" -> Some "content"
-  | "-e" -> Some "expand"
+  | "-e" -> Some "edn-options"
   | "-f" -> Some "fields"
   | "-h" -> Some "help"
+  | "-p" -> Some "pretty-print"
   | "-s" -> Some "sort"
   | "-t" -> Some "type"
   | "-v" -> Some "verbose"
@@ -151,16 +152,7 @@ let allowed_options_for_path = function
   | [ "graph"; "backup"; "create" ] -> [ "name" ]
   | [ "graph"; "backup"; "restore" ] -> [ "src"; "dst" ]
   | [ "graph"; "backup"; "remove" ] -> [ "src" ]
-  | [ "graph"; "export" ] ->
-      [
-        "type";
-        "file";
-        "edn-options";
-        "pretty-print";
-        "include-timestamps";
-        "exclude-built-in-pages";
-        "exclude-namespaces";
-      ]
+  | [ "graph"; "export" ] -> [ "type"; "file"; "edn-options"; "pretty-print" ]
   | [ "graph"; "import" ] -> [ "type"; "input" ]
   | [ "list"; "page" ] ->
       common_list_options
@@ -390,21 +382,6 @@ let validate_global_values options =
   Error.bind (validate_integer_option "timeout-ms" options) (fun () ->
       validate_member_option "output" [ "human"; "json"; "edn" ] options)
 
-let empty_exclude_namespaces_error =
-  Error.invalid_options
-    "graph export --exclude-namespaces must include at least one non-empty \
-     value"
-
-let validate_graph_export_values options =
-  match
-    ( Option.map String.lowercase_ascii (option_value "type" options),
-      List.find_opt (fun (key, _) -> key = "exclude-namespaces") options )
-  with
-  | Some "edn", Some (_, Some value) when parse_csv value = [] ->
-      Error empty_exclude_namespaces_error
-  | Some "edn", Some (_, None) -> Error empty_exclude_namespaces_error
-  | _ -> Ok ()
-
 let parse_graph_export_edn_options options =
   match option_value "edn-options" options with
   | None -> Ok None
@@ -457,7 +434,7 @@ let validate_selector_integer_values path options =
 let validate_option_values path options =
   Error.bind (validate_selector_integer_values path options) (fun () ->
       match path with
-      | [ "graph"; "export" ] -> validate_graph_export_values options
+      | [ "graph"; "export" ] -> Ok ()
       | [ "list"; "page" ] ->
           Error.bind (validate_list_common_values list_page_sort_values options)
             (fun () ->
@@ -784,15 +761,9 @@ let parse ?stdin argv =
                           file = option_value "file" options;
                           edn_options;
                           pretty_print = option_present "pretty-print" options;
-                          include_timestamps =
-                            option_present "include-timestamps" options;
-                          exclude_built_in_pages =
-                            option_present "exclude-built-in-pages" options;
-                          exclude_namespaces =
-                            Option.value
-                              (Option.map parse_csv
-                                 (option_value "exclude-namespaces" options))
-                              ~default:[];
+                          include_timestamps = false;
+                          exclude_built_in_pages = false;
+                          exclude_namespaces = [];
                         })))
         | None ->
             Error
