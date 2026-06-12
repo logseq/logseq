@@ -55,7 +55,12 @@ type asset_opts = {
   content : string option;
 }
 
-type tag_opts = { id : Cli_primitive.db_id option; name : string option }
+type tag_opts = {
+  id : Cli_primitive.db_id option;
+  name : string option;
+  add_properties_edn : string option;
+  remove_properties_edn : string option;
+}
 
 type property_opts = {
   id : Cli_primitive.db_id option;
@@ -152,6 +157,8 @@ type action =
       mode : mode;
       id : Cli_primitive.db_id option;
       name : string option;
+      add_properties : Property.key list;
+      remove_properties : Property.key list;
     }
   | Upsert_property of {
       repo : Cli_primitive.repo;
@@ -525,19 +532,6 @@ let update_action_of_block_update (action : block_update) : Update.action =
     target_label = action.target_label;
   }
 
-let build_tag repo graph (opts : tag_opts) =
-  match (opts.id, Option.bind opts.name normalize_tag_name) with
-  | Some id, name ->
-      Ok (Upsert_tag { repo; graph; mode = Update; id = Some id; name })
-  | None, Some name ->
-      Ok
-        (Upsert_tag { repo; graph; mode = Create; id = None; name = Some name })
-  | None, None ->
-      Error
-        (Error.make
-           (Edn_util.keyword_t "missing-tag-name")
-           "tag name is required")
-
 let normalize_page_name_input value =
   let value = String.trim value in
   if value = "" then None else Some value
@@ -614,6 +608,49 @@ let parse_property_keys_edn ~label = function
                          (label ^ " must contain property keys")))
           in
           loop [] values)
+
+let parse_tag_schema_properties opts =
+  Error.bind
+    (parse_property_keys_edn ~label:"add-properties" opts.add_properties_edn)
+    (fun add_properties ->
+      Error.map
+        (fun remove_properties -> (add_properties, remove_properties))
+        (parse_property_keys_edn ~label:"remove-properties"
+           opts.remove_properties_edn))
+
+let build_tag repo graph (opts : tag_opts) =
+  Error.bind (parse_tag_schema_properties opts)
+    (fun (add_properties, remove_properties) ->
+      match (opts.id, Option.bind opts.name normalize_tag_name) with
+      | Some id, name ->
+          Ok
+            (Upsert_tag
+               {
+                 repo;
+                 graph;
+                 mode = Update;
+                 id = Some id;
+                 name;
+                 add_properties;
+                 remove_properties;
+               })
+      | None, Some name ->
+          Ok
+            (Upsert_tag
+               {
+                 repo;
+                 graph;
+                 mode = Create;
+                 id = None;
+                 name = Some name;
+                 add_properties;
+                 remove_properties;
+               })
+      | None, None ->
+          Error
+            (Error.make
+               (Edn_util.keyword_t "missing-tag-name")
+               "tag name is required"))
 
 let parse_property_assignments_edn ~label = function
   | None -> Ok []
@@ -1347,17 +1384,6 @@ let tag_not_found mode =
        (Edn_util.keyword_t "tag-not-found")
        "tag not found after upsert")
 
-let result_of_tag_entity mode entity =
-  if tag_entity entity then
-    match id_of_entity entity with
-    | Some id -> ok_tag_ids mode [ id ]
-    | None -> tag_not_found mode
-  else
-    Cli_result.error ~command:Command_id.Upsert_tag mode
-      (Error.make
-         (Edn_util.keyword_t "tag-create-not-tag")
-         "created entity is not tagged as :logseq.class/Tag")
-
 let upsert_id_not_found entity_type id =
   Error.make
     (Edn_util.keyword_t "upsert-id-not-found")
@@ -1461,6 +1487,15 @@ let resolved_property_ident_from_query key result =
   | Some entity -> resolved_property_ident key entity
   | None -> Error (property_not_found_error key)
 
+let resolved_schema_property_ident key entity =
+  if property_entity entity then resolved_property_ident key entity
+  else Error (property_not_found_error key)
+
+let resolved_schema_property_ident_from_query key result =
+  match first_entity result with
+  | Some entity -> resolved_schema_property_ident key entity
+  | None -> Error (property_not_found_error key)
+
 let resolve_property_ident invoke_config repo key =
   let open Cli_effect in
   match key with
@@ -1506,6 +1541,40 @@ let resolve_property_ident invoke_config repo key =
                   if Option.is_some (id_of_entity result) then pure (Ok ident)
                   else pure (Error (property_not_found_error key))))
 
+let resolve_schema_property_ident invoke_config repo key =
+  let open Cli_effect in
+  match key with
+  | Property.Key_ident ident ->
+      bind
+        (pull_entity_by_lookup invoke_config repo property_selector
+           (vector [ kw "db/ident"; Edn_util.any ident ]))
+        (fun result ->
+          match resolved_schema_property_ident key result with
+          | Ok ident -> pure (Ok ident)
+          | Error _ when not (qualified_property_ident ident) ->
+              bind
+                (pull_property_by_name invoke_config repo
+                   (property_key_label key) property_selector)
+                (fun result ->
+                  pure (resolved_schema_property_ident_from_query key result))
+          | Error err -> pure (Error err))
+  | Key_id id ->
+      bind
+        (pull_entity_by_lookup invoke_config repo property_selector
+           (Edn_util.int64 id))
+        (fun result -> pure (resolved_schema_property_ident key result))
+  | Key_name name ->
+      bind (pull_property_by_name invoke_config repo name property_selector)
+        (fun result ->
+          match resolved_schema_property_ident_from_query key result with
+          | Ok ident -> pure (Ok ident)
+          | Error _ ->
+              let ident = Edn_util.keyword_t name in
+              bind
+                (pull_entity_by_lookup invoke_config repo property_selector
+                   (vector [ kw "db/ident"; Edn_util.any ident ]))
+                (fun result -> pure (resolved_schema_property_ident key result)))
+
 let rec resolve_tag_ids invoke_config repo = function
   | [] -> Cli_effect.pure (Ok [])
   | tag :: rest ->
@@ -1525,6 +1594,18 @@ let rec resolve_property_keys invoke_config repo = function
         | Error err -> pure (Error err)
         | Ok ident ->
             bind (resolve_property_keys invoke_config repo rest) (function
+              | Error err -> pure (Error err)
+              | Ok idents -> pure (Ok (ident :: idents))))
+
+let rec resolve_schema_property_keys invoke_config repo = function
+  | [] -> Cli_effect.pure (Ok [])
+  | key :: rest ->
+      let open Cli_effect in
+      bind (resolve_schema_property_ident invoke_config repo key) (function
+        | Error err -> pure (Error err)
+        | Ok ident ->
+            bind (resolve_schema_property_keys invoke_config repo rest)
+              (function
               | Error err -> pure (Error err)
               | Ok idents -> pure (Ok (ident :: idents))))
 
@@ -1872,20 +1953,96 @@ let pull_created_page invoke_config repo name create_result =
           (vector
              [ kw "block/name"; Edn_util.string (normalized_lookup_name name) ])
 
-let execute_create_tag mode invoke_config repo name =
+let tag_schema_property_ops tag_uuid ~add_properties ~remove_properties =
+  let add_ops =
+    List.map
+      (fun ident ->
+        Edn_util.vector
+          [
+            kw "class-add-property";
+            Edn_util.vector [ Edn_util.uuid tag_uuid; Edn_util.any ident ];
+          ])
+      add_properties
+  in
+  let remove_ops =
+    List.map
+      (fun ident ->
+        Edn_util.vector
+          [
+            kw "class-remove-property";
+            Edn_util.vector [ Edn_util.uuid tag_uuid; Edn_util.any ident ];
+          ])
+      remove_properties
+  in
+  add_ops @ remove_ops
+
+let execute_tag_schema_properties invoke_config repo tag_uuid ~add_properties
+    ~remove_properties =
+  let open Cli_effect in
+  bind (resolve_schema_property_keys invoke_config repo add_properties)
+    (function
+    | Error err -> pure (Error (option_resolution_error "--add-properties" err))
+    | Ok add_properties ->
+        bind (resolve_schema_property_keys invoke_config repo remove_properties)
+          (function
+          | Error err ->
+              pure (Error (option_resolution_error "--remove-properties" err))
+          | Ok remove_properties ->
+              let ops =
+                tag_schema_property_ops tag_uuid ~add_properties
+                  ~remove_properties
+              in
+              if ops = [] then pure (Ok Edn_util.nil)
+              else
+                bind (apply_outliner_ops invoke_config repo ops) (fun result ->
+                    pure (Ok result))))
+
+let tag_result_with_schema_properties mode invoke_config repo entity
+    ~add_properties ~remove_properties =
+  let open Cli_effect in
+  match (id_of_entity entity, uuid_of_entity entity) with
+  | Some id, Some uuid ->
+      if tag_entity entity then
+        bind
+          (execute_tag_schema_properties invoke_config repo uuid ~add_properties
+             ~remove_properties) (function
+          | Error err ->
+              pure (Cli_result.error ~command:Command_id.Upsert_tag mode err)
+          | Ok _ -> pure (ok_tag_ids mode [ id ]))
+      else
+        pure
+          (Cli_result.error ~command:Command_id.Upsert_tag mode
+             (Error.make
+                (Edn_util.keyword_t "tag-create-not-tag")
+                "created entity is not tagged as :logseq.class/Tag"))
+  | Some _, None ->
+      pure
+        (Cli_result.error ~command:Command_id.Upsert_tag mode
+           (Error.make
+              (Edn_util.keyword_t "upsert-id-not-found")
+              "tag uuid not found"))
+  | None, _ -> pure (tag_not_found mode)
+
+let execute_create_tag mode invoke_config repo name ~add_properties
+    ~remove_properties =
   let open Cli_effect in
   bind (pull_tag_by_name invoke_config repo name tag_selector) (fun existing ->
-      match Option.bind (first_entity existing) id_of_entity with
-      | Some id -> pure (ok_tag_ids mode [ id ])
+      match first_entity existing with
+      | Some entity ->
+          tag_result_with_schema_properties mode invoke_config repo entity
+            ~add_properties ~remove_properties
       | None ->
           bind (create_tag_page invoke_config repo name) (fun _ ->
               bind (pull_tag_by_name invoke_config repo name tag_selector)
                 (fun page ->
                   match first_entity page with
-                  | Some entity -> pure (result_of_tag_entity mode entity)
+                  | Some entity ->
+                      tag_result_with_schema_properties mode invoke_config repo
+                        entity ~add_properties ~remove_properties
                   | None -> pure (tag_not_found mode))))
 
-let execute_update_tag mode invoke_config repo id name =
+let execute_update_tag mode invoke_config repo id name ~add_properties
+    ~remove_properties =
   let open Cli_effect in
   bind (pull_entity_by_id invoke_config repo tag_selector id) (fun entity ->
       match id_of_entity entity with
@@ -1897,11 +2054,14 @@ let execute_update_tag mode invoke_config repo id name =
           pure
             (Cli_result.error ~command:Command_id.Upsert_tag mode
                (upsert_id_type_mismatch "Tag" id))
-      | Some id -> (
+      | Some _ -> (
           match name with
-          | None -> pure (ok_tag_ids mode [ id ])
+          | None ->
+              tag_result_with_schema_properties mode invoke_config repo entity
+                ~add_properties ~remove_properties
           | Some target_name when same_tag_name entity target_name ->
-              pure (ok_tag_ids mode [ id ])
+              tag_result_with_schema_properties mode invoke_config repo entity
+                ~add_properties ~remove_properties
           | Some target_name ->
               bind
                 (pull_tag_by_name invoke_config repo target_name tag_selector)
@@ -1924,7 +2084,10 @@ let execute_update_tag mode invoke_config repo id name =
                                   "tag uuid not found"))
                       | Some uuid ->
                           bind (rename_page invoke_config repo uuid target_name)
-                            (fun _ -> pure (ok_tag_ids mode [ id ]))))))
+                            (fun _ ->
+                              tag_result_with_schema_properties mode
+                                invoke_config repo entity ~add_properties
+                                ~remove_properties)))))
 
 let execute_create_property mode invoke_config repo name schema =
   let open Cli_effect in
@@ -2599,18 +2762,39 @@ let execute action config mode =
       map
         (Cli_result.with_command Command_id.Upsert_block)
         (Update.execute (update_action_of_block_update action) config mode)
-  | Upsert_tag { repo; mode = Create; name = Some name; _ } ->
+  | Upsert_tag
+      {
+        repo;
+        mode = Create;
+        name = Some name;
+        add_properties;
+        remove_properties;
+        _;
+      } ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
         (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_tag mode err)
-        | Ok invoke_config -> execute_create_tag mode invoke_config repo name)
-  | Upsert_tag { repo; mode = Update; id = Some id; name; _ } ->
+        | Ok invoke_config ->
+            execute_create_tag mode invoke_config repo name ~add_properties
+              ~remove_properties)
+  | Upsert_tag
+      {
+        repo;
+        mode = Update;
+        id = Some id;
+        name;
+        add_properties;
+        remove_properties;
+        _;
+      } ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
         (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_tag mode err)
-        | Ok invoke_config -> execute_update_tag mode invoke_config repo id name)
+        | Ok invoke_config ->
+            execute_update_tag mode invoke_config repo id name ~add_properties
+              ~remove_properties)
   | Upsert_tag _ ->
       pure
         (Cli_result.error ~command:Command_id.Upsert_tag mode
@@ -2806,6 +2990,8 @@ let metadata () =
         [
           "logseq upsert tag --graph my-graph --name project";
           "logseq upsert tag --graph my-graph --id 200 --name Project Renamed";
+          "logseq upsert tag --graph my-graph --name project --add-properties \
+           '[\"status\" \"owner\"]'";
         ]
       Upsert_tag "Upsert tag";
     meta
