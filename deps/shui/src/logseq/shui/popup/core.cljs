@@ -211,10 +211,7 @@
                    event
                    :else [0 0])]
     (let [target @*target
-          opened (some #(when (and (:open? %)
-                                   (same-popup-target? (:target %) target))
-                          %)
-                       @*popups)]
+          opened (some->> (get-popups) (filter #(= id (:id %))) (first))]
       (if opened
         (do
           (consume-toggle-event! event)
