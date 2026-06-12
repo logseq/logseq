@@ -83,13 +83,6 @@ html.is-mobile .ls-block-content-indent {
     @apply inline-flex items-center pr-0.5;
   }
 
-  &:has(> .icon-emoji-wrap),
-  &:has(> .icon-cp-container) {
-    display: inline-flex;
-    align-items: center;
-    vertical-align: baseline;
-  }
-
   .icon-emoji-wrap em-emoji,
   .icon-cp-container .ui__icon {
     display: inline-flex;
