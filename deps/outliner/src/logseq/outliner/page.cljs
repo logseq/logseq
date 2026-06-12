@@ -71,7 +71,7 @@
            seq
            vec))
 
-(defn build-page-retract-tx
+(defn ^:api build-page-retract-tx
   "Build cleanup tx-data for deleting a schema page.
    This is pure and can be reused by sync repair."
   [db page & [{:keys [include-page-retract? today-page?]
