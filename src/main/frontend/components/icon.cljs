@@ -17,6 +17,7 @@
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
+            [logseq.common.util :as common-util]
             [medley.core :as medley]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
@@ -244,6 +245,7 @@
   [m]
   (let [s (some->> (or (get-used-items) [])
                    (take 24)
+                   (common-util/distinct-by #(str (:type %) ":" (:id %)))
                    (filter #(not= m %))
                    (cons m))]
     (storage/set :ui/ls-icons-used s)))
@@ -344,6 +346,7 @@
 (hsx/defc color-picker
   [*color on-select!]
   (let [[color, set-color!] (hooks/use-state @*color)
+        [open? set-open!] (hooks/use-state false)
         *el (hooks/use-ref nil)
         content-fn (fn []
                      (let [colors ["#6e7b8b" "#5e69d2" "#00b5ed" "#00b55b"
@@ -353,7 +356,7 @@
                           (shui/button
                            {:on-click (fn [] (set-color! c)
                                         (some-> on-select! (apply [c]))
-                                        (shui/popup-hide!))
+                                        (set-open! false))
                             :size :sm :variant :outline
                             :class "it" :style {:background-color c}}
                            (if c "" (shui/tabler-icon "minus" {:class "scale-75 opacity-70"}))))]))]
@@ -366,17 +369,19 @@
        (reset! *color color))
      [color])
 
-    (shui/button {:size :sm
-                  :ref *el
-                  :class "color-picker"
-                  :on-pointer-down (fn [^js e]
-                                     (util/stop e)
-                                     (shui/popup-show! (.-target e) content-fn
-                                                       {:id :icons-color-picker
-                                                        :content-props {:side-offset 6}}))
-                  :variant :outline}
-                 [:strong {:style {:color (or color "inherit")}}
-                  (shui/tabler-icon "palette")])))
+    (shui/popover
+      {:open open?
+       :onOpenChange (fn [a] (set-open! a))}
+      (shui/popover-trigger
+        (shui/button {:size :sm
+                      :ref *el
+                      :class "color-picker"
+                      :variant :outline}
+          [:strong {:style {:color (or color "inherit")}}
+           (shui/tabler-icon "palette")]))
+      (shui/popover-content
+        {:id :icons-color-picker}
+        (content-fn)))))
 
 (hsx/defc ^:large-vars/cleanup-todo icon-search
   [{:keys [on-chosen del-btn? color-auto-chosen? icon-value] :as opts}]
