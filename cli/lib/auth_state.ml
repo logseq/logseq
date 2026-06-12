@@ -313,21 +313,16 @@ let raw_config_bool config keys ~default =
           String.lowercase_ascii (String.trim value) = "true"
       | _ -> default)
 
+let replace_char ~needle ~replacement value =
+  value |> String.split_on_char needle |> String.concat replacement
+
 let form_encode value =
-  let hex = "0123456789ABCDEF" in
-  let buffer = Buffer.create (String.length value) in
-  String.iter
-    (fun c ->
-      match c with
-      | 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '-' | '_' | '.' | '~' ->
-          Buffer.add_char buffer c
-      | _ ->
-          let code = Char.code c in
-          Buffer.add_char buffer '%';
-          Buffer.add_char buffer hex.[code lsr 4];
-          Buffer.add_char buffer hex.[code land 0x0f])
-    value;
-  Buffer.contents buffer
+  value |> Js.Global.encodeURIComponent
+  |> replace_char ~needle:'!' ~replacement:"%21"
+  |> replace_char ~needle:'\'' ~replacement:"%27"
+  |> replace_char ~needle:'(' ~replacement:"%28"
+  |> replace_char ~needle:')' ~replacement:"%29"
+  |> replace_char ~needle:'*' ~replacement:"%2A"
 
 let form_body fields =
   fields
@@ -503,34 +498,9 @@ let split_once c value =
       ( String.sub value 0 idx,
         String.sub value (idx + 1) (String.length value - idx - 1) )
 
-let hex_value = function
-  | '0' .. '9' as c -> Some (Char.code c - Char.code '0')
-  | 'a' .. 'f' as c -> Some (Char.code c - Char.code 'a' + 10)
-  | 'A' .. 'F' as c -> Some (Char.code c - Char.code 'A' + 10)
-  | _ -> None
-
 let url_decode value =
-  let buffer = Buffer.create (String.length value) in
-  let rec loop index =
-    if index >= String.length value then Buffer.contents buffer
-    else
-      match value.[index] with
-      | '+' ->
-          Buffer.add_char buffer ' ';
-          loop (index + 1)
-      | '%' when index + 2 < String.length value -> (
-          match (hex_value value.[index + 1], hex_value value.[index + 2]) with
-          | Some hi, Some lo ->
-              Buffer.add_char buffer (Char.chr ((hi lsl 4) lor lo));
-              loop (index + 3)
-          | _ ->
-              Buffer.add_char buffer value.[index];
-              loop (index + 1))
-      | c ->
-          Buffer.add_char buffer c;
-          loop (index + 1)
-  in
-  loop 0
+  try value |> replace_char ~needle:'+' ~replacement:" " |> Js.Global.decodeURIComponent
+  with _ -> value
 
 let query_params query =
   query |> String.split_on_char '&'

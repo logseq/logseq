@@ -53,9 +53,12 @@ let as_float = function
   | Melange_edn.Any (Melange_edn.Float value) -> Some value
   | _ -> None
 
-let as_string = function
+let raw_string = function
   | Melange_edn.Any (Melange_edn.String value) -> Some value
   | _ -> None
+
+let as_string value =
+  Option.map (fun value -> Ustring.(of_string value |> to_string)) (raw_string value)
 
 let as_symbol = function
   | Melange_edn.Any (Melange_edn.Symbol value) -> Some value
@@ -76,7 +79,7 @@ let as_uuid = function
 
 let as_bytes = function
   | Melange_edn.Any (Melange_edn.Tagged ("transit/bytes", value)) ->
-      Option.map Bytes.of_string (as_string value)
+      Option.map Bytes.of_string (raw_string value)
   | _ -> None
 
 let as_list = function

@@ -358,7 +358,8 @@ let connect_events config on_event =
        ~on_chunk:(consume_sse_chunk on_event buffer))
 
 let normalize_format format = Edn_util.keyword_to_string format |> String.trim
-let write_file_text path content = Cli_unix.write_text_file path content
+let write_file_text path content =
+  Cli_unix.write_text_file path Ustring.(of_string content |> to_string)
 let read_file_text path = Cli_unix.read_text_file path
 let write_file_binary path content = Cli_unix.write_binary_file path content
 let read_file_binary path = Bytes.of_string (Cli_unix.read_binary_file path)
