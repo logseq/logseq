@@ -138,6 +138,8 @@ let default_entries =
       [
         "logseq upsert tag --graph my-graph --name project";
         "logseq upsert tag --graph my-graph --id 200 --name Project Renamed";
+        "logseq upsert tag --graph my-graph --name project --add-properties \
+         '[\"status\" \"owner\"]'";
       ];
     entry [ "upsert"; "property" ]
       [
