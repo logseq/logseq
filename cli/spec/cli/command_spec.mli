@@ -14,8 +14,6 @@ module type S = sig
     parsed ->
     action Error.build_result
 
-  val execute :
-    action -> Cli_config.t -> Cli_result.t Cli_effect.t
-
+  val execute : action -> Cli_config.t -> Cli_result.t Cli_effect.t
   val metadata : unit -> Command_registry.command_meta list
 end
