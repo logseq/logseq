@@ -1137,8 +1137,10 @@ let file_sha256 path =
     let payload_buffer =
       Node.Buffer.fromStringWithEncoding payload ~encoding:`latin1
     in
-    Some (Node_crypto.digest (Node_crypto.update_buffer hash payload_buffer) "hex")
+    Some
+      (Node_crypto.digest (Node_crypto.update_buffer hash payload_buffer) "hex")
   with _ -> None
+
 let file_size path = (Cli_unix.stat path).Cli_unix.st_size
 
 let file_extension path =
@@ -1499,7 +1501,8 @@ let resolved_schema_property_ident_from_query key result =
 let resolve_property_ident invoke_config repo key =
   let open Cli_effect in
   match key with
-  | Property.Key_ident ident when qualified_property_ident ident -> pure (Ok ident)
+  | Property.Key_ident ident when qualified_property_ident ident ->
+      pure (Ok ident)
   | Property.Key_ident ident ->
       bind
         (pull_entity_by_lookup invoke_config repo
@@ -1523,11 +1526,9 @@ let resolve_property_ident invoke_config repo key =
         (fun result ->
           match ident_of_entity result with
           | Some ident -> pure (Ok ident)
-          | None ->
-              pure (Error (property_not_found_error key)))
+          | None -> pure (Error (property_not_found_error key)))
   | Key_name name ->
-      bind
-        (pull_property_by_name invoke_config repo name property_selector)
+      bind (pull_property_by_name invoke_config repo name property_selector)
         (fun result ->
           match resolved_property_ident_from_query key result with
           | Ok ident -> pure (Ok ident)
@@ -1684,7 +1685,8 @@ let rec resolve_property_assignments invoke_config repo = function
                   bind (resolve_property_assignments invoke_config repo rest)
                     (function
                     | Error err -> pure (Error err)
-                    | Ok assignments -> pure (Ok ((ident, value) :: assignments)))))
+                    | Ok assignments ->
+                        pure (Ok ((ident, value) :: assignments)))))
 
 let option_resolution_error option err =
   {
@@ -1713,7 +1715,7 @@ let inline_property_assignments block =
   | Some fields ->
       let rec loop acc = function
         | [] -> Ok (List.rev acc)
-        | (key, value) :: rest ->
+        | (key, value) :: rest -> (
             if structural_block_field key then loop acc rest
             else
               match Property.parse_key key with
@@ -1722,7 +1724,7 @@ let inline_property_assignments block =
                   Error
                     (Error.invalid_options
                        ("invalid block property key: "
-                       ^ Melange_edn.to_edn_string key))
+                       ^ Melange_edn.to_edn_string key)))
       in
       loop [] fields
 
@@ -1888,8 +1890,7 @@ let resolve_update_plan invoke_config repo plan =
                    plan.update_properties) (function
                 | Error err ->
                     pure
-                      (Error
-                         (option_resolution_error "--update-properties" err))
+                      (Error (option_resolution_error "--update-properties" err))
                 | Ok update_properties ->
                     bind
                       (resolve_property_keys invoke_config repo
@@ -2666,8 +2667,7 @@ let execute_task_create mode config invoke_config repo target_page content
 
 let execute_create_block mode (action : block_create) config =
   let open Cli_effect in
-  bind
-    (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
+  bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
     (function
     | Error err ->
         pure (Cli_result.error ~command:Command_id.Upsert_block mode err)
@@ -2684,8 +2684,7 @@ let execute_create_block mode (action : block_create) config =
                 else
                   map
                     (function
-                      | Ok plan -> Ok (Some plan)
-                      | Error err -> Error err)
+                      | Ok plan -> Ok (Some plan) | Error err -> Error err)
                     (resolve_update_plan invoke_config action.repo
                        action.update_plan)
               in
@@ -2749,8 +2748,8 @@ let execute_create_block mode (action : block_create) config =
                                                       (Cli_result.error
                                                          ~command:
                                                            Command_id
-                                                           .Upsert_block
-                                                         mode err)
+                                                           .Upsert_block mode
+                                                         err)
                                                 | Ok _ -> pure result)))))))))
 
 let execute_with_mode action config mode =

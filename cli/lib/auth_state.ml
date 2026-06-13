@@ -499,7 +499,10 @@ let split_once c value =
         String.sub value (idx + 1) (String.length value - idx - 1) )
 
 let url_decode value =
-  try value |> replace_char ~needle:'+' ~replacement:" " |> Js.Global.decodeURIComponent
+  try
+    value
+    |> replace_char ~needle:'+' ~replacement:" "
+    |> Js.Global.decodeURIComponent
   with _ -> value
 
 let query_params query =

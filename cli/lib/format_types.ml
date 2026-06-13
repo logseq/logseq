@@ -73,13 +73,12 @@ let rec redact_sensitive_value value =
   | Some fields ->
       fields
       |> List.map (fun (key, value) ->
-             let value =
-               match Edn_util.as_string_like key with
-               | Some key when sensitive_field key ->
-                   Edn_util.string "[REDACTED]"
-               | _ -> redact_sensitive_value value
-             in
-             (key, value))
+          let value =
+            match Edn_util.as_string_like key with
+            | Some key when sensitive_field key -> Edn_util.string "[REDACTED]"
+            | _ -> redact_sensitive_value value
+          in
+          (key, value))
       |> Edn_util.map
   | None -> (
       match Edn_util.as_seq value with
@@ -153,7 +152,8 @@ let error_to_value ?(edn = false) (error : Error.t) =
             @ List.filter
                 (fun (key, _) ->
                   match Edn_util.as_string_like key with
-                  | Some key -> not (List.mem (strip_leading_colon key) reserved)
+                  | Some key ->
+                      not (List.mem (strip_leading_colon key) reserved)
                   | None -> true)
                 context_fields
         | None -> fields @ [ (Edn_util.keyword "context", context) ])
@@ -442,15 +442,15 @@ let format_result result config =
   | Some Command_id.Skill_show, Some (Cli_result.Message message) -> message
   | _ -> (
       match config.Cli_config.output_format with
-  | Some (Output.Mode.Packed Output.Mode.Json) -> to_json result
-  | Some (Output.Mode.Packed Output.Mode.Edn) -> to_edn result
-  | Some (Output.Mode.Packed Output.Mode.Human) | None -> (
-      match result.Cli_result.status with
-      | Ok -> to_human result config
-      | Error -> (
-          match result.error with
-          | Some err -> format_error err result.command
-          | None -> "")))
+      | Some (Output.Mode.Packed Output.Mode.Json) -> to_json result
+      | Some (Output.Mode.Packed Output.Mode.Edn) -> to_edn result
+      | Some (Output.Mode.Packed Output.Mode.Human) | None -> (
+          match result.Cli_result.status with
+          | Ok -> to_human result config
+          | Error -> (
+              match result.error with
+              | Some err -> format_error err result.command
+              | None -> "")))
 
 let format_counted_table ~headers ~rows =
   render_human
