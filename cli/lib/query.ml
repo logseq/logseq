@@ -489,7 +489,7 @@ let query_entry_value (entry : query_entry) =
       (Edn_util.keyword "query", entry.query);
     ]
 
-let execute action config mode =
+let execute_with_mode action config mode =
   let open Cli_effect in
   match action with
   | List ->
@@ -551,3 +551,7 @@ let metadata () =
         ]
       Query_list "List available queries";
   ]
+
+let execute action config =
+  let (Output.Mode.Packed mode) = Output_mode.for_config config in
+  execute_with_mode action config mode

@@ -1399,7 +1399,13 @@ let show_task_tree config repo graph block =
           level = Some 100;
         }
       in
-      bind (Show.execute action config Output.Mode.Human) (fun result ->
+      let config =
+        {
+          config with
+          Cli_config.output_format = Some (Output.Mode.Packed Output.Mode.Human);
+        }
+      in
+      bind (Show.execute action config) (fun result ->
           match
             Option.bind (Cli_result.data_value result) Edn_util.as_string
           with
@@ -2072,7 +2078,7 @@ let execute_bridge_forever repo (graph : Cli_primitive.graph) agent_name config
           in
           wait_forever ())
 
-let execute (Agent_bridge { repo; graph }) config mode =
+let execute_with_mode (Agent_bridge { repo; graph }) config mode =
   let open Cli_effect in
   match resolve_agent_name config None with
   | Error err ->
@@ -2105,3 +2111,7 @@ let metadata () =
       write_command = Command_id.is_write Command_id.Agent_bridge;
     };
   ]
+
+let execute action config =
+  let (Output.Mode.Packed mode) = Output_mode.for_config config in
+  execute_with_mode action config mode
