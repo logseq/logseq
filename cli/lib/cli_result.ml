@@ -10,13 +10,13 @@ type ok_data =
 
 type error_data = Error.t
 
-type 'o t = {
+type t = {
   status : status;
   data : ok_data option;
   error : error_data option;
   command : Command_id.t option;
   context : Melange_edn.any option;
-  output : 'o Output.t;
+  output : 'o. 'o Output.Mode.t -> 'o Output.t;
   exit_code : int option;
 }
 
@@ -375,54 +375,34 @@ let output_for_data : type a.
   | Output.Mode.Edn -> Output.Edn (data_value data)
 
 let ok ?command ?context mode data =
+  let (_ : _ Output.Mode.t) = mode in
   {
     status = Ok;
     data = Some data;
     error = None;
     command;
     context;
-    output = output_for_data command mode data;
+    output = (fun mode -> output_for_data command mode data);
     exit_code = None;
   }
 
-let error : type a.
-    ?command:Command_id.t ->
-    ?context:Melange_edn.any ->
-    a Output.Mode.t ->
-    Error.t ->
-    a t =
- fun ?command ?context mode error ->
-  match mode with
+let error ?command ?context mode error =
+  let (_ : _ Output.Mode.t) = mode in
+  let output : type a. a Output.Mode.t -> a Output.t = function
   | Output.Mode.Human ->
-      {
-        status = Error;
-        data = None;
-        error = Some error;
-        command;
-        context;
-        output = Output.Human (human_message error.Error.message);
-        exit_code = Some 1;
-      }
-  | Output.Mode.Json ->
-      {
-        status = Error;
-        data = None;
-        error = Some error;
-        command;
-        context;
-        output = Output.Json Edn_util.nil;
-        exit_code = Some 1;
-      }
-  | Output.Mode.Edn ->
-      {
-        status = Error;
-        data = None;
-        error = Some error;
-        command;
-        context;
-        output = Output.Edn Edn_util.nil;
-        exit_code = Some 1;
-      }
+      Output.Human (human_message error.Error.message)
+  | Output.Mode.Json -> Output.Json Edn_util.nil
+  | Output.Mode.Edn -> Output.Edn Edn_util.nil
+  in
+  {
+    status = Error;
+    data = None;
+    error = Some error;
+    command;
+    context;
+    output;
+    exit_code = Some 1;
+  }
 
 let is_error t = t.status = Error
 
