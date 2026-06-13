@@ -9,14 +9,14 @@ let cli_argv () =
 let cli_env () =
   Cli_unix.environment () |> Array.to_list
   |> List.filter_map (fun item ->
-         match String.index_opt item '=' with
-         | None -> None
-         | Some index ->
-             let key = String.sub item 0 index in
-             let value =
-               String.sub item (index + 1) (String.length item - index - 1)
-             in
-             Some (key, value))
+      match String.index_opt item '=' with
+      | None -> None
+      | Some index ->
+          let key = String.sub item 0 index in
+          let value =
+            String.sub item (index + 1) (String.length item - index - 1)
+          in
+          Some (key, value))
 
 let cli_input () =
   {
@@ -33,16 +33,13 @@ let run app input =
   match Cli.parse_args app raw with
   | Error err -> finalize_error err
   | Ok parsed -> (
-      Cli.resolve_config app parsed
-      >>= function
+      Cli.resolve_config app parsed >>= function
       | Error err -> finalize_error err
       | Ok resolved -> (
-          Cli.build_action app resolved
-          >>= function
+          Cli.build_action app resolved >>= function
           | Error err -> finalize_error err
           | Ok built -> (
-              Cli.execute_action app built
-              >>= function
+              Cli.execute_action app built >>= function
               | Error err -> finalize_error err
               | Ok executed -> Cli.final_effect executed)))
 

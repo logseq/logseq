@@ -1016,7 +1016,8 @@ let fetch_property_value_labels invoke_config repo ids =
   in
   pull [] ids
 
-let replace_uuid_refs_in_property_value_labels config repo property_value_labels =
+let replace_uuid_refs_in_property_value_labels config repo property_value_labels
+    =
   let label_uuids =
     property_value_labels |> List.map snd
     |> Uuid_refs_types.collect_uuid_refs_from_strings
@@ -1070,8 +1071,7 @@ let prepare_property_render_metadata config invoke_config action root
             (fun property_value_labels ->
               bind
                 (replace_uuid_refs_in_property_value_labels config action.repo
-                   property_value_labels)
-                (fun property_value_labels ->
+                   property_value_labels) (fun property_value_labels ->
                   pure { property_titles; property_value_labels })))
 
 let id_text value =
@@ -1083,8 +1083,7 @@ let rec tree_id_width value =
        (fun width child -> max width (tree_id_width child))
        (String.length (id_text value))
 
-let pad_id width id =
-  id ^ String.make (max 0 (width - String.length id)) ' '
+let pad_id width id = id ^ String.make (max 0 (width - String.length id)) ' '
 
 let rstrip_spaces value =
   let rec loop idx =
@@ -1215,8 +1214,8 @@ let render_tree_text_value ?(metadata = empty_render_metadata) root =
           prefix ^ if last_child then "    " else Cli_platform.Symbols.tree_pipe
         in
         lines :=
-          append_label_lines !lines ~id_width ~id:(id_text child) ~prefix ~branch
-            ~continuation_prefix:next_prefix (label_of child);
+          append_label_lines !lines ~id_width ~id:(id_text child) ~prefix
+            ~branch ~continuation_prefix:next_prefix (label_of child);
         lines :=
           append_property_lines !lines ~id_width ~prefix:next_prefix metadata
             child;
@@ -1503,8 +1502,8 @@ let execute_single mode action config target =
                                 (fun (value, linked_references, footer, _) ->
                                   let metadata =
                                     if human_output_for_mode mode then
-                                      prepare_property_render_metadata
-                                        config invoke_config action value
+                                      prepare_property_render_metadata config
+                                        invoke_config action value
                                         linked_references
                                     else pure empty_render_metadata
                                   in
@@ -1569,8 +1568,7 @@ let execute_with_mode action config mode =
                                                 then
                                                   prepare_property_render_metadata
                                                     config invoke_config action
-                                                    root
-                                                    linked_references
+                                                    root linked_references
                                                 else pure empty_render_metadata
                                               in
                                               bind metadata (fun metadata ->
