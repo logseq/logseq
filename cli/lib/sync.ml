@@ -473,9 +473,11 @@ let sync_upload_worker_error value =
     || code = Some "graph-already-exists"
     || message = "remote graph already exists; delete it before uploading again"
   then
-    Error.make ~context:value (Edn_util.keyword_t "graph-already-exists")
+    Error.make ~context:value
+      (Edn_util.keyword_t "graph-already-exists")
       message
-  else Error.make ~context:value (Edn_util.keyword_t "sync-upload-failed") message
+  else
+    Error.make ~context:value (Edn_util.keyword_t "sync-upload-failed") message
 
 let e2ee_password_worker_error value =
   worker_error ~code:"e2ee-password-failed"
@@ -854,15 +856,16 @@ let execute_upload mode config repo e2ee_password =
           in
           let ensure_upload_e2ee_password () =
             match e2ee_password with
-            | Some password when String.trim password <> "" ->
-                let options = ensure_keys_args ~upload_keys:true ~e2ee_password in
+            | Some password when String.trim password <> "" -> (
+                let options =
+                  ensure_keys_args ~upload_keys:true ~e2ee_password
+                in
                 Transport.thread_api_db_sync_ensure_user_rsa_keys ?options
                   upload_invoke_config
                 >>= fun result ->
-                (match tagged_error_value result with
+                match tagged_error_value result with
                 | Some value ->
-                    Cli_effect.pure
-                      (Error (e2ee_password_worker_error value))
+                    Cli_effect.pure (Error (e2ee_password_worker_error value))
                 | None ->
                     ensure_e2ee_password_available config upload_invoke_config
                       repo e2ee_password true)
@@ -956,13 +959,14 @@ let verify_e2ee_password_if_provided config invoke_config e2ee_password =
   | Some password when String.trim password <> "" -> (
       match refresh_token_required config with
       | Error err -> Cli_effect.pure (Error err)
-      | Ok refresh_token ->
+      | Ok refresh_token -> (
           Transport.thread_api_verify_and_save_e2ee_password invoke_config
             ~refresh_token ~password
           >>= fun result ->
           match tagged_error_value result with
-          | Some value -> Cli_effect.pure (Error (e2ee_password_worker_error value))
-          | None -> Cli_effect.pure (Ok ()))
+          | Some value ->
+              Cli_effect.pure (Error (e2ee_password_worker_error value))
+          | None -> Cli_effect.pure (Ok ())))
   | _ -> Cli_effect.pure (Ok ())
 
 let execute_ensure_keys mode config ~upload_keys ~e2ee_password =
@@ -974,7 +978,7 @@ let execute_ensure_keys mode config ~upload_keys ~e2ee_password =
   | Ok config -> (
       invoke_global_config config >>= function
       | Error err -> error err
-      | Ok invoke_config ->
+      | Ok invoke_config -> (
           prepare_worker_runtime invoke_config config >>= fun _ ->
           let options = ensure_keys_args ~upload_keys ~e2ee_password in
           let ensure_keys () =
@@ -1002,7 +1006,7 @@ let execute_ensure_keys mode config ~upload_keys ~e2ee_password =
             | Ok () -> (
                 ensure_keys () >>= function
                 | Error err -> error err
-                | Ok result -> ok result))
+                | Ok result -> ok result)))
 
 let ensure_empty_download_db invoke_config repo =
   Transport.thread_api_q invoke_config ~repo
