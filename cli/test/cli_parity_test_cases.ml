@@ -173,6 +173,12 @@ let config ?graph ?repo ?output_format ?auth_path ?id_token ?access_token
     profile_session = None;
   }
 
+let config_with_output config mode =
+  { config with Cli_config.output_format = Some (Output.Mode.Packed mode) }
+
+let execute_with_output execute action config mode =
+  execute action (config_with_output config mode)
+
 let effect_result name task =
   let value = ref None in
   let error = ref None in
@@ -197,13 +203,25 @@ let effect_to_promise task =
         (fun value -> (resolve value [@u]))
         (fun exn -> (reject exn [@u])))
 
-let run_cli_lifecycle ?(env = []) argv =
-  effect_result
-    ("run cli " ^ String.concat " " argv)
-    (Cli.run (Cli.make_app ())
-       { Cli.argv; env; cwd = Sys.getcwd (); stdin = None })
+type lifecycle_output = {
+  stdout : string option;
+  stderr : string list;
+  exit_code : int;
+}
 
-let stdout_text name (output : Cli.run_output) = expect_some name output.stdout
+let run_cli_lifecycle ?(env = []) argv =
+  let result = spawn_cli ~env:(Array.of_list env) argv in
+  let stderr =
+    let stderr = string_trim_end result##stderr in
+    if stderr = "" then [] else Array.to_list (string_split stderr "\n")
+  in
+  {
+    stdout = Some result##stdout;
+    stderr;
+    exit_code = result_status result;
+  }
+
+let stdout_text name output = expect_some name output.stdout
 
 let invoke_args body =
   match Json_util.object_of_json_string body with
@@ -415,7 +433,7 @@ let () =
         write_file (Node.Path.join [| graph_path; "db.sqlite" |]) "test-data";
         let result =
           effect_result "graph remove slash"
-            (Graph.execute
+            (execute_with_output Graph.execute
                (Graph.Graph_remove { graph; repo })
                (config ~root_dir:root ()) Output.Mode.Human)
         in
@@ -447,7 +465,7 @@ let () =
         write_file (Node.Path.join [| graph_path; "db.sqlite" |]) "test-data";
         let result =
           effect_result "graph remove space"
-            (Graph.execute
+            (execute_with_output Graph.execute
                (Graph.Graph_remove { graph; repo })
                (config ~root_dir:root ()) Output.Mode.Human)
         in
@@ -888,14 +906,16 @@ let () =
                 (Auth_state.write_auth_file config (sample_auth ()))));
         let result =
           effect_result "logout existing"
-            (Auth_command.execute Auth_command.Logout config Output.Mode.Json)
+            (execute_with_output Auth_command.execute Auth_command.Logout config
+               Output.Mode.Json)
         in
         expect_bool "logout status" false (Cli_result.is_error result);
         expect_bool "deleted existing" true (deleted_flag result);
         expect_bool "auth file removed" false (Node.Fs.existsSync auth_path);
         let missing_result =
           effect_result "logout missing"
-            (Auth_command.execute Auth_command.Logout config Output.Mode.Json)
+            (execute_with_output Auth_command.execute Auth_command.Logout config
+               Output.Mode.Json)
         in
         expect_bool "missing logout status" false
           (Cli_result.is_error missing_result);
@@ -1775,7 +1795,7 @@ let () =
                         created_after = None;
                       }))
             in
-            List_command.execute action cfg Output.Mode.Human
+            execute_with_output List_command.execute action cfg Output.Mode.Human
           in
           let ids result =
             let data = expect_some "list data" (Cli_result.data_value result) in
@@ -1852,7 +1872,7 @@ let () =
           in
           let* result =
             effect_to_promise
-              (List_command.execute action cfg Output.Mode.Human)
+              (execute_with_output List_command.execute action cfg Output.Mode.Human)
           in
           let data =
             expect_some "property list data" (Cli_result.data_value result)
@@ -1915,7 +1935,7 @@ let () =
           in
           let* result =
             effect_to_promise
-              (List_command.execute action cfg Output.Mode.Human)
+              (execute_with_output List_command.execute action cfg Output.Mode.Human)
           in
           let data =
             expect_some "asset list data" (Cli_result.data_value result)
@@ -2011,7 +2031,7 @@ let () =
           in
           let repo = Cli_primitive.create_repo "demo" in
           let run scope command query =
-            Search.execute
+            execute_with_output Search.execute
               {
                 Search.scope;
                 command;
@@ -2101,7 +2121,7 @@ let () =
             }
           in
           let run scope command query =
-            Search.execute
+            execute_with_output Search.execute
               {
                 Search.scope;
                 command;
@@ -2161,7 +2181,7 @@ let () =
           in
           let* result =
             effect_to_promise
-              (Search.execute
+              (execute_with_output Search.execute
                  {
                    Search.scope = Search.Block;
                    command = Command_id.Search_block;
@@ -2292,7 +2312,7 @@ let () =
             }
           in
           let* result =
-            effect_to_promise (Remove.execute action cfg Output.Mode.Human)
+            effect_to_promise (execute_with_output Remove.execute action cfg Output.Mode.Human)
           in
           expect_bool "remove page target is error" true
             (Cli_result.is_error result);
@@ -2339,7 +2359,7 @@ let () =
             }
           in
           let* result =
-            effect_to_promise (Remove.execute action cfg Output.Mode.Human)
+            effect_to_promise (execute_with_output Remove.execute action cfg Output.Mode.Human)
           in
           expect_bool "remove block succeeds" false (Cli_result.is_error result);
           let body = expect_some "captured apply body" !captured_apply_body in
@@ -3338,7 +3358,7 @@ let () =
             }
           in
           let* result =
-            effect_to_promise (Sync.execute action cfg Output.Mode.Human)
+            effect_to_promise (execute_with_output Sync.execute action cfg Output.Mode.Human)
           in
           remove_tree root;
           expect_bool "asset download ok" false (Cli_result.is_error result);
@@ -3403,7 +3423,7 @@ let () =
             }
           in
           let* result =
-            effect_to_promise (Sync.execute action cfg Output.Mode.Human)
+            effect_to_promise (execute_with_output Sync.execute action cfg Output.Mode.Human)
           in
           remove_tree root;
           expect_bool "asset download error" true (Cli_result.is_error result);
@@ -3464,7 +3484,7 @@ let () =
               }
             in
             let* result =
-              effect_to_promise (Sync.execute action cfg Output.Mode.Human)
+              effect_to_promise (execute_with_output Sync.execute action cfg Output.Mode.Human)
             in
             remove_tree root;
             expect_bool (label ^ " error") true (Cli_result.is_error result);
@@ -3784,7 +3804,7 @@ let () =
       with_server server (fun base_url ->
           let cfg = { cfg with Cli_config.base_url = Some base_url } in
           let* result =
-            effect_to_promise (Query.execute action cfg Output.Mode.Human)
+            effect_to_promise (execute_with_output Query.execute action cfg Output.Mode.Human)
           in
           expect_bool "query execute ok" false (Cli_result.is_error result);
           let body = expect_some "query request body" !captured_body in
@@ -4327,7 +4347,7 @@ let () =
               }
             in
             let* result =
-              effect_to_promise (Graph.execute action cfg Output.Mode.Human)
+              effect_to_promise (execute_with_output Graph.execute action cfg Output.Mode.Human)
             in
             assert_result result;
             Js.Promise.resolve pass)
@@ -4384,7 +4404,7 @@ let () =
             }
           in
           let* result =
-            effect_to_promise (Graph.execute action cfg Output.Mode.Edn)
+            effect_to_promise (execute_with_output Graph.execute action cfg Output.Mode.Edn)
           in
           expect_bool "graph info ok" false (Cli_result.is_error result);
           expect_bool "q called" true !q_called;
@@ -4507,7 +4527,7 @@ let () =
             }
           in
           let* result =
-            effect_to_promise (Graph.execute action cfg Output.Mode.Edn)
+            effect_to_promise (execute_with_output Graph.execute action cfg Output.Mode.Edn)
           in
           let backup_dir =
             Node.Path.join [| root; "graphs"; "demo"; "backup"; backup_name |]
@@ -4580,7 +4600,7 @@ let () =
                 }
               in
               Cli_effect.on_any
-                (Graph.execute action cfg Output.Mode.Human)
+                (execute_with_output Graph.execute action cfg Output.Mode.Human)
                 (fun result ->
                   if not (Cli_result.is_error result) then
                     close_and_fail "expected backup create error result"
@@ -4637,7 +4657,7 @@ let () =
           in
           let* list_result =
             effect_to_promise
-              (Graph.execute
+              (execute_with_output Graph.execute
                  (Graph.Graph_backup_list { graph; repo })
                  cfg Output.Mode.Edn)
           in
@@ -4654,7 +4674,7 @@ let () =
                (Edn_util.get_string (List.hd backups) "name"));
           let* missing_restore =
             effect_to_promise
-              (Graph.execute
+              (execute_with_output Graph.execute
                  (Graph.Graph_backup_restore
                     {
                       source_repo = repo;
@@ -4675,7 +4695,7 @@ let () =
           | None -> fail_test "expected missing restore error");
           let* restore_result =
             effect_to_promise
-              (Graph.execute
+              (execute_with_output Graph.execute
                  (Graph.Graph_backup_restore
                     {
                       source_repo = repo;
@@ -4695,7 +4715,7 @@ let () =
                !calls);
           let* missing_remove =
             effect_to_promise
-              (Graph.execute
+              (execute_with_output Graph.execute
                  (Graph.Graph_backup_remove
                     { graph; repo; src = "missing-nightly" })
                  cfg Output.Mode.Human)
@@ -4704,7 +4724,7 @@ let () =
             (Cli_result.is_error missing_remove);
           let* remove_result =
             effect_to_promise
-              (Graph.execute
+              (execute_with_output Graph.execute
                  (Graph.Graph_backup_remove
                     { graph; repo; src = "demo-nightly" })
                  cfg Output.Mode.Human)
@@ -4779,7 +4799,7 @@ let () =
           in
           let* edn_result =
             effect_to_promise
-              (Graph.execute
+              (execute_with_output Graph.execute
                  (Graph.Graph_export { graph; repo; opts = edn_opts })
                  cfg Output.Mode.Edn)
           in
@@ -4790,7 +4810,7 @@ let () =
             (read_file edn_export) "\n";
           let* sqlite_result =
             effect_to_promise
-              (Graph.execute
+              (execute_with_output Graph.execute
                  (Graph.Graph_export { graph; repo; opts = sqlite_opts })
                  cfg Output.Mode.Human)
           in
@@ -4803,7 +4823,7 @@ let () =
             (Js.String.endsWith ~suffix:".sqlite" sqlite_path);
           let* import_edn_result =
             effect_to_promise
-              (Graph.execute
+              (execute_with_output Graph.execute
                  (Graph.Graph_import
                     {
                       graph;
@@ -4821,7 +4841,7 @@ let () =
             (Cli_result.is_error import_edn_result);
           let* import_sqlite_result =
             effect_to_promise
-              (Graph.execute
+              (execute_with_output Graph.execute
                  (Graph.Graph_import
                     {
                       graph;
@@ -4890,6 +4910,16 @@ let () =
       expect_named_contains "version build time" stdout "Build time: ";
       expect_named_contains "version revision" stdout "Revision: ";
       expect_bool "profile disabled" true (output.stderr = []));
+
+  test "CLI parity version action output includes build metadata" (fun () ->
+      let result =
+        effect_result "version action"
+          (execute_with_output Cli_action.execute Cli_action.Version (config ())
+             Output.Mode.Human)
+      in
+      let output = Format_types.format_result result (config ()) in
+      expect_named_contains "version action build time" output "Build time: ";
+      expect_named_contains "version action revision" output "Revision: ");
 
   test "CLI parity main structured help respects output modes" (fun () ->
       let json_output = run_cli_lifecycle [ "--output"; "json"; "--help" ] in
@@ -5040,7 +5070,7 @@ let () =
 
   test "CLI parity completion generation includes top nested and value cases"
     (fun () ->
-      let registry = (Cli.make_app ()).Cli.registry in
+      let registry = (Cli.make_app_context ()).Cli.registry in
       let zsh = Completion.generate Cli_primitive.Zsh registry in
       expect_named_contains "zsh header" zsh "#compdef logseq";
       expect_named_contains "zsh graph group" zsh "_logseq_graph()";
@@ -5059,7 +5089,7 @@ let () =
 
   test "CLI parity completion generation keeps current dynamic helper surface"
     (fun () ->
-      let registry = (Cli.make_app ()).Cli.registry in
+      let registry = (Cli.make_app_context ()).Cli.registry in
       let zsh = Completion.generate Cli_primitive.Zsh registry in
       expect_named_contains "zsh graph helper" zsh "_logseq_graphs";
       expect_named_not_contains "zsh page helper removed" zsh "_logseq_pages";
@@ -5078,7 +5108,7 @@ let () =
 
   test "CLI parity zsh completion keeps current global option contracts"
     (fun () ->
-      let registry = (Cli.make_app ()).Cli.registry in
+      let registry = (Cli.make_app_context ()).Cli.registry in
       let zsh = Completion.generate Cli_primitive.Zsh registry in
       expect_named_contains "zsh top dispatcher" zsh "_logseq()";
       expect_named_contains "zsh graph helper" zsh "_logseq_graphs";
@@ -5099,7 +5129,7 @@ let () =
 
   test "CLI parity bash completion keeps current global option contracts"
     (fun () ->
-      let registry = (Cli.make_app ()).Cli.registry in
+      let registry = (Cli.make_app_context ()).Cli.registry in
       let bash = Completion.generate Cli_primitive.Bash registry in
       expect_named_contains "bash global opts helper" bash "_logseq_opts_for";
       expect_named_contains "bash global options" bash
@@ -5120,7 +5150,7 @@ let () =
 
   test "CLI parity command registry fills catalog options for known paths"
     (fun () ->
-      let registry = (Cli.make_app ()).Cli.registry in
+      let registry = (Cli.make_app_context ()).Cli.registry in
       let has_name name (option : Command_registry.option_meta) =
         List.mem name option.names
       in
@@ -5292,7 +5322,7 @@ let () =
 
   test "CLI parity command registry help renders command and option details"
     (fun () ->
-      let registry = (Cli.make_app ()).Cli.registry in
+      let registry = (Cli.make_app_context ()).Cli.registry in
       let top_help = Command_registry.render_help registry in
       expect_named_contains "top commands heading" top_help
         "Available commands:";
@@ -5368,7 +5398,7 @@ let () =
         write_file neighbor "keep me";
         let show =
           effect_result "skill show"
-            (Skill.execute
+            (execute_with_output Skill.execute
                (Skill.Skill_show { source_path = Some source })
                (config ~root_dir:root ()) Output.Mode.Human)
         in
@@ -5376,7 +5406,7 @@ let () =
           (Format_types.format_result show (config ~root_dir:root ()));
         let install =
           effect_result "skill install"
-            (Skill.execute
+            (execute_with_output Skill.execute
                (Skill.Skill_install
                   {
                     global = false;

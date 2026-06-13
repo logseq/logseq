@@ -46,7 +46,7 @@ let logout_value (result : Auth_state.logout_result) =
         Edn_util.bool result.logout_completed );
     ]
 
-let execute action config mode =
+let execute_with_mode action config mode =
   match action with
   | Login -> (
       Auth_state.login config >>= function
@@ -82,3 +82,7 @@ let meta id doc =
   }
 
 let metadata () = [ meta Command_id.Login "Login"; meta Logout "Logout" ]
+
+let execute action config =
+  let (Output.Mode.Packed mode) = Output_mode.for_config config in
+  execute_with_mode action config mode

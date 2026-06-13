@@ -1,32 +1,4 @@
-open Cli_effect.Infix
-
-type request = Cli_request.t
-type config = Cli_config.t
-type action = Cli_action.t
-type result = Result : 'o Cli_result.t -> result
-
-type phase =
-  | Raw_argv
-  | Parse_argv
-  | Resolve_config
-  | Build_action
-  | Execute_action
-  | Format_result
-  | Print_output
-  | Exit
-
-type lifecycle = {
-  argv : string list;
-  request : request option;
-  config : config option;
-  action : action option;
-  result : result option;
-  output : string option;
-  exit_code : int option;
-  current_phase : phase;
-}
-
-type app = {
+type app_context = {
   registry : Command_registry.t;
   defaults : Cli_config.defaults;
 }
@@ -36,14 +8,6 @@ type run_input = {
   env : (string * string) list;
   cwd : Cli_primitive.path;
   stdin : string option;
-}
-
-type run_output = {
-  result : result;
-  stdout : string option;
-  stderr : string list;
-  exit_code : int;
-  lifecycle : lifecycle;
 }
 
 let command_metadata () =
@@ -58,20 +22,7 @@ let command_registry () = Command_registry.make (command_metadata ())
 let make_app ?version:_ () =
   { registry = command_registry (); defaults = Cli_config.defaults () }
 
-let build_time : string =
-  [%mel.raw
-    {|
-typeof LOGSEQ_CLI_BUILD_TIME !== "undefined" ? LOGSEQ_CLI_BUILD_TIME : "unknown"
-|}]
-
-let revision : string =
-  [%mel.raw
-    {|
-typeof LOGSEQ_CLI_REVISION !== "undefined" ? LOGSEQ_CLI_REVISION : "dev"
-|}]
-
-let version_output () =
-  "Build time: " ^ build_time ^ "\nRevision: " ^ revision
+let make_app_context = make_app
 
 let env_lookup env key = List.assoc_opt key env
 let is_option token = String.length token > 0 && token.[0] = '-'
@@ -143,54 +94,190 @@ let parse_tokens argv =
   in
   loop [] [] argv
 
-let globals_of_options options =
-  Global_opts.create
-    ?graph:
-      (Option.map Cli_primitive.create_graph (option_value "graph" options))
-    ?root_dir:(option_value "root-dir" options)
-    ?config_path:(option_value "config" options)
-    ?timeout_span:
-      (Option.map Time.span_of_ms
-         (Option.bind (option_value "timeout-ms" options) Int64.of_string_opt))
-    ?output_format:
-      (Option.bind (option_value "output" options) Output_mode.of_string)
-    ~verbose:(option_present "verbose" options)
-    ~profile:(option_present "profile" options)
-    ()
+let stdin_required_for_show_id argv =
+  let options, positional = parse_tokens argv in
+  positional = [ "show" ]
+  && option_present "id" options
+  && Option.is_none (option_value "id" options)
 
-let parse_request _ input =
-  Cli_effect.pure (Cli_parse.parse ?stdin:input.stdin input.argv)
+let read_stdin_all () = Cli_unix.read_stdin_all ()
 
-let resolve_config app request input =
+let output_mode_of_options options =
+  Option.bind (option_value "output" options) Output_mode.of_string
+  |> Option.value ~default:Output_mode.default
+
+let output_mode_of_globals globals =
+  Option.value globals.Global_opts.output_format ~default:Output_mode.default
+
+let output_mode_of_config config = Output_mode.for_config config
+
+let result_text_for_mode result (Output.Mode.Packed mode) =
+  match mode with
+  | Output.Mode.Human -> (
+      match result.Cli_result.status with
+      | Ok -> (
+          match result.data with
+          | Some (Cli_result.Message message) -> message
+          | _ -> "")
+      | Error -> (
+          match result.error with
+          | Some err -> Format_types.format_error err result.command
+          | None -> ""))
+  | Output.Mode.Json -> Format_types.to_json result
+  | Output.Mode.Edn -> Format_types.to_edn result
+
+type pending_output = {
+  stdout : string;
+  stderr : string list;
+  exit_code : int;
+}
+
+let pending_output : pending_output option ref = ref None
+
+let set_pending_output ?(stderr = []) ~exit_code stdout =
+  pending_output := Some { stdout; stderr; exit_code }
+
+let take_pending_output () =
+  let output = !pending_output in
+  pending_output := None;
+  output
+
+let set_pending_error_output ?command mode err =
+  let (Output.Mode.Packed concrete_mode) = mode in
+  let result = Cli_result.error ?command concrete_mode err in
+  set_pending_output ~exit_code:1 (result_text_for_mode result mode)
+
+let set_pending_message_output ?command mode message =
+  let (Output.Mode.Packed concrete_mode) = mode in
+  let result =
+    Cli_result.ok ?command concrete_mode (Cli_result.Message message)
+  in
+  set_pending_output ~exit_code:0 (result_text_for_mode result mode)
+
+let is_prefix prefix path =
+  let rec loop prefix path =
+    match (prefix, path) with
+    | [], _ -> true
+    | p :: ps, x :: xs when p = x -> loop ps xs
+    | _ -> false
+  in
+  List.length prefix <= List.length path && loop prefix path
+
+let group_help_path registry path =
+  match path with
+  | [] -> true
+  | _ when Option.is_some (Command_registry.find_by_path path registry) -> false
+  | _ ->
+      List.exists
+        (fun command ->
+          is_prefix path command.Command_registry.path
+          && List.length command.Command_registry.path > List.length path)
+        registry.Command_registry.commands
+
+let help_group registry options positional =
+  if option_present "help" options then Some positional
+  else if group_help_path registry positional then Some positional
+  else None
+
+let profile_status exit_code =
+  Edn_util.keyword_t (if exit_code = 0 then "ok" else "error")
+
+let command_name = function
+  | Some command -> Command_id.to_string command
+  | None -> "unknown"
+
+let profile_lines config result exit_code =
+  match config.Cli_config.profile_session with
+  | None -> []
+  | Some session ->
+      Profile_types.report session
+        ~command:(command_name result.Cli_result.command)
+        ~status:(profile_status exit_code)
+      |> Profile_types.render_lines
+
+let verbose_line config result =
+  if not config.Cli_config.verbose then []
+  else
+    [
+      Melange_edn.to_edn_string
+        (Edn_util.map
+           [
+             (Edn_util.keyword "level", Edn_util.keyword "debug");
+             (Edn_util.keyword "message", Edn_util.keyword "cli/parsed-options");
+             ( Edn_util.keyword "command",
+               Edn_util.string (command_name result.Cli_result.command) );
+             (Edn_util.keyword "root-dir", Edn_util.string config.root_dir);
+           ]);
+    ]
+
+type raw_argv
+type parsed_argv
+type resolved_config
+type built_action
+type executed_action
+type error
+type final
+type not_final
+
+type ('phase, 'final) state =
+  | Raw_argv_state : run_input -> (raw_argv, not_final) state
+  | Parsed_argv_state :
+      (run_input * Cli_request.t)
+      -> (parsed_argv, not_final) state
+  | Resolved_config_state :
+      (Cli_config.t * Cli_request.t)
+      -> (resolved_config, not_final) state
+  | Built_action_state :
+      (Cli_config.t * Cli_action.t)
+      -> (built_action, not_final) state
+  | Executed_action_state :
+      (Cli_config.t * Cli_result.t)
+      -> (executed_action, final) state
+  | Error_state : Error.t -> (error, final) state
+
+let make_error_state err = Error_state err
+
+let make_raw_argv_state _ input = Raw_argv_state input
+
+let parse_request _ input = Cli_parse.parse ?stdin:input.stdin input.argv
+
+let parse_args :
+    type marker.
+    app_context ->
+    (raw_argv, marker) state ->
+    (parsed_argv, not_final) state Error.build_result =
+ fun app (Raw_argv_state input) ->
+  let input =
+    match input.stdin with
+    | Some _ -> input
+    | None when stdin_required_for_show_id input.argv ->
+        { input with stdin = Some (read_stdin_all ()) }
+    | None -> input
+  in
+  let options, positional = parse_tokens input.argv in
+  let mode = output_mode_of_options options in
+  let help =
+    if option_present "version" options then None
+    else help_group app.registry options positional
+  in
+  match help with
+  | Some group ->
+      Command_registry.render_help ~group app.registry
+      |> set_pending_message_output mode;
+      Error (Error.unknown_command "")
+  | None -> (
+      match parse_request app input with
+      | Ok request -> Ok (Parsed_argv_state (input, request))
+      | Error err ->
+          set_pending_error_output mode err;
+          Error err)
+
+let resolve_request_config app request input =
   Cli_config.resolve ~defaults:app.defaults ~env:(env_lookup input.env)
     request.Cli_request.globals
   |> Cli_effect.map
        (Error.map (fun r ->
             { r.Cli_config.config with project_dir = Some input.cwd }))
-
-let build_action app request config =
-  match request.Cli_request.command with
-  | Cli_request.Completion parsed ->
-      Cli_effect.pure
-        (Error.map
-           (fun action -> Cli_action.Completion action)
-           (Completion.build ~registry:app.registry config request.globals
-              parsed))
-  | _ -> Cli_action.build config request
-
-let execute_action _ action config =
-  let execute_with_packed (Output.Mode.Packed mode) =
-    Cli_effect.map
-      (fun result -> Result result)
-      (Cli_action.execute action config mode)
-  in
-  execute_with_packed
-    (Option.value config.Cli_config.output_format ~default:Output_mode.default)
-
-let format_result _ (Result result) config =
-  Format_types.format_result result config
-
-let result_exit_code (Result result) = Cli_result.exit_code result
 
 let ensure_root_config config =
   match Root_dir_types.ensure_root_dir (Some config.Cli_config.root_dir) with
@@ -221,369 +308,127 @@ let ensure_action_graph_constraints config action =
       Error (graph_exists_error graph)
   | _ -> Ok ()
 
-let profile_status output =
-  Edn_util.keyword_t (if output.exit_code = 0 then "ok" else "error")
-
-let profile_command = function
-  | Some request -> Command_id.to_string (Cli_request.command_id request)
-  | None -> "unknown"
-
-let with_profile_lines profile_session request output =
-  match profile_session with
-  | None -> output
-  | Some session ->
-      let report =
-        Profile_types.report session ~command:(profile_command request)
-          ~status:(profile_status output)
-      in
-      { output with stderr = output.stderr @ Profile_types.render_lines report }
-
-let verbose_parsed_options_line request (config : Cli_config.t) =
-  if not config.verbose then []
-  else
-    [
-      Melange_edn.to_edn_string
-        (Edn_util.map
-           [
-             (Edn_util.keyword "level", Edn_util.keyword "debug");
-             (Edn_util.keyword "message", Edn_util.keyword "cli/parsed-options");
-             ( Edn_util.keyword "command",
-               Edn_util.string
-                 (Command_id.to_string (Cli_request.command_id request)) );
-             (Edn_util.keyword "root-dir", Edn_util.string config.root_dir);
-           ]);
-    ]
-
-let with_verbose_line config request output =
-  {
-    output with
-    stderr = output.stderr @ verbose_parsed_options_line request config;
-  }
-
-let stdin_required_for_show_id argv =
-  let options, positional = parse_tokens argv in
-  positional = [ "show" ]
-  && option_present "id" options
-  && Option.is_none (option_value "id" options)
-
-let read_stdin_all () = Cli_unix.read_stdin_all ()
-
-let group_help_path registry path =
-  let is_prefix prefix path =
-    let rec loop prefix path =
-      match (prefix, path) with
-      | [], _ -> true
-      | p :: ps, x :: xs when p = x -> loop ps xs
-      | _ -> false
-    in
-    List.length prefix <= List.length path && loop prefix path
-  in
-  match path with
-  | [] -> true
-  | _ when Option.is_some (Command_registry.find_by_path path registry) -> false
-  | _ ->
-      List.exists
-        (fun command ->
-          is_prefix path command.Command_registry.path
-          && List.length command.Command_registry.path > List.length path)
-        registry.Command_registry.commands
-
-let help_group registry options positional =
-  if option_present "help" options then Some positional
-  else if group_help_path registry positional then Some positional
-  else None
-
-let run app input =
-  let options, _ = parse_tokens input.argv in
-  let profile_session =
-    Profile_types.create_session (option_present "profile" options)
-  in
-  let time stage f = Profile_types.time profile_session stage f in
-  let ( let* ) = ( >>= ) in
-  let finish ?config request output =
-    let output =
-      match (config, request) with
-      | Some config, Some request -> with_verbose_line config request output
-      | _ -> output
-    in
-    Cli_effect.pure (with_profile_lines profile_session request output)
-  in
-  let format_result_effect result config =
-    time "cli.format-result" (fun () ->
-        Cli_effect.pure (format_result app result config))
-  in
-  let requested_output_format () =
-    globals_of_options options |> fun globals ->
-    Option.value globals.Global_opts.output_format ~default:Output_mode.default
-  in
-  let result_output_text ?human_message = function
-    | Result result -> (
-        match result.Cli_result.output with
-        | Output.Human _ -> (
-            match (result.Cli_result.status, human_message, result.error) with
-            | Ok, Some message, _ -> message
-            | Error, _, Some err -> Format_types.format_error err result.command
-            | _ -> "")
-        | Output.Json _ -> Format_types.to_json result
-        | Output.Edn _ -> Format_types.to_edn result)
-  in
-  let message_result ?command output_format message =
-    let pack (Output.Mode.Packed mode) =
-      Result (Cli_result.ok ?command mode (Message message))
-    in
-    pack output_format
-  in
-  let error_result ?command output_format err =
-    let pack (Output.Mode.Packed mode) =
-      Result (Cli_result.error ?command mode err)
-    in
-    pack output_format
-  in
-  let finish_command_error config request err =
-    let packed_result =
-      let pack (Output.Mode.Packed mode) =
-        Result
-          (Cli_result.error ~command:(Cli_request.command_id request) mode err)
-      in
-      pack
-        (Option.value config.Cli_config.output_format
-           ~default:Output_mode.default)
-    in
-    let* output = format_result_effect packed_result config in
-    finish ~config (Some request)
-      {
-        result = packed_result;
-        stdout = Some (output ^ "\n");
-        stderr = [];
-        exit_code = 1;
-        lifecycle =
-          {
-            argv = input.argv;
-            request = Some request;
-            config = Some config;
-            action = None;
-            result = Some packed_result;
-            output = Some output;
-            exit_code = Some 1;
-            current_phase = Exit;
-          };
-      }
-  in
-  if option_present "version" options then
-    let* request =
-      time "cli.parse-args" (fun () ->
-          Cli_effect.pure
-            (Cli_request.make ~globals:(globals_of_options options) ~path:[]
-               ~command:Cli_request.Version ~raw_args:input.argv))
-    in
-    let version = version_output () in
-    let packed_result =
-      message_result ~command:Command_id.Version (requested_output_format ())
-        version
-    in
-    let output = result_output_text ~human_message:version packed_result in
-    finish (Some request)
-      {
-        result = packed_result;
-        stdout = Some (output ^ "\n");
-        stderr = [];
-        exit_code = 0;
-        lifecycle =
-          {
-            argv = input.argv;
-            request = Some request;
-            config = None;
-            action = None;
-            result = Some packed_result;
-            output = Some output;
-            exit_code = Some 0;
-            current_phase = Exit;
-          };
-      }
-  else
-    match help_group app.registry options (snd (parse_tokens input.argv)) with
-    | Some group ->
-        let help = Command_registry.render_help ~group app.registry in
-        let packed_result =
-          message_result (requested_output_format ()) help
-        in
-        let output = result_output_text ~human_message:help packed_result in
-        finish None
-          {
-            result = packed_result;
-            stdout = Some (output ^ "\n");
-            stderr = [];
-            exit_code = 0;
-            lifecycle =
-              {
-                argv = input.argv;
-                request = None;
-                config = None;
-                action = None;
-                result = Some packed_result;
-                output = Some output;
-                exit_code = Some 0;
-                current_phase = Exit;
-              };
-          }
-    | None -> (
-        let* parsed =
-          time "cli.parse-args" (fun () -> parse_request app input)
-        in
-        match parsed with
-        | Error err ->
-            let packed_result = error_result (requested_output_format ()) err in
-            let* output =
-              time "cli.format-result" (fun () ->
-                  Cli_effect.pure (result_output_text packed_result))
-            in
-            finish None
-              {
-                result = packed_result;
-                stdout = Some (output ^ "\n");
-                stderr = [];
-                exit_code = 1;
-                lifecycle =
-                  {
-                    argv = input.argv;
-                    request = None;
-                    config = None;
-                    action = None;
-                    result = Some packed_result;
-                    output = Some output;
-                    exit_code = Some 1;
-                    current_phase = Exit;
-                  };
-              }
-        | Ok request -> (
-            let* resolved =
-              time "cli.resolve-config" (fun () ->
-                  resolve_config app request input)
-            in
-            match resolved with
-            | Error err ->
-                let result = Cli_result.error Output.Mode.Human err in
-                let packed_result = Result result in
-                let* output =
-                  time "cli.format-result" (fun () ->
-                      Cli_effect.pure
-                        (Format_types.format_error err
-                           (Some (Cli_request.command_id request))))
-                in
-                finish (Some request)
-                  {
-                    result = packed_result;
-                    stdout = Some (output ^ "\n");
-                    stderr = [];
-                    exit_code = 1;
-                    lifecycle =
-                      {
-                        argv = input.argv;
-                        request = Some request;
-                        config = None;
-                        action = None;
-                        result = Some packed_result;
-                        output = Some output;
-                        exit_code = Some 1;
-                        current_phase = Exit;
-                      };
-                  }
-            | Ok config -> (
-                let config = { config with Cli_config.profile_session } in
-                let* ensured =
-                  time "cli.ensure-root-dir" (fun () ->
-                      Cli_effect.pure (ensure_root_config config))
-                in
-                match ensured with
-                | Error err -> finish_command_error config request err
-                | Ok config -> (
-                    let* built =
-                      time "cli.build-action" (fun () ->
-                          build_action app request config)
-                    in
-                    match built with
-                    | Error err -> finish_command_error config request err
-                    | Ok action -> (
-                        match ensure_action_graph_constraints config action with
-                        | Error err -> finish_command_error config request err
-                        | Ok () ->
-                            let* result =
-                              time "cli.execute-action" (fun () ->
-                                  execute_action app action config)
-                            in
-                            let* output = format_result_effect result config in
-                            let exit_code = result_exit_code result in
-                            finish ~config (Some request)
-                              {
-                                result;
-                                stdout =
-                                  (if output = "" then None
-                                   else Some (output ^ "\n"));
-                                stderr = [];
-                                exit_code;
-                                lifecycle =
-                                  {
-                                    argv = input.argv;
-                                    request = Some request;
-                                    config = Some config;
-                                    action = Some action;
-                                    result = Some result;
-                                    output = Some output;
-                                    exit_code = Some exit_code;
-                                    current_phase = Exit;
-                                  };
-                              })))))
-
-let main_effect ?argv ?env () =
-  let argv =
-    match argv with
-    | Some argv -> Array.to_list argv |> List.tl
-    | None -> Array.to_list Sys.argv |> List.tl
-  in
-  let env =
-    match env with
-    | Some lookup ->
-        [
-          "HOME";
-          "LOGSEQ_CLI_GRAPH";
-          "LOGSEQ_CLI_ROOT_DIR";
-          "LOGSEQ_CLI_CONFIG";
-          "LOGSEQ_CLI_TIMEOUT_MS";
-          "LOGSEQ_CLI_LOGIN_TIMEOUT_MS";
-          "LOGSEQ_CLI_LOGOUT_TIMEOUT_MS";
-          "LOGSEQ_CLI_OUTPUT";
-          "LOGSEQ_CLI_WS_URL";
-          "LOGSEQ_CLI_HTTP_BASE";
-          "LOGSEQ_CLI_BASE_URL";
-        ]
-        |> List.filter_map (fun key ->
-            Option.map (fun value -> (key, value)) (lookup key))
-    | None ->
-        [
-          "HOME";
-          "LOGSEQ_CLI_GRAPH";
-          "LOGSEQ_CLI_ROOT_DIR";
-          "LOGSEQ_CLI_CONFIG";
-          "LOGSEQ_CLI_TIMEOUT_MS";
-          "LOGSEQ_CLI_LOGIN_TIMEOUT_MS";
-          "LOGSEQ_CLI_LOGOUT_TIMEOUT_MS";
-          "LOGSEQ_CLI_OUTPUT";
-          "LOGSEQ_CLI_WS_URL";
-          "LOGSEQ_CLI_HTTP_BASE";
-          "LOGSEQ_CLI_BASE_URL";
-          "LOGSEQ_DB_WORKER_NODE_SCRIPT";
-        ]
-        |> List.filter_map (fun key ->
-            Option.map (fun value -> (key, value)) (Sys.getenv_opt key))
-  in
-  let stdin =
-    if stdin_required_for_show_id argv then Some (read_stdin_all ()) else None
-  in
+let resolve_config :
+    type marker.
+    app_context ->
+    (parsed_argv, marker) state ->
+    (resolved_config, not_final) state Error.build_result Cli_effect.t =
+ fun app (Parsed_argv_state (input, request)) ->
   Cli_effect.map
-    (fun output ->
-      Option.iter print_string output.stdout;
+    (fun result ->
+      match result with
+      | Error err ->
+          set_pending_error_output
+            ~command:(Cli_request.command_id request)
+            (output_mode_of_globals request.Cli_request.globals)
+            err;
+          Error err
+      | Ok config -> (
+          match ensure_root_config config with
+          | Error err ->
+              set_pending_error_output
+                ~command:(Cli_request.command_id request)
+                (output_mode_of_config config) err;
+              Error err
+          | Ok config ->
+              let profile_session =
+                Profile_types.create_session config.Cli_config.profile
+              in
+              Option.iter
+                (fun session ->
+                  let now = Time.now () in
+                  Profile_types.record_span session
+                    {
+                      stage = "cli.parse-args";
+                      span_id = 1;
+                      start_time = now;
+                      end_time = now;
+                      elapsed_span = Time.zero_span;
+                    })
+                profile_session;
+              Ok
+                (Resolved_config_state
+                   ({ config with Cli_config.profile_session }, request))))
+    (resolve_request_config app request input)
+
+let build_request_action app request config =
+  match request.Cli_request.command with
+  | Cli_request.Completion parsed ->
+      Cli_effect.pure
+        (Error.map
+           (fun action -> Cli_action.Completion action)
+           (Completion.build ~registry:app.registry config request.globals
+              parsed))
+  | _ -> Cli_action.build config request
+
+let build_action :
+    type marker.
+    app_context ->
+    (resolved_config, marker) state ->
+    (built_action, not_final) state Error.build_result Cli_effect.t =
+ fun app (Resolved_config_state (config, request)) ->
+  Cli_effect.map
+    (fun result ->
+      match result with
+      | Error err ->
+          set_pending_error_output
+            ~command:(Cli_request.command_id request)
+            (output_mode_of_config config) err;
+          Error err
+      | Ok action -> (
+          match ensure_action_graph_constraints config action with
+          | Error err ->
+              set_pending_error_output
+                ~command:(Cli_request.command_id request)
+                (output_mode_of_config config) err;
+              Error err
+          | Ok () -> Ok (Built_action_state (config, action))))
+    (build_request_action app request config)
+
+let execute_action :
+    type marker.
+    app_context ->
+    (built_action, marker) state ->
+    (executed_action, final) state Error.build_result Cli_effect.t =
+ fun _ (Built_action_state (config, action)) ->
+  Cli_effect.map
+    (fun result -> Ok (Executed_action_state (config, result)))
+    (Cli_action.execute action config)
+
+let format_cli_result result config = Format_types.format_result result config
+
+let format_result _ (Executed_action_state (config, result)) =
+  format_cli_result result config
+
+let result_exit_code result = Cli_result.exit_code result
+
+let write_stdout_line output =
+  if output <> "" then print_string (output ^ "\n")
+
+let final_effect : type phase. (phase, final) state -> int Cli_effect.t =
+  function
+  | Executed_action_state (config, result) ->
+      let output = format_cli_result result config in
+      let exit_code = result_exit_code result in
+      write_stdout_line output;
+      List.iter prerr_endline (verbose_line config result);
+      List.iter prerr_endline (profile_lines config result exit_code);
+      flush stdout;
+      flush stderr;
+      Cli_effect.pure exit_code
+  | Error_state err ->
+      let output =
+        match take_pending_output () with
+        | Some output -> output
+        | None ->
+            {
+              stdout = Format_types.format_error err None;
+              stderr = [];
+              exit_code = 1;
+            }
+      in
+      write_stdout_line output.stdout;
       List.iter prerr_endline output.stderr;
       flush stdout;
       flush stderr;
-      output.exit_code)
-    (run (make_app ()) { argv; env; cwd = Sys.getcwd (); stdin })
+      Cli_effect.pure output.exit_code

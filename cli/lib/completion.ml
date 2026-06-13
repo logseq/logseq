@@ -414,7 +414,7 @@ let build ?registry _config _ = function
         (Error.invalid_options
            "completion shell is required; expected zsh or bash")
 
-let execute (Completion { shell; registry }) _config mode =
+let execute_with_mode (Completion { shell; registry }) _config mode =
   Cli_effect.pure
     (Cli_result.ok ~command:Command_id.Completion mode
        (Message
@@ -436,3 +436,7 @@ let metadata () =
       write_command = Command_id.is_write Command_id.Completion;
     };
   ]
+
+let execute action config =
+  let (Output.Mode.Packed mode) = Output_mode.for_config config in
+  execute_with_mode action config mode
