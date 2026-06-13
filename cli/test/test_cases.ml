@@ -1,10 +1,10 @@
 open Test_support
 
 let () = ignore Cli_parity_test_cases.touch
-
 let tree_pipe = decode_uri_component "%E2%94%82"
 let tree_corner = decode_uri_component "%E2%94%94%E2%94%80%E2%94%80"
 let tree_middle = decode_uri_component "%E2%94%9C%E2%94%80%E2%94%80"
+
 let unicode_text codepoints =
   String.concat "" (List.map Js.String.fromCodePoint codepoints)
 
@@ -28,7 +28,9 @@ let () =
           (Edn_util.keyword_t "sync-not-started")
           "sync is not started for this graph"
       in
-      let output = Format_types.to_json (Cli_result.error Output.Mode.Json err) in
+      let output =
+        Format_types.to_json (Cli_result.error Output.Mode.Json err)
+      in
       expect_named_contains "json error hint" output
         "\"hint\":\"Run logseq sync start --graph demo.\"")
 
@@ -312,8 +314,7 @@ let () =
         let config_path = Node.Path.join [| root; "cli.edn" |] in
         let auth_path = Node.Path.join [| root; "auth.json" |] in
         let state, encoded_state =
-          if index = 1 then
-            (unicode_text [ 0x4e2d ], "%E4%B8%AD")
+          if index = 1 then (unicode_text [ 0x4e2d ], "%E4%B8%AD")
           else ("fixed-test-state", "fixed-test-state")
         in
         let code = "auth-code-" ^ string_of_int index in
@@ -821,13 +822,16 @@ let () =
                      body ->
                 if
                   Js.String.includes ~search:"2026-02-10T08:00:00.000Z" body
-                  || Js.String.includes ~search:"2026-02-12T18:00:00.000Z"
-                       body
-                then fail_test ("datetime task values must not be ISO strings: " ^ body);
+                  || Js.String.includes ~search:"2026-02-12T18:00:00.000Z" body
+                then
+                  fail_test
+                    ("datetime task values must not be ISO strings: " ^ body);
                 if
                   Js.String.includes ~search:"\\\"1770710400000\\\"" body
                   || Js.String.includes ~search:"\\\"1770919200000\\\"" body
-                then fail_test ("datetime task values must be JSON numbers: " ^ body);
+                then
+                  fail_test
+                    ("datetime task values must be JSON numbers: " ^ body);
                 if
                   not
                     (Js.String.includes ~search:"1770710400000" body
@@ -912,22 +916,29 @@ let () =
           if output.code = 0 then
             fail_promise
               ("expected missing update property to fail\n" ^ output.stdout)
-          else if not (Js.String.includes ~search:"property-not-found" output.stdout)
+          else if
+            not (Js.String.includes ~search:"property-not-found" output.stdout)
           then
             fail_promise
-              ("missing property code\nstdout:\n" ^ output.stdout ^ "\nstderr:\n"
-             ^ output.stderr)
+              ("missing property code\nstdout:\n" ^ output.stdout
+             ^ "\nstderr:\n" ^ output.stderr)
           else if not (Js.String.includes ~search:"missing-prop" output.stdout)
           then
             fail_promise
-              ("missing property name\nstdout:\n" ^ output.stdout ^ "\nstderr:\n"
-             ^ output.stderr)
-          else if not (Js.String.includes ~search:"\"option\":\"--update-properties\"" output.stdout)
+              ("missing property name\nstdout:\n" ^ output.stdout
+             ^ "\nstderr:\n" ^ output.stderr)
+          else if
+            not
+              (Js.String.includes ~search:"\"option\":\"--update-properties\""
+                 output.stdout)
           then
             fail_promise
               ("missing property option context\nstdout:\n" ^ output.stdout
              ^ "\nstderr:\n" ^ output.stderr)
-          else if not (Js.String.includes ~search:"\"phase\":\"resolve-options\"" output.stdout)
+          else if
+            not
+              (Js.String.includes ~search:"\"phase\":\"resolve-options\""
+                 output.stdout)
           then
             fail_promise
               ("missing property phase context\nstdout:\n" ^ output.stdout
@@ -1134,7 +1145,8 @@ let () =
             fail_promise
               (Printf.sprintf "expected two invoke requests, got %d" !step)));
 
-  test_promise "upsert page resolves unqualified update property keywords by name"
+  test_promise
+    "upsert page resolves unqualified update property keywords by name"
     (fun () ->
       let step = ref 0 in
       let property_ident = "user.property/node-prop" in
@@ -1212,7 +1224,9 @@ let () =
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
                 if Js.String.includes ~search:property_ident body then
-                  fail_test ("inline property should not be inserted with block: " ^ body);
+                  fail_test
+                    ("inline property should not be inserted with block: "
+                   ^ body);
                 "[]"
             | 4 when Js.String.includes ~search:"thread-api/pull" body ->
                 "[\"^ \",\"~:db/id\",10]"
@@ -1243,7 +1257,8 @@ let () =
                 "--target-page";
                 "Home";
                 "--blocks";
-                "[{:block/title \"First inline\" \"Inline Note\" \"First note\"}]";
+                "[{:block/title \"First inline\" \"Inline Note\" \"First \
+                 note\"}]";
               ]
           in
           ignore (expect_cli_exit_zero "upsert block inline property" output);
@@ -1289,7 +1304,8 @@ let () =
                 if not (Js.String.includes ~search:"88" body) then
                   fail_test ("missing resolved block ref id: " ^ body);
                 if Js.String.includes ~search:ref_uuid body then
-                  fail_test ("unresolved block uuid leaked into property op: " ^ body);
+                  fail_test
+                    ("unresolved block uuid leaked into property op: " ^ body);
                 "[]"
             | _ ->
                 fail_test
@@ -1310,18 +1326,21 @@ let () =
                 "--target-page";
                 "Home";
                 "--blocks";
-                "[{:block/title \"Comment area\" :logseq.property.comments/blocks [[:block/uuid #uuid \"22222222-2222-4222-8222-222222222222\"]]}]";
+                "[{:block/title \"Comment area\" \
+                 :logseq.property.comments/blocks [[:block/uuid #uuid \
+                 \"22222222-2222-4222-8222-222222222222\"]]}]";
               ]
           in
-          ignore (expect_cli_exit_zero "upsert block inline ref property" output);
+          ignore
+            (expect_cli_exit_zero "upsert block inline ref property" output);
           if !step = 5 then Js.Promise.resolve pass
           else
             fail_promise
               (Printf.sprintf "expected five invoke requests, got %d" !step)));
 
   test_promise
-    "upsert block create keeps inline tags out of property ops while resolving refs"
-    (fun () ->
+    "upsert block create keeps inline tags out of property ops while resolving \
+     refs" (fun () ->
       let step = ref 0 in
       let ref_uuid = "22222222-2222-4222-8222-222222222222" in
       let property_ident = "logseq.property.comments/blocks" in
@@ -1358,11 +1377,13 @@ let () =
                 if not (Js.String.includes ~search:property_ident body) then
                   fail_test ("missing comments blocks property ident: " ^ body);
                 if Js.String.includes ~search:tag_ident body then
-                  fail_test ("block/tags leaked into inline property op: " ^ body);
+                  fail_test
+                    ("block/tags leaked into inline property op: " ^ body);
                 if not (Js.String.includes ~search:"88" body) then
                   fail_test ("missing resolved block ref id: " ^ body);
                 if Js.String.includes ~search:ref_uuid body then
-                  fail_test ("unresolved block uuid leaked into property op: " ^ body);
+                  fail_test
+                    ("unresolved block uuid leaked into property op: " ^ body);
                 "[]"
             | _ ->
                 fail_test
@@ -1383,7 +1404,10 @@ let () =
                 "--target-page";
                 "Home";
                 "--blocks";
-                "[{:block/title \"Comment area\" :block/tags [:logseq.class/Comments] :logseq.property.comments/blocks [[:block/uuid #uuid \"22222222-2222-4222-8222-222222222222\"]]}]";
+                "[{:block/title \"Comment area\" :block/tags \
+                 [:logseq.class/Comments] :logseq.property.comments/blocks \
+                 [[:block/uuid #uuid \
+                 \"22222222-2222-4222-8222-222222222222\"]]}]";
               ]
           in
           ignore (expect_cli_exit_zero "upsert block inline ref tags" output);
@@ -1402,10 +1426,10 @@ let () =
             match !step with
             | 1
               when Js.String.includes ~search:"thread-api/pull" body
-                   && not
-                        (Js.String.includes ~search:"reproducible" body) ->
+                   && not (Js.String.includes ~search:"reproducible" body) ->
                 "[\"^ \
-                 \",\"~:db/id\",42,\"~:block/uuid\",\"11111111-1111-1111-1111-111111111111\",\"~:block/title\",\"Alpha block\"]"
+                 \",\"~:db/id\",42,\"~:block/uuid\",\"11111111-1111-1111-1111-111111111111\",\"~:block/title\",\"Alpha \
+                 block\"]"
             | 2
               when Js.String.includes ~search:"thread-api/q" body
                    && Js.String.includes ~search:"reproducible steps" body ->
@@ -1460,8 +1484,8 @@ let () =
                    && Js.String.includes ~search:"node-prop" body ->
                 "[[\"^ \
                  \",\"~:db/id\",77,\"~:db/ident\",\"~:user.property/node-prop\",\"~:logseq.property/type\",\"default\"]]"
-            | 2
-              when Js.String.includes ~search:"thread-api/cli-list-nodes" body ->
+            | 2 when Js.String.includes ~search:"thread-api/cli-list-nodes" body
+              ->
                 if not (Js.String.includes ~search:property_ident body) then
                   fail_test ("missing list property ident: " ^ body);
                 "[]"
@@ -2128,7 +2152,8 @@ let () =
       set_timeout (fun () -> res_destroy res) 20)
     (fun _stdout -> ());
 
-  test_promise "sync upload without password does not require stored e2ee password"
+  test_promise
+    "sync upload without password does not require stored e2ee password"
     (fun () ->
       let root = temp_dir "logseq-cli-sync-upload-no-password-" in
       let invoke_calls = ref [] in
@@ -2166,7 +2191,8 @@ let () =
           then Js.Promise.resolve pass
           else fail_promise ("missing db-sync upload call\n" ^ result.stdout)));
 
-  test_promise "sync upload with password initializes e2ee keys before verifying password"
+  test_promise
+    "sync upload with password initializes e2ee keys before verifying password"
     (fun () ->
       let root = temp_dir "logseq-cli-sync-upload-password-keys-" in
       let config_path = Node.Path.join [| root; "cli.edn" |] in
@@ -2188,8 +2214,7 @@ let () =
       in
       with_server server (fun base_url ->
           write_file config_path
-            "{:refresh-token \"refresh-token\"\n\
-            \ :id-token \"id-token\"}\n";
+            "{:refresh-token \"refresh-token\"\n :id-token \"id-token\"}\n";
           let env = [| ("LOGSEQ_CLI_BASE_URL", base_url) |] in
           let* result =
             run_cli_p ~env
@@ -2231,8 +2256,9 @@ let () =
               ("unexpected sync upload method order: "
               ^ String.concat " -> " !method_names)));
 
-  test_promise "sync ensure-keys with password verifies password before ensuring local keys"
-    (fun () ->
+  test_promise
+    "sync ensure-keys with password verifies password before ensuring local \
+     keys" (fun () ->
       let root = temp_dir "logseq-cli-sync-ensure-keys-password-" in
       let config_path = Node.Path.join [| root; "cli.edn" |] in
       let method_names = ref [] in
@@ -2248,8 +2274,7 @@ let () =
       in
       with_server server (fun base_url ->
           write_file config_path
-            "{:refresh-token \"refresh-token\"\n\
-            \ :id-token \"id-token\"}\n";
+            "{:refresh-token \"refresh-token\"\n :id-token \"id-token\"}\n";
           let env = [| ("LOGSEQ_CLI_BASE_URL", base_url) |] in
           let* result =
             run_cli_p ~env

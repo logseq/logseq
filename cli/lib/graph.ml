@@ -817,8 +817,7 @@ let graph_backup_create_result mode config graph repo name backup_name =
         let backup_effect =
           bind
             (Transport.thread_api_backup_db_sqlite invoke_config ~repo
-               ~path:tmp_path)
-            (fun _ ->
+               ~path:tmp_path) (fun _ ->
               if Cli_unix.file_exists tmp_path then (
                 Cli_unix.rename tmp_path db_path;
                 write_backup_metadata dir ~backup_name ~repo ~db_path;
@@ -833,7 +832,8 @@ let graph_backup_create_result mode config graph repo name backup_name =
             remove_tree dir;
             pure
               (Cli_result.error ~command:Command_id.Graph_backup_create mode
-                 (Error.make ~context:(Edn_util.string (Printexc.to_string exn))
+                 (Error.make
+                    ~context:(Edn_util.string (Printexc.to_string exn))
                     (Edn_util.keyword_t "backup-create-failed")
                     "backup create failed"))))
 
