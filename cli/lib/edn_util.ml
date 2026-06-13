@@ -58,7 +58,9 @@ let raw_string = function
   | _ -> None
 
 let as_string value =
-  Option.map (fun value -> Ustring.(of_string value |> to_string)) (raw_string value)
+  Option.map
+    (fun value -> Ustring.(of_string value |> to_string))
+    (raw_string value)
 
 let as_symbol = function
   | Melange_edn.Any (Melange_edn.Symbol value) -> Some value
