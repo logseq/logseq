@@ -1,4 +1,4 @@
-type 'a formatter = 'a Cli_result.t -> Cli_config.t -> string
+type formatter = Cli_result.t -> Cli_config.t -> string
 
 let normalize_json v = v
 
@@ -415,9 +415,9 @@ let graph_list_human value config =
       | None -> "")
   | None -> ""
 
-let to_human : type a. a Cli_result.t -> Cli_config.t -> string =
- fun result config ->
-  match (result.Cli_result.command, result.data, result.output) with
+let to_human result config =
+  let output = result.Cli_result.output Output.Mode.Human in
+  match (result.Cli_result.command, result.data, output) with
   | Some Command_id.Graph_list, Some (Cli_result.Raw value), Output.Human _ ->
       graph_list_human value config
   | Some Command_id.Query, Some (Cli_result.Query_result value), Output.Human _
@@ -428,7 +428,7 @@ let to_human : type a. a Cli_result.t -> Cli_config.t -> string =
       match list_search_human command value config with
       | Some output -> output
       | None -> (
-          match result.output with
+          match output with
           | Output.Human human -> render_human human
           | Output.Json _ | Output.Edn _ -> ""))
   | _, _, Output.Human human -> render_human human

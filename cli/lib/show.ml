@@ -1522,7 +1522,7 @@ let execute_single mode action config target =
                                                linked_references footer metadata
                                                breadcrumb_line))))))))))
 
-let execute action config mode =
+let execute_with_mode action config mode =
   let run =
     match action.target with
     | By_ids ids ->
@@ -1666,3 +1666,7 @@ let metadata () =
         ]
       Command_id.Show "Show tree";
   ]
+
+let execute action config =
+  let (Output.Mode.Packed mode) = Output_mode.for_config config in
+  execute_with_mode action config mode

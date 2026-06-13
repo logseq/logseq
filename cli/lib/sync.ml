@@ -1216,7 +1216,7 @@ let execute_asset_download mode config repo graph id uuid =
           execute_asset_download_request mode config invoke_config repo graph
             asset)
 
-let execute action config mode =
+let execute_with_mode action config mode =
   match action with
   | Sync_config_get { key } -> execute_config_get mode config key
   | Sync_config_set { key; value } -> execute_config_set mode config key value
@@ -1317,3 +1317,7 @@ let metadata () =
       ~examples:[ "logseq sync config unset sync-enabled" ]
       Sync_config_unset "Unset sync config key";
   ]
+
+let execute action config =
+  let (Output.Mode.Packed mode) = Output_mode.for_config config in
+  execute_with_mode action config mode

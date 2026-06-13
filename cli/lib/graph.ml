@@ -882,7 +882,7 @@ let execute_graph_create_enable_sync mode graph repo opts config =
           (Sync.execute
              (Sync.Sync_upload
                 { repo; graph; e2ee_password = opts.e2ee_password })
-             config mode)
+             config)
           (fun upload_result ->
             if Cli_result.is_error upload_result then
               pure
@@ -892,7 +892,7 @@ let execute_graph_create_enable_sync mode graph repo opts config =
                 (Sync.execute
                    (Sync.Sync_start
                       { repo; graph; e2ee_password = opts.e2ee_password })
-                   config mode)
+                   config)
                 (fun start_result ->
                   if Cli_result.is_error start_result then
                     pure
@@ -1111,7 +1111,7 @@ let execute_graph_remove mode graph repo config =
                       (Edn_util.keyword_t "graph-not-removed")
                       "unable to remove graph"))))
 
-let execute action config mode =
+let execute_with_mode action config mode =
   let pure = Cli_effect.pure in
   match action with
   | Graph_list ->
@@ -1250,3 +1250,7 @@ let graph = function
   | Graph_import { graph; _ } ->
       Some graph
   | Graph_backup_restore { dst_graph; _ } -> Some dst_graph
+
+let execute action config =
+  let (Output.Mode.Packed mode) = Output_mode.for_config config in
+  execute_with_mode action config mode
