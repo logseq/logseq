@@ -323,8 +323,7 @@ let start_command_detached command =
   match command with
   | [] ->
       Error
-        (Error.make (Edn_util.keyword_t "codex-start-failed")
-           "missing command")
+        (Error.make (Edn_util.keyword_t "codex-start-failed") "missing command")
   | bin :: _ -> (
       try
         ignore
@@ -334,11 +333,13 @@ let start_command_detached command =
       with
       | Cli_unix.Cli_unix_error (_, op, detail) ->
           Error
-            (Error.make (Edn_util.keyword_t "codex-start-failed")
+            (Error.make
+               (Edn_util.keyword_t "codex-start-failed")
                ("failed to start codex " ^ op ^ ": " ^ detail))
       | exn ->
           Error
-            (Error.make (Edn_util.keyword_t "codex-start-failed")
+            (Error.make
+               (Edn_util.keyword_t "codex-start-failed")
                ("failed to start codex: " ^ Printexc.to_string exn)))
 
 let codex_available config =
@@ -1524,13 +1525,14 @@ let transit_cache_code_index text =
   | 2 -> Some (Char.code text.[1] - transit_cache_base)
   | 3 ->
       Some
-        (((Char.code text.[1] - transit_cache_base)
-         * transit_cache_code_digits)
+        (((Char.code text.[1] - transit_cache_base) * transit_cache_code_digits)
         + (Char.code text.[2] - transit_cache_base))
   | _ -> None
 
 let transit_cache_code text =
-  String.length text >= 2 && String.length text <= 3 && text.[0] = '^'
+  String.length text >= 2
+  && String.length text <= 3
+  && text.[0] = '^'
   && text <> "^ "
 
 let transit_remember reader text =
@@ -1543,8 +1545,7 @@ let transit_lookup reader text =
       Some reader.cache.(index)
   | _ -> None
 
-let transit_drop_prefix text =
-  String.sub text 2 (String.length text - 2)
+let transit_drop_prefix text = String.sub text 2 (String.length text - 2)
 
 let rec decode_transit_string reader ?(cache_string_key = false)
     ?(remember_value = true) text =
@@ -1561,7 +1562,8 @@ let rec decode_transit_string reader ?(cache_string_key = false)
   else if String.length text = 1 then Edn_util.string text
   else
     match text.[1] with
-    | '~' | '^' | '`' -> Edn_util.string (String.sub text 1 (String.length text - 1))
+    | '~' | '^' | '`' ->
+        Edn_util.string (String.sub text 1 (String.length text - 1))
     | '_' when String.length text = 2 -> Edn_util.nil
     | '?' -> (
         match transit_drop_prefix text with
@@ -1593,7 +1595,11 @@ let rec normalize_transit_value reader value =
   | None -> (
       match Edn_util.as_vector value with
       | Some (tag_value :: [ rep ]) -> (
-          match Option.bind (Edn_util.as_string tag_value) (decode_transit_tag reader) with
+          match
+            Option.bind
+              (Edn_util.as_string tag_value)
+              (decode_transit_tag reader)
+          with
           | Some "set" ->
               normalize_transit_rep_values reader rep |> Edn_util.set
           | Some "list" ->
@@ -1621,7 +1627,8 @@ and normalize_transit_map reader flat =
     | key :: value :: rest ->
         let key =
           match Edn_util.as_string key with
-          | Some text -> decode_transit_string reader ~cache_string_key:true text
+          | Some text ->
+              decode_transit_string reader ~cache_string_key:true text
           | None -> normalize_transit_value reader key
         in
         let value = normalize_transit_value reader value in
