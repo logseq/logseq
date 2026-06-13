@@ -389,10 +389,9 @@ let ok ?command ?context mode data =
 let error ?command ?context mode error =
   let (_ : _ Output.Mode.t) = mode in
   let output : type a. a Output.Mode.t -> a Output.t = function
-  | Output.Mode.Human ->
-      Output.Human (human_message error.Error.message)
-  | Output.Mode.Json -> Output.Json Edn_util.nil
-  | Output.Mode.Edn -> Output.Edn Edn_util.nil
+    | Output.Mode.Human -> Output.Human (human_message error.Error.message)
+    | Output.Mode.Json -> Output.Json Edn_util.nil
+    | Output.Mode.Edn -> Output.Edn Edn_util.nil
   in
   {
     status = Error;

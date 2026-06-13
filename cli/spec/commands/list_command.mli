@@ -74,7 +74,6 @@ val order_of_string : string -> order option
 val string_of_order : order -> string
 val kind_of_parsed : parsed -> kind
 val normalize_options : parsed -> parsed Error.build_result
-
 val apply_offset_limit : common_opts -> Entity.t list -> Entity.t list
 
 include Command_spec.S with type parsed := parsed and type action := action

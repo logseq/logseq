@@ -12,10 +12,11 @@ type run_input = {
 
 let command_metadata () =
   Graph.metadata () @ List_command.metadata () @ Upsert.metadata ()
-  @ Remove.metadata () @ Search.metadata () @ Query.metadata () @ Show.metadata ()
-  @ Server_command.metadata () @ Sync.metadata () @ Completion.metadata ()
-  @ Skill.metadata () @ Example.metadata () @ Doctor.metadata ()
-  @ Debug.metadata () @ Agent.metadata () @ Auth_command.metadata ()
+  @ Remove.metadata () @ Search.metadata () @ Query.metadata ()
+  @ Show.metadata () @ Server_command.metadata () @ Sync.metadata ()
+  @ Completion.metadata () @ Skill.metadata () @ Example.metadata ()
+  @ Doctor.metadata () @ Debug.metadata () @ Agent.metadata ()
+  @ Auth_command.metadata ()
 
 let command_registry () = Command_registry.make (command_metadata ())
 
@@ -23,7 +24,6 @@ let make_app ?version:_ () =
   { registry = command_registry (); defaults = Cli_config.defaults () }
 
 let make_app_context = make_app
-
 let env_lookup env key = List.assoc_opt key env
 let is_option token = String.length token > 0 && token.[0] = '-'
 
@@ -126,11 +126,7 @@ let result_text_for_mode result (Output.Mode.Packed mode) =
   | Output.Mode.Json -> Format_types.to_json result
   | Output.Mode.Edn -> Format_types.to_edn result
 
-type pending_output = {
-  stdout : string;
-  stderr : string list;
-  exit_code : int;
-}
+type pending_output = { stdout : string; stderr : string list; exit_code : int }
 
 let pending_output : pending_output option ref = ref None
 
@@ -236,13 +232,10 @@ type ('phase, 'final) state =
   | Error_state : Error.t -> (error, final) state
 
 let make_error_state err = Error_state err
-
 let make_raw_argv_state _ input = Raw_argv_state input
-
 let parse_request _ input = Cli_parse.parse ?stdin:input.stdin input.argv
 
-let parse_args :
-    type marker.
+let parse_args : type marker.
     app_context ->
     (raw_argv, marker) state ->
     (parsed_argv, not_final) state Error.build_result =
@@ -308,8 +301,7 @@ let ensure_action_graph_constraints config action =
       Error (graph_exists_error graph)
   | _ -> Ok ()
 
-let resolve_config :
-    type marker.
+let resolve_config : type marker.
     app_context ->
     (parsed_argv, marker) state ->
     (resolved_config, not_final) state Error.build_result Cli_effect.t =
@@ -328,7 +320,8 @@ let resolve_config :
           | Error err ->
               set_pending_error_output
                 ~command:(Cli_request.command_id request)
-                (output_mode_of_config config) err;
+                (output_mode_of_config config)
+                err;
               Error err
           | Ok config ->
               let profile_session =
@@ -361,8 +354,7 @@ let build_request_action app request config =
               parsed))
   | _ -> Cli_action.build config request
 
-let build_action :
-    type marker.
+let build_action : type marker.
     app_context ->
     (resolved_config, marker) state ->
     (built_action, not_final) state Error.build_result Cli_effect.t =
@@ -373,20 +365,21 @@ let build_action :
       | Error err ->
           set_pending_error_output
             ~command:(Cli_request.command_id request)
-            (output_mode_of_config config) err;
+            (output_mode_of_config config)
+            err;
           Error err
       | Ok action -> (
           match ensure_action_graph_constraints config action with
           | Error err ->
               set_pending_error_output
                 ~command:(Cli_request.command_id request)
-                (output_mode_of_config config) err;
+                (output_mode_of_config config)
+                err;
               Error err
           | Ok () -> Ok (Built_action_state (config, action))))
     (build_request_action app request config)
 
-let execute_action :
-    type marker.
+let execute_action : type marker.
     app_context ->
     (built_action, marker) state ->
     (executed_action, final) state Error.build_result Cli_effect.t =
@@ -401,9 +394,7 @@ let format_result _ (Executed_action_state (config, result)) =
   format_cli_result result config
 
 let result_exit_code result = Cli_result.exit_code result
-
-let write_stdout_line output =
-  if output <> "" then print_string (output ^ "\n")
+let write_stdout_line output = if output <> "" then print_string (output ^ "\n")
 
 let final_effect : type phase. (phase, final) state -> int Cli_effect.t =
   function

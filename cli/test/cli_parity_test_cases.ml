@@ -215,11 +215,7 @@ let run_cli_lifecycle ?(env = []) argv =
     let stderr = string_trim_end result##stderr in
     if stderr = "" then [] else Array.to_list (string_split stderr "\n")
   in
-  {
-    stdout = Some result##stdout;
-    stderr;
-    exit_code = result_status result;
-  }
+  { stdout = Some result##stdout; stderr; exit_code = result_status result }
 
 let stdout_text name output = expect_some name output.stdout
 
@@ -1795,7 +1791,8 @@ let () =
                         created_after = None;
                       }))
             in
-            execute_with_output List_command.execute action cfg Output.Mode.Human
+            execute_with_output List_command.execute action cfg
+              Output.Mode.Human
           in
           let ids result =
             let data = expect_some "list data" (Cli_result.data_value result) in
@@ -1872,7 +1869,8 @@ let () =
           in
           let* result =
             effect_to_promise
-              (execute_with_output List_command.execute action cfg Output.Mode.Human)
+              (execute_with_output List_command.execute action cfg
+                 Output.Mode.Human)
           in
           let data =
             expect_some "property list data" (Cli_result.data_value result)
@@ -1935,7 +1933,8 @@ let () =
           in
           let* result =
             effect_to_promise
-              (execute_with_output List_command.execute action cfg Output.Mode.Human)
+              (execute_with_output List_command.execute action cfg
+                 Output.Mode.Human)
           in
           let data =
             expect_some "asset list data" (Cli_result.data_value result)
@@ -2312,7 +2311,8 @@ let () =
             }
           in
           let* result =
-            effect_to_promise (execute_with_output Remove.execute action cfg Output.Mode.Human)
+            effect_to_promise
+              (execute_with_output Remove.execute action cfg Output.Mode.Human)
           in
           expect_bool "remove page target is error" true
             (Cli_result.is_error result);
@@ -2359,7 +2359,8 @@ let () =
             }
           in
           let* result =
-            effect_to_promise (execute_with_output Remove.execute action cfg Output.Mode.Human)
+            effect_to_promise
+              (execute_with_output Remove.execute action cfg Output.Mode.Human)
           in
           expect_bool "remove block succeeds" false (Cli_result.is_error result);
           let body = expect_some "captured apply body" !captured_apply_body in
@@ -3358,7 +3359,8 @@ let () =
             }
           in
           let* result =
-            effect_to_promise (execute_with_output Sync.execute action cfg Output.Mode.Human)
+            effect_to_promise
+              (execute_with_output Sync.execute action cfg Output.Mode.Human)
           in
           remove_tree root;
           expect_bool "asset download ok" false (Cli_result.is_error result);
@@ -3423,7 +3425,8 @@ let () =
             }
           in
           let* result =
-            effect_to_promise (execute_with_output Sync.execute action cfg Output.Mode.Human)
+            effect_to_promise
+              (execute_with_output Sync.execute action cfg Output.Mode.Human)
           in
           remove_tree root;
           expect_bool "asset download error" true (Cli_result.is_error result);
@@ -3484,7 +3487,8 @@ let () =
               }
             in
             let* result =
-              effect_to_promise (execute_with_output Sync.execute action cfg Output.Mode.Human)
+              effect_to_promise
+                (execute_with_output Sync.execute action cfg Output.Mode.Human)
             in
             remove_tree root;
             expect_bool (label ^ " error") true (Cli_result.is_error result);
@@ -3804,7 +3808,8 @@ let () =
       with_server server (fun base_url ->
           let cfg = { cfg with Cli_config.base_url = Some base_url } in
           let* result =
-            effect_to_promise (execute_with_output Query.execute action cfg Output.Mode.Human)
+            effect_to_promise
+              (execute_with_output Query.execute action cfg Output.Mode.Human)
           in
           expect_bool "query execute ok" false (Cli_result.is_error result);
           let body = expect_some "query request body" !captured_body in
@@ -4347,7 +4352,8 @@ let () =
               }
             in
             let* result =
-              effect_to_promise (execute_with_output Graph.execute action cfg Output.Mode.Human)
+              effect_to_promise
+                (execute_with_output Graph.execute action cfg Output.Mode.Human)
             in
             assert_result result;
             Js.Promise.resolve pass)
@@ -4404,7 +4410,8 @@ let () =
             }
           in
           let* result =
-            effect_to_promise (execute_with_output Graph.execute action cfg Output.Mode.Edn)
+            effect_to_promise
+              (execute_with_output Graph.execute action cfg Output.Mode.Edn)
           in
           expect_bool "graph info ok" false (Cli_result.is_error result);
           expect_bool "q called" true !q_called;
@@ -4527,7 +4534,8 @@ let () =
             }
           in
           let* result =
-            effect_to_promise (execute_with_output Graph.execute action cfg Output.Mode.Edn)
+            effect_to_promise
+              (execute_with_output Graph.execute action cfg Output.Mode.Edn)
           in
           let backup_dir =
             Node.Path.join [| root; "graphs"; "demo"; "backup"; backup_name |]
