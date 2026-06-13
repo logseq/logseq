@@ -264,11 +264,7 @@ let allowed_options_for_path = function
   | [ "sync"; "config"; "set" ] -> []
   | [ "debug"; "pull" ] -> [ "id"; "uuid"; "ident" ]
   | [ "doctor" ] -> [ "dev-script" ]
-  | [ "login" ]
-  | [ "logout" ]
-  | [ "skill"; "show" ]
-  | "example" :: _ ->
-      []
+  | [ "login" ] | [ "logout" ] | [ "skill"; "show" ] | "example" :: _ -> []
   | [ "completion" ] -> [ "shell" ]
   | [ "skill"; "install" ] -> [ "global" ]
   | _ -> []
@@ -397,8 +393,8 @@ let parse_graph_export_edn_options options =
                  "graph export --edn-options must be an EDN map")
       with Melange_edn.Parse_error _ ->
         Error
-          (Error.invalid_options
-             "graph export --edn-options must be an EDN map"))
+          (Error.invalid_options "graph export --edn-options must be an EDN map")
+      )
 
 let validate_non_empty_csv_option key message options =
   match List.find_opt (fun (candidate, _) -> candidate = key) options with
@@ -753,8 +749,7 @@ let parse ?stdin argv =
     | [ "graph"; "export" ] -> (
         match graph_export_type options with
         | Some export_type ->
-            Error.bind
-              (parse_graph_export_edn_options options)
+            Error.bind (parse_graph_export_edn_options options)
               (fun edn_options ->
                 make [ "graph"; "export" ]
                   (Graph
@@ -1018,8 +1013,8 @@ let parse ?stdin argv =
               | None ->
                   Error
                     (Error.invalid_options
-                       ("unsupported shell: " ^ shell
-                      ^ "; expected zsh or bash")))
+                       ("unsupported shell: " ^ shell ^ "; expected zsh or bash"))
+              )
         in
         Error.bind shell (fun shell ->
             make [ "completion" ]
