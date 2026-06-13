@@ -213,7 +213,7 @@ let execute_install config mode ~global ~source_path ~destination_dir
                     (Edn_util.keyword_t "skill-install-failed")
                     ("failed to install skill: " ^ Printexc.to_string exn)))))
 
-let execute action config mode =
+let execute_with_mode action config mode =
   match action with
   | Skill_show { source_path } -> execute_show config mode source_path
   | Skill_install { global; source_path; destination_dir; destination_file } ->
@@ -239,3 +239,7 @@ let metadata () =
     meta Command_id.Skill_show "Show built-in logseq-cli skill";
     meta Skill_install "Install built-in logseq-cli skill";
   ]
+
+let execute action config =
+  let (Output.Mode.Packed mode) = Output_mode.for_config config in
+  execute_with_mode action config mode

@@ -17,17 +17,10 @@ type t =
   | Completion of Completion.action
   | Example of Example.action
 
-type build_context = {
-  config : Cli_config.t;
-  request : Cli_request.t;
-  selected_graph : Cli_primitive.graph option;
-  selected_repo : Cli_primitive.repo option;
-}
-
 val build : Cli_config.t -> Cli_request.t -> t Error.build_result Cli_effect.t
 
 val execute :
-  t -> Cli_config.t -> 'o Output.Mode.t -> 'o Cli_result.t Cli_effect.t
+  t -> Cli_config.t -> Cli_result.t Cli_effect.t
 
 val requires_missing_graph : t -> bool
 val repo : t -> Cli_primitive.repo option
