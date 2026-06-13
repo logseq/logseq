@@ -17,12 +17,20 @@ type t =
   | Completion of Completion.action
   | Example of Example.action
 
-type build_context = {
-  config : Cli_config.t;
-  request : Cli_request.t;
-  selected_graph : Cli_primitive.graph option;
-  selected_repo : Cli_primitive.repo option;
-}
+let build_time : string =
+  [%mel.raw
+    {|
+typeof LOGSEQ_CLI_BUILD_TIME !== "undefined" ? LOGSEQ_CLI_BUILD_TIME : "unknown"
+|}]
+
+let revision : string =
+  [%mel.raw
+    {|
+typeof LOGSEQ_CLI_REVISION !== "undefined" ? LOGSEQ_CLI_REVISION : "dev"
+|}]
+
+let version_output () =
+  "Build time: " ^ build_time ^ "\nRevision: " ^ revision
 
 let build config request =
   let result =
@@ -79,28 +87,32 @@ let build config request =
   in
   Cli_effect.pure result
 
-let execute action config mode =
+let output_mode config =
+  Option.value config.Cli_config.output_format ~default:Output_mode.default
+
+let execute action config =
+  let (Output.Mode.Packed mode) = output_mode config in
   match action with
   | Version ->
       Cli_effect.pure
         (Cli_result.ok ~command:Command_id.Version mode
-           (Message "logseq-cli ocaml"))
-  | Graph action -> Graph.execute action config mode
-  | List action -> List_command.execute action config mode
-  | Upsert action -> Upsert.execute action config mode
-  | Remove action -> Remove.execute action config mode
-  | Search action -> Search.execute action config mode
-  | Query action -> Query.execute action config mode
-  | Show action -> Show.execute action config mode
-  | Server action -> Server_command.execute action config mode
-  | Sync action -> Sync.execute action config mode
-  | Debug action -> Debug.execute action config mode
-  | Doctor action -> Doctor.execute action config mode
-  | Skill action -> Skill.execute action config mode
-  | Completion action -> Completion.execute action config mode
-  | Example action -> Example.execute action config mode
-  | Auth action -> Auth_command.execute action config mode
-  | Agent action -> Agent.execute action config mode
+           (Message (version_output ())))
+  | Graph action -> Graph.execute action config
+  | List action -> List_command.execute action config
+  | Upsert action -> Upsert.execute action config
+  | Remove action -> Remove.execute action config
+  | Search action -> Search.execute action config
+  | Query action -> Query.execute action config
+  | Show action -> Show.execute action config
+  | Server action -> Server_command.execute action config
+  | Sync action -> Sync.execute action config
+  | Debug action -> Debug.execute action config
+  | Doctor action -> Doctor.execute action config
+  | Skill action -> Skill.execute action config
+  | Completion action -> Completion.execute action config
+  | Example action -> Example.execute action config
+  | Auth action -> Auth_command.execute action config
+  | Agent action -> Agent.execute action config
 
 let requires_missing_graph = function
   | Graph (Graph.Graph_import { opts = { import_type = Graph.Import_sqlite; _ }; _ })

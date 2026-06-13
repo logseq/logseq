@@ -352,7 +352,7 @@ let value_of_action action =
       (Edn_util.keyword "message", Edn_util.string action.message);
     ]
 
-let execute action _config mode =
+let execute_with_mode action _config mode =
   Cli_effect.pure
     (Cli_result.ok ~command:Command_id.Example mode
        (Raw (value_of_action action)))
@@ -372,3 +372,7 @@ let metadata () =
       write_command = Command_id.is_write Command_id.Example;
     };
   ]
+
+let execute action config =
+  let (Output.Mode.Packed mode) = Output_mode.for_config config in
+  execute_with_mode action config mode

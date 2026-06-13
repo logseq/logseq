@@ -208,7 +208,7 @@ let build ?registry:_ _ _ (Parsed_doctor opts) =
   in
   Stdlib.Ok (Doctor { script_path })
 
-let execute action config mode =
+let execute_with_mode action config mode =
   let script_check = check_db_worker_script action in
   if script_check.status = Error then
     Cli_effect.pure
@@ -253,3 +253,7 @@ let metadata () =
       write_command = Command_id.is_write Command_id.Doctor;
     };
   ]
+
+let execute action config =
+  let (Output.Mode.Packed mode) = Output_mode.for_config config in
+  execute_with_mode action config mode
