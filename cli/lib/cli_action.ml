@@ -29,8 +29,7 @@ let revision : string =
 typeof LOGSEQ_CLI_REVISION !== "undefined" ? LOGSEQ_CLI_REVISION : "dev"
 |}]
 
-let version_output () =
-  "Build time: " ^ build_time ^ "\nRevision: " ^ revision
+let version_output () = "Build time: " ^ build_time ^ "\nRevision: " ^ revision
 
 let build config request =
   let result =
@@ -115,7 +114,8 @@ let execute action config =
   | Agent action -> Agent.execute action config
 
 let requires_missing_graph = function
-  | Graph (Graph.Graph_import { opts = { import_type = Graph.Import_sqlite; _ }; _ })
+  | Graph
+      (Graph.Graph_import { opts = { import_type = Graph.Import_sqlite; _ }; _ })
     ->
       true
   | Sync (Sync.Sync_download { require_missing_graph; _ }) ->

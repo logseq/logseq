@@ -356,8 +356,8 @@ let generate_bash_completion registry =
       "  logseq graph list --output json 2>/dev/null | node -e 'const fs = \
        require(\"fs\"); const input = fs.readFileSync(0, \"utf8\"); if \
        (!input.trim()) process.exit(0); const data = JSON.parse(input); const \
-       graphs = data && data.data && data.data.graphs; if (Array.isArray(graphs)) \
-       console.log(graphs.join(\" \"));'";
+       graphs = data && data.data && data.data.graphs; if \
+       (Array.isArray(graphs)) console.log(graphs.join(\" \"));'";
       "}";
       "";
       "_logseq_opts_for() {";
@@ -407,8 +407,7 @@ let validate_parsed _ = Ok ()
 
 let build ?registry _config _ = function
   | Parsed_completion { shell = Some shell } ->
-      Ok
-        (Completion { shell; registry })
+      Ok (Completion { shell; registry })
   | Parsed_completion { shell = None } ->
       Error
         (Error.invalid_options
