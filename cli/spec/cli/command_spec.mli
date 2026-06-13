@@ -15,7 +15,7 @@ module type S = sig
     action Error.build_result
 
   val execute :
-    action -> Cli_config.t -> 'o Output.Mode.t -> 'o Cli_result.t Cli_effect.t
+    action -> Cli_config.t -> Cli_result.t Cli_effect.t
 
   val metadata : unit -> Command_registry.command_meta list
 end
