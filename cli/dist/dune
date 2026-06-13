@@ -21,7 +21,10 @@
  (action
   (progn
    (run pwd)
-   (run sh -c "printf 'DUNE_PROJECT_ROOT=%s\nDUNE_SOURCEROOT=%s\n' \"$DUNE_PROJECT_ROOT\" \"$DUNE_SOURCEROOT\"")
+   (run
+    sh
+    -c
+    "printf 'DUNE_PROJECT_ROOT=%s\nDUNE_SOURCEROOT=%s\n' \"$DUNE_PROJECT_ROOT\" \"$DUNE_SOURCEROOT\"")
    (echo "project_root=%{project_root}\n")
    (echo "workspace_root=%{workspace_root}\n")
    (echo "profile=%{profile}\n")
