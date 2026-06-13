@@ -2753,7 +2753,7 @@ let execute_create_block mode (action : block_create) config =
                                                          mode err)
                                                 | Ok _ -> pure result)))))))))
 
-let execute action config mode =
+let execute_with_mode action config mode =
   let open Cli_effect in
   match action with
   | Upsert_block (Block_create action) ->
@@ -3023,3 +3023,7 @@ let graph = function
   | Upsert_tag { graph; _ }
   | Upsert_property { graph; _ } ->
       graph
+
+let execute action config =
+  let (Output.Mode.Packed mode) = Output_mode.for_config config in
+  execute_with_mode action config mode
