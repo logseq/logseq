@@ -110,7 +110,7 @@ let failed_cleanup_value (server, err) =
           (Edn_util.keyword "error", error_value err);
         ]
 
-let execute action config mode =
+let execute_with_mode action config mode =
   let open Cli_effect in
   match action with
   | Server_list ->
@@ -210,3 +210,7 @@ let metadata () =
       ~examples:[ "logseq server restart --graph my-graph" ]
       Server_restart "Restart db-worker-node for a graph";
   ]
+
+let execute action config =
+  let (Output.Mode.Packed mode) = Output_mode.for_config config in
+  execute_with_mode action config mode
