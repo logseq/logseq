@@ -10,13 +10,13 @@ type ok_data =
 
 type error_data = Error.t
 
-type 'o t = private {
+type t = private {
   status : status;
   data : ok_data option;
   error : error_data option;
   command : Command_id.t option;
   context : Melange_edn.any option;
-  output : 'o Output.t;
+  output : 'o. 'o Output.Mode.t -> 'o Output.t;
   exit_code : int option;
 }
 
@@ -25,16 +25,16 @@ val ok :
   ?context:Melange_edn.any ->
   'o Output.Mode.t ->
   ok_data ->
-  'o t
+  t
 
 val error :
   ?command:Command_id.t ->
   ?context:Melange_edn.any ->
   'o Output.Mode.t ->
   Error.t ->
-  'o t
+  t
 
-val is_error : 'a t -> bool
-val exit_code : 'a t -> int
-val data_value : 'a t -> Melange_edn.any option
-val with_command : Command_id.t -> 'a t -> 'a t
+val is_error : t -> bool
+val exit_code : t -> int
+val data_value : t -> Melange_edn.any option
+val with_command : Command_id.t -> t -> t

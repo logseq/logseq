@@ -193,7 +193,7 @@ let normalize_uuid_refs config repo items =
           |> List.map (fun item -> item.Entity.raw))
         (Uuid_refs_types.fetch_uuid_labels config repo uuids)
 
-let execute action config mode =
+let execute_with_mode action config mode =
   let open Cli_effect in
   bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
     (function
@@ -247,3 +247,7 @@ let metadata () =
       ~examples:[ "logseq search tag --content \"quote\" --graph my-graph" ]
       Search_tag "Search tags by title";
   ]
+
+let execute action config =
+  let (Output.Mode.Packed mode) = Output_mode.for_config config in
+  execute_with_mode action config mode
