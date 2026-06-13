@@ -85,7 +85,7 @@ let build ?registry:_ config _globals (Parsed_pull opts) =
                })
       | None -> Error (Error.missing_repo "repo is required for debug pull"))
 
-let execute (Debug_pull action) config mode =
+let execute_with_mode (Debug_pull action) config mode =
   let open Cli_effect in
   bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
     (function
@@ -131,3 +131,7 @@ let metadata () =
       write_command = Command_id.is_write Command_id.Debug_pull;
     };
   ]
+
+let execute action config =
+  let (Output.Mode.Packed mode) = Output_mode.for_config config in
+  execute_with_mode action config mode

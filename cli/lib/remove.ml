@@ -619,7 +619,7 @@ let execute_remove_entity mode invoke_config repo ~command ~list_method
               (Edn_util.keyword_t "missing-target")
               (label ^ " name or id is required")))
 
-let execute action config mode =
+let execute_with_mode action config mode =
   let open Cli_effect in
   match action with
   | Remove_block { repo; id = Some id; _ } ->
@@ -735,3 +735,7 @@ let metadata () =
         ]
       Remove_property "Remove property";
   ]
+
+let execute action config =
+  let (Output.Mode.Packed mode) = Output_mode.for_config config in
+  execute_with_mode action config mode
