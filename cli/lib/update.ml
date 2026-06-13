@@ -368,8 +368,14 @@ let class_query selector class_ident =
   Edn_util.map
     [
       ( kw "find",
-        vector [ vector [ list [ variable "pull"; variable "?e"; selector ]; variable "..." ] ]
-      );
+        vector
+          [
+            vector
+              [
+                list [ variable "pull"; variable "?e"; selector ];
+                variable "...";
+              ];
+          ] );
       (kw "in", list [ variable "$"; variable "?name" ]);
       ( kw "where",
         vector
@@ -541,8 +547,7 @@ let resolve_property_ident invoke_config repo = function
                       "property not found")))
   | Key_name name ->
       let open Cli_effect in
-      bind (pull_property_by_name invoke_config repo name)
-        (fun result ->
+      bind (pull_property_by_name invoke_config repo name) (fun result ->
           match Option.bind (first_entity result) ident_of_entity with
           | Some ident -> pure (Ok ident)
           | None ->

@@ -233,7 +233,8 @@ let rec block_of_value raw =
       let uuid = Option.bind (find "block/uuid") Edn_util.as_string_like in
       let tags =
         Option.value
-          (Option.map (List.filter_map tag_of_value)
+          (Option.map
+             (List.filter_map tag_of_value)
              (Option.bind (find "block/tags") Edn_util.as_seq))
           ~default:[]
       in
@@ -822,34 +823,34 @@ let execute_add_block action config mode =
                                 ];
                             ]
                         in
-                        apply_outliner_ops invoke_config action.repo [ insert_op ]
+                        apply_outliner_ops invoke_config action.repo
+                          [ insert_op ]
                       in
                       let rec insert_tree target_uuid pos blocks =
                         if blocks = [] then pure Edn_util.nil
                         else
                           bind (insert_blocks target_uuid pos blocks)
                             (fun insert_result ->
-                            let rec insert_children acc = function
-                              | [] -> pure acc
-                              | block :: rest -> (
-                                  match block.Block.uuid with
-                                  | None -> insert_children acc rest
-                                  | Some uuid ->
-                                      bind
-                                        (insert_tree uuid Block.Last_child
-                                           block.Block.children)
-                                        (fun child_result ->
-                                          let acc =
-                                            if Edn_util.is_null acc then
-                                              child_result
-                                            else acc
-                                          in
-                                          insert_children acc rest))
-                            in
-                            insert_children insert_result blocks)
+                              let rec insert_children acc = function
+                                | [] -> pure acc
+                                | block :: rest -> (
+                                    match block.Block.uuid with
+                                    | None -> insert_children acc rest
+                                    | Some uuid ->
+                                        bind
+                                          (insert_tree uuid Block.Last_child
+                                             block.Block.children)
+                                          (fun child_result ->
+                                            let acc =
+                                              if Edn_util.is_null acc then
+                                                child_result
+                                              else acc
+                                            in
+                                            insert_children acc rest))
+                              in
+                              insert_children insert_result blocks)
                       in
-                      bind
-                        (insert_tree target_uuid action.pos action.blocks)
+                      bind (insert_tree target_uuid action.pos action.blocks)
                         (fun insert_result ->
                           let metadata_ops =
                             metadata_ops block_uuids action.status tags
@@ -861,15 +862,16 @@ let execute_add_block action config mode =
                                apply_outliner_ops invoke_config action.repo
                                  metadata_ops)
                             (fun _metadata_result ->
-                          bind
-                            (resolve_created_ids invoke_config action.repo
-                               all_blocks insert_result) (function
-                            | Error err ->
-                                pure
-                                  (Cli_result.error
-                                     ~command:Command_id.Upsert_block mode err)
-                            | Ok ids ->
-                                pure
-                                  (Cli_result.ok
-                                     ~command:Command_id.Upsert_block mode
-                                     (Raw (result_ids ids))))))))))
+                              bind
+                                (resolve_created_ids invoke_config action.repo
+                                   all_blocks insert_result) (function
+                                | Error err ->
+                                    pure
+                                      (Cli_result.error
+                                         ~command:Command_id.Upsert_block mode
+                                         err)
+                                | Ok ids ->
+                                    pure
+                                      (Cli_result.ok
+                                         ~command:Command_id.Upsert_block mode
+                                         (Raw (result_ids ids))))))))))
