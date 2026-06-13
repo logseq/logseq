@@ -313,11 +313,7 @@ let options_for_known_path = function
   | [ "debug"; "pull" ] ->
       selector_options @ [ value "ident" "ident" "Entity ident" ]
   | [ "doctor" ] -> [ flag "dev-script" "Use development script" ]
-  | [ "login" ]
-  | [ "logout" ]
-  | [ "agent"; "bridge" ]
-  | "example" :: _ ->
-      []
+  | [ "login" ] | [ "logout" ] | [ "agent"; "bridge" ] | "example" :: _ -> []
   | [ "skill"; "show" ] -> []
   | [ "completion" ] ->
       [ value "shell" "shell" "Completion shell" ~choices:[ "zsh"; "bash" ] ]
@@ -427,9 +423,9 @@ let render_help ?group (t : t) =
         format_rows
           (t.commands
           |> List.filter (fun (command : command_meta) ->
-                 command.category <> Hidden)
+              command.category <> Hidden)
           |> List.map (fun (command : command_meta) ->
-                 (command_label command, command.doc)));
+              (command_label command, command.doc)));
         "";
         "Global options:";
         global_options_help;
