@@ -851,7 +851,7 @@ let build ?registry:_ config _globals parsed =
 let items_value items =
   Edn_util.map_t [ (Edn_util.keyword "items", Edn_util.vector items) ]
 
-let execute action config mode =
+let execute_with_mode action config mode =
   let open Cli_effect in
   bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
     (function
@@ -979,3 +979,7 @@ let metadata () =
         ]
       List_asset "List assets";
   ]
+
+let execute action config =
+  let (Output.Mode.Packed mode) = Output_mode.for_config config in
+  execute_with_mode action config mode
