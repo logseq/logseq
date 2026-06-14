@@ -5,7 +5,8 @@
             [frontend.state.tabs :as tabs-state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]
+            [logseq.shui.hooks :as hooks]))
 
 ;; --- auto-hide typing state ---
 
@@ -71,20 +72,20 @@
 
 ;; --- components ---
 
-(rum/defc tab-item
-  [tab active? index drag-state tabs-count]
+(hsx/defc tab-item
+  [tab active? index drag-state set-drag-state! tabs-count]
   (let [title        (or (:title tab) "Untitled")
-        ds           @drag-state
-        drag-index   (:drag-index ds)
+        drag-index   (:drag-index drag-state)
         dragging?    (= drag-index index)
-        offset-x     (:offset-x ds 0)
-        stride       (:stride ds 122)
+        offset-x     (:offset-x drag-state 0)
+        stride       (:stride drag-state 122)
         target-index (when drag-index
                        (compute-target-index drag-index offset-x stride tabs-count))
         shift        (when (and drag-index (not dragging?))
                        (tab-shift index drag-index target-index stride))]
     [:div.tab-item
-     {:class (str (when active? "active ")
+     {:key   (:id tab)
+      :class (str (when active? "active ")
                   (when dragging? "chrome-dragging"))
       :style (cond
                dragging?
@@ -108,33 +109,33 @@
                          prev (- (.-left rect) (.-left (.getBoundingClientRect prev)))
                          :else (+ tw 2))]
             (.setPointerCapture el (.-pointerId e))
-            (reset! drag-state {:drag-index index
-                                :drag-id    (:id tab)
-                                :start-x    (.-clientX e)
-                                :offset-x   0
-                                :tab-width  tw
-                                :stride     stride}))))
+            (set-drag-state! {:drag-index index
+                              :drag-id    (:id tab)
+                              :start-x    (.-clientX e)
+                              :offset-x   0
+                              :tab-width  tw
+                              :stride     stride}))))
       :on-pointer-move
       (fn [e]
-        (when (= (:drag-index @drag-state) index)
-          (swap! drag-state assoc :offset-x (- (.-clientX e) (:start-x @drag-state)))))
+        (when (= (:drag-index drag-state) index)
+          (set-drag-state! (assoc drag-state :offset-x (- (.-clientX e) (:start-x drag-state))))))
       :on-pointer-up
       (fn [_e]
-        (when (= (:drag-index @drag-state) index)
-          (let [{:keys [drag-index offset-x stride]} @drag-state
+        (when (= (:drag-index drag-state) index)
+          (let [{:keys [drag-index offset-x stride]} drag-state
                 target    (compute-target-index drag-index offset-x stride tabs-count)
                 was-drag? (> (js/Math.abs offset-x) 5)]
             (when (not= target drag-index)
               (tabs-state/reorder-tabs! drag-index target))
-            (reset! drag-state (if was-drag? {:was-drag? true} {})))))
+            (set-drag-state! (if was-drag? {:was-drag? true} {})))))
       :on-pointer-cancel
       (fn [_e]
-        (reset! drag-state {}))
+        (set-drag-state! {}))
       :on-click
       (fn [e]
         (util/stop e)
-        (if (:was-drag? @drag-state)
-          (reset! drag-state {})
+        (if (:was-drag? drag-state)
+          (set-drag-state! {})
           (tabs-handler/switch-tab! (:id tab))))}
      [:div.tab-title {:title title} title]
      [:div.tab-close
@@ -144,34 +145,31 @@
                           (tabs-handler/close-tab! (:id tab)))}
       (ui/icon "x" {:size 14})]]))
 
-(rum/defcs tab-bar < rum/reactive
-                     (rum/local {} ::drag-state)
-                     {:did-mount    (fn [state]
-                                      (.addEventListener js/document "focusin" on-doc-focusin)
-                                      (.addEventListener js/document "keydown" on-doc-keydown)
-                                      (.addEventListener js/document "pointerdown" on-doc-pointerdown)
-                                      state)
-                      :will-unmount (fn [state]
-                                      (.removeEventListener js/document "focusin" on-doc-focusin)
-                                      (.removeEventListener js/document "keydown" on-doc-keydown)
-                                      (.removeEventListener js/document "pointerdown" on-doc-pointerdown)
-                                      (when @hide-timer (js/clearTimeout @hide-timer) (reset! hide-timer nil))
-                                      (reset! typing? false)
-                                      state)}
-  [state]
-  (let [drag-state    (::drag-state state)
-        tabs          (tabs-state/sub-tabs)
-        active-tab-id (tabs-state/sub-active-tab-id)
-        auto-hide?    (state/sub :ui/auto-hide-tabs-typing?)
-        is-typing?    (rum/react typing?)
+(hsx/defc tab-bar
+  []
+  (let [[drag-state set-drag-state!] (hooks/use-state {})
+        tabs          (state/use-sub :tabs/tabs-list)
+        active-tab-id (state/use-sub :tabs/active-tab-id)
+        auto-hide?    (state/use-sub :ui/auto-hide-tabs-typing?)
+        [is-typing?]  (hooks/use-atom typing?)
         hidden?       (and auto-hide? is-typing?)]
+    (hooks/use-effect!
+     (fn []
+       (.addEventListener js/document "focusin" on-doc-focusin)
+       (.addEventListener js/document "keydown" on-doc-keydown)
+       (.addEventListener js/document "pointerdown" on-doc-pointerdown)
+       (fn []
+         (.removeEventListener js/document "focusin" on-doc-focusin)
+         (.removeEventListener js/document "keydown" on-doc-keydown)
+         (.removeEventListener js/document "pointerdown" on-doc-pointerdown)
+         (when @hide-timer (js/clearTimeout @hide-timer) (reset! hide-timer nil))
+         (reset! typing? false)))
+     [])
     [:div.tabs-container
      {:class          (when hidden? "tabs-typing-hidden")
       :on-mouse-enter (when auto-hide? on-tabs-mouse-enter)}
      [:div.tabs-bar
       (map-indexed
         (fn [idx tab]
-          (rum/with-key
-            (tab-item tab (= (:id tab) active-tab-id) idx drag-state (count tabs))
-            (:id tab)))
-        tabs)]]))
+          (tab-item tab (= (:id tab) active-tab-id) idx drag-state set-drag-state! (count (or tabs []))))
+        (or tabs []))]]))

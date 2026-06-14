@@ -367,7 +367,7 @@
 (hsx/defc block-breadcrumb
   [page-name]
   (let [db-restoring? (state/use-sub :db/restoring?)]
-    (when-let [page (when (and page-name (common-util/uuid-string? page-name))
+    (when-let [page (when (and page-name (util/uuid-string? page-name))
                       (db/entity [:block/uuid (uuid page-name)]))]
       ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
       (when (and (if config/publishing? (not db-restoring?) true)

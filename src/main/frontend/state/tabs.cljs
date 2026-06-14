@@ -1,9 +1,7 @@
 (ns frontend.state.tabs
   "State management for tabs feature"
   (:require [frontend.mobile.util :as mobile-util]
-            [frontend.state :as state]
-            [frontend.util :as util]
-            [rum.core :as rum]))
+            [frontend.state :as state]))
 
 (defn tabs-enabled?
   "Tabs are only available on desktop (Electron) and web platforms, not on mobile native (iOS/Android)."
@@ -19,17 +17,6 @@
 (defn get-active-tab-id []
   (get-in @state/state [:tabs/active-tab-id]))
 
-
-(defn sub-tabs
-  "Reactive subscription to tabs list"
-  []
-  (or (util/react (rum/cursor-in state/state [:tabs/tabs-list])) []))
-
-
-(defn sub-active-tab-id
-  "Reactive subscription to active tab id"
-  []
-  (util/react (rum/cursor-in state/state [:tabs/active-tab-id])))
 
 (defn set-active-tab-id! [tab-id]
   (swap! state/state assoc-in [:tabs/active-tab-id] tab-id))

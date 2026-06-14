@@ -270,12 +270,11 @@
             :icon "home"
             :shortcut :go/home})
 
-          (when enable-journals?
-            (sidebar-item
+          (sidebar-item
              {:class "journals-nav"
               :active (and (not srs-open?)
                            (or (= route-name :all-journals) (= route-name :home)))
-              :title (t :left-side-bar/journals)
+              :title (t :nav/journals)
               :on-click-handler (fn [e]
                                   (let [cmd-key? (or (.-metaKey e) (.-ctrlKey e))
                                         shift? (gobj/get e "shiftKey")]
@@ -289,7 +288,7 @@
                                       :else
                                       (route-handler/go-to-journals!))))
               :icon "calendar"
-              :shortcut :go/journals}))))
+              :shortcut :go/journals})))
 
       (for [nav checked-navs]
         (cond

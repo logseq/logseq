@@ -1318,7 +1318,7 @@
                                    (notification/show!
                                     "The logseq-tabs plugin has been automatically uninstalled. Logseq now has built-in tabs support!"
                                     :success
-                                    false))))))
+                                    false)))))
 
 
               default-plugins (get-user-default-plugins)

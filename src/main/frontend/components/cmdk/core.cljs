@@ -658,7 +658,6 @@
 (defmethod handle-action :create [_ state _event]
   (let [item (state->highlighted-item state)
         !input (::input state)
-        input @!input
         create-class? (string/starts-with? @!input "#")
         create-page? (= :page (:source-create item))
         class (when create-class? (get-class-from-input @!input))]
@@ -674,7 +673,7 @@
           (and create-class? result)
           (state/pub-event! [:dialog/show-block result {:tag-dialog? true}])
           (and create-page? result)
-          (tabs-handler/open-tab-by-page! (:block/uuid result) {:new-tab? true})))))
+          (tabs-handler/open-tab-by-page! (:block/uuid result) {:new-tab? true}))))))
 
 (defn- get-filter-user-input
   [input]
