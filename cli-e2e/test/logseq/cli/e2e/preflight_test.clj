@@ -3,7 +3,8 @@
             [logseq.cli.e2e.preflight :as preflight]))
 
 (def required-artifacts
-  ["/repo/static/logseq-cli.js"
+  ["/repo/cli/_build/default/dist/logseq-cli.js"
+   "/repo/static/logseq-cli.js"
    "/repo/static/db-worker-node.js"
    "/repo/dist/db-worker-node.js"
    "/repo/dist/db-worker-node-assets.json"
@@ -16,10 +17,12 @@
     (f)))
 
 (deftest build-plan-matches-required-commands
-  (is (= ["clojure -M:cljs compile logseq-cli"
+  (is (= ["pnpm cli:release"
           "pnpm db-worker-node:compile:bundle"
           "pnpm --dir deps/db-sync build:node-adapter"]
-         (mapv :cmd preflight/build-plan))))
+         (mapv :cmd preflight/build-plan)))
+  (is (not-any? #(re-find #"clojure -M:cljs compile logseq-cli" (:cmd %))
+                preflight/build-plan)))
 
 (deftest missing-artifacts-returns-unreadable-paths
   (let [artifacts ["/repo/static/logseq-cli.js"
@@ -50,7 +53,7 @@
                                                      :err ""})
                                      :file-exists? (set required-artifacts)})]
          (is (= :ok (:status result)))
-         (is (= ["clojure -M:cljs compile logseq-cli"
+         (is (= ["pnpm cli:release"
                  "pnpm db-worker-node:compile:bundle"
                  "pnpm --dir deps/db-sync build:node-adapter"]
                 @calls))))))
@@ -70,7 +73,7 @@
                                      :file-exists? (fn [path]
                                                      (contains? @existing path))})]
          (is (= :ok (:status result)))
-         (is (= ["clojure -M:cljs compile logseq-cli"
+         (is (= ["pnpm cli:release"
                  "pnpm db-worker-node:compile:bundle"
                  "pnpm --dir deps/db-sync build:node-adapter"]
                 @calls))))))
@@ -89,7 +92,7 @@
                                      :file-exists? (fn [path]
                                                      (contains? @existing path))})]
          (is (= :ok (:status result)))
-         (is (= ["clojure -M:cljs compile logseq-cli"
+         (is (= ["pnpm cli:release"
                  "pnpm db-worker-node:compile:bundle"
                  "pnpm --dir deps/db-sync build:node-adapter"]
                 @calls))))))

@@ -6,11 +6,13 @@ on:
   push:
     branches: [master]
     paths:
+      - 'cli/**'
       - 'src/main/logseq/cli/**'
       - 'src/test/logseq/cli/**'
       - 'cli-e2e/**'
       - 'dist/logseq.js'
       - 'scripts/prepare-cli-package.mjs'
+      - 'scripts/stage-cli-runtime.mjs'
       - 'scripts/test-cli-release-config.mjs'
       - '.github/workflows/deps-cli.yml'
       - '!**/*.md'
@@ -25,11 +27,13 @@ on:
   pull_request:
     branches: [master]
     paths:
+      - 'cli/**'
       - 'src/main/logseq/cli/**'
       - 'src/test/logseq/cli/**'
       - 'cli-e2e/**'
       - 'dist/logseq.js'
       - 'scripts/prepare-cli-package.mjs'
+      - 'scripts/stage-cli-runtime.mjs'
       - 'scripts/test-cli-release-config.mjs'
       - '.github/workflows/deps-cli.yml'
       - '!**/*.md'
@@ -60,6 +64,7 @@ env:
   CLOJURE_VERSION: '1.12.4.1618'
   JAVA_VERSION: '21'
   NODE_VERSION: '24'
+  OCAML_VERSION: '5.4.0'
   BABASHKA_VERSION: '1.12.215'
 
 jobs:
@@ -80,7 +85,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
-          cache-dependency-path: pnpm-lock.yaml
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            cli/pnpm-lock.yaml
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -94,12 +101,27 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
+      - name: Fetch OCaml deps
+        working-directory: cli
+        run: opam install . --deps-only --with-test --yes
+
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
 
+      - name: Fetch CLI pnpm deps
+        run: pnpm --dir cli install --frozen-lockfile
+
+      - name: Run logseq CLI tests
+        run: opam exec -- pnpm --dir cli test
+
       - name: Build logseq CLI
         run: |
-          clojure -M:cljs release logseq-cli
+          opam exec -- pnpm cli:release
           pnpm db-worker-node:release:bundle
 
       - name: Verify CLI publish config
@@ -127,7 +149,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
-          cache-dependency-path: pnpm-lock.yaml
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            cli/pnpm-lock.yaml
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -141,12 +165,24 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
+      - name: Fetch OCaml deps
+        working-directory: cli
+        run: opam install . --deps-only --with-test --yes
+
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
 
+      - name: Fetch CLI pnpm deps
+        run: pnpm --dir cli install --frozen-lockfile
+
       - name: Build logseq CLI
         run: |
-          clojure -M:cljs release logseq-cli
+          opam exec -- pnpm cli:release
           pnpm db-worker-node:release:bundle
 
       - name: Prepare npm package
