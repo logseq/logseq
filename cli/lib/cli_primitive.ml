@@ -10,6 +10,15 @@ type shell = Bash | Zsh
 type port = int
 type pid = int
 type owner_source = Cli | Electron | Unknown | Other of string
+type ds_where_clause =
+  | V of Melange_edn.vector Melange_edn.t
+  | L of Melange_edn.list_ Melange_edn.t
+
+type datascript_query = {
+  find : Melange_edn.any list;
+  in_ : Melange_edn.symbol Melange_edn.t list option;
+  where : ds_where_clause list;
+}
 
 let trim = String.trim
 let db_version_prefix = "logseq_db_"
@@ -56,3 +65,28 @@ let string_of_owner_source = function
   | Electron -> "electron"
   | Unknown -> "unknown"
   | Other s -> s
+
+let make_datascript_query ~find ?in_ ~where () =
+  let in_ =
+    match in_ with
+    | None | Some [] -> None
+    | Some values -> Some values
+  in
+  { find; in_; where }
+
+let datascript_query_to_edn query =
+  let input_clause =
+    match query.in_ with
+    | None -> []
+    | Some inputs ->
+        Edn_util.keyword "in" :: List.map (fun value -> Edn_util.any value) inputs
+  in
+  let where_clause = function
+    | V value -> Edn_util.any value
+    | L value -> Edn_util.any value
+  in
+  Edn_util.vector_t
+    (Edn_util.keyword "find"
+    :: query.find
+    @ input_clause
+    @ (Edn_util.keyword "where" :: List.map where_clause query.where))

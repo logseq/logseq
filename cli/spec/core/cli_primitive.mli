@@ -13,6 +13,16 @@ type port = int
 type pid = int
 type owner_source = Cli | Electron | Unknown | Other of string
 
+type ds_where_clause =
+  | V of Melange_edn.vector Melange_edn.t
+  | L of Melange_edn.list_ Melange_edn.t
+
+type datascript_query = private {
+  find : Melange_edn.any list;
+  in_ : Melange_edn.symbol Melange_edn.t list option;
+  where : ds_where_clause list;
+}
+
 val create_graph : string -> graph
 
 val create_repo : string -> repo
@@ -24,3 +34,13 @@ val non_empty : string -> string option
 val is_uuid_string : string -> bool
 val shell_of_string : string -> shell option
 val string_of_owner_source : owner_source -> string
+
+val make_datascript_query :
+  find:Melange_edn.any list ->
+  ?in_:Melange_edn.symbol Melange_edn.t list ->
+  where:ds_where_clause list ->
+  unit ->
+  datascript_query
+
+val datascript_query_to_edn :
+  datascript_query -> Melange_edn.vector Melange_edn.t
