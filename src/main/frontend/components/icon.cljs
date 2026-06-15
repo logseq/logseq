@@ -2177,12 +2177,23 @@
   [label icon-items & {:keys [collapsible? keyboard-hint total-count searching? virtual-list? render-item-fn expanded? focus-region show-header? *virtuoso-ref header-cp]
                        :or {virtual-list? true collapsible? false expanded? true show-header? true}
                        :as opts}]
-  (let [*el-ref (hooks/use-ref nil)
+  (let [;; Resolve the `.bd-scroll` ancestor reactively so Virtuoso picks
+        ;; up `:custom-scroll-parent` on the render after the node attaches.
+        ;; A plain `(deref ref)` read stays `nil` here: under HSX nothing
+        ;; re-renders `pane-section` after attach (Rum's `rum/local` used to
+        ;; do it implicitly), so Virtuoso never dropped its own scroller and
+        ;; the double scrollbar returned. The stable callback ref fires once
+        ;; on mount and stores the parent in state, forcing that one render.
+        [scroll-parent set-scroll-parent!] (hooks/use-state nil)
+        el-ref (hooks/use-callback
+                (fn [^js el]
+                  (set-scroll-parent! (some-> el (.closest ".bd-scroll"))))
+                [])
         render-fn (or render-item-fn render-item)
         toggle-fn (when collapsible?
                     #(swap! *section-states update label (fn [v] (if (nil? v) false (not v)))))]
     [:div.pane-section
-     {:ref *el-ref
+     {:ref el-ref
       :class (util/classnames
               [{:has-virtual-list virtual-list?
                 :searching-result searching?}])}
@@ -2218,11 +2229,12 @@
                      ;; across every picker mode (All / Emojis / Icons /
                      ;; reaction / search), reclaiming the ~6px the
                      ;; inner Virtuoso scrollbar would otherwise eat so
-                     ;; the 9-column grid stays at 9. On first render
-                     ;; the ref isn't attached yet and this is `nil`;
-                     ;; Virtuoso falls back to internal scrolling for
-                     ;; one frame, then re-renders with the parent.
-                     :custom-scroll-parent (some-> (hooks/deref *el-ref) (.closest ".bd-scroll"))
+                     ;; the 9-column grid stays at 9. `scroll-parent` is
+                     ;; `nil` on first render (node not attached yet);
+                     ;; Virtuoso falls back to internal scrolling for one
+                     ;; frame, then the callback ref resolves the parent and
+                     ;; the re-render hands it over.
+                     :custom-scroll-parent scroll-parent
                      :item-content (fn [idx]
                                      (icons-row
                                       (let [last? (= (dec rows) idx)
