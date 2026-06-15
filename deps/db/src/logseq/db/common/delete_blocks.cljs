@@ -97,6 +97,7 @@
         history-entities (->> entities
                               (mapcat (fn [entity]
                                         (concat (:logseq.property.history/_block entity)
+                                                (:logseq.property.history/_property entity)
                                                 (:logseq.property.history/_ref-value entity))))
                               (common-util/distinct-by :db/id))
         retract-history-tx (map (fn [history] [:db/retractEntity (:db/id history)])

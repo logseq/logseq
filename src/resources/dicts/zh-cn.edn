@@ -1709,10 +1709,8 @@
  :settings.editor/wide-mode "宽屏模式"
 
  :settings.features/enable-flashcards "记忆卡片"
- :settings.features/enable-journals "开启日记"
  :settings.features/home-default-page "设置首页默认页面"
  :settings.features/home-default-page-update-success "主页默认页面已更新成功！"
- :settings.features/journals-enable-success "已启用日志页"
  :settings.features/login-prompt "你必须是 Logseq 的 Open Collective Sponsor 或者 Backer 才能提前使用新功能（仍在测试中），因此需要登录。"
  :settings.features/markdown-mirror "Markdown 镜像"
  :settings.features/markdown-mirror-desc "将已编辑页面的派生 Markdown 副本写入图谱的 mirror/markdown 文件夹。仅桌面端可用。"
@@ -1723,6 +1721,7 @@
  :settings.features/plugin-system "插件系统"
  :settings.features/semantic-search "语义搜索"
  :settings.features/semantic-search-desc "在搜索结果中包含语义匹配。适用于 macOS Apple 芯片设备。"
+ :settings.features/semantic-search-python3-missing "请安装 Python 3 以启用语义搜索。"
 
  :settings.general/accent-color "高亮色"
  :settings.general/accent-color-alert "选择高亮色可能会影响你选择的自定义主题。"

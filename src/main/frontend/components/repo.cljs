@@ -181,8 +181,7 @@
                                      (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion graph-e2ee?])
 
                                      :else
-                                     (when-not (util/capacitor?)
-                                       (state/pub-event! [:graph/pull-down-remote-graph repo]))))))]
+                                     nil))))]
       (when-let [time (some-> (or last-seen-at created-at) (safe-locale-date))]
         [:small.text-muted-foreground (t :graph/last-opened-at-label time)])]
 
@@ -384,7 +383,7 @@
                                                  (when target
                                                    (state/pub-event! [:graph/open-new-window target])))))
                                            (cond
-                                                  ;; exists locally?
+                                             ;; exists locally?
                                              (or (:root graph) (not rtc-graph?))
                                              (state/pub-event! [:graph/switch url])
 
@@ -396,7 +395,7 @@
                                                  false))
 
                                              :else
-                                             (state/pub-event! [:graph/pull-down-remote-graph graph])))))}})))
+                                             nil))))}})))
                     switch-repos)]
     (->> repo-links (remove nil?))))
 

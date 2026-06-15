@@ -113,6 +113,17 @@
                                         cmd " " (pr-str args)
                                         " exited with " code))))))))))
 
+(defn python-command-available!
+  ([cmd] (python-command-available! cmd {}))
+  ([cmd opts]
+   (let [run-command-fn (or (:run-command! opts) run-command!)
+         logger (or (:logger opts)
+                    {:debug (fn [& _args])
+                     :warn (fn [& _args])})]
+     (-> (run-command-fn cmd ["--version"] {:logger logger})
+         (p/then (fn [_] true))
+         (p/catch (fn [_error] false))))))
+
 (defn- find-port!
   [host]
   (js/Promise.
@@ -213,25 +224,46 @@
            ((:error logger) :embedding-server/start-failed error)))
     proc))
 
-(defn- existing-venv-python
+(defn- existing-venv-python-candidates
   [{:keys [exists? venv-python-candidates]}]
-  (some #(when (exists? %) %) venv-python-candidates))
+  (filterv #(exists? %) venv-python-candidates))
+
+(defn- validate-venv-python!
+  [{:keys [runtime-dir logger] :as cfg} venv-python]
+  (-> ((:run-command! cfg) venv-python ["-c" "import sys"] {:cwd runtime-dir
+                                                            :logger logger})
+      (p/then (fn [_] venv-python))
+      (p/catch (fn [_error] nil))))
+
+(defn- usable-venv-python!
+  [cfg]
+  (letfn [(try-candidates! [candidates]
+            (if-let [candidate (first candidates)]
+              (p/let [usable-python (validate-venv-python! cfg candidate)]
+                (if usable-python
+                  usable-python
+                  (try-candidates! (rest candidates))))
+              (p/resolved nil)))]
+    (try-candidates! (existing-venv-python-candidates cfg))))
 
 (defn- install-runtime!
   [{:keys [runtime-dir venv-dir deps-stamp python-command
            ensure-dir! remove-dir! exists? write-file! logger] :as cfg}]
   (ensure-dir! runtime-dir)
-  (let [run-command-fn (:run-command! cfg)
-        venv-python (existing-venv-python cfg)
-        needs-venv? (nil? venv-python)
-        needs-deps? (or needs-venv?
-                        (not (exists? deps-stamp)))]
-    (p/let [_ (when needs-venv?
+  (let [run-command-fn (:run-command! cfg)]
+    (p/let [venv-python (usable-venv-python! cfg)
+            needs-venv? (nil? venv-python)
+            needs-deps? (or needs-venv?
+                            (not (exists? deps-stamp)))
+            _ (when needs-venv?
                 (remove-dir! venv-dir))
             _ (when needs-venv?
                 (run-command-fn python-command ["-m" "venv" venv-name] {:cwd runtime-dir
                                                                          :logger logger}))
-            venv-python (or (existing-venv-python cfg)
+            venv-python (if needs-venv?
+                          (usable-venv-python! cfg)
+                          venv-python)
+            venv-python (or venv-python
                             (throw (ex-info "Embedding server virtualenv Python is missing"
                                             {:venv-dir venv-dir
                                              :candidates (:venv-python-candidates cfg)})))

@@ -133,11 +133,10 @@
                                   (:page default-home))
                              [:page (:page default-home)]
 
-                             (or (not (state/enable-journals? current-repo))
-                                 (let [latest-journals (db/get-latest-journals (state/get-current-repo) 1)]
-                                   (and config/publishing?
-                                        (not default-home)
-                                        (empty? latest-journals))))
+                             (let [latest-journals (db/get-latest-journals (state/get-current-repo) 1)]
+                               (and config/publishing?
+                                    (not default-home)
+                                    (empty? latest-journals)))
                              [:route :all-pages])]
        (hooks/use-effect!
         (fn []
