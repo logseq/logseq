@@ -61,7 +61,7 @@
         dialog-config {:cancel-label (t :ui/cancel)
                        :ok-label (t :ui/confirm)}]
     (-> (shui/dialog-confirm!
-         [:p.font-medium.-my-4.mb-6 (t :graph/upload-local-confirm-desc graph-name)]
+         [:p.font-medium.mb-6 (t :graph/upload-local-confirm-desc graph-name)]
          dialog-config)
         (p/then
          (fn []
