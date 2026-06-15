@@ -517,8 +517,7 @@
             new-home (dissoc home :page)]
         (p/do!
          (config-handler/set-config! :default-home new-home)
-         (config-handler/set-config! :feature/enable-journals? true)
-         (notification/show! (t :settings.features/journals-enable-success) :success)))
+         (notification/show! (t :settings.features/home-default-page-update-success) :success)))
 
       ;; FIXME: home page should be db id instead of page name
       (ldb/get-page (db/get-db) value)
@@ -529,14 +528,6 @@
 
       :else
       (notification/show! (t :settings.features/page-not-found value) :warning))))
-
-(defn journal-row [enable-journals?]
-  (toggle "enable_journals"
-          (t :settings.features/enable-journals)
-          enable-journals?
-          (fn []
-            (let [value (not enable-journals?)]
-              (config-handler/set-config! :feature/enable-journals? value)))))
 
 (defn enable-all-pages-public-row [t enable-all-pages-public?]
   (toggle "all pages public"
@@ -585,8 +576,17 @@
           enabled?
           (fn []
             (let [enabled?' (not enabled?)]
-              (state/set-state! [:electron/user-cfgs :feature/enable-semantic-search?] enabled?')
-              (ipc/ipc :userAppCfgs :feature/enable-semantic-search? enabled?')))
+              (if enabled?'
+                (-> (ipc/ipc :userAppCfgs :feature/enable-semantic-search? true)
+                    (p/then (fn [_]
+                              (state/set-state! [:electron/user-cfgs :feature/enable-semantic-search?] true)))
+                    (p/catch (fn [_error]
+                               (notification/show!
+                                (t :settings.features/semantic-search-python3-missing)
+                                :warning))))
+                (do
+                  (state/set-state! [:electron/user-cfgs :feature/enable-semantic-search?] false)
+                  (ipc/ipc :userAppCfgs :feature/enable-semantic-search? false)))))
           [:div.text-sm.opacity-50 (t :settings.features/semantic-search-desc)]))
 
 (hsx/defc plugin-enabled-switcher
@@ -1125,25 +1125,22 @@
         app-user-cfgs (rfx/use-sub [:electron/user-cfgs])
         app-base-info (rfx/use-sub [:electron/app-base-info])
         current-repo (state/get-current-repo)
-        enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
         semantic-search-enabled? (true? (:feature/enable-semantic-search? app-user-cfgs))
         logged-in? (user-handler/logged-in?)]
     [:div.panel-wrap.is-features.mb-8
-     (journal-row enable-journals?)
-     (when (not enable-journals?)
-       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-        [:label.block.text-sm.font-medium.leading-5.opacity-70
-         {:for "default page"}
-         (t :settings.features/home-default-page)]
-        [:div.mt-1.sm:mt-0.sm:col-span-2
-         [:div.max-w-lg.rounded-md.sm:max-w-xs
-          [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
-           {:default-value default-home-page
-            :on-blur       update-home-page
-            :on-key-press  (fn [e]
-                             (when (= "Enter" (util/ekey e))
-                               (update-home-page e)))}]]]])
+     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+      [:label.block.text-sm.font-medium.leading-5.opacity-70
+       {:for "default page"}
+       (t :settings.features/home-default-page)]
+      [:div.mt-1.sm:mt-0.sm:col-span-2
+       [:div.max-w-lg.rounded-md.sm:max-w-xs
+        [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
+         {:default-value default-home-page
+          :on-blur       update-home-page
+          :on-key-press  (fn [e]
+                           (when (= "Enter" (util/ekey e))
+                             (update-home-page e)))}]]]]
      (when (and web-platform? config/feature-plugin-system-on?)
        (plugin-system-switcher-row))
      (when (util/electron?)

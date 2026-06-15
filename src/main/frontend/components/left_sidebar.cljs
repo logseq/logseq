@@ -242,9 +242,8 @@
              (shui/tabler-icon "filter-edit" {:size 14})]}
      [:div.sidebar-navigations.flex.flex-col.mt-1
        ;; required custom home page
-      (let [page (:page default-home)
-            enable-journals? (state/enable-journals? (state/get-current-repo))]
-        (if (and page (not enable-journals?))
+      (let [page (:page default-home)]
+        (if page
           (sidebar-item
            {:class "home-nav"
             :title page
@@ -255,18 +254,17 @@
             :icon "home"
             :shortcut :go/home})
 
-          (when enable-journals?
-            (sidebar-item
-             {:class "journals-nav"
-              :active (and (not srs-open?)
-                           (or (= route-name :all-journals) (= route-name :home)))
-              :title (t :nav/journals)
-              :on-click-handler (fn [e]
-                                  (if (gobj/get e "shiftKey")
-                                    (route-handler/sidebar-journals!)
-                                    (route-handler/go-to-journals!)))
-              :icon "calendar"
-              :shortcut :go/journals}))))
+          (sidebar-item
+           {:class "journals-nav"
+            :active (and (not srs-open?)
+                         (or (= route-name :all-journals) (= route-name :home)))
+            :title (t :nav/journals)
+            :on-click-handler (fn [e]
+                                (if (gobj/get e "shiftKey")
+                                  (route-handler/sidebar-journals!)
+                                  (route-handler/go-to-journals!)))
+            :icon "calendar"
+            :shortcut :go/journals})))
 
       (for [nav checked-navs]
         (cond

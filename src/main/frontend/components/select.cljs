@@ -129,6 +129,11 @@
            (fn []
              #(shui/dialog-close! :ls-select-modal))
            [])
+        _ (hooks/use-effect!
+           (fn []
+             (when (fn? tap-*input-val)
+               (tap-*input-val *input)))
+           [tap-*input-val *input])
         full-choices (cond->>
                       (remove nil? items)
                        (seq input)

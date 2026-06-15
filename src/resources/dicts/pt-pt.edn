@@ -1587,10 +1587,8 @@
  :settings.editor/wide-mode "Modo amplo"
 
  :settings.features/enable-flashcards "Ativar flashcards"
- :settings.features/enable-journals "Páginas Diárias"
  :settings.features/home-default-page "Definir a página inicial predefinida"
  :settings.features/home-default-page-update-success "Página inicial predefinida atualizada"
- :settings.features/journals-enable-success "Diários ativados"
  :settings.features/login-prompt "Para aceder a novas funcionalidades antes de qualquer outra pessoa tem de ser um \"Sponsor\" ou \"Backer\" na Open Collective do Logseq e, portanto, tem de iniciar sessão primeiro."
  :settings.features/page-not-found "A página \"{1}\" ainda não existe. Crie essa página primeiro e tente novamente."
  :settings.features/plugin-system "Sistema de extensões"
