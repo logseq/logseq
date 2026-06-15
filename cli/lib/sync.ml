@@ -353,33 +353,36 @@ let repo_string repo = Cli_primitive.string_of_repo repo
 let graph_string graph = Cli_primitive.string_of_graph graph
 
 let graph_e2ee_query =
-  vector
-    [
-      kw "find";
-      sym "?v";
-      kw ".";
-      kw "where";
-      vector [ sym "?e"; kw "db/ident"; kw "logseq.kv/graph-rtc-e2ee?" ];
-      vector [ sym "?e"; kw "kv/value"; sym "?v" ];
-    ]
+  Cli_primitive.make_datascript_query
+    ~find:[ sym "?v"; kw "." ]
+    ~where:
+      [
+        Cli_primitive.V
+          (Edn_util.vector_t
+             [ sym "?e"; kw "db/ident"; kw "logseq.kv/graph-rtc-e2ee?" ]);
+        Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "kv/value"; sym "?v" ]);
+      ]
+    ()
 
 let sync_download_non_empty_query =
-  vector
-    [
-      kw "find";
-      Edn_util.list [ sym "count"; sym "?e" ];
-      kw ".";
-      kw "where";
-      vector [ sym "?e"; kw "block/name"; sym "_" ];
-      Edn_util.list
-        [
-          sym "not";
-          vector
-            [ sym "?e"; kw "logseq.property/built-in?"; Edn_util.bool true ];
-        ];
-      Edn_util.list [ sym "not"; vector [ sym "?e"; kw "db/ident" ] ];
-      Edn_util.list [ sym "not"; vector [ sym "?e"; kw "file/path" ] ];
-    ]
+  Cli_primitive.make_datascript_query
+    ~find:[ Edn_util.list [ sym "count"; sym "?e" ]; kw "." ]
+    ~where:
+      [
+        Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "block/name"; sym "_" ]);
+        Cli_primitive.L
+          (Edn_util.list_t
+             [
+               sym "not";
+               vector
+                 [ sym "?e"; kw "logseq.property/built-in?"; Edn_util.bool true ];
+             ]);
+        Cli_primitive.L
+          (Edn_util.list_t [ sym "not"; vector [ sym "?e"; kw "db/ident" ] ]);
+        Cli_primitive.L
+          (Edn_util.list_t [ sym "not"; vector [ sym "?e"; kw "file/path" ] ]);
+      ]
+    ()
 
 let sync_asset_pull_selector =
   vector
@@ -903,7 +906,12 @@ let execute_start mode config repo e2ee_password =
             | Error err -> error err
           in
           Transport.thread_api_q invoke_config ~repo
-            ~query:(Edn_util.vector_t [ graph_e2ee_query ])
+            ~query:
+              (Edn_util.vector_t
+                 [
+                   Edn_util.any
+                     (Cli_primitive.datascript_query_to_edn graph_e2ee_query);
+                 ])
           >>= fun graph_e2ee ->
           let graph_e2ee = Edn_util.as_bool graph_e2ee = Some true in
           let handle_e2ee = function
@@ -1010,7 +1018,13 @@ let execute_ensure_keys mode config ~upload_keys ~e2ee_password =
 
 let ensure_empty_download_db invoke_config repo =
   Transport.thread_api_q invoke_config ~repo
-    ~query:(Edn_util.vector_t [ sync_download_non_empty_query ])
+    ~query:
+      (Edn_util.vector_t
+         [
+           Edn_util.any
+             (Cli_primitive.datascript_query_to_edn
+                sync_download_non_empty_query);
+         ])
   >>= function
   | count_value when Option.value (Edn_util.as_int count_value) ~default:0 > 0
     ->
