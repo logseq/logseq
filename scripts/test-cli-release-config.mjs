@@ -105,6 +105,43 @@ assert.match(buildWorkflow, /--graph schema-graph --timeout-ms 120000/, "db grap
 assertNotContains(buildWorkflow, "clojure -M:cljs compile logseq-cli", "db graph workflow");
 assertNotContains(buildWorkflow, "pnpm db-worker-node:compile:bundle", "db graph workflow");
 
+const desktopReleaseWorkflow = readText(".github/workflows/build-desktop-release.yml");
+assert.match(
+  desktopReleaseWorkflow,
+  /OCAML_VERSION: '5\.4\.0'/,
+  "desktop release workflow should define the OCaml version used by cli/",
+);
+assert.match(
+  desktopReleaseWorkflow,
+  /uses: ocaml\/setup-ocaml@v3/,
+  "desktop release workflow should set up OCaml before building cli/",
+);
+assert.match(
+  desktopReleaseWorkflow,
+  /working-directory: cli\s+run: opam install \. --deps-only --with-test --yes/,
+  "desktop release workflow should install cli/ OCaml deps",
+);
+assert.match(
+  desktopReleaseWorkflow,
+  /pnpm --dir cli install --frozen-lockfile/,
+  "desktop release workflow should install cli/ pnpm deps",
+);
+assert.match(
+  desktopReleaseWorkflow,
+  /opam exec -- pnpm cli:release/,
+  "desktop release workflow should build and stage the OCaml CLI",
+);
+assert.ok(
+  desktopReleaseWorkflow.indexOf("opam exec -- pnpm cli:release") <
+    desktopReleaseWorkflow.indexOf("pnpm desktop:prepare-runtime-js"),
+  "desktop release workflow should stage the CLI before preparing desktop runtime scripts",
+);
+assertNotContains(
+  desktopReleaseWorkflow,
+  "clojure -M:cljs release logseq-cli",
+  "desktop release workflow",
+);
+
 const shadowCljs = readText("shadow-cljs.edn");
 assertNotContains(shadowCljs, ":logseq-cli", "shadow-cljs.edn");
 
