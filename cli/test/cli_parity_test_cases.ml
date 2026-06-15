@@ -1036,6 +1036,34 @@ let () =
         remove_tree root;
         fail_test (Printexc.to_string exn));
 
+  test "CLI parity empty config file uses defaults" (fun () ->
+      let root = temp_dir "logseq-cli-parity-config-empty-" in
+      let cfg_path = Node.Path.join [| root; "cli.edn" |] in
+      try
+        write_file cfg_path " \n\t";
+        let config =
+          resolve_config (Global_opts.create ~config_path:cfg_path ())
+        in
+        expect_equal "config path" cfg_path config.config_path;
+        expect_equal "root-dir"
+          (Node.Path.join
+             [| Sys.getenv_opt "HOME" |> Option.value ~default:"."; "logseq" |])
+          config.root_dir;
+        expect_equal "ws-url" "wss://api.logseq.io/sync/%s"
+          (expect_some "ws-url" config.ws_url);
+        expect_equal "http-base" "https://api.logseq.io"
+          (expect_some "http-base" config.http_base);
+        expect_int64 "timeout" 10_000L (Time.span_to_ms config.timeout_span);
+        expect_int64 "login timeout" 300_000L
+          (Time.span_to_ms config.login_timeout_span);
+        expect_int64 "logout timeout" 120_000L
+          (Time.span_to_ms config.logout_timeout_span);
+        expect_int "title max width" 40 config.list_title_max_display_width;
+        remove_tree root
+      with exn ->
+        remove_tree root;
+        fail_test (Printexc.to_string exn));
+
   test "CLI parity config path follows root-dir unless explicitly set"
     (fun () ->
       let root = temp_dir "logseq-cli-parity-config-path-" in
