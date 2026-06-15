@@ -53,6 +53,115 @@ let () =
         "\"status\"";
       expect_named_not_contains "skill markdown data wrapper" output "\"data\"")
 
+let write_cli_wrapper path =
+  write_file path
+    ("require("
+    ^ Js.Json.stringify (Js.Json.string (Node.Path.resolve "." entrypoint))
+    ^ ");\n")
+
+let spawn_cli_from entrypoint ?(env = [||]) args =
+  spawn_sync Node.Process.argv.(0)
+    (Array.of_list (entrypoint :: args))
+    [%obj { encoding = "utf8"; env = clone_env env }]
+
+let doctor_args root =
+  [ "--root-dir"; root; "--output"; "json"; "doctor" ]
+
+let () =
+  test "doctor resolves db-worker-node beside CLI entrypoint" (fun () ->
+      let root = temp_dir "logseq-cli-doctor-entrypoint-root-" in
+      let app_dir = temp_dir "logseq-cli-doctor-app-" in
+      let cli_dir = Node.Path.join [| app_dir; "bin" |] in
+      let cli_path = Node.Path.join [| cli_dir; "logseq-cli.js" |] in
+      let worker_path = Node.Path.join [| cli_dir; "db-worker-node.js" |] in
+      try
+        mkdir_p cli_dir;
+        write_cli_wrapper cli_path;
+        write_file worker_path "console.log('db-worker');\n";
+        let result = spawn_cli_from cli_path (doctor_args root) in
+        remove_tree root;
+        remove_tree app_dir;
+        ignore (expect_exit_zero "doctor entrypoint worker" result);
+        expect_named_contains "doctor entrypoint path" result##stdout worker_path
+      with exn ->
+        remove_tree root;
+        remove_tree app_dir;
+        fail_test (Printexc.to_string exn));
+
+  test "doctor resolves db-worker-node beside CLI inside app.asar" (fun () ->
+      let root = temp_dir "logseq-cli-doctor-asar-root-" in
+      let app_dir = temp_dir "logseq-cli-doctor-app-" in
+      let asar_dir = Node.Path.join [| app_dir; "Logseq.app.asar" |] in
+      let cli_path = Node.Path.join [| asar_dir; "logseq-cli.js" |] in
+      let worker_path = Node.Path.join [| asar_dir; "db-worker-node.js" |] in
+      try
+        mkdir_p asar_dir;
+        write_cli_wrapper cli_path;
+        write_file worker_path "console.log('db-worker');\n";
+        let result = spawn_cli_from cli_path (doctor_args root) in
+        remove_tree root;
+        remove_tree app_dir;
+        ignore (expect_exit_zero "doctor asar worker" result);
+        expect_named_contains "doctor asar path" result##stdout worker_path
+      with exn ->
+        remove_tree root;
+        remove_tree app_dir;
+        fail_test (Printexc.to_string exn));
+
+  test "doctor resolves db-worker-node under js beside CLI entrypoint"
+    (fun () ->
+      let root = temp_dir "logseq-cli-doctor-entrypoint-js-root-" in
+      let app_dir = temp_dir "logseq-cli-doctor-app-" in
+      let cli_dir = Node.Path.join [| app_dir; "bin" |] in
+      let cli_js_dir = Node.Path.join [| cli_dir; "js" |] in
+      let cli_path = Node.Path.join [| cli_dir; "logseq-cli.js" |] in
+      let worker_path = Node.Path.join [| cli_js_dir; "db-worker-node.js" |] in
+      try
+        mkdir_p cli_js_dir;
+        write_cli_wrapper cli_path;
+        write_file worker_path "console.log('db-worker');\n";
+        let result = spawn_cli_from cli_path (doctor_args root) in
+        remove_tree root;
+        remove_tree app_dir;
+        ignore (expect_exit_zero "doctor entrypoint js worker" result);
+        expect_named_contains "doctor entrypoint js path" result##stdout
+          worker_path
+      with exn ->
+        remove_tree root;
+        remove_tree app_dir;
+        fail_test (Printexc.to_string exn));
+
+  test "doctor keeps LOGSEQ_DB_WORKER_NODE_SCRIPT before app.asar worker"
+    (fun () ->
+      let root = temp_dir "logseq-cli-doctor-asar-env-root-" in
+      let app_dir = temp_dir "logseq-cli-doctor-app-" in
+      let asar_js_dir = Node.Path.join [| app_dir; "Logseq.app.asar"; "js" |] in
+      let cli_path = Node.Path.join [| asar_js_dir; "logseq-cli.js" |] in
+      let asar_worker_path =
+        Node.Path.join [| asar_js_dir; "db-worker-node.js" |]
+      in
+      let env_worker_path = Node.Path.join [| app_dir; "env-worker.js" |] in
+      try
+        mkdir_p asar_js_dir;
+        write_cli_wrapper cli_path;
+        write_file asar_worker_path "console.log('asar db-worker');\n";
+        write_file env_worker_path "console.log('env db-worker');\n";
+        let result =
+          spawn_cli_from cli_path
+            ~env:[| ("LOGSEQ_DB_WORKER_NODE_SCRIPT", env_worker_path) |]
+            (doctor_args root)
+        in
+        remove_tree root;
+        remove_tree app_dir;
+        ignore (expect_exit_zero "doctor env worker" result);
+        expect_named_contains "doctor env path" result##stdout env_worker_path;
+        expect_named_not_contains "doctor env excludes asar path" result##stdout
+          asar_worker_path
+      with exn ->
+        remove_tree root;
+        remove_tree app_dir;
+        fail_test (Printexc.to_string exn))
+
 let () =
   test "sync download requires an explicit graph" (fun () ->
       let root = temp_dir "logseq-cli-sync-download-graph-" in
