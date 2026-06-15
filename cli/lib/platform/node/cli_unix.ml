@@ -273,6 +273,31 @@ let spawn_detached command args env =
   Child_process.unref child;
   Child_process.pid child |> Js.Nullable.toOption |> Option.value ~default:0
 
+let windows_verbatim_spawn_options env : Child_process.spawn_options =
+  let make : string Js.Dict.t -> Js.Json.t array -> Child_process.spawn_options =
+    [%mel.raw
+      {|
+function (env, stdio) {
+  return {
+    detached: true,
+    stdio: stdio,
+    env: env,
+    shell: false,
+    windowsVerbatimArguments: true
+  };
+}
+|}]
+  in
+  make (copy_env env) stdio_ignore
+
+let spawn_detached_windows_verbatim command args env =
+  let child =
+    Child_process.spawn command (Array.of_list args)
+      (windows_verbatim_spawn_options env)
+  in
+  Child_process.unref child;
+  Child_process.pid child |> Js.Nullable.toOption |> Option.value ~default:0
+
 let create_process_env _prog argv env _stdin _stdout _stderr =
   let command, args = command_args argv in
   try spawn_detached command args env
@@ -387,16 +412,30 @@ let kill pid signal =
   try Process.kill pid signal
   with _ -> raise (Cli_unix_error (ESRCH, "kill", string_of_int pid))
 
+let unquote_double_quoted value =
+  let len = String.length value in
+  if len > 1 && value.[0] = '"' && value.[len - 1] = '"' then
+    String.sub value 1 (len - 2)
+  else value
+
+let windows_start_url_command url =
+  "start \"\" \"" ^ unquote_double_quoted url ^ "\""
+
 let open_url url =
   try
+    let platform = Node.Process.process##platform in
     let command, args =
-      match Node.Process.process##platform with
+      match platform with
       | "darwin" -> ("open", [ url ])
       | "linux" -> ("xdg-open", [ url ])
-      | "win32" -> ("cmd.exe", [ "/d"; "/c"; "start"; ""; url ])
+      | "win32" -> ("cmd.exe", [ "/d"; "/c"; windows_start_url_command url ])
       | _ -> raise (Cli_unix_error (EPERM, "open", url))
     in
-    ignore (spawn_detached command args (environment ()) : int);
+    ignore
+      ((if platform = "win32" then spawn_detached_windows_verbatim
+        else spawn_detached)
+         command args (environment ())
+        : int);
     true
   with _ -> false
 
