@@ -94,7 +94,7 @@
   - Error response (409): `{"error":"graph not ready"}` when bootstrap upload/import has not finished.
 - `GET /sync/:graph-id/repair/blocks?uuid=<block-uuid>&uuid=<block-uuid>`
   - Fetch server-authoritative block data for client repair while applying remote txs.
-  - Response: `{"tx":"<tx-transit>"}` where `tx` is a Transit-encoded vector of transactable block maps.
+  - Response: `{"tx":"<tx-transit>"}` where `tx` is a Transit-encoded Datascript transaction vector of `[:db/add ...]` datoms. Repaired block entities use `repair-block-<uuid>` temp ids and lookup refs for referenced blocks outside the repair payload.
   - Error response (400): `{"error":"missing block uuid"}`.
   - Error response (409): `{"error":"graph not ready"}` when bootstrap upload/import has not finished.
 - `POST /sync/:graph-id/tx/batch`

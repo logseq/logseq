@@ -275,6 +275,12 @@
         [_valid? errors] (db-validate/validate-tx-report tx-report nil)]
     errors))
 
+(defn- safe-invalid-tx-errors
+  [db tx-data tx-meta]
+  (try
+    (invalid-tx-errors db tx-data tx-meta)
+    (catch :default _ nil)))
+
 (defn- block-uuid-lookup-ref
   [db v]
   (when (and (vector? v)
@@ -420,9 +426,7 @@
                 tx-meta (apply-tx-meta remote-tx)
                 errors (when (and (seq tx-data)
                                   (missing-datom-repair-tx? tx-data))
-                         (try
-                           (invalid-tx-errors db tx-data tx-meta)
-                           (catch :default _ nil)))]
+                         (safe-invalid-tx-errors db tx-data tx-meta))]
             (when (seq errors)
               (repair-block-uuids-in-tx-data db tx-data)))))
        distinct
@@ -758,7 +762,7 @@
               tx-meta (apply-tx-meta remote-tx)
               invalid-retry? (and allow-invalid-repair?
                                   (missing-datom-repair-tx? tx-data)
-                                  (seq (invalid-tx-errors db tx-data tx-meta)))
+                                  (seq (safe-invalid-tx-errors db tx-data tx-meta)))
               repair-block-uuids (when invalid-retry?
                                    (repair-block-uuids-in-tx-data db tx-data))
               report (ldb/transact! conn tx-data

@@ -15,6 +15,12 @@
    :gen-undo-ops? false
    :db-sync/tx-id (random-uuid)})
 
+(defn- repair-tx-meta
+  []
+  (assoc (sync-fix-tx-meta)
+         :rtc-tx? true
+         :persist-op? false))
+
 (defn local-repair-tx-data
   [db block-uuids]
   (db-sync-repair/tx-data db block-uuids))
@@ -26,4 +32,4 @@
 (defn apply-tx-data!
   [conn tx-data]
   (when (seq tx-data)
-    (ldb/transact! conn tx-data (sync-fix-tx-meta))))
+    (ldb/transact! conn tx-data (repair-tx-meta))))

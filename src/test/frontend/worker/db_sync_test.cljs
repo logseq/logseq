@@ -1244,6 +1244,57 @@
                                              :where [?e :block/title "remote-migration-only"]]
                                         @conn))))))))))
 
+(deftest apply-repair-tx-data-uses-maintenance-tx-meta-test
+  (testing "server repair txs should not be treated as local user ops"
+    (let [tx-metas (atom [])]
+      (with-redefs [ldb/transact!
+                    (fn [_conn _tx-data tx-meta]
+                      (swap! tx-metas conj tx-meta)
+                      {:tx-meta tx-meta})]
+        (sync-repair/apply-tx-data!
+         (db-test/create-conn)
+         [[:db/add -1 :block/title "server repair"]]))
+      (let [tx-meta (first @tx-metas)]
+        (is (= :fix (:outliner-op tx-meta)))
+        (is (true? (:rtc-tx? tx-meta)))
+        (is (false? (:persist-op? tx-meta)))))))
+
+(deftest apply-repair-tx-data-does-not-enqueue-local-tx-test
+  (testing "server repair tx-data is applied without entering the upload queue"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+      (with-datascript-conns
+        conn client-ops-conn
+        (fn []
+          (sync-repair/apply-tx-data!
+           conn
+           [[:db/add (:db/id parent) :block/title "server repair"]])
+          (is (= "server repair"
+                 (:block/title (d/entity @conn (:db/id parent)))))
+          (is (= 0 (client-op/get-local-tx test-repo))))))))
+
+(deftest transact-remote-txs-validation-probe-errors-do-not-skip-transact-test
+  (testing "invalid repair detection should not crash before transact can run"
+    (let [conn (db-test/create-conn)
+          missing-uuid (random-uuid)
+          tx-data [[:db/retractEntity [:block/uuid missing-uuid]]]
+          transact-calls (atom [])
+          result (with-redefs [sync-apply/invalid-tx-errors
+                               (fn [_db _tx-data _tx-meta]
+                                 (throw (ex-info "validation probe failed" {})))
+                               ldb/transact!
+                               (fn [_conn tx-data* tx-meta*]
+                                 (swap! transact-calls conj {:tx-data tx-data*
+                                                             :tx-meta tx-meta*})
+                                 {:tx-data tx-data*})]
+                   (try
+                     (#'sync-apply/transact-remote-txs!
+                      conn
+                      [{:tx-data tx-data}])
+                     (catch :default error
+                       error)))]
+      (is (not (instance? js/Error result)))
+      (is (= [tx-data] (mapv :tx-data @transact-calls))))))
+
 (deftest apply-remote-txs-preserves-many-page-property-values-test
   (testing "remote txs keep both values when a new page-many property is created and then assigned twice"
     (let [graph {:pages-and-blocks
@@ -4147,7 +4198,7 @@
                 pending (#'sync-apply/pending-txs test-repo)]
             (is (= [[child-uuid]] @repair-calls))
             (is (= page-id (:db/id (:block/page child1'))))
-            (is (some #(= :fix (:outliner-op %)) pending))))))))
+            (is (empty? pending))))))))
 
 (deftest apply-remote-txs-repairs-missing-block-lookup-ref-test
   (testing "remote tx application fetches missing block lookup refs from server"
