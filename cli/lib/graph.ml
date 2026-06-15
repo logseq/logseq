@@ -569,22 +569,22 @@ let graph_validate_result mode _config result =
            ^ Melange_edn.to_edn_string (Edn_util.vector errors)))
 
 let sym name = Edn_util.symbol name
-let vector values = Edn_util.vector values
 let vector_t values = Edn_util.vector_t values
 let list values = Edn_util.list values
 
 let graph_info_query =
-  vector_t
-    [
-      kw "find";
-      sym "?ident";
-      sym "?value";
-      kw "where";
-      vector [ sym "?e"; kw "db/ident"; sym "?ident" ];
-      vector [ list [ sym "namespace"; sym "?ident" ]; sym "?ns" ];
-      vector [ list [ sym "="; string "logseq.kv"; sym "?ns" ] ];
-      vector [ sym "?e"; kw "kv/value"; sym "?value" ];
-    ]
+  Cli_primitive.(
+    make_datascript_query
+      ~find:[ sym "?ident"; sym "?value" ]
+      ~where:
+        [
+          V (vector_t [ sym "?e"; kw "db/ident"; sym "?ident" ]);
+          V (vector_t [ list [ sym "namespace"; sym "?ident" ]; sym "?ns" ]);
+          V (vector_t [ list [ sym "="; string "logseq.kv"; sym "?ns" ] ]);
+          V (vector_t [ sym "?e"; kw "kv/value"; sym "?value" ]);
+        ]
+      ()
+    |> datascript_query_to_edn)
 
 let graph_info_key value =
   match Edn_util.as_keyword value with

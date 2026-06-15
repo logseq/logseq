@@ -455,28 +455,27 @@ let tree_block_selector =
     ]
 
 let page_blocks_query =
-  vector
-    [
-      kw "find";
-      Edn_util.list [ sym "pull"; sym "?b"; tree_block_selector ];
-      kw "in";
-      sym "$";
-      sym "?page-id";
-      kw "where";
-      vector [ sym "?b"; kw "block/page"; sym "?page-id" ];
-    ]
+  Cli_primitive.make_datascript_query
+    ~find:[ Edn_util.list [ sym "pull"; sym "?b"; tree_block_selector ] ]
+    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?page-id" ]
+    ~where:
+      [
+        Cli_primitive.V
+          (Edn_util.vector_t [ sym "?b"; kw "block/page"; sym "?page-id" ]);
+      ]
+    ()
 
 let page_hierarchy_children_query =
-  vector
-    [
-      kw "find";
-      Edn_util.list [ sym "pull"; sym "?child"; tree_block_selector ];
-      kw "in";
-      sym "$";
-      sym "?parent-id";
-      kw "where";
-      vector [ sym "?child"; kw "block/parent"; sym "?parent-id" ];
-    ]
+  Cli_primitive.make_datascript_query
+    ~find:[ Edn_util.list [ sym "pull"; sym "?child"; tree_block_selector ] ]
+    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?parent-id" ]
+    ~where:
+      [
+        Cli_primitive.V
+          (Edn_util.vector_t
+             [ sym "?child"; kw "block/parent"; sym "?parent-id" ]);
+      ]
+    ()
 
 let row_entity value =
   match
@@ -538,7 +537,13 @@ let fetch_page_blocks config repo page_id =
   let open Cli_effect in
   bind
     (Transport.thread_api_q config ~repo
-       ~query:(Edn_util.vector_t [ page_blocks_query; Edn_util.int64 page_id ]))
+       ~query:
+         (Edn_util.vector_t
+            [
+              Edn_util.any
+                (Cli_primitive.datascript_query_to_edn page_blocks_query);
+              Edn_util.int64 page_id;
+            ]))
     (fun rows ->
       let blocks =
         Option.value (Edn_util.as_seq rows) ~default:[]
@@ -552,7 +557,12 @@ let fetch_page_hierarchy_children config repo parent_id =
     (Transport.thread_api_q config ~repo
        ~query:
          (Edn_util.vector_t
-            [ page_hierarchy_children_query; Edn_util.int64 parent_id ]))
+            [
+              Edn_util.any
+                (Cli_primitive.datascript_query_to_edn
+                   page_hierarchy_children_query);
+              Edn_util.int64 parent_id;
+            ]))
     (fun rows ->
       let blocks =
         Option.value (Edn_util.as_seq rows) ~default:[]
