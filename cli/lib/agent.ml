@@ -517,6 +517,10 @@ let kw value = Edn_util.keyword value
 let sym value = Edn_util.symbol value
 let vector values = Edn_util.vector values
 let list values = Edn_util.list values
+let where_v values = Cli_primitive.V (Edn_util.vector_t values)
+let where_l values = Cli_primitive.L (Edn_util.list_t values)
+let query_value query = Edn_util.any (Cli_primitive.datascript_query_to_edn query)
+let query_call query args = vector (query_value query :: args)
 let empty_rules = vector []
 let agent_bridge_registry_page = "AgentBridge"
 let master_prompt_wrapper_title = "AgentBridge master prompt"
@@ -668,182 +672,160 @@ let blocks_by_title blocks title =
     blocks
 
 let agent_bridge_registry_page_query =
-  vector
-    [
-      Edn_util.map
-        [
-          ( kw "find",
-            vector
-              [
-                vector
-                  [
-                    list
-                      [
-                        sym "pull";
-                        sym "?p";
-                        vector
-                          [
-                            kw "db/id";
-                            kw "block/uuid";
-                            kw "block/name";
-                            kw "block/title";
-                            kw "logseq.property/deleted-at";
-                          ];
-                      ];
-                    sym "...";
-                  ];
-              ] );
-          (kw "in", list [ sym "$"; sym "?page-name" ]);
-          ( kw "where",
-            vector [ vector [ sym "?p"; kw "block/name"; sym "?page-name" ] ] );
-        ];
-      Edn_util.string (registry_page_name ());
-    ]
+  query_call
+    (Cli_primitive.make_datascript_query
+       ~find:
+         [
+           vector
+             [
+               list
+                 [
+                   sym "pull";
+                   sym "?p";
+                   vector
+                     [
+                       kw "db/id";
+                       kw "block/uuid";
+                       kw "block/name";
+                       kw "block/title";
+                       kw "logseq.property/deleted-at";
+                     ];
+                 ];
+               sym "...";
+             ];
+         ]
+       ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?page-name" ]
+       ~where:[ where_v [ sym "?p"; kw "block/name"; sym "?page-name" ] ]
+       ())
+    [ Edn_util.string (registry_page_name ()) ]
 
 let registered_agent_query agent_name =
-  vector
-    [
-      Edn_util.map
-        [
-          ( kw "find",
-            vector
-              [
-                vector
-                  [
-                    list
-                      [
-                        sym "pull";
-                        sym "?p";
-                        vector
-                          [
-                            kw "db/id";
-                            kw "block/uuid";
-                            kw "block/name";
-                            kw "block/title";
-                            kw "logseq.property/deleted-at";
-                          ];
-                      ];
-                    sym "...";
-                  ];
-              ] );
-          (kw "in", list [ sym "$"; sym "?agent-page-name" ]);
-          ( kw "where",
-            vector
-              [ vector [ sym "?p"; kw "block/name"; sym "?agent-page-name" ] ]
-          );
-        ];
-      Edn_util.string (agent_page_name agent_name);
-    ]
+  query_call
+    (Cli_primitive.make_datascript_query
+       ~find:
+         [
+           vector
+             [
+               list
+                 [
+                   sym "pull";
+                   sym "?p";
+                   vector
+                     [
+                       kw "db/id";
+                       kw "block/uuid";
+                       kw "block/name";
+                       kw "block/title";
+                       kw "logseq.property/deleted-at";
+                     ];
+                 ];
+               sym "...";
+             ];
+         ]
+       ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?agent-page-name" ]
+       ~where:[ where_v [ sym "?p"; kw "block/name"; sym "?agent-page-name" ] ]
+       ())
+    [ Edn_util.string (agent_page_name agent_name) ]
 
 let agent_master_prompt_blocks_query page_id =
-  vector
-    [
-      Edn_util.map
-        [
-          ( kw "find",
-            vector
-              [
-                vector
-                  [
-                    list
-                      [
-                        sym "pull";
-                        sym "?b";
-                        vector
-                          [
-                            kw "db/id";
-                            kw "block/uuid";
-                            kw "block/title";
-                            kw "block/order";
-                            kw "logseq.property/deleted-at";
-                            Edn_util.map
-                              [
-                                ( kw "block/_parent",
-                                  vector
-                                    [
-                                      kw "db/id";
-                                      kw "block/uuid";
-                                      kw "block/title";
-                                      kw "block/order";
-                                      kw "logseq.property/deleted-at";
-                                      Edn_util.map
-                                        [
-                                          ( kw "block/tags",
-                                            vector
-                                              [
-                                                kw "db/id";
-                                                kw "db/ident";
-                                                kw "block/name";
-                                                kw "block/title";
-                                              ] );
-                                        ];
-                                    ] );
-                              ];
-                          ];
-                      ];
-                    sym "...";
-                  ];
-              ] );
-          (kw "in", list [ sym "$"; sym "?page-id" ]);
-          ( kw "where",
-            vector [ vector [ sym "?b"; kw "block/parent"; sym "?page-id" ] ] );
-        ];
-      Edn_util.int64 page_id;
-    ]
+  query_call
+    (Cli_primitive.make_datascript_query
+       ~find:
+         [
+           vector
+             [
+               list
+                 [
+                   sym "pull";
+                   sym "?b";
+                   vector
+                     [
+                       kw "db/id";
+                       kw "block/uuid";
+                       kw "block/title";
+                       kw "block/order";
+                       kw "logseq.property/deleted-at";
+                       Edn_util.map
+                         [
+                           ( kw "block/_parent",
+                             vector
+                               [
+                                 kw "db/id";
+                                 kw "block/uuid";
+                                 kw "block/title";
+                                 kw "block/order";
+                                 kw "logseq.property/deleted-at";
+                                 Edn_util.map
+                                   [
+                                     ( kw "block/tags",
+                                       vector
+                                         [
+                                           kw "db/id";
+                                           kw "db/ident";
+                                           kw "block/name";
+                                           kw "block/title";
+                                         ] );
+                                   ];
+                               ] );
+                         ];
+                     ];
+                 ];
+               sym "...";
+             ];
+         ]
+       ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?page-id" ]
+       ~where:[ where_v [ sym "?b"; kw "block/parent"; sym "?page-id" ] ]
+       ())
+    [ Edn_util.int64 page_id ]
 
 let prompt_template_blocks_query page_id =
-  vector
-    [
-      Edn_util.map
-        [
-          ( kw "find",
-            vector
-              [
-                vector
-                  [
-                    list
-                      [
-                        sym "pull";
-                        sym "?b";
-                        vector
-                          [
-                            kw "db/id";
-                            kw "block/uuid";
-                            kw "block/title";
-                            kw "block/order";
-                            Edn_util.map
-                              [
-                                ( kw "block/_parent",
-                                  vector
-                                    [
-                                      kw "db/id";
-                                      kw "block/uuid";
-                                      kw "block/title";
-                                      kw "block/order";
-                                      Edn_util.map
-                                        [
-                                          ( kw "block/_parent",
-                                            vector
-                                              [
-                                                kw "db/id";
-                                                kw "block/uuid";
-                                                kw "block/title";
-                                                kw "block/order";
-                                              ] );
-                                        ];
-                                    ] );
-                              ];
-                          ];
-                      ];
-                    sym "...";
-                  ];
-              ] );
-          (kw "in", list [ sym "$"; sym "?page-id" ]);
-          ( kw "where",
-            vector [ vector [ sym "?b"; kw "block/parent"; sym "?page-id" ] ] );
-        ];
-      Edn_util.int64 page_id;
-    ]
+  query_call
+    (Cli_primitive.make_datascript_query
+       ~find:
+         [
+           vector
+             [
+               list
+                 [
+                   sym "pull";
+                   sym "?b";
+                   vector
+                     [
+                       kw "db/id";
+                       kw "block/uuid";
+                       kw "block/title";
+                       kw "block/order";
+                       Edn_util.map
+                         [
+                           ( kw "block/_parent",
+                             vector
+                               [
+                                 kw "db/id";
+                                 kw "block/uuid";
+                                 kw "block/title";
+                                 kw "block/order";
+                                 Edn_util.map
+                                   [
+                                     ( kw "block/_parent",
+                                       vector
+                                         [
+                                           kw "db/id";
+                                           kw "block/uuid";
+                                           kw "block/title";
+                                           kw "block/order";
+                                         ] );
+                                   ];
+                               ] );
+                         ];
+                     ];
+                 ];
+               sym "...";
+             ];
+         ]
+       ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?page-id" ]
+       ~where:[ where_v [ sym "?b"; kw "block/parent"; sym "?page-id" ] ]
+       ())
+    [ Edn_util.int64 page_id ]
 
 let task_ancestor_session_selector =
   vector
@@ -882,51 +864,34 @@ let routable_task_selector =
     ]
 
 let routable_task_query agent_name =
-  vector
-    [
-      Edn_util.map
-        [
-          ( kw "find",
-            vector
-              [
-                vector
-                  [
-                    list [ sym "pull"; sym "?e"; routable_task_selector ];
-                    sym "...";
-                  ];
-              ] );
-          (kw "in", list [ sym "$"; sym "?agent-name"; sym "%" ]);
-          ( kw "where",
-            vector
-              [
-                vector [ sym "?e"; kw "block/tags"; kw "logseq.class/Task" ];
-                vector [ sym "?e"; kw "logseq.property/status"; sym "?status" ];
-                vector
-                  [
-                    sym "?status";
-                    kw "db/ident";
-                    kw "logseq.property/status.todo";
-                  ];
-                vector
-                  [
-                    sym "?assignee-property";
-                    kw "block/name";
-                    Edn_util.string "assignee";
-                  ];
-                vector
-                  [
-                    sym "?assignee-property";
-                    kw "db/ident";
-                    sym "?assignee-attr";
-                  ];
-                vector [ sym "?e"; sym "?assignee-attr"; sym "?assignee-ref" ];
-                vector
-                  [ sym "?assignee-ref"; kw "block/title"; sym "?agent-name" ];
-              ] );
-        ];
-      Edn_util.string agent_name;
-      empty_rules;
-    ]
+  query_call
+    (Cli_primitive.make_datascript_query
+       ~find:
+         [ vector [ list [ sym "pull"; sym "?e"; routable_task_selector ]; sym "..." ] ]
+       ~in_:
+         [
+           Melange_edn.symbol "$";
+           Melange_edn.symbol "?agent-name";
+           Melange_edn.symbol "%";
+         ]
+       ~where:
+         [
+           where_v [ sym "?e"; kw "block/tags"; kw "logseq.class/Task" ];
+           where_v [ sym "?e"; kw "logseq.property/status"; sym "?status" ];
+           where_v
+             [ sym "?status"; kw "db/ident"; kw "logseq.property/status.todo" ];
+           where_v
+             [
+               sym "?assignee-property";
+               kw "block/name";
+               Edn_util.string "assignee";
+             ];
+           where_v [ sym "?assignee-property"; kw "db/ident"; sym "?assignee-attr" ];
+           where_v [ sym "?e"; sym "?assignee-attr"; sym "?assignee-ref" ];
+           where_v [ sym "?assignee-ref"; kw "block/title"; sym "?agent-name" ];
+         ]
+       ())
+    [ Edn_util.string agent_name; empty_rules ]
 
 let comment_block_selector =
   vector
@@ -990,61 +955,47 @@ let comments_area_selector =
     ]
 
 let reaction_query target_uuid emoji_id =
-  vector
-    [
-      Edn_util.map
-        [
-          (kw "find", list [ sym "?r"; sym "." ]);
-          ( kw "in",
-            list [ sym "$"; sym "?target-uuid"; sym "?emoji-id"; sym "%" ] );
-          ( kw "where",
-            vector
-              [
-                vector [ sym "?target"; kw "block/uuid"; sym "?target-uuid" ];
-                vector
-                  [
-                    sym "?r";
-                    kw "logseq.property.reaction/target";
-                    sym "?target";
-                  ];
-                vector
-                  [
-                    sym "?r";
-                    kw "logseq.property.reaction/emoji-id";
-                    sym "?emoji-id";
-                  ];
-                list
-                  [
-                    sym "missing?";
-                    sym "$";
-                    sym "?r";
-                    kw "logseq.property/created-by-ref";
-                  ];
-              ] );
-        ];
-      Edn_util.uuid target_uuid;
-      Edn_util.string emoji_id;
-      empty_rules;
-    ]
+  query_call
+    (Cli_primitive.make_datascript_query
+       ~find:[ list [ sym "?r"; sym "." ] ]
+       ~in_:
+         [
+           Melange_edn.symbol "$";
+           Melange_edn.symbol "?target-uuid";
+           Melange_edn.symbol "?emoji-id";
+           Melange_edn.symbol "%";
+         ]
+       ~where:
+         [
+           where_v [ sym "?target"; kw "block/uuid"; sym "?target-uuid" ];
+           where_v
+             [ sym "?r"; kw "logseq.property.reaction/target"; sym "?target" ];
+           where_v
+             [ sym "?r"; kw "logseq.property.reaction/emoji-id"; sym "?emoji-id" ];
+           where_l
+             [
+               sym "missing?";
+               sym "$";
+               sym "?r";
+               kw "logseq.property/created-by-ref";
+             ];
+         ]
+       ())
+    [ Edn_util.uuid target_uuid; Edn_util.string emoji_id; empty_rules ]
 
 let task_status_query block_uuid =
-  vector
-    [
-      Edn_util.map
-        [
-          (kw "find", list [ sym "?status-ident"; sym "." ]);
-          (kw "in", list [ sym "$"; sym "?block-uuid" ]);
-          ( kw "where",
-            vector
-              [
-                vector [ sym "?block"; kw "block/uuid"; sym "?block-uuid" ];
-                vector
-                  [ sym "?block"; kw "logseq.property/status"; sym "?status" ];
-                vector [ sym "?status"; kw "db/ident"; sym "?status-ident" ];
-              ] );
-        ];
-      Edn_util.uuid block_uuid;
-    ]
+  query_call
+    (Cli_primitive.make_datascript_query
+       ~find:[ list [ sym "?status-ident"; sym "." ] ]
+       ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?block-uuid" ]
+       ~where:
+         [
+           where_v [ sym "?block"; kw "block/uuid"; sym "?block-uuid" ];
+           where_v [ sym "?block"; kw "logseq.property/status"; sym "?status" ];
+           where_v [ sym "?status"; kw "db/ident"; sym "?status-ident" ];
+         ]
+       ())
+    [ Edn_util.uuid block_uuid ]
 
 let values_of_query_result value =
   match (Edn_util.as_vector value, Edn_util.as_list value) with

@@ -69,6 +69,8 @@ let vector values = Edn_util.vector values
 let list values = Edn_util.list values
 let variable name = sym ("?" ^ name)
 let call name args = list (sym name :: args)
+let where_v values = Cli_primitive.V (Edn_util.vector_t values)
+let query_value query = Edn_util.any (Cli_primitive.datascript_query_to_edn query)
 
 let pull_attrs = function
   | Block ->
@@ -106,32 +108,25 @@ let query_of_scope scope =
   let query_lower = variable "query-lower" in
   let where =
     ( ( ( ( [] |> fun clauses ->
-            vector
+            where_v
               [ call "clojure.string/includes?" [ title_lower; query_lower ] ]
             :: clauses )
         |> fun clauses ->
-          vector [ call "clojure.string/lower-case" [ query ]; query_lower ]
+          where_v [ call "clojure.string/lower-case" [ query ]; query_lower ]
           :: clauses )
       |> fun clauses ->
-        vector [ call "clojure.string/lower-case" [ title ]; title_lower ]
+        where_v [ call "clojure.string/lower-case" [ title ]; title_lower ]
         :: clauses )
-    |> fun clauses -> vector [ entity; text_attr scope; title ] :: clauses )
+    |> fun clauses -> where_v [ entity; text_attr scope; title ] :: clauses )
     |> fun clauses ->
     match class_filter scope with
-    | Some class_ -> vector [ entity; kw "block/tags"; class_ ] :: clauses
+    | Some class_ -> where_v [ entity; kw "block/tags"; class_ ] :: clauses
     | None -> clauses
   in
-  vector
-    ([
-       kw "find";
-       vector
-         [ list [ sym "pull"; entity; vector (pull_attrs scope) ]; sym "..." ];
-       kw "in";
-       sym "$";
-       query;
-       kw "where";
-     ]
-    @ where)
+  Cli_primitive.make_datascript_query
+    ~find:[ vector [ list [ sym "pull"; entity; vector (pull_attrs scope) ]; sym "..." ] ]
+    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?query" ]
+    ~where ()
 
 let search_result_keys = [ "db/id"; "db/ident"; "block/title" ]
 
@@ -203,7 +198,10 @@ let execute_with_mode action config mode =
           (Transport.thread_api_q invoke_config ~repo:action.repo
              ~query:
                (Edn_util.vector_t
-                  [ query_of_scope action.scope; Edn_util.string action.query ]))
+                  [
+                    query_value (query_of_scope action.scope);
+                    Edn_util.string action.query;
+                  ]))
           (fun value ->
             let items =
               match (Edn_util.as_vector value, Edn_util.as_list value) with

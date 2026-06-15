@@ -29,6 +29,7 @@ let vector values = Edn_util.vector values
 let list values = Edn_util.list values
 let sym value = Edn_util.symbol value
 let normalized_lookup_name value = String.lowercase_ascii (String.trim value)
+let query_value query = Edn_util.any (Cli_primitive.datascript_query_to_edn query)
 
 let edn_value_of_string ~label text =
   try Ok (Melange_edn.of_edn_string text)
@@ -346,46 +347,39 @@ let property_entity_selector =
     ]
 
 let page_query selector =
-  Edn_util.map
-    [
-      ( kw "find",
-        vector [ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-      );
-      (kw "in", list [ sym "$"; sym "?name" ]);
-      (kw "where", vector [ vector [ sym "?e"; kw "block/name"; sym "?name" ] ]);
-    ]
+  Cli_primitive.make_datascript_query
+    ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
+    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~where:
+      [ Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "block/name"; sym "?name" ]) ]
+    ()
 
 let tag_query selector =
-  Edn_util.map
-    [
-      ( kw "find",
-        vector [ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-      );
-      (kw "in", list [ sym "$"; sym "?name" ]);
-      ( kw "where",
-        vector
-          [
-            vector [ sym "?e"; kw "block/name"; sym "?name" ];
-            vector [ sym "?e"; kw "block/tags"; sym "?t" ];
-            vector [ sym "?t"; kw "db/ident"; kw "logseq.class/Tag" ];
-          ] );
-    ]
+  Cli_primitive.make_datascript_query
+    ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
+    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~where:
+      [
+        Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "block/name"; sym "?name" ]);
+        Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "block/tags"; sym "?t" ]);
+        Cli_primitive.V
+          (Edn_util.vector_t [ sym "?t"; kw "db/ident"; kw "logseq.class/Tag" ]);
+      ]
+    ()
 
 let property_query selector =
-  Edn_util.map
-    [
-      ( kw "find",
-        vector [ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-      );
-      (kw "in", list [ sym "$"; sym "?name" ]);
-      ( kw "where",
-        vector
-          [
-            vector [ sym "?e"; kw "block/name"; sym "?name" ];
-            vector [ sym "?e"; kw "block/tags"; sym "?t" ];
-            vector [ sym "?t"; kw "db/ident"; kw "logseq.class/Property" ];
-          ] );
-    ]
+  Cli_primitive.make_datascript_query
+    ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
+    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~where:
+      [
+        Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "block/name"; sym "?name" ]);
+        Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "block/tags"; sym "?t" ]);
+        Cli_primitive.V
+          (Edn_util.vector_t
+             [ sym "?t"; kw "db/ident"; kw "logseq.class/Property" ]);
+      ]
+    ()
 
 let first_entity = function
   | value -> (
@@ -427,20 +421,20 @@ let pull_pages_by_name config repo name selector =
   Transport.thread_api_q config ~repo
     ~query:
       (Edn_util.vector_t
-         [ page_query selector; Edn_util.string (normalized_lookup_name name) ])
+         [ query_value (page_query selector); Edn_util.string (normalized_lookup_name name) ])
 
 let pull_tag_by_name config repo name selector =
   Transport.thread_api_q config ~repo
     ~query:
       (Edn_util.vector_t
-         [ tag_query selector; Edn_util.string (normalized_lookup_name name) ])
+         [ query_value (tag_query selector); Edn_util.string (normalized_lookup_name name) ])
 
 let pull_property_by_name config repo name selector =
   Transport.thread_api_q config ~repo
     ~query:
       (Edn_util.vector_t
          [
-           property_query selector;
+           query_value (property_query selector);
            Edn_util.string (normalized_lookup_name name);
          ])
 
