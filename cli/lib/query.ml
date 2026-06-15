@@ -49,6 +49,17 @@ let parsed_edn text =
   | Ok value -> value
   | Error err -> failwith err.message
 
+let kw value = Edn_util.keyword value
+let sym value = Edn_util.symbol value
+let in_sym value = Melange_edn.symbol value
+let vector values = Edn_util.vector values
+let vector_t values = Edn_util.vector_t values
+let list values = Edn_util.list values
+let list_t values = Edn_util.list_t values
+let where_v values = Cli_primitive.V (vector_t values)
+let where_l values = Cli_primitive.L (list_t values)
+let query_value query = Edn_util.any (Cli_primitive.datascript_query_to_edn query)
+
 let input ?default name =
   { name; optional = String.length name > 0 && name.[0] = '?'; default }
 
@@ -60,10 +71,37 @@ let built_in_queries =
       doc = Some "List closed values for the Priority property.";
       inputs = [];
       query =
-        parsed_edn
-          "[:find [(pull ?value [:db/id :db/ident :block/order]) ...] :where \
-           [?property :db/ident :logseq.property/priority] [?value \
-           :block/closed-value-property ?property]]";
+        query_value
+          (Cli_primitive.make_datascript_query
+             ~find:
+               [
+                 vector
+                   [
+                     list
+                       [
+                         sym "pull";
+                         sym "?value";
+                         vector [ kw "db/id"; kw "db/ident"; kw "block/order" ];
+                       ];
+                     sym "...";
+                   ];
+               ]
+             ~where:
+               [
+                 where_v
+                   [
+                     sym "?property";
+                     kw "db/ident";
+                     kw "logseq.property/priority";
+                   ];
+                 where_v
+                   [
+                     sym "?value";
+                     kw "block/closed-value-property";
+                     sym "?property";
+                   ];
+               ]
+             ());
     };
     {
       name = "list-status";
@@ -71,10 +109,33 @@ let built_in_queries =
       doc = Some "List closed values for the Status property.";
       inputs = [];
       query =
-        parsed_edn
-          "[:find [(pull ?value [:db/id :db/ident :block/order]) ...] :where \
-           [?property :db/ident :logseq.property/status] [?value \
-           :block/closed-value-property ?property]]";
+        query_value
+          (Cli_primitive.make_datascript_query
+             ~find:
+               [
+                 vector
+                   [
+                     list
+                       [
+                         sym "pull";
+                         sym "?value";
+                         vector [ kw "db/id"; kw "db/ident"; kw "block/order" ];
+                       ];
+                     sym "...";
+                   ];
+               ]
+             ~where:
+               [
+                 where_v
+                   [ sym "?property"; kw "db/ident"; kw "logseq.property/status" ];
+                 where_v
+                   [
+                     sym "?value";
+                     kw "block/closed-value-property";
+                     sym "?property";
+                   ];
+               ]
+             ());
     };
     {
       name = "recent-updated";
@@ -82,12 +143,49 @@ let built_in_queries =
       doc = Some "Find entities updated within recent-days.";
       inputs = [ input "recent-days"; input "?now-ms" ];
       query =
-        parsed_edn
-          "[:find [(pull ?e [:db/id :block/title :block/updated-at]) ...] :in \
-           $ ?recent-days ?now-ms :where [?e :block/updated-at ?updated-at] \
-           [(missing? $ ?e :logseq.property/built-in?)] [(* ?recent-days \
-           86400000) ?recent-days-ms] [(- ?now-ms ?recent-days-ms) ?days-ago] \
-           [(>= ?updated-at ?days-ago)]]";
+        query_value
+          (Cli_primitive.make_datascript_query
+             ~find:
+               [
+                 vector
+                   [
+                     list
+                       [
+                         sym "pull";
+                         sym "?e";
+                         vector
+                           [ kw "db/id"; kw "block/title"; kw "block/updated-at" ];
+                       ];
+                     sym "...";
+                   ];
+               ]
+             ~in_:[ in_sym "$"; in_sym "?recent-days"; in_sym "?now-ms" ]
+             ~where:
+               [
+                 where_v [ sym "?e"; kw "block/updated-at"; sym "?updated-at" ];
+                 where_v
+                   [
+                     list
+                       [
+                         sym "missing?";
+                         sym "$";
+                         sym "?e";
+                         kw "logseq.property/built-in?";
+                       ];
+                   ];
+                 where_v
+                   [
+                     list [ sym "*"; sym "?recent-days"; Edn_util.int 86400000 ];
+                     sym "?recent-days-ms";
+                   ];
+                 where_v
+                   [
+                     list [ sym "-"; sym "?now-ms"; sym "?recent-days-ms" ];
+                     sym "?days-ago";
+                   ];
+                 where_v [ list [ sym ">="; sym "?updated-at"; sym "?days-ago" ] ];
+               ]
+             ());
     };
     {
       name = "task-search";
@@ -104,21 +202,134 @@ let built_in_queries =
           input "?now-ms";
         ];
       query =
-        parsed_edn
-          "[:find [(pull ?e [:db/id :block/title :block/updated-at]) ...] :in \
-           $ ?search-status ?search-title ?recent-days ?now-ms :where [?e \
-           :block/title ?title] [?e :logseq.property/status ?status] [?status \
-           :db/ident ?status-ident] [(= ?status-ident ?search-status)] \
-           [(clojure.string/lower-case ?title) ?title-lower-case] [(str \
-           ?search-title) ?search-title-string] [(clojure.string/lower-case \
-           ?search-title-string) ?search-title-lower-case] \
-           [(clojure.string/includes? ?title-lower-case \
-           ?search-title-lower-case)] [(get-else $ ?e :block/updated-at 0) \
-           ?updated-at] (or-join [?recent-days ?updated-at ?now-ms ?days-ago] \
-           (and [(nil? ?recent-days)] [(identity 0) ?days-ago]) (and [(<= \
-           ?recent-days 0)] [(identity 0) ?days-ago]) (and [(* ?recent-days \
-           86400000) ?recent-days-ms] [(- ?now-ms ?recent-days-ms) ?days-ago] \
-           [(>= ?updated-at ?days-ago)]))]";
+        query_value
+          (Cli_primitive.make_datascript_query
+             ~find:
+               [
+                 vector
+                   [
+                     list
+                       [
+                         sym "pull";
+                         sym "?e";
+                         vector
+                           [ kw "db/id"; kw "block/title"; kw "block/updated-at" ];
+                       ];
+                     sym "...";
+                   ];
+               ]
+             ~in_:
+               [
+                 in_sym "$";
+                 in_sym "?search-status";
+                 in_sym "?search-title";
+                 in_sym "?recent-days";
+                 in_sym "?now-ms";
+               ]
+             ~where:
+               [
+                 where_v [ sym "?e"; kw "block/title"; sym "?title" ];
+                 where_v
+                   [ sym "?e"; kw "logseq.property/status"; sym "?status" ];
+                 where_v [ sym "?status"; kw "db/ident"; sym "?status-ident" ];
+                 where_v
+                   [ list [ sym "="; sym "?status-ident"; sym "?search-status" ] ];
+                 where_v
+                   [
+                     list [ sym "clojure.string/lower-case"; sym "?title" ];
+                     sym "?title-lower-case";
+                   ];
+                 where_v
+                   [
+                     list [ sym "str"; sym "?search-title" ];
+                     sym "?search-title-string";
+                   ];
+                 where_v
+                   [
+                     list
+                       [
+                         sym "clojure.string/lower-case";
+                         sym "?search-title-string";
+                       ];
+                     sym "?search-title-lower-case";
+                   ];
+                 where_v
+                   [
+                     list
+                       [
+                         sym "clojure.string/includes?";
+                         sym "?title-lower-case";
+                         sym "?search-title-lower-case";
+                       ];
+                   ];
+                 where_v
+                   [
+                     list
+                       [
+                         sym "get-else";
+                         sym "$";
+                         sym "?e";
+                         kw "block/updated-at";
+                         Edn_util.int 0;
+                       ];
+                     sym "?updated-at";
+                   ];
+                 where_l
+                   [
+                     sym "or-join";
+                     vector
+                       [
+                         sym "?recent-days";
+                         sym "?updated-at";
+                         sym "?now-ms";
+                         sym "?days-ago";
+                       ];
+                     list
+                       [
+                         sym "and";
+                         vector [ list [ sym "nil?"; sym "?recent-days" ] ];
+                         vector
+                           [
+                             list [ sym "identity"; Edn_util.int 0 ];
+                             sym "?days-ago";
+                           ];
+                       ];
+                     list
+                       [
+                         sym "and";
+                         vector
+                           [
+                             list [ sym "<="; sym "?recent-days"; Edn_util.int 0 ];
+                           ];
+                         vector
+                           [
+                             list [ sym "identity"; Edn_util.int 0 ];
+                             sym "?days-ago";
+                           ];
+                       ];
+                     list
+                       [
+                         sym "and";
+                         vector
+                           [
+                             list
+                               [ sym "*"; sym "?recent-days"; Edn_util.int 86400000 ];
+                             sym "?recent-days-ms";
+                           ];
+                         vector
+                           [
+                             list [ sym "-"; sym "?now-ms"; sym "?recent-days-ms" ];
+                             sym "?days-ago";
+                           ];
+                         vector
+                           [
+                             list
+                               [ sym ">="; sym "?updated-at"; sym "?days-ago" ];
+                           ];
+                       ];
+                   ];
+               ]
+             ());
     };
   ]
   |> List.sort (fun (a : query_entry) (b : query_entry) ->
