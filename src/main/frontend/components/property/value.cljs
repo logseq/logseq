@@ -123,26 +123,44 @@
   (let [icon-value (:logseq.property/icon block)
         clear-overlay! (fn []
                          (shui/popup-hide-all!))
-        on-chosen! (fn [_e icon]
+        on-chosen! (fn [_e icon & [keep-popup?]]
                      (let [blocks (get-operating-blocks block)]
                        (property-handler/batch-set-block-property!
                         (map :db/id blocks)
                         :logseq.property/icon
-                        (when icon (select-keys icon [:type :id :color]))))
-                     (clear-overlay!)
-                     (when editing?
-                       (editor-handler/restore-last-saved-cursor!)))
+                        (when icon (icon-component/icon-data-for-storage icon))))
+                     ;; Tile clicks that drill into a sub-picker (Avatar/Text/Image
+                     ;; -> asset/text-picker; color/shape tweaks) pass keep-popup?
+                     ;; = true: keep the popup open so the picker advances in place
+                     ;; (e.g. Avatar applies the icon AND opens the asset-picker's
+                     ;; Avatar tab). Final picks (emoji/icon) and delete (a truthy-
+                     ;; but-not-true action keyword) fall through and close as
+                     ;; before. `icon-data-for-storage` preserves :data so
+                     ;; avatar/text initials persist (`select-keys` dropped them,
+                     ;; yielding non-renderable `{:type :avatar :id "avatar-XX"}`).
+                     (when-not (true? keep-popup?)
+                       (clear-overlay!)
+                       (when editing?
+                         (editor-handler/restore-last-saved-cursor!))))
         icon (get block :logseq.property/icon)]
     (if editing?
       (icon-component/icon-search
        {:on-chosen on-chosen!
         :icon-value icon
-        :del-btn? (some? icon)})
+        :del-btn? (some? icon)
+        ;; The asset-picker derives the Avatar "Default - Letters, circle"
+        ;; initials and the Web-images query from the page title; without
+        ;; these the Avatar tab opens blank (no initials, no web-images row).
+        ;; Mirrors block.cljs page-icon / default-icon-row.
+        :page-title (:block/title block)
+        :preview-target-db-id (:db/id block)})
       [:div.col-span-3.flex.flex-row.items-center.gap-2
        (icon-component/icon-picker icon-value
                                    {:disabled? config/publishing?
                                     :del-btn? (some? icon-value)
-                                    :on-chosen on-chosen!})])))
+                                    :on-chosen on-chosen!
+                                    :page-title (:block/title block)
+                                    :preview-target-db-id (:db/id block)})])))
 
 ;; Renders the Default Icon property for classes. Uses a single
 ;; icon-picker button that opens the universal icon search popup
