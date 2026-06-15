@@ -351,7 +351,7 @@
         content-fn (fn []
                      (let [colors ["#6e7b8b" "#5e69d2" "#00b5ed" "#00b55b"
                                    "#f2be00" "#e47a00" "#f38e81" "#fb434c" nil]]
-                       [:div.color-picker-presets
+                       [:div.color-picker-presets.p-2
                         (for [c colors]
                           (shui/button
                            {:on-click (fn [] (set-color! c)
