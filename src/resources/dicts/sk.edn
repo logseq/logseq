@@ -1587,10 +1587,8 @@
  :settings.editor/wide-mode "Široký režim"
 
  :settings.features/enable-flashcards "Zapnúť kartičky"
- :settings.features/enable-journals "Denníky"
  :settings.features/home-default-page "Nastaviť predvolenú domovskú stránku"
  :settings.features/home-default-page-update-success "Domovská stránka aktualizována"
- :settings.features/journals-enable-success "Denníky zapnuty"
  :settings.features/login-prompt "Ak chcete získať prístup k novým funkciám skôr ako ktokoľvek iný, musíte byť sponzorom nadácie Open Collective alebo podporovateľom Logseq, následne sa musíte prihlásiť."
  :settings.features/page-not-found "Stránka „{1}“ zatiaľ neexistuje. Najprv vytvorte túto stránku a potom to skúste znova."
  :settings.features/plugin-system "Systém pluginov"

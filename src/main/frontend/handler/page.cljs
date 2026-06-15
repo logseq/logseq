@@ -282,23 +282,22 @@
 
 (defn create-today-journal!
   []
-  (when-let [repo (state/get-current-repo)]
-    (when (and (state/enable-journals? repo)
-               ;; FIXME: There are a lot of long-running actions we don't want interrupted by this fn.
-               ;; We should implement an app-wide check rather than list them all here
-               (not (:graph/loading? @state/state))
-               (not (:graph/importing @state/state))
-               (not config/publishing?))
-      (when-let [title (date/today)]
-        (state/set-today! title)
-        (p/let [today-page-lc-title (util/page-name-sanity-lc title)
-                page (db/get-today-journal-page)]
-          (when-not page
-            (p/let [result (<create! title {:redirect? false
-                                            :split-namespace? false
-                                            :today-journal? true})]
-              (plugin-handler/hook-plugin-app :today-journal-created {:title today-page-lc-title})
-              result)))))))
+  (when (and
+         ;; FIXME: There are a lot of long-running actions we don't want interrupted by this fn.
+         ;; We should implement an app-wide check rather than list them all here
+         (not (:graph/loading? @state/state))
+         (not (:graph/importing @state/state))
+         (not config/publishing?))
+    (when-let [title (date/today)]
+      (state/set-today! title)
+      (p/let [today-page-lc-title (util/page-name-sanity-lc title)
+              page (db/get-today-journal-page)]
+        (when-not page
+          (p/let [result (<create! title {:redirect? false
+                                          :split-namespace? false
+                                          :today-journal? true})]
+            (plugin-handler/hook-plugin-app :today-journal-created {:title today-page-lc-title})
+            result))))))
 
 (defn open-today-in-sidebar
   []

@@ -11,6 +11,7 @@
 
 html.is-native-ios,
 html.is-ios {
+  --ls-font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: calc(var(--ls-mobile-font-size) * var(--ls-mobile-font-scale, 1));
 }
 html.is-native-android {
@@ -30,18 +31,21 @@ html.is-native-android {
 }
 
 html.is-native-ios body,
+html.is-native-ios button,
 html.is-native-ios textarea,
 html.is-native-ios input,
 html.is-native-ios select,
 html.is-native-ios .block-content,
 html.is-native-ios .editor-inner,
 html.is-ios body,
+html.is-ios button,
 html.is-ios textarea,
 html.is-ios input,
 html.is-ios select,
 html.is-ios .block-content,
 html.is-ios .editor-inner
 {
+  font-family: inherit;
   font-size: inherit;
 }
 
@@ -220,12 +224,6 @@ ul {
 
 .latex.initial {
   @apply pt-1;
-
-  .katex-html {
-    &[aria-hidden="true"] {
-      @apply hidden;
-    }
-  }
 }
 
 .ui__popover-content, .ui__dropdown-menu-content {

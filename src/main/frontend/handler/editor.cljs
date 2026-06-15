@@ -1205,7 +1205,8 @@
              (some-> node .-getAttribute)
              (or (dom/attr node "blockid")
                  (some-> node (dom/attr "id") (string/replace #"^ls-block-" ""))))]
-    (when (util/uuid-string? id)
+    (when (and (string? id)
+               (util/uuid-string? id))
       (uuid id))))
 
 (defn- selection-node-for-block-id

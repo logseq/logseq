@@ -1587,10 +1587,8 @@
  :settings.editor/wide-mode "Mode ample"
 
  :settings.features/enable-flashcards "Activar flashcards"
- :settings.features/enable-journals "Habilitar diaris"
  :settings.features/home-default-page "Establir pàgina d'inici"
  :settings.features/home-default-page-update-success "Pàgina d'inici per defecte actualitzada"
- :settings.features/journals-enable-success "Diaris activats"
  :settings.features/login-prompt "Per accedir a noves característiques abans que ningú ha de ser patrocinador de Logseq en Open Collective y després iniciar sessió."
  :settings.features/page-not-found "La pàgina \"{1}\" encara no existeix. Creeu aquesta pàgina primer i, després, torneu-ho a provar."
  :settings.features/plugin-system "Sistema de connectors"
