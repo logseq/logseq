@@ -403,7 +403,7 @@
                     (:block/uuid linked) :markdown (:block/title linked))]
         [:div.preview-block {:data-block-uuid (str uuid)
                              :style {:padding-left (str (* (dec depth) 20) "px")}}
-         [:div.preview-block-content.flex.items-baseline.gap-1
+         [:div.preview-block-content.flex.items-baseline.gap-2
           [:span.preview-bullet]
           [:span.flex-1.min-w-0
            (when-let [ast (:block.temp/ast-title parsed)]
@@ -414,7 +414,7 @@
                (some #(= :logseq.class/Query (:db/ident %))))
       [:div.preview-block {:data-block-uuid (str uuid)
                            :style {:padding-left (str (* (dec depth) 20) "px")}}
-       [:div.preview-block-content.flex.items-baseline.gap-1.text-gray-11
+       [:div.preview-block-content.flex.items-baseline.gap-2.text-gray-11
         [:span.preview-bullet]
         (shui/tabler-icon "search" {:size 14})
         [:span.italic "Query"]]]
@@ -429,7 +429,7 @@
             collapsed? (:block/collapsed? block)]
         [:div.preview-block {:data-block-uuid (str uuid)
                              :style {:padding-left (str (* (dec depth) 20) "px")}}
-         [:div.preview-block-content.flex.items-baseline.gap-1
+         [:div.preview-block-content.flex.items-baseline.gap-2
           [:span.preview-bullet {:class (when (and has-children? collapsed?) "collapsed")}]
           [:span.flex-1.min-w-0
            (when ast-title (block/map-inline preview-config ast-title))]]
@@ -452,7 +452,7 @@
     (for [[i [width indent]] (map-indexed vector skeleton-lines)]
       [:div.preview-block {:key i
                            :style {:padding-left (str indent "px")}}
-       [:div.preview-block-content.flex.items-baseline.gap-1
+       [:div.preview-block-content.flex.items-baseline.gap-2
         [:span.preview-bullet]
         (shui/skeleton {:class "h-3" :style {:width (str width "%")}})]])]])
 
@@ -1681,25 +1681,30 @@
         block-uuid (when (and source (not (:page? source)))
                      (:block/uuid source))
         *container (rum/use-ref nil)]
-    ;; Async-load entity from worker if not in main-thread DB
+    ;; Load the page's FULL descendant tree from the worker so nested child
+    ;; blocks render -- not just the page's top-level blocks. {:children? true}
+    ;; alone transacts only one level into the lazy main-thread DB, leaving
+    ;; grandchildren (e.g. notes nested under a tagged block) missing;
+    ;; :include-collapsed-children? true pulls the entire subtree. A
+    ;; synchronously-resolvable entity is shown immediately for a snappy first
+    ;; paint, then we re-render once the full tree has loaded.
     (hooks/use-effect!
      (fn []
-       (if sync-entity
-         (do (set-page-entity! sync-entity) js/undefined)
-         (when-let [id (or source-uuid source-eid)]
-           (-> (db-async/<get-block (state/get-current-repo) id
-                                    {:children? true})
-               (p/then (fn [_]
-                         ;; Entity is now transacted into main-thread DB, retry resolution
-                         (let [entity (preview-page-entity item)]
-                           (when entity
-                             ;; Also load children for the resolved page (in case it's
-                             ;; a different entity than what we loaded, e.g. block's parent page)
-                             (-> (db-async/<get-block (state/get-current-repo)
-                                                      (:block/uuid entity)
-                                                      {:children? true})
-                                 (p/then (fn [_] (set-page-entity! entity)))))))))
-           js/undefined)))
+       (when sync-entity (set-page-entity! sync-entity))
+       (when-let [id (or source-uuid source-eid)]
+         (-> (db-async/<get-block (state/get-current-repo) id
+                                  {:children? true :include-collapsed-children? true})
+             (p/then (fn [_]
+                       ;; Entity is now transacted into main-thread DB, retry resolution
+                       (let [entity (preview-page-entity item)]
+                         (when entity
+                           ;; Load the resolved page's full tree (it may differ from the
+                           ;; loaded entity, e.g. a block's parent page) so every level renders.
+                           (-> (db-async/<get-block (state/get-current-repo)
+                                                    (:block/uuid entity)
+                                                    {:children? true :include-collapsed-children? true})
+                               (p/then (fn [_] (set-page-entity! entity))))))))))
+       js/undefined)
      [source-uuid source-eid])
     ;; Auto-scroll to matched block (for block search results).
     ;; The highlight class is applied and never removed -- the CSS animation
@@ -1747,7 +1752,7 @@
     [:div.cmdk-preview-pane {:ref *container}
      (if page-entity
        [:div.cmdk-preview-content
-        [:div.preview-page-title.px-4.pt-3.pb-2
+        [:div.preview-page-title.px-6.pt-3.pb-2
          [:span.text-lg.font-bold (:block/title page-entity)]]
         (if (ldb/class? page-entity)
           (preview-class-objects page-entity)

@@ -157,9 +157,10 @@
     var(--lx-gray-03) 100%);
 }
 
-/* Block list */
+/* Block list. Left padding is 0.25rem less than the 1rem sides so the wider
+   bullet→text gap (gap-2) keeps the block text aligned with the page title. */
 .preview-blocks {
-  padding: 0 0.5rem 1rem;
+  padding: 0 1rem 1rem 0.75rem;
 }
 
 .preview-block {
@@ -217,8 +218,21 @@
   100% { background: var(--lx-accent-03-alpha, rgba(59, 130, 246, 0.12)); }
 }
 
+/* The highlight is drawn as a background layer ~8px wider than the block on
+   each side (via ::before) so the bullet/text aren't flush against the box
+   edge. Using a pseudo-element leaves the block's box model untouched, so the
+   content stays put at every depth and the title<->block alignment holds. */
 .cmdk-preview-highlight {
+  position: relative;
+  z-index: 0;
+}
+
+.cmdk-preview-highlight::before {
+  content: '';
+  position: absolute;
+  inset: 0 -0.5rem;
   border-radius: 4px;
+  z-index: -1;
   animation: cmdk-highlight-settle 600ms ease-out forwards;
 }
 
@@ -264,7 +278,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .cmdk-results-list { transition: none; }
-  .cmdk-preview-highlight { animation: none; background: var(--lx-accent-03-alpha, rgba(59, 130, 246, 0.12)); }
+  .cmdk-preview-highlight::before { animation: none; background: var(--lx-accent-03-alpha, rgba(59, 130, 246, 0.12)); }
   .cmdk-preview-content { animation: none; }
 }
 
