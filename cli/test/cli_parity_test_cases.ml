@@ -74,6 +74,46 @@ let graph_text graph = Cli_primitive.string_of_graph graph
 let unicode_text codepoints =
   String.concat "" (List.map Js.String.fromCodePoint codepoints)
 
+let start_open_url_capture () : unit =
+  [%mel.raw
+    {|
+(function () {
+  const childProcess = require("child_process");
+  const capture = {
+    originalSpawn: childProcess.spawn,
+    originalPlatformDescriptor: Object.getOwnPropertyDescriptor(process, "platform"),
+    calls: []
+  };
+  globalThis.__logseqOpenUrlCapture = capture;
+  childProcess.spawn = function (command, args, options) {
+    capture.calls.push({ command, args: Array.from(args), options });
+    return { pid: 4242, unref: function () {} };
+  };
+  Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+})()
+|}]
+
+let stop_open_url_capture () : unit =
+  [%mel.raw
+    {|
+(function () {
+  const capture = globalThis.__logseqOpenUrlCapture;
+  if (!capture) return;
+  const childProcess = require("child_process");
+  childProcess.spawn = capture.originalSpawn;
+  if (capture.originalPlatformDescriptor) {
+    Object.defineProperty(process, "platform", capture.originalPlatformDescriptor);
+  }
+  delete globalThis.__logseqOpenUrlCapture;
+})()
+|}]
+
+let open_url_capture_calls () : string =
+  [%mel.raw
+    {|
+JSON.stringify((globalThis.__logseqOpenUrlCapture && globalThis.__logseqOpenUrlCapture.calls) || [])
+|}]
+
 let property_key_text = function
   | Property.Key_ident ident -> keyword_text ident
   | Property.Key_id id -> Int64.to_string id
@@ -873,6 +913,28 @@ let () =
       | Ok Auth_command.Logout -> pass
       | Ok _ -> fail_test "logout build: expected Logout"
       | Error err -> fail_test ("logout build: " ^ err.Error.message));
+
+  test "CLI parity Windows open_url keeps query params inside start URL"
+    (fun () ->
+      let url =
+        "https://logseq-prod.auth.us-east-1.amazoncognito.com/oauth2/authorize?response_type=code&client_id=abc&redirect_uri=http%3A%2F%2Flocalhost%3A8765%2Fauth%2Fcallback&state=xyz&code_challenge=pkce&code_challenge_method=S256"
+      in
+      try
+        start_open_url_capture ();
+        expect_bool "open url result" true (Cli_unix.open_url url);
+        let calls = open_url_capture_calls () in
+        stop_open_url_capture ();
+        expect_named_contains "windows open command" calls
+          "\"command\":\"cmd.exe\"";
+        expect_named_contains "windows verbatim arguments" calls
+          "\"windowsVerbatimArguments\":true";
+        expect_named_contains "windows quoted start url" calls
+          ("start \\\"\\\" \\\"" ^ url ^ "\\\"");
+        expect_named_not_contains "windows split start args" calls
+          ("\"start\",\"\",\"" ^ url ^ "\"")
+      with exn ->
+        stop_open_url_capture ();
+        fail_test (Printexc.to_string exn));
 
   test "CLI parity auth logout command deletes file and reports absent file"
     (fun () ->
