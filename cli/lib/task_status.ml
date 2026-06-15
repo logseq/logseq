@@ -6,15 +6,19 @@ let vector values = Edn_util.vector values
 let vector_t values = Edn_util.vector_t values
 
 let status_closed_values_query =
-  vector_t
-    [
-      kw "find";
-      vector [ sym "?status-ident"; sym "..." ];
-      kw "where";
-      vector [ sym "?property"; kw "db/ident"; kw "logseq.property/status" ];
-      vector [ sym "?value"; kw "block/closed-value-property"; sym "?property" ];
-      vector [ sym "?value"; kw "db/ident"; sym "?status-ident" ];
-    ]
+  Cli_primitive.(
+    make_datascript_query
+      ~find:[ vector [ sym "?status-ident"; sym "..." ] ]
+      ~where:
+        [
+          V (vector_t [ sym "?property"; kw "db/ident"; kw "logseq.property/status" ]);
+          V
+            (vector_t
+               [ sym "?value"; kw "block/closed-value-property"; sym "?property" ]);
+          V (vector_t [ sym "?value"; kw "db/ident"; sym "?status-ident" ]);
+        ]
+      ()
+    |> datascript_query_to_edn)
 
 let starts_with ~prefix value =
   let prefix_len = String.length prefix in

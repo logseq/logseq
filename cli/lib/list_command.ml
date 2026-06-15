@@ -340,6 +340,7 @@ let sym value = Edn_util.symbol value
 let vector values = Edn_util.vector values
 let list values = Edn_util.list values
 let normalized_lookup_name value = String.lowercase_ascii (String.trim value)
+let query_value query = Edn_util.any (Cli_primitive.datascript_query_to_edn query)
 
 let tag_selector =
   vector
@@ -365,27 +366,26 @@ let property_selector =
     ]
 
 let class_query selector class_ident =
-  Edn_util.map
-    [
-      ( kw "find",
-        vector [ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-      );
-      (kw "in", list [ sym "$"; sym "?name" ]);
-      ( kw "where",
-        vector
-          [
-            vector [ sym "?e"; kw "block/name"; sym "?name" ];
-            vector [ sym "?e"; kw "block/tags"; sym "?tag" ];
-            vector [ sym "?tag"; kw "db/ident"; kw class_ident ];
-          ] );
-    ]
+  Cli_primitive.make_datascript_query
+    ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
+    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~where:
+      [
+        Cli_primitive.V
+          (Edn_util.vector_t [ sym "?e"; kw "block/name"; sym "?name" ]);
+        Cli_primitive.V
+          (Edn_util.vector_t [ sym "?e"; kw "block/tags"; sym "?tag" ]);
+        Cli_primitive.V
+          (Edn_util.vector_t [ sym "?tag"; kw "db/ident"; kw class_ident ]);
+      ]
+    ()
 
 let pull_tag_by_name config repo name =
   Transport.thread_api_q config ~repo
     ~query:
       (Edn_util.vector_t
          [
-           class_query tag_selector "logseq.class/Tag";
+           query_value (class_query tag_selector "logseq.class/Tag");
            Edn_util.string (normalized_lookup_name name);
          ])
 
@@ -405,7 +405,7 @@ let pull_property_by_name config repo name =
     ~query:
       (Edn_util.vector_t
          [
-           class_query property_selector "logseq.class/Property";
+           query_value (class_query property_selector "logseq.class/Property");
            Edn_util.string (normalized_lookup_name name);
          ])
 
