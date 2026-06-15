@@ -119,15 +119,6 @@
     (when (and start end)
       (subs source start end))))
 
-(defn- assert-form-does-not-match!
-  [relative-file marker pattern message]
-  (let [source (source-for relative-file)
-        form (form-source source marker)]
-    (is (some? form)
-        (str relative-file " should contain " marker))
-    (is (not (re-find pattern form))
-        message)))
-
 (defn- hook-var-defined? [source var-name]
   (or (string/includes? source (str "(defn " var-name))
       (string/includes? source (str "(def " var-name))))
