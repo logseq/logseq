@@ -318,6 +318,7 @@ let pull_by_uuid invoke_config repo selector uuid =
 let normalized_page_name value = String.lowercase_ascii (String.trim value)
 let variable value = Edn_util.symbol value
 let list values = Edn_util.list values
+let query_value query = Edn_util.any (Cli_primitive.datascript_query_to_edn query)
 
 let tag_query selector =
   vector
@@ -365,26 +366,23 @@ let tag_query selector =
     ]
 
 let class_query selector class_ident =
-  Edn_util.map
-    [
-      ( kw "find",
-        vector
-          [
-            vector
-              [
-                list [ variable "pull"; variable "?e"; selector ];
-                variable "...";
-              ];
-          ] );
-      (kw "in", list [ variable "$"; variable "?name" ]);
-      ( kw "where",
-        vector
-          [
-            vector [ variable "?e"; kw "block/name"; variable "?name" ];
-            vector [ variable "?e"; kw "block/tags"; variable "?t" ];
-            vector [ variable "?t"; kw "db/ident"; kw class_ident ];
-          ] );
-    ]
+  Cli_primitive.make_datascript_query
+    ~find:
+      [
+        vector [ list [ variable "pull"; variable "?e"; selector ]; variable "..." ];
+      ]
+    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~where:
+      [
+        Cli_primitive.V
+          (Edn_util.vector_t
+             [ variable "?e"; kw "block/name"; variable "?name" ]);
+        Cli_primitive.V
+          (Edn_util.vector_t [ variable "?e"; kw "block/tags"; variable "?t" ]);
+        Cli_primitive.V
+          (Edn_util.vector_t [ variable "?t"; kw "db/ident"; kw class_ident ]);
+      ]
+    ()
 
 let property_query selector = class_query selector "logseq.class/Property"
 
@@ -407,7 +405,7 @@ let pull_property_by_name invoke_config repo name =
     ~query:
       (Edn_util.vector_t
          [
-           property_query property_selector;
+           query_value (property_query property_selector);
            Edn_util.string (normalized_page_name name);
          ])
 
