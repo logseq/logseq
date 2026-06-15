@@ -89,7 +89,9 @@ let read_file = Cli_unix.read_text_file
 let read_config_file path =
   if not (Cli_unix.file_exists path) then Ok None
   else
-    try Ok (Some (Melange_edn.of_edn_string (read_file path) |> value_of_edn))
+    let content = read_file path in
+    if String.trim content = "" then Ok None
+    else try Ok (Some (Melange_edn.of_edn_string content |> value_of_edn))
     with exn ->
       Error
         (Error.make
