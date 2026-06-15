@@ -1141,11 +1141,22 @@
                                           (nil? fb-type) :letters
                                           (and (#{:icon :emoji} fb-type)
                                                (string/blank? fb-icon)) :letters
-                                          :else fb-type)]
+                                          :else fb-type)
+                      ;; Initials value: when `:value` is absent the shared
+                      ;; `value` binding falls back to `:id` (line ~1094),
+                      ;; which for an avatar is "avatar-<initials>". Strip the
+                      ;; prefix so we recover the initials ("MW") instead of
+                      ;; rendering the first 3 chars of the id ("ava"). Mirrors
+                      ;; the `:image` branch's "image-" prefix stripping below.
+                      avatar-value (or (:value v)
+                                       (some-> (:id v) (string/replace #"^avatar-" "")))]
                   {:type :avatar
-                   :id (or id (str "avatar-" value))
-                   :label (or label value)
-                   :data (cond-> {:value value
+                   :id (or id (str "avatar-" avatar-value))
+                   ;; `label` (above) falls back to the shared `value`, which
+                   ;; for an avatar is the prefixed id; use the cleaned
+                   ;; `avatar-value` so labels/aria read "MW", not "avatar-MW".
+                   :label (or (:name v) (:label v) avatar-value)
+                   :data (cond-> {:value avatar-value
                                   :backgroundColor backgroundColor
                                   :color color
                                   :shape shape
