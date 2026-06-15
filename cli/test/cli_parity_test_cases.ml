@@ -3567,6 +3567,77 @@ let () =
       expect_error_code "non vector query" ":invalid-options"
         (Query.validate_query (Edn_util.map [])));
 
+  test "CLI parity datascript query primitive serializes query clauses" (fun () ->
+      let title_clause =
+        Edn_util.vector_t
+          [
+            Edn_util.symbol "?b";
+            Edn_util.keyword "block/title";
+            Edn_util.symbol "?title";
+          ]
+      in
+      let page_clause =
+        Edn_util.vector_t
+          [
+            Edn_util.symbol "?b";
+            Edn_util.keyword "block/page";
+            Edn_util.symbol "?page";
+          ]
+      in
+      let predicate_clause =
+        Edn_util.list_t
+          [
+            Edn_util.symbol "clojure.string/includes?";
+            Edn_util.symbol "?title";
+            Edn_util.symbol "?query";
+          ]
+      in
+      let edn query =
+        Melange_edn.to_edn_string
+          (Edn_util.any (Cli_primitive.datascript_query_to_edn query))
+      in
+      let without_inputs =
+        Cli_primitive.make_datascript_query ~find:[ Edn_util.symbol "?b" ]
+          ~where:[ Cli_primitive.V title_clause ] ()
+      in
+      expect_equal "datascript query without inputs"
+        "[:find ?b :where [?b :block/title ?title]]" (edn without_inputs);
+      let with_inputs =
+        Cli_primitive.make_datascript_query ~find:[ Edn_util.symbol "?b" ]
+          ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?title" ]
+          ~where:[ Cli_primitive.V title_clause ] ()
+      in
+      expect_equal "datascript query with inputs"
+        "[:find ?b :in $ ?title :where [?b :block/title ?title]]"
+        (edn with_inputs);
+      let with_empty_inputs =
+        Cli_primitive.make_datascript_query ~find:[ Edn_util.symbol "?b" ]
+          ~in_:[] ~where:[ Cli_primitive.V title_clause ] ()
+      in
+      expect_equal "datascript query with empty inputs"
+        "[:find ?b :where [?b :block/title ?title]]" (edn with_empty_inputs);
+      let with_multiple_clauses =
+        Cli_primitive.make_datascript_query ~find:[ Edn_util.symbol "?b" ]
+          ~where:[ Cli_primitive.V title_clause; Cli_primitive.V page_clause ]
+          ()
+      in
+      expect_equal "datascript query with multiple where clauses"
+        "[:find ?b :where [?b :block/title ?title] [?b :block/page ?page]]"
+        (edn with_multiple_clauses);
+      let with_list_clause =
+        Cli_primitive.make_datascript_query
+          ~find:[ Edn_util.symbol "?b"; Edn_util.symbol "?title" ]
+          ~where:
+            [
+              Cli_primitive.V title_clause;
+              Cli_primitive.L predicate_clause;
+            ]
+          ()
+      in
+      expect_equal "datascript query with list where clause"
+        "[:find ?b ?title :where [?b :block/title ?title] (clojure.string/includes? ?title ?query)]"
+        (edn with_list_clause));
+
   test
     "CLI parity query input normalization fills defaults and validates \
      required inputs" (fun () ->
