@@ -184,3 +184,29 @@
     (is (= #{"Obj B"} is-not-titles))
     (is (= #{obj-a-id} (set (:data is-result))))
     (is (= #{obj-b-id} (set (:data is-not-result))))))
+
+(deftest get-view-data-class-objects-groups-by-number-property-sorts-numerically-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Topic {:block/title "Topic"}}
+               :properties {:user.property/score {:logseq.property/type :number}}
+               :pages-and-blocks
+               [{:page {:block/title "A" :build/tags [:Topic]
+                        :build/properties {:user.property/score 2}}}
+                {:page {:block/title "B" :build/tags [:Topic]
+                        :build/properties {:user.property/score 10}}}
+                {:page {:block/title "C" :build/tags [:Topic]
+                        :build/properties {:user.property/score 1}}}]})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        _ (d/transact! conn [[:db/add view-id :logseq.property.view/group-by-property :user.property/score]])
+        asc-groups (map first (:data (db-view/get-view-data @conn view-id
+                                                            {:view-feature-type :class-objects
+                                                             :view-for-id class-id})))
+        _ (d/transact! conn [[:db/add view-id :logseq.property.view/sort-groups-desc? true]])
+        desc-groups (map first (:data (db-view/get-view-data @conn view-id
+                                                             {:view-feature-type :class-objects
+                                                              :view-for-id class-id})))]
+    ;; Number groups must sort numerically (1 2 10), not lexicographically (1 10 2)
+    (is (= [1 2 10] asc-groups))
+    ;; "Sort groups order" (desc?) must reverse the numeric order
+    (is (= [10 2 1] desc-groups))))
