@@ -46,10 +46,34 @@ let lock_path ~root_dir repo =
        (Graph_dir.graph_dir_name_of_repo repo))
     "db-worker.lock"
 
-let db_worker_runtime_script_path () =
+let env_db_worker_script_path () =
   match Sys.getenv_opt "LOGSEQ_DB_WORKER_NODE_SCRIPT" with
-  | Some path when String.trim path <> "" -> path
-  | _ -> "db-worker-node.js"
+  | Some path when String.trim path <> "" -> Some path
+  | _ -> None
+
+let cli_entrypoint_path () =
+  let argv = Cli_platform.argv () in
+  if Array.length argv > 1 then Some argv.(1) else None
+
+let cli_dir_db_worker_script_paths () =
+  match cli_entrypoint_path () with
+  | Some entrypoint ->
+      let dir = Filename.dirname entrypoint in
+      [
+        Filename.concat dir "db-worker-node.js";
+        Filename.concat (Filename.concat dir "js") "db-worker-node.js";
+      ]
+  | _ -> []
+
+let db_worker_runtime_script_path () =
+  match env_db_worker_script_path () with
+  | Some path -> path
+  | None -> (
+      match
+        List.find_opt Cli_unix.file_exists (cli_dir_db_worker_script_paths ())
+      with
+      | Some path -> path
+      | None -> "db-worker-node.js")
 
 let starts_with ~prefix value =
   let prefix_len = String.length prefix in
@@ -193,7 +217,6 @@ let ensure_repo_dir config repo =
         ^ Printexc.to_string exn ^ ")"))
 
 let script_candidates config =
-  let explicit = db_worker_runtime_script_path () in
   let project_dir = config.Cli_config.project_dir in
   let project_candidates =
     match project_dir with
@@ -207,7 +230,10 @@ let script_candidates config =
             "db-worker-node.js";
         ]
   in
-  explicit :: project_candidates
+  List.filter_map Fun.id [ env_db_worker_script_path () ]
+  @ cli_dir_db_worker_script_paths ()
+  @ [ "db-worker-node.js" ]
+  @ project_candidates
 
 let resolve_script_path config =
   let candidates = script_candidates config in
