@@ -52,6 +52,7 @@ env:
   CLOJURE_VERSION: '1.12.4.1618'
   NODE_VERSION: '24'
   JAVA_VERSION: '21'
+  OCAML_VERSION: '5.4.0'
 
 jobs:
   compile-cljs:
@@ -110,6 +111,18 @@ jobs:
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
+      - name: Fetch OCaml deps
+        working-directory: cli
+        run: opam install . --deps-only --with-test --yes
+
+      - name: Fetch CLI pnpm deps
+        run: pnpm --dir cli install --frozen-lockfile
+
       - name: Retrieve tag version
         id: ref
         run: |
@@ -137,7 +150,14 @@ jobs:
           echo "ENABLE_FILE_SYNC_PRODUCTION=${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}" >> $GITHUB_ENV
 
       - name: Compile CLJS
-        run: pnpm install --frozen-lockfile && gulp build && pnpm cljs:release-electron && pnpm db-worker-node:bundle && pnpm webpack-app-build && pnpm desktop:prepare-runtime-js
+        run: |
+          pnpm install --frozen-lockfile
+          gulp build
+          pnpm cljs:release-electron
+          pnpm db-worker-node:bundle
+          opam exec -- pnpm cli:release
+          pnpm webpack-app-build
+          pnpm desktop:prepare-runtime-js
         env:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
