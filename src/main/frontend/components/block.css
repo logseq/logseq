@@ -1007,7 +1007,6 @@ html.is-mobile .ls-block-content-indent {
 .ls-page-title-container .block-content-wrapper {
   .ls-page-title-actions {
     @apply absolute -top-5 opacity-0;
-    left: -2px;
   }
 
   &:hover {
