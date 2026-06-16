@@ -32,6 +32,7 @@
         chmods (atom [])
         messages (atom [])
         errors (atom [])
+        deferred (atom [])
         files (atom (set (:existing-files opts)))
         contents (atom (:existing-contents opts))]
     (cli-install/install-cli-launcher!
@@ -50,6 +51,7 @@
        :show-message-box! #(swap! messages conj %)
        :show-error-box! (fn [title content]
                           (swap! errors conj {:title title :content content}))
+       :defer! #(swap! deferred conj %)
        :t t
        :log-info! (fn [& _])
        :log-warn! (fn [& _])}
@@ -57,7 +59,15 @@
     {:writes @writes
      :chmods @chmods
      :messages @messages
-     :errors @errors}))
+     :errors @errors
+     :deferred @deferred
+     :messages-atom messages}))
+
+(defn- run-deferred!
+  [result]
+  (doseq [f (:deferred result)]
+    (f))
+  (assoc result :messages @(:messages-atom result)))
 
 (deftest install-cli-launcher-shows-success-dialog
   (testing "successful Unix install writes to ~/.local/bin and reports the user-facing directory"
@@ -65,9 +75,12 @@
       (is (= "/home/me/.local/bin/logseq" (ffirst (:writes result))))
       (is (= [["/home/me/.local/bin/logseq" "755"]] (:chmods result)))
       (is (= [] (:errors result)))
+      (is (= [] (:messages result)))
+      (is (= 1 (count (:deferred result))))
+      (let [result (run-deferred! result)]
       (is (= [{:title "Logseq"
                :message "Logseq CLI was installed to ~/.local/bin"}]
-             (:messages result))))))
+             (:messages result)))))))
 
 (deftest install-cli-launcher-uses-stable-appimage-path
   (testing "Linux AppImage launchers use APPIMAGE instead of the temporary mounted executable path"
@@ -102,9 +115,12 @@
       (is (= (str windows-dir "/logseq.cmd") (ffirst (:writes result))))
       (is (= [] (:chmods result)))
       (is (= [] (:errors result)))
+      (is (= [] (:messages result)))
+      (is (= 1 (count (:deferred result))))
+      (let [result (run-deferred! result)]
       (is (= [{:title "Logseq"
                :message (str "Logseq CLI was installed to " windows-dir)}]
-             (:messages result))))))
+             (:messages result)))))))
 
 (deftest install-cli-launcher-shows-error-dialog-on-failure
   (testing "installer failures are visible through an Electron error dialog"
