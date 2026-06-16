@@ -76,7 +76,7 @@
                                                                            :role "member"
                                                                            :email "user@example.com"
                                                                            :username "User"}]}))
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                               user-handler/<ensure-id&access-token (fn [resolve _reject]
                                                                            (resolve true))]
                  (p/let [first-result (db-sync/<rtc-get-users-info)
                          second-result (db-sync/<rtc-get-users-info)
