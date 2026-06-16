@@ -862,7 +862,7 @@
                 (is false (str "unexpected error: " error))))
      (p/finally done))))
 
-(deftest search-build-blocks-indice-in-worker-rebuilds-when-vector-metadata-mismatches-test
+(deftest search-build-blocks-indice-in-worker-skips-rebuild-when-fts-current-and-vector-metadata-mismatches-test
   (async done
     (->
      (restoring-worker-state
@@ -898,12 +898,9 @@
                                                             :title "Hello"})]
             (p/let [result (build-index! test-repo false)
                     _ (p/delay 10)]
-              (is (= :started result))
-              (is (= 1 @truncate-calls))
-              (is (= [{:embedding-model-id "test-model"
-                       :embedding-dimension search/vector-embedding-dimension
-                       :context-version search/vector-context-version}]
-                     @metadata-writes)))))))
+              (is (= db-core/search-db-version result))
+              (is (= 0 @truncate-calls))
+              (is (empty? @metadata-writes)))))))
      (p/catch (fn [error]
                 (is false (str "unexpected error: " error))))
      (p/finally done))))
