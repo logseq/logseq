@@ -241,7 +241,7 @@
          (p/resolved cached-users)
 
          base
-         (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+         (p/let [_ (js/Promise. user-handler/<ensure-id&access-token!)
                  resp (fetch-json (str base "/graphs/" graph-uuid "/members")
                                   {:method "GET"}
                                   {:response-schema :graph-members/list})
@@ -357,7 +357,7 @@
         graph-uuid (str graph-uuid)]
     (if (and base (string? graph-uuid) (string? email))
       (->
-       (p/let [_ (user-handler/<ensure-id&access-token!)
+       (p/let [_ (user-handler/<ensure-id&access-token)
                body (coerce-http-request :graph-members/create
                                          {:email email
                                           :role "member"})
