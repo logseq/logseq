@@ -357,7 +357,7 @@
         graph-uuid (str graph-uuid)]
     (if (and base (string? graph-uuid) (string? email))
       (->
-       (p/let [_ (user-handler/<ensure-id&access-token)
+       (p/let [_ (user-handler/<ensure-id&access-token!)
                body (coerce-http-request :graph-members/create
                                          {:email email
                                           :role "member"})
