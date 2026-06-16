@@ -57,9 +57,14 @@
   (or (some-> error .-message)
       (str error)))
 
+(defn- default-defer!
+  [f]
+  (js/setTimeout f 0)
+  nil)
+
 (defn install-cli-launcher!
   [{:keys [windows? cli-path cli-dir cli-dir! path-join exists? show-message-box!
-           show-error-box! t log-info! log-warn!]
+           show-error-box! defer! t log-info! log-warn!]
     :as deps}]
   (try
     (let [cli-dir (if cli-dir! (cli-dir!) cli-dir)]
@@ -84,8 +89,9 @@
                                             :target-path target-path
                                             :content content))
             (log-info! :cli/install (str "Installed launcher at " target-path))
-            (show-message-box! {:title "Logseq"
-                                :message (t :electron/cli-installed display-dir)})))))
+            ((or defer! default-defer!)
+             #(show-message-box! {:title "Logseq"
+                                  :message (t :electron/cli-installed display-dir)}))))))
     (catch :default error
       (let [message (error-message error)]
         (log-warn! :cli/install "Failed to install logseq launcher" error)
