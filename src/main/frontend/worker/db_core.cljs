@@ -52,6 +52,7 @@
    [logseq.db.sqlite.util :as sqlite-util]
    [logseq.outliner.op :as outliner-op]
    [logseq.outliner.recycle :as outliner-recycle]
+   [logseq.publishing.html :as publish-html]
    [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
    [missionary.core :as m]
    [promesa.core :as p]
@@ -1112,6 +1113,11 @@
       {:schema (:schema @conn)
        :initial-data (vec (d/datoms @conn :eavt))}
       (common-initial-data/get-initial-data @conn))))
+
+(def-thread-api :thread-api/build-publishing-html
+  [repo options]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (publish-html/build-html @conn options)))
 
 (def-thread-api :thread-api/reset-db
   [repo db-transit]

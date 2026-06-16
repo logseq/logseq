@@ -1588,10 +1588,8 @@
  :settings.editor/wide-mode "الوضع العريض"
 
  :settings.features/enable-flashcards "تفعيل البطاقات التعليمية"
- :settings.features/enable-journals "تفعيل اليوميات"
  :settings.features/home-default-page "الصفحة الرئيسية الافتراضية"
  :settings.features/home-default-page-update-success "تم تحديث الصفحة الافتراضية"
- :settings.features/journals-enable-success "اليوميات مفعلة"
  :settings.features/login-prompt "سجل الدخول للمزامنة"
  :settings.features/page-not-found "الصفحة «{1}» غير موجودة بعد. الرجاء إنشاء تلك الصفحة أولاً، ثم حاول مرة أخرى."
  :settings.features/plugin-system "نظام الإضافات"

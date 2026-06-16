@@ -63,6 +63,28 @@
             db)
        (map #(str (:block/uuid %) "." (:logseq.property.asset/type %)))))
 
+(defn- add-missing-built-in-block-timestamps
+  [db]
+  (let [tx-data (->> (d/datoms db :avet :logseq.property/built-in? true)
+                     (map :e)
+                     (map #(d/entity db %))
+                     (mapcat
+                      (fn [entity]
+                        (let [created-at (or (:block/created-at entity)
+                                             (:block/updated-at entity)
+                                             0)
+                              updated-at (or (:block/updated-at entity)
+                                             created-at)]
+                          (cond-> []
+                            (nil? (:block/created-at entity))
+                            (conj [:db/add (:db/id entity) :block/created-at created-at])
+
+                            (nil? (:block/updated-at entity))
+                            (conj [:db/add (:db/id entity) :block/updated-at updated-at]))))))]
+    (if (seq tx-data)
+      (:db-after (d/with db tx-data))
+      db)))
+
 (defn clean-export!
   "Prepares a database assuming all pages are public unless a page has a publishing-public? property set to false"
   [db]
@@ -78,7 +100,7 @@
         datoms (d/datoms filtered-db :eavt)
         assets (get-db-assets filtered-db)]
     ;; (prn :public-counts :datoms (count datoms) :assets (count assets))
-    [@(d/conn-from-datoms datoms (:schema db)) assets]))
+    [(add-missing-built-in-block-timestamps @(d/conn-from-datoms datoms (:schema db))) assets]))
 
 (defn- db-filter-only-public
   [public-ents _db datom]
@@ -154,4 +176,4 @@
         datoms (d/datoms filtered-db :eavt)
         assets (get-db-assets filtered-db)]
     ;; (prn :private-counts :internal (count internal-ents) :datoms (count datoms) :assets (count assets))
-    [@(d/conn-from-datoms datoms (:schema db)) assets]))
+    [(add-missing-built-in-block-timestamps @(d/conn-from-datoms datoms (:schema db))) assets]))

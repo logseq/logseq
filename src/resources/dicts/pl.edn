@@ -1588,10 +1588,8 @@
  :settings.editor/wide-mode "Tryb szeroki"
 
  :settings.features/enable-flashcards "Włącz fiszki"
- :settings.features/enable-journals "Dzienniki"
  :settings.features/home-default-page "Ustaw domyślną stronę startową"
  :settings.features/home-default-page-update-success "Strona domowa zaktualizowana"
- :settings.features/journals-enable-success "Dzienniki włączone"
  :settings.features/login-prompt "Żeby zyskać dostęp do nowych funkcjonalności przed innymi, musisz mieć status Open Collective Sponsor lub Logseq Backer i musisz się zalogować."
  :settings.features/page-not-found "Strona „{1}” jeszcze nie istnieje. Najpierw utwórz tę stronę, a następnie spróbuj ponownie."
  :settings.features/plugin-system "System wtyczek"

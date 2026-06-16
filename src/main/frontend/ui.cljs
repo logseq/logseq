@@ -346,10 +346,10 @@
           [:div.flex.items-start
            [:div.flex-shrink-0.pt-2
             svg]
-           [:div.ml-3.w-0.flex-1.pt-2
+           [:div.ml-3.w-0.flex-1.pt-2.pointer-events-auto
 
             [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}}
-             content]]
+             (if (keyword? content) (name content) content)]]
            (when-not (contains? #{"exiting" "exited"} state)
              [:div.flex-shrink-0.flex.pointer-events-auto {:style {:margin-top -9
                                                                     :margin-right -18}}
@@ -749,8 +749,8 @@
                (log/error :exception error)
                (notification/show!
                 [:div.flex.flex-col.gap-2
-                 [:div (t :ui/error-boundary-error error)]
-                 (str (.-stack error))] `:error))}
+                 [:div (t :ui/error-boundary-error (if (instance? js/Error error) (.-message error) (str error)))]
+                 (when (instance? js/Error error) (str (.-stack error)))] :error))}
    view))
 
 (hsx/defc block-error
@@ -1050,15 +1050,30 @@
   [{:keys [name className value onChange _children]}]
   (let [year? (or (= name "years")
                   (and (string? className)
-                       (string/includes? className "year")))]
+                       (string/includes? className "year")))
+        [year-value set-year-value!] (hooks/use-state (str value))]
+    (hooks/use-effect!
+     (fn []
+       (set-year-value! (str value))
+       nil)
+     [value])
     [:div.months-years-nav {:class className}
      (if year?
        (shui/input
-        {:on-change (fn [v]
-                      (when v
-                        (onChange (day-picker-change-event v))))
+        {:on-change (fn [e]
+                      (let [input-value (util/evalue e)]
+                        (set-year-value! input-value)
+                        (when (re-matches #"\d{4}" input-value)
+                          (onChange (day-picker-change-event input-value)))))
+         :on-focus (fn [e]
+                     (some-> (.-target e) (.select)))
+         :on-click (fn [e]
+                     (some-> (.-target e) (.select)))
+         :on-blur (fn [_]
+                    (when-not (re-matches #"\d{4}" year-value)
+                      (set-year-value! (str value))))
          :class "h-8 ml-2 !w-[5.75rem] !px-3 !py-0"
-         :value value
+         :value year-value
          :type "number"
          :min 1
          :max 9999})

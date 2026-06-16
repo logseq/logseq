@@ -37,10 +37,17 @@
   [original-path & {:keys [href block]}]
   (let [web-link? (string/starts-with? original-path "http")
         protocol-link? (common-config/protocol-path? href)
+        local-asset-link? (common-config/local-protocol-asset? href)
         filename (util/node-path.basename original-path)
         ext-name "pdf"
-        url (if protocol-link?
+        url (cond
+              local-asset-link?
+              (assets-handler/normalize-asset-resource-url (fs/asset-path-normalize href))
+
+              protocol-link?
               href
+
+              :else
               (assets-handler/normalize-asset-resource-url original-path))
         filename' (if protocol-link?
                     filename

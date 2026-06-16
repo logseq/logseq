@@ -1588,10 +1588,8 @@
  :settings.editor/wide-mode "Modo ancho"
 
  :settings.features/enable-flashcards "Tarjetas de memorización"
- :settings.features/enable-journals "Habilitar diarios"
  :settings.features/home-default-page "Establecer página de inicio"
  :settings.features/home-default-page-update-success "Página de inicio actualizada"
- :settings.features/journals-enable-success "Diarios habilitados"
  :settings.features/login-prompt "Para acceder a nuevas características antes que nadie debes ser un patrocinador de Logseq en Open Collective y después iniciar sesión."
  :settings.features/page-not-found "La página \"{1}\" aún no existe. Primero cree esa página y luego vuelva a intentarlo."
  :settings.features/plugin-system "Habilitar extensiones"
