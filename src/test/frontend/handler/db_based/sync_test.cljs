@@ -2,12 +2,14 @@
   (:require [cljs.test :refer [deftest is async]]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.db :as db]
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.persist-db :as persist-db]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (deftest remove-member-request-test
@@ -57,6 +59,39 @@
              (p/catch (fn [e]
                         (is (= :db-sync/invalid-member (:type (ex-data e))))
                         (done))))))
+
+(deftest rtc-get-users-info-uses-cached-members-test
+  (async done
+         (let [users-info (:rtc/users-info @state/state)
+               users-info-prev @users-info
+               fetch-calls (atom 0)]
+           (reset! users-info {})
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               db/get-db (fn [] :db)
+                               ldb/get-graph-rtc-uuid (fn [_db] "graph-1")
+                               state/get-current-repo (fn [] "repo-1")
+                               db-sync/fetch-json (fn [url opts _]
+                                                    (swap! fetch-calls inc)
+                                                    (is (= "http://base/graphs/graph-1/members" url))
+                                                    (is (= "GET" (:method opts)))
+                                                    (p/resolved {:members [{:user-id "user-1"
+                                                                           :role "member"
+                                                                           :email "user@example.com"
+                                                                           :username "User"}]}))
+                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                           (resolve true))]
+                 (p/let [first-result (db-sync/<rtc-get-users-info)
+                         second-result (db-sync/<rtc-get-users-info)
+                         refreshed-result (db-sync/<rtc-get-users-info true)]
+                   (is (= 2 @fetch-calls))
+                   (is (= first-result second-result))
+                   (is (= first-result refreshed-result))
+                   (is (= {"repo-1" first-result} @users-info))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally (fn []
+                            (reset! users-info users-info-prev)
+                            (done)))))))
 
 (deftest rtc-create-graph-persists-disabled-e2ee-flag-test
   (async done
