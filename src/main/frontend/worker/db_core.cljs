@@ -634,14 +634,6 @@
    :embedding-dimension (platform/embedding-dimension (platform/current))
    :context-version search/vector-context-version})
 
-(defn- vector-index-current?
-  [repo]
-  (if-let [vector-index (worker-state/get-vector-index repo)]
-    (if-let [metadata-fn (:metadata vector-index)]
-      (= (expected-vector-index-metadata) (metadata-fn))
-      false)
-    true))
-
 (defn- persist-vector-index-metadata!
   [repo]
   (when-let [set-metadata! (:set-metadata! (worker-state/get-vector-index repo))]
@@ -1358,7 +1350,6 @@
         vector-context (search/build-vector-context-cache blocks)
         total (count blocks)
         vector-index (worker-state/get-vector-index repo)
-        vector-index? (boolean vector-index)
         progress-for-fts (fn [processed]
                            (if (zero? total)
                              100
@@ -1420,7 +1411,6 @@
     (when search-db
       (let [version (search-index-version search-db)]
         (if (and (= version search-db-version)
-                 (vector-index-current? repo)
                  (not force?))
           version
          (when-let [conn (worker-state/get-datascript-conn repo)]
