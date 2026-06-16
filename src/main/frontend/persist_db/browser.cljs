@@ -52,13 +52,15 @@
     (notification/show! (t :search/indices-rebuilt-success) :success)))
 
 (def-thread-api :thread-api/search-index-build-progress
-  [repo {:keys [build-id status progress processed total]}]
+  [repo {:keys [build-id status progress processed total]
+         input-stage :stage}]
   (let [prev-state (get @state/state :search/index-build)
         current-repo (state/get-current-repo)
         stage :search-index
         visible-repo? (or (= repo current-repo)
                           (= repo (:repo prev-state)))]
-    (when visible-repo?
+    (when (and visible-repo?
+               (not= :vector-index input-stage))
       (case status
         :idle
         (when-not (= :completed (:status prev-state))
@@ -98,6 +100,9 @@
                                      :processed (or processed 0)
                                      :total (or total 0)}
                               build-id (assoc :build-id build-id)))
+          (when (and (= :search-index input-stage)
+                     (= repo current-repo))
+            (state/pub-event! [:graph/ready repo]))
           (maybe-notify-search-index-rebuilt! repo)
           (hide-search-index-progress-later! repo build-id))
 
