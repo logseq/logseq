@@ -1588,10 +1588,8 @@
  :settings.editor/wide-mode "Mode large"
 
  :settings.features/enable-flashcards "Cartes mémoire"
- :settings.features/enable-journals "Journaux"
  :settings.features/home-default-page "Régler la page d'accueil par défaut"
  :settings.features/home-default-page-update-success "Page d'accueil par défaut mise à jour"
- :settings.features/journals-enable-success "Journaux activés"
  :settings.features/login-prompt "Pour accéder aux nouvelles fonctionnalités avant tout le monde, vous devez être sponsor ou \"backer\" (contributeur) sur Open Collective, puis vous connecter."
  :settings.features/page-not-found "La page « {1} » n'existe pas encore. Veuillez d'abord créer cette page, puis réessayer."
  :settings.features/plugin-system "Extensions"

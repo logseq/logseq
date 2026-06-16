@@ -105,12 +105,19 @@
                            (string/starts-with? url HOST_PLUGIN_URL))
            external-plugin-url? (or (string/starts-with? url EXTERNAL_PLUGIN_URL)
                                     (string/starts-with? url HOST_EXTERNAL_PLUGIN_URL))
+           compatible-plugin-url? (and (string/starts-with? url (str LSP_PROTOCOL "logseq.io/"))
+                                       (not external-plugin-url?))
            path' (.-pathname url')
            path' (cond
                    plugin-url?
                    (->> path'
                         (utils/safe-decode-uri-component)
                         (#(string/replace-first % #"^/plugins" ""))
+                        (.join node-path PLUGINS_ROOT))
+
+                   compatible-plugin-url?
+                   (->> path'
+                        (utils/safe-decode-uri-component)
                         (.join node-path PLUGINS_ROOT))
 
                    external-plugin-url?
@@ -457,6 +464,7 @@
     (let [privileges {:standard        true
                       :secure          true
                       :bypassCSP       true
+                      :corsEnabled     true
                       :supportFetchAPI true}]
       (.registerSchemesAsPrivileged
        protocol (bean/->js [{:scheme     LSP_SCHEME
@@ -464,10 +472,7 @@
                             {:scheme     FILE_LSP_SCHEME
                              :privileges privileges}
                             {:scheme     FILE_ASSETS_SCHEME
-                             :privileges {:standard        false
-                                          :secure          false
-                                          :bypassCSP       false
-                                          :supportFetchAPI false}}]))
+                             :privileges (assoc privileges :stream true)}]))
 
       (register-default-protocol-client! app)
       (set-app-menu!)

@@ -1588,10 +1588,8 @@
  :settings.editor/wide-mode "Modo amplo"
 
  :settings.features/enable-flashcards "Habilitar flashcards"
- :settings.features/enable-journals "Diários"
  :settings.features/home-default-page "Definir a página inicial padrão"
  :settings.features/home-default-page-update-success "Página inicial padrão atualizada"
- :settings.features/journals-enable-success "Diários habilitados"
  :settings.features/login-prompt "Para acessar novos recursos antes de qualquer outra pessoa, você deve ser um Patrocinador ou Apoiador do Logseq no Open Collective e, portanto, fazer login primeiro."
  :settings.features/page-not-found "A página \"{1}\" ainda não existe. Crie essa página primeiro e tente novamente."
  :settings.features/plugin-system "Sistema de plugins"

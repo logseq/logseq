@@ -247,6 +247,20 @@
   (is (= ["global-help" "graph-list"]
          (mapv :id (main/select-cases sample-cases {:include ["smoke"]})))))
 
+(deftest select-cases-omits-skipped-cases
+  (let [cases (conj sample-cases
+                    {:id "stale-fallback"
+                     :cmds ["node static/logseq-cli.js debug pull --id 1"]
+                     :skip "Requires a removed current graph fallback"
+                     :covers {:commands ["debug pull"]}
+                     :tags [:debug :smoke]})]
+    (is (= ["global-help" "graph-create" "graph-list"]
+           (mapv :id (main/select-cases cases {}))))
+    (is (= ["global-help" "graph-list"]
+           (mapv :id (main/select-cases cases {:include ["smoke"]}))))
+    (is (= []
+           (mapv :id (main/select-cases cases {:case "stale-fallback"}))))))
+
 (deftest run-fails-on-missing-coverage-before-case-execution
   (let [ran? (atom false)]
     (is (thrown-with-msg?

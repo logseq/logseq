@@ -1066,7 +1066,8 @@
   []
   (let [*root-ref          (hooks/use-ref nil)
         *list-node-ref     (hooks/use-ref nil)
-        pkgs               (state/use-sub :plugin/marketplace-pkgs)
+        pkgs               (->> (state/use-sub :plugin/marketplace-pkgs)
+                                (remove (fn [pkg] (false? (:supportsDB pkg)))))
         stats              (state/use-sub :plugin/marketplace-stats)
         installed-plugins  (state/use-sub :plugin/installed-plugins)
         installing         (state/use-sub :plugin/installing)

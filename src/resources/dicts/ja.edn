@@ -1601,10 +1601,8 @@
  :settings.editor/wide-mode "ワイドモード"
 
  :settings.features/enable-flashcards "フラッシュカード"
- :settings.features/enable-journals "日誌"
  :settings.features/home-default-page "起動時のホームページを設定"
  :settings.features/home-default-page-update-success "ホームのデフォルトページを更新しました"
- :settings.features/journals-enable-success "ジャーナルを有効化"
  :settings.features/login-prompt "新しい機能を誰よりも早く使いたい場合は、LogseqのOpen Collective Sponsorか後援者になった上で、ログインしてください。"
  :settings.features/page-not-found "ページ「{1}」はまだ存在しません。まずそのページを作成してから、再試行してください。"
  :settings.features/plugin-system "プラグイン"

@@ -119,6 +119,11 @@
            (fn []
              #(shui/dialog-close! :ls-select-modal))
            [])
+        _ (hooks/use-effect!
+           (fn []
+             (when (fn? tap-*input-val)
+               (tap-*input-val *input)))
+           [tap-*input-val *input])
         full-choices (cond->>
                       (remove nil? items)
                        (seq input)
@@ -222,8 +227,6 @@
                                                                             (when @*toggle (@*toggle))
                                                                             (on-apply selected-choices)
                                                                             (when close-modal? (state/close-modal!)))})])]))]
-    (when (fn? tap-*input-val)
-      (tap-*input-val *input))
     [:div.cp__select
      (merge {:class "cp__select-main"}
             host-opts)
