@@ -132,6 +132,7 @@
         main-thread-prev @worker-state/*main-thread
         platform-prev @@#'platform/*platform
         search-build-prev @(deref #'db-core/*search-index-build-ids)
+        vector-build-prev @(deref #'db-core/*vector-index-rebuild-ids)
         cleanup (fn []
                   (reset! worker-state/*state state-prev)
                   (reset! worker-state/*db-sync-config config-prev)
@@ -143,6 +144,7 @@
                   (reset! worker-state/*opfs-pools opfs-prev)
                   (reset! worker-state/*main-thread main-thread-prev)
                   (reset! (deref #'db-core/*search-index-build-ids) search-build-prev)
+                  (reset! (deref #'db-core/*vector-index-rebuild-ids) vector-build-prev)
                   (reset! @#'platform/*platform platform-prev))]
     (platform/set-platform! (build-test-platform))
     (reset! worker-state/*sqlite #js {})
@@ -153,6 +155,7 @@
     (reset! worker-state/*opfs-pools {})
     (reset! worker-state/*main-thread nil)
     (reset! (deref #'db-core/*search-index-build-ids) {})
+    (reset! (deref #'db-core/*vector-index-rebuild-ids) {})
     (let [result (f)]
       (if (p/promise? result)
         (p/finally result cleanup)
@@ -634,6 +637,80 @@
                 (is (= 1 (get-in terminal-progress [:payload :total])))))))))
      (p/catch (fn [error]
                 (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest search-build-blocks-indice-in-worker-completes-before-vector-embedding-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [build-index! #'db-core/<build-blocks-index!
+              build-id (#'db-core/start-search-index-build! test-repo)
+              conn (d/create-conn db-schema/schema)
+              page-id (random-uuid)
+              sql-calls (atom [])
+              search-db (fake-db {:sql-calls sql-calls})
+              progress-calls (atom [])
+              vector-upserts (atom [])
+              embedding-started? (atom false)
+              vector-index {:upsert! (fn [docs]
+                                        (swap! vector-upserts conj docs))
+                            :truncate! (fn [] nil)
+                            :set-metadata! (fn [_metadata] nil)}
+              idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
+          (d/transact! conn [{:block/uuid page-id
+                              :block/name "page"
+                              :block/title "Page"}
+                             {:block/uuid (random-uuid)
+                              :block/title "Hello"
+                              :block/page [:block/uuid page-id]}])
+          (set! (.-transaction search-db) (fn [f] (f search-db)))
+          (platform/set-platform! (build-test-platform
+                                   {:runtime :node
+                                    :post-message! (fn [type payload]
+                                                     (when (= type :thread-api/search-index-build-progress)
+                                                       (let [[repo payload'] payload]
+                                                         (swap! progress-calls conj {:repo repo
+                                                                                     :payload payload'}))))
+                                    :embed-texts (fn [_texts]
+                                                   (reset! embedding-started? true)
+                                                   (js/Promise. (fn [_resolve _reject])))}))
+          (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
+          (reset! worker-state/*datascript-conns {test-repo conn})
+          (reset! worker-state/*vector-indexes {test-repo vector-index})
+          (reset! idle-status-atom {test-repo {:idle? true
+                                               :ts (.now js/Date)}})
+          (reset! worker-state/*main-thread (fn [& _args] (p/resolved nil)))
+          (with-redefs [worker-state/get-vector-index (fn [repo]
+                                                        (when (= repo test-repo)
+                                                          vector-index))]
+            (-> (p/let [result (js/Promise.race
+                                 #js [(build-index! test-repo search-db conn build-id)
+                                      (p/delay 50 ::timeout)])
+                        _ (<wait-for-progress! progress-calls
+                                               (fn [calls]
+                                                 (some #(= :completed (get-in % [:payload :status])) calls))
+                                               50)
+                        _ (p/delay 10)]
+                  (let [completed-progress (some #(when (= :completed (get-in % [:payload :status]))
+                                                    %)
+                                                 @progress-calls)]
+                    (is (nil? result))
+                    (is @embedding-started?)
+                    (is (some #(= (str "PRAGMA user_version = " db-core/search-db-version) %)
+                              @sql-calls))
+                    (is (= {:repo test-repo
+                            :payload {:status :completed
+                                      :stage :search-index
+                                      :progress 100
+                                      :processed 2
+                                      :total 2}}
+                           (some-> completed-progress
+                                   (select-keys [:repo :payload])
+                                   (update :payload dissoc :build-id))))
+                    (is (empty? @vector-upserts))))
+                (p/catch (fn [error]
+                           (is false (str error)))))))))
      (p/finally done))))
 
 (deftest search-build-blocks-indice-in-worker-reuses-vector-context-test
