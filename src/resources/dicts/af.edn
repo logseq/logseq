@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Beskadigde plugin \"{1}\" verwyder."
 
  :plugin.proxy/direct "Direk"
+ :plugin.proxy/host-port-required "Gasheer en poort word verlang"
  :plugin.proxy/system "Stelsel"
  :plugin.proxy/test-url "Toets-URL"
  :plugin.proxy/testing "Toets tans"
