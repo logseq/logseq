@@ -1,5 +1,4 @@
-{
- :account/authentication "Authentication"
+{:account/authentication "Authentication"
  :account/benefits-desc "With a Logseq account, you can access cloud-based services like Logseq Sync and alpha/beta features."
  :account/billing "Billing"
  :account/billing-expired-on-label "Pro plan expired on: {1}"
@@ -1295,6 +1294,7 @@
  :plugin.package-config/remove-installed-success "Removed broken plugin \"{1}\"."
 
  :plugin.proxy/direct "Direct"
+ :plugin.proxy/host-port-required "Host and port are required"
  :plugin.proxy/system "System"
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
@@ -1969,5 +1969,4 @@
  :zotero/attachments "Attachments"
  :zotero/imported-file-warning "This is a Zotero imported file, set Zotero data directory to open the file in Logseq."
  :zotero/linked-file-warning "This is a Zotero linked file, set Zotero linked attachment base directory to open the file in Logseq."
- :zotero/notes "Notes"
-}
+ :zotero/notes "Notes"}

@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "손상된 플러그인 \"{1}\"을 제거했습니다."
 
  :plugin.proxy/direct "직접 연결"
+ :plugin.proxy/host-port-required "호스트와 포트는 필수입니다"
  :plugin.proxy/system "시스템"
  :plugin.proxy/test-url "URL 테스트"
  :plugin.proxy/testing "테스트 중"

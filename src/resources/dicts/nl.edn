@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Beschadigde plugin \"{1}\" verwijderd."
 
  :plugin.proxy/direct "Direct"
+ :plugin.proxy/host-port-required "Host en poort zijn vereist"
  :plugin.proxy/system "Systeem"
  :plugin.proxy/test-url "Test-URL"
  :plugin.proxy/testing "Testen"
