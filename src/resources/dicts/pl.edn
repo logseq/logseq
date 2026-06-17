@@ -994,7 +994,7 @@
  :node/built-in-cant-delete-error "Wbudowanych elementów nie można usunąć."
  :node/new "Nowy węzeł"
 
- :notification/clear-all "Wyczyść wszystkie"
+
  :notification/copied "Skopiowano"
 
  :onboarding.import/desc "Opis importu"

@@ -994,7 +994,7 @@
  :node/built-in-cant-delete-error "Yerleşik öğeler silinemez."
  :node/new "Yeni düğüm"
 
- :notification/clear-all "Tümünü temizle"
+
  :notification/copied "Kopyalandı"
 
  :onboarding.import/desc "Notlarınız EDN veya Markdown biçimindeyse, Logseq bunlarla çalışabilir."
