@@ -994,7 +994,7 @@
  :node/built-in-cant-delete-error "Elementos integrados não podem ser eliminados."
  :node/new "Novo nó"
 
- :notification/clear-all "Limpar tudo"
+
  :notification/copied "Copiado"
 
  :onboarding.import/desc "Descrição da importação"

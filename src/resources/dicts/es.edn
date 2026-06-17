@@ -994,7 +994,7 @@
  :node/built-in-cant-delete-error "Los elementos integrados no se pueden eliminar."
  :node/new "Nuevo nodo"
 
- :notification/clear-all "Limpiar todo"
+
  :notification/copied "Copiado"
 
  :onboarding.import/desc "Si están en formato EDN o Markdown Logseq puede trabajar con ellos."

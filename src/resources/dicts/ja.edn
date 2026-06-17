@@ -994,7 +994,7 @@
  :node/built-in-cant-delete-error "組み込み項目は削除できません。"
  :node/new "新しいノード"
 
- :notification/clear-all "すべてクリア"
+
  :notification/copied "コピーしました"
 
  :onboarding.import/desc "EDN、Markdown形式のいずれかであればLogseqはうまく処理できます。"
