@@ -994,7 +994,7 @@
  :node/built-in-cant-delete-error "Els elements integrats no es poden eliminar."
  :node/new "Nou node"
 
- :notification/clear-all "Netejar tot"
+
  :notification/copied "Copiat"
 
  :onboarding.import/desc "Descripció d'importació"
