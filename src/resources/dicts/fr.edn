@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Plugin corrompu « {1} » supprimé."
 
  :plugin.proxy/direct "Direct"
+ :plugin.proxy/host-port-required "L'hôte et le port sont requis"
  :plugin.proxy/system "Système"
  :plugin.proxy/test-url "URL de test"
  :plugin.proxy/testing "Test en cours"
