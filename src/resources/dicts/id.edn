@@ -994,7 +994,7 @@
  :node/built-in-cant-delete-error "Elemen bawaan tidak dapat dihapus."
  :node/new "Node baru"
 
- :notification/clear-all "Hapus semua"
+
  :notification/copied "Disalin"
 
  :onboarding.import/desc "Jika ia dalam format EDN atau Markdown, Logseq dapat bekerja dengannya."

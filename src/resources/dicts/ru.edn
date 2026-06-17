@@ -994,7 +994,7 @@
  :node/built-in-cant-delete-error "Встроенные элементы нельзя удалить."
  :node/new "Новый узел"
 
- :notification/clear-all "Очистить всё"
+
  :notification/copied "Скопировано"
 
  :onboarding.import/desc "Описание импорта"

@@ -994,7 +994,7 @@
  :node/built-in-cant-delete-error "Vstavaný prvky nemožno smazat."
  :node/new "Nový uzel"
 
- :notification/clear-all "Zmazať všetko"
+
  :notification/copied "Skopírované"
 
  :onboarding.import/desc "Popis importu"
