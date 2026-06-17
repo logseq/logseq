@@ -2053,10 +2053,12 @@ should be done through this fn in order to get global config and config defaults
   (:auth/refresh-token @state))
 
 (defn http-proxy-enabled-or-val? []
-  (when-let [{:keys [type protocol host port] :as agent-opts} (get-state [:electron/user-cfgs :settings/agent])]
-    (when (and  (not (contains? #{"system"} type))
-                (every? not-empty (vals agent-opts)))
-      (str protocol "://" host ":" port))))
+  (when-let [{:keys [type protocol host port]} (get-state [:electron/user-cfgs :settings/agent])]
+    ;; Older saved proxy settings may only have :protocol.
+    (let [proxy-type (or type protocol)]
+      (when (and (contains? #{"http" "socks5"} proxy-type)
+                 (every? not-empty [proxy-type host port]))
+        (str proxy-type "://" host ":" port)))))
 
 (defn get-current-pdf
   []
