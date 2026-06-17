@@ -994,7 +994,7 @@
  :node/built-in-cant-delete-error "Innebygde elementer kan ikke slettes."
  :node/new "Ny node"
 
- :notification/clear-all "Fjern alle"
+
  :notification/copied "Kopiert"
 
  :onboarding.import/desc "Importbeskrivelse"

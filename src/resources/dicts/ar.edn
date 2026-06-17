@@ -994,7 +994,7 @@
  :node/built-in-cant-delete-error "لا يمكن حذف العناصر المدمجة."
  :node/new "عقدة جديدة"
 
- :notification/clear-all "مسح الكل"
+
  :notification/copied "تم النسخ"
 
  :onboarding.import/desc "وصف الاستيراد"

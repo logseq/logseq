@@ -1090,7 +1090,7 @@
  :node/built-in-cant-delete-error "Built-in nodes can't be deleted."
  :node/new "New node"
 
- :notification/clear-all "Clear all"
+
  :notification/copied "Copied!"
 
  :onboarding.import/desc "If they are in an EDN or Markdown format Logseq can work with them."

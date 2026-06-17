@@ -994,7 +994,7 @@
  :node/built-in-cant-delete-error "Gli elementi predefiniti non possono essere eliminati."
  :node/new "Nuovo nodo"
 
- :notification/clear-all "Pulisci tutte"
+
  :notification/copied "Copiato"
 
  :onboarding.import/desc "Se sono in formato EDN o Markdown Logseq può lavorarci."

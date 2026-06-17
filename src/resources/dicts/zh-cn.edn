@@ -1086,7 +1086,7 @@
  :node/built-in-cant-delete-error "无法删除内置项。"
  :node/new "新建节点"
 
- :notification/clear-all "清除全部通知"
+
  :notification/copied "已复制！"
 
  :onboarding.import/desc "如果它们是 EDN 或 Markdown 格式，Logseq 可以使用它们。"
