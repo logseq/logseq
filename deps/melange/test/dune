@@ -1,0 +1,14 @@
+(rule
+ (alias runtest)
+ (deps
+  (:node_js_api ../lib/js_api/melange-js-api-node.js)
+  (:browser_js_api ../lib/js_api/melange-js-api-browser.js)
+  (:platform_js_test ./platform_js_test.js))
+ (action
+  (setenv
+   LOGSEQ_MELANGE_JS_API_NODE
+   %{node_js_api}
+   (setenv
+    LOGSEQ_MELANGE_JS_API_BROWSER
+    %{browser_js_api}
+    (run node --test %{platform_js_test})))))

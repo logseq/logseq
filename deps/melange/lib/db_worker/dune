@@ -1,0 +1,9 @@
+(library
+ (name melange_db_worker)
+ (modes melange)
+ (preprocess
+  (pps melange.ppx))
+ (libraries melange.js melange.node)
+ (implements melange_db_worker_spec)
+ (modules Platform Opfs Idb)
+ (private_modules Opfs Idb))

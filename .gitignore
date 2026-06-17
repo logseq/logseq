@@ -95,3 +95,4 @@ clj-e2e/.clj-kondo/imports
 /cli/_build/
 /cli/compile_commands.json
 /cli/.eglot-root
+/deps/melange/_build/
