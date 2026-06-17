@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Bozuk eklenti \"{1}\" kaldırıldı."
 
  :plugin.proxy/direct "Doğrudan"
+ :plugin.proxy/host-port-required "Ana makine ve port gereklidir"
  :plugin.proxy/system "Sistem"
  :plugin.proxy/test-url "URL'yi test et"
  :plugin.proxy/testing "Test ediliyor"
