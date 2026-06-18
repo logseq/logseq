@@ -49,7 +49,7 @@ on:
         description: 'Publish Flathub and Snap'
         type: boolean
         required: true
-        default: true
+        default: false
   # schedule: # Every workday at the 2 P.M. (UTC) we run a scheduled nightly build
   #   - cron: '0 14 * * MON-FRI'
 
