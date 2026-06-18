@@ -308,27 +308,29 @@
           content-props (cond-> content-props
                           (and (not as-mask?) auto-side?) (assoc :side (auto-side-fn)))
           handle-open-change! (fn [open? ^js e]
-                                (some-> root-props (:onOpenChange) (apply [open? e]))
-                                (when-not open?
-                                  (let [native-event (some-> e (.-event))
-                                        reason (some-> e (.-reason))
-                                        targets (close-targets e)
-                                        target-toggle? (some #(same-popup-target? target %) targets)
-                                        focus-retained? (and (= reason "focus-out")
-                                                             (popup-focus-retained? targets))
-                                        menu-transition? (and use-menu?
-                                                              (contains? menu-transition-close-reasons reason))
-                                        handler (case reason
-                                                  "escape-key" (:onEscapeKeyDown content-props)
-                                                  "outside-press" (:onPointerDownOutside content-props)
-                                                  nil)]
-                                    ;; (prn :debug :id id :reason reason)
-                                    (if (or target-toggle?
+                                (when-not (false? (some-> root-props (:onOpenChange) (apply [open? e])))
+                                  (when-not open?
+                                    (let [native-event (some-> e (.-event))
+                                          last-popup? (= (:id (get-last-popup)) id)
+                                          reason (some-> e (.-reason))
+                                          targets (close-targets e)
+                                          target-toggle? (some #(same-popup-target? target %) targets)
+                                          focus-retained? (and (= reason "focus-out")
+                                                            (popup-focus-retained? targets))
+                                          menu-transition? (and use-menu?
+                                                             (contains? menu-transition-close-reasons reason))
+                                          handler (case reason
+                                                    "escape-key" (:onEscapeKeyDown content-props)
+                                                    "outside-press" (:onPointerDownOutside content-props)
+                                                    nil)]
+                                      (prn :debug :id id :reason reason)
+                                      (if (or (not last-popup?)
+                                            target-toggle?
                                             menu-transition?
                                             focus-retained?)
-                                      (some-> e (.cancel))
-                                      (when-not (close-canceled? handler e)
-                                        (hide! id 1 {:event native-event}))))))]
+                                        (some-> e (.cancel))
+                                        (when-not (close-canceled? handler e)
+                                          (hide! id 1 {:event native-event})))))))]
       (let [disable-menu-handlers? (and use-menu? (not as-dropdown?))
             content-props (cond-> (merge content-props
                                           (anchor-props content-props target position))
