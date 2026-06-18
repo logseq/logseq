@@ -6,6 +6,7 @@
             [frontend.db :as db]
             [frontend.db.react :as react]
             [frontend.extensions.sci :as sci]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -152,7 +153,8 @@
   [{:keys [*query-error dsl-query? built-in-query? table? current-block] :as config}
    {:keys [builder query view _collapsed?] :as q}]
   (let [*result (hooks/use-memo #(atom nil) [])
-        repo-config (state/use-sub-config)
+        repo-config (state/config-for-repo (rfx/use-sub [:config])
+                                           (state/get-current-repo))
         *collapsed? (hooks/use-memo #(atom (or (:collapsed? q) (:collapsed? config))) [])
         [collapsed?] (hooks/use-atom *collapsed?)
         [k result] (query-result/run-custom-query config q *result *query-error)
@@ -210,11 +212,15 @@
   (ui/catch-error
    (ui/block-error (t :query/error) {:content (:query q)})
    (let [*query-error (hooks/use-memo #(atom nil) [])
-         repo-config (state/use-sub-config)
+         repo-config (state/config-for-repo (rfx/use-sub [:config])
+                                            (state/get-current-repo))
          current-block-uuid (or (:block/uuid (:block config))
                                 (:block/uuid config))
          current-block (db/entity [:block/uuid current-block-uuid])
-         temp-collapsed? (state/use-sub-block-collapsed current-block-uuid (:container-id config))
+         temp-collapsed? (rfx/use-sub [:ui/collapsed-blocks
+                                       (state/get-current-repo)
+                                       (state/resolve-container-id (:container-id config))
+                                       current-block-uuid])
          ;; Get query result
          collapsed?' (calculate-collapsed? current-block
                                            {:collapsed? false

@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [range])
   (:require-macros [hiccups.core])
   (:require ["/frontend/utils" :as utils]
+            ["react" :as react-core]
             [cljs-bean.core :as bean]
             [cljs.core.match :refer [match]]
             [clojure.set :as set]
@@ -68,6 +69,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.reaction :as reaction]
+            [frontend.rfx :as rfx]
             [frontend.security :as security]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -94,7 +96,6 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
-            [missionary.core :as m]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
@@ -936,7 +937,7 @@
 
     (hooks/use-effect!
      (fn []
-       (if (some-> (hooks/deref *el-wrap) (.closest "[data-radix-popper-content-wrapper]"))
+      (if (some-> (hooks/deref *el-wrap) (.closest ".ui__popover-content, .ui__dropdown-menu-content, .ui__context-menu-content"))
          (set-in-popup! true)
          (set-in-popup! false)))
      [])
@@ -1011,12 +1012,12 @@
         entity
         (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
               inner (page-inner config entity children label)
-              modal? (shui-dialog/has-modal?)]
+              dialog? (shui-dialog/has-dialog?)]
           (if (and (not (util/mobile?))
                    (not= page-name (:id config))
                    (not (false? preview?))
                    (not disable-preview?)
-                   (not modal?))
+                   (not dialog?))
             (page-preview-trigger (assoc config :children inner) entity)
             inner))
 
@@ -1081,7 +1082,7 @@
 (defn- maybe-request-asset-download!
   [file-exists? requested? block]
   (let [repo (state/get-current-repo)
-        asset-file-write-finish @(get @state/state :assets/asset-file-write-finish)
+        asset-file-write-finish (state/get-state :assets/asset-file-write-finish)
         asset-file-write-finished? (get-in asset-file-write-finish [repo (str (:block/uuid block))])
         file-ready? (or file-exists? asset-file-write-finished?)]
     (when (and (true? @requested?) file-ready?)
@@ -1098,11 +1099,9 @@
         requested?* (hooks/use-memo #(atom false) [(:block/uuid block)])
         [file-exists?] (hooks/use-atom file-exists?*)
         repo (state/get-current-repo)
-        asset-file-write-finished? (state/use-sub :assets/asset-file-write-finish
-                                                  :path-in-sub-atom [repo (str (:block/uuid block))])
+        asset-file-write-finished? (rfx/use-sub [:assets/asset-file-write-finish repo (str (:block/uuid block))])
         file-ready? (or file-exists? asset-file-write-finished?)
-        progress-entry (state/use-sub :rtc/asset-upload-download-progress
-                                      :path-in-sub-atom [repo (str (:block/uuid block))])
+        progress-entry (rfx/use-sub [:rtc/asset-upload-download-progress repo (str (:block/uuid block))])
         {:keys [direction loaded total]} progress-entry
         in-progress? (and (number? loaded) (number? total) (pos? total) (not= loaded total))
         percent (when in-progress?
@@ -1311,7 +1310,9 @@
 
 (hsx/defc nested-link
   [config html-export? link]
-  (let [show-brackets? (not (false? (:ui/show-brackets? (state/use-sub-config))))
+  (let [show-brackets? (not (false? (:ui/show-brackets?
+                                     (state/config-for-repo (rfx/use-sub [:config])
+                                                            (state/get-current-repo)))))
         {:keys [content children]} link]
     [:span.page-reference.nested
      (when (and show-brackets?
@@ -1912,76 +1913,6 @@
           (apply [(str uuid)])))))
 
 (declare block-list)
-(defn- should-defer-block-children-render?
-  [config children-count anchor]
-  (let [has-anchor? (not (string/blank? anchor))]
-    (and
-     (pos? children-count)
-     (number? (:defer-ready-index config))
-     (:current-page? config)
-     ;; Defer only the first level under current page blocks.
-     ;; Deeper levels render immediately after their parent subtree is released,
-     ;; preserving top-to-bottom perception instead of level-by-level batches.
-     (= 1 (:level config))
-     (not (or has-anchor?
-              (:ref? config)
-              (:custom-query? config)
-              (:sidebar? config)
-              (:embed? config)
-              (:library? config)
-              (:document/mode? config))))))
-
-;; Progressive root rendering should kick in for pages with either many root
-;; blocks or heavy expanded descendant trees.
-(def ^:private defer-root-render-batch-size 1)
-(def ^:private defer-children-initial-render-budget 12)
-(def ^:private defer-children-render-batch-budget 12)
-
-(defn- should-defer-root-block-render?
-  [config root-block blocks anchor]
-  (let [has-anchor? (not (string/blank? anchor))
-        page-blocks-count (count (:block/_page root-block))
-        children-blocks-count (count blocks)
-        root-surface? (or (:current-page? config) (:journals? config))
-        root-level? (zero? (or (:level config) 0))
-        excluded-context? (or has-anchor?
-                              (:ref? config)
-                              (:custom-query? config)
-                              (:sidebar? config)
-                              (:embed? config)
-                              (:library? config)
-                              (:document/mode? config))
-        heavy-journal-root? (and (:journals? config)
-                                 (>= children-blocks-count 50))
-        heavy-descendant-tree? (>= (- page-blocks-count children-blocks-count) 30)]
-    (and root-surface?
-         root-level?
-         (not excluded-context?)
-         (or heavy-journal-root?
-             heavy-descendant-tree?))))
-
-(defn- defer-placeholder-element
-  []
-  (js/React.createElement "div"
-                          #js {:style #js {:minHeight 28}}))
-
-(defn- deferred-child-render-cost
-  [child]
-  (if (seq (:block/children child)) 4 1))
-
-(defn- deferred-children-visible-count
-  [children ready-budget]
-  (let [children-count (count children)]
-    (loop [idx 0
-           budget (max 0 ready-budget)]
-      (if (or (>= idx children-count)
-              (<= budget 0))
-        idx
-        (let [cost (deferred-child-render-cost (nth children idx))]
-          (if (>= budget cost)
-            (recur (inc idx) (- budget cost))
-            ;; Keep one child visible for progressive feedback.
-            (if (zero? idx) 1 idx)))))))
 
 (hsx/defc block-children
   [config block children collapsed?]
@@ -1997,56 +1928,7 @@
                              (filter (fn [b] (ref-matched-children-ids (:db/id b))))
                              library?
                              (filter (fn [b] (and (ldb/page? b) (not (or (ldb/class? b) (ldb/property? b))))))))))
-        children-count (count children)
-        anchor (get-in (state/get-route-match) [:query-params :anchor])
-        defer-render? (should-defer-block-children-render? config children-count anchor)
-        defer-ready-index (:defer-ready-index config)
-        defer-index (or (:defer-top-index config) 0)
-        render-children? (or (not defer-render?)
-                             (<= defer-index defer-ready-index))
-        *defer-children-render-complete-by-root (:defer-children-render-complete-by-root* config)
-        fallback-children-ready-budget* (hooks/use-memo #(atom defer-children-initial-render-budget) [])
-        *children-ready-budget fallback-children-ready-budget*
-        [children-ready-budget] (hooks/use-atom *children-ready-budget)
-        visible-children-count (if defer-render?
-                                 (deferred-children-visible-count children children-ready-budget)
-                                 children-count)
-        children-max-render-budget (* children-count 4)
-        children-fully-rendered? (or collapsed?
-                                     (>= visible-children-count children-count))
-        children' (if (and defer-render? render-children?)
-                    (subvec children 0 visible-children-count)
-                    children)]
-    (hooks/use-effect!
-     (fn []
-       (when (and defer-render?
-                  render-children?
-                  (number? defer-index)
-                  *defer-children-render-complete-by-root)
-         (swap! *defer-children-render-complete-by-root
-                assoc
-                defer-index
-                children-fully-rendered?))
-       (if (and defer-render?
-                render-children?
-                (< visible-children-count children-count))
-         (let [raf-id (js/requestAnimationFrame
-                       (fn []
-                         (swap! *children-ready-budget
-                                (fn [v]
-                                  (min children-max-render-budget
-                                       (+ v defer-children-render-batch-budget))))))]
-           #(js/cancelAnimationFrame raf-id))
-         (fn [])))
-     [defer-render?
-      render-children?
-      defer-index
-      children-fully-rendered?
-      visible-children-count
-      children-count
-      children-max-render-budget
-      *children-ready-budget
-      *defer-children-render-complete-by-root])
+        children' children]
     (when (and (coll? children)
                (seq children)
                (not collapsed?))
@@ -2062,8 +1944,7 @@
                         (assoc :block-children? true)
                         (integer? (:block-level config))
                         (update :block-level inc))]
-          (when render-children?
-            (block-list config' children')))]])))
+          (block-list config' children'))]])))
 
 (defn- block-content-empty?
   [block]
@@ -2207,16 +2088,6 @@
       (when comment-thread
         (open-comment-thread! (:block/uuid block) comment-thread)))))
 
-(defn- editing-user-for-block
-  [block-uuid online-users current-user-uuid]
-  (when (and block-uuid (seq online-users))
-    (some (fn [{:user/keys [editing-block-uuid uuid] :as user}]
-            (when (and (string? editing-block-uuid)
-                       (= editing-block-uuid (str block-uuid))
-                       (not= uuid current-user-uuid))
-              user))
-          online-users)))
-
 (defn- editing-user-avatar
   [{:user/keys [name uuid]}]
   (let [user-name (or name uuid)]
@@ -2232,12 +2103,9 @@
 (hsx/defc ^:large-vars/cleanup-todo block-control
   [config block {:keys [uuid block-id collapsed? *control-show? edit? selected? top? bottom?]}]
   (let [*bullet-dragging? (hooks/use-memo #(atom false) [])
-        doc-mode? (state/use-sub :document/mode?)
+        doc-mode? (rfx/use-sub [:document/mode?])
         [control-show?] (hooks/use-atom *control-show?)
-        rtc-state (state/use-sub :rtc/state)
-        online-users (:online-users rtc-state)
-        current-user-uuid (user-handler/user-uuid)
-        editing-user (editing-user-for-block uuid online-users current-user-uuid)
+        editing-user (rfx/use-sub [:rtc/editing-users-by-block (str uuid)])
         ref? (:ref? config)
         container-id (:container-id config)
         empty-content? (block-content-empty? block)
@@ -2586,9 +2454,34 @@
   [target]
   (boolean (util/rec-get-node target "ls-comments-area")))
 
+(defn- caret-range-from-point
+  [e block-dom-element]
+  (when-let [node (some-> block-dom-element
+                          (dom/by-class "block-content-inner")
+                          first)]
+    (let [doc (or (gobj/get node "ownerDocument") js/document)
+          win (or (gobj/get doc "defaultView") js/window)
+          x (gobj/get e "clientX")
+          y (gobj/get e "clientY")
+          range (cond
+                  (fn? (gobj/get doc "caretRangeFromPoint"))
+                  (.caretRangeFromPoint doc x y)
+
+                  (fn? (gobj/get doc "caretPositionFromPoint"))
+                  (when-let [pos (.caretPositionFromPoint doc x y)]
+                    (let [range (.createRange doc)]
+                      (.setStart range (gobj/get pos "offsetNode") (gobj/get pos "offset"))
+                      (.collapse range true)
+                      range)))]
+      (when range
+        (let [selection (.getSelection win)]
+          (.removeAllRanges selection)
+          (.addRange selection range)
+          (util/caret-range node))))))
+
 (defn- block-content-on-pointer-down
   [e block block-id edit-input-id content config]
-  (when-not @(:ui/scrolling? @state/state)
+  (when-not (state/get-state :ui/scrolling?)
     (let [target (.-target e)
           selection-blocks (state/get-selection-blocks)
           starting-block (state/get-selection-start-block-or-first)
@@ -2648,7 +2541,11 @@
                   (state/set-selection-start-block! block-dom-element))
 
                 :else
-                (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
+                (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)
+                      point-cursor-range (when-not mobile?
+                                           (caret-range-from-point e block-dom-element))]
+                  (when-not mobile?
+                    (.preventDefault e))
                   (mobile-util/mobile-focus-hidden-input)
                   (editor-handler/clear-selection!)
                   (editor-handler/unhighlight-blocks!)
@@ -2661,7 +2558,8 @@
                    (when-not (:block.temp/load-status (db/entity (:db/id block)))
                      (db-async/<get-block (state/get-current-repo) (:db/id block) {:children? false}))
 
-                   (let [cursor-range (if mobile? mobile-range (get-cursor-range))
+                   (let [cursor-range (or point-cursor-range
+                                          (if mobile? mobile-range (get-cursor-range)))
                          block (db/entity (:db/id block))
                          content (:block/title block)]
 
@@ -3014,27 +2912,17 @@
     (ui/button (t :sync/mark-conflicts-resolved)
                :on-click on-mark-resolved)]])
 
-(defn- sync-block-conflicts-flow
-  [repo block-id]
-  (let [path [repo (str block-id)]]
-    (->> (m/watch (:sync/block-conflicts @state/state))
-         (m/eduction
-          (map #(get-in % path))
-          (dedupe)))))
-
 (hsx/defc sync-conflicts-warning-button
   [block]
   (let [repo (state/get-current-repo)
         block-id (:block/uuid block)
-        conflicts (hooks/use-flow-state (sync-block-conflicts-flow repo block-id))
+        conflicts (rfx/use-sub [:sync/block-conflicts repo (str block-id)])
         visible-conflicts (visible-sync-conflicts block conflicts)]
     (hooks/use-effect!
      (fn []
        (when (and repo block-id (nil? conflicts))
          (p/let [result (state/<invoke-db-worker :thread-api/db-sync-get-block-conflicts repo block-id)]
-           (state/set-state! :sync/block-conflicts
-                             (or result [])
-                             :path-in-sub-atom [repo (str block-id)])))
+           (state/set-sync-block-conflicts! repo block-id result)))
        nil)
      [repo block-id conflicts])
     (when (seq visible-conflicts)
@@ -3205,7 +3093,7 @@
                                block-ref/block-ref?)
         named? (some? (:block/name block))
         table? (:table? config)
-        raw-mode-block (state/use-sub :editor/raw-mode-block)
+        raw-mode-block (rfx/use-sub [:editor/raw-mode-block])
         type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
                                 (not= (:db/id block) (:db/id raw-mode-block)))
         config (assoc config :block-parent-id block-id)
@@ -3342,9 +3230,11 @@
                         (handle-breadcrumb-activate! config block opts e))}
    label])
 
-(hsx/defc breadcrumb-separator
-  []
+(defn- breadcrumb-separator
+  [& [k]]
   [:span.opacity-50.px-1
+   (cond-> {}
+     k (assoc :key k))
    "/"])
 
 (hsx/defc breadcrumb-segment-label
@@ -3428,6 +3318,15 @@
   [seg]
   (when (:db/id seg)
     (db/entity (:db/id seg))))
+
+(defn- breadcrumb-segment-key
+  [seg fallback]
+  (str (or (:block/uuid seg)
+           (:db/id seg)
+           (:full-text seg)
+           (:text seg)
+           (:type seg)
+           fallback)))
 
 (defn- missing-breadcrumb-ref-ids
   [segments]
@@ -3534,39 +3433,48 @@
         config (assoc config
                       :breadcrumb? true
                       :disable-preview? true)
-        render-seg (fn [seg]
+        render-seg (fn [group idx seg]
                      (let [entity (breadcrumb-segment-entity seg)
                            label (breadcrumb-segment-label seg entity)
                            nav-block (or entity
                                          {:db/id (:db/id seg)
                                           :block/uuid (:block/uuid seg)})]
-                       ^{:key (str (:block/uuid seg))}
+                       ^{:key (str group "-seg-" (breadcrumb-segment-key seg idx))}
                        [:<> (if (or disabled? (= effective-variant :search-result))
                               label
-                              (breadcrumb-fragment config nav-block label opts))]))]
+                              (breadcrumb-fragment config nav-block label opts))]))
+        render-segs (fn [group segs]
+                      (mapcat (fn [idx seg]
+                                (if (zero? idx)
+                                  [(render-seg group idx seg)]
+                                  [(breadcrumb-separator (str group "-sep-" idx))
+                                   (render-seg group idx seg)]))
+                              (cljs.core/range)
+                              segs))]
     (when (or (seq visible-prefix-raw) (seq visible-suffix-raw))
       [:div.breadcrumb.block-parents
        {:class (str " breadcrumb--" (name effective-variant)
                     (when-not (or (:search? config) (:list-view? config)) " my-2")
                     (when indent? " ml-4"))}
        (when (and (false? (:top-level? config)) (seq parents))
-         (breadcrumb-separator))
+         (breadcrumb-separator "leading-sep"))
        ;; visible prefix (page + early ancestors)
-       (interpose (breadcrumb-separator) (map render-seg visible-prefix-raw))
+       (render-segs "prefix" visible-prefix-raw)
        ;; overflow indicator
        (when overflow?
-         (list
-          (breadcrumb-separator)
-          (if (= effective-variant :search-result)
-            (breadcrumb-search-overflow-tooltip full-title)
-            (breadcrumb-overflow-dropdown
-             config repo target-entity from-property hidden opts vopts show-page?))))
+         (concat
+          [(breadcrumb-separator "overflow-sep")]
+          [^{:key "overflow"}
+           [:<> (if (= effective-variant :search-result)
+                  (breadcrumb-search-overflow-tooltip full-title)
+                  (breadcrumb-overflow-dropdown
+                   config repo target-entity from-property hidden opts vopts show-page?))]]))
        ;; visible suffix (nearest parents)
        (when (seq visible-suffix-raw)
-         (list
-          (breadcrumb-separator)
-          (interpose (breadcrumb-separator) (map render-seg visible-suffix-raw))))
-       (when end-separator? (breadcrumb-separator))])))
+         (concat
+          [(breadcrumb-separator "suffix-leading-sep")]
+          (render-segs "suffix" visible-suffix-raw)))
+       (when end-separator? (breadcrumb-separator "end-sep"))])))
 
 (hsx/defc breadcrumb
   [config repo block-id {:keys [_show-page? _indent? _end-separator? _navigating-block _disabled? variant header?]
@@ -4046,7 +3954,10 @@
         level (:level config)
         *control-show? (get container-state ::control-show?)
         db-collapsed? (util/collapsed? block)
-        temp-collapsed? (state/use-sub-block-collapsed uuid container-id)
+        temp-collapsed? (rfx/use-sub [:ui/collapsed-blocks
+                                      (state/get-current-repo)
+                                      (state/resolve-container-id container-id)
+                                      uuid])
         collapsed? (cond
                      (:ignore-block-collapsed? config)
                      false
@@ -4082,7 +3993,7 @@
                                (:thread hydrated-comment-thread))))
         has-comment-thread? (or comment-thread
                                 (true? comment-thread-present?))
-        inline-thread (state/use-sub :comments/inline-thread)
+        inline-thread (rfx/use-sub [:comments/inline-thread])
         show-inline-comments? (inline-comment-thread? inline-thread uuid comment-thread)
         page-icon (when (:page-title? config)
                     (let [icon' (get block :logseq.property/icon)]
@@ -4293,7 +4204,7 @@
                           (set-plugin-renderer-error! true))
               :fallback-view outline-view-cp}
              (when-some [renderer (:render matched-block-renderer)]
-               (js/React.createElement renderer block-renderer-props-js))]]]
+               (react-core/createElement renderer block-renderer-props-js))]]]
 
           ;; --- Original outline ---
           outline-view-cp)
@@ -4382,9 +4293,9 @@
   [container-state repo config* block opts]
   (let [container-id (:container-id config*)
         block-id (:block/uuid block)
-        v1 (state/use-sub-editing? [container-id block-id])
-        v2 (state/use-sub-editing? [:unknown-container block-id])
-        selected? (state/use-sub-block-selected? block-id)
+        v1 (boolean (rfx/use-sub [:editor/editing? [container-id block-id]]))
+        v2 (boolean (rfx/use-sub [:editor/editing? [:unknown-container block-id]]))
+        selected? (rfx/use-sub [:selection/block-selected? block-id])
         editing? (or v1 v2)]
     (block-container-inner-aux container-state repo config* block (assoc opts
                                                                          :editing? editing?
@@ -4413,14 +4324,18 @@
 
 (defn- memo-react-component
   [component same-args?]
-  (let [memo-class (js/React.memo
+  (let [memo-class (react-core/memo
                     (fn [^js props]
-                      (apply component (.-args props)))
+                      (hsx/create-callable-component-element
+                       (cons 'memo-react-component (.-args props))
+                       component
+                       (.-args props)
+                       nil))
                     (fn [^js prev-props ^js next-props]
                       (same-args? (.-args prev-props)
                                   (.-args next-props))))]
     (fn [& args]
-      (js/React.createElement memo-class #js {:args args}))))
+      (react-core/createElement memo-class #js {:args args}))))
 
 (defn- set-collapsed-block!
   [block-id v container-id]
@@ -4430,41 +4345,65 @@
       (state/set-collapsed-block! block-id v container-id))
     (state/set-collapsed-block! block-id v container-id)))
 
+(defn- generated-container-id-key
+  [config block]
+  [:block-container-inner
+   (:container-id config)
+   (:id config)
+   (:db/id config)
+   (:page-name config)
+   (:sidebar? config)
+   (:embed? config)
+   (:custom-query? config)
+   (:table? config)
+   (:block? config)
+   (:ref? config)
+   (:view? config)
+   (:block/uuid block)
+   (some-> (:original-block config) :block/uuid)])
+
+(defn- resolve-block-container-id
+  [config block linked-block?]
+  (if (and (:container-id config) (not linked-block?))
+    (:container-id config)
+    (state/get-container-id (generated-container-id-key config block))))
+
 (hsx/defc loaded-block-container-inner
   [config block & {:as opts}]
   (let [repo (state/get-current-repo)
-           linked-block? (or (:block/link block)
-                             (:original-block config))
-           container-id (hooks/use-memo
-                         #(if (or linked-block? (nil? (:container-id config)))
-                            (state/get-next-container-id)
-                            (:container-id config))
-                         [(:container-id config) (:block/uuid block)])
-           *control-show? (hooks/use-memo #(atom false) [])
-           *navigating-block (hooks/use-memo #(atom (:block/uuid block)) [(:block/uuid block)])
-           [navigating-block] (hooks/use-atom *navigating-block)
-           _ (hooks/use-effect!
-              (fn []
-                (let [block-id (:block/uuid block)]
-                  (when-not (:property-block? config)
-                    (cond
-                      (and (:page-title? config) (or (ldb/class? block) (ldb/property? block)) (not config/publishing?))
-                      (let [collapsed? (state/get-block-collapsed block-id container-id)]
-                        (set-collapsed-block! block-id (if (some? collapsed?) collapsed? true) container-id))
+        linked-block? (or (:block/link block)
+                          (:original-block config))
+        container-id (hooks/use-memo
+                      #(resolve-block-container-id config block linked-block?)
+                      [(:container-id config)
+                       (:block/uuid block)
+                       (some-> (:original-block config) :block/uuid)
+                       linked-block?])
+        *control-show? (hooks/use-memo #(atom false) [])
+        *navigating-block (hooks/use-memo #(atom (:block/uuid block)) [(:block/uuid block)])
+        [navigating-block] (hooks/use-atom *navigating-block)
+        _ (hooks/use-effect!
+           (fn []
+             (let [block-id (:block/uuid block)]
+               (when-not (:property-block? config)
+                 (cond
+                   (and (:page-title? config) (or (ldb/class? block) (ldb/property? block)) (not config/publishing?))
+                   (let [collapsed? (state/get-block-collapsed block-id container-id)]
+                     (set-collapsed-block! block-id (if (some? collapsed?) collapsed? true) container-id))
 
-                      (root-block? config block)
-                      (set-collapsed-block! block-id false container-id)
+                   (root-block? config block)
+                   (set-collapsed-block! block-id false container-id)
 
-                      (or (:view? config) (:ref? config) (:custom-query? config))
-                      (set-collapsed-block! block-id
-                                            (boolean (editor-handler/block-default-collapsed? block config))
-                                            container-id)
+                   (or (:view? config) (:ref? config) (:custom-query? config))
+                   (set-collapsed-block! block-id
+                                         (boolean (editor-handler/block-default-collapsed? block config))
+                                         container-id)
 
-                      :else
-                      nil))
-                  #(when (root-block? config block)
-                     (set-collapsed-block! block-id nil container-id))))
-              [])
+                   :else
+                   nil))
+               #(when (root-block? config block)
+                  (set-collapsed-block! block-id nil container-id))))
+           [])
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
         config' (->
                  (assoc config :container-id container-id)
@@ -4921,8 +4860,6 @@
 (hsx/defc ^:large-vars/cleanup-todo block-list
   [config blocks]
   (let [blocks-count (count blocks)
-        root-block (when-let [id (:db/id config)]
-                     (db/entity id))
         zoomed-child-blocks? (and (:block-children? config)
                                   (not (and (:id config)
                                             (= (:id config)
@@ -4932,46 +4869,15 @@
                                  (< blocks-count 10)
                                  zoomed-child-blocks?)
         [virtualized? _] (hooks/use-state (not disable-virtualized?))
-        root-level? (zero? (or (:level config) 0))
-        anchor (get-in (state/get-route-match) [:query-params :anchor])
-        fallback-ready-index* (hooks/use-memo #(atom -1) [])
-        fallback-children-complete-by-root* (hooks/use-memo #(atom {}) [])
-        *defer-ready-index (or (:defer-children-ready-index* config)
-                               fallback-ready-index*)
-        *defer-children-render-complete-by-root (or (:defer-children-render-complete-by-root* config)
-                                                    fallback-children-complete-by-root*)
-        [defer-ready-index] (hooks/use-atom *defer-ready-index)
-        [defer-children-render-complete-by-root] (hooks/use-atom *defer-children-render-complete-by-root)
-        defer-root-render? (should-defer-root-block-render? config root-block blocks anchor)
-        current-root-block (when (<= 0 defer-ready-index (dec blocks-count))
-                             (nth blocks defer-ready-index))
-        current-root-children-need-deferring? (and current-root-block
-                                                   (not (util/collapsed? current-root-block))
-                                                   (should-defer-block-children-render?
-                                                    (assoc config :level 1 :defer-ready-index defer-ready-index)
-                                                    (count (:block/children current-root-block))
-                                                    anchor))
-        current-root-children-rendered? (or (neg? defer-ready-index)
-                                            (not current-root-children-need-deferring?)
-                                            (true? (get defer-children-render-complete-by-root
-                                                        defer-ready-index)))
-        root-item-visible? (fn [idx]
-                             (or (not defer-root-render?)
-                                 (<= idx defer-ready-index)))
         render-item (fn [idx]
                       (let [top? (zero? idx)
                             bottom? (= (dec blocks-count) idx)
                             block (nth blocks idx)
-                            config' (cond-> (assoc config :top? top?)
-                                      (and root-level? defer-root-render?) (assoc :defer-top-index idx)
-                                      (and root-level? defer-root-render?) (assoc :defer-ready-index defer-ready-index)
-                                      (and root-level? defer-root-render?) (assoc :defer-children-render-complete-by-root* *defer-children-render-complete-by-root))]
-                        (if (and root-level? (not (root-item-visible? idx)))
-                          (defer-placeholder-element)
-                          (block-item config'
-                                      block
-                                      {:top? top?
-                                       :bottom? bottom?}))))
+                            config' (assoc config :top? top?)]
+                        (block-item config'
+                                    block
+                                    {:top? top?
+                                     :bottom? bottom?})))
         virtualized? (and virtualized? (seq blocks))
         virtualized-block-ids (when virtualized? (mapv :block/uuid blocks))
         selection-block-ids (or (:selection/block-ids config)
@@ -4998,43 +4904,14 @@
                                         (let [top? (zero? idx)
                                               bottom? (= (dec blocks-count) idx)
                                               block (nth blocks idx)
-                                              config' (cond-> (assoc config :top? top?)
-                                                        true (assoc :selection/block-ids selection-block-ids)
-                                                        (and root-level? defer-root-render?) (assoc :defer-top-index idx)
-                                                        (and root-level? defer-root-render?) (assoc :defer-ready-index defer-ready-index)
-                                                        (and root-level? defer-root-render?) (assoc :defer-children-render-complete-by-root* *defer-children-render-complete-by-root))]
-                                          (if (and root-level? (not (root-item-visible? idx)))
-                                            (defer-placeholder-element)
-                                            (block-item config'
-                                                        block
-                                                        {:top? top?
-                                                         :bottom? bottom?}))))})
+                                              config' (assoc config
+                                                             :top? top?
+                                                             :selection/block-ids selection-block-ids)]
+                                          (block-item config'
+                                                      block
+                                                      {:top? top?
+                                                       :bottom? bottom?})))})
         *wrap-ref (hooks/use-ref nil)]
-    (hooks/use-effect!
-     (fn []
-       (let [last-idx (dec blocks-count)]
-         (if (and defer-root-render?
-                  current-root-children-rendered?
-                  (< defer-ready-index last-idx))
-           (let [raf-id (js/requestAnimationFrame
-                         (fn []
-                           (swap! *defer-ready-index
-                                  (fn [v]
-                                    (let [next-v (min (dec blocks-count)
-                                                      (+ v defer-root-render-batch-size))]
-                                      (swap! *defer-children-render-complete-by-root
-                                             assoc
-                                             next-v
-                                             false)
-                                      next-v)))))]
-             #(js/cancelAnimationFrame raf-id))
-           (fn []))))
-     [defer-root-render?
-      defer-ready-index
-      current-root-children-rendered?
-      blocks-count
-      *defer-ready-index
-      *defer-children-render-complete-by-root])
     (hooks/use-effect!
      (fn []
        (when virtualized?
@@ -5087,9 +4964,7 @@
   (let [doc-mode? (:document/mode? config)
         id (hooks/use-memo #(str (random-uuid)) [])
         container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
-        container-id (or (:container-id config) (state/get-container-id container-key))
-        *defer-children-ready-index (hooks/use-memo #(atom -1) [])
-        *defer-children-render-complete-by-root (hooks/use-memo #(atom {}) [])]
+        container-id (or (:container-id config) (state/get-container-id container-key))]
     (when (seq blocks)
       [:div.blocks-container.flex-1
        {:id id
@@ -5097,9 +4972,7 @@
         :containerid container-id}
        (block-list (assoc config
                           :blocks-node-id id
-                          :defer-children-ready-index* *defer-children-ready-index
-                          :defer-children-render-complete-by-root* *defer-children-render-complete-by-root
-                                  :container-id container-id)
+                          :container-id container-id)
                    blocks)])))
 
 (hsx/defc breadcrumb-with-container

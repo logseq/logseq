@@ -135,8 +135,7 @@
   (k/esc)
   (util/search-and-click "(Dev) Validate current graph")
   (assert/assert-is-visible
-   (loc/and ".notifications div.notification-success div"
-            (w/get-by-text "Your graph is valid")))
-  (when (w/visible? ".notifications div.notification-success .ls-icon-x")
-    (w/click ".notifications div.notification-success .ls-icon-x"))
+   ".ui__toast:has-text('Your graph is valid')")
+  (when (w/visible? ".ui__toast.success button")
+    (w/click ".ui__toast.success button"))
   {:valid? true})

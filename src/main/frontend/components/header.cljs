@@ -1,5 +1,6 @@
 (ns frontend.components.header
-  (:require [cljs-bean.core :as bean]
+  (:require ["react" :as react]
+            [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [clojure.string :as string]
@@ -20,12 +21,12 @@
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler :as handler]
-            [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -36,7 +37,6 @@
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [io.factorhouse.hsx.core :as hsx]))
@@ -75,7 +75,7 @@
 (hsx/defc rtc-collaborators
   []
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
-        online-users (hooks/use-flow-state nil rtc-flows/rtc-online-users-flow)]
+        online-users (rfx/use-sub [:rtc/state :online-users])]
     (when rtc-graph-id
       [:div.rtc-collaborators.flex.gap-1.text-sm.bg-gray-01.items-center
        (shui/button-ghost-icon :user-plus
@@ -89,15 +89,18 @@
        (when (seq online-users)
          (for [{user-email :user/email
                 user-name :user/name
-                user-uuid :user/uuid} online-users]
-           (when user-name
-             (avatar/user-avatar
-              {:class "w-5 h-5"
-               :style {:app-region "no-drag"}
-               :title user-email
-               :name user-name
-               :uuid user-uuid
-               :fallback-props {:style {:font-size 11}}}))))])))
+                user-uuid :user/uuid} online-users
+               :when user-name
+               :let [key (str "rtc-user-" (or user-uuid user-email user-name))]]
+           ^{:key key}
+           [:<>
+            (avatar/user-avatar
+             {:class "w-5 h-5"
+              :style {:app-region "no-drag"}
+              :title user-email
+              :name user-name
+              :uuid user-uuid
+              :fallback-props {:style {:font-size 11}}})]))])))
 
 (hsx/defc left-menu-button
   [{:keys [on-click]}]
@@ -126,32 +129,31 @@
 
 (hsx/defc ^:large-vars/cleanup-todo toolbar-dots-menu
   [{:keys [current-repo t]}]
-  (let [_route-match (state/use-sub :route-match)
+  (let [_route-match (rfx/use-sub [:route-match])
         current-page (sidebar/get-current-page)
         page (or (some-> current-page db/get-page)
                  (when (util/uuid-string? current-page)
                    (db/entity [:block/uuid (uuid current-page)])))
         ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
-        db-storing? (state/use-sub :db/restoring?)
-        working-page? (if config/publishing? (not db-storing?) true)
-        page-menu-items (fn []
-                          (if (and working-page? (ldb/page? (or (some-> page :db/id db/entity) page)))
-                            (page-menu/page-menu page)
-                            (when-not config/publishing?
-                              (let [block-id-str (str (:block/uuid page))
-                                    favorited? (page-handler/favorited? block-id-str)]
-                                [{:title   (if favorited?
-                                             (t :page/unfavorite)
-                                             (t :page/add-to-favorites))
-                                  :options {:on-click
-                                            (fn []
-                                              (if favorited?
-                                                (page-handler/<unfavorite-page! block-id-str)
-                                                (page-handler/<favorite-page! block-id-str)))}}
-                                 {:title   (t :publish/dialog-title)
-                                  :options {:on-click #(shui/dialog-open! (fn [] (page-menu/publish-page-dialog page))
-                                                                          {:class "w-auto max-w-md"})}}]))))
-        login? (and (state/use-sub :auth/id-token) (user-handler/logged-in?))
+        working-page? (if config/publishing? (not (rfx/use-sub [:db/restoring?])) true)
+        page-menu (if (and working-page? (ldb/page? page))
+                    (page-menu/page-menu page)
+                    (when-not config/publishing?
+                      (let [block-id-str (str (:block/uuid page))
+                            favorited? (page-handler/favorited? block-id-str)]
+                        [{:title   (if favorited?
+                                     (t :page/unfavorite)
+                                     (t :page/add-to-favorites))
+                          :options {:on-click
+                                    (fn []
+                                      (if favorited?
+                                        (page-handler/<unfavorite-page! block-id-str)
+                                        (page-handler/<favorite-page! block-id-str)))}}
+                         {:title   (t :publish/dialog-title)
+                          :options {:on-click #(shui/dialog-open! (fn [] (page-menu/publish-page-dialog page))
+                                                                  {:class "w-auto max-w-md"})}}])))
+        page-menu-and-hr (concat page-menu [{:hr true}])
+        login? (and (rfx/use-sub [:auth/id-token]) (user-handler/logged-in?))
         items (fn []
                 (->>
                  [(when (state/enable-editing?)
@@ -203,39 +205,46 @@
                              (ui/icon "logout")]]
                      :options {:on-click #(user-handler/logout)
                                :class "w-full"}})]
-                 (concat (page-menu-items) [{:hr true}])
+                 (concat page-menu-and-hr)
                  (remove nil?)))]
 
     (ui/tooltip
      (shui/button-ghost-icon
       :dots {:class "toolbar-dots-btn"
-             :on-pointer-down (fn [^js e]
-                                (shui/popup-show! (.-target e)
-                                                  (fn [{:keys [id]}]
-                                                    (for [{:keys [hr item title options icon]} (items)]
-                                                      (let [on-click' (:on-click options)
-                                                            href (:href options)]
-                                                        (if hr
-                                                          (shui/dropdown-menu-separator)
-                                                          (shui/dropdown-menu-item
-                                                           (assoc options
-                                                                  :on-click (fn [^js e]
-                                                                              (when on-click'
-                                                                                (when-not (false? (on-click' e))
-                                                                                  (shui/popup-hide! id)))))
-                                                           (or item
-                                                               (if href
-                                                                 [:a.flex.items-center.w-full
-                                                                  {:href href :on-click #(shui/popup-hide! id)
-                                                                   :style {:color "inherit"}}
-                                                                  [:span.flex.items-center.gap-1.w-full
-                                                                   icon [:div title]]]
-                                                                 [:span.flex.items-center.gap-1.w-full
-                                                                  icon [:div title]])))))))
-                                                  {:align "end"
-                                                   :as-dropdown? true
-                                                   :content-props {:class "w-64"
-                                                                   :align-offset -32}}))})
+             :on-click (fn [^js e]
+                         (shui/popup-show! (.-currentTarget e)
+                                           (fn [{:keys [id]}]
+                                             (for [[idx {:keys [hr item title options icon]}] (map-indexed vector (items))]
+                                               (let [on-click' (:on-click options)
+                                                     href (:href options)
+                                                     key (or (:key options)
+                                                             (str (if hr "separator-" "item-") idx))]
+                                                 (if hr
+                                                   (react/cloneElement
+                                                    (shui/dropdown-menu-separator {})
+                                                    #js {:key (str key)})
+                                                   (react/cloneElement
+                                                    (shui/dropdown-menu-item
+                                                     (assoc options
+                                                            :on-click (fn [^js e]
+                                                                        (when on-click'
+                                                                          (when-not (false? (on-click' e))
+                                                                            (shui/popup-hide! id)))))
+                                                     (or item
+                                                         (if href
+                                                           [:a.flex.items-center.w-full
+                                                            {:href href :on-click #(shui/popup-hide! id)
+                                                             :style {:color "inherit"}}
+                                                            [:span.flex.items-center.gap-1.w-full
+                                                             icon [:div title]]]
+                                                           [:span.flex.items-center.gap-1.w-full
+                                                            icon [:div title]])))
+                                                    #js {:key (str key)})))))
+                                           {:align "end"
+                                            :as-dropdown? true
+                                            :focus-trigger? false
+                                            :content-props {:class "w-64"
+                                                            :align-offset -32}}))})
      (t :header/more)
      {:trigger-props {:as-child true}})))
 
@@ -355,7 +364,7 @@
 
 (hsx/defc recent-slider
   []
-  (let [highlight? (state/use-sub :ui/toggle-highlight-recent-blocks?)]
+  (let [highlight? (rfx/use-sub [:ui/toggle-highlight-recent-blocks?])]
     (hooks/use-effect!
      (fn []
        (when-not highlight?
@@ -366,7 +375,7 @@
 
 (hsx/defc block-breadcrumb
   [page-name]
-  (let [db-restoring? (state/use-sub :db/restoring?)]
+  (let [db-restoring? (rfx/use-sub [:db/restoring?])]
     (when-let [page (when (and page-name (common-util/uuid-string? page-name))
                       (db/entity [:block/uuid (uuid page-name)]))]
       ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
@@ -382,7 +391,7 @@
 (hsx/defc search-index-progress
   []
   (let [current-repo (state/get-current-repo)
-        {:keys [visible? running? repo progress]} (or (state/use-sub :search/index-build) {})
+        {:keys [visible? running? repo progress]} (or (rfx/use-sub [:search/index-build]) {})
         progress' (-> (or progress 0)
                       (max 0)
                       (min 100))]
@@ -396,14 +405,15 @@
 (hsx/defc ^:large-vars/cleanup-todo header-aux
   [{:keys [current-repo default-home new-block-mode]}]
   (let [electron-mac? (and util/mac? (util/electron?))
-        rtc-graphs (state/use-sub :rtc/graphs)
-        default-home-page (state/use-sub-default-home-page)
+        rtc-graphs (rfx/use-sub [:rtc/graphs])
+        default-home-page (get-in (state/config-for-repo (rfx/use-sub [:config])
+                                                         (state/get-current-repo))
+                                  [:default-home :page] "")
         left-menu (left-menu-button {:on-click (fn []
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
-                               (= default-home-page (state/get-current-page)))
-        electron-server (state/use-sub :electron/server)]
+                               (= default-home-page (state/get-current-page)))]
     [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -474,7 +484,7 @@
           (plugins/updates-notifications)])
 
        (when (state/feature-http-server-enabled?)
-         (server/server-indicator electron-server))
+         (server/server-indicator (rfx/use-sub [:electron/server])))
 
        (when (util/electron?)
          (back-and-forward))
@@ -494,14 +504,8 @@
 
        (updater-tips-new-version t)]]]))
 
-(def ^:private header-related-flow
-  (m/latest
-   (fn [state rtc-running?]
-     {:user-groups (get-in state [:user/info :UserGroups])
-      :rtc-running? rtc-running?})
-   (m/watch state/state) rtc-flows/rtc-running-flow))
-
 (hsx/defc header
   [opts]
-  (let [_m (hooks/use-flow-state header-related-flow)]
+  (let [_user-groups (rfx/use-sub [:user/info :UserGroups])
+        _rtc-running? (rfx/use-sub [:rtc/state :rtc-lock])]
     (header-aux opts)))

@@ -3,13 +3,14 @@ const { stripIOSWebFontSourcesPlugin } = require('./scripts/lib/postcss-strip-io
 const mobileCssBuild = process.argv.some((arg) => arg.endsWith('tailwind.mobile.css'))
 
 module.exports = {
-  plugins: [
-    require('autoprefixer')(),
-    require('postcss-import-ext-glob')(),
-    require('postcss-import')(),
-    require('tailwindcss/nesting')('postcss-nested'),
-    require('tailwindcss')(),
+  plugins: {
+    'postcss-import-ext-glob': {},
+    'postcss-import': {},
+    'postcss-nested': {},
+    '@tailwindcss/postcss': {
+      optimize: false
+    },
     ...(mobileCssBuild ? [stripIOSWebFontSourcesPlugin()] : []),
-    ...(process.env.NODE_ENV === 'production' ? [require('cssnano')()] : [])
-  ]
+    ...(process.env.NODE_ENV === 'production' ? { cssnano: {} } : {})
+  }
 }

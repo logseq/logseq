@@ -22,6 +22,7 @@
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.search :as search]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -323,7 +324,7 @@
                   result  []]
              (let [[b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
                    hiccups-add [[:span b-cut]
-                                [:mark.p-0.rounded-none hl-cut]]
+                                [:mark {:style {:padding 0 :border-radius 0}} hl-cut]]
                    hiccups-add (remove nil? hiccups-add)
                    new-result (concat result hiccups-add)]
                (if-not (string/blank? e-cut)
@@ -1086,7 +1087,7 @@
                  move-blocks? (= :move-blocks action)]
              (cond
                (and move-blocks? (string/blank? input))
-               (state/close-modal!)
+               (state/close-dialog!)
 
                (and filter' (not move-blocks?))
                (do
@@ -1243,8 +1244,8 @@
                                   :muted    true}))]
     [:div.hints
      [:div.text-sm.leading-6
-      [:div.flex.flex-row.gap-1.items-center]
-      [:div.font-medium.text-gray-12 (t :cmdk.tip/label)
+      [:div.flex.flex-row.gap-1.items-center
+       [:span.font-medium.text-gray-12 (t :cmdk.tip/label)]
        (tip state)]]
 
      [:div.gap-2.hidden.md:flex {:style {:margin-right -6}}
@@ -1306,8 +1307,6 @@
                                              search-mode
                                              search-args
                                              (state/get-current-repo))]
-    (when (nil? raw-search-mode)
-      (state/set-state! :search/mode :global))
     {::ref (atom nil)
      ::filter (atom filter-group)
      ::input (atom input)
@@ -1332,8 +1331,8 @@
   [{:keys [sidebar?] :as opts}]
   (let [state (hooks/use-memo #(cmdk-init-state opts) [])
         *input (::input state)
-        search-mode (state/use-sub :search/mode)
-        search-args (state/use-sub :search/args)
+        search-mode (rfx/use-sub [:search/mode])
+        search-args (rfx/use-sub [:search/args])
         [filter'] (hooks/use-atom (::filter state))
         [_results] (hooks/use-atom (::results state))
         [_highlighted-item] (hooks/use-atom (::highlighted-item state))
@@ -1344,6 +1343,11 @@
         results-ordered (state->results-ordered state)
         all-items (mapcat last results-ordered)
         first-item (first all-items)]
+    (hooks/use-effect!
+     (fn []
+       (when (nil? search-mode)
+         (state/set-state! :search/mode :global)))
+     [])
     (hooks/use-effect!
      (fn []
        (let [{input :input filter-group :filter} (cmdk-state/build-initial-cmdk-search
@@ -1405,10 +1409,11 @@
                                       (and (contains? #{:create} group-filter)
                                            (= group-key :create))))))
                    results-ordered)]
-        (if (seq items)
-          (for [[group-name group-key _group-count group-items] items]
-            (let [title (string/capitalize group-name)]
-              (result-group state title group-key group-items first-item sidebar?)))
+	        (if (seq items)
+	          (for [[group-name group-key _group-count group-items] items]
+	            (let [title (string/capitalize group-name)]
+                ^{:key (str "cmdk-group-" (name group-key))}
+                [result-group state title group-key group-items first-item sidebar?]))
           [:div.flex.flex-col.p-4.opacity-50
            (when-not (string/blank? @*input)
              (t :search/no-result))]))]

@@ -994,7 +994,7 @@
  :node/built-in-cant-delete-error "Eingebaute Elemente können nicht gelöscht werden."
  :node/new "Neuer Knoten"
 
- :notification/clear-all "Alles löschen"
+
  :notification/copied "Kopiert"
 
  :onboarding.import/desc "Logseq importiert EDN und Markdown."

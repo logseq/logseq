@@ -1,5 +1,6 @@
 (ns frontend.components.plugins
-  (:require [cljs-bean.core :as bean]
+  (:require ["react" :as react]
+            [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.components.plugins-settings :as plugins-settings]
@@ -13,6 +14,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.rfx :as rfx]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -81,9 +83,9 @@
         *cursor (hooks/use-memo #(atom 0) [])
         *total (hooks/use-memo #(atom 0) [])
         [cursor] (hooks/use-atom *cursor)
-        mode (state/use-sub :ui/theme)
-        all-themes (state/use-sub :plugin/installed-themes)
-        selected (state/use-sub :plugin/selected-theme)]
+        mode (rfx/use-sub [:ui/theme])
+        all-themes (rfx/use-sub [:plugin/installed-themes])
+        selected (rfx/use-sub [:plugin/selected-theme])]
     (hooks/use-effect!
      (fn []
        (let [mode-title (t (case mode
@@ -191,7 +193,7 @@
 
 (hsx/defc local-markdown-display
   []
-  (let [[content item] (state/use-sub :plugin/active-readme)]
+  (let [[content item] (rfx/use-sub [:plugin/active-readme])]
     [:div.cp__plugins-details
      {:on-click (fn [^js/MouseEvent e]
                   (when-let [target (.-target e)]
@@ -440,9 +442,8 @@
      :auto-focus true
      :on-key-down (fn [^js e]
                     (when (= 27 (.-keyCode e))
-                      (util/stop e)
-                      (if (string/blank? search-key)
-                        (some-> (js/document.querySelector ".cp__plugins-page") (.focus))
+                      (when-not (string/blank? search-key)
+                        (util/stop e)
                         (reset! *search-key nil))))
      :on-change #(let [^js target (.-target %)]
                    (reset! *search-key (some-> (.-value target) (string/triml))))
@@ -722,7 +723,7 @@
     [:div.p-4.flex.flex-col.gap-3
      [:h1.text-xl.font-bold (t :plugin/bulk-remove-disabled-title)]
      (if (seq plugins)
-       [:<>
+      [:<>
         [:p.opacity-70.text-sm (t :plugin/bulk-remove-disabled-desc)]
         [:ul.max-h-96.overflow-y-auto.flex.flex-col.gap-2.ml-0
          (for [{:keys [id name title version icon]} plugins
@@ -1066,14 +1067,13 @@
   []
   (let [*root-ref          (hooks/use-ref nil)
         *list-node-ref     (hooks/use-ref nil)
-        pkgs               (->> (state/use-sub :plugin/marketplace-pkgs)
-                                (remove (fn [pkg] (false? (:supportsDB pkg)))))
-        stats              (state/use-sub :plugin/marketplace-stats)
-        installed-plugins  (state/use-sub :plugin/installed-plugins)
-        installing         (state/use-sub :plugin/installing)
-        online?            (state/use-sub :network/online?)
-        develop-mode?      (state/use-sub :ui/developer-mode?)
-        agent-opts         (state/use-sub [:electron/user-cfgs :settings/agent])
+        pkgs               (rfx/use-sub [:plugin/marketplace-pkgs])
+        stats              (rfx/use-sub [:plugin/marketplace-stats])
+        installed-plugins  (rfx/use-sub [:plugin/installed-plugins])
+        installing         (rfx/use-sub [:plugin/installing])
+        online?            (rfx/use-sub [:network/online?])
+        develop-mode?      (rfx/use-sub [:ui/developer-mode?])
+        agent-opts         (rfx/use-sub [:electron/user-cfgs :settings/agent])
         *search-key        (hooks/use-memo #(atom "") [])
         *category          (hooks/use-memo #(atom :plugins) [])
         *sort-by           (hooks/use-memo #(atom :default) []) ;; default (weighted) / downloads / stars / letters / updates / date-added
@@ -1205,12 +1205,12 @@
   []
   (let [*root-ref             (hooks/use-ref nil)
         *list-node-ref        (hooks/use-ref nil)
-        installed-plugins'    (vals (state/use-sub [:plugin/installed-plugins]))
-        updating              (state/use-sub :plugin/installing)
-        develop-mode?         (state/use-sub :ui/developer-mode?)
-        selected-unpacked-pkg (state/use-sub :plugin/selected-unpacked-pkg)
-        coming-updates        (state/use-sub :plugin/updates-coming)
-        agent-opts            (state/use-sub [:electron/user-cfgs :settings/agent])
+        installed-plugins'    (vals (rfx/use-sub [:plugin/installed-plugins]))
+        updating              (rfx/use-sub [:plugin/installing])
+        develop-mode?         (rfx/use-sub [:ui/developer-mode?])
+        selected-unpacked-pkg (rfx/use-sub [:plugin/selected-unpacked-pkg])
+        coming-updates        (rfx/use-sub [:plugin/updates-coming])
+        agent-opts            (rfx/use-sub [:electron/user-cfgs :settings/agent])
         *filter-by            (hooks/use-memo #(atom :default) [])
         *sort-by              (hooks/use-memo #(atom :default) [])
         *search-key           (hooks/use-memo #(atom "") [])
@@ -1307,9 +1307,9 @@
 (hsx/defc waiting-coming-updates
   []
   (hooks/use-effect! #(state/reset-unchecked-update) [])
-  (let [_            (state/use-sub :plugin/updates-coming)
-        downloading? (state/use-sub :plugin/updates-downloading?)
-        unchecked    (state/use-sub :plugin/updates-unchecked)
+  (let [_            (rfx/use-sub [:plugin/updates-coming])
+        downloading? (rfx/use-sub [:plugin/updates-downloading?])
+        unchecked    (rfx/use-sub [:plugin/updates-unchecked])
         updates      (state/all-available-coming-updates)]
 
     [:div.cp__plugins-waiting-updates
@@ -1498,8 +1498,8 @@
                        {:title [auto-check-for-updates-control]}])
                      (remove nil?)))]
 
-    [:div.toolbar-plugins-manager
-     {:on-pointer-down
+    [:div.toolbar-plugins-manager.flex.items-center
+     {:on-click
       (fn [^js e]
         (shui/popup-show! (.-target e)
                           (fn [{:keys [id]}]
@@ -1520,9 +1520,9 @@
 (hsx/defc hook-ui-items
   "type of :toolbar, :pagebar"
   [type]
-  (let [installed-ui-items (state/use-sub [:plugin/installed-ui-items])
-        pinned-items       (state/use-sub [:plugin/preferences :pinnedToolbarItems])
-        updates-coming     (state/use-sub :plugin/updates-coming)
+  (let [installed-ui-items (rfx/use-sub [:plugin/installed-ui-items])
+        pinned-items       (rfx/use-sub [:plugin/preferences :pinnedToolbarItems])
+        updates-coming     (rfx/use-sub [:plugin/updates-coming])
         toolbar?           (= :toolbar type)
         pinned-items       (and (sequential? pinned-items) (into #{} pinned-items))]
     (when installed-ui-items
@@ -1607,7 +1607,7 @@
        (ui/button (ui/icon "source-code" {:size 14})
                   :on-click #(editor-handler/edit-block! block (count content1)))]
       (when (fn? render)
-        (js/React.createElement render #js {:content content1}))]]))
+        (react/createElement render #js {:content content1}))]]))
 
 (hsx/defc plugins-page
   []
@@ -1733,18 +1733,18 @@
 
 (hsx/defc updates-notifications
   []
-  (let [updates-pending (state/use-sub :plugin/updates-pending)
-        online?         (state/use-sub :network/online?)
-        auto-checking?  (state/use-sub :plugin/updates-auto-checking?)
+  (let [updates-pending (rfx/use-sub [:plugin/updates-pending])
+        online?         (rfx/use-sub [:network/online?])
+        auto-checking?  (rfx/use-sub [:plugin/updates-auto-checking?])
         check-pending?  (boolean (seq updates-pending))]
     (updates-notifications-impl check-pending? auto-checking? online?)))
 
 (hsx/defc focused-settings-content
   [title]
-  (let [focused (state/use-sub :plugin/focused-settings)
+  (let [focused (rfx/use-sub [:plugin/focused-settings])
         [cache set-cache!] (hooks/use-state focused)
-        nav?    (state/use-sub :plugin/navs-settings?)
-        _       (state/use-sub :plugin/installed-plugins)]
+        nav?    (rfx/use-sub [:plugin/navs-settings?])
+        _       (rfx/use-sub [:plugin/installed-plugins])]
     (hooks/use-effect!
      (fn []
        (let [timeout-id (js/setTimeout #(set-cache! focused) 100)]

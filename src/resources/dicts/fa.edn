@@ -994,7 +994,7 @@
  :node/built-in-cant-delete-error "عناصر داخلی قابل حذف نیستند."
  :node/new "گره جدید"
 
- :notification/clear-all "پاک کردن همه"
+
  :notification/copied "کپی شد"
 
  :onboarding.import/desc "توضیحات وارد کردن"

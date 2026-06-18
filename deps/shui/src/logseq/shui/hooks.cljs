@@ -2,9 +2,7 @@
   "React custom hooks."
   (:refer-clojure :exclude [deref])
   (:require ["react" :as react]
-            [frontend.common.missionary :as c.m]
-            [goog.functions :as gfun]
-            [missionary.core :as m]))
+            [goog.functions :as gfun]))
 
 (defn- memo-deps
   [equal-fn deps]
@@ -169,20 +167,6 @@
     (use-effect! #(cb value) [value])
     debounced-value))
 
-(defn use-flow-state
-  "Return values from `flow`, default init-value is nil"
-  ([flow] (use-flow-state nil flow []))
-  ([init-value flow] (use-flow-state init-value flow []))
-  ([init-value flow deps]
-   (let [[value set-value!] (use-state init-value)]
-     (use-effect!
-      #(c.m/run-task*
-        (m/reduce
-         (constantly nil)
-         (m/ap (set-value! (m/?> flow)))))
-      deps)
-     value)))
-
 (defn- is-touch-event? [e]
   (exists? (.-touches e)))
 
@@ -252,6 +236,10 @@
   "(use-atom my-atom)"
   [a]
   (use-atom-fn a identity (fn [_ v] v)))
+
+(defn use-atom-value
+  [a]
+  (first (use-atom a)))
 
 (defn use-atom-in
   [a ks]

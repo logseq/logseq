@@ -396,7 +396,7 @@
 
 (defn- pending-new-block
   []
-  @(:editor/pending-new-block @state/state))
+  (state/get-state :editor/pending-new-block))
 
 (defn- pending-new-block?
   []
@@ -1266,7 +1266,7 @@
 
 (defn dialog-exists?
   [id]
-  (shui-dialog/get-modal id))
+  (shui-dialog/get-dialog id))
 
 (defn show-action-bar!
   [& {:keys [delay]
@@ -1333,7 +1333,7 @@
       (when element
         (util/scroll-to-block element)
         (state/drop-last-selection-block!))))
-  (show-action-bar! {:delay 500})
+  (show-action-bar! {:delay 200})
   nil)
 
 (defn on-select-block
@@ -1702,11 +1702,11 @@
 (defn in-shui-popup?
   []
   (or (some-> js/document.activeElement
-              (.closest "[data-radix-menu-content]")
+              (.closest ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content")
               (nil?)
               (not))
       (.querySelector js/document.body
-                      "div[data-radix-popper-content-wrapper]")))
+                      ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content")))
 
 (defn get-current-input-char
   [input]
@@ -2834,7 +2834,7 @@
           hashtag? (or (surround-by? input "#" " ")
                        (surround-by? input "#" :end)
                        (= key "#"))]
-      (when (or (not @(:editor/start-pos @state/state))
+      (when (or (not (state/get-state :editor/start-pos))
                 (and key (string/starts-with? key "Arrow")))
         (state/set-state! :editor/start-pos pos))
 
@@ -2883,7 +2883,7 @@
         (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
         nil
 
-        (some? @(:editor/action @state/state))
+        (some? (state/get-state :editor/action))
         nil
 
         (and (not (string/blank? (util/get-selected-text)))
@@ -3116,7 +3116,7 @@
 
 (defn- cut-blocks-and-clear-selections!
   [copy?]
-  (when-not (get-in @state/state [:ui/find-in-page :active?])
+  (when-not (:active? (state/get-state :ui/find-in-page))
     (cut-selection-blocks copy?)
     (clear-selection!)))
 
@@ -3164,7 +3164,7 @@
       (state/selection?)
       (shortcut-copy-selection e)
 
-      (and (state/editing?) (nil? (:editor/code-block-context @state/state)))
+      (and (state/editing?) (nil? (state/get-state :editor/code-block-context)))
       (let [input (state/get-input)
             selected-start (util/get-selection-start input)
             selected-end (util/get-selection-end input)]
@@ -3725,7 +3725,7 @@
       :else
       (do
         (util/stop e)
-        (when-not @(:selection/selected-all? @state/state)
+        (when-not (state/get-state :selection/selected-all?)
           (if-let [block-id (some-> (first (state/get-selection-blocks))
                                     (dom/attr "blockid")
                                     uuid)]
@@ -3898,14 +3898,14 @@
             (if-let [today-last-child (last (ldb/sort-by-order (:block/_parent today)))]
               (move-blocks! children today-last-child {:sibling? true})
               (move-blocks! children today {:sibling? false})))
-          (state/close-modal!)
+          (state/close-dialog!)
           (shui/popup-hide!)
           (when (seq children)
             (notification/show! (t :journal/add-blocks-to-today-success) :success))))))))
 
 (defn quick-add
   []
-  (if (shui-dialog/get-modal :ls-dialog-quick-add)
+  (if (shui-dialog/get-dialog :ls-dialog-quick-add)
     (quick-add-blocks!)
     (show-quick-add)))
 

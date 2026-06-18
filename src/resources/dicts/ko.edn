@@ -994,7 +994,7 @@
  :node/built-in-cant-delete-error "내장 항목은 삭제할 수 없습니다."
  :node/new "새 노드"
 
- :notification/clear-all "모두 지우기"
+
  :notification/copied "복사했습니다"
 
  :onboarding.import/desc "EDN 또는 Markdown 형식의 노트를 Logseq에서 가져올 수 있습니다."

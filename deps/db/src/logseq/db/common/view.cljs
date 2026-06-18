@@ -392,7 +392,8 @@
         (sort cmp page-ids)))))
 
 (defn- get-entities
-  [db view feat-type property-ident view-for-id* sorting]
+  [db view feat-type property-ident view-for-id* sorting {:keys [include-ref-pages-count?]
+                                                          :or {include-ref-pages-count? true}}]
   (let [view-for (:logseq.property/view-for view)
         view-for-id (or (:db/id view-for) view-for-id*)
         non-hidden-e (fn [id] (let [e (d/entity db id)]
@@ -419,7 +420,9 @@
        (keep (fn [id] (non-hidden-e id))))
 
       :linked-references
-      (db-reference/get-linked-references db view-for-id)
+      (db-reference/get-linked-references db view-for-id
+                                          {:include-ref-pages-count?
+                                           (not (false? include-ref-pages-count?))})
 
       :unlinked-references
       (db-reference/get-unlinked-references db view-for-id)
@@ -430,7 +433,7 @@
       nil)))
 
 (defn- get-view-entities
-  [db view-id & {:keys [view-for-id view-feature-type sorting]}]
+  [db view-id & {:keys [view-for-id view-feature-type sorting include-ref-pages-count?]}]
   (let [view (d/entity db view-id)
         feat-type (or view-feature-type (:logseq.property.view/feature-type view))
         sorting (or sorting (:logseq.property.table/sorting view))
@@ -443,7 +446,10 @@
                      (let [view-for (:logseq.property/view-for view)]
                        (:db/ident view-for))
                      nil)]
-    (get-entities db view feat-type index-attr view-for-id sorting)))
+    (get-entities db view feat-type index-attr view-for-id sorting
+                  (cond-> {}
+                    (some? include-ref-pages-count?)
+                    (assoc :include-ref-pages-count? include-ref-pages-count?)))))
 
 (defn- get-view-property-values
   [db property-ident {:keys [view-id query-entity-ids]}]
@@ -517,6 +523,45 @@
       properties
       (distinct (mapcat keys entities)))))
 
+(defn- linked-references-page-list-view-data
+  [view entities-result entities]
+  (let [groups-sort-by-property-ident (or (:db/ident (:logseq.property.view/sort-groups-by-property view))
+                                          :block/journal-day)
+        desc? (:logseq.property.view/sort-groups-desc? view)
+        page-sort-value (fn [page]
+                          (let [v (get page groups-sort-by-property-ident)]
+                            (if (and (= groups-sort-by-property-ident :block/journal-day)
+                                     (not desc?)
+                                     (nil? (:block/journal-day page)))
+                              js/Number.MAX_SAFE_INTEGER
+                              v)))
+        page-sorters (cond->
+                      [{:get-value (fn [[page _blocks]] (page-sort-value page))
+                        :asc? (not desc?)}]
+                       (not= groups-sort-by-property-ident :block/title)
+                       (conj {:get-value (fn [[page _blocks]] (:block/title page))
+                              :asc? (not desc?)}))
+        sorted-page-groups (sort (common-util/by-sorting page-sorters)
+                                 (group-by :block/page entities))
+        block-row (fn [block]
+                    {:db/id (:db/id block)
+                     :block/parent (:block/uuid (:block/parent block))})
+        nested-group (fn [[_parent blocks]]
+                       [(:block/uuid (first blocks))
+                        (map block-row (ldb/sort-by-order blocks))])
+        data (map (fn [[page blocks]]
+                    [(select-keys page [:db/id :db/ident :block/uuid :block/title :block/name
+                                        :logseq.property/value :logseq.property/icon :block/tags])
+                     (->> blocks
+                          (group-by :block/parent)
+                          (sort-by (fn [[parent _]] (:block/order parent)))
+                          (map nested-group))])
+                  sorted-page-groups)]
+    (merge
+     {:count (count entities)
+      :data data}
+     (select-keys entities-result [:ref-pages-count :ref-matched-children-ids]))))
+
 (defn ^:api ^:large-vars/cleanup-todo get-view-data
   [db view-id {:keys [journals? _view-for-id view-feature-type group-by-property-ident input query-entity-ids query filters sorting]
                :as opts}]
@@ -567,6 +612,12 @@
                                      (into [] (filter filter-pred) entities))
                                    entities)
                group-by-page? (= group-by-property-ident :block/page)
+               linked-references-page-list-fast-path?
+               (and (= feat-type :linked-references)
+                    group-by-page?
+                    list-view?
+                    (empty? filters)
+                    (string/blank? input))
                group-values
                (fn group-values [ent]
                  (let [pvalue (get ent group-by-property-ident)
@@ -586,7 +637,9 @@
                            value))
                        values))
                     [nil])))
-               result (if group-by-property-ident
+               result (if linked-references-page-list-fast-path?
+                        nil
+                        (if group-by-property-ident
                         (let [groups-sort-by-property-ident (or (:db/ident (:logseq.property.view/sort-groups-by-property view))
                                                                 :block/journal-day)
                               desc? (:logseq.property.view/sort-groups-desc? view)
@@ -628,9 +681,11 @@
                                    (not= groups-sort-by-property-ident :block/title)
                                    (conj {:get-value (keyfn :block/title)
                                           :asc? (not desc?)})))
-                                result))
-                        (sort-entities db sorting filtered-entities))
-               data' (if group-by-property-ident
+                               result))
+                        (sort-entities db sorting filtered-entities)))
+               data' (if linked-references-page-list-fast-path?
+                       nil
+                       (if group-by-property-ident
                        (map
                          (fn [[by-value entities]]
                            (let [by-value' (if (de/entity? by-value)
@@ -653,9 +708,11 @@
                                               (map :db/id)))]
                              [by-value' group]))
                          result)
-                       (map :db/id result))
+                       (map :db/id result)))
                dedupe-data? (or (= feat-type :property-objects) query?)]
-           (cond->
+           (if linked-references-page-list-fast-path?
+             (linked-references-page-list-view-data view entities-result entities)
+             (cond->
              {:count (count filtered-entities)
               :data (if dedupe-data?
                       (distinct data')
@@ -663,4 +720,4 @@
              (= feat-type :linked-references)
              (merge (select-keys entities-result [:ref-pages-count :ref-matched-children-ids]))
              query?
-             (assoc :properties (get-query-properties query entities-result))))))))
+             (assoc :properties (get-query-properties query entities-result)))))))))

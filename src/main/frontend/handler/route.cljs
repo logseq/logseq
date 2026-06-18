@@ -206,7 +206,7 @@
 
 (defn set-route-match!
   [route]
-  (swap! state/state assoc :route-match route)
+  (state/swap-state! assoc :route-match route)
   (update-page-title! route)
   (update-page-label! route)
   (when-let [anchor (get-in route [:query-params :anchor])]

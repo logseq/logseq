@@ -8,6 +8,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.runtime.globals :as runtime-globals]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
             [mobile.components.app :as app]
@@ -88,6 +89,7 @@
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
+  (runtime-globals/install!)
   (prn "[Mobile] init!")
   (log/add-handler mobile-state/log-append!)
   (mobile-nav/install-native-bridge!)

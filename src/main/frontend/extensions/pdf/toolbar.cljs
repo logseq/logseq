@@ -11,6 +11,7 @@
             [frontend.extensions.pdf.windows :refer [resolve-own-container] :as pdf-windows]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.notification :as notification]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
@@ -32,8 +33,8 @@
 
   (let [*el-popup (hooks/use-ref nil)
         [area-dashed? set-area-dashed?] (hooks/use-atom *area-dashed?)
-        hl-block-colored? (state/use-sub :pdf/block-highlight-colored?)
-        auto-open-ctx-menu? (state/use-sub :pdf/auto-open-ctx-menu?)]
+        hl-block-colored? (rfx/use-sub [:pdf/block-highlight-colored?])
+        auto-open-ctx-menu? (rfx/use-sub [:pdf/auto-open-ctx-menu?])]
 
     (hooks/use-effect!
      (fn []
@@ -69,7 +70,7 @@
      (fn []
        (let [cb  #(let [^js target (.-target %)]
                     (when (and (not (some-> (hooks/deref *el-popup) (.contains target)))
-                               (nil? (.closest target ".ui__modal")))
+                               (nil? (.closest target ".ui__dialog-content")))
                       (hide-settings!)))
              doc (resolve-own-container viewer)]
          (js/setTimeout

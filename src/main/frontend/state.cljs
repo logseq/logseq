@@ -10,9 +10,9 @@
             [electron.locale :as electron-locale]
             [frontend.db.conn-state :as db-conn-state]
             [frontend.dicts :as dicts]
-            [frontend.flows :as flows]
             [frontend.graph-tab :as graph-tab]
             [frontend.mobile.util :as mobile-util]
+            [frontend.rfx :as rfx]
             [frontend.spec.storage :as storage-spec]
             [frontend.storage :as storage]
             [frontend.util :as util]
@@ -25,7 +25,6 @@
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [promesa.core :as p]))
 
 (defonce *profile-state (volatile! {}))
@@ -57,11 +56,14 @@
                     :en)
                 name)))))
 
-(def db-worker-ready-flow
+(def db-worker-ready?
   "`<invoke-db-worker` throws err if `*db-worker` not ready yet.
-  Use this flow to wait till db-worker ready."
-  (->> (m/watch *db-worker)
-       (m/eduction (map some?))))
+  Use this atom to wait till db-worker ready."
+  (let [ready? (atom (fn? @*db-worker))]
+    (add-watch *db-worker ::db-worker-ready?
+               (fn [_ _ _ worker]
+                 (reset! ready? (fn? worker))))
+    ready?))
 
 (defn <invoke-db-worker
   "invoke db-worker thread api"
@@ -100,18 +102,15 @@
      {:client-id                             (str (random-uuid))
       :route-match                           nil
       :today                                 nil
-      :system/events                         (async/chan 1000)
       :reactive/custom-queries               (async/chan 1000)
-      :notification/show?                    false
-      :notification/content                  nil
       :instrument/disabled?                  (storage/get "instrument-disabled")
       ;; TODO: how to detect the network reliably?
-      ;; NOTE: prefer to use flows/network-online-event-flow
+      ;; NOTE: prefer to use flows/network-online?
       :network/online?         true
       :me                      nil
       :git/current-repo        current-graph
       :db/restoring?           nil
-
+      :db/query-results                      {}
       :search/q                              ""
       :search/mode                           nil
       :search/args                           nil
@@ -126,10 +125,11 @@
       ;; modals
       :modal/dropdowns                       {}
       :modal/id                              nil
+      :notification/contents                 {}
 
       ;; ui
       :ui/viewport                           {}
-      :ui/show-property-dialog?              (atom false)
+      :ui/show-property-dialog?              false
 
       ;; left sidebar
       :ui/navigation-item-collapsed?         {}
@@ -162,62 +162,64 @@
       :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
                                                  false)
       ;; remember scroll positions of visited paths
-      :ui/paths-scroll-positions             (atom {})
-      :ui/main-container-scroll-top          (atom nil)
+      :ui/paths-scroll-positions             {}
+      :ui/main-container-scroll-top          nil
       :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
                                                false
                                                true)
-      :ui/scrolling?                         (atom false)
-      :ui/show-empty-and-hidden-properties?  (atom {:mode :global
-                                                    :show? false})
+      :ui/shortcut-handler-refreshing?       false
+      :ui/scrolling?                         false
+      :ui/show-empty-and-hidden-properties?  {:mode :global
+                                              :show? false}
       :document/mode?                        document-mode?
 
       :config                                {}
       :block/component-editing-mode?         false
-      :editor/op                             (atom nil)
-      :editor/start-pos                      (atom nil)
-      :editor/pending-new-block              (atom nil)
+      :editor/op                             nil
+      :editor/start-pos                      nil
+      :editor/pending-new-block              nil
       :editor/hidden-editors                 #{} ;; page names
 
-      :editor/action                         (atom nil)
+      :editor/action                         nil
       :editor/action-data                    nil
       ;; With label or other data
-      :editor/last-saved-cursor              (atom {})
-      :editor/editing?                       (atom nil)
+      :editor/last-saved-cursor              {}
+      :editor/editing?                       nil
       :editor/in-composition?                false
-      :editor/content                        (atom {})
-      :editor/block                          (atom nil)
-      :editor/set-timestamp-block            (atom nil) ;; click rendered block timestamp-cp to set timestamp
-      :editor/last-input-time                (atom {})
+      :editor/code-mode?                     false
+      :editor/content                        {}
+      :editor/block                          nil
+      :editor/set-timestamp-block            nil ;; click rendered block timestamp-cp to set timestamp
+      :editor/last-input-time                {}
       :editor/document-mode?                 document-mode?
-      :editor/args                           (atom nil)
-      :editor/on-paste?                      (atom false)
-      :editor/last-key-code                  (atom nil)
-      :ui/global-last-key-code               (atom nil)
+      :editor/args                           nil
+      :editor/on-paste?                      false
+      :editor/last-key-code                  nil
+      :ui/global-last-key-code               nil
       :editor/block-op-type                  nil ;; :cut, :copy
-      :editor/block-refs                     (atom #{})
+      :editor/block-refs                     #{}
 
       ;; Stores deleted refed blocks, indexed by repo
       :editor/last-replace-ref-content-tx    nil
 
       :editor/code-block-context             nil
-      :editor/latest-shortcut                (atom nil)
+      :editor/latest-shortcut                nil
 
-      :history/paused?                       (atom false)
-      :editor/cursor-range                   (atom nil)
-      :editor/container-id                   (atom nil)
-      :editor/next-edit-block                (atom nil)
-      :editor/raw-mode-block                 (atom nil)
+      :history/paused?                       false
+      :editor/cursor-range                   nil
+      :editor/container-id                   nil
+      :editor/next-edit-block                nil
+      :editor/raw-mode-block                 nil
       :editor/virtualized-scroll-fn          nil
-      :editor/edit-block-fn                  (atom nil)
+      :editor/edit-block-fn                  nil
 
       ;; Warning: blocks order is determined when setting this attribute
-      :selection/blocks                      (atom [])
-      :selection/start-block                 (atom nil)
+      :selection/blocks                      []
+      :selection/start-block                 nil
       ;; nil, :up or :down
       ;; used to determine selection direction when two or more blocks are selected
-      :selection/direction                   (atom nil)
-      :selection/selected-all?               (atom false)
+      :selection/direction                   nil
+      :selection/selected-all?               false
       :custom-context-menu/show?             false
       :custom-context-menu/links             nil
       :custom-context-menu/position          nil
@@ -241,11 +243,12 @@
       ;; assets
       :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
       :assets/alias-dirs                     (or (storage/get :assets/alias-dirs) [])
-      :assets/asset-file-write-finish        (atom {})
+      :assets/asset-file-write-finish        {}
 
       ;; mobile
       :mobile/container-urls                 nil
       :mobile/show-action-bar?               false
+      :mobile/show-tabbar?                   false
 
       ;; plugin
       :plugin/enabled                        (and util/plugin-platform?
@@ -282,9 +285,6 @@
       :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
       :pdf/auto-open-ctx-menu?               (not= false (storage/get "ls-pdf-auto-open-ctx-menu"))
 
-      ;; all notification contents as k-v pairs
-      :notification/contents                 {}
-
       :copy/export-block-text-indent-style   (or (normalize-export-block-text-indent-style
                                                   (storage/get :copy/export-block-text-indent-style))
                                                  "dashes")
@@ -293,11 +293,13 @@
       :copy/export-block-text-other-options  (or (storage/get :copy/export-block-text-other-options)
                                                  {})
       :date-picker/date                      nil
+      :page-title/context                    nil
+      :block-ref/context                     nil
 
       :youtube/players                       {}
 
       ;; command palette
-      :command-palette/commands              (atom [])
+      :command-palette/commands              []
 
       :view/components                       {}
       :view/selected-blocks                  nil
@@ -312,30 +314,37 @@
       :auth/refresh-token                    (some-> (storage/get "refresh-token") str)
       :auth/access-token                     nil
       :auth/id-token                         nil
+      :auth/oauth-token-url                  nil
+      :auth/oauth-domain                     nil
+      :auth/oauth-client-id                  nil
+      :auth/current-login-user               nil
 
       ;; graph-uuid -> ...
-      :rtc/state                             (atom {})
+      :rtc/state                             {}
+      :rtc/editing-users-by-block            {}
       :rtc/loading-graphs?                   nil
-      ;; only latest rtc-log stored here, when a log stream is needed,
-      ;; use missionary to create a rtc-log-flow, use (missionary.core/watch <atom>)
-      :rtc/log                               (atom nil)
+      ;; only latest rtc-log stored here, derive a log stream from state when needed.
+      :rtc/log                               nil
       :rtc/uploading?                        false
       :rtc/downloading-graph-uuid            nil
       :rtc/graphs                            []
-      :rtc/online-info                       (atom {})
-      :rtc/asset-upload-download-progress    (atom {})
-      :rtc/users-info                        (atom {})
-      :sync/block-conflicts                  (atom {})
+      :rtc/online-info                       {}
+      :rtc/asset-upload-download-progress    {}
+      :rtc/users-info                        {}
+      :sync/block-conflicts                  {}
 
       :user/info                             {:UserGroups (storage/get :user-groups)}
       :encryption/graph-parsing?             false
 
       :ui/loading?                           {}
-      :ui/container-id                       (atom 0)
-      :ui/cached-key->container-id           (atom {})
+      :ui/container-id                       0
+      :ui/cached-key->container-id           {}
       :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
 
       :ui/find-in-page                       nil
+      :comments/inline-thread                nil
+      :graph/exporting                       nil
+      :graph/exporting-state                 nil
       :graph/importing                       nil
       :graph/importing-state                 {}
       :graph/loading?                        nil
@@ -343,13 +352,61 @@
 
       :system/info                           {}
       ;; Whether block is selected
-      :ui/select-query-cache                 (atom {})
-      :ui/toggle-highlight-recent-blocks?    (atom false)
-      :ui/highlight-recent-days              (atom (or (storage/get :ui/highlight-recent-days)
-                                                       3))
-      :favorites/updated?                    (atom 0)
-      :db/async-queries                      (atom {})
-      :db/latest-transacted-entity-uuids     (atom {})})))
+      :ui/select-query-cache                 {}
+      :view/table-selection                  {}
+      :ui/toggle-highlight-recent-blocks?    false
+      :ui/highlight-recent-days              (or (storage/get :ui/highlight-recent-days)
+                                                 3)
+      :favorites/updated?                    0
+      :db/async-queries                      {}
+      :sync-graph/init?                      nil
+      :db/latest-transacted-entity-uuids     {}})))
+
+(rfx/init! {:initial-value @state
+            :registry (atom {})})
+
+(defn register-rfx-state-subs!
+  []
+  (rfx/reg-sub! ::state-key
+    (fn [db [_ k]]
+      (get db k)))
+  (doseq [k (keys (rfx/snapshot))]
+    (rfx/register-state-sub-id! k)
+    (rfx/reg-sub! k
+      [[::state-key k]]
+      (fn [value [_ & path]]
+        (if (seq path)
+          (get-in value path)
+          value))))
+  (rfx/register-state-sub-id! :view/table-selection)
+  (rfx/reg-sub! :selection/block-selected?
+    [[:selection/blocks]]
+    (fn [selection-blocks [_ block-id]]
+      (boolean
+       (some #(= block-id (some-> % (dom/attr "blockid") uuid))
+             selection-blocks))))
+  true)
+
+(register-rfx-state-subs!)
+
+(declare get-state update-state! set-state!)
+(defn async-query-requested?
+  [query-key]
+  (get (get-state :db/async-queries) query-key))
+
+(defn mark-async-query-requested!
+  [query-key]
+  (update-state! :db/async-queries assoc query-key true))
+
+(defn clear-async-queries!
+  []
+  (set-state! :db/async-queries {}))
+
+(defn set-sync-block-conflicts!
+  [repo block-id conflicts]
+  (set-state! :sync/block-conflicts
+              (or conflicts [])
+              :nested-path [repo (str block-id)]))
 
 ;; User configuration getters under :config (and sometimes :me)
 ;; ========================================
@@ -399,7 +456,7 @@
           :ui/hide-empty-properties? false}))
 
 ;; State that most user config is dependent on
-(declare get-current-repo set-state!)
+(declare get-current-repo)
 
 (defn merge-configs
   "Merges user configs in given orders. All values are overridden except for maps
@@ -560,148 +617,38 @@ should be done through this fn in order to get global config and config defaults
 
 (declare document-mode?)
 
-(deftype PathCursor [ref path meta]
-  IAtom
+(defn- read-state-value
+  [db ks nested-path]
+  (let [ks-coll?               (coll? ks)
+        get-fn                 (if ks-coll? get-in get)
+        s                      (get-fn db ks)
+        nested-path-coll? (coll? nested-path)]
+    (cond
+      (and nested-path nested-path-coll?)
+      (get-in s nested-path)
 
-  IMeta
-  (-meta [_] meta)
+      nested-path
+      (get s nested-path)
 
-  IEquiv
-  (-equiv [this other]
-    (identical? this other))
-
-  IDeref
-  (-deref [_]
-    (get-in (-deref ref) path))
-
-  IWatchable
-  (-add-watch [this key callback]
-    (add-watch ref (list this key)
-               (fn [_ _ oldv newv]
-                 (let [old (get-in oldv path)
-                       new (get-in newv path)]
-                   (when (not= old new)
-                     (callback key this old new)))))
-    this)
-
-  (-remove-watch [this key]
-    (remove-watch ref (list this key))
-    this)
-
-  (-notify-watches [_ _ _])
-
-  IHash
-  (-hash [this]
-    (goog/getUid this))
-
-  IReset
-  (-reset! [_ newv]
-    (swap! ref assoc-in path newv)
-    newv)
-
-  ISwap
-  (-swap! [this f]
-    (-reset! this (f (-deref this))))
-  (-swap! [this f a]
-    (-reset! this (f (-deref this) a)))
-  (-swap! [this f a b]
-    (-reset! this (f (-deref this) a b)))
-  (-swap! [this f a b xs]
-    (-reset! this (apply f (-deref this) a b xs)))
-
-  IPrintWithWriter
-  (-pr-writer [this writer _opts]
-    (-write writer "#object [frontend.state.PathCursor ")
-    (-write writer (pr-str {:val (-deref this)}))
-    (-write writer "]")))
-
-(defn- path-cursor-in
-  [ref path]
-  (if (instance? PathCursor ref)
-    (PathCursor. (.-ref ref) (into (.-path ref) path) nil)
-    (PathCursor. ref path nil)))
-
-(defn- path-cursor
-  [ref key]
-  (path-cursor-in ref [key]))
+      :else s)))
 
 (defn get-state
   "Returns a plain state value.
 
   Use this outside component rendering or when the caller does not need reactive
-  rendering. Components that render from state should use `use-sub`."
-  [ks & {:keys [path-in-sub-atom]}]
-  (let [ks-coll?               (coll? ks)
-        get-fn                 (if ks-coll? get-in get)
-        s                      (get-fn @state ks)
-        s-atom?                (util/atom? s)
-        path-coll?-in-sub-atom (coll? path-in-sub-atom)]
-    (cond
-      (and s-atom? path-in-sub-atom path-coll?-in-sub-atom)
-      (get-in @s path-in-sub-atom)
-
-      (and s-atom? path-in-sub-atom)
-      (get @s path-in-sub-atom)
-
-      s-atom?  @s
-      :else    s)))
-
-(defn use-sub
-  "Returns a state subscription value for function components."
-  [ks & {:keys [path-in-sub-atom]}]
-  (let [ks-coll?               (coll? ks)
-        get-fn                 (if ks-coll? get-in get)
-        s                      (get-fn @state ks)
-        s-atom?                (util/atom? s)
-        path-coll?-in-sub-atom (coll? path-in-sub-atom)]
-    (cond
-      (and s-atom? path-in-sub-atom path-coll?-in-sub-atom)
-      (first (hooks/use-atom (path-cursor-in s path-in-sub-atom)))
-
-      (and s-atom? path-in-sub-atom)
-      (first (hooks/use-atom (path-cursor s path-in-sub-atom)))
-
-      s-atom?  (first (hooks/use-atom s))
-      ks-coll? (first (hooks/use-atom (path-cursor-in state ks)))
-      :else    (first (hooks/use-atom (path-cursor state ks))))))
+  rendering. Components that render from state should use `frontend.rfx/use-sub`."
+  [ks & {:keys [nested-path]}]
+  (read-state-value (rfx/snapshot) ks nested-path))
 
 (defn set-editing-block-id!
   [container-block]
-  (reset! (:editor/editing? @state) {container-block true}))
+  (set-state! :editor/editing? {container-block true}))
 
-(defn- sub-flow-state
-  [flow watch-ref sub-value-f deps]
-  (let [checkf (hooks/use-callback sub-value-f deps)
-        init-value (checkf @watch-ref)
-        flow (hooks/use-memo
-              #(m/eduction
-                (map checkf)
-                (dedupe)
-                (drop-while (fn [x] (identical? x init-value)))
-                flow)
-              [init-value])]
-    (hooks/use-flow-state init-value flow)))
-
-(def ^:private editing-flow
-  (m/watch (:editor/editing? @state)))
-
-(defn sub-editing?
-  [container-block]
-  (sub-flow-state editing-flow
-                  (:editor/editing? @state)
-                  (fn [s] (boolean (get s container-block)))
-                  [container-block]))
-
-(def use-sub-editing? sub-editing?)
-
-(defn use-sub-config
-  "Returns reactive merged config for function components."
-  ([] (use-sub-config (get-current-repo)))
-  ([repo]
-   (let [config (use-sub :config)]
-     (merge-configs db-default-config
-                    (get config ::global-config)
-                    (get config repo)))))
+(defn config-for-repo
+  [config repo]
+  (merge-configs db-default-config
+                 (get config ::global-config)
+                 (get config repo)))
 
 (defn enable-grammarly?
   []
@@ -718,7 +665,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn use-enable-fold-button-right?
   []
-  (let [_ (use-sub :ui/viewport)]
+  (let [_ (rfx/use-sub [:ui/viewport])]
     (enable-fold-button-right?)))
 
 (defn enable-flashcards?
@@ -731,10 +678,6 @@ should be done through this fn in order to get global config and config defaults
 (defn show-brackets?
   []
   (not (false? (:ui/show-brackets? (get-config)))))
-
-(defn use-sub-default-home-page
-  []
-  (get-in (use-sub-config) [:default-home :page] ""))
 
 (defn- get-selected-block-ids
   [blocks]
@@ -793,57 +736,88 @@ should be done through this fn in order to get global config and config defaults
 ;; State mutation helpers
 ;; ======================
 
-(defn set-state!
-  [path value & {:keys [path-in-sub-atom]}]
-  (vswap! *profile-state update path inc)
+(defn- assoc-state-db
+  [db path value nested-path]
   (let [path-coll?             (coll? path)
-        get-fn                 (if path-coll? get-in get)
-        s                      (get-fn @state path)
-        s-atom?                (util/atom? s)
-        path-coll?-in-sub-atom (coll? path-in-sub-atom)]
+        nested-path-coll? (coll? nested-path)]
     (cond
-      (and s-atom? path-in-sub-atom path-coll?-in-sub-atom)
-      (let [old-v (get-in @s path-in-sub-atom)]
-        (when (not= old-v value)
-          (swap! s assoc-in path-in-sub-atom value)))
+      (and nested-path nested-path-coll?)
+      (if path-coll?
+        (assoc-in db (into (vec path) nested-path) value)
+        (assoc-in db (into [path] nested-path) value))
 
-      (and s-atom? path-in-sub-atom)
-      (let [old-v (get @s path-in-sub-atom)]
-        (when (not= old-v value)
-          (swap! s assoc path-in-sub-atom value)))
-
-      s-atom?
-      (when (not= @s value)
-        (reset! s value))
+      nested-path
+      (if path-coll?
+        (assoc-in db (conj (vec path) nested-path) value)
+        (assoc-in db [path nested-path] value))
 
       path-coll?
-      (when (not= s value)
-        (swap! state assoc-in path value))
+      (assoc-in db path value)
 
       :else
-      (when (not= s value)
-        (swap! state assoc path value))))
+      (assoc db path value))))
+
+(defn- full-state-path
+  [path nested-path]
+  (let [base-path (if (coll? path) (vec path) [path])]
+    (cond
+      (and nested-path (coll? nested-path))
+      (into base-path nested-path)
+
+      nested-path
+      (conj base-path nested-path)
+
+      :else
+      base-path)))
+
+(defn- update-state-db
+  [db path f nested-path]
+  (let [path-coll?             (coll? path)
+        nested-path-coll? (coll? nested-path)]
+    (cond
+      (and nested-path nested-path-coll?)
+      (if path-coll?
+        (update-in db (into (vec path) nested-path) f)
+        (update-in db (into [path] nested-path) f))
+
+      nested-path
+      (if path-coll?
+        (update-in db (conj (vec path) nested-path) f)
+        (update-in db [path nested-path] f))
+
+      path-coll?
+      (update-in db path f)
+
+      :else
+      (update db path f))))
+
+(defn set-state!
+  [path value & {:keys [nested-path]}]
+  (vswap! *profile-state update path inc)
+  (let [old-v (read-state-value (rfx/snapshot) path nested-path)]
+    (when (not= old-v value)
+      (let [db' (assoc-state-db (rfx/snapshot) path value nested-path)]
+        (rfx/replace-state! db' (full-state-path path nested-path))
+        (reset! state db'))))
   nil)
 
 (defn update-state!
-  [path f & {:keys [path-in-sub-atom]}]
+  [path f & {:keys [nested-path]}]
   (vswap! *profile-state update path inc)
-  (let [path-coll?             (coll? path)
-        get-fn                 (if path-coll? get-in get)
-        s                      (get-fn @state path)
-        s-atom?                (util/atom? s)
-        path-coll?-in-sub-atom (coll? path-in-sub-atom)]
-    (cond
-      (and s-atom? path-in-sub-atom path-coll?-in-sub-atom)
-      (swap! s update-in path-in-sub-atom f)
-
-      (and s-atom? path-in-sub-atom)
-      (swap! s update path-in-sub-atom f)
-
-      s-atom?    (swap! s f)
-      path-coll? (swap! state update-in path f)
-      :else      (swap! state update path f)))
+  (let [db' (update-state-db (rfx/snapshot) path f nested-path)]
+    (rfx/replace-state! db' (full-state-path path nested-path))
+    (reset! state db'))
   nil)
+
+(defn replace-state!
+  [db]
+  (rfx/replace-state! db)
+  (reset! state db)
+  nil)
+
+(defn swap-state!
+  [f & args]
+  (replace-state! (apply f (rfx/snapshot) args)))
 
 ;; State getters and setters
 ;; =========================
@@ -912,8 +886,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn set-current-repo!
   [repo]
-  (swap! state assoc :git/current-repo repo)
-  (reset! flows/*current-repo repo)
+  (set-state! :git/current-repo repo)
   (if repo
     (storage/set :git/current-repo repo)
     (storage/remove :git/current-repo))
@@ -930,7 +903,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn delete-repo!
   [repo]
-  (swap! state update-in [:me :repos]
+  (swap-state! update-in [:me :repos]
          (fn [repos]
            (->> (remove #(or (= (:url repo) (:url %))
                              (and
@@ -945,15 +918,15 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-timestamp-block
   []
-  @(:editor/set-timestamp-block @state))
+  (get-state :editor/set-timestamp-block))
 
 (defn get-edit-block
   []
-  @(get @state :editor/block))
+  (get-state :editor/block))
 
 (defn editing?
   []
-  (seq @(:editor/editing? @state)))
+  (seq (get-state :editor/editing?)))
 
 (defn get-edit-input-id
   []
@@ -977,7 +950,7 @@ should be done through this fn in order to get global config and config defaults
      (when set-input-value?
        (when-let [input (gdom/getElement input-id)]
          (util/set-change-value input value)))
-     (set-state! :editor/content value :path-in-sub-atom
+     (set-state! :editor/content value :nested-path
                  (or (:block/uuid (get-edit-block)) input-id)))))
 
 (defn get-input
@@ -988,7 +961,7 @@ should be done through this fn in order to get global config and config defaults
 (defn get-edit-content
   []
   (when-let [id (:block/uuid (get-edit-block))]
-    (get @(:editor/content @state) id)))
+    (get (get-state :editor/content) id)))
 
 (defn set-selection-start-block!
   [start-block]
@@ -996,7 +969,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-selection-start-block
   []
-  (or @(get @state :selection/start-block)
+  (or (get-state :selection/start-block)
       (when-let [edit-block (get-edit-block)]
         (let [node (util/rec-get-node edit-block "ls-block")]
           (set-selection-start-block! node)
@@ -1004,7 +977,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-cursor-range
   []
-  @(:editor/cursor-range @state))
+  (get-state :editor/cursor-range))
 
 (defn set-cursor-range!
   [range]
@@ -1026,11 +999,11 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-editor-action
   []
-  @(:editor/action @state))
+  (get-state :editor/action))
 
 (defn get-editor-action-data
   []
-  (:editor/action-data @state))
+  (get-state :editor/action-data))
 
 (defn get-editor-show-page-search?
   []
@@ -1057,7 +1030,7 @@ should be done through this fn in order to get global config and config defaults
 (defn get-editor-show-input
   []
   (when (= (get-editor-action) :input)
-    (get @state :editor/action-data)))
+    (get-state :editor/action-data)))
 
 (defn set-editor-show-commands!
   []
@@ -1074,11 +1047,11 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-selection-direction
   []
-  @(:selection/direction @state))
+  (get-state :selection/direction))
 
 (defn get-unsorted-selection-blocks
   []
-  @(:selection/blocks @state))
+  (get-state :selection/blocks))
 
 (defn get-selection-blocks
   []
@@ -1092,20 +1065,6 @@ should be done through this fn in order to get global config and config defaults
   []
   (get-selected-block-ids (get-selection-blocks)))
 
-(def ^:private block-selected-flow
-  (m/watch (:selection/blocks @state)))
-
-(defn sub-block-selected?
-  [block-id]
-  (assert (uuid? block-id))
-  (sub-flow-state block-selected-flow
-                  (:selection/blocks @state)
-                  (fn [blocks]
-                    (some #{block-id} (get-selected-block-ids blocks)))
-                  [block-id]))
-
-(def use-sub-block-selected? sub-block-selected?)
-
 (defn dom-clear-selection!
   []
   (doseq [node (dom/by-class "selected")]
@@ -1118,17 +1077,10 @@ should be done through this fn in order to get global config and config defaults
     (when (dom/has-class? node "ls-table-row")
       (.focus node))))
 
-(defn get-events-chan
-  []
-  (:system/events @state))
-
 (defn pub-event!
   {:malli/schema [:=> [:cat vector?] :any]}
   [payload]
-  (let [d (p/deferred)
-        chan (get-events-chan)]
-    (async/put! chan [payload d])
-    d))
+  (rfx/pub-event! payload))
 
 (defn- unselect-node
   [node]
@@ -1139,7 +1091,7 @@ should be done through this fn in order to get global config and config defaults
 (defn- set-selection-blocks-aux!
   [blocks]
   (set-state! :view/selected-blocks nil)
-  (let [selected-blocks @(:selection/blocks @state)
+  (let [selected-blocks (get-state :selection/blocks)
         selected-ids (set (get-selected-block-ids selected-blocks))
         _ (set-state! :selection/blocks blocks)
         new-ids (set (get-selection-block-ids))
@@ -1216,14 +1168,14 @@ should be done through this fn in order to get global config and config defaults
 
 (defn drop-last-selection-block!
   []
-  (let [blocks @(:selection/blocks @state)
+  (let [blocks (get-state :selection/blocks)
         blocks' (vec (butlast blocks))]
     (set-selection-blocks-aux! blocks')
     (last blocks)))
 
 (defn hide-custom-context-menu!
   []
-  (swap! state assoc
+  (swap-state! assoc
          :custom-context-menu/show? false
          :custom-context-menu/links nil
          :custom-context-menu/position nil))
@@ -1241,11 +1193,11 @@ should be done through this fn in order to get global config and config defaults
 (defn open-right-sidebar!
   []
   (sidebar-add-content-when-open!)
-  (swap! state assoc :ui/sidebar-open? true))
+  (swap-state! assoc :ui/sidebar-open? true))
 
 (defn hide-right-sidebar!
   []
-  (swap! state assoc :ui/sidebar-open? false))
+  (swap-state! assoc :ui/sidebar-open? false))
 
 (defn toggle-sidebar-open?!
   []
@@ -1336,7 +1288,7 @@ should be done through this fn in order to get global config and config defaults
     (set-state! :editor/block nil))
   (set-state! :editor/args nil)
   (when clear-editing-block?
-    (let [online-users (some-> @state :rtc/state deref :online-users)]
+    (let [online-users (some-> (get-state :rtc/state) :online-users)]
       (when (and (coll? online-users) (> (count online-users) 1))
         (pub-event! [:rtc/presence-update {:editing-block-uuid nil}]))))
   (set-state! :editor/start-pos nil)
@@ -1356,7 +1308,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-editor-last-pos
   []
-  (get @(:editor/last-saved-cursor @state) (:block/uuid (get-edit-block))))
+  (get (get-state :editor/last-saved-cursor) (:block/uuid (get-edit-block))))
 
 (defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]
@@ -1460,18 +1412,18 @@ should be done through this fn in order to get global config and config defaults
   ([value]
    (save-scroll-position! value js/window.location.hash))
   ([value path]
-   (set-state! :ui/paths-scroll-positions value :path-in-sub-atom path)))
+   (set-state! :ui/paths-scroll-positions value :nested-path path)))
 
 (defn save-main-container-position!
   [value]
-  (when (not= value @(:ui/main-container-scroll-top @state))
+  (when (not= value (get-state :ui/main-container-scroll-top))
     (set-state! :ui/main-container-scroll-top value)))
 
 (defn get-saved-scroll-position
   ([]
    (get-saved-scroll-position js/window.location.hash))
   ([path]
-   (get @(get @state :ui/paths-scroll-positions) path 0)))
+   (get (get-state :ui/paths-scroll-positions) path 0)))
 
 (defn set-today!
   [value]
@@ -1485,11 +1437,11 @@ should be done through this fn in order to get global config and config defaults
   [value]
   (set-state! :db/restoring? value))
 
-(defn modal-opened?
+(defn dialog-opened?
   []
-  (shui-dialog/has-modal?))
+  (shui-dialog/has-dialog?))
 
-(defn close-modal! []
+(defn close-dialog! []
   (shui/dialog-close!))
 
 (defn get-reactive-custom-queries-chan
@@ -1519,13 +1471,9 @@ should be done through this fn in order to get global config and config defaults
   []
   (:ui/developer-mode? @state))
 
-(defn get-notification-contents
-  []
-  (get @state :notification/contents))
-
 (defn document-mode?
   []
-  (get @state :document/mode?))
+  (get-state :document/mode?))
 
 (defn toggle-document-mode!
   []
@@ -1535,12 +1483,12 @@ should be done through this fn in order to get global config and config defaults
 
 (defn toggle-highlight-recent-blocks!
   []
-  (let [value @(:ui/toggle-highlight-recent-blocks? @state)]
+  (let [value (get-state :ui/toggle-highlight-recent-blocks?)]
     (set-state! :ui/toggle-highlight-recent-blocks? (not value))))
 
 (defn shortcut-tooltip-enabled?
   []
-  (get @state :ui/shortcut-tooltip?))
+  (get-state :ui/shortcut-tooltip?))
 
 (defn toggle-shortcut-tooltip!
   []
@@ -1569,11 +1517,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn set-online!
   [value]
-  (set-state! :network/online? value)
-  ;; to avoid watch whole big state atom,
-  ;; there's an atom flows/*network-online?,
-  ;; then we can use flows/network-online-event-flow
-  (reset! flows/*network-online? value))
+  (set-state! :network/online? value))
 
 (defn get-plugins-slash-commands
   []
@@ -1676,7 +1620,7 @@ should be done through this fn in order to get global config and config defaults
   [pid hook-or-all]
   (when-let [pid (keyword pid)]
     (if (nil? hook-or-all)
-      (swap! state update :plugin/installed-hooks #(update-vals % (fn [ids] (dissoc ids pid))))
+      (swap-state! update :plugin/installed-hooks #(update-vals % (fn [ids] (dissoc ids pid))))
       (when-let [coll (get-in @state [:plugin/installed-hooks hook-or-all])]
         (set-state! [:plugin/installed-hooks hook-or-all] (dissoc coll pid))))
     true))
@@ -1697,13 +1641,13 @@ should be done through this fn in order to get global config and config defaults
 
 (defn set-editor-last-input-time!
   [repo time]
-  (set-state! :editor/last-input-time time :path-in-sub-atom repo))
+  (set-state! :editor/last-input-time time :nested-path repo))
 
 (defn input-idle?
   [repo & {:keys [diff]
            :or {diff 1000}}]
   (when repo
-    (let [last-input-time (get @(get @state :editor/last-input-time) repo)]
+    (let [last-input-time (get (get-state :editor/last-input-time) repo)]
       (or
        (nil? last-input-time)
 
@@ -1813,7 +1757,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-editor-args
   []
-  @(:editor/args @state))
+  (get-state :editor/args))
 
 (defn get-editor-block-container
   []
@@ -1871,11 +1815,11 @@ should be done through this fn in order to get global config and config defaults
           (set-editing-block-id! [container-id (:block/uuid property-block) (:block/uuid block)])
           (set-editing-block-id! [container-id (:block/uuid block)]))
         (set-state! :editor/container-id container-id)
-        (set-state! :editor/content content :path-in-sub-atom (:block/uuid block))
+        (set-state! :editor/content content :nested-path (:block/uuid block))
         (set-state! :editor/last-key-code nil)
         (set-state! :editor/set-timestamp-block nil)
         (set-state! :editor/cursor-range cursor-range)
-        (let [online-users (some-> @state :rtc/state deref :online-users)]
+        (let [online-users (some-> (get-state :rtc/state) :online-users)]
           (when (and (coll? online-users) (> (count online-users) 1))
             (when-let [block-uuid (:block/uuid block)]
               (pub-event! [:rtc/presence-update {:editing-block-uuid (str block-uuid)}]))))
@@ -1898,7 +1842,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-last-key-code
   []
-  @(:editor/last-key-code @state))
+  (get-state :editor/last-key-code))
 
 (defn set-ui-last-key-code!
   [key-code]
@@ -1906,7 +1850,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-ui-last-key-code
   []
-  @(:ui/global-last-key-code @state))
+  (get-state :ui/global-last-key-code))
 
 (defn set-block-op-type!
   [op-type]
@@ -1946,12 +1890,12 @@ should be done through this fn in order to get global config and config defaults
   (when-let [id (keyword (:id payload))]
     (let [prev-pending? (boolean (seq (:plugin/updates-pending @state)))]
       (println "Updates: consumed pending - " id)
-      (swap! state update :plugin/updates-pending dissoc id)
+      (swap-state! update :plugin/updates-pending dissoc id)
       (if updated?
         (if-let [error (:error-code payload)]
-          (swap! state update-in [:plugin/updates-coming id] assoc :error-code error)
-          (swap! state update :plugin/updates-coming dissoc id))
-        (swap! state update :plugin/updates-coming assoc id payload))
+          (swap-state! update-in [:plugin/updates-coming id] assoc :error-code error)
+          (swap-state! update :plugin/updates-coming dissoc id))
+        (swap-state! update :plugin/updates-coming assoc id payload))
       (pub-event! [:plugin/consume-updates id prev-pending? updated?]))))
 
 (defn coming-update-new-version?
@@ -1977,15 +1921,15 @@ should be done through this fn in order to get global config and config defaults
 
 (defn set-unchecked-update
   [id unchecked?]
-  (swap! state update :plugin/updates-unchecked (if unchecked? conj disj) id))
+  (swap-state! update :plugin/updates-unchecked (if unchecked? conj disj) id))
 
 (defn reset-unchecked-update
   []
-  (swap! state assoc :plugin/updates-unchecked #{}))
+  (swap-state! assoc :plugin/updates-unchecked #{}))
 
 (defn reset-all-updates-state
   []
-  (swap! state assoc
+  (swap-state! assoc
          :plugin/updates-auto-checking?         false
          :plugin/updates-pending                {}
          :plugin/updates-coming                 {}
@@ -1993,16 +1937,16 @@ should be done through this fn in order to get global config and config defaults
 
 (defn use-right-sidebar-blocks
   []
-  (let [current-repo (use-sub :git/current-repo)
-        blocks (use-sub :sidebar/blocks)]
+  (let [current-repo (rfx/use-sub [:git/current-repo])
+        blocks (rfx/use-sub [:sidebar/blocks])]
     (when current-repo
       (filter #(= (first %) current-repo) blocks))))
 
 (defn get-current-editor-container-id
   []
-  @(:editor/container-id @state))
+  (get-state :editor/container-id))
 
-(defn- resolve-container-id
+(defn resolve-container-id
   [container-id]
   (or container-id (get-current-editor-container-id) :unknown-container))
 
@@ -2020,19 +1964,14 @@ should be done through this fn in order to get global config and config defaults
          container-id (resolve-container-id container-id)]
      (set-state! [:ui/collapsed-blocks current-repo container-id block-id] value))))
 
-(defn use-sub-block-collapsed
-  ([block-id] (use-sub-block-collapsed block-id nil))
-  ([block-id container-id]
-   (use-sub [:ui/collapsed-blocks (get-current-repo) (resolve-container-id container-id) block-id])))
-
 (defn get-block-collapsed
   ([block-id] (get-block-collapsed block-id nil))
   ([block-id container-id]
    (get-in @state [:ui/collapsed-blocks (get-current-repo) (resolve-container-id container-id) block-id])))
 
-(defn get-modal-id
+(defn get-dialog-id
   []
-  (shui-dialog/get-last-modal-id))
+  (shui-dialog/get-last-dialog-id))
 
 (defn set-auth-id-token
   [id-token]
@@ -2086,13 +2025,13 @@ should be done through this fn in order to get global config and config defaults
   (storage/remove :user-groups))
 
 (defn set-color-accent! [color]
-  (swap! state assoc :ui/radix-color color)
+  (swap-state! assoc :ui/radix-color color)
   (storage/set :ui/radix-color color))
 
 (defn set-editor-font! [config]
   (let [config' (:ui/editor-font @state)
         config (if (map? config') (merge config' config) {})]
-    (swap! state assoc :ui/editor-font config)
+    (swap-state! assoc :ui/editor-font config)
     (storage/set :ui/editor-font config)))
 
 (defn handbook-open?
@@ -2116,15 +2055,17 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-next-container-id
   []
-  (swap! (:ui/container-id @state) inc))
+  (let [next-id (inc (or (get-state :ui/container-id) 0))]
+    (set-state! :ui/container-id next-id)
+    next-id))
 
 (defn get-container-id
   "Either cached container-id or a new id"
   [key]
   (if (seq key)
-    (or (get @(:ui/cached-key->container-id @state) key)
+    (or (get (get-state :ui/cached-key->container-id) key)
         (let [id (get-next-container-id)]
-          (swap! (:ui/cached-key->container-id @state) assoc key id)
+          (update-state! :ui/cached-key->container-id assoc key id)
           id))
     (get-next-container-id)))
 
@@ -2138,7 +2079,7 @@ should be done through this fn in order to get global config and config defaults
 (comment
   (defn remove-container-key!
     [key]
-    (swap! (:ui/cached-key->container-id @state) dissoc key)))
+    (update-state! :ui/cached-key->container-id dissoc key)))
 
 (defn get-editor-info
   []
@@ -2148,8 +2089,8 @@ should be done through this fn in order to get global config and config defaults
                           :selection-direction (get-selection-direction)})]
     (if-let [edit-block (get-edit-block)]
       (cond-> {:block-uuid (:block/uuid edit-block)
-               :container-id (or @(:editor/container-id @state) :unknown-container)
-               :start-pos @(:editor/start-pos @state)
+               :container-id (or (get-state :editor/container-id) :unknown-container)
+               :start-pos (get-state :editor/start-pos)
                :end-pos (get-edit-pos)}
         selection-info
         (merge selection-info))
@@ -2157,16 +2098,15 @@ should be done through this fn in order to get global config and config defaults
 
 (defn conj-block-ref!
   [ref-entity]
-  (let [refs! (:editor/block-refs @state)]
-    (swap! refs! conj ref-entity)))
+  (update-state! :editor/block-refs conj ref-entity))
 
 (defn get-highlight-recent-days
   []
-  @(:ui/highlight-recent-days @state))
+  (get-state :ui/highlight-recent-days))
 
 (defn set-highlight-recent-days!
   [days]
-  (reset! (:ui/highlight-recent-days @state) days)
+  (set-state! :ui/highlight-recent-days days)
   (storage/set :ui/highlight-recent-days days))
 
 (defn set-db-worker-client-id!

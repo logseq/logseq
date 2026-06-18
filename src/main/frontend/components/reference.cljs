@@ -1,6 +1,5 @@
 (ns frontend.components.reference
-  (:require [frontend.common.missionary :as c.m]
-            [frontend.components.reference-filters :as filters]
+  (:require [frontend.components.reference-filters :as filters]
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -10,7 +9,6 @@
             [logseq.db.common.reference :as db-reference]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [io.factorhouse.hsx.core :as hsx]
             [promesa.core :as p]))
 
@@ -63,15 +61,14 @@
   (let [id (:db/id entity)
         [refs-total-count set-refs-total-count!] (hooks/use-state (:refs-count config))]
     (hooks/use-effect!
-     #(when id
-        (c.m/run-task*
-         (m/sp
-           (if-let [refs-count (:refs-count config)]
-             (set-refs-total-count! refs-count)
-             (let [result (c.m/<? (db-async/<get-block-refs-count (state/get-current-repo) id))]
-               (set-refs-total-count! result))))))
+     (fn []
+       (when id
+         (if-let [refs-count (:refs-count config)]
+          (set-refs-total-count! refs-count)
+          (p/let [result (db-async/<get-block-refs-count (state/get-current-repo) id)]
+            (set-refs-total-count! result)))))
      [id (:refs-count config)])
-    (when (and id refs-total-count (> refs-total-count 0))
+    (when (> refs-total-count 0)
       (ui/catch-error
        (ui/component-error
         "Linked References: Unexpected error.")
@@ -86,10 +83,10 @@
      (fn []
        (when id
          (p/let [result (state/<invoke-db-worker :thread-api/block-refs-check
-                                                 (state/get-current-repo) id {:unlinked? true})]
-           (set-has-references! result))))
+                                                (state/get-current-repo) id {:unlinked? true})]
+          (set-has-references! result))))
      [id])
-    (when (and id has-references?)
+    (when has-references?
       (let [config (assoc config :highlight-query (:block/title entity))]
         [:div.unlinked-references
          (views/view

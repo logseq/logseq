@@ -34,7 +34,7 @@
                        (when-not page-db-id
                          {:files files}))
                search-key (if more? :search/more-result :search/result)]
-           (swap! state/state assoc search-key result)
+           (state/swap-state! assoc search-key result)
            result))))))
 
 (defn open-find-in-page!
@@ -97,7 +97,7 @@
   ([clear-search-mode?]
    (let [m {:search/result nil
             :search/q ""}]
-     (swap! state/state merge m)
+     (state/swap-state! merge m)
      (when config/lsp-enabled? (state/reset-plugin-search-engines)))
    (when clear-search-mode?
      (state/set-search-mode! :global))))
@@ -128,7 +128,7 @@
             [:span
              (when-not (string/blank? before)
                [:span before])
-             [:mark.p-0.rounded-none (subs content i (+ i (count q)))]
+             [:mark {:style {:padding 0 :border-radius 0}} (subs content i (+ i (count q)))]
              (when-not (string/blank? after)
                [:span after])])
           (let [elements (loop [words q-words
@@ -144,7 +144,7 @@
                                         (vec
                                          (concat result
                                                  [[:span (subs content 0 i)]
-                                                  [:mark.p-0.rounded-none (subs content i (+ i (count word)))]])))
+                                                  [:mark {:style {:padding 0 :border-radius 0}} (subs content i (+ i (count word)))]])))
                                  (recur nil
                                         content
                                         result)))

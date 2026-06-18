@@ -128,7 +128,7 @@
   (add-watch state/state
              :sync-ui-state
              (fn [_ _ prev current]
-               (when-not @(:history/paused? @state/state)
+               (when-not (state/get-state :history/paused?)
                  (let [f (fn [state]
                            (-> (select-keys state [:ui/sidebar-open? :ui/sidebar-collapsed-blocks :sidebar/blocks])
                                (assoc :route-data (get-route-data (:route-match state)))))

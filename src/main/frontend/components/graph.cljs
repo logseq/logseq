@@ -4,6 +4,7 @@
             [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
             [frontend.extensions.graph :as graph]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [lambdaisland.glogi :as log]
@@ -891,7 +892,7 @@
 (hsx/defc global-graph
   []
   (let [repo (state/get-current-repo)
-        theme (state/use-sub :ui/theme)
+        theme (rfx/use-sub [:ui/theme])
         theme-token (use-theme-token)
         dark? (effective-dark-theme? theme theme-token)
         [settings-state set-settings-state!] (hooks/use-state {:repo repo :settings (load-graph-settings repo)})

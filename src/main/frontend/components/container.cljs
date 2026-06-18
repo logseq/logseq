@@ -24,6 +24,7 @@
             [frontend.mobile.footer :as footer]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -45,7 +46,7 @@
   (when-let [^js element (gdom/getElement "main-content-container")]
     (let [active-element (.-activeElement js/document)]
       (when (and (not (state/editing?))
-                 (not (state/modal-opened?))
+                 (not (state/dialog-opened?))
                  (or (nil? active-element)
                      (identical? active-element (.-body js/document))))
         (.focus element #js {:preventScroll true})))))
@@ -55,7 +56,7 @@
 
 (hsx/defc main
   [{:keys [route-match margin-less-pages? route-name db-restoring? main-content]}]
-  (let [left-sidebar-open? (state/use-sub :ui/left-sidebar-open?)
+  (let [left-sidebar-open? (rfx/use-sub [:ui/left-sidebar-open?])
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
                                   (= :home route-name))
@@ -124,7 +125,7 @@
 (hsx/defc main-content
   []
   (let [default-home (app-left-sidebar/get-default-home-if-valid)
-           current-repo (state/use-sub :git/current-repo)
+           current-repo (rfx/use-sub [:git/current-repo])
            redirect-target (cond
                              (and default-home
                                   (= :home (state/get-current-route))
@@ -170,7 +171,7 @@
                 (util/meta-key? e)
                 (state/get-edit-input-id)
                 (some-> (.-target e) util/input?)
-                (= (shui-dialog/get-last-modal-id) :property-dialog)
+                (= (shui-dialog/get-last-dialog-id) :property-dialog)
                 (some-> (.-target e) (.closest ".ls-block"))
                 (some-> (.-target e) (.closest "[data-keep-selection]")))
     (if (and esc? (editor-handler/popup-exists? :selection-action-bar))
@@ -195,36 +196,35 @@
 
 (hsx/defc custom-context-menu
   []
-  (let [show? (state/use-sub :custom-context-menu/show?)
-        links (state/use-sub :custom-context-menu/links)
-        position (state/use-sub :custom-context-menu/position)]
+  (let [show? (rfx/use-sub [:custom-context-menu/show?])
+        links (rfx/use-sub [:custom-context-menu/links])
+        position (rfx/use-sub [:custom-context-menu/position])]
     (when (and show? links position)
       (render-custom-context-menu links position))))
 
 (hsx/defc new-block-mode
   []
-  (let [document-mode? (state/use-sub [:document/mode?])]
-    (when document-mode?
-      (ui/tooltip
-       [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
-        {:on-click state/toggle-document-mode!}
-        "D"]
-       [:div.p-2
-        [:p.mb-2 [:b (t :editor.document-mode/title)]]
-        [:ul
-         [:li
-          [:p.inline-block.mr-1
-           (interpolate-rich-text-node
-            (t :editor.document-mode/new-block-hint)
-            [[:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :editor/new-line)
-                                                                  :shortcut-id :editor/new-line)]])]
-          [:li
-           [:p.inline-block.mr-1
-            (interpolate-rich-text-node
-             (t :editor.document-mode/toggle-desc)
-             [[:div.inline-block.mr-1
-               (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :ui/toggle-document-mode)
-                                            :shortcut-id :ui/toggle-document-mode)]])]]]]]))))
+  (when (rfx/use-sub [:document/mode?])
+    (ui/tooltip
+     [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
+      {:on-click state/toggle-document-mode!}
+      "D"]
+     [:div.p-2
+      [:p.mb-2 [:b (t :editor.document-mode/title)]]
+      [:ul
+       [:li
+        [:p.inline-block.mr-1
+         (interpolate-rich-text-node
+          (t :editor.document-mode/new-block-hint)
+          [[:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :editor/new-line)
+                                                                :shortcut-id :editor/new-line)]])]
+        [:li
+         [:p.inline-block.mr-1
+          (interpolate-rich-text-node
+           (t :editor.document-mode/toggle-desc)
+           [[:div.inline-block.mr-1
+             (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :ui/toggle-document-mode)
+                                          :shortcut-id :ui/toggle-document-mode)]])]]]]])))
 
 (def help-menu-items
   [{:title (t :help/handbook) :icon "book-2" :on-click #(handbooks/toggle-handbooks)}
@@ -249,7 +249,10 @@
 
   (hooks/use-effect!
    (fn []
-     (let [h #(state/set-state! :ui/help-open? false)]
+     (let [h (fn [^js e]
+               (when-not (some-> (.-target e)
+                                  (.closest ".cp__sidebar-help-btn, .cp__sidebar-help-menu-popup"))
+                 (state/set-state! :ui/help-open? false)))]
        (.addEventListener js/document.body "click" h)
        #(.removeEventListener js/document.body "click" h)))
    [])
@@ -259,7 +262,8 @@
     (for [[idx {:keys [title icon href on-click] :as item}] (medley/indexed help-menu-items)]
       (case item
         :hr
-        [:hr.my-2 {:key idx}]
+        [:hr {:class "!my-2"
+              :key idx}]
 
         ;; default
         [:a.it.flex.items-center.px-4.py-1.select-none
@@ -276,8 +280,8 @@
 
 (hsx/defc help-button
   []
-  (let [help-open? (state/use-sub :ui/help-open?)
-        handbooks-open? (state/use-sub :ui/handbooks-open?)]
+  (let [help-open? (rfx/use-sub [:ui/help-open?])
+        handbooks-open? (rfx/use-sub [:ui/handbooks-open?])]
     [:<>
      [:div.cp__sidebar-help-btn
       (ui/tooltip
@@ -389,68 +393,90 @@
    [])
   nil)
 
+(defn- skip-selection-action-bar-target?
+  [target]
+  (when target
+    (or (.closest target ".block-control-wrap")
+        (.closest target "button")
+        (.closest target "input")
+        (.closest target "textarea")
+        (.closest target "a"))))
+
+(defn- maybe-show-selection-action-bar!
+  [target]
+  (when-not (skip-selection-action-bar-target? target)
+    (editor-handler/show-action-bar!)))
+
+(defn- show-selection-action-bar-for-pointer!
+  [button target]
+  (when (zero? button)
+    (maybe-show-selection-action-bar! target)))
+
 (defn- on-mouse-up
   [e]
-  (when-not (or (.closest (.-target e) ".block-control-wrap")
-                (.closest (.-target e) "button")
-                (.closest (.-target e) "input")
-                (.closest (.-target e) "textarea")
-                (.closest (.-target e) "a"))
-    (editor-handler/show-action-bar!)))
+  (show-selection-action-bar-for-pointer! (.-button e) (.-target e)))
+
+(defn- on-pointer-up
+  [e]
+  (block-selection/clear-pointer-down!)
+  (let [button (.-button e)
+        target (.-target e)]
+    (js/setTimeout #(show-selection-action-bar-for-pointer! button target)
+                   0)))
 
 (hsx/defc ^:large-vars/cleanup-todo root-container
   [route-match main-content']
-  (let [current-repo (state/use-sub :git/current-repo)
-        theme (state/use-sub :ui/theme)
-        accent-color (some-> (state/use-sub :ui/radix-color) (name))
-        editor-font (state/use-sub :ui/editor-font)
-        system-theme? (state/use-sub :ui/system-theme?)
+  (let [current-repo (rfx/use-sub [:git/current-repo])
+        theme (rfx/use-sub [:ui/theme])
+        accent-color (some-> (rfx/use-sub [:ui/radix-color]) (name))
+        editor-font (rfx/use-sub [:ui/editor-font])
+        system-theme? (rfx/use-sub [:ui/system-theme?])
         light? (= "light" theme)
-        sidebar-open? (state/use-sub :ui/sidebar-open?)
-        settings-open? (state/use-sub :ui/settings-open?)
-        left-sidebar-open? (state/use-sub :ui/left-sidebar-open?)
-        wide-mode? (state/use-sub :ui/wide-mode?)
-        ls-block-hl-colored? (state/use-sub :pdf/block-highlight-colored?)
+        sidebar-open? (rfx/use-sub [:ui/sidebar-open?])
+        settings-open? (rfx/use-sub [:ui/settings-open?])
+        left-sidebar-open? (rfx/use-sub [:ui/left-sidebar-open?])
+        wide-mode? (rfx/use-sub [:ui/wide-mode?])
+        ls-block-hl-colored? (rfx/use-sub [:pdf/block-highlight-colored?])
         right-sidebar-blocks (state/use-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
         margin-less-pages? (boolean (#{:graph} route-name))
-        db-restoring? (state/use-sub :db/restoring?)
+        db-restoring? (rfx/use-sub [:db/restoring?])
         page? (= :page route-name)
         home? (= :home route-name)
-        native-titlebar? (state/use-sub [:electron/user-cfgs :window/native-titlebar?])
+        native-titlebar? (rfx/use-sub [:electron/user-cfgs :window/native-titlebar?])
         window-controls? (and (util/electron?) (not util/mac?) (not native-titlebar?))
         edit? (state/editing?)
         default-home (app-left-sidebar/get-default-home-if-valid)
         logged? (user-handler/logged-in?)
         fold-button-on-right? (state/use-enable-fold-button-right?)
-        show-action-bar? (state/use-sub :mobile/show-action-bar?)
-        preferred-language (state/use-sub [:preferred-language])
-        uploading? (state/use-sub :rtc/uploading?)]
+        show-action-bar? (rfx/use-sub [:mobile/show-action-bar?])
+        preferred-language (rfx/use-sub [:preferred-language])
+        uploading? (rfx/use-sub [:rtc/uploading?])]
     (hooks/use-effect!
      (fn []
        (let [keydown-handler (fn [e]
                                (cond
                                  (= 27 (.-keyCode e))
-                                 (if (and (state/modal-opened?)
+                                 (if (and (state/dialog-opened?)
                                           (not
                                            (and
                                             ;; FIXME: this does not work on CI tests
                                             util/node-test?
                                             (state/editing?))))
-                                   (state/close-modal!)
+                                   (state/close-dialog!)
                                    (hide-context-menu-and-clear-selection e {:esc? true})))
                                (state/set-ui-last-key-code! (.-key e)))
              keyup-handler (fn [_e]
                              (state/set-state! :editor/latest-shortcut nil))]
          (.addEventListener js/window "pointerdown" hide-context-menu-and-clear-selection)
-         (.addEventListener js/window "pointerup" block-selection/clear-pointer-down!)
+         (.addEventListener js/window "pointerup" on-pointer-up)
          (.addEventListener js/window "pointercancel" block-selection/clear-pointer-down!)
          (.addEventListener js/window "blur" block-selection/clear-pointer-down!)
          (.addEventListener js/window "keydown" keydown-handler)
          (.addEventListener js/window "keyup" keyup-handler)
          #(do
             (.removeEventListener js/window "pointerdown" hide-context-menu-and-clear-selection)
-            (.removeEventListener js/window "pointerup" block-selection/clear-pointer-down!)
+            (.removeEventListener js/window "pointerup" on-pointer-up)
             (.removeEventListener js/window "pointercancel" block-selection/clear-pointer-down!)
             (.removeEventListener js/window "blur" block-selection/clear-pointer-down!)
             (.removeEventListener js/window "keydown" keydown-handler)
@@ -531,10 +557,8 @@
 
        [:div#app-single-container]]
 
-      (ui/notification)
-
       (shui-toaster/install-toaster)
-      (shui-dialog/install-modals)
+      (shui-dialog/install-dialogs)
       (shui-popup/install-popups)
 
       (custom-context-menu)

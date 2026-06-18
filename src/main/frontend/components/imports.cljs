@@ -21,6 +21,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.persist-db.browser :as db-browser]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -440,7 +441,7 @@
 
 (hsx/defc indicator-progress
   []
-  (let [{:keys [total current-idx current-page label]} (state/use-sub :graph/importing-state)
+  (let [{:keys [total current-idx current-page label]} (rfx/use-sub [:graph/importing-state])
         label (or label (t :import/loading))
         left-label (if (and current-idx total (= current-idx total))
                      [:div.flex.flex-row.font-bold (t :ui/loading)]
@@ -460,7 +461,7 @@
   [importing?]
   (hooks/use-effect!
    (fn []
-     (when (and importing? (not (shui-dialog/get-modal :import-indicator)))
+     (when (and importing? (not (shui-dialog/get-dialog :import-indicator)))
        (shui/dialog-open! indicator-progress
                           {:id :import-indicator
                            :content-props
@@ -473,7 +474,7 @@
 ;; will complain about it.
 (hsx/defc ^:large-vars/cleanup-todo importer
   [{:keys [query-params]}]
-  (let [importing? (state/use-sub :graph/importing)]
+  (let [importing? (rfx/use-sub [:graph/importing])]
     [:<>
      (import-indicator importing?)
      (when-not importing?

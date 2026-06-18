@@ -2,7 +2,6 @@
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.colors :as colors]
-            [frontend.common.missionary :as c.m]
             [frontend.components.assets :as assets]
             [frontend.components.shortcut :as shortcut]
             [frontend.components.svg :as svg]
@@ -22,6 +21,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
+            [frontend.rfx :as rfx]
             [frontend.spec.storage :as storage-spec]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -34,7 +34,6 @@
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [io.factorhouse.hsx.core :as hsx]))
@@ -54,8 +53,8 @@
 
 (hsx/defc app-updater
   [version]
-  (let [update-pending? (state/use-sub :electron/updater-pending?)
-        {:keys [type payload]} (state/use-sub :electron/updater)]
+  (let [update-pending? (rfx/use-sub [:electron/updater-pending?])
+        {:keys [type payload]} (rfx/use-sub [:electron/updater])]
     [:span.cp__settings-app-updater
      [:div.ctls.flex.items-center
       [:div.mt-1.sm:mt-0.sm:col-span-2.flex.gap-4.items-center.flex-wrap
@@ -151,7 +150,7 @@
 
 (hsx/defc outdenting-hint
   []
-  [:div.ui__modal-panel
+  [:div.rounded-lg.border.overflow-hidden.bg-card
    {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
    [:div {:style {:margin "12px" :max-width "500px"}}
     [:p.text-sm
@@ -165,7 +164,7 @@
 
 (hsx/defc auto-expand-hint
   []
-  [:div.ui__modal-panel
+  [:div.rounded-lg.border.overflow-hidden.bg-card
    {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
    [:div {:style {:margin "12px" :max-width "500px"}}
     [:p.text-sm
@@ -276,8 +275,7 @@
        (shui/button
         {:key t
          :variant :secondary
-         :class (when active? " border-primary border-[2px]")
-         :style {:width "4.4rem"}
+         :class (str "cursor-pointer" (when active? " !border-primary border-[2px]"))
          :on-click #(state/set-editor-font! {:type t})}
         [:span.flex.flex-col
          {:class (str "ls-font-" t)}
@@ -291,7 +289,7 @@
 
 (hsx/defc switch-spell-check-row
   [t]
-  (let [enabled? (state/use-sub [:electron/user-cfgs :spell-check])]
+  (let [enabled? (rfx/use-sub [:electron/user-cfgs :spell-check])]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       (t :settings.editor/spell-checker)]
@@ -307,7 +305,7 @@
         true)]]]))
 
 (hsx/defc app-auto-update-row [t]
-  (let [enabled? (state/use-sub [:electron/user-cfgs :auto-update])
+  (let [enabled? (rfx/use-sub [:electron/user-cfgs :auto-update])
         enabled? (if (nil? enabled?) true enabled?)]
     (toggle "usage-diagnostics"
             (t :settings.advanced/auto-updater)
@@ -316,32 +314,48 @@
               (ipc/ipc :userAppCfgs :auto-update (not enabled?))))))
 
 (defn language-row [t preferred-language]
-  (let [on-change (fn [e]
-                    (let [lang-code (util/evalue e)]
-                      (state/set-preferred-language! lang-code)
-                      (state/pub-event! [:init/commands])
-                      (ui-handler/re-render-root!)))
-        action [:select.form-select.is-small {:value     preferred-language
-                                              :on-change on-change}
-                (for [language dicts/languages]
-                  (let [lang-code (name (:value language))
-                        lang-label (:label language)]
-                    [:option {:key lang-code :value lang-code} lang-label]))]]
+  (let [selected-language (some-> preferred-language name)
+        language-items (mapv (fn [language]
+                               {:value (name (:value language))
+                                :label (:label language)})
+                             dicts/languages)
+        language-labels (into {} (map (juxt :value :label)) language-items)
+        on-value-change (fn [lang-code]
+                          (when lang-code
+                            (state/set-preferred-language! lang-code)
+                            (state/pub-event! [:init/commands])
+                            (ui-handler/re-render-root!)))
+        action (shui/select
+                {:value selected-language
+                 :items language-items
+                 :on-value-change on-value-change}
+                (shui/select-trigger
+                 {:class "w-64 h-8"}
+                 (shui/select-value
+                  (fn [value]
+                    (get language-labels value value))))
+                (shui/select-content
+                 {:container (.-body js/document)
+                  :class "z-[99999]"
+                  :positioner-props {:style {:z-index 99999}}}
+                 (shui/select-group
+                  (for [{:keys [value label]} language-items]
+                    (shui/select-item {:key value :value value} label)))))]
     (row-with-button-action {:left-label (t :settings.general/language)
                              :-for       "preferred_language"
                              :action     action})))
 
 (hsx/defc theme-modes-row
   [t]
-  (let [theme (state/use-sub :ui/theme)
+  (let [theme (rfx/use-sub [:ui/theme])
         dark? (= "dark" theme)
-        system-theme? (state/use-sub :ui/system-theme?)
+        system-theme? (rfx/use-sub [:ui/system-theme?])
         switch-theme (if dark? "light" "dark")
         switch-theme-label (case switch-theme
                              "light" (t :settings.general/theme-light)
                              "dark" (t :settings.general/theme-dark)
                              (t :settings.general/theme-system))
-        color-accent (state/use-sub :ui/radix-color)
+        color-accent (rfx/use-sub [:ui/radix-color])
         pick-theme [:ul.cp__theme-modes-options
                     [:li {:on-click (partial state/use-theme-mode! "light")
                           :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light {:class (when color-accent "radix")}] [:strong (t :settings.general/theme-light)]]
@@ -358,7 +372,7 @@
 
 (hsx/defc accent-color-row
   [_in-modal?]
-  (let [color-accent (state/use-sub :ui/radix-color)
+  (let [color-accent (rfx/use-sub [:ui/radix-color])
         color-label (fn [color]
                       (case color
                         :none [:p {:style {:max-width "300px"}}
@@ -387,7 +401,7 @@
                        {:key (name color)}
                        (ui/tooltip
                         (shui/button
-                         {:class "w-5 h-5 px-1 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
+                         {:class "w-5 h-5 px-1 !rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
                           :auto-focus (and _in-modal? active?)
                           :style {:background-color (colors/variable color :09)
                                   :outline-color (colors/variable color (if active? :07 :06))
@@ -398,7 +412,7 @@
                           :on-click (fn [_e] (state/set-color-accent! color))}
                          [:strong
                           {:class (if none? "h-0.5 w-full bg-red-700"
-                                      "w-2 h-2 rounded-full transition ease-in duration-100")
+                                      "w-2 h-2 !rounded-full transition ease-in duration-100")
                            :style {:background-color (if-not none? (str "var(--rx-" (name color) "-07)") "")
                                    :opacity (if (or none? active?) 1 0)}}])
 
@@ -419,10 +433,10 @@
 
 (hsx/defc appearance
   []
-  (let [_config (state/use-sub :config)
-        editor-font (state/use-sub :ui/editor-font)
-        wide-mode? (state/use-sub :ui/wide-mode?)]
-    [:div#appearance_settings.cp__settings-appearance-modal-inner
+  (let [_config (rfx/use-sub [:config])
+        editor-font (rfx/use-sub [:ui/editor-font])
+        wide-mode? (rfx/use-sub [:ui/wide-mode?])]
+    [:div#appearance_settings.cp__settings-appearance-dialog-inner
      (theme-modes-row t)
      (editor-font-family-row t editor-font)
      (toggle-wide-mode-row t wide-mode?)
@@ -770,7 +784,8 @@
 (hsx/defc markdown-mirror-row
   [t]
   (let [repo (state/get-current-repo)
-        repo-config (state/use-sub [:config repo])
+        repo-config (rfx/use-sub [:config repo])
+        repo-config (when repo repo-config)
         enabled? (true? (:feature/markdown-mirror? repo-config))
         *regenerating? (hooks/use-memo #(atom false) [])
         [regenerating?] (hooks/use-atom *regenerating?)
@@ -819,10 +834,9 @@
 
 (hsx/defc auto-chmod-row
   [t]
-  (let [auto-chmod-enabled? (state/use-sub [:electron/user-cfgs :feature/enable-automatic-chmod?])
-        enabled? (if (nil? auto-chmod-enabled?)
+  (let [enabled? (if (= nil (rfx/use-sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))
                    true
-                   auto-chmod-enabled?)]
+                   (rfx/use-sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))]
     (toggle
      "automatic-chmod"
      (t :settings.advanced/auto-chmod)
@@ -834,7 +848,7 @@
 
 (hsx/defc native-titlebar-row
   [t]
-  (let [enabled? (state/use-sub [:electron/user-cfgs :window/native-titlebar?])]
+  (let [enabled? (rfx/use-sub [:electron/user-cfgs :window/native-titlebar?])]
     (toggle
      "native-titlebar"
      (t :settings.general/native-titlebar)
@@ -847,9 +861,9 @@
 
 (hsx/defc settings-general
   [current-repo]
-  (let [preferred-language (state/use-sub [:preferred-language])
+  (let [preferred-language (rfx/use-sub [:preferred-language])
         show-radix-themes? true
-        editor-font (state/use-sub :ui/editor-font)]
+        editor-font (rfx/use-sub [:ui/editor-font])]
     [:div.panel-wrap.is-general
      (version-row t fv/version)
      (language-row t preferred-language)
@@ -864,7 +878,7 @@
 
 (hsx/defc settings-editor
   []
-  (let [_config (state/use-sub :config)
+  (let [_config (rfx/use-sub [:config])
         preferred-date-format (state/get-date-formatter)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
@@ -872,9 +886,9 @@
         preferred-pasting-file? (state/preferred-pasting-file?)
         auto-expand-block-refs? (state/auto-expand-block-refs?)
         enable-tooltip? (state/enable-tooltip?)
-        enable-shortcut-tooltip? (state/use-sub :ui/shortcut-tooltip?)
+        enable-shortcut-tooltip? (rfx/use-sub [:ui/shortcut-tooltip?])
         show-brackets? (state/show-brackets?)
-        wide-mode? (state/use-sub :ui/wide-mode?)]
+        wide-mode? (rfx/use-sub [:ui/wide-mode?])]
 
     [:div.panel-wrap.is-editor
      (date-format-row t preferred-date-format)
@@ -894,9 +908,9 @@
 
 (hsx/defc settings-advanced
   []
-  (let [instrument-disabled? (state/use-sub :instrument/disabled?)
-        developer-mode? (state/use-sub [:ui/developer-mode?])
-        https-agent-opts (state/use-sub [:electron/user-cfgs :settings/agent])]
+  (let [instrument-disabled? (rfx/use-sub [:instrument/disabled?])
+        developer-mode? (rfx/use-sub [:ui/developer-mode?])
+        https-agent-opts (rfx/use-sub [:electron/user-cfgs :settings/agent])]
     [:div.panel-wrap.is-advanced
      (when (and (or util/mac? util/win32?) (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
@@ -961,10 +975,10 @@
 (hsx/defc ^:large-vars/cleanup-todo settings-account
   []
   (let [graph-usage []
-        auth-refresh-token (state/use-sub :auth/refresh-token)
+        auth-refresh-token (rfx/use-sub [:auth/refresh-token])
         logged-in? (and (string? auth-refresh-token)
                         (not (string/blank? auth-refresh-token)))
-        user-info (state/use-sub :user/info)
+        user-info (rfx/use-sub [:user/info])
         paid-user? (#{"active" "on_trial" "cancelled"} (:LemonStatus user-info))
         gift-user? (some #{"pro"} (:UserGroups user-info))
         pro-account? (or paid-user? gift-user?)
@@ -1104,10 +1118,12 @@
 
 (hsx/defc settings-features
   []
-  (let [_config (state/use-sub :config)
-        app-base-info (state/use-sub :electron/app-base-info)
-        app-user-cfgs (state/use-sub :electron/user-cfgs)
-        default-home-page (state/use-sub-default-home-page)
+  (let [config (rfx/use-sub [:config])
+        default-home-page (get-in (state/config-for-repo config
+                                    (state/get-current-repo))
+                            [:default-home :page] "")
+        app-user-cfgs (rfx/use-sub [:electron/user-cfgs])
+        app-base-info (rfx/use-sub [:electron/app-base-info])
         current-repo (state/get-current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
         semantic-search-enabled? (true? (:feature/enable-semantic-search? app-user-cfgs))
@@ -1174,7 +1190,7 @@
         [loading? set-loading!] (hooks/use-state true)
         current-repo (state/get-current-repo)
         manager? (user-handler/manager? current-repo)
-        [users-info] (hooks/use-atom (:rtc/users-info @state/state))
+        users-info (rfx/use-sub [:rtc/users-info])
         users (get users-info current-repo)
         invite-user! (fn []
                        (let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
@@ -1182,10 +1198,10 @@
                            (when graph-uuid
                              (rtc-handler/<rtc-invite-email graph-uuid invite-email)))))]
     (hooks/use-effect!
-     #(c.m/run-task*
-       (m/sp
-         (c.m/<? (rtc-handler/<rtc-get-users-info))
-         (set-loading! false)))
+     #(do
+        (p/let [_ (rtc-handler/<rtc-get-users-info)]
+          (set-loading! false))
+        nil)
      [])
     [:div.flex.flex-col.gap-2.mt-4
      {:on-key-press (fn [e]
@@ -1417,8 +1433,8 @@
 
 (hsx/defc ^:large-vars/cleanup-todo settings
   [_active-tab]
-  (let [current-repo (state/use-sub :git/current-repo)
-        _installed-plugins (state/use-sub :plugin/installed-plugins)
+  (let [current-repo (rfx/use-sub [:git/current-repo])
+        _installed-plugins (rfx/use-sub [:plugin/installed-plugins])
         plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
         *active (hooks/use-memo #(atom DEFAULT-ACTIVE-TAB-STATE) [])
         [active] (hooks/use-atom *active)
@@ -1464,15 +1480,18 @@
 
           (when label
             [:li.settings-menu-item
-             {:key      text
-              :data-id  (name text)
+             {:key      (name label)
+              :data-id  (name label)
               :class    (classnames [{:active (= label (first active))}])
               :on-click (fn []
                           (if (= label :plugins-setting)
                             (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])
                             (reset! *active [label (first active)])))}
 
-             [:a.flex.items-center.settings-menu-link icon [:strong text]]]))]]
+             [:button.flex.items-center.settings-menu-link
+              {:type "button"}
+              icon
+              [:strong text]]]))]]
 
       [:article
        [:header.cp__settings-header

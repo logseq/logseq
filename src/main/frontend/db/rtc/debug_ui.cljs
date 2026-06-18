@@ -1,7 +1,6 @@
 (ns frontend.db.rtc.debug-ui
   "Debug UI for rtc module"
   (:require [fipp.edn :as fipp]
-            [frontend.common.missionary :as c.m]
             [frontend.db :as db]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.user :as user]
@@ -11,11 +10,10 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
-(defonce debug-state (:rtc/state @state/state))
+(defonce debug-state (atom (state/get-state :rtc/state)))
 
 (defn- stop
   []
@@ -32,15 +30,16 @@
         rtc-lock (:rtc-lock debug-state*)]
     (hooks/use-effect!
      (fn []
-       (c.m/run-task ::sub-logs
-         (m/reduce
-          (fn [logs log]
-            (let [logs* (if log
-                          (take 10 (conj logs log))
-                          logs)]
-              (set-rtc-logs! logs*)
-              logs*))
-          nil rtc-flows/rtc-log-flow)))
+       (let [logs* (atom nil)
+             watch-key ::sub-logs]
+         (add-watch rtc-flows/rtc-log watch-key
+                    (fn [_ _ _ log]
+                      (let [logs (if log
+                                   (take 10 (conj @logs* log))
+                                   @logs*)]
+                        (reset! logs* logs)
+                        (set-rtc-logs! logs))))
+         #(remove-watch rtc-flows/rtc-log watch-key)))
      [])
     [:div
      {:on-click (fn [^js e]
@@ -76,8 +75,7 @@
        (shui/tabler-icon "download") "graph-list")
       (shui/button
        {:size :sm
-        :on-click #(c.m/run-task :upload-test-avatar
-                     (user/new-task--upload-user-avatar "TEST_AVATAR"))}
+        :on-click #(user/<upload-user-avatar "TEST_AVATAR")}
        (shui/tabler-icon "upload") "upload-test-avatar")]
 
      [:div.pb-4

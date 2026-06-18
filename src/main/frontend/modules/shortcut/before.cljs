@@ -36,6 +36,6 @@
 (defn enable-when-not-component-editing!
   [f]
   (fn [e]
-    (when (or (contains? #{:srs :page-histories} (state/get-modal-id))
+    (when (or (contains? #{:srs :page-histories} (state/get-dialog-id))
               (not (state/block-component-editing?)))
       (f e))))

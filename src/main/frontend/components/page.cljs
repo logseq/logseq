@@ -27,6 +27,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -142,7 +143,7 @@
 
 (hsx/defc add-button
   [block config]
-  (let [editing? (state/use-sub :editor/editing?)]
+  (let [editing? (rfx/use-sub [:editor/editing?])]
     (add-button-inner block (assoc config :editing? editing?))))
 
 (hsx/defc page-blocks-cp
@@ -151,7 +152,7 @@
    (fn []
      (when on-page-blocks-rendered
        (on-page-blocks-rendered))))
-  (let [document-mode? (state/use-sub :document/mode?)]
+  (let [_doc-mode? (rfx/use-sub [:document/mode?])]
     (when-let [id (:db/id block*)]
       (let [block (db/sub-block id)
             block-id (:block/uuid block)
@@ -175,15 +176,16 @@
                        (ldb/property? block)
                        (remove (fn [b] (some? (get b (:db/ident block)))) children)
 
-                       :else
-                       children)
-            config (assoc config :library? (ldb/library? block))]
-        (cond
-          (and
-           (not block?)
-           (not config/publishing?)
-           (empty? children) block)
-          (add-button block config)
+                     :else
+                     children)
+          config (assoc config :library? (ldb/library? block))
+          document-mode? (rfx/use-sub [:document/mode?])]
+      (cond
+        (and
+         (not block?)
+         (not config/publishing?)
+         (empty? children) block)
+        (add-button block config)
 
           :else
           (let [hiccup-config (merge
@@ -208,22 +210,24 @@
 
 (hsx/defc today-queries
   [repo today? sidebar?]
-  (let [queries (get-in (state/use-sub-config repo) [:default-queries :journals])]
-    (when (and today? (not sidebar?) (seq queries))
-      [:div#today-queries
-       (for [query queries]
-         (let [query' (assoc query :collapsed? true)]
-           (with-meta
-             [:<>
-              (ui/catch-error
-               (ui/component-error (t :page/default-query-error) {:content (pr-str query')})
-               (query/custom-query (component-block/wrap-query-components
-                                    {:editor-box editor/box
-                                     :page page-cp
-                                     :built-in-query? true
-                                     :today-query? true})
-                                   query'))]
-             {:key (str repo "-custom-query-" (:query query'))})))])))
+  (when (and today? (not sidebar?))
+    (let [queries (get-in (state/config-for-repo (rfx/use-sub [:config]) repo)
+                          [:default-queries :journals])]
+      (when (seq queries)
+        [:div#today-queries
+         (for [query queries]
+           (let [query' (assoc query :collapsed? true)]
+             (with-meta
+               [:<>
+                (ui/catch-error
+                 (ui/component-error (t :page/default-query-error) {:content (pr-str query')})
+                 (query/custom-query (component-block/wrap-query-components
+                                      {:editor-box editor/box
+                                       :page page-cp
+                                       :built-in-query? true
+                                       :today-query? true})
+                                     query'))]
+               {:key (str repo "-custom-query-" (:query query'))})))]))))
 
 (hsx/defc db-page-title-actions
   [page]
@@ -237,7 +241,7 @@
          :on-click (fn [e]
                      (state/pub-event! [:editor/new-property {:property-key "Icon"
                                                               :block page
-                                                              :target (.-target e)}]))}
+                                                              :target (.-currentTarget e)}]))}
         (t :command.editor/add-property-icon)))
 
     (shui/button
@@ -246,15 +250,15 @@
        :class "px-2 py-0 h-6 text-xs text-muted-foreground"
        :on-click (fn [e]
                    (if (ldb/property? page)
-                     (shui/popup-show!
-                      (.-target e)
+                   (shui/popup-show!
+                      (.-currentTarget e)
                       (fn []
                         [:div.ls-property-dropdown
                          (property-config/property-dropdown page nil {})])
                       {:align :center
                        :as-dropdown? true
                        :dropdown-menu? true})
-                     (let [opts (cond-> {:block page :target (.-target e)}
+                     (let [opts (cond-> {:block page :target (.-currentTarget e)}
                                   (ldb/class? page)
                                   (assoc :class-schema? true))]
                        (state/pub-event! [:editor/new-property opts]))))}
@@ -411,7 +415,7 @@
 ;; A page is just a logical block
 (hsx/defc ^:large-vars/cleanup-todo page-inner
   [{:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals?] :as option}]
-  (let [current-repo (state/use-sub :git/current-repo)
+  (let [current-repo (rfx/use-sub [:git/current-repo])
         linked-refs-blocks-ready-page-id* (hooks/use-memo #(atom nil) [])
         linked-refs-tagged-ready-page-id* (hooks/use-memo #(atom nil) [])
         [linked-refs-blocks-ready-page-id] (hooks/use-atom linked-refs-blocks-ready-page-id*)
@@ -617,9 +621,9 @@
 
 (hsx/defc page-graph
   []
-  (let [route-name (state/use-sub [:route-match :data :name])
-        route-path-name (state/use-sub [:route-match :path-params :name])
-        theme (state/use-sub :ui/theme)
+  (let [route-name (rfx/use-sub [:route-match :data :name])
+        route-path-name (rfx/use-sub [:route-match :path-params :name])
+        theme (rfx/use-sub [:ui/theme])
         current-page (or
                       (and (= :page route-name)
                            route-path-name)

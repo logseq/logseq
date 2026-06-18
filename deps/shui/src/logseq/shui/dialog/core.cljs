@@ -8,29 +8,29 @@
             [promesa.core :as p]))
 
 ;; provider
-(def dialog (util/lsui-wrap "Dialog"))
-(def dialog-portal (util/lsui-wrap "DialogPortal"))
-(def alert-dialog (util/lsui-wrap "AlertDialog"))
-(def alert-dialog-portal (util/lsui-wrap "AlertDialogPortal"))
+(def dialog (util/ui-wrap "Dialog"))
+(def dialog-portal (util/ui-wrap "DialogPortal"))
+(def alert-dialog (util/ui-wrap "AlertDialog"))
+(def alert-dialog-portal (util/ui-wrap "AlertDialogPortal"))
 
 ;; ui
-(def dialog-overlay (util/lsui-wrap "DialogOverlay"))
-(def dialog-close (util/lsui-wrap "DialogClose"))
-(def dialog-trigger (util/lsui-wrap "DialogTrigger"))
-(def dialog-content (util/lsui-wrap "DialogContent"))
-(def dialog-header (util/lsui-wrap "DialogHeader"))
-(def dialog-footer (util/lsui-wrap "DialogFooter"))
-(def dialog-title (util/lsui-wrap "DialogTitle"))
-(def dialog-description (util/lsui-wrap "DialogDescription"))
-(def alert-dialog-overlay (util/lsui-wrap "AlertDialogOverlay"))
-(def alert-dialog-trigger (util/lsui-wrap "AlertDialogTrigger"))
-(def alert-dialog-content (util/lsui-wrap "AlertDialogContent"))
-(def alert-dialog-header (util/lsui-wrap "AlertDialogHeader"))
-(def alert-dialog-title (util/lsui-wrap "AlertDialogTitle"))
-(def alert-dialog-description (util/lsui-wrap "AlertDialogDescription"))
-(def alert-dialog-footer (util/lsui-wrap "AlertDialogFooter"))
-(def alert-dialog-action (util/lsui-wrap "AlertDialogAction"))
-(def alert-dialog-cancel (util/lsui-wrap "AlertDialogCancel"))
+(def dialog-overlay (util/ui-wrap "DialogOverlay"))
+(def dialog-close (util/ui-wrap "DialogClose"))
+(def dialog-trigger (util/ui-wrap "DialogTrigger"))
+(def dialog-content (util/ui-wrap "DialogContent"))
+(def dialog-header (util/ui-wrap "DialogHeader"))
+(def dialog-footer (util/ui-wrap "DialogFooter"))
+(def dialog-title (util/ui-wrap "DialogTitle"))
+(def dialog-description (util/ui-wrap "DialogDescription"))
+(def alert-dialog-overlay (util/ui-wrap "AlertDialogOverlay"))
+(def alert-dialog-trigger (util/ui-wrap "AlertDialogTrigger"))
+(def alert-dialog-content (util/ui-wrap "AlertDialogContent"))
+(def alert-dialog-header (util/ui-wrap "AlertDialogHeader"))
+(def alert-dialog-title (util/ui-wrap "AlertDialogTitle"))
+(def alert-dialog-description (util/ui-wrap "AlertDialogDescription"))
+(def alert-dialog-footer (util/ui-wrap "AlertDialogFooter"))
+(def alert-dialog-action (util/ui-wrap "AlertDialogAction"))
+(def alert-dialog-cancel (util/ui-wrap "AlertDialogCancel"))
 
 (defn interpret-vals
   [config ks & args]
@@ -41,42 +41,60 @@
           config ks))
 
 ;; {:id :title :description :content :footer :open? :on-close ...}
-(def ^:private *modals (atom []))
+(def ^:private *dialogs (atom []))
 (def ^:private *id (atom 0))
 (def ^:private gen-id #(reset! *id (inc @*id)))
 
-(defn get-modal
+(defn get-dialog
   [id]
   (when id
-    (some->> (medley/indexed @*modals)
+    (some->> (medley/indexed @*dialogs)
              (filter #(= id (:id (second %)))) (first))))
 
-(defn update-modal!
+(defn- open-dialogs
+  []
+  (filter :open? @*dialogs))
+
+(defn update-dialog!
   [id ks val & {:keys [closing?]}]
-  (when-let [[index config] (get-modal id)]
+  (when-let [[index config] (get-dialog id)]
     (let [ks (if (coll? ks) ks [ks])
           config (if (nil? val)
                    (medley/dissoc-in config ks)
                    (assoc-in config ks val))]
-      (swap! *modals assoc index config)
+      (swap! *dialogs assoc index config)
       (when (and (false? (:open? config))
                  (fn? (:on-close config))
                  (not closing?))
         ((:on-close config) id)))))
 
-(defn upsert-modal!
+(defn upsert-dialog!
   [config]
   (when-let [_id (:id config)]
-    (swap! *modals conj config)))
+    (swap! *dialogs conj config)))
 
-(defn detach-modal!
+(defn detach-dialog!
   [id]
-  (when-let [[index] (get-modal id)]
-    (swap! *modals #(->> % (medley/remove-nth index) (vec)))))
+  (when-let [[index] (get-dialog id)]
+    (swap! *dialogs #(->> % (medley/remove-nth index) (vec)))))
 
-(defn has-modal?
+(defn has-dialog?
   []
-  (some-> @*modals (last) :open?))
+  (boolean (some :open? @*dialogs)))
+
+(defn- close-prevented?
+  [handler-result ^js event-details ^js native-event]
+  (when (or (false? handler-result)
+            (some-> native-event (.-defaultPrevented))
+            (some-> event-details (.-isCanceled)))
+    (some-> event-details (.cancel))
+    true))
+
+(defn- call-close-handler!
+  [handler ^js event-details]
+  (let [native-event (some-> event-details (.-event))
+        result (when (fn? handler) (handler native-event))]
+    (close-prevented? result event-details native-event)))
 
 ;; apis
 (declare close!)
@@ -87,13 +105,19 @@
                  content-or-config
                  {:content content-or-config})
         content (:content config)
-        id (gen-id)
-        config (merge {:id id :open? true :close #(close! id)} config (first config'))
+        generated-id (gen-id)
+        config (merge {:id generated-id :open? true} config (first config'))
+        id (:id config)
+        config (cond-> config
+                 (nil? (:close config))
+                 (assoc :close #(close! id)))
         config (cond-> config
                  (fn? content)
                  (assoc :content (content config)))]
-    (upsert-modal! (assoc-in config [:content-props :onOpenAutoFocus]
-                             #(.preventDefault %)))))
+    (upsert-dialog! (update config :content-props
+                            (fn [content-props]
+                              (merge {:onCloseAutoFocus #(.preventDefault %)}
+                                     content-props))))))
 
 (defn alert!
   [content-or-config & config']
@@ -106,68 +130,103 @@
   [content-or-config & config']
   (alert! content-or-config (assoc (first config') :alert? :confirm)))
 
-(defn get-last-modal-id
+(defn get-last-dialog-id
   []
-  (some-> (last @*modals) (:id)))
+  (some-> (last (open-dialogs)) (:id)))
 
-(defn get-first-modal-id
+(defn get-first-dialog-id
   []
-  (some-> (first @*modals) (:id)))
+  (some-> (first (open-dialogs)) (:id)))
+
+(defn- top-dialog?
+  [id]
+  (= id (get-last-dialog-id)))
+
+(defn- prevent-dismiss!
+  [^js event-details]
+  (some-> event-details (.-event) (.preventDefault))
+  (some-> event-details (.cancel))
+  true)
 
 (defn close!
-  ([] (close! (get-last-modal-id)))
-  ([id] (update-modal! id :open? false {:closing? true})))
+  ([] (close! (get-last-dialog-id)))
+  ([id] (update-dialog! id :open? false {:closing? true})))
 
 (defn close-all! []
-  (doseq [{:keys [id]} @*modals]
+  (doseq [{:keys [id]} @*dialogs]
     (close! id)))
 
 ;; components
-(hsx/defc modal-inner
+(hsx/defc dialog-inner
   [config]
   (let [{:keys [id title description content footer on-open-change align open?
-                auto-width? close-btn? root-props content-props]} config
+                auto-width? close-btn? root-props content-props
+                onEscapeKeyDown onPointerDownOutside]} config
         props (dissoc config
                       :id :title :description :content :footer :auto-width? :close-btn?
-                      :close :align :on-open-change :open? :root-props :content-props)
+                      :close :align :on-open-change :open? :root-props :content-props
+                      :onEscapeKeyDown :onPointerDownOutside)
         props (assoc-in props [:overlay-props :data-align] (name (or align :center)))]
 
     (hooks/use-effect!
      (fn []
        (when (false? open?)
-         (detach-modal! id)))
+         (detach-dialog! id)))
      [open?])
 
     (dialog
      (merge root-props
-            {:key (str "modal-" id)
+            {:key (str "dialog-" id)
              :open open?
-             :on-open-change (fn [v]
-                               (let [set-open! #(update-modal! id :open? %)]
-                                 (if (fn? on-open-change)
-                                   (on-open-change {:value v :set-open! set-open!})
-                                   (set-open! v))))})
+             :on-open-change (fn [v e]
+                               (let [set-open! #(update-dialog! id :open? %)
+                                     reason (some-> e (.-reason))
+                                     escape-handler (or (:onEscapeKeyDown content-props)
+                                                        onEscapeKeyDown)
+                                     pointer-handler (or (:onPointerDownOutside content-props)
+                                                         onPointerDownOutside)
+                                     prevented? (when (false? v)
+                                                  (cond
+                                                     (and (contains? #{"escape-key" "outside-press"} reason)
+                                                         (not (top-dialog? id)))
+                                                    (prevent-dismiss! e)
+
+                                                    (= reason "escape-key")
+                                                    (call-close-handler! escape-handler e)
+
+                                                    (= reason "outside-press")
+                                                    (call-close-handler! pointer-handler e)
+
+                                                    :else false))]
+                                 (when-not prevented?
+                                   (if (fn? on-open-change)
+                                     (on-open-change {:value v :set-open! set-open!})
+                                     (set-open! v)))))})
      (let [onPointerDownOutside (:onPointerDownOutside content-props)
            onEscapeKeyDown (:onEscapeKeyDown content-props)
            handle-key-escape! (fn [^js e]
-                                (if (fn? onEscapeKeyDown)
-                                  (onEscapeKeyDown e)
-                                  ;; default handled by global Escape listener
+                                (if (top-dialog? id)
+                                  (if (fn? onEscapeKeyDown)
+                                    (onEscapeKeyDown e)
+                                    (do
+                                      (.preventDefault e)
+                                      (close! id)))
                                   (.preventDefault e)))
            handle-pointer-down-outside! (fn [^js e]
-                                          (when (fn? onPointerDownOutside)
-                                            (onPointerDownOutside e))
-                                          (when-not (some-> (.-target e) (.closest ".ui__dialog-overlay"))
+                                          (if (top-dialog? id)
+                                            (when (fn? onPointerDownOutside)
+                                              (onPointerDownOutside e))
                                             (.preventDefault e)))
-           content-props (assoc content-props
-                           :onEscapeKeyDown handle-key-escape!
-                           :onPointerDownOutside handle-pointer-down-outside!)]
+           content-props (-> content-props
+                             (dissoc :onEscapeKeyDown :onPointerDownOutside)
+                             (assoc :onEscapeKeyDown handle-key-escape!
+                                    :onPointerDownOutside handle-pointer-down-outside!))]
        (dialog-content
         (cond-> (merge props content-props)
           auto-width? (assoc :data-auto-width true)
           (false? close-btn?) (assoc :data-close-btn false))
 
-        ;; nested title component is required for radix dialog content
+        ;; Title component is required for accessible dialog content.
         (dialog-title {:class (when (nil? title) "hidden")} title)
         (when description (dialog-description description))
 
@@ -179,22 +238,33 @@
 
 (hsx/defc alert-inner
   [config]
-  (let [{:keys [id title description content footer deferred open? ok-label]} config
-        props (dissoc config :id :title :description :content :footer :deferred :open? :alert? :ok-label)
+  (let [{:keys [id title description content footer deferred open? ok-label
+                root-props content-props]} config
+        props (dissoc config
+                      :id :title :description :content :footer :deferred :open? :alert? :ok-label
+                      :close :on-close :root-props :content-props
+                      :outside-cancel? :cancel-label :data-reminder :data-reminder-label)
         ok-label (or ok-label "OK")]
 
     (hooks/use-effect!
      (fn []
        (when (false? open?)
-         (let [timeout (js/setTimeout #(detach-modal! id) 128)]
+         (let [timeout (js/setTimeout #(detach-dialog! id) 128)]
            #(js/clearTimeout timeout))))
      [open?])
 
     (alert-dialog
-     {:key (str "alert-" id)
-      :open open?
-      :on-open-change #(update-modal! id :open? %)}
-     (alert-dialog-content props
+     (merge root-props
+            {:key (str "alert-" id)
+             :open open?
+             :on-open-change (fn [v e]
+                               (let [reason (some-> e (.-reason))]
+                                 (if (and (false? v)
+                                          (= reason "escape-key")
+                                          (not (top-dialog? id)))
+                                   (prevent-dismiss! e)
+                                   (update-dialog! id :open? v))))})
+     (alert-dialog-content (merge props content-props)
                            (when (or title description)
                              (alert-dialog-header
                               {:class "ui__alert-dialog-header"}
@@ -212,7 +282,8 @@
                                (base/button
                                 {:key "ok"
                                  :on-click #(do (close!) (p/resolve! deferred true))
-                                 :size :sm} ok-label)]))))))
+                                 :size :sm} ok-label)])))
+     )))
 
 (hsx/defc confirm-inner
   [config]
@@ -223,7 +294,29 @@
         *ok-ref (hooks/use-ref nil)
         *reminder-ref (hooks/use-ref nil)
         cancel-label (or cancel-label "Cancel")
-        ok-label (or ok-label "OK")]
+        ok-label (or ok-label "OK")
+        footer [:<>
+                [:span.flex.items-center.pt-1
+                 (when (and id data-reminder data-reminder-label)
+                   [:label.flex.items-center.gap-1.text-sm
+                    (form/checkbox {:ref *reminder-ref})
+                    [:span.opacity-50 data-reminder-label]])]
+                [:span.flex.gap-2
+                 (base/button
+                  {:key "cancel"
+                   :on-click #(do (close!) (p/reject! deferred false))
+                   :variant :outline
+                   :size :sm} cancel-label)
+                 (base/button
+                  {:key "ok"
+                   :ref *ok-ref
+                   :on-click (fn []
+                               (when-let [^js reminder (and id data-reminder (hooks/deref *reminder-ref))]
+                                 (when (= "checked" (.-state (.-dataset reminder)))
+                                   (js/localStorage.setItem (str id) (js/Date.now))))
+                               (close!)
+                               (p/resolve! deferred true))
+                   :size :sm} ok-label)]]]
 
     (hooks/use-effect!
      (fn []
@@ -238,7 +331,7 @@
        (try
          (if-let [reminder-v (and reminder? (js/localStorage.getItem (str id)))]
            (if (< (- (js/Date.now) reminder-v) (* 1000 60 10))
-             (do (detach-modal! id) (p/resolve! deferred true))
+             (do (detach-dialog! id) (p/resolve! deferred true))
              (set-ready! true))
            (set-ready! true))
          (catch js/Error _e
@@ -251,45 +344,30 @@
               :data-mode :confirm
               :overlay-props
               {:on-click #(when outside-cancel? (close!) (p/reject! deferred nil))}
+              :footer footer)))))
 
-              :footer
-              [:<>
-               [:span.flex.items-center.pt-1
-                (when (and id data-reminder data-reminder-label)
-                  [:label.flex.items-center.gap-1.text-sm
-                   (form/checkbox {:ref *reminder-ref})
-                   [:span.opacity-50 data-reminder-label]])]
-               [:span.flex.gap-2
-                (base/button
-                 {:key "cancel"
-                  :on-click #(do (close!) (p/reject! deferred false))
-                  :variant :outline
-                  :size :sm} cancel-label)
-                (base/button
-                 {:key "ok"
-                  :ref *ok-ref
-                  :on-click (fn []
-                              (when-let [^js reminder (and id data-reminder (hooks/deref *reminder-ref))]
-                                (when (= "checked" (.-state (.-dataset reminder)))
-                                  (js/localStorage.setItem (str id) (js/Date.now))))
-                              (close!)
-                              (p/resolve! deferred true))
-                  :size :sm} ok-label)]])))))
+(defn- render-dialog
+  [config]
+  (let [id (:id config)
+        alert? (:alert? config)
+        config (interpret-vals config
+                               [:title :description :content :footer]
+                               {:id id})]
+    (case alert?
+      :default
+      (alert-inner config)
 
-(hsx/defc install-modals
+      :confirm
+      (confirm-inner config)
+
+      (dialog-inner config))))
+
+(defn- render-dialogs
+  [configs]
+  (when-let [configs (seq (filter map? configs))]
+    (into [:<>] (map render-dialog configs))))
+
+(hsx/defc install-dialogs
   []
-  (let [[modals _set-modals!] (util/use-atom *modals)]
-    (for [config modals
-          :when (map? config)]
-      (let [id (:id config)
-            alert? (:alert? config)
-            config (interpret-vals config
-                     [:title :description :content :footer]
-                     {:id id})]
-        (case alert?
-          :default
-          (alert-inner config)
-          :confirm
-          (confirm-inner config)
-          ;; modal
-          (modal-inner config))))))
+  (let [[dialogs _set-dialogs!] (util/use-atom *dialogs)]
+    (render-dialogs dialogs)))

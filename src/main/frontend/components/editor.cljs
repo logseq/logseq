@@ -17,6 +17,7 @@
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.search :as search-handler]
+            [frontend.rfx :as rfx]
             [frontend.search :refer [fuzzy-search]]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -38,8 +39,7 @@
 
 (defn- use-current-edit-content
   []
-  (state/use-sub :editor/content
-                 :path-in-sub-atom (:block/uuid (state/get-edit-block))))
+  (rfx/use-sub [:editor/content (:block/uuid (state/get-edit-block))]))
 
 (defn filter-commands
   [page? commands]
@@ -258,7 +258,7 @@
   "Page or tag searching popup"
   [id format]
   (let [pos (hooks/use-memo state/get-editor-last-pos [])
-        action (state/use-sub :editor/action)
+        action (rfx/use-sub [:editor/action])
         embed? (= @commands/*current-command "Page embed")
         tag? (= action :page-search-hashtag)
         db-tag? tag?
@@ -472,7 +472,7 @@
       (when (seq options)
         (let [command (:command (first options))]
           [:div.p-2.rounded-md.flex.flex-col.gap-2
-           (for [{:keys [id placeholder type]} options]
+           (for [{:keys [id placeholder type auto-focus]} options]
              (shui/input
               (cond->
                {:key (str "modal-input-" (name id))
@@ -482,7 +482,10 @@
                              (swap! input-value assoc id (util/evalue e)))}
 
                 placeholder
-                (assoc :placeholder placeholder))))
+                (assoc :placeholder placeholder)
+
+                auto-focus
+                (assoc :auto-focus true))))
            (ui/button
             (t :ui/submit)
             :on-click
@@ -565,7 +568,7 @@
   [content]
   (hooks/use-effect!
    (fn []
-     (when-not @(:editor/on-paste? @state/state)
+     (when-not (state/get-state :editor/on-paste?)
        (try (editor-handler/handle-last-input)
             (catch :default _e
               nil)))
@@ -665,7 +668,7 @@
 (hsx/defc command-popups
   "React to atom changes, find and render the correct popup"
   [id format]
-  (let [action (state/use-sub :editor/action)]
+  (let [action (rfx/use-sub [:editor/action])]
     (shui-editor-popups id format action nil)))
 
 (defn- editor-on-hide
@@ -712,7 +715,7 @@
         component-state {:opts opts
                          :id id
                          :config config}
-        content (state/use-sub :editor/content :path-in-sub-atom (:block/uuid block))
+        content (rfx/use-sub [:editor/content (:block/uuid block)])
         heading-class (get-editor-style-class block content format)
         read-only? (editor-readonly? block)
         _ (lifecycle/use-did-mount! id config)

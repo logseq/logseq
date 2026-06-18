@@ -9,7 +9,6 @@
    [datascript.storage :refer [IStorage] :as storage]
    [frontend.common.cache :as common.cache]
    [frontend.common.graph-view :as graph-view]
-   [frontend.common.missionary :as c.m]
    [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
    [frontend.worker-common.util :as worker-util]
    [frontend.worker.db-listener :as db-listener]
@@ -54,7 +53,6 @@
    [logseq.outliner.recycle :as outliner-recycle]
    [logseq.publishing.html :as publish-html]
    [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
-   [missionary.core :as m]
    [promesa.core :as p]
    [shadow.resource :as rc]))
 
@@ -1670,15 +1668,14 @@
 
 (defn- on-become-master
   [repo start-opts]
-  (js/Promise.
-   (m/sp
-     (log/info :db-worker/on-become-master-start {:repo repo
-                                                  :import-type (:import-type start-opts)})
-     (c.m/<? (init-sqlite-module!))
-     (when-not (:import-type start-opts)
-       (c.m/<? (start-db! repo start-opts))
-       (assert (some? (worker-state/get-datascript-conn repo))))
-     nil)))
+  (log/info :db-worker/on-become-master-start {:repo repo
+                                               :import-type (:import-type start-opts)})
+  (p/let [_ (init-sqlite-module!)
+          _ (when-not (:import-type start-opts)
+              (start-db! repo start-opts))]
+    (when-not (:import-type start-opts)
+      (assert (some? (worker-state/get-datascript-conn repo))))
+    nil))
 
 (def broadcast-data-types
   (set (map

@@ -321,7 +321,7 @@ li p:last-child,
 }
 
 .to-heading-button {
-  @apply px-1 text-lg;
+  @apply p-0 text-lg w-[30px] h-[30px];
 }
 
 /** endregion **/
@@ -420,12 +420,9 @@ a.chosen {
   background: var(--ls-a-chosen-bg);
 }
 
-a.warning,
-span.warning,
-div.warning:not(.admonitionblock),
-p.warning {
+a.warning {
   @apply bg-yellow-rx-05-alpha text-yellow-rx-08 dark:bg-yellow-rx-07-alpha
-  dark:text-yellow-rx-10 rounded px-1.5 py-[2px] leading-none;
+  dark:text-yellow-rx-10 rounded px-1.5 py-0.5 leading-none;
 }
 
 .text-warning {
@@ -436,12 +433,6 @@ p.warning {
   @apply bg-yellow-300 dark:bg-yellow-500/50;
 }
 
-a.error,
-span.error {
-  @apply bg-red-rx-04-alpha text-red-rx-09 dark:bg-red-rx-06-alpha
-  dark:text-red-rx-10 rounded px-1.5 py-[2px] leading-none;
-}
-
 .text-error {
   @apply text-red-rx-09;
 }
@@ -450,11 +441,6 @@ span.error {
   @apply bg-red-rx-04-alpha;
 }
 
-a.error,
-span.error {
-  @apply bg-red-rx-04-alpha text-red-rx-09 dark:bg-red-rx-06-alpha
-  dark:text-red-rx-10 rounded px-1.5 py-[2px] leading-none;
-}
 
 .text-error {
   @apply text-red-rx-09;
@@ -647,10 +633,6 @@ html[data-theme='dark'] .keyboard-shortcut > code {
   0 0 1px 1px rgba(255, 255, 255, 0.2);
 }
 
-.ui__modal-panel {
-  border-radius: 8px;
-}
-
 .overflow-y-scroll {
   overflow-y: scroll;
 }
@@ -700,6 +682,14 @@ button[role="checkbox"][data-state=unchecked] {
   border-color: var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))));
 }
 
+.ui__checkbox:not([data-checked]) {
+  border-color: var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))));
+}
+
 .dark-theme button[role="checkbox"][data-state=unchecked] {
+  border-color: var(--lx-gray-11, var(--ls-primary-text-color, hsl(var(--foreground))));
+}
+
+.dark-theme .ui__checkbox:not([data-checked]) {
   border-color: var(--lx-gray-11, var(--ls-primary-text-color, hsl(var(--foreground))));
 }

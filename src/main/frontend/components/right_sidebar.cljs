@@ -1,5 +1,6 @@
 (ns frontend.components.right-sidebar
-  (:require [cljs-bean.core :as bean]
+  (:require ["react" :as react]
+            [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.components.cmdk.core :as cmdk]
@@ -18,6 +19,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.undo-redo.debug-ui :as undo-redo-debug-ui]
@@ -231,13 +233,13 @@
   component)
 
 (def inner-component
-  (let [memo-class (js/React.memo
+  (let [memo-class (react/memo
                     (fn [^js props]
                       (apply inner-component-inner (.-args props)))
                     (fn [_prev-props ^js next-props]
                       (not (last (.-args next-props)))))]
     (fn [& args]
-      (js/React.createElement memo-class #js {:args (vec args)}))))
+      (react/createElement memo-class #js {:args (vec args)}))))
 
 (hsx/defc sidebar-item-inner
   [db-id {:keys [repo idx block-type collapsed? drag-from drag-to block-count *db-id init-key]}]
@@ -325,7 +327,7 @@
         init-key (hooks/use-memo #(random-uuid) [])
         drag-from (first (hooks/use-atom *drag-from))
         drag-to (first (hooks/use-atom *drag-to))
-        collapsed? (state/use-sub [:ui/sidebar-collapsed-blocks db-id])]
+        collapsed? (rfx/use-sub [:ui/sidebar-collapsed-blocks db-id])]
     (sidebar-item-inner db-id {:repo repo
                                :idx idx
                                :block-type block-type
@@ -337,13 +339,13 @@
                                :init-key init-key})))
 
 (def sidebar-item
-  (let [memo-class (js/React.memo
+  (let [memo-class (react/memo
                     (fn [^js props]
                       (apply sidebar-item-component (.-args props)))
                     (fn [^js prev-props ^js next-props]
                       (= (.-args prev-props) (.-args next-props))))]
     (fn [& args]
-      (js/React.createElement memo-class #js {:args (vec args)}))))
+      (react/createElement memo-class #js {:args (vec args)}))))
 
 (defn- get-page
   [match]
@@ -468,7 +470,7 @@
 (hsx/defc sidebar-inner
   [repo t blocks]
   (let [block-count (count blocks)
-        developer-mode? (state/use-sub [:ui/developer-mode?])]
+        developer-mode? (rfx/use-sub [:ui/developer-mode?])]
     [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
 
      [:div.cp__right-sidebar-scrollable
@@ -526,9 +528,9 @@
         blocks (if (empty? blocks)
                  [[(state/get-current-repo) "contents" :contents nil]]
                  blocks)
-        sidebar-open? (state/use-sub :ui/sidebar-open?)
-        width (state/use-sub :ui/sidebar-width)
-        repo (state/use-sub :git/current-repo)]
+        sidebar-open? (rfx/use-sub [:ui/sidebar-open?])
+        width (rfx/use-sub [:ui/sidebar-width])
+        repo (rfx/use-sub [:git/current-repo])]
     [:div#right-sidebar.cp__right-sidebar.h-screen
      {:class (if sidebar-open? "open" "closed")
       :style {:width width}}
@@ -537,8 +539,8 @@
        (sidebar-inner repo t blocks))]))
 
 (def sidebar
-  (let [memo-class (js/React.memo
+  (let [memo-class (react/memo
                     (fn [_props]
                       (sidebar-component)))]
     (fn []
-      (js/React.createElement memo-class #js {}))))
+      (react/createElement memo-class #js {}))))

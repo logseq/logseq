@@ -1,5 +1,6 @@
 (ns frontend.handler.events.ui
   "UI events"
+  (:require-macros [frontend.handler.events.macros :refer [defevent!]])
   (:require [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
             [frontend.components.assets :as assets]
@@ -45,7 +46,8 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.shui.dialog.core :as shui-dialog]))
 
 (defn- <asset-file-ready?
   [asset file-name]
@@ -56,7 +58,7 @@
      (config/get-repo-dir (state/get-current-repo))
      (path/path-join common-config/local-assets-dir file-name))))
 
-(defmethod events/handle :go/search [_]
+(defevent! :go/search [_]
   (when-not (editor-handler/dialog-exists? :ls-dialog-cmdk)
     (shui/dialog-open!
      cmdk/cmdk-modal
@@ -66,68 +68,68 @@
       :close-btn? false
       :onEscapeKeyDown (fn [e] (.preventDefault e))})))
 
-(defmethod events/handle :notification/show [[_ {:keys [content status clear?]}]]
+(defevent! :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
 
-(defmethod events/handle :shell/run [_]
+(defevent! :shell/run [_]
   (when (util/electron?)
     (shui/dialog-open! shell/shell)))
 
-(defmethod events/handle :go/plugins [_]
+(defevent! :go/plugins [_]
   (plugin/open-plugins-modal!))
 
-(defmethod events/handle :go/plugins-waiting-lists [_]
+(defevent! :go/plugins-waiting-lists [_]
   (plugin/open-waiting-updates-modal!))
 
-(defmethod events/handle :go/plugins-from-file [[_ plugins]]
+(defevent! :go/plugins-from-file [[_ plugins]]
   (plugin/open-plugins-from-file-modal! plugins))
 
-(defmethod events/handle :go/install-plugin-from-github [[_]]
+(defevent! :go/install-plugin-from-github [[_]]
   (shui/dialog-open!
    (plugin/install-from-github-release-container)))
 
-(defmethod events/handle :go/plugins-settings [[_ pid nav? title]]
+(defevent! :go/plugins-settings [[_ pid nav? title]]
   (when pid
     (state/set-state! :plugin/focused-settings pid)
     (state/set-state! :plugin/navs-settings? (not (false? nav?)))
     (plugin/open-focused-settings-modal! title)))
 
-(defmethod events/handle :go/proxy-settings [[_ agent-opts]]
+(defevent! :go/proxy-settings [[_ agent-opts]]
   (shui/dialog-open!
    (plugin/user-proxy-settings-container agent-opts)
    {:id :https-proxy-panel :center? true :class "lg:max-w-2xl"}))
 
-(defmethod events/handle :go/sync-server-settings [[_]]
+(defevent! :go/sync-server-settings [[_]]
   (shui/dialog-open!
    (settings/sync-server-url-settings-container)
    {:id :sync-server-panel :center? true :class "lg:max-w-2xl"}))
 
-(defmethod events/handle :go/publish-server-settings [[_]]
+(defevent! :go/publish-server-settings [[_]]
   (shui/dialog-open!
    (settings/publish-server-url-settings-container)
    {:id :publish-server-panel :center? true :class "lg:max-w-2xl"}))
 
-(defmethod events/handle :redirect-to-home [_]
+(defevent! :redirect-to-home [_]
   (page-handler/create-today-journal!)
   (when (util/capacitor?)
     (state/pub-event! [:mobile/set-tab "home"])))
 
-(defmethod events/handle :page/show-delete-dialog [[_ selected-rows ok-handler]]
+(defevent! :page/show-delete-dialog [[_ selected-rows ok-handler]]
   (shui/dialog-open!
    (component-page/batch-delete-dialog selected-rows ok-handler)))
 
-(defmethod events/handle :modal/show-cards [[_ cards-id]]
+(defevent! :modal/show-cards [[_ cards-id]]
   (shui/dialog-open!
    (fn [] (fsrs/cards-view cards-id nil))
    {:id :srs
     :label :flashcards__cp}))
 
-(defmethod events/handle :modal/show-themes-modal [[_ classic?]]
+(defevent! :modal/show-themes-modal [[_ classic?]]
   (if classic?
     (plugin/open-select-theme!)
     (route-handler/go-to-search! :themes)))
 
-(defmethod events/handle :publish/open-dialog [_]
+(defevent! :publish/open-dialog [_]
   (when-not config/publishing?
     (when-let [page-name (state/get-current-page)]
       (when-let [page (db/get-page page-name)]
@@ -136,7 +138,7 @@
            (fn [] (page-menu/publish-page-dialog page))
            {:class "w-auto max-w-md"}))))))
 
-(defmethod events/handle :ui/toggle-appearance [_]
+(defevent! :ui/toggle-appearance [_]
   (let [popup-id "appearance_settings"]
     (if (gdom/getElement popup-id)
       (shui/popup-hide! popup-id)
@@ -145,9 +147,10 @@
        (fn []
          (settings/appearance))
        {:id popup-id
+        :focus-trigger? false
         :align :end}))))
 
-(defmethod events/handle :plugin/consume-updates [[_ id prev-pending? updated?]]
+(defevent! :plugin/consume-updates [[_ id prev-pending? updated?]]
   (let [downloading?   (:plugin/updates-downloading? @state/state)
         auto-checking? (plugin-handler/get-auto-checking?)]
     (when-let [coming (and (not downloading?)
@@ -186,7 +189,7 @@
               (plugin/open-waiting-updates-modal!))
             (plugin-handler/set-auto-checking! false))))))
 
-(defmethod events/handle :plugin/loader-perf-tip [[_ {:keys [^js o _s _e]}]]
+(defevent! :plugin/loader-perf-tip [[_ {:keys [^js o _s _e]}]]
   (when-let [opts (.-options o)]
     (notification/show!
      (plugin/perf-tip-content (.-id o) (.-name opts) (.-url opts))
@@ -250,14 +253,15 @@
         (if target'
           (shui/popup-show! target'
                             #(property-dialog/dialog blocks opts')
-                            (cond-> {:align "start"}
+                            (cond-> {:align "start"
+                                     :force-popover? true}
                               popup-id
                               (assoc :id popup-id)))
           (shui/dialog-open! #(property-dialog/dialog blocks opts')
                              {:id :property-dialog
                               :align "start"}))))))
 
-(defmethod events/handle :editor/new-property [[_ {:keys [block target] :as opts}]]
+(defevent! :editor/new-property [[_ {:keys [block target] :as opts}]]
   (when-not config/publishing?
     (let [editing-block (some-> (state/get-edit-block)
                                 :block/uuid
@@ -313,27 +317,27 @@
        {:align :start
         :content-props {:class "ls-icon-picker"}}))))
 
-(defmethod events/handle :editor/new-reaction [[_ {:keys [block blocks target]}]]
+(defevent! :editor/new-reaction [[_ {:keys [block blocks target]}]]
   (when-not config/publishing?
     (p/do!
      (editor-handler/save-current-block!)
      (editor-new-reaction (if (seq blocks) blocks block) target))))
 
-(defmethod events/handle :graph/new-db-graph [[_ _opts]]
+(defevent! :graph/new-db-graph [[_ _opts]]
   (shui/dialog-open!
    repo/new-db-graph
    {:id :new-db-graph
-    :title [:h2 (t :graph/create-new)]
+    :title (t :graph/create-new)
     :align (if (util/mobile?) :top :center)
     :style {:max-width "500px"}}))
 
-(defmethod events/handle :dialog-select/graph-open []
+(defevent! :dialog-select/graph-open []
   (select/dialog-select! :graph-open))
 
-(defmethod events/handle :dialog-select/graph-remove []
+(defevent! :dialog-select/graph-remove []
   (select/dialog-select! :graph-remove))
 
-(defmethod events/handle :dialog-select/db-graph-replace []
+(defevent! :dialog-select/db-graph-replace []
   (select/dialog-select! :db-graph-replace))
 
 (defn- hide-action-bar!
@@ -341,42 +345,46 @@
   (when (editor-handler/popup-exists? :selection-action-bar)
     (shui/popup-hide! :selection-action-bar)))
 
-(defmethod events/handle :editor/show-action-bar []
+(defevent! :editor/show-action-bar []
   (let [selection (state/get-selection-blocks)
         first-visible-block (some #(when (util/el-visible-in-viewport? % true) %) selection)]
-    (when first-visible-block
+    (when (and first-visible-block
+               (not (shui-dialog/has-dialog?)))
       (hide-action-bar!)
       (shui/popup-show!
        first-visible-block
        (fn []
          (selection/action-bar))
        {:id :selection-action-bar
+        :focus-trigger? false
+        :force-popover? true
         :root-props {:modal false}
         :content-props {:side "top"
-                        :class "!py-0 !px-0 !border-none"}
+                        :onCloseAutoFocus #(.preventDefault %)
+                        :class "!w-max !max-w-none !overflow-visible !py-0 !px-0 !border-none"}
         :auto-side? false
         :align :start}))))
 
-(defmethod events/handle :editor/hide-action-bar []
+(defevent! :editor/hide-action-bar []
   (hide-action-bar!)
   (state/set-state! :mobile/show-action-bar? false))
 
-(defmethod events/handle :user/logout [[_]]
+(defevent! :user/logout [[_]]
   (login/sign-out!))
 
-(defmethod events/handle :user/login [[_]]
+(defevent! :user/login [[_]]
   (if (mobile-util/native-platform?)
     (route-handler/redirect! {:to :user-login})
     (login/open-login-modal!)))
 
-(defmethod events/handle :asset/dialog-edit-external-url [[_ asset-block pdf-current]]
+(defevent! :asset/dialog-edit-external-url [[_ asset-block pdf-current]]
   (shui/dialog-open!
    (assets/edit-external-url-content asset-block pdf-current)
    {:id :edit-external-asset-source-dialog
     :title (if asset-block (t :asset/edit-title) (t :asset/create-title))
     :center? true}))
 
-(defmethod events/handle :asset/show-preview [[_ asset]]
+(defevent! :asset/show-preview [[_ asset]]
   (when-let [asset-type-str (:logseq.property.asset/type asset)]
     (let [asset-type (keyword asset-type-str)
           image? (contains? (common-config/img-formats) asset-type)
@@ -443,7 +451,7 @@
                    nil)))
     (p/resolved nil)))
 
-(defmethod events/handle :user/fetch-info-and-graphs [[_]]
+(defevent! :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)
   (async/go
     (let [result (async/<! (user-handler/<user-info user-handler/remoteapi))]
@@ -467,7 +475,7 @@
                 (when (some #(= current-repo (:url %)) (state/get-rtc-graphs))
                   (rtc-flows/trigger-rtc-start current-repo))))))))))
 
-(defmethod events/handle :dialog/show-block [[_ block option]]
+(defevent! :dialog/show-block [[_ block option]]
   (shui/dialog-open!
    [:div.p-8.w-full.h-full
     (component-page/page-container block option)]
@@ -476,7 +484,7 @@
     :content-props {:class "ls-dialog-block"}
     :onEscapeKeyDown (fn [e] (.preventDefault e))}))
 
-(defmethod events/handle :dialog/quick-add [_]
+(defevent! :dialog/quick-add [_]
   (shui/dialog-open!
    [:div.w-full.h-full
     (quick-add/quick-add)]

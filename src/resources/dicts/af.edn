@@ -994,7 +994,7 @@
  :node/built-in-cant-delete-error "Ingebouwde elementen kunnen nie worden verwijderd."
  :node/new "Nuwe node"
 
- :notification/clear-all "Verwyder alles"
+
  :notification/copied "Gekopieer"
 
  :onboarding.import/desc "Beschrijving van voer in"

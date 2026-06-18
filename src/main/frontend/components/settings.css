@@ -15,8 +15,8 @@
       @apply bg-gray-03-alpha p-4;
 
       > ul > li {
-        > a {
-          @apply mb-2;
+        > button {
+          @apply w-full mb-2;
 
           > strong {
             @apply text-sm font-normal pl-1 opacity-90;
@@ -78,7 +78,7 @@
     }
 
     .settings-menu-link {
-      @apply px-2 py-1.5 select-none text-gray-12;
+      @apply px-2 py-1.5 select-none text-gray-12 text-left justify-start;
     }
 
 
@@ -91,7 +91,7 @@
     .panel-wrap {
       @apply p-1 flex flex-col gap-4;
 
-      @screen sm {
+      @media (min-width: 640px) {
         width: 600px;
       }
 
@@ -234,7 +234,7 @@
     }
   }
 
-  &-appearance-modal-inner {
+  &-appearance-dialog-inner {
     @apply -m-2 -mb-3 flex flex-col gap-4;
 
     .keyboard-shortcut {
@@ -244,13 +244,13 @@
 }
 
 #appearance_settings {
-  &.cp__settings-appearance-modal-inner {
+  &.cp__settings-appearance-dialog-inner {
     @apply w-auto p-5 shadow-none m-0;
   }
 }
 
 .cp__theme-modes-options {
-  @apply flex items-center m-0 list-none;
+  @apply flex items-center m-0 list-none gap-3;
 
   > li {
     @apply pr-2 m-0 opacity-90 hover:opacity-100;
@@ -269,29 +269,29 @@
     }
 
     > i {
-      @apply block w-[70px] rounded overflow-hidden bg-gray-04;
-      aspect-ratio: 160 / 92;
+      @apply block w-[92px] rounded overflow-hidden bg-gray-04;
+      aspect-ratio: 160 / 110;
 
-      background: url('../img/light-theme.png') no-repeat center / cover;
+      background: url('/static/img/light-theme.png') no-repeat center / cover;
 
       &.mode-dark {
-        background: url('../img/dark-theme.png') no-repeat center / cover;
+        background: url('/static/img/dark-theme.png') no-repeat center / cover;
       }
 
       &.mode-system {
-        background: url('../img/system-theme.png') no-repeat center / cover;
+        background: url('/static/img/system-theme.png') no-repeat center / cover;
       }
 
       &.mode-dark.radix {
-        background: url('../img/dark-theme.png') no-repeat center / cover;
+        background: url('/static/img/dark-theme.png') no-repeat center / cover;
       }
 
       &.mode-light.radix {
-        background: url('../img/light-theme.png') no-repeat center / cover;
+        background: url('/static/img/light-theme.png') no-repeat center / cover;
       }
 
       &.mode-system.radix {
-        background: url('../img/system-theme.png') no-repeat center / cover;
+        background: url('/static/img/system-theme.png') no-repeat center / cover;
       }
     }
 

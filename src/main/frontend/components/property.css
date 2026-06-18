@@ -14,7 +14,7 @@
   @apply min-w-[700px] p-2 overflow-auto;
 
   /*noinspection CssUnresolvedCustomProperty*/
-  max-height: var(--radix-dropdown-menu-content-available-height);
+  max-height: var(--available-height);
 }
 
 .property-block-container {
@@ -233,7 +233,7 @@ input.simple-input:focus {
 }
 
 .page-configure {
-  @screen md {
+  @media (min-width: 768px) {
     max-width: 720px;
   }
 }
@@ -400,10 +400,6 @@ a.control-link {
 
     & + svg {
       @apply opacity-30;
-    }
-
-    .ui__switch {
-      @apply relative top-[1px];
     }
   }
 }

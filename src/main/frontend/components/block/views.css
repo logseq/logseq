@@ -6,17 +6,13 @@
 }
 
 .ls-gallery-action-bar {
-  @apply flex h-8 max-w-[calc(100vw-2rem)] flex-row items-center overflow-x-auto rounded-md border border-border bg-background;
+  @apply flex h-8 w-max max-w-none flex-row items-center overflow-visible rounded-md border border-border bg-background;
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.18), 0 2px 6px rgb(0 0 0 / 0.12);
   pointer-events: auto;
 }
 
 .ls-gallery-action-select-all {
   @apply flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center border-r border-border;
-}
-
-.ls-gallery-action-bar .ls-table-actions > div:first-child {
-  @apply px-2;
 }
 
 .ls-cards {

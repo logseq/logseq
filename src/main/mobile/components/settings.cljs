@@ -1,7 +1,6 @@
 (ns mobile.components.settings
   "Mobile settings"
   (:require [clojure.string :as string]
-            [frontend.common.missionary :as c.m]
             [frontend.components.dnd :as dnd]
             [frontend.components.user.login :as login]
             [frontend.config :as config]
@@ -9,6 +8,7 @@
             [frontend.dicts :as dicts]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
@@ -17,7 +17,6 @@
             [logseq.common.version :as build-version]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [missionary.core :as m]
             [mobile.bottom-tabs :as bottom-tabs]
             [mobile.state :as mobile-state]
             [mobile.tabs :as mobile-tabs]
@@ -87,9 +86,10 @@
         [show-worker-log? set-show-worker-log!] (hooks/use-state false)
         [worker-records set-worker-records!] (hooks/use-state [])]
     (hooks/use-effect!
-     #(c.m/run-task*
-       (m/sp
-        (set-worker-records! (c.m/<? (state/<invoke-db-worker :thread-api/mobile-logs)))))
+     #(do
+        (p/let [records (state/<invoke-db-worker :thread-api/mobile-logs)]
+          (set-worker-records! records))
+        nil)
      [])
     [:div.flex.flex-col.gap-1.p-2.ls-debug-log
      [:div.flex.flex-row.justify-between
@@ -225,11 +225,11 @@
 
 (hsx/defc page
   []
-  (let [login? (and (state/use-sub :auth/id-token)
+  (let [login? (and (rfx/use-sub [:auth/id-token])
                     (user-handler/logged-in?))
-        theme (state/use-sub :ui/theme)
-        system-theme? (state/use-sub :ui/system-theme?)
-        preferred-language (state/use-sub :preferred-language)
+        theme (rfx/use-sub [:ui/theme])
+        system-theme? (rfx/use-sub [:ui/system-theme?])
+        preferred-language (rfx/use-sub [:preferred-language])
         theme-value (if system-theme?
                       "system"
                       (or theme "system"))]

@@ -11,7 +11,9 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.extensions.fsrs :as fsrs]
-            [frontend.mobile.util :as mobile-util]            [frontend.state :as state]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.rfx :as rfx]
+            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
@@ -33,7 +35,7 @@
 
 (hsx/defc component-with-restoring
   [component]
-  (let [db-restoring? (state/use-sub :db/restoring?)]
+  (let [db-restoring? (rfx/use-sub [:db/restoring?])]
     (if db-restoring?
       [:div.space-y-2.mt-8.mx-0.opacity-75
        (shui/skeleton {:class "h-10 w-full mb-6"})
@@ -305,7 +307,7 @@
 (hsx/defc app
   [current-repo route-match]
   (let [[tab] (mobile-state/use-tab)
-        preferred-language (state/use-sub :preferred-language)
+        preferred-language (rfx/use-sub [:preferred-language])
         [theme] (hooks/use-atom-in state/state :ui/theme)]
     (use-screen-size-effects!)
     (use-theme-effects! current-repo theme)
@@ -342,11 +344,11 @@
 
 (hsx/defc main
   []
-  (let [current-repo (state/use-sub :git/current-repo)
-        show-action-bar? (state/use-sub :mobile/show-action-bar?)
+  (let [current-repo (rfx/use-sub [:git/current-repo])
+        show-action-bar? (rfx/use-sub [:mobile/show-action-bar?])
         [{:keys [open? content-fn opts]}] (hooks/use-atom mobile-state/*popup-data)
         show-popup? (and open? content-fn)
-        route-match (state/use-sub :route-match)]
+        route-match (rfx/use-sub [:route-match])]
     [:main#app-container-wrapper.ls-fold-button-on-right
      [:div#app-container {:class (when show-popup? "invisible")}
       [:div#main-container.flex.flex-1.overflow-x-hidden
