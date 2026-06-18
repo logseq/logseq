@@ -323,7 +323,7 @@
                                                     "escape-key" (:onEscapeKeyDown content-props)
                                                     "outside-press" (:onPointerDownOutside content-props)
                                                     nil)]
-                                      (prn :debug :id id :reason reason)
+                                      ; (prn :debug :id id :reason reason)
                                       (if (or (not last-popup?)
                                             target-toggle?
                                             menu-transition?
