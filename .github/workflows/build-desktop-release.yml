@@ -45,6 +45,11 @@ on:
         type: boolean
         required: true
         default: true
+      publish-linux-stores:
+        description: 'Publish Flathub and Snap'
+        type: boolean
+        required: true
+        default: false
   # schedule: # Every workday at the 2 P.M. (UTC) we run a scheduled nightly build
   #   - cron: '0 14 * * MON-FRI'
 
@@ -830,7 +835,7 @@ jobs:
   trigger-flathub-release:
     runs-on: ubuntu-22.04
     needs: [ release ]
-    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish-linux-stores == 'true' && (github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') }}
     steps:
       - name: Trigger Flathub release
         run: |
@@ -875,7 +880,7 @@ jobs:
   publish-linux-snap:
     runs-on: ubuntu-22.04
     needs: [ release ]
-    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish-linux-stores == 'true' && (github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') }}
     steps:
       - name: Download The Static Asset
         uses: actions/download-artifact@v4
