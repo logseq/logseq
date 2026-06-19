@@ -458,53 +458,75 @@
    :intent "link"
    :target "_blank"))
 
-(hsx/defc user-proxy-settings-container
+(hsx/defc ^:large-vars/cleanup-todo user-proxy-settings-container
   [{:keys [protocol type] :as agent-opts}]
-  (let [type        (or (not-empty type) (not-empty protocol) "system")
+  (let [selected-type    (or (not-empty (:type agent-opts)) (not-empty protocol) (not-empty type) "system")
         [opts set-opts!] (hooks/use-state agent-opts)
         [testing? set-testing?!] (hooks/use-state false)
-        *test-input (hooks/create-ref)
-        disabled?   (or (= (:type opts) "system") (= (:type opts) "direct"))]
+        current-type     (or (:type opts) selected-type)
+        disabled?        (or (= current-type "system") (= current-type "direct"))
+        needs-host-port? (or (= current-type "http") (= current-type "socks5"))
+        host-port-valid? (and (not (string/blank? (:host opts)))
+                              (not (string/blank? (:port opts))))
+        normalize-opts   (fn [{test-url :test :keys [host port type]}]
+                           (let [type (or type selected-type)
+                                 test-url (util/trim-safe test-url)]
+                             (cond-> {:type type
+                                      :test test-url}
+                               (contains? #{"http" "socks5"} type)
+                               (assoc :protocol type
+                                      :host (util/trim-safe host)
+                                      :port (util/normalize-port-input port)))))
+        validate!        (fn []
+                           (when (and needs-host-port? (not host-port-valid?))
+                             (notification/show! (t :plugin.proxy/host-port-required) :error)
+                             true))]
     [:div.cp__settings-network-proxy-cnt
      [:h1.mb-2.text-2xl.font-bold (t :settings.advanced/network-proxy)]
-     [:div.p-2
-      [:p [:label [:strong (t :ui/type)]
-             (ui/select [{:label (t :plugin.proxy/system) :value "system" :selected (= type "system")}
-                         {:label (t :plugin.proxy/direct) :value "direct" :selected (= type "direct")}
-                         {:label "HTTP" :value "http" :selected (= type "http")}
-                         {:label "SOCKS5" :value "socks5" :selected (= type "socks5")}]
-                      (fn [_e value]
-                        (set-opts! (assoc opts :type value :protocol value))))]]
-      [:p.flex
-       [:label.pr-4
-        {:class (if disabled? "opacity-50" nil)}
-        [:strong (t :ui/host)]
-        [:input.form-input.is-small
-         {:value     (:host opts)
-          :disabled  disabled?
-          :on-change #(set-opts!
-                       (assoc opts :host (util/trim-safe (util/evalue %))))}]]
+     [:div.flex.flex-col.gap-4.p-2
+      [:div.flex.items-center.gap-3
+       [:span.shrink-0.font-medium.text-sm (t :ui/type)]
+       (shui/select
+        {:value current-type
+         :on-value-change (fn [v] (set-opts! (assoc opts :type v :protocol v)))}
+        (shui/select-trigger {:class "h-8 flex-1"} (shui/select-value {}))
+        (shui/select-content
+         (shui/select-group
+          (shui/select-item {:value "system"} (t :plugin.proxy/system))
+          (shui/select-item {:value "direct"} (t :plugin.proxy/direct))
+          (shui/select-item {:value "http"} "HTTP")
+          (shui/select-item {:value "socks5"} "SOCKS5"))))]
 
-       [:label
-        {:class (if disabled? "opacity-50" nil)}
-        [:strong (t :ui/port)]
+      [:div.flex.items-end.gap-3
+       [:div.flex.flex-col.gap-1.flex-1.min-w-0
+        [:strong.text-sm.font-medium {:class (when disabled? "opacity-50")} (t :ui/host)]
         [:input.form-input.is-small
-         {:value     (:port opts) :type "number" :min 1 :max 65535
+         {:style     {:marginTop 0}
+          :value     (or (:host opts) "")
           :disabled  disabled?
-          :on-change #(set-opts!
-                       (assoc opts :port (util/trim-safe (util/evalue %))))}]]]
-
-      [:hr]
-      [:p.flex.items-center.space-x-2
-       [:span.w-60
+          :on-change #(set-opts! (assoc opts :host (util/trim-safe (util/evalue %))))}]]
+       [:div.flex.flex-col.gap-1.flex-none {:class "w-28"}
+        [:strong.text-sm.font-medium {:class (when disabled? "opacity-50")} (t :ui/port)]
         [:input.form-input.is-small
-         {:ref         *test-input
-          :list        "proxy-test-url-datalist"
+         {:class     "text-right"
+          :style     {:marginTop 0}
+          :value     (or (:port opts) "")
+          :type      "text"
+          :inputMode "numeric"
+          :pattern   "[0-9]*"
+          :disabled  disabled?
+          :on-change #(set-opts! (assoc opts :port (util/sanitize-port-input (util/evalue %))))
+          :on-blur   #(set-opts! (assoc opts :port (util/normalize-port-input (util/evalue %))))}]]]
+
+      [:hr.my-2]
+      [:div.flex.items-center.gap-3
+       [:div.flex-1
+        [:input.form-input.is-small.w-full
+         {:list        "proxy-test-url-datalist"
           :type        "url"
           :placeholder "https://"
-          :on-change   #(set-opts!
-                         (assoc opts :test (util/trim-safe (util/evalue %))))
-          :value       (:test opts)}]
+          :on-change   #(set-opts! (assoc opts :test (util/trim-safe (util/evalue %))))
+          :value       (or (:test opts) "")}]
         [:datalist#proxy-test-url-datalist
          [:option "https://api.logseq.com/logseq/version"]
          [:option "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing"]
@@ -514,24 +536,31 @@
 
        (ui/button (if testing? (ui/loading (t :plugin.proxy/testing)) (t :plugin.proxy/test-url))
                   :intent "logseq"
-                  :on-click #(let [val (util/trim-safe (.-value (hooks/deref *test-input)))]
+                  :on-click #(let [normalized-opts (normalize-opts opts)
+                                   val (util/trim-safe (:test normalized-opts))]
                                (when (and (not testing?) (not (string/blank? val)))
-                                 (set-testing?! true)
-                                 (-> (p/let [result (ipc/ipc :testProxyUrl val opts)]
-                                       (js->clj result :keywordize-keys true))
-                                     (p/then (fn [{:keys [code response-ms]}]
-                                               (notification/clear! :proxy-net-check)
-                                               (notification/show! (t :plugin/proxy-check-success code response-ms) :success)))
-                                     (p/catch (fn [e]
-                                                (notification/show! (str e) :error false :proxy-net-check)))
-                                     (p/finally (fn [] (set-testing?! false)))))))]
+                                 (when-not (validate!)
+                                   (set-testing?! true)
+                                   (-> (p/let [result (ipc/ipc :testProxyUrl val normalized-opts)]
+                                         (js->clj result :keywordize-keys true))
+                                       (p/then (fn [{:keys [code response-ms]}]
+                                                 (notification/clear! :proxy-net-check)
+                                                 (notification/show! (t :plugin/proxy-check-success code response-ms) :success)))
+                                       (p/catch (fn [e]
+                                                  (notification/show! (str e) :error false :proxy-net-check)))
+                                       (p/finally (fn [] (set-testing?! false))))))))]
 
-      [:p.pt-2
+      [:div.pt-2
        (ui/button (t :ui/save)
                   :on-click (fn []
-                              (p/let [_ (ipc/ipc :setProxy opts)]
-                                (state/set-state! [:electron/user-cfgs :settings/agent] opts))))]]]))
-
+                              (let [normalized-opts (normalize-opts opts)]
+                                (when-not (validate!)
+                                  (state/set-state! [:electron/user-cfgs :settings/agent] normalized-opts)
+                                  (shui/dialog-close!)
+                                  (-> (ipc/ipc :setProxy normalized-opts)
+                                      (p/catch (fn [e]
+                                                 (state/set-state! [:electron/user-cfgs :settings/agent] agent-opts)
+                                                 (notification/show! (str e) :error))))))))]]]))
 (hsx/defc load-from-web-url-container
   []
   (let [[url set-url!] (hooks/use-state "http://127.0.0.1:8080/")

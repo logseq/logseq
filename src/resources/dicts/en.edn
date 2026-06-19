@@ -1,19 +1,4 @@
-{
- :account/already-logged-in-as "You are already logged in as {1}"
- :account/auth-error-already-authenticated "You are already signed in."
- :account/auth-error-code-delivery-failed "We could not send the verification code. Please try again later."
- :account/auth-error-code-expired "The verification code has expired. Please request a new one."
- :account/auth-error-code-mismatch "The verification code is incorrect."
- :account/auth-error-generic "Authentication failed. Please try again."
- :account/auth-error-invalid-credentials "Incorrect email or password."
- :account/auth-error-invalid-parameter "Some information is invalid. Please check your input and try again."
- :account/auth-error-too-many-attempts "Too many failed attempts. Please wait a moment and try again."
- :account/auth-error-too-many-requests "Too many requests. Please wait a moment and try again."
- :account/auth-error-user-not-confirmed "Your account is not confirmed yet. Please verify it with the code we sent."
- :account/auth-error-user-not-found "We could not find an account for that email address."
- :account/auth-error-username-exists "This username is already taken."
- :account/authentication "Authentication"
- :account/back-to-login "Back to login"
+{:account/authentication "Authentication"
  :account/benefits-desc "With a Logseq account, you can access cloud-based services like Logseq Sync and alpha/beta features."
  :account/billing "Billing"
  :account/billing-expired-on-label "Pro plan expired on: {1}"
@@ -1325,6 +1310,7 @@
  :plugin.package-config/remove-installed-success "Removed broken plugin \"{1}\"."
 
  :plugin.proxy/direct "Direct"
+ :plugin.proxy/host-port-required "Host and port are required"
  :plugin.proxy/system "System"
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
@@ -1999,5 +1985,4 @@
  :zotero/attachments "Attachments"
  :zotero/imported-file-warning "This is a Zotero imported file, set Zotero data directory to open the file in Logseq."
  :zotero/linked-file-warning "This is a Zotero linked file, set Zotero linked attachment base directory to open the file in Logseq."
- :zotero/notes "Notes"
-}
+ :zotero/notes "Notes"}
