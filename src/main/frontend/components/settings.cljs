@@ -1207,7 +1207,6 @@
      {:on-key-press (fn [e]
                       (when (= "Enter" (.-key e))
                         (invite-user!)))}
-     [:h2.opacity-50.font-medium (t :collaboration/members)]
      [:div.users.flex.flex-col.gap-1
       (if loading?
         (for [i (range 2)]
@@ -1244,7 +1243,7 @@
                                  (when (and graph-uuid member-id)
                                    (-> (rtc-handler/<rtc-remove-member! graph-uuid member-id)
                                        (p/then (fn []
-                                                 (rtc-handler/<rtc-get-users-info)))
+                                                 (rtc-handler/<rtc-get-users-info true)))
                                        (p/catch (fn [e]
                                                   (notification/show! (t :collaboration/remove-access-error) :error)
                                                   (log/error :db-sync/remove-member-failed {:error e

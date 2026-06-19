@@ -1,0 +1,14 @@
+(library
+ (name logseq_cli)
+ (implements logseq_cli_spec)
+ (modes melange)
+ (preprocess
+  (pps melange.ppx))
+ (libraries
+  logseq_cli_platform_spec
+  humanize
+  melange-fetch
+  melange-transit
+  melange-edn
+  melange.js
+  melange.node))

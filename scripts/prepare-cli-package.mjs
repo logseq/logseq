@@ -4,6 +4,15 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = path.join(repoRoot, "dist", "cli-package");
+const cliBundlePath = path.join(
+  repoRoot,
+  "cli",
+  "_build",
+  "default",
+  "dist",
+  "logseq-cli.js",
+);
+const stagedCliPath = path.join(repoRoot, "static", "logseq-cli.js");
 const rootPackage = JSON.parse(
   fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"),
 );
@@ -11,7 +20,6 @@ const rootPackage = JSON.parse(
 const packageFiles = [
   "dist/logseq.js",
   "static/logseq-cli.js",
-  "static/logseq-cli.js.map",
   "static/js/db-worker-node.js",
   "static/js/db-worker-node-assets.json",
   ".agents/skills/logseq-cli/SKILL.md",
@@ -20,7 +28,6 @@ const packageFiles = [
 const copyEntries = [
   ["dist/logseq.js", "dist/logseq.js"],
   ["static/logseq-cli.js", "static/logseq-cli.js"],
-  ["static/logseq-cli.js.map", "static/logseq-cli.js.map"],
   ["dist/db-worker-node.js", "static/js/db-worker-node.js"],
   ["dist/db-worker-node-assets.json", "static/js/db-worker-node-assets.json"],
   [".agents/skills/logseq-cli/SKILL.md", ".agents/skills/logseq-cli/SKILL.md"],
@@ -33,6 +40,25 @@ const assertReleaseEntrypoint = (content) => {
         `static/logseq-cli.js still references Shadow runtime output: ${needle}`,
       );
     }
+  }
+};
+
+const assertFreshCliRuntime = () => {
+  if (!fs.existsSync(cliBundlePath)) {
+    throw new Error(
+      "Missing CLI package input: cli/_build/default/dist/logseq-cli.js",
+    );
+  }
+  if (!fs.existsSync(stagedCliPath)) {
+    throw new Error("Missing CLI package input: static/logseq-cli.js");
+  }
+
+  const bundleStats = fs.statSync(cliBundlePath);
+  const stagedStats = fs.statSync(stagedCliPath);
+  if (stagedStats.mtimeMs + 1000 < bundleStats.mtimeMs) {
+    throw new Error(
+      "static/logseq-cli.js is older than cli/_build/default/dist/logseq-cli.js; run `pnpm cli:release` before preparing the CLI package",
+    );
   }
 };
 
@@ -82,9 +108,8 @@ const optionalDependencies = Object.fromEntries(
   dependencyEntries.filter(([name]) => optionalDependencyNames.has(name)),
 );
 
-assertReleaseEntrypoint(
-  fs.readFileSync(path.join(repoRoot, "static", "logseq-cli.js"), "utf8"),
-);
+assertFreshCliRuntime();
+assertReleaseEntrypoint(fs.readFileSync(stagedCliPath, "utf8"));
 
 fs.rmSync(packageRoot, { recursive: true, force: true });
 

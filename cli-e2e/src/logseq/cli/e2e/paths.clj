@@ -41,7 +41,8 @@
 
 (defn required-artifacts
   []
-  [(repo-path "static" "logseq-cli.js")
+  [(repo-path "cli" "_build" "default" "dist" "logseq-cli.js")
+   (repo-path "static" "logseq-cli.js")
    (repo-path "static" "db-worker-node.js")
    (repo-path "dist" "db-worker-node.js")
    (repo-path "dist" "db-worker-node-assets.json")
