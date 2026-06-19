@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Ødelagt plugin \"{1}\" ble fjernet."
 
  :plugin.proxy/direct "Direkte"
+ :plugin.proxy/host-port-required "Vert og port er påkrevd"
  :plugin.proxy/system "System"
  :plugin.proxy/test-url "Test-URL"
  :plugin.proxy/testing "Tester"
