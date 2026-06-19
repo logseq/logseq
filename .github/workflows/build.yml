@@ -15,6 +15,7 @@ env:
   JAVA_VERSION: '21'
   # This is the latest node version we can run.
   NODE_VERSION: '24'
+  OCAML_VERSION: '5.4.0'
   BABASHKA_VERSION: '1.12.215'
 
 jobs:
@@ -112,7 +113,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
-          cache-dependency-path: pnpm-lock.yaml
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            cli/pnpm-lock.yaml
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -125,6 +128,11 @@ jobs:
         with:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
 
       - name: Clojure cache
         uses: actions/cache@v4
@@ -140,11 +148,18 @@ jobs:
         if: steps.clojure-deps.outputs.cache-hit != 'true'
         run: clojure -A:cljs -P
 
+      - name: Fetch OCaml deps
+        working-directory: cli
+        run: opam install . --deps-only --with-test --yes
+
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
 
+      - name: Fetch CLI pnpm deps
+        run: pnpm --dir cli install --frozen-lockfile
+
       - name: Run CLI E2E tests
-        run: bb dev:cli-e2e --jobs 1 --verbose
+        run: opam exec -- bb dev:cli-e2e --jobs 1 --verbose
 
   lint:
     runs-on: ubuntu-22.04
@@ -209,6 +224,7 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: |
             pnpm-lock.yaml
+            cli/pnpm-lock.yaml
             deps/db/pnpm-lock.yaml
             scripts/pnpm-lock.yaml
 
@@ -224,14 +240,26 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
       - name: Install CLI Linux runtime deps
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
+
+      - name: Fetch OCaml deps
+        working-directory: cli
+        run: opam install . --deps-only --with-test --yes
 
       - name: Fetch scripts pnpm deps
         run: cd scripts && pnpm install --frozen-lockfile
 
       - name: Fetch root pnpm deps
         run: pnpm install --frozen-lockfile
+
+      - name: Fetch CLI pnpm deps
+        run: pnpm --dir cli install --frozen-lockfile
 
       - name: Create DB graph with properties
         run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ./cli-root/graphs/properties-graph
@@ -244,7 +272,7 @@ jobs:
 
       - name: Build logseq CLI runtime
         run: |
-          clojure -M:cljs release logseq-cli
+          opam exec -- pnpm cli:release
           pnpm db-worker-node:release:bundle
           pnpm --dir deps/db-sync build:node-adapter
           node scripts/prepare-cli-package.mjs

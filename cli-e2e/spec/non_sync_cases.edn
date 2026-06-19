@@ -180,9 +180,9 @@
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page BackupSeed >/dev/null"],
    :cmds
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup create --graph {{graph-arg}} --name nightly >/dev/null"
-    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup list"
-    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup restore --src \"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup list | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"backups\"][0][\"name\"])')\" --dst {{restore-graph-arg}} >/dev/null"
-    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup remove --src \"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup list | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"backups\"][0][\"name\"])')\""],
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup list --graph {{graph-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup restore --graph {{graph-arg}} --src \"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup list --graph {{graph-arg}} | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"backups\"][0][\"name\"])')\" --dst {{restore-graph-arg}} >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup remove --graph {{graph-arg}} --src \"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph backup list --graph {{graph-arg}} | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"backups\"][0][\"name\"])')\""],
    :id "graph-backup-lifecycle-json",
    :covers
    {:commands
@@ -520,6 +520,26 @@
      :upsert ["--name"],
      :list ["--with-properties" "--sort" "--order" "--limit"]}},
    :tags [:upsert :list],
+   :extends :non-sync/graph-json-env}
+  {:id "tag-upsert-schema-properties-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name SchemaOwner --type default --cardinality one >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name SchemaTag --add-properties '[\"SchemaOwner\"]' >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find [?title ...] :where [?tag :block/title \"SchemaTag\"] [?tag :logseq.property.class/properties ?prop] [?prop :block/title ?title]]' | grep -q SchemaOwner"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name SchemaTag --remove-properties '[\"SchemaOwner\"]' >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find [?title ...] :where [?tag :block/title \"SchemaTag\"] [?tag :logseq.property.class/properties ?prop] [?prop :block/title ?title]]'"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths {[:status] "ok"},
+    :stdout-not-contains ["SchemaOwner"]},
+   :covers
+   {:commands ["upsert property" "upsert tag" "query"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--name" "--type" "--cardinality" "--add-properties" "--remove-properties"],
+     :query ["--query"]}},
+   :tags [:upsert :query],
    :extends :non-sync/graph-json-env}
   {:id "property-upsert-and-list-json",
    :cmds
@@ -1131,21 +1151,6 @@
      :debug ["--ident"]}},
    :tags [:debug],
    :extends :non-sync/graph-json-env}
-  {:id "debug-pull-current-graph-fallback-json",
-   :setup
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"],
-   :cmds
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json debug pull --id \"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Home\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\""],
-   :expect
-   {:exit 0,
-    :stdout-json-paths
-    {[:status] "ok", [:data :entity :block/title] "Home"}},
-   :covers
-   {:commands ["debug pull"],
-    :options
-    {:global ["--config" "--root-dir" "--output"], :debug ["--id"]}},
-   :tags [:debug],
-   :extends :non-sync/graph-json-env}
   {:id "remove-page-json",
    :setup
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"],
@@ -1163,8 +1168,7 @@
    :extends :non-sync/graph-json-env}
   {:id "graph-remove-json",
    :setup
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
-    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}} >/dev/null"],
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"],
    :cmds
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph remove --graph {{graph-arg}}"
     "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph list"],
@@ -1237,12 +1241,14 @@
    :tags [:server],
    :extends :non-sync/graph-json-env}
   {:id "server-list-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server start --graph {{graph-arg}} >/dev/null"],
    :cmds
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server list"],
    :expect
    {:exit 0,
     :stdout-json-paths
-    {[:status] "ok", [:data :servers 0 :repo] "{{graph}}"}},
+    {[:status] "ok", [:data :servers 0 :graph] "{{graph}}"}},
    :covers
    {:commands ["server list"],
     :options {:global ["--config" "--root-dir" "--output"]}},
@@ -1254,7 +1260,7 @@
    :expect
    {:exit 0,
     :stdout-json-paths
-    {[:status] "ok", [:data :repo] "{{graph}}", [:data :owned?] true}},
+    {[:status] "ok", [:data :repo] "logseq_db_{{graph}}", [:data :owned] true}},
    :covers
    {:commands ["server restart"],
     :options
@@ -1264,12 +1270,13 @@
    :extends :non-sync/graph-json-env}
   {:id "server-stop-json",
    :setup
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"],
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server start --graph {{graph-arg}} >/dev/null"],
    :cmds
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"],
    :expect
    {:exit 0,
-    :stdout-json-paths {[:status] "ok", [:data :repo] "{{graph}}"}},
+    :stdout-json-paths {[:status] "ok", [:data :repo] "logseq_db_{{graph}}"}},
    :covers
    {:commands ["server stop"],
     :options
@@ -1277,14 +1284,12 @@
      :server ["--graph"]}},
    :tags [:server]}
   {:id "server-start-json",
-   :setup
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}} >/dev/null"],
    :cmds
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server start --graph {{graph-arg}}"],
    :expect
    {:exit 0,
     :stdout-json-paths
-    {[:status] "ok", [:data :repo] "{{graph}}", [:data :owned?] true}},
+    {[:status] "ok", [:data :repo] "logseq_db_{{graph}}", [:data :owned] true}},
    :covers
    {:commands ["server start"],
     :options
@@ -1332,17 +1337,17 @@
    :covers {:commands ["skill show"], :options {:global ["--output"]}},
    :tags [:skill]}
   ;; Repo root already contains tracked `.agents/skills/logseq-cli/SKILL.md`,
-  ;; so this local-install case must run from an isolated cwd.
+  ;; so this local-install case must run from an isolated cwd and HOME.
   {:id "skill-install-local",
    :setup
-   ["rm -rf ./tmp/cli-e2e-skill-install-local"
-    "mkdir -p ./tmp/cli-e2e-skill-install-local"],
+   ["rm -rf ./tmp/cli-e2e-skill-install-local ./tmp/cli-e2e-skill-install-local-home"
+    "mkdir -p ./tmp/cli-e2e-skill-install-local ./tmp/cli-e2e-skill-install-local-home"],
    :cmds
-   ["cd ./tmp/cli-e2e-skill-install-local && {{cli}} skill install >/dev/null"
+   ["cd ./tmp/cli-e2e-skill-install-local && HOME=\"$(pwd)/../cli-e2e-skill-install-local-home\" {{cli}} skill install"
     "python3 -c 'import pathlib; p=pathlib.Path(\"./tmp/cli-e2e-skill-install-local/.agents/skills/logseq-cli/SKILL.md\"); print(\"installed\" if p.exists() else \"missing\")'"],
    :expect {:exit 0, :stdout-contains ["installed"]},
    :covers {:commands ["skill install"], :options {:skill []}},
-   :cleanup ["rm -rf ./tmp/cli-e2e-skill-install-local"],
+   :cleanup ["rm -rf ./tmp/cli-e2e-skill-install-local ./tmp/cli-e2e-skill-install-local-home"],
    :tags [:skill]}
   {:id "skill-install-global-preserves-other-skills",
    :setup

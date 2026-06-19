@@ -230,26 +230,35 @@
   (debounced-update-presence editing-block-uuid))
 
 (defn <rtc-get-users-info
-  []
-  (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
-    (let [base (http-base)
-          repo (state/get-current-repo)]
-      (if base
-        (p/let [_ (user-handler/<ensure-id&access-token!)
-                resp (fetch-json (str base "/graphs/" graph-uuid "/members")
-                                 {:method "GET"}
-                                 {:response-schema :graph-members/list})
-                members (:members resp)
-                users (mapv (fn [{:keys [user-id role email username]}]
-                              (let [name (or username email user-id)
-                                    user-type (some-> role keyword)]
-                                (cond-> {:user/uuid user-id
-                                         :user/name name
-                                         :graph<->user/user-type user-type}
-                                  (string? email) (assoc :user/email email))))
-                            members)]
-          (state/set-state! :rtc/users-info {repo users}))
-        (p/resolved nil)))))
+  ([] (<rtc-get-users-info false))
+  ([force?]
+   (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
+     (let [base (http-base)
+           repo (state/get-current-repo)
+           cached-users (get @(:rtc/users-info @state/state) repo)]
+       (cond
+         (and (not force?) (contains? @(:rtc/users-info @state/state) repo))
+         (p/resolved cached-users)
+
+         base
+         (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+                 resp (fetch-json (str base "/graphs/" graph-uuid "/members")
+                                  {:method "GET"}
+                                  {:response-schema :graph-members/list})
+                 members (:members resp)
+                 users (mapv (fn [{:keys [user-id role email username]}]
+                               (let [name (or username email user-id)
+                                     user-type (some-> role keyword)]
+                                 (cond-> {:user/uuid user-id
+                                          :user/name name
+                                          :graph<->user/user-type user-type}
+                                   (string? email) (assoc :user/email email))))
+                             members)]
+           (state/set-state! :rtc/users-info users :path-in-sub-atom repo)
+           users)
+
+         :else
+         (p/resolved nil))))))
 
 (defn <rtc-create-graph!
   ([repo]
@@ -365,7 +374,8 @@
                e2ee? (ldb/get-graph-rtc-e2ee? (db/get-db))
                _ (when (and repo e2ee?)
                    (state/<invoke-db-worker :thread-api/db-sync-grant-graph-access
-                                            repo graph-uuid email))]
+                                            repo graph-uuid email))
+               _ (<rtc-get-users-info true)]
          (notification/show! (t :sync/invitation-sent) :success))
        (p/catch (fn [e]
                   (if (= "user not found" (get-in (ex-data e) [:body :error]))

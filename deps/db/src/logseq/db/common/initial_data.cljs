@@ -340,7 +340,8 @@
                      (when (and (entity-util/journal? e)
                                 (:db/id e)
                                 (not (entity-util/recycled? e)))
-                       e))))))))
+                       e)))))
+         (common-util/distinct-by :db/id))))
 
 (defn- get-structured-datoms
   [db]
