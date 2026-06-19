@@ -92,20 +92,6 @@
                                                  :redef false}}
                    :closure-defines {goog.debug.LOGGING_ENABLED true}}
 
-  :logseq-cli {:target :node-script
-               :output-to "static/logseq-cli.js"
-               :main logseq.cli.main/main
-               :devtools {:enabled false}
-               :build-hooks [(shadow.hooks/build-metadata-hook "--long --always --dirty")]
-               :closure-defines {goog.debug.LOGGING_ENABLED true
-                                 lambdaisland.glogi.console/colorize "false"
-                                 lambdaisland.glogi.console/timestamp "true"}
-               :compiler-options {:infer-externs :auto
-                                  :source-map true
-                                  :externs ["datascript/externs.js"
-                                            "externs.js"]
-                                  :warnings {:fn-deprecated false
-                                             :redef false}}}
   :mobile {:target        :browser
            :module-loader true
 	           :js-options    {:ignore-asset-requires true}

@@ -94,7 +94,11 @@
 (defonce ^:private *search-index-build-timeout (atom nil))
 (defn- <build-search-index!
   [repo]
-  (-> (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)
+  (-> (p/let [result (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)]
+        (when (and (not= :started result)
+                   (= repo (state/get-current-repo)))
+          (state/pub-event! [:graph/ready repo]))
+        result)
       (p/catch (fn [error]
                  (js/console.error "Search index build error:" error)))))
 
@@ -276,8 +280,7 @@
   (export/auto-db-backup! graph)
   (rtc-flows/trigger-rtc-start graph)
   (fsrs/update-due-cards-count)
-  (when-not (mobile-util/native-platform?)
-    (state/pub-event! [:graph/ready graph])))
+  nil)
 
 (defevent! :graph/save-db-to-disk [[_ _opts]]
   (persist-db/export-current-graph! :succ-notification? true))

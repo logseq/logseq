@@ -81,6 +81,7 @@
 (def ^:private search-index-build-idle-status-ttl-ms 2000)
 (def ^:private search-index-build-pause-ms 300)
 (defonce ^:private *search-index-build-ids (atom {}))
+(defonce ^:private *vector-index-rebuild-ids (atom {}))
 (defonce ^:private *client-ops-cleanup-timers (atom {}))
 (def ^:private client-ops-cleanup-interval-ms (* 3 60 60 1000))
 (def ^:private wal-checkpoint-sql "PRAGMA wal_checkpoint(TRUNCATE)")
@@ -631,18 +632,50 @@
    :embedding-dimension (platform/embedding-dimension (platform/current))
    :context-version search/vector-context-version})
 
-(defn- vector-index-current?
-  [repo]
-  (if-let [vector-index (worker-state/get-vector-index repo)]
-    (if-let [metadata-fn (:metadata vector-index)]
-      (= (expected-vector-index-metadata) (metadata-fn))
-      false)
-    true))
-
 (defn- persist-vector-index-metadata!
   [repo]
   (when-let [set-metadata! (:set-metadata! (worker-state/get-vector-index repo))]
     (set-metadata! (expected-vector-index-metadata))))
+
+(declare <embed-index-batches vector-embedding-batches)
+
+(defn- start-vector-index-rebuild!
+  [repo build-id]
+  (swap! *vector-index-rebuild-ids assoc repo build-id))
+
+(defn- active-vector-index-rebuild?
+  [repo build-id]
+  (= build-id (get @*vector-index-rebuild-ids repo)))
+
+(defn- clear-vector-index-rebuild!
+  [repo build-id]
+  (swap! *vector-index-rebuild-ids
+         (fn [builds]
+           (if (= build-id (get builds repo))
+             (dissoc builds repo)
+             builds))))
+
+(defn- schedule-vector-index-rebuild!
+  [repo build-id indexed-blocks]
+  (when (worker-state/get-vector-index repo)
+    (start-vector-index-rebuild! repo build-id)
+    (let [indexed-blocks (vec indexed-blocks)]
+      (-> (if (seq indexed-blocks)
+            (p/let [vector-blocks (<embed-index-batches (vector-embedding-batches indexed-blocks))]
+              (when (active-vector-index-rebuild? repo build-id)
+                (when-let [vector-index (worker-state/get-vector-index repo)]
+                  (search/upsert-vector-blocks! vector-index vector-blocks))))
+            (p/resolved nil))
+          (p/then (fn [_]
+                    (when (active-vector-index-rebuild? repo build-id)
+                      (persist-vector-index-metadata! repo))))
+          (p/catch (fn [error]
+                     (when (active-vector-index-rebuild? repo build-id)
+                       (log/error :search/vector-index-rebuild-failed {:repo repo
+                                                                       :error error}))))
+          (p/finally (fn []
+                       (clear-vector-index-rebuild! repo build-id))))))
+  nil)
 
 (defn- start-search-index-build!
   [repo]
@@ -1315,14 +1348,10 @@
         vector-context (search/build-vector-context-cache blocks)
         total (count blocks)
         vector-index (worker-state/get-vector-index repo)
-        vector-index? (boolean vector-index)
-        fts-progress-scale (if vector-index? 50 100)
-        vector-progress-base (if vector-index? 50 100)
         progress-for-fts (fn [processed]
                            (if (zero? total)
-                             vector-progress-base
-                             (min vector-progress-base
-                                  (int (* fts-progress-scale (/ processed total))))))
+                             100
+                             (min 100 (int (* 100 (/ processed total))))))
         report-progress! (fn [progress processed total]
                            (report-search-index-progress! repo {:build-id build-id
                                                                 :status :running
@@ -1363,22 +1392,8 @@
              (p/recur remaining' processed' (if should-report? progress last-progress) indexed-blocks')))
          (do
            (ensure-active-search-index-build! repo build-id)
-           (p/let [_ (when (and vector-index? (seq indexed-blocks))
-                       (let [vector-total (count indexed-blocks)
-                             vector-processed (atom 0)
-                             vector-batches (vector-embedding-batches indexed-blocks)]
-                         (p/let [vector-blocks (<embed-index-batches
-                                                vector-batches
-                                                (fn [embedded-count]
-                                                  (let [processed' (swap! vector-processed + embedded-count)
-                                                        progress (+ vector-progress-base
-                                                                    (if (zero? vector-total)
-                                                                      50
-                                                                      (min 50 (int (* 50 (/ processed' vector-total))))))]
-                                                    (report-progress! progress processed' vector-total))))]
-                           (search/upsert-vector-blocks! (worker-state/get-vector-index repo) vector-blocks))))
-                   _ (do
-                       (persist-vector-index-metadata! repo)
+           (schedule-vector-index-rebuild! repo build-id indexed-blocks)
+           (p/let [_ (do
                        (.exec search-db (str "PRAGMA user_version = " search-db-version))
                        (report-search-index-progress! repo {:build-id build-id
                                                             :status :completed
@@ -1394,7 +1409,6 @@
     (when search-db
       (let [version (search-index-version search-db)]
         (if (and (= version search-db-version)
-                 (vector-index-current? repo)
                  (not force?))
           version
          (when-let [conn (worker-state/get-datascript-conn repo)]
