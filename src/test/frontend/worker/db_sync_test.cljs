@@ -4548,6 +4548,26 @@
                 (is (= tx-ids-before tx-ids-after))
                 (is (= 2 (count (distinct tx-ids-after))))))))))))
 
+(deftest remote-rebase-tx-is-not-enqueued-as-local-pending-test
+  (testing "remote rebase tx reports are applied as remote data, not new local pending txs"
+    (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (d/transact! conn [[:db/add (:db/id child1) :block/title "child local"]])
+          (let [pending-before (#'sync-apply/pending-txs test-repo)
+                tx-ids-before (mapv :tx-id pending-before)]
+            (is (= 1 (count pending-before)))
+            (#'sync-apply/apply-remote-txs!
+             test-repo
+             nil
+             [{:tx-data [[:db/add (:db/id parent) :block/title "remote rebase"]]
+               :outliner-op :rebase}])
+            (let [pending-after (#'sync-apply/pending-txs test-repo)
+                  tx-ids-after (mapv :tx-id pending-after)]
+              (is (= 1 (count pending-after)))
+              (is (= tx-ids-before tx-ids-after))
+              (is (= :rebase (:outliner-op (first pending-after)))))))))))
+
 (deftest rebase-keeps-original-created-at-for-pending-tx-test
   (testing "rebasing a pending tx should keep its original created-at ordering key"
     (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)]
