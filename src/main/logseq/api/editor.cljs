@@ -159,6 +159,11 @@
   [name]
   (page-handler/<delete! name nil))
 
+(defn restore_page
+  [id-or-page-name]
+  (when-let [page (db-model/get-page id-or-page-name)]
+    (page-handler/restore-recycled! (:block/uuid page))))
+
 (def rename_page
   page-handler/rename!)
 

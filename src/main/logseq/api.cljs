@@ -131,6 +131,7 @@
 (def ^:export remove_block api-editor/remove_block)
 (def ^:export remove_block_property api-editor/remove_block_property)
 (def ^:export rename_page api-editor/rename_page)
+(def ^:export restore_page api-editor/restore_page)
 (def ^:export restore_editing_cursor api-editor/restore_editing_cursor)
 (def ^:export save_focused_code_editor_content api-editor/save_focused_code_editor_content)
 (def ^:export select_block api-editor/select_block)
