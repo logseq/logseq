@@ -5363,6 +5363,18 @@ let () =
         List.mem name option.names
       in
       let option_by_name name options = List.find_opt (has_name name) options in
+      let assert_timestamp_headers_last (command : Command_registry.command_meta) =
+        let headers = command.human_table_headers_order in
+        if List.mem "created-at" headers || List.mem "updated-at" headers then
+          match List.rev headers with
+          | "updated-at" :: "created-at" :: _ -> pass
+          | _ ->
+              fail_test
+                (Printf.sprintf "%s: expected created-at,updated-at suffix, got %s"
+                   (String.concat " " command.path)
+                   (String.concat "," headers))
+      in
+      List.iter assert_timestamp_headers_last registry.commands;
       let output_option =
         expect_some "global output option"
           (option_by_name "--output" Command_registry.global_options)
@@ -5470,7 +5482,7 @@ let () =
           (Command_registry.find_by_path [ "list"; "task" ] registry)
       in
       expect_equal "list task human header order"
-        "id,title,status,priority,scheduled,deadline,updated-at,created-at"
+        "id,title,status,priority,scheduled,deadline,created-at,updated-at"
         (String.concat "," list_task.human_table_headers_order);
       let show =
         expect_some "show command"

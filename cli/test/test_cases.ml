@@ -864,7 +864,7 @@ let () =
           let headers =
             headers_from output.stdout |> Array.to_list |> String.concat ","
           in
-          if headers <> "id,title,status,priority,updated-at,created-at" then
+          if headers <> "id,title,status,priority,created-at,updated-at" then
             fail_promise ("unexpected task headers: " ^ headers)
           else if
             Js.String.includes ~search:"logseq.property/status.todo"
