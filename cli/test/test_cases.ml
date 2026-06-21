@@ -812,16 +812,9 @@ let () =
           else
             let headers = headers_from output.stdout in
             let expected_prefix =
-              [|
-                "db/id";
-                "block/title";
-                "logseq.property.asset/size";
-                "logseq.property.asset/type";
-              |]
+              [| "id"; "title"; "size"; "type" |]
             in
-            let expected_suffix =
-              [| "block/created-at"; "block/updated-at" |]
-            in
+            let expected_suffix = [| "created-at"; "updated-at" |] in
             if
               not
                 (string_array_equal
@@ -840,14 +833,79 @@ let () =
               fail_promise
                 ("unexpected asset header suffix: "
                 ^ String.concat "," (Array.to_list headers))
-            else if
-              not
-                (Array.exists (( = ) "logseq.property.asset/checksum") headers)
-            then fail_promise ("missing middle asset column:\n" ^ output.stdout)
-            else if Array.exists (( = ) "node/type") headers then
+            else if not (Array.exists (( = ) "checksum") headers) then
+              fail_promise ("missing middle asset column:\n" ^ output.stdout)
+            else if Js.String.includes ~search:"node/type" output.stdout then
               fail_promise
                 ("asset output must not render node/type:\n" ^ output.stdout)
             else Js.Promise.resolve pass));
+
+  test_promise "list task human output uses registry header order" (fun () ->
+      let result_transit =
+        "[{\"~:logseq.property/priority\":\"~:logseq.property/priority.high\",\"~:block/title\":\"Ship\",\"~:logseq.property/status\":\"~:logseq.property/status.todo\",\"~:block/created-at\":40000,\"~:block/updated-at\":90000,\"~:db/id\":12,\"~:block/uuid\":\"u1\"}]"
+      in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/cli-list-tasks" body then
+              result_transit
+            else (
+              fail_test ("unexpected request: " ^ body);
+              "null"))
+      in
+      let root = temp_dir "logseq-cli-list-task-order-" in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [ "--root-dir"; root; "--graph"; "alpha"; "list"; "task" ]
+          in
+          remove_tree root;
+          ignore (expect_cli_exit_zero "list task" output);
+          let headers =
+            headers_from output.stdout |> Array.to_list |> String.concat ","
+          in
+          if headers <> "id,title,status,priority,updated-at,created-at" then
+            fail_promise ("unexpected task headers: " ^ headers)
+          else if
+            Js.String.includes ~search:"logseq.property/status.todo"
+              output.stdout
+          then
+            fail_promise ("task status value kept namespace:\n" ^ output.stdout)
+          else if
+            Js.String.includes ~search:"logseq.property/priority.high"
+              output.stdout
+          then
+            fail_promise ("task priority value kept namespace:\n" ^ output.stdout)
+          else (
+            ignore
+              (expect_named_contains "task status value" output.stdout
+                 "status.todo");
+            ignore
+              (expect_named_contains "task priority value" output.stdout
+                 "priority.high");
+            Js.Promise.resolve pass)));
+
+  test "CLI exits quietly on stdout EPIPE" (fun () ->
+      let root = temp_dir "logseq-cli-stdout-epipe-" in
+      let script_path = Node.Path.join [| root; "emit-stdout-epipe.js" |] in
+      let entrypoint_path = Node.Path.resolve "." entrypoint in
+      try
+        write_file script_path
+          ("process.argv = [process.argv[0], "
+          ^ Js.Json.stringify (Js.Json.string entrypoint_path)
+          ^ ", '--version'];\nrequire("
+          ^ Js.Json.stringify (Js.Json.string entrypoint_path)
+          ^ ");\nconst err = new Error('write EPIPE');\nerr.code = \
+             'EPIPE';\nprocess.stdout.emit('error', err);\n");
+        let output = spawn_cli_from script_path [] in
+        remove_tree root;
+        ignore (expect_exit_zero "stdout EPIPE" output);
+        expect_named_not_contains "stdout EPIPE stderr" output##stderr "EPIPE";
+        expect_named_not_contains "stdout EPIPE unhandled" output##stderr
+          "Unhandled 'error' event"
+      with exn ->
+        remove_tree root;
+        fail_test (Printexc.to_string exn));
 
   test_promise "list page human output aligns ragged property rows" (fun () ->
       let request_count = ref 0 in

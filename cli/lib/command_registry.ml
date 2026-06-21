@@ -28,6 +28,7 @@ type command_meta = {
   requires_graph : bool;
   requires_auth : bool;
   write_command : bool;
+  human_table_headers_order : string list;
 }
 
 type group_meta = {
@@ -64,7 +65,7 @@ let property_type_choices = [ "default"; "number"; "date"; "checkbox"; "url" ]
 let cardinality_choices = [ "one"; "many" ]
 
 let list_page_sort_choices =
-  [ "id"; "ident"; "title"; "uuid"; "created-at"; "updated-at" ]
+  [ "id"; "title"; "ident"; "uuid"; "created-at"; "updated-at" ]
 
 let list_tag_sort_choices =
   list_page_sort_choices @ [ "properties"; "extends"; "description" ]
@@ -89,6 +90,29 @@ let list_node_sort_choices =
 
 let list_asset_sort_choices =
   [ "id"; "title"; "asset-type"; "size"; "updated-at"; "created-at" ]
+
+let search_result_header_order = [ "id"; "ident"; "title" ]
+
+let human_table_headers_order_for_known_path = function
+  | [ "list"; "page" ] -> list_page_sort_choices
+  | [ "list"; "tag" ] -> list_tag_sort_choices
+  | [ "list"; "property" ] -> list_property_sort_choices
+  | [ "list"; "task" ] -> list_task_sort_choices
+  | [ "list"; "node" ] -> list_node_sort_choices
+  | [ "list"; "asset" ] ->
+      [
+        "id";
+        "title";
+        "size";
+        "type";
+        "checksum";
+        "remote-metadata";
+        "created-at";
+        "updated-at";
+      ]
+  | [ "search"; ("block" | "page" | "property" | "tag") ] ->
+      search_result_header_order
+  | _ -> []
 
 let global_options =
   [
@@ -321,8 +345,16 @@ let options_for_known_path = function
   | _ -> []
 
 let with_catalog_options command =
-  if command.options <> [] then command
-  else { command with options = options_for_known_path command.path }
+  let options =
+    if command.options = [] then options_for_known_path command.path
+    else command.options
+  in
+  let human_table_headers_order =
+    if command.human_table_headers_order = [] then
+      human_table_headers_order_for_known_path command.path
+    else command.human_table_headers_order
+  in
+  { command with options; human_table_headers_order }
 
 let empty = { commands = []; groups = [] }
 

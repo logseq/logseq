@@ -1408,6 +1408,28 @@ let () =
       expect_named_contains "blank value" output "2   -";
       expect_named_contains "footer" output "Count: 2");
 
+  test "CLI parity human table renders keyword headers without namespaces"
+    (fun () ->
+      let output =
+        Output.Human_output.create
+          ~headers:
+            [
+              "db/id";
+              "block/title";
+              ":logseq.property/status";
+              "Input/Output";
+            ]
+          ~rows:[ [ "1"; "Ship"; "logseq.property/status.todo"; "Ready" ] ]
+          ()
+        |> Output.Human_output.to_string
+      in
+      expect_named_contains "keyword headers" output "id  title  status";
+      expect_named_contains "plain slash header" output "Input/Output";
+      expect_named_not_contains "db namespace" output "db/id";
+      expect_named_not_contains "block namespace" output "block/title";
+      expect_named_not_contains "property namespace" output
+        ":logseq.property/status");
+
   test "CLI parity output mode parser accepts exact lowercase values only"
     (fun () ->
       expect_equal "json" "json"
@@ -4183,6 +4205,7 @@ let () =
               requires_graph = false;
               requires_auth = false;
               write_command = false;
+              human_table_headers_order = [];
             };
             {
               id = Command_id.Graph_create;
@@ -4195,6 +4218,7 @@ let () =
               requires_graph = true;
               requires_auth = false;
               write_command = true;
+              human_table_headers_order = [];
             };
           ]
       in
@@ -4224,6 +4248,7 @@ let () =
               requires_graph = true;
               requires_auth = false;
               write_command = true;
+              human_table_headers_order = [];
             };
             {
               id = Command_id.Upsert_tag;
@@ -4236,6 +4261,7 @@ let () =
               requires_graph = true;
               requires_auth = false;
               write_command = true;
+              human_table_headers_order = [];
             };
           ]
       in
@@ -4258,6 +4284,7 @@ let () =
               requires_graph = true;
               requires_auth = false;
               write_command = true;
+              human_table_headers_order = [];
             };
           ]
       in
@@ -5438,6 +5465,13 @@ let () =
         (List.mem "title" tag_fields.choices);
       expect_bool "tag fields include uuid" true
         (List.mem "uuid" tag_fields.choices);
+      let list_task =
+        expect_some "list task"
+          (Command_registry.find_by_path [ "list"; "task" ] registry)
+      in
+      expect_equal "list task human header order"
+        "id,title,status,priority,scheduled,deadline,updated-at,created-at"
+        (String.concat "," list_task.human_table_headers_order);
       let show =
         expect_some "show command"
           (Command_registry.find_by_path [ "show" ] registry)
@@ -5499,7 +5533,9 @@ let () =
         expect_some "search content option"
           (option_by_name "--content" search_block.options)
       in
-      expect_equal "search content doc" "Content search text" search_content.doc);
+      expect_equal "search content doc" "Content search text" search_content.doc;
+      expect_equal "search block human header order" "id,ident,title"
+        (String.concat "," search_block.human_table_headers_order));
 
   test "CLI parity command registry help renders command and option details"
     (fun () ->
@@ -5627,6 +5663,7 @@ let () =
               requires_graph = false;
               requires_auth = false;
               write_command = false;
+              human_table_headers_order = [];
             };
           ]
       in
@@ -6422,6 +6459,32 @@ let () =
         (Format_types.format_result (message Output.Mode.Edn)
            (config ~output_format:(Output.Mode.Packed Output.Mode.Edn) ())));
 
+  test "CLI parity default human tables keep discovered header order" (fun () ->
+      let value =
+        Edn_util.map
+          [
+            ( Edn_util.keyword "items",
+              Edn_util.vector
+                [
+                  Edn_util.map
+                    [
+                      ( Edn_util.keyword "block/updated-at",
+                        Edn_util.int64 90000L );
+                      (Edn_util.keyword "block/title", Edn_util.string "Alpha");
+                      ( Edn_util.keyword "block/created-at",
+                        Edn_util.int64 40000L );
+                    ];
+                ] );
+          ]
+      in
+      let output =
+        Format_types.format_result
+          (Cli_result.ok Output.Mode.Human (Cli_result.Raw value))
+          (config ())
+      in
+      expect_equal "default table header order" "updated-at,title,created-at"
+        (headers_from output |> Array.to_list |> String.concat ","));
+
   test "CLI parity format graph list marks current graph and old graph dirs"
     (fun () ->
       let graph_list_data =
@@ -6498,13 +6561,23 @@ let () =
       in
       let list_output =
         Format_types.format_result
+          ~human_table_headers_order:
+            [ "id"; "ident"; "title"; "uuid"; "created-at"; "updated-at" ]
           (Cli_result.ok ~command:Command_id.List_page Output.Mode.Human
              (Cli_result.Raw list_value))
           (config ())
       in
-      expect_named_contains "list id header" list_output "db/id";
+      expect_named_contains "list id header" list_output "id";
       expect_named_contains "list title" list_output "Alpha";
       expect_named_contains "list count" list_output "Count: 1";
+      let empty_order_output =
+        Format_types.format_result ~human_table_headers_order:[]
+          (Cli_result.ok ~command:Command_id.List_page Output.Mode.Human
+             (Cli_result.Raw list_value))
+          (config ())
+      in
+      expect_equal "empty header order does not infer columns" "Count: 1"
+        (String.trim empty_order_output);
       let search_value =
         Edn_util.map
           [
@@ -6528,6 +6601,7 @@ let () =
       in
       let search_output =
         Format_types.format_result
+          ~human_table_headers_order:[ "id"; "ident"; "title" ]
           (Cli_result.ok ~command:Command_id.Search_block Output.Mode.Human
              (Cli_result.Raw search_value))
           (config ())
@@ -6544,6 +6618,14 @@ let () =
       in
       let human command value =
         Format_types.format_result
+          ~human_table_headers_order:
+            (let registry = (Cli.make_app_context ()).Cli.registry in
+             let meta =
+               expect_some "command metadata"
+                 (Command_registry.find_by_path (Command_id.to_path command)
+                    registry)
+             in
+             meta.human_table_headers_order)
           (Cli_result.ok ~command Output.Mode.Human (Cli_result.Raw value))
           (config ())
       in
@@ -6560,8 +6642,8 @@ let () =
                  ];
              ])
       in
-      expect_named_contains "tag id header" tag_output "db/id";
-      expect_named_contains "tag title header" tag_output "block/title";
+      expect_named_contains "tag id header" tag_output "id";
+      expect_named_contains "tag title header" tag_output "title";
       expect_named_contains "tag ident value" tag_output "logseq.class/Tag";
       let property_output =
         human Command_id.List_property
@@ -6583,10 +6665,9 @@ let () =
                  ];
              ])
       in
-      expect_named_contains "property type header" property_output
-        "logseq.property/type";
+      expect_named_contains "property type header" property_output "type";
       expect_named_contains "property cardinality header" property_output
-        "db/cardinality";
+        "cardinality";
       expect_named_contains "property cardinality value" property_output
         "db.cardinality/many";
       let task_output =
@@ -6604,10 +6685,46 @@ let () =
                  ];
              ])
       in
-      expect_named_contains "task status column" task_output
-        "logseq.property/status";
-      expect_named_contains "task priority column" task_output
-        "logseq.property/priority";
+      expect_named_contains "task status column" task_output "status";
+      expect_named_contains "task priority column" task_output "priority";
+      let unordered_task_output =
+        Format_types.format_result
+          ~human_table_headers_order:
+            [
+              "id";
+              "title";
+              "status";
+              "priority";
+              "scheduled";
+              "deadline";
+              "updated-at";
+              "created-at";
+            ]
+          (Cli_result.ok ~command:Command_id.List_task Output.Mode.Human
+             (Cli_result.Raw
+                (items
+                   [
+                     row
+                       [
+                         ( Edn_util.keyword "logseq.property/priority",
+                           Edn_util.keyword "logseq.property/priority.high" );
+                         (Edn_util.keyword "block/title", Edn_util.string "Ship");
+                         ( Edn_util.keyword "logseq.property/status",
+                           Edn_util.keyword "logseq.property/status.todo" );
+                         ( Edn_util.keyword "block/created-at",
+                           Edn_util.int64 40000L );
+                         ( Edn_util.keyword "block/updated-at",
+                           Edn_util.int64 90000L );
+                         (Edn_util.keyword "db/id", Edn_util.int64 12L);
+                         (Edn_util.keyword "block/uuid", Edn_util.string "u1");
+                       ];
+                   ])))
+          (config ())
+      in
+      expect_equal "ordered task headers"
+        "id,title,status,priority,updated-at,created-at"
+        (headers_from unordered_task_output |> Array.to_list
+        |> String.concat ",");
       let node_output =
         human Command_id.List_node
           (items
@@ -6622,8 +6739,8 @@ let () =
                  ];
              ])
       in
-      expect_named_contains "node type column" node_output "node/type";
-      expect_named_contains "node uuid column" node_output "block/uuid";
+      expect_named_contains "node type column" node_output "type";
+      expect_named_not_contains "node uuid column" node_output "uuid";
       let asset_output =
         human Command_id.List_asset
           (items
@@ -6639,10 +6756,8 @@ let () =
                  ];
              ])
       in
-      expect_named_contains "asset type column" asset_output
-        "logseq.property.asset/type";
-      expect_named_contains "asset size column" asset_output
-        "logseq.property.asset/size";
+      expect_named_contains "asset type column" asset_output "type";
+      expect_named_contains "asset size column" asset_output "size";
       expect_named_contains "asset raw size" asset_output "2552");
 
   test "CLI parity format list title truncation keeps current display contracts"
@@ -6661,6 +6776,8 @@ let () =
       in
       let truncated =
         Format_types.format_result
+          ~human_table_headers_order:
+            [ "id"; "ident"; "title"; "uuid"; "created-at"; "updated-at" ]
           (Cli_result.ok ~command:Command_id.List_page Output.Mode.Human
              (Cli_result.Raw (value "ABCDEFGH")))
           (config ~list_title_max_display_width:6 ())
@@ -6671,16 +6788,18 @@ let () =
         "ABCDEFGH";
       let multiline =
         Format_types.format_result
+          ~human_table_headers_order:
+            [ "id"; "ident"; "title"; "uuid"; "created-at"; "updated-at" ]
           (Cli_result.ok ~command:Command_id.List_page Output.Mode.Human
              (Cli_result.Raw (value "Line 1\nLine 2\nLine 3\nLine 4\nLine 5")))
           (config ())
       in
       expect_named_contains "multiline line one" multiline "Line 1";
-      expect_named_contains "multiline line two" multiline "Line 2";
+      expect_named_not_contains "multiline line two" multiline "Line 2";
       ignore ellipsis;
-      expect_named_contains "multiline line three" multiline "Line 3";
-      expect_named_contains "multiline line four" multiline "Line 4";
-      expect_named_contains "multiline line five" multiline "Line 5");
+      expect_named_not_contains "multiline line three" multiline "Line 3";
+      expect_named_not_contains "multiline line four" multiline "Line 4";
+      expect_named_not_contains "multiline line five" multiline "Line 5");
 
   test "CLI parity format upsert summaries use current generic tables"
     (fun () ->
