@@ -1,7 +1,8 @@
 (ns logseq.db.common.view-test
-  (:require [cljs.test :refer [deftest is]]
+  (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.db.common.view :as db-view]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.test.helper :as db-test]))
 
 (defn- create-view-id
@@ -210,3 +211,237 @@
     (is (= [1 2 10] asc-groups))
     ;; "Sort groups order" (desc?) must reverse the numeric order
     (is (= [10 2 1] desc-groups))))
+
+(deftest get-view-data-class-objects-daterange-sort-test
+  "Verify that sorting class objects by a :daterange property produces a
+   correctly ordered result.  We create three Book pages with year-precision
+   publication dates (2015, 2020, 2023) and assert that both ascending and
+   descending sorts return them in the expected order."
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Book {:block/title "Book"}}
+               :pages-and-blocks
+               [{:page {:block/title "Book A" :build/tags [:Book]}}
+                {:page {:block/title "Book B" :build/tags [:Book]}}
+                {:page {:block/title "Book C" :build/tags [:Book]}}]})
+        ;; 1. Create the daterange property.
+        _ (d/transact! conn
+                       [(sqlite-util/build-new-property
+                         :user.property/publication-date
+                         {:logseq.property/type :daterange}
+                         {:title "Publication Date"})])
+        ;; 2. Create three daterange value entities (year precision).
+        ;;    year 2015 → 20150000, 2020 → 20200000, 2023 → 20230000
+        tx2 (d/transact! conn
+                         [{:db/id -10
+                           :block/uuid (random-uuid)
+                           :logseq.property.date/precision :year
+                           :logseq.property.date/start 20150000}
+                          {:db/id -20
+                           :block/uuid (random-uuid)
+                           :logseq.property.date/precision :year
+                           :logseq.property.date/start 20200000}
+                          {:db/id -30
+                           :block/uuid (random-uuid)
+                           :logseq.property.date/precision :year
+                           :logseq.property.date/start 20230000}])
+        dr-2015-id (get-in tx2 [:tempids -10])
+        dr-2020-id (get-in tx2 [:tempids -20])
+        dr-2023-id (get-in tx2 [:tempids -30])
+        ;; Helper to look up a book id by title.
+        book-id #(d/q '[:find ?e . :in $ ?t :where [?e :block/title ?t]] @conn %)
+        ;; 3. Assign publication dates to each book.
+        _ (d/transact! conn
+                       [{:db/id (book-id "Book A") :user.property/publication-date dr-2020-id}
+                        {:db/id (book-id "Book B") :user.property/publication-date dr-2015-id}
+                        {:db/id (book-id "Book C") :user.property/publication-date dr-2023-id}])
+        class-id (:db/id (d/entity @conn :user.class/Book))
+        view-id  (create-view-id conn :class-objects :view-for-id class-id)
+        ;; 4. Sort ascending: expect 2015 < 2020 < 2023  →  B, A, C
+        asc-result  (db-view/get-view-data @conn view-id
+                                           {:view-feature-type :class-objects
+                                            :view-for-id class-id
+                                            :sorting [{:id :user.property/publication-date :asc? true}]})
+        asc-titles  (mapv #(:block/title (d/entity @conn %)) (:data asc-result))
+        ;; 5. Sort descending: expect 2023 > 2020 > 2015  →  C, A, B
+        desc-result (db-view/get-view-data @conn view-id
+                                           {:view-feature-type :class-objects
+                                            :view-for-id class-id
+                                            :sorting [{:id :user.property/publication-date :asc? false}]})
+        desc-titles (mapv #(:block/title (d/entity @conn %)) (:data desc-result))]
+    (is (= 3 (:count asc-result)) "All three books are returned")
+    (is (= ["Book B" "Book A" "Book C"] asc-titles)
+        "Ascending sort: 2015 < 2020 < 2023")
+    (is (= ["Book C" "Book A" "Book B"] desc-titles)
+        "Descending sort: 2023 > 2020 > 2015")))
+
+(deftest get-view-data-class-objects-daterange-month-precision-sort-test
+  (testing "Sorting by a :daterange property with :month precision"
+    ;; Books and their month-precision dates (day part is arbitrary for :month precision)
+    ;; A=Feb 2020, B=May 2019, C=Nov 2021  →  asc: B A C  /  desc: C A B
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:Book {:block/title "Book"}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Book A" :build/tags [:Book]}}
+                  {:page {:block/title "Book B" :build/tags [:Book]}}
+                  {:page {:block/title "Book C" :build/tags [:Book]}}]})
+          _ (d/transact! conn
+                         [(sqlite-util/build-new-property
+                           :user.property/pub-date
+                           {:logseq.property/type :daterange}
+                           {:title "Publication Date"})])
+          tx (d/transact! conn
+                          [{:db/id -10
+                            :logseq.property.date/precision :month
+                            :logseq.property.date/start 20200200}   ; Feb 2020
+                           {:db/id -20
+                            :logseq.property.date/precision :month
+                            :logseq.property.date/start 20190500}   ; May 2019
+                           {:db/id -30
+                            :logseq.property.date/precision :month
+                            :logseq.property.date/start 20211100}]) ; Nov 2021
+          book-id #(d/q '[:find ?e . :in $ ?t :where [?e :block/title ?t]] @conn %)
+          _ (d/transact! conn
+                         [{:db/id (book-id "Book A") :user.property/pub-date (get-in tx [:tempids -10])}
+                          {:db/id (book-id "Book B") :user.property/pub-date (get-in tx [:tempids -20])}
+                          {:db/id (book-id "Book C") :user.property/pub-date (get-in tx [:tempids -30])}])
+          class-id (:db/id (d/entity @conn :user.class/Book))
+          view-id  (create-view-id conn :class-objects :view-for-id class-id)
+          asc-titles  (mapv #(:block/title (d/entity @conn %))
+                            (:data (db-view/get-view-data @conn view-id
+                                                          {:view-feature-type :class-objects
+                                                           :view-for-id class-id
+                                                           :sorting [{:id :user.property/pub-date :asc? true}]})))
+          desc-titles (mapv #(:block/title (d/entity @conn %))
+                            (:data (db-view/get-view-data @conn view-id
+                                                          {:view-feature-type :class-objects
+                                                           :view-for-id class-id
+                                                           :sorting [{:id :user.property/pub-date :asc? false}]})))]
+      (is (= ["Book B" "Book A" "Book C"] asc-titles)
+          "Month precision ascending: May 2019 < Feb 2020 < Nov 2021")
+      (is (= ["Book C" "Book A" "Book B"] desc-titles)
+          "Month precision descending: Nov 2021 > Feb 2020 > May 2019"))))
+
+(deftest get-view-data-class-objects-daterange-day-precision-sort-test
+  (testing "Sorting by a :daterange property with :day precision"
+    ;; A=2024-03-10, B=2024-01-25, C=2024-06-05  →  asc: B A C  /  desc: C A B
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:Book {:block/title "Book"}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Book A" :build/tags [:Book]}}
+                  {:page {:block/title "Book B" :build/tags [:Book]}}
+                  {:page {:block/title "Book C" :build/tags [:Book]}}]})
+          _ (d/transact! conn
+                         [(sqlite-util/build-new-property
+                           :user.property/pub-date
+                           {:logseq.property/type :daterange}
+                           {:title "Publication Date"})])
+          tx (d/transact! conn
+                          [{:db/id -10
+                            :logseq.property.date/precision :day
+                            :logseq.property.date/start 20240310}  ; Mar 10 2024
+                           {:db/id -20
+                            :logseq.property.date/precision :day
+                            :logseq.property.date/start 20240125}  ; Jan 25 2024
+                           {:db/id -30
+                            :logseq.property.date/precision :day
+                            :logseq.property.date/start 20240605}]) ; Jun 5 2024
+          book-id #(d/q '[:find ?e . :in $ ?t :where [?e :block/title ?t]] @conn %)
+          _ (d/transact! conn
+                         [{:db/id (book-id "Book A") :user.property/pub-date (get-in tx [:tempids -10])}
+                          {:db/id (book-id "Book B") :user.property/pub-date (get-in tx [:tempids -20])}
+                          {:db/id (book-id "Book C") :user.property/pub-date (get-in tx [:tempids -30])}])
+          class-id (:db/id (d/entity @conn :user.class/Book))
+          view-id  (create-view-id conn :class-objects :view-for-id class-id)
+          asc-titles  (mapv #(:block/title (d/entity @conn %))
+                            (:data (db-view/get-view-data @conn view-id
+                                                          {:view-feature-type :class-objects
+                                                           :view-for-id class-id
+                                                           :sorting [{:id :user.property/pub-date :asc? true}]})))
+          desc-titles (mapv #(:block/title (d/entity @conn %))
+                            (:data (db-view/get-view-data @conn view-id
+                                                          {:view-feature-type :class-objects
+                                                           :view-for-id class-id
+                                                           :sorting [{:id :user.property/pub-date :asc? false}]})))]
+      (is (= ["Book B" "Book A" "Book C"] asc-titles)
+          "Day precision ascending: Jan 25 < Mar 10 < Jun 5")
+      (is (= ["Book C" "Book A" "Book B"] desc-titles)
+          "Day precision descending: Jun 5 > Mar 10 > Jan 25"))))
+
+(deftest get-view-data-class-objects-daterange-range-values-sort-by-start-test
+  (testing "Sorting by a :daterange property with start+end ranges — sort uses :start"
+    ;; All three books have ranges, but different starts.
+    ;; A: 2022-01-01 → 2022-12-31, B: 2020-06-01 → 2021-05-31, C: 2023-03-01 → 2023-09-30
+    ;; asc by start: B (2020) < A (2022) < C (2023)
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:Book {:block/title "Book"}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Book A" :build/tags [:Book]}}
+                  {:page {:block/title "Book B" :build/tags [:Book]}}
+                  {:page {:block/title "Book C" :build/tags [:Book]}}]})
+          _ (d/transact! conn
+                         [(sqlite-util/build-new-property
+                           :user.property/pub-date
+                           {:logseq.property/type :daterange}
+                           {:title "Publication Date"})])
+          tx (d/transact! conn
+                          [{:db/id -10
+                            :logseq.property.date/precision :day
+                            :logseq.property.date/start 20220101
+                            :logseq.property.date/end   20221231}
+                           {:db/id -20
+                            :logseq.property.date/precision :day
+                            :logseq.property.date/start 20200601
+                            :logseq.property.date/end   20210531}
+                           {:db/id -30
+                            :logseq.property.date/precision :day
+                            :logseq.property.date/start 20230301
+                            :logseq.property.date/end   20230930}])
+          book-id #(d/q '[:find ?e . :in $ ?t :where [?e :block/title ?t]] @conn %)
+          _ (d/transact! conn
+                         [{:db/id (book-id "Book A") :user.property/pub-date (get-in tx [:tempids -10])}
+                          {:db/id (book-id "Book B") :user.property/pub-date (get-in tx [:tempids -20])}
+                          {:db/id (book-id "Book C") :user.property/pub-date (get-in tx [:tempids -30])}])
+          class-id (:db/id (d/entity @conn :user.class/Book))
+          view-id  (create-view-id conn :class-objects :view-for-id class-id)
+          asc-titles (mapv #(:block/title (d/entity @conn %))
+                           (:data (db-view/get-view-data @conn view-id
+                                                         {:view-feature-type :class-objects
+                                                          :view-for-id class-id
+                                                          :sorting [{:id :user.property/pub-date :asc? true}]})))]
+      (is (= ["Book B" "Book A" "Book C"] asc-titles)
+          "Range values sort by :start — 2020 < 2022 < 2023"))))
+
+(deftest get-view-data-class-objects-daterange-nil-sort-test
+  (testing "Books without a daterange property value are kept in results when sorting by that property"
+    ;; Book A has a date, Books B and C do not.
+    ;; All three should appear in the result regardless of sort direction.
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:Book {:block/title "Book"}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Book A" :build/tags [:Book]}}
+                  {:page {:block/title "Book B" :build/tags [:Book]}}
+                  {:page {:block/title "Book C" :build/tags [:Book]}}]})
+          _ (d/transact! conn
+                         [(sqlite-util/build-new-property
+                           :user.property/pub-date
+                           {:logseq.property/type :daterange}
+                           {:title "Publication Date"})])
+          tx (d/transact! conn
+                          [{:db/id -10
+                            :logseq.property.date/precision :year
+                            :logseq.property.date/start 20200000}])
+          book-id #(d/q '[:find ?e . :in $ ?t :where [?e :block/title ?t]] @conn %)
+          _ (d/transact! conn
+                         [{:db/id (book-id "Book A") :user.property/pub-date (get-in tx [:tempids -10])}])
+          ;; Books B and C intentionally have no :user.property/pub-date
+          class-id (:db/id (d/entity @conn :user.class/Book))
+          view-id  (create-view-id conn :class-objects :view-for-id class-id)
+          result   (db-view/get-view-data @conn view-id
+                                          {:view-feature-type :class-objects
+                                           :view-for-id class-id
+                                           :sorting [{:id :user.property/pub-date :asc? true}]})
+          titles   (set (map #(:block/title (d/entity @conn %)) (:data result)))]
+      (is (= 3 (:count result))
+          "All three books are returned even when two lack the sort property")
+      (is (= #{"Book A" "Book B" "Book C"} titles)
+          "Books without a daterange value are not dropped from results"))))

@@ -49,8 +49,12 @@
                                          (into {})))
         get-property-value-fn (fn [entity]
                                 (if (de/entity? property)
-                                  (if (= :date (:logseq.property/type property))
-                                    (:block/journal-day (get entity db-ident))
+                                  (case (:logseq.property/type property)
+                                    :date     (:block/journal-day (get entity db-ident))
+                                    :daterange (let [v (get entity db-ident)]
+                                                 (if (de/entity? v)
+                                                   (:logseq.property.date/start v)
+                                                   (some :logseq.property.date/start v)))
                                     (get-property-value-for-search entity property))
                                   (get entity db-ident)))]
     (fn [entity]

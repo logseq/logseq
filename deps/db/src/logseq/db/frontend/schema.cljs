@@ -95,6 +95,13 @@
    ;; page's journal day
    :block/journal-day {:db/index true}
 
+   ;; date-range value entity attributes — used by the :date-range property type.
+   ;; Each property value is a dedicated entity (no :block/uuid) with these three
+   ;; fields.  :logseq.property.date/end is absent for single-point values.
+   :logseq.property.date/precision {:db/index true}  ; keyword: :day | :month | :year
+   :logseq.property.date/start     {:db/index true}  ; YYYYMMDD integer
+   :logseq.property.date/end       {:db/index true}  ; YYYYMMDD integer, optional
+
    ;; latest tx that affected the block
    :block/tx-id {}
    :block/closed-value-property {:db/valueType :db.type/ref

@@ -243,27 +243,28 @@
   (let [type (or (:logseq.property/type property) property-type :default)
         ident (:db/ident property)
         icon (cond
-	               (= ident :block/tags)
-	               "hash"
-	               (string/starts-with? (str ident) ":plugin.")
-	               "puzzle"
-	               :else
-	               (case type
-	                 :number "number"
-	                 :date "calendar"
-	                 :datetime "calendar"
-	                 :checkbox "checkbox"
-	                 :url "link"
-	                 :property "letter-p"
-	                 :page "page"
-	                 :node "point-filled"
-	                 :asset "letter-a"
-	                 nil))]
-	    (if icon
-	      (ui/icon icon {:class "opacity-50"
-	                     :size 15})
-	      [:span.bullet-container
-	       [:span.bullet]])))
+               (= ident :block/tags)
+               "hash"
+               (string/starts-with? (str ident) ":plugin.")
+               "puzzle"
+               :else
+               (case type
+                 :number "number"
+                 :date "calendar"
+                 :daterange "calendar-range"
+                 :datetime "calendar"
+                 :checkbox "checkbox"
+                 :url "link"
+                 :property "letter-p"
+                 :page "page"
+                 :node "point-filled"
+                 :asset "letter-a"
+                 nil))]
+    (if icon
+      (ui/icon icon {:class "opacity-50"
+                     :size 15})
+      [:span.bullet-container
+       [:span.bullet]])))
 
 (defn- property-input-on-chosen
   [block *property *property-key *show-new-property-config? {:keys [class-schema? remove-property?]}]

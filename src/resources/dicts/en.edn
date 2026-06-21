@@ -1382,6 +1382,7 @@
  :property/type-change-warning "Changing the property type clears some property configurations."
  :property/type-checkbox "Checkbox"
  :property/type-date "Date"
+ :property/type-daterange "DateRange"
  :property/type-datetime "DateTime"
  :property/type-locked-help "The type of this property is locked once you start using it. This is to make sure all your existing information stays correct if the property type is changed later. To unlock, all uses of a property must be deleted."
  :property/type-node "Node"
