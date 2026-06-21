@@ -68,10 +68,12 @@ let list_page_sort_choices =
   [ "id"; "title"; "ident"; "uuid"; "created-at"; "updated-at" ]
 
 let list_tag_sort_choices =
-  list_page_sort_choices @ [ "properties"; "extends"; "description" ]
+  [ "id"; "title"; "ident"; "uuid"; "properties"; "extends"; "description" ]
+  @ [ "created-at"; "updated-at" ]
 
 let list_property_sort_choices =
-  list_page_sort_choices @ [ "classes"; "type"; "cardinality"; "description" ]
+  [ "id"; "title"; "ident"; "uuid"; "classes"; "type"; "cardinality"; "description" ]
+  @ [ "created-at"; "updated-at" ]
 
 let list_task_sort_choices =
   [
@@ -81,15 +83,15 @@ let list_task_sort_choices =
     "priority";
     "scheduled";
     "deadline";
-    "updated-at";
     "created-at";
+    "updated-at";
   ]
 
 let list_node_sort_choices =
   [ "id"; "title"; "type"; "page-id"; "page-title"; "created-at"; "updated-at" ]
 
 let list_asset_sort_choices =
-  [ "id"; "title"; "asset-type"; "size"; "updated-at"; "created-at" ]
+  [ "id"; "title"; "asset-type"; "size"; "created-at"; "updated-at" ]
 
 let search_result_header_order = [ "id"; "ident"; "title" ]
 
