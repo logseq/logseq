@@ -407,6 +407,8 @@ let () =
 
   test "CLI parity ustring decodes utf8 byte strings to JS unicode strings"
     (fun () ->
+      let ascii = Ustring.of_string "ABC" |> Ustring.to_string in
+      expect_equal "ascii text" "ABC" ascii;
       let utf8_byte_string =
         Js.String.fromCharCode 0xe4
         ^ Js.String.fromCharCode 0xb8
@@ -415,7 +417,17 @@ let () =
       let decoded = Ustring.of_string utf8_byte_string |> Ustring.to_string in
       expect_equal "decoded unicode text" (unicode_text [ 0x4e2d ]) decoded;
       expect_int "decoded JS length" 1 (String.length decoded);
-      expect_int "decoded char code" 0x4e2d (string_char_code_at decoded 0));
+      expect_int "decoded char code" 0x4e2d (string_char_code_at decoded 0);
+      let latin1_unicode =
+        "Diese Vorteile " ^ unicode_text [ 0x00f6 ] ^ " und "
+        ^ unicode_text [ 0x00fc ]
+      in
+      let preserved = Ustring.of_string latin1_unicode |> Ustring.to_string in
+      expect_equal "latin1 supplement unicode text" latin1_unicode preserved;
+      expect_int "latin1 supplement char code" 0x00f6
+        (string_char_code_at preserved 15);
+      expect_int "latin1 supplement char code 2" 0x00fc
+        (string_char_code_at preserved 21));
 
   test
     "CLI parity id parser accepts single multi comma whitespace and vector \
