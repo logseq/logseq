@@ -1,7 +1,35 @@
 open Cli_effect.Infix
 
 let hostname = Cli_unix.gethostname
-let argv () = Node.Process.argv
+
+module Stdout = struct
+  type writable
+
+  external stdout : writable = "stdout" [@@mel.module "process"]
+
+  external on_error :
+    writable -> (_[@mel.as "error"]) -> ((Js.Exn.t -> unit)[@u]) -> unit = "on"
+  [@@mel.send]
+
+  external error_code : Js.Exn.t -> string option = "code"
+  [@@mel.get] [@@mel.return { undefined_to_opt }]
+end
+
+let stdout_error_handler_installed = ref false
+
+let install_stdout_error_handler () =
+  if not !stdout_error_handler_installed then (
+    stdout_error_handler_installed := true;
+    Stdout.on_error Stdout.stdout (fun[@u] error ->
+        match Stdout.error_code error with
+        | Some "EPIPE" -> exit 0
+        | _ ->
+            Js.Exn.raiseError
+              (Option.value (Js.Exn.message error) ~default:"JavaScript error")))
+
+let argv () =
+  install_stdout_error_handler ();
+  Node.Process.argv
 
 type login_callback_request = { target : string option }
 type login_callback_response = { status : int; body : string }

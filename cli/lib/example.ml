@@ -370,6 +370,7 @@ let metadata () =
       requires_graph = Command_id.requires_graph Command_id.Example;
       requires_auth = Command_id.requires_auth Command_id.Example;
       write_command = Command_id.is_write Command_id.Example;
+      human_table_headers_order = [];
     };
   ]
 
