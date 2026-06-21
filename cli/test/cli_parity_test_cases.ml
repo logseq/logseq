@@ -4574,7 +4574,7 @@ let () =
             | None -> fail_test "expected graph validation error")
       in
       let* () =
-        run_validate "[\"^ \",\"~:errors\",null,\"~:datom-count\",10]"
+        run_validate "[\"^ \",\"~:errors\",null,\"~:datoms\",10]"
           (fun valid ->
             expect_bool "valid graph status" false (Cli_result.is_error valid);
             let data =
