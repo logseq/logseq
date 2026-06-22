@@ -1,13 +1,15 @@
 # Logseq CLI (Node)
 
-The Logseq CLI is a Node.js program compiled from ClojureScript that connects to a db-worker-node server managed by the CLI. When installed, the CLI binary name is `logseq`.
+The Logseq CLI is a Node.js program built from the `cli/` Dune, Melange, and Vite runtime. It connects to a ClojureScript db-worker-node server managed by the CLI. When installed, the CLI binary name is `logseq`.
 
 ## Build the CLI
 
 ```bash
-clojure -M:cljs compile logseq-cli
+pnpm cli:release
 pnpm db-worker-node:release:bundle
 ```
+
+`pnpm cli:release` bundles the `cli/` runtime and stages it to `static/logseq-cli.js`, which is the stable local, npm package, and desktop packaging runtime path.
 
 `pnpm db-worker-node:release:bundle` compiles and bundles `db-worker-node` with Vite, and writes a standalone runtime to `dist/db-worker-node.js` plus an asset manifest at `dist/db-worker-node-assets.json` (which may contain an empty `assets` array when no extra files are required).
 
@@ -120,10 +122,11 @@ Graph commands:
 - `graph validate --graph <name>` - validate graph data
 - `graph info [--graph <name>]` - show graph metadata (defaults to current graph)
 - `graph export --type edn|sqlite --file <path> [--graph <name>]` - export a graph to EDN or SQLite
-  - EDN export also accepts `--include-timestamps`, `--exclude-built-in-pages`, and `--exclude-namespaces <csv>`
-  - `--exclude-namespaces` trims CSV tokens, ignores empty tokens, removes duplicates, and can reduce backend export validation strictness
+  - EDN export also accepts `--edn-options/-e <edn-map>` and `--pretty-print/-p`
+  - `--edn-options` is an EDN map; `:export-type` (if present) overrides the default `:graph`, and every other key is forwarded to the worker as `:graph-options` (for example, `'{:export-type :graph-human :include-timestamps? true :exclude-built-in-pages? true :exclude-namespaces #{:user :project}}'`)
+  - `--pretty-print` writes the EDN file through `clojure.pprint` for readability while remaining round-trippable via `graph import --type edn`
   - SQLite export writes the snapshot directly to the destination path through `db-worker-node` instead of round-tripping a base64 payload through the CLI
-  - EDN-only export flags are rejected when `--type sqlite` is selected
+  - `--edn-options` and `--pretty-print` are rejected when `--type sqlite` is selected; a non-map value for `--edn-options` is also rejected
 - `graph import --type edn|sqlite --input <path> --graph <name>` - import a graph from EDN or SQLite (new graph only)
 - `graph backup list` - list backup snapshots under `<root-dir>/graphs/<graph>/backup`
 - `graph backup create [--graph <name>] [--name <label>]` - create a backup snapshot for the selected graph

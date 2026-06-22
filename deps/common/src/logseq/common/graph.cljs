@@ -5,6 +5,7 @@
             ["path" :as node-path]
             [clojure.string :as string]
             [logseq.common.config :as common-config]
+            [logseq.common.graph-dir :as graph-dir]
             [logseq.common.path :as path]))
 
 (def ^:private win32?
@@ -118,3 +119,22 @@ Rules:
   (if (and (seq path) (string/starts-with? path "~"))
     (node-path/join (os/homedir) (subs path 1))
     path))
+
+(defn get-db-graphs-dir
+  "Returns the directory where DB graphs are stored."
+  []
+  (expand-home (get-default-graphs-dir)))
+
+(defn get-db-based-graphs
+  "Returns canonical DB graph repo names from the default DB graph directory."
+  []
+  (let [dir (get-db-graphs-dir)]
+    (fs/mkdirSync dir #js {:recursive true})
+    (->> (read-directories dir)
+         (remove (fn [s] (= s common-config/unlinked-graphs-dir)))
+         (map graph-dir/decode-graph-dir-name)
+         (keep (fn [s]
+                 (when (and (string? s)
+                            (not (string/starts-with? s common-config/file-version-prefix)))
+                   (common-config/canonicalize-db-version-repo s))))
+         distinct)))

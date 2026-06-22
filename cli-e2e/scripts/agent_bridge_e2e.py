@@ -8,7 +8,7 @@ import subprocess
 import time
 
 
-TASK_TITLE = "测试 agent bridge 功能，把当前task status设置为done"
+TASK_TITLE = "Test AgentBridge task routing and completion status"
 EXPECTED_SESSION = "thread-e2e-agent-bridge"
 PARALLEL_TASK_TITLES = [
     "测试 agent bridge 并行执行任务 1",
@@ -62,11 +62,20 @@ if args[:6] == ["--sandbox", "danger-full-access", "exec", "resume", "--json", "
     prompt = args[7] if len(args) > 7 else ""
     comment_uuid_match = re.search(r"^Comment UUID: (.+)$", prompt, re.MULTILINE)
     comment_uuid = comment_uuid_match.group(1) if comment_uuid_match else None
+    block_uuid_match = re.search(r"^Block UUID: (.+)$", prompt, re.MULTILINE)
+    block_uuid = block_uuid_match.group(1) if block_uuid_match else None
     log_path = pathlib.Path(os.environ["CODEX_FAKE_LOG"])
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("a", encoding="utf8") as f:
         f.write(json.dumps(
-            {"event": "resume", "time": time.time(), "args": args, "prompt": prompt, "comment_uuid": comment_uuid, "session": session_id},
+            {"event": "resume", "time": time.time(), "args": args, "prompt": prompt, "comment_uuid": comment_uuid, "block_uuid": block_uuid, "session": session_id},
+            ensure_ascii=False) + "\\n")
+    delay = float(os.environ.get("CODEX_FAKE_DELAY_SECONDS", "0"))
+    if delay > 0:
+        time.sleep(delay)
+    with log_path.open("a", encoding="utf8") as f:
+        f.write(json.dumps(
+            {"event": "resume-complete", "time": time.time(), "comment_uuid": comment_uuid, "block_uuid": block_uuid, "session": session_id},
             ensure_ascii=False) + "\\n")
     print(json.dumps({"type": "thread.started", "thread_id": session_id}), flush=True)
     sys.exit(0)
@@ -321,6 +330,24 @@ def wait_for_codex_event(codex_log, event_name, bridge, bridge_log, bridge_err):
     raise SystemExit("codex event {!r} was not observed; events={!r}".format(event_name, events))
 
 
+def wait_for_codex_events(codex_log, event_name, count, bridge, bridge_log, bridge_err):
+    deadline = time.time() + 45
+    events = []
+    while time.time() < deadline:
+        events = read_codex_events(codex_log)
+        matches = [event for event in events if event.get("event") == event_name]
+        if len(matches) >= count:
+            return matches
+        if bridge.poll() is not None:
+            raise SystemExit(
+                "agent bridge exited early with {}\nstdout:\n{}\nstderr:\n{}".format(
+                    bridge.returncode, read_text(bridge_log), read_text(bridge_err)
+                )
+            )
+        time.sleep(0.5)
+    raise SystemExit("codex event {!r} count {} was not observed; events={!r}".format(event_name, count, events))
+
+
 def write_comment_blocks_file(path, task_uuid, hostname):
     path.write_text(
         """[{{:block/title "Comments"
@@ -371,9 +398,14 @@ def run_comment_mention_check(cli, repo_root, root_dir, config, graph, tmp_dir):
     try:
         wait_for_log(bridge_log, "listening graph changes", bridge)
         assign_task(cli, repo_root, root_dir, config, graph)
-        session = wait_for_task_sessions(
-            cli, repo_root, root_dir, config, graph, [TASK_TITLE], bridge, bridge_log, bridge_err
-        )[TASK_TITLE]
+        start_events = wait_for_codex_event(codex_log, "start", bridge, bridge_log, bridge_err)
+        session_events = wait_for_codex_event(codex_log, "session", bridge, bridge_log, bridge_err)
+        session = session_events[0].get("session")
+        resume_events = wait_for_codex_event(codex_log, "resume", bridge, bridge_log, bridge_err)
+        task_prompt = resume_events[0].get("prompt", "")
+        assert resume_events[0].get("session") == session, resume_events[0]
+        assert "Request kind: task" in task_prompt, task_prompt
+        assert TASK_TITLE in task_prompt, task_prompt
 
         task_id = find_task_id(cli, repo_root, root_dir, config, graph, TASK_TITLE)
         task_uuid = find_task_uuid(cli, repo_root, root_dir, config, graph, TASK_TITLE)
@@ -399,14 +431,16 @@ def run_comment_mention_check(cli, repo_root, root_dir, config, graph, tmp_dir):
             ],
         )
 
-        resume_events = wait_for_codex_event(codex_log, "resume", bridge, bridge_log, bridge_err)
-        if resume_events[0].get("session") != session:
-            raise SystemExit("comment resumed the wrong session: {!r}".format(resume_events[0]))
-        prompt = resume_events[0].get("prompt", "")
-        assert "You are handling a Logseq AgentBridge comment request." in prompt, prompt
+        resume_events = wait_for_codex_events(codex_log, "resume", 2, bridge, bridge_log, bridge_err)
+        comment_event = resume_events[-1]
+        if comment_event.get("session") != session:
+            raise SystemExit("comment resumed the wrong master session: {!r}".format(comment_event))
+        prompt = comment_event.get("prompt", "")
+        assert "You are handling a Logseq AgentBridge master dispatch request." in prompt, prompt
+        assert "Request kind: comment" in prompt, prompt
         assert "Comment target context:" in prompt, prompt
         assert "Requesting comment:" in prompt, prompt
-        print("agent bridge resumed comment request in " + session)
+        print("agent bridge dispatched comment request to master " + session)
     finally:
         if bridge.poll() is None:
             bridge.terminate()
@@ -458,29 +492,27 @@ def run_parallel_assignment_check(cli, repo_root, root_dir, config, graph, tmp_d
         for title in PARALLEL_TASK_TITLES:
             assign_task(cli, repo_root, root_dir, config, graph, title)
 
-        sessions = wait_for_task_sessions(
-            cli, repo_root, root_dir, config, graph, PARALLEL_TASK_TITLES, bridge, bridge_log, bridge_err
-        )
         events = read_codex_events(codex_log)
         start_events = [event for event in events if event.get("event") == "start"]
-        session_events = [event for event in events if event.get("event") == "session"]
-        if len(start_events) != 2 or len(session_events) != 2:
-            raise SystemExit("expected two codex starts and sessions, got: {!r}".format(events))
+        resume_events = wait_for_codex_events(codex_log, "resume", 2, bridge, bridge_log, bridge_err)
+        complete_events = wait_for_codex_events(codex_log, "resume-complete", 2, bridge, bridge_log, bridge_err)
+        if len(start_events) != 1 or len(resume_events) != 2:
+            raise SystemExit("expected one master start and two master resumes, got: {!r}".format(read_codex_events(codex_log)))
 
-        first_session_time = min(event["time"] for event in session_events)
-        latest_start_time = max(event["time"] for event in start_events)
-        if latest_start_time >= first_session_time:
+        first_complete_time = min(event["time"] for event in complete_events)
+        latest_resume_time = max(event["time"] for event in resume_events)
+        if latest_resume_time >= first_complete_time:
             raise SystemExit(
-                "codex exec did not overlap; starts={!r}, sessions={!r}".format(
-                    [event["time"] for event in start_events],
-                    [event["time"] for event in session_events],
+                "master dispatch resumes did not overlap; resumes={!r}, completes={!r}".format(
+                    [event["time"] for event in resume_events],
+                    [event["time"] for event in complete_events],
                 )
             )
 
-        prompts = "\n".join(event["prompt"] for event in start_events)
+        prompts = "\n".join(event["prompt"] for event in resume_events)
         for title in PARALLEL_TASK_TITLES:
             assert title in prompts, prompts
-        print("agent bridge routed tasks concurrently: " + ", ".join(sorted(sessions.values())))
+        print("agent bridge dispatched tasks concurrently to master")
     finally:
         if bridge.poll() is None:
             bridge.terminate()
@@ -491,198 +523,74 @@ def run_parallel_assignment_check(cli, repo_root, root_dir, config, graph, tmp_d
                 bridge.wait(timeout=5)
 
 
-def edn_string(value):
-    return json.dumps(value, ensure_ascii=False)
-
-
-def write_task_template_file(path, marker):
-    template = "\n".join(
-        [
-            marker,
-            "Graph: {{graph}}",
-            "Block UUID: {{block-uuid}}",
-            "AgentBridge name: {{agent-name}}",
-            "{{task-block-tree}}",
-        ]
-    )
-    path.write_text(
-        """[{:block/title "Task prompt template"
-   :block/children [{:block/title "Description: Custom task template for this graph."}
-                    {:block/title "Template variables: {{graph}}, {{block-uuid}}, {{agent-name}}, and {{task-block-tree}}."}
-                    {:block/title %s}]}]"""
-        % edn_string("```text\n" + template + "\n```"),
-        encoding="utf8",
-    )
-
-
-def write_invalid_task_template_file(path):
-    path.write_text(
-        """[{:block/title "Task prompt template"
-   :block/children [{:block/title "Description: Invalid task template for lint coverage."}
-                    {:block/title %s}]}]"""
-        % edn_string("```text\nBroken {{graph}} {{unknown-var}}\n```"),
-        encoding="utf8",
-    )
-
-
-def install_task_template(cli, repo_root, root_dir, config, graph, tmp_dir, marker):
-    run_cli(
-        cli,
-        repo_root,
-        root_dir,
-        config,
-        graph,
-        ["upsert", "page", "--graph", graph, "--page", "AgentBridge"],
-    )
-    blocks_file = tmp_dir / ("task-template-" + graph + ".edn")
-    write_task_template_file(blocks_file, marker)
-    run_cli(
-        cli,
-        repo_root,
-        root_dir,
-        config,
-        graph,
-        [
-            "upsert",
-            "block",
-            "--graph",
-            graph,
-            "--target-page",
-            "AgentBridge",
-            "--blocks-file",
-            str(blocks_file),
-        ],
-    )
-
-
-def install_invalid_task_template(cli, repo_root, root_dir, config, graph, tmp_dir):
-    run_cli(
-        cli,
-        repo_root,
-        root_dir,
-        config,
-        graph,
-        ["upsert", "page", "--graph", graph, "--page", "AgentBridge"],
-    )
-    blocks_file = tmp_dir / ("invalid-task-template-" + graph + ".edn")
-    write_invalid_task_template_file(blocks_file)
-    run_cli(
-        cli,
-        repo_root,
-        root_dir,
-        config,
-        graph,
-        [
-            "upsert",
-            "block",
-            "--graph",
-            graph,
-            "--target-page",
-            "AgentBridge",
-            "--blocks-file",
-            str(blocks_file),
-        ],
-    )
-
-
-def dry_run_prompt(cli, repo_root, root_dir, config, graph, env):
-    result = run_cli_with_env(
-        cli,
-        repo_root,
-        root_dir,
-        config,
-        ["agent", "bridge", "--graph", graph, "--dry-run"],
-        env,
-    )
-    if result.returncode != 0:
-        raise SystemExit(
-            "agent bridge dry-run failed for {}\nstdout:\n{}\nstderr:\n{}".format(
-                graph, result.stdout, result.stderr
-            )
-        )
-    payload = json.loads(result.stdout)
-    commands = payload.get("data", {}).get("commands", [])
-    if len(commands) != 1:
-        raise SystemExit("expected one dry-run command for {}, got {!r}".format(graph, commands))
-    command = commands[0].get("command", [])
-    if len(command) < 1:
-        raise SystemExit("dry-run command did not contain a prompt: {!r}".format(command))
-    return command[-1]
-
-
-def assert_contains(text, expected):
-    if expected not in text:
-        raise SystemExit("expected {!r} in:\n{}".format(expected, text))
-
-
-def assert_not_contains(text, unexpected):
-    if unexpected in text:
-        raise SystemExit("did not expect {!r} in:\n{}".format(unexpected, text))
-
-
-def run_prompt_template_graph_check(cli, repo_root, root_dir, config, graph, tmp_dir):
-    graph_a = graph
-    graph_b = graph + "-other"
-    graph_bad = graph + "-invalid"
-    marker_a = "CUSTOM GRAPH A TEMPLATE"
-    marker_b = "CUSTOM GRAPH B TEMPLATE"
-
+def run_duplicate_bridge_check(cli, repo_root, root_dir, config, graph, tmp_dir):
     fake_bin = tmp_dir / "fake-bin"
+    bridge_log = tmp_dir / "agent-bridge.log"
+    bridge_err = tmp_dir / "agent-bridge.err"
+    codex_log = tmp_dir / "codex-invocations.jsonl"
+
     env = os.environ.copy()
     env["PATH"] = str(fake_bin) + os.pathsep + env.get("PATH", "")
-    env["CODEX_FAKE_LOG"] = str(tmp_dir / "codex-dry-run.jsonl")
+    env["CODEX_FAKE_LOG"] = str(codex_log)
 
-    for graph_name in [graph_b, graph_bad]:
-        run_cli(
-            cli,
-            repo_root,
-            root_dir,
-            config,
-            graph_name,
-            ["graph", "create", "--graph", graph_name],
+    with bridge_log.open("wb") as out, bridge_err.open("wb") as err:
+        bridge = subprocess.Popen(
+            cli
+            + [
+                "--root-dir",
+                root_dir,
+                "--config",
+                config,
+                "--output",
+                "human",
+                "agent",
+                "bridge",
+                "--graph",
+                graph,
+            ],
+            cwd=repo_root,
+            env=env,
+            stdout=out,
+            stderr=err,
         )
 
-    for graph_name in [graph_a, graph_b, graph_bad]:
-        create_task(cli, repo_root, root_dir, config, graph_name, TASK_TITLE)
-        assign_task(cli, repo_root, root_dir, config, graph_name)
-
-    install_task_template(cli, repo_root, root_dir, config, graph_a, tmp_dir, marker_a)
-    prompt_a = dry_run_prompt(cli, repo_root, root_dir, config, graph_a, env)
-    assert_contains(prompt_a, marker_a)
-    assert_contains(prompt_a, "Graph: " + graph_a)
-    assert_not_contains(prompt_a, marker_b)
-    assert_not_contains(prompt_a, "You are handling a Logseq AgentBridge task.")
-
-    prompt_b_default = dry_run_prompt(cli, repo_root, root_dir, config, graph_b, env)
-    assert_contains(prompt_b_default, "You are handling a Logseq AgentBridge task.")
-    assert_contains(prompt_b_default, "Graph: " + graph_b)
-    assert_not_contains(prompt_b_default, marker_a)
-
-    install_task_template(cli, repo_root, root_dir, config, graph_b, tmp_dir, marker_b)
-    prompt_b = dry_run_prompt(cli, repo_root, root_dir, config, graph_b, env)
-    assert_contains(prompt_b, marker_b)
-    assert_contains(prompt_b, "Graph: " + graph_b)
-    assert_not_contains(prompt_b, marker_a)
-    assert_not_contains(prompt_b, "You are handling a Logseq AgentBridge task.")
-
-    prompt_a_again = dry_run_prompt(cli, repo_root, root_dir, config, graph_a, env)
-    assert_contains(prompt_a_again, marker_a)
-    assert_not_contains(prompt_a_again, marker_b)
-
-    install_invalid_task_template(cli, repo_root, root_dir, config, graph_bad, tmp_dir)
-    bad_result = run_cli_with_env(
-        cli,
-        repo_root,
-        root_dir,
-        config,
-        ["agent", "bridge", "--graph", graph_bad, "--dry-run"],
-        env,
-    )
-    if bad_result.returncode == 0:
-        raise SystemExit("invalid graph prompt template unexpectedly passed:\n" + bad_result.stdout)
-    assert_contains(bad_result.stdout + bad_result.stderr, "agent-prompt-template-invalid")
-
-    print("agent bridge graph prompt templates are isolated and linted")
+    try:
+        wait_for_log(bridge_log, "listening graph changes", bridge)
+        duplicate = subprocess.run(
+            cli
+            + [
+                "--root-dir",
+                root_dir,
+                "--config",
+                config,
+                "--output",
+                "json",
+                "agent",
+                "bridge",
+                "--graph",
+                graph,
+            ],
+            cwd=repo_root,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=15,
+        )
+        output = duplicate.stdout + duplicate.stderr
+        if duplicate.returncode == 0:
+            raise SystemExit("duplicate bridge unexpectedly succeeded:\n{}".format(output))
+        if "agent-bridge-already-running" not in output and "already running" not in output:
+            raise SystemExit("duplicate bridge did not report the expected lock error:\n{}".format(output))
+        print("agent bridge rejected duplicate process")
+    finally:
+        if bridge.poll() is None:
+            bridge.terminate()
+            try:
+                bridge.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                bridge.kill()
+                bridge.wait(timeout=5)
 
 
 def main():
@@ -697,7 +605,7 @@ def main():
     parser.add_argument("--assign-after-start", action="store_true")
     parser.add_argument("--parallel-assignment-check", action="store_true")
     parser.add_argument("--comment-mention-check", action="store_true")
-    parser.add_argument("--prompt-template-graph-check", action="store_true")
+    parser.add_argument("--duplicate-bridge-check", action="store_true")
     args = parser.parse_args()
 
     repo_root = pathlib.Path(args.repo_root)
@@ -720,8 +628,8 @@ def main():
         run_comment_mention_check(cli, repo_root, args.root_dir, args.config, args.graph, tmp_dir)
         return
 
-    if args.prompt_template_graph_check:
-        run_prompt_template_graph_check(cli, repo_root, args.root_dir, args.config, args.graph, tmp_dir)
+    if args.duplicate_bridge_check:
+        run_duplicate_bridge_check(cli, repo_root, args.root_dir, args.config, args.graph, tmp_dir)
         return
 
     env = os.environ.copy()
@@ -754,45 +662,15 @@ def main():
             wait_for_log(bridge_log, "listening graph changes", bridge)
             assign_task(cli, repo_root, args.root_dir, args.config, args.graph)
 
-        deadline = time.time() + 30
-        session = None
-        query = (
-            '[:find ?session . :where [?e :block/title "{}"] '
-            "[?e :logseq.property.agent/session-id ?session]]"
-        ).format(TASK_TITLE)
-
-        while time.time() < deadline:
-            session = deref_session_value(
-                cli,
-                repo_root,
-                args.root_dir,
-                args.config,
-                args.graph,
-                run_json(cli, repo_root, args.root_dir, args.config, args.graph, query),
-            )
-            if session == EXPECTED_SESSION:
-                break
-            if bridge.poll() is not None:
-                raise SystemExit(
-                    "agent bridge exited early with {}\nstdout:\n{}\nstderr:\n{}".format(
-                        bridge.returncode, read_text(bridge_log), read_text(bridge_err)
-                    )
-                )
-            time.sleep(0.5)
-        else:
-            raise SystemExit(
-                "agent-session-id was not written; last session={!r}\nstdout:\n{}\nstderr:\n{}".format(
-                    session, read_text(bridge_log), read_text(bridge_err)
-                )
-            )
-
         start_events = [event for event in read_codex_events(codex_log) if event.get("event") == "start"]
+        resume_events = wait_for_codex_event(codex_log, "resume", bridge, bridge_log, bridge_err)
         assert len(start_events) == 1, start_events
-        prompt = start_events[0]["prompt"]
+        prompt = resume_events[0]["prompt"]
         assert TASK_TITLE in prompt, prompt
         assert "Graph: " + args.graph in prompt, prompt
         assert "Block UUID:" in prompt, prompt
-        print("agent bridge routed task to " + session)
+        assert "Request kind: task" in prompt, prompt
+        print("agent bridge dispatched task to master " + resume_events[0]["session"])
     finally:
         if bridge.poll() is None:
             bridge.terminate()

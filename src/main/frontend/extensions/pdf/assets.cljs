@@ -19,9 +19,10 @@
             [frontend.util.ref :as ref]
             [logseq.common.config :as common-config]
             [logseq.graph-parser.exporter :as gp-exporter]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn get-in-repo-assets-full-filename
   [url]
@@ -36,10 +37,17 @@
   [original-path & {:keys [href block]}]
   (let [web-link? (string/starts-with? original-path "http")
         protocol-link? (common-config/protocol-path? href)
+        local-asset-link? (common-config/local-protocol-asset? href)
         filename (util/node-path.basename original-path)
         ext-name "pdf"
-        url (if protocol-link?
+        url (cond
+              local-asset-link?
+              (assets-handler/normalize-asset-resource-url (fs/asset-path-normalize href))
+
+              protocol-link?
               href
+
+              :else
               (assets-handler/normalize-asset-resource-url original-path))
         filename' (if protocol-link?
                     filename
@@ -203,7 +211,7 @@
 
 (defn get-zotero-local-pdf-path
   [path & {:keys [id]}]
-  (let [zotero-config (get-in (state/sub-config) [:zotero/settings-v2 "default"])
+  (let [zotero-config (get-in (state/get-config) [:zotero/settings-v2 "default"])
         zotero-data-directory (:zotero-data-directory zotero-config)
         zotero-linked-attachment-base-directory (:zotero-linked-attachment-base-directory zotero-config)
         relative-path (subs path 14)]
@@ -274,15 +282,16 @@
     (when (seq images)
       (lightbox/preview-images! images))))
 
-(rum/defcs area-display <
-  (rum/local nil ::src)
-  [state block]
-  (let [*src (::src state)]
+(hsx/defc area-display
+  [block]
+  (let [[src set-src!] (hooks/use-state nil)]
     (when-let [asset-path' (and block (assets-handler/get-area-block-asset-url block))]
-      (when (nil? @*src)
-        (p/let [asset-path (assets-handler/<make-asset-url asset-path')]
-          (reset! *src asset-path)))
-      (when @*src
+      (hooks/use-effect!
+       (fn []
+         (p/let [asset-path (assets-handler/<make-asset-url asset-path')]
+           (set-src! asset-path)))
+       [asset-path'])
+      (when src
         (let [asset-block (some-> block (:logseq.property.pdf/hl-image))
               resize-metadata (some-> asset-block :logseq.property.asset/resize-metadata)
               style (when-let [w (:width resize-metadata)] {:style {:width w}})]
@@ -305,7 +314,7 @@
                  :on-pointer-down util/stop
                  :on-click (fn [e]
                              (util/stop e)
-                             (-> (util/copy-image-to-clipboard (common-config/remove-asset-protocol @*src))
+                             (-> (util/copy-image-to-clipboard (common-config/remove-asset-protocol src))
                                  (p/then #(notification/show! (t :notification/copied) :success))))}
                 (ui/icon "copy")])
 
@@ -316,4 +325,4 @@
                :on-click open-lightbox!}
 
               (ui/icon "maximize")]]
-            [:img.w-full {:src @*src}]]])))))
+            [:img.w-full {:src src}]]])))))

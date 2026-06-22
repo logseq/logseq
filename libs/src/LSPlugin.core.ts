@@ -11,6 +11,9 @@ import {
   getSDKPathRoot,
   PROTOCOL_FILE,
   URL_LSP,
+  URL_LSP_EXTERNAL,
+  URL_LSP_HOST,
+  URL_LSP_HOST_EXTERNAL,
   safetyPathJoin,
   path,
   safetyPathNormalize,
@@ -451,14 +454,41 @@ function initApiProxyHandlers(pluginLocal: PluginLocal) {
   })
 }
 
-function convertToLSPResource(fullUrl: string, dotPluginRoot: string) {
-  if (dotPluginRoot && fullUrl.startsWith(PROTOCOL_FILE + dotPluginRoot)) {
+function convertToLSPResource(
+  fullUrl: string,
+  localRoot: string,
+  lspRoot = URL_LSP
+) {
+  if (localRoot && fullUrl.startsWith(PROTOCOL_FILE + localRoot)) {
     fullUrl = safetyPathJoin(
-      URL_LSP,
-      fullUrl.substr(PROTOCOL_FILE.length + dotPluginRoot.length)
+      lspRoot,
+      fullUrl.substr(PROTOCOL_FILE.length + localRoot.length)
     )
   }
   return fullUrl
+}
+
+function getPluginLSPRoot(effect?: boolean) {
+  return effect ? URL_LSP_HOST : URL_LSP
+}
+
+function getExternalLSPRoot(localRoot: string, effect?: boolean) {
+  return safetyPathJoin(
+    effect === false ? URL_LSP_EXTERNAL : URL_LSP_HOST_EXTERNAL,
+    encodeURIComponent(localRoot)
+  )
+}
+
+function convertToExternalLSPResource(
+  fullUrl: string,
+  localRoot: string,
+  effect?: boolean
+) {
+  return convertToLSPResource(
+    fullUrl,
+    localRoot,
+    getExternalLSPRoot(localRoot, effect)
+  )
 }
 
 class IllegalPluginPackageError extends Error {
@@ -610,9 +640,19 @@ class PluginLocal extends EventEmitter<
       const url = path.join(localRoot, filePath)
       filePath = reg.test(url) ? url : PROTOCOL_FILE + url
     }
-    return !this.options.effect && this.isInstalledInLocalDotRoot
-      ? convertToLSPResource(filePath, this.dotPluginsRoot)
-      : filePath
+    if (this.isInstalledInLocalDotRoot) {
+      return convertToLSPResource(
+        filePath,
+        this.dotPluginsRoot,
+        getPluginLSPRoot(this.options.effect)
+      )
+    }
+
+    return convertToExternalLSPResource(
+      filePath,
+      localRoot,
+      this.options.effect
+    )
   }
 
   async _preparePackageConfigs() {
@@ -682,7 +722,7 @@ class PluginLocal extends EventEmitter<
     if (logseq.devEntry) {
       // development mode entry
       this._options.devEntry = logseq.devEntry
-      this._options.entry = logseq.devEntry
+      this._options.entry = this._resolveResourceFullUrl(logseq.devEntry, localRoot)
     } else {
       // theme has no main
       this._options.entry = this._resolveResourceFullUrl(entry, localRoot)
@@ -747,7 +787,10 @@ class PluginLocal extends EventEmitter<
     devEntry = devEntry || settings?.get('_devEntry')
 
     if (devEntry) {
-      this._options.entry = devEntry
+      this._options.entry = this._resolveResourceFullUrl(
+        devEntry,
+        this._localRoot
+      )
       return
     }
 
@@ -787,10 +830,17 @@ class PluginLocal extends EventEmitter<
 
     entry = withFileProtocol(path.normalize(entryPath))
 
-    if (!this._options.effect) {
+    if (this.isInstalledInLocalDotRoot) {
       entry = convertToLSPResource(
         entry,
-        this.dotPluginsRoot
+        this.dotPluginsRoot,
+        getPluginLSPRoot(this.options.effect)
+      )
+    } else {
+      entry = convertToExternalLSPResource(
+        entry,
+        path.dirname(entryPath),
+        this.options.effect
       )
     }
 

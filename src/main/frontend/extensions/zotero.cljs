@@ -7,7 +7,7 @@
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn open-button [full-path]
   (if (string/ends-with? (string/lower-case full-path) "pdf")
@@ -25,9 +25,9 @@
      :target "_blank"
      :href full-path)))
 
-(defn sub-zotero-config
+(defn use-zotero-config
   []
-  (:zotero/settings-v2 (state/sub-config)))
+  (:zotero/settings-v2 (state/use-sub-config)))
 
 (def default-settings
   {:type                                    :user
@@ -47,48 +47,52 @@
     :notes-block-text (t :zotero/notes)
     (get default-settings k)))
 
-(defn all-profiles []
-  (let [profiles (-> (sub-zotero-config) keys set)
+(defn all-profiles [config]
+  (let [profiles (-> config keys set)
         default #{"default"}]
     (if (empty? profiles) default profiles)))
 
-(defn get-profile []
+(defn get-profile [config]
   (let [profile (storage/get :zotero/setting-profile)]
-    (if (and profile (contains? (all-profiles) profile))
+    (if (and profile (contains? (all-profiles config) profile))
       profile
-      (first (all-profiles)))))
+      (first (all-profiles config)))))
 
-(defn setting [k]
-  (let [profile (get-profile)]
-    (-> (sub-zotero-config)
+(defn setting [config k]
+  (let [profile (get-profile config)]
+    (-> config
         (get profile)
         (get k (default-setting k)))))
 
 (defn zotero-full-path
-  [item-key filename]
+  [config item-key filename]
   (str "file://"
        (util/node-path.join
-        (setting :zotero-data-directory)
+        (setting config :zotero-data-directory)
         "storage"
         item-key
         filename)))
 
-(rum/defc zotero-imported-file
+(hsx/defc zotero-imported-file
   [item-key filename]
-  (if (string/blank? (setting :zotero-data-directory))
-    [:p.warning (t :zotero/imported-file-warning)]
-    (let [filename (read-string filename)
-          full-path (zotero-full-path item-key filename)]
-      (open-button full-path))))
+  (let [config (use-zotero-config)
+        data-directory (setting config :zotero-data-directory)]
+    (if (string/blank? data-directory)
+      [:p.warning (t :zotero/imported-file-warning)]
+      (let [filename (read-string filename)
+            full-path (zotero-full-path config item-key filename)]
+        (open-button full-path)))))
 
-(rum/defc zotero-linked-file
+(hsx/defc zotero-linked-file
   [path]
-  (if (string/blank? (setting :zotero-linked-attachment-base-directory))
-    [:p.warning (t :zotero/linked-file-warning)]
-    (let [path (read-string path)
-          full-path
-          (str "file://"
-               (util/node-path.join
-                (setting :zotero-linked-attachment-base-directory)
-                (string/replace-first path "attachments:" "")))]
-      (open-button full-path))))
+  (let [config (use-zotero-config)
+        attachment-directory (setting config :zotero-linked-attachment-base-directory)]
+    (if (string/blank? attachment-directory)
+      [:p.warning (t :zotero/linked-file-warning)]
+      (let [path (read-string path)
+            full-path
+            (str "file://"
+                 (util/node-path.join
+                  attachment-directory
+                  (string/replace-first path "attachments:" "")))]
+        (open-button full-path)))))

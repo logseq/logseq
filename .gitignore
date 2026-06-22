@@ -85,9 +85,13 @@ deps/db-sync/data
 *.map
 /dist/db-worker-node.js
 /dist/build/
+/dist/cli-package/
 /dist/db-worker-node-assets.json
 /dist/*.wasm
 /dist/cljs-runtime/
 /.agent-shell/
 
 clj-e2e/.clj-kondo/imports
+/cli/_build/
+/cli/compile_commands.json
+/cli/.eglot-root

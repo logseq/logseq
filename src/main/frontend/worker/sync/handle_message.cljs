@@ -174,7 +174,8 @@
   (let [reason (:reason message)
         remote-tx (:t message)
         success-tx-ids (:success-tx-ids message)
-        failed-tx-id (:failed-tx-id message)]
+        failed-tx-id (:failed-tx-id message)
+        missing-block-uuids (:missing-block-uuids message)]
     (when (nil? reason)
       (fail-fast :db-sync/missing-field
                  {:repo repo :type "tx/reject" :field :reason}))
@@ -186,6 +187,10 @@
         (require-uuid tx-id {:repo repo :type "tx/reject" :field :success-tx-ids})))
     (when (contains? message :failed-tx-id)
       (require-uuid failed-tx-id {:repo repo :type "tx/reject" :field :failed-tx-id}))
+    (when (contains? message :missing-block-uuids)
+      (require-seq missing-block-uuids {:repo repo :type "tx/reject" :field :missing-block-uuids})
+      (doseq [block-uuid missing-block-uuids]
+        (require-uuid block-uuid {:repo repo :type "tx/reject" :field :missing-block-uuids})))
     (case reason
       "stale"
       (request-pull! client local-tx)
@@ -197,6 +202,7 @@
                                    vec)
             failed-tx-id (when (and failed-tx-id (contains? inflight-set failed-tx-id))
                            failed-tx-id)
+            recoverable-missing? (seq missing-block-uuids)
             data (when-let [raw-data (:data message)]
                    (parse-transit raw-data
                                   {:repo repo
@@ -210,18 +216,23 @@
                             (contains? message :t) (assoc :t remote-tx)
                             (seq successful-tx-ids) (assoc :success-tx-ids successful-tx-ids)
                             (some? failed-tx-id) (assoc :failed-tx-id failed-tx-id)
+                            recoverable-missing? (assoc :missing-block-uuids (vec missing-block-uuids))
                             (some? data) (assoc :data data))]
         (if (or (contains? message :success-tx-ids)
                 (contains? message :failed-tx-id))
           (do
             (sync-apply/mark-pending-txs-false! repo successful-tx-ids)
-            (when failed-tx-id
-              (sync-apply/mark-failed-txs! repo [failed-tx-id])))
+            (if recoverable-missing?
+              (sync-apply/enqueue-upload-repair! repo missing-block-uuids)
+              (when failed-tx-id
+                (sync-apply/mark-failed-txs! repo [failed-tx-id]))))
           ;; Backward compatibility for older servers without per-tx reject metadata.
           (sync-apply/mark-failed-txs! repo inflight))
         (reset! (:inflight client) [])
         (broadcast-rtc-state! client)
         (sync-log-state/rtc-log :rtc.log/tx-rejected rejected-data)
+        (when recoverable-missing?
+          (sync-apply/enqueue-flush-pending! repo client))
         (fail-fast :db-sync/tx-rejected
                    rejected-data)))))
 
@@ -354,17 +365,16 @@
                    _ (when (and graph-e2ee? (nil? aes-key))
                        (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
                    remote-txs* (if aes-key
-                                 (p/all (mapv (fn [{:keys [t tx-data]}]
+                                 (p/all (mapv (fn [{:keys [tx-data] :as remote-tx}]
                                                 (p/let [tx-data* (sync-crypt/<decrypt-tx-data aes-key tx-data)]
-                                                  {:t t
-                                                   :tx-data tx-data*}))
+                                                  (assoc remote-tx :tx-data tx-data*)))
                                               remote-txs))
-                                 (p/resolved remote-txs))]
-             (try
-               (sync-apply/apply-remote-txs! repo client remote-txs*)
-               (catch :default e
-                 (log/error ::apply-remote-tx e)
-                 (throw e)))
+                                 (p/resolved remote-txs))
+                   _ (try
+                       (sync-apply/apply-remote-txs! repo client remote-txs*)
+                       (catch :default e
+                         (log/error ::apply-remote-tx e)
+                         (throw e)))]
              (client-op/update-local-tx repo remote-tx)
              (broadcast-rtc-state! client)
              (verify-sync-checksum! repo client remote-tx remote-tx remote-checksum {:type "pull/ok"})

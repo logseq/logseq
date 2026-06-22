@@ -1,8 +1,9 @@
 {:paths ["src/main" "src/electron" "src/resources"]
  :deps
  {org.clojure/clojure                   {:mvn/version "1.12.4"}
-  rum/rum                               {:git/url "https://github.com/logseq/rum" ;; fork
-                                         :sha     "5d672bf84ed944414b9f61eeb83808ead7be9127"}
+  org.clojure/clojurescript             {:mvn/version "1.12.134"}
+  io.factorhouse/hsx                    {:git/url "https://github.com/logseq/hsx"
+                                         :sha     "21615ffa2aa530cc830e3464b793a53ef4fdd18c"}
 
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
                                          :sha     "3f141af97b70e1f14c65eaa119acd822ebece37e"}
@@ -42,7 +43,6 @@
   logseq/outliner                       {:local/root "deps/outliner"}
   logseq/db-sync                        {:local/root "deps/db-sync"}
   logseq/publishing                     {:local/root "deps/publishing"}
-  logseq/cli                            {:local/root "deps/cli"}
   logseq/shui                           {:local/root "deps/shui"}
   metosin/malli                         {:git/url "https://github.com/metosin/malli"
                                          :sha     "52ea58a36ff5172b38dfc526ca638afa7226a4a0"}

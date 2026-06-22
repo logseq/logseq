@@ -46,6 +46,26 @@ The current experimental surface includes:
 
 Use the host's React runtime instead of bundling your own copy.
 
+> **React version note**
+>
+> Current Logseq hosts ship React 19.x and ReactDOM 19.x. Treat
+> `logseq.Experiments.React` and `logseq.Experiments.ReactDOM` as the
+> host's concrete runtime, not as version-neutral compatibility shims.
+>
+> Compatibility guidance:
+>
+> - Prefer the host React runtime for elements returned from experimental
+>   renderers.
+> - Do not mix host React elements, hooks, contexts, or portals with a
+>   separately bundled React copy.
+> - Audit third-party integrations before attaching them to the host
+>   runtime. Older helpers that rely on legacy root APIs such as
+>   `ReactDOM.render`, `ReactDOM.hydrate`, `ReactDOM.unmountComponentAtNode`,
+>   or `findDOMNode` may need updates for React 19.
+> - In most cases you do **not** need to mount manually with `ReactDOM`.
+>   Return React elements from the experimental `render` callback and let
+>   Logseq own the root.
+
 ### `logseq.Experiments.React`
 
 Returns the React instance from the host scope.

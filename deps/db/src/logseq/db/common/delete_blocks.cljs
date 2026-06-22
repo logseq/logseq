@@ -60,6 +60,31 @@
                  (d/entity db (second tx)))))
        (common-util/distinct-by :db/id)))
 
+(defn- block-subtree-entities
+  [root]
+  (loop [pending [root]
+         seen-ids #{}
+         result []]
+    (if-let [entity (first pending)]
+      (if (or (nil? (:db/id entity))
+              (contains? seen-ids (:db/id entity)))
+        (recur (rest pending) seen-ids result)
+        (recur (concat (rest pending) (filter block-entity? (:block/_parent entity)))
+               (conj seen-ids (:db/id entity))
+               (conj result entity)))
+      result)))
+
+(defn expand-delete-blocks-tx
+  "Expands delete-blocks retracts to the current DB subtree before transacting."
+  [db txs {:keys [outliner-op]}]
+  (if (= :delete-blocks outliner-op)
+    (let [subtree-tx (->> (retracted-entities db txs)
+                          (filter block-entity?)
+                          (mapcat block-subtree-entities)
+                          (map (fn [entity] [:db/retractEntity (:db/id entity)])))]
+      (distinct (concat txs subtree-tx)))
+    txs))
+
 (defn- direct-cleanup-tx
   [entities]
   (let [retracted-blocks (filter block-entity? entities)
@@ -72,6 +97,7 @@
         history-entities (->> entities
                               (mapcat (fn [entity]
                                         (concat (:logseq.property.history/_block entity)
+                                                (:logseq.property.history/_property entity)
                                                 (:logseq.property.history/_ref-value entity))))
                               (common-util/distinct-by :db/id))
         retract-history-tx (map (fn [history] [:db/retractEntity (:db/id history)])

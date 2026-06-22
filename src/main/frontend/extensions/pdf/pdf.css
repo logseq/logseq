@@ -993,7 +993,7 @@ html.is-system-window {
   animation-name: hl-flash;
   animation-duration: 0.3s;
   animation-timing-function: ease;
-  animation-iteration-count: 2;
+  animation-iteration-count: 1;
   animation-direction: alternate;
   animation-play-state: running;
 }
