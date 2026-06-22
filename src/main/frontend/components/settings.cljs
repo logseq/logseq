@@ -37,23 +37,25 @@
             [missionary.core :as m]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for label-for}
-    name]
-   [:div.rounded-md.sm:max-w-tss.sm:col-span-2
-    [:div.rounded-md {:style {:display "flex" :gap "1rem" :align-items "center"}}
-     (ui/toggle state on-toggle true)
-     detail-text]]])
+  (let [label (cond-> [:label.block.text-sm.font-medium.leading-5.opacity-70
+                       {:for label-for}]
+                (sequential? name) (into name)
+                (not (sequential? name)) (conj name))]
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+     label
+     [:div.rounded-md.sm:max-w-tss.sm:col-span-2
+      [:div.rounded-md {:style {:display "flex" :gap "1rem" :align-items "center"}}
+       (ui/toggle state on-toggle true)
+       detail-text]]]))
 
-(rum/defcs app-updater < rum/reactive
-  [state version]
-  (let [update-pending? (state/sub :electron/updater-pending?)
-        {:keys [type payload]} (state/sub :electron/updater)]
+(hsx/defc app-updater
+  [version]
+  (let [update-pending? (state/use-sub :electron/updater-pending?)
+        {:keys [type payload]} (state/use-sub :electron/updater)]
     [:span.cp__settings-app-updater
      [:div.ctls.flex.items-center
       [:div.mt-1.sm:mt-0.sm:col-span-2.flex.gap-4.items-center.flex-wrap
@@ -147,7 +149,7 @@
               [release-channel-link]
               true)]))])]))
 
-(rum/defc outdenting-hint
+(hsx/defc outdenting-hint
   []
   [:div.ui__modal-panel
    {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
@@ -161,7 +163,7 @@
            :width  500
            :height 500}]]])
 
-(rum/defc auto-expand-hint
+(hsx/defc auto-expand-hint
   []
   [:div.ui__modal-panel
    {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
@@ -272,7 +274,8 @@
                  tt (string/capitalize t)
                  active? (= (or type "default") t)]]
        (shui/button
-        {:variant :secondary
+        {:key t
+         :variant :secondary
          :class (when active? " border-primary border-[2px]")
          :style {:width "4.4rem"}
          :on-click #(state/set-editor-font! {:type t})}
@@ -286,9 +289,9 @@
                       :on-checked-change #(state/set-editor-font! {:global %})})
       [:span.pl-1.text-sm.opacity-70 (t :settings.general/editor-font-set-global)]]]]])
 
-(rum/defcs switch-spell-check-row < rum/reactive
-  [state t]
-  (let [enabled? (state/sub [:electron/user-cfgs :spell-check])]
+(hsx/defc switch-spell-check-row
+  [t]
+  (let [enabled? (state/use-sub [:electron/user-cfgs :spell-check])]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       (t :settings.editor/spell-checker)]
@@ -303,8 +306,8 @@
                      (js/logseq.api.relaunch))))
         true)]]]))
 
-(rum/defc app-auto-update-row < rum/reactive [t]
-  (let [enabled? (state/sub [:electron/user-cfgs :auto-update])
+(hsx/defc app-auto-update-row [t]
+  (let [enabled? (state/use-sub [:electron/user-cfgs :auto-update])
         enabled? (if (nil? enabled?) true enabled?)]
     (toggle "usage-diagnostics"
             (t :settings.advanced/auto-updater)
@@ -328,17 +331,17 @@
                              :-for       "preferred_language"
                              :action     action})))
 
-(rum/defc theme-modes-row < rum/reactive
+(hsx/defc theme-modes-row
   [t]
-  (let [theme (state/sub :ui/theme)
+  (let [theme (state/use-sub :ui/theme)
         dark? (= "dark" theme)
-        system-theme? (state/sub :ui/system-theme?)
+        system-theme? (state/use-sub :ui/system-theme?)
         switch-theme (if dark? "light" "dark")
         switch-theme-label (case switch-theme
                              "light" (t :settings.general/theme-light)
                              "dark" (t :settings.general/theme-dark)
                              (t :settings.general/theme-system))
-        color-accent (state/sub :ui/radix-color)
+        color-accent (state/use-sub :ui/radix-color)
         pick-theme [:ul.cp__theme-modes-options
                     [:li {:on-click (partial state/use-theme-mode! "light")
                           :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light {:class (when color-accent "radix")}] [:strong (t :settings.general/theme-light)]]
@@ -353,9 +356,9 @@
                                           (shortcut-helper/gen-shortcut-seq :ui/toggle-theme)
                                           :shortcut-id :ui/toggle-theme)})))
 
-(rum/defc accent-color-row < rum/reactive
+(hsx/defc accent-color-row
   [_in-modal?]
-  (let [color-accent (state/sub :ui/radix-color)
+  (let [color-accent (state/use-sub :ui/radix-color)
         color-label (fn [color]
                       (case color
                         :none [:p {:style {:max-width "300px"}}
@@ -381,6 +384,7 @@
                           :let [active? (= color color-accent)
                                 none? (= color :none)]]
                       [:div.flex.items-center
+                       {:key (name color)}
                        (ui/tooltip
                         (shui/button
                          {:class "w-5 h-5 px-1 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
@@ -413,14 +417,17 @@
      [:div.text-sm.opacity-50.mt-1
       (t :settings.general/accent-color-alert)]]))
 
-(rum/defc appearance < rum/reactive
+(hsx/defc appearance
   []
-  [:div#appearance_settings.cp__settings-appearance-modal-inner
-   (theme-modes-row t)
-   (editor-font-family-row t (state/sub :ui/editor-font))
-   (toggle-wide-mode-row t (state/sub :ui/wide-mode?))
-   (show-brackets-row t (state/show-brackets?))
-   (accent-color-row true)])
+  (let [_config (state/use-sub :config)
+        editor-font (state/use-sub :ui/editor-font)
+        wide-mode? (state/use-sub :ui/wide-mode?)]
+    [:div#appearance_settings.cp__settings-appearance-modal-inner
+     (theme-modes-row t)
+     (editor-font-family-row t editor-font)
+     (toggle-wide-mode-row t wide-mode?)
+     (show-brackets-row t (state/show-brackets?))
+     (accent-color-row true)]))
 
 (defn date-format-row [t preferred-date-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
@@ -496,8 +503,7 @@
             new-home (dissoc home :page)]
         (p/do!
          (config-handler/set-config! :default-home new-home)
-         (config-handler/set-config! :feature/enable-journals? true)
-         (notification/show! (t :settings.features/journals-enable-success) :success)))
+         (notification/show! (t :settings.features/home-default-page-update-success) :success)))
 
       ;; FIXME: home page should be db id instead of page name
       (ldb/get-page (db/get-db) value)
@@ -508,14 +514,6 @@
 
       :else
       (notification/show! (t :settings.features/page-not-found value) :warning))))
-
-(defn journal-row [enable-journals?]
-  (toggle "enable_journals"
-          (t :settings.features/enable-journals)
-          enable-journals?
-          (fn []
-            (let [value (not enable-journals?)]
-              (config-handler/set-config! :feature/enable-journals? value)))))
 
 (defn enable-all-pages-public-row [t enable-all-pages-public?]
   (toggle "all pages public"
@@ -553,10 +551,34 @@
               (state/set-developer-mode! mode)))
           [:div.text-sm.opacity-50 (t :settings.advanced/developer-mode-desc)]))
 
-(rum/defc plugin-enabled-switcher
+(defn semantic-search-setting-supported?
+  [{:keys [platform arch]}]
+  (and (= "darwin" platform)
+       (= "arm64" arch)))
+
+(defn semantic-search-row [t enabled?]
+  (toggle "semantic_search"
+          (t :settings.features/semantic-search)
+          enabled?
+          (fn []
+            (let [enabled?' (not enabled?)]
+              (if enabled?'
+                (-> (ipc/ipc :userAppCfgs :feature/enable-semantic-search? true)
+                    (p/then (fn [_]
+                              (state/set-state! [:electron/user-cfgs :feature/enable-semantic-search?] true)))
+                    (p/catch (fn [_error]
+                               (notification/show!
+                                (t :settings.features/semantic-search-python3-missing)
+                                :warning))))
+                (do
+                  (state/set-state! [:electron/user-cfgs :feature/enable-semantic-search?] false)
+                  (ipc/ipc :userAppCfgs :feature/enable-semantic-search? false)))))
+          [:div.text-sm.opacity-50 (t :settings.features/semantic-search-desc)]))
+
+(hsx/defc plugin-enabled-switcher
   [t]
   (let [value (state/lsp-enabled?-or-theme)
-        [on? set-on?] (rum/use-state value)
+        [on? set-on?] (hooks/use-state value)
         on-toggle #(let [v (not on?)]
                      (set-on? v)
                      (storage/set ::storage-spec/lsp-core-enabled v))]
@@ -569,10 +591,10 @@
                     :on-click #(js/logseq.api.relaunch)
                     :small? true :intent "logseq")))]))
 
-(rum/defc http-server-enabled-switcher
+(hsx/defc http-server-enabled-switcher
   [t]
-  (let [[value _] (rum/use-state (boolean (storage/get ::storage-spec/http-server-enabled)))
-        [on? set-on?] (rum/use-state value)
+  (let [[value _] (hooks/use-state (boolean (storage/get ::storage-spec/http-server-enabled)))
+        [on? set-on?] (hooks/use-state value)
         on-toggle #(let [v (not on?)]
                      (set-on? v)
                      (storage/set ::storage-spec/http-server-enabled v))]
@@ -583,7 +605,7 @@
                   :on-click #(js/logseq.api.relaunch)
                   :small? true :intent "logseq"))]))
 
-(rum/defc flashcards-enabled-switcher
+(hsx/defc flashcards-enabled-switcher
   [enable-flashcards?]
   (ui/toggle enable-flashcards?
              (fn []
@@ -600,10 +622,10 @@
                             :ws-url (config/db-sync-ws-url)
                             :http-base (config/db-sync-http-base)}))
 
-(rum/defc sync-server-url-settings-container
+(hsx/defc sync-server-url-settings-container
   []
   (let [current-url (config/get-custom-sync-server-url)
-        [url set-url!] (rum/use-state (or current-url ""))
+        [url set-url!] (hooks/use-state (or current-url ""))
         reset-url! (fn []
                      (config/set-custom-sync-server-url! nil)
                      (set-url! "")
@@ -644,7 +666,7 @@
            :on-click (fn [] (reset-url!))}
           (t :settings.sync-server/reset)))]]]))
 
-(rum/defc sync-server-url-button
+(hsx/defc sync-server-url-button
   []
   (let [current-url (config/get-custom-sync-server-url)]
     (ui/button [:span.flex.items-center
@@ -661,10 +683,10 @@
    {:left-label (t :settings.sync-server/url)
     :action (sync-server-url-button)}))
 
-(rum/defc publish-server-url-settings-container
+(hsx/defc publish-server-url-settings-container
   []
   (let [current-url (config/get-custom-publish-server-url)
-        [url set-url!] (rum/use-state (or current-url ""))
+        [url set-url!] (hooks/use-state (or current-url ""))
         reset-url! (fn []
                      (config/set-custom-publish-server-url! nil)
                      (set-url! "")
@@ -701,7 +723,7 @@
            :on-click (fn [] (reset-url!))}
           (t :settings-page/publish-server-url-reset)))]]]))
 
-(rum/defc publish-server-url-button
+(hsx/defc publish-server-url-button
   []
   (let [current-url (config/get-custom-publish-server-url)]
     (ui/button [:span.flex.items-center
@@ -718,7 +740,7 @@
    {:left-label (t :settings-page/publish-server-url)
     :action (publish-server-url-button)}))
 
-(rum/defc user-proxy-settings
+(hsx/defc user-proxy-settings
   [{:keys [type protocol host port] :as agent-opts}]
   (ui/button [:span.flex.items-center
               [:span.pr-1
@@ -745,12 +767,13 @@
    {:left-label (t :settings.features/enable-flashcards)
     :action (flashcards-enabled-switcher enable-flashcards?)}))
 
-(rum/defcs markdown-mirror-row < rum/reactive
-  (rum/local false ::regenerating?)
-  [state t]
+(hsx/defc markdown-mirror-row
+  [t]
   (let [repo (state/get-current-repo)
-        enabled? (true? (:feature/markdown-mirror? (when repo (state/sub [:config repo]))))
-        *regenerating? (::regenerating? state)
+        repo-config (state/use-sub [:config repo])
+        enabled? (true? (:feature/markdown-mirror? repo-config))
+        *regenerating? (hooks/use-memo #(atom false) [])
+        [regenerating?] (hooks/use-atom *regenerating?)
         regenerate! (fn []
                       (when (and repo @state/*db-worker (not @*regenerating?))
                         (reset! *regenerating? true)
@@ -786,7 +809,7 @@
        (t :settings.features/markdown-mirror-regenerate)
        :icon "refresh"
        :class "text-sm"
-       :disabled @*regenerating?
+       :disabled regenerating?
        :on-click regenerate!)])))
 
 (defn https-user-agent-row [agent-opts]
@@ -794,11 +817,12 @@
    {:left-label (t :settings.advanced/network-proxy)
     :action (user-proxy-settings agent-opts)}))
 
-(rum/defcs auto-chmod-row < rum/reactive
-  [state t]
-  (let [enabled? (if (= nil (state/sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))
+(hsx/defc auto-chmod-row
+  [t]
+  (let [auto-chmod-enabled? (state/use-sub [:electron/user-cfgs :feature/enable-automatic-chmod?])
+        enabled? (if (nil? auto-chmod-enabled?)
                    true
-                   (state/sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))]
+                   auto-chmod-enabled?)]
     (toggle
      "automatic-chmod"
      (t :settings.advanced/auto-chmod)
@@ -808,9 +832,9 @@
         (ipc/ipc :userAppCfgs :feature/enable-automatic-chmod? (not enabled?)))
      [:span.text-sm.opacity-50 (t :settings.advanced/auto-chmod-desc)])))
 
-(rum/defcs native-titlebar-row < rum/reactive
-  [state t]
-  (let [enabled? (state/sub [:electron/user-cfgs :window/native-titlebar?])]
+(hsx/defc native-titlebar-row
+  [t]
+  (let [enabled? (state/use-sub [:electron/user-cfgs :window/native-titlebar?])]
     (toggle
      "native-titlebar"
      (t :settings.general/native-titlebar)
@@ -821,11 +845,11 @@
         (js/logseq.api.relaunch))
      [:span.text-sm.opacity-50 (t :settings.general/native-titlebar-desc)])))
 
-(rum/defcs settings-general < rum/reactive
-  [_state current-repo]
-  (let [preferred-language (state/sub [:preferred-language])
+(hsx/defc settings-general
+  [current-repo]
+  (let [preferred-language (state/use-sub [:preferred-language])
         show-radix-themes? true
-        editor-font (state/sub :ui/editor-font)]
+        editor-font (state/use-sub :ui/editor-font)]
     [:div.panel-wrap.is-general
      (version-row t fv/version)
      (language-row t preferred-language)
@@ -838,18 +862,19 @@
      (when current-repo (edit-custom-css))
      (when (and current-repo (util/electron?)) (edit-export-css))]))
 
-(rum/defcs settings-editor < rum/reactive
-  [_state]
-  (let [preferred-date-format (state/get-date-formatter)
+(hsx/defc settings-editor
+  []
+  (let [_config (state/use-sub :config)
+        preferred-date-format (state/get-date-formatter)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
         show-full-blocks? (state/show-full-blocks?)
         preferred-pasting-file? (state/preferred-pasting-file?)
         auto-expand-block-refs? (state/auto-expand-block-refs?)
         enable-tooltip? (state/enable-tooltip?)
-        enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
+        enable-shortcut-tooltip? (state/use-sub :ui/shortcut-tooltip?)
         show-brackets? (state/show-brackets?)
-        wide-mode? (state/sub :ui/wide-mode?)]
+        wide-mode? (state/use-sub :ui/wide-mode?)]
 
     [:div.panel-wrap.is-editor
      (date-format-row t preferred-date-format)
@@ -867,11 +892,11 @@
        (tooltip-row t enable-tooltip?))
      (enable-all-pages-public-row t enable-all-pages-public?)]))
 
-(rum/defc settings-advanced < rum/reactive
+(hsx/defc settings-advanced
   []
-  (let [instrument-disabled? (state/sub :instrument/disabled?)
-        developer-mode? (state/sub [:ui/developer-mode?])
-        https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])]
+  (let [instrument-disabled? (state/use-sub :instrument/disabled?)
+        developer-mode? (state/use-sub [:ui/developer-mode?])
+        https-agent-opts (state/use-sub [:electron/user-cfgs :settings/agent])]
     [:div.panel-wrap.is-advanced
      (when (and (or util/mac? util/win32?) (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
@@ -887,7 +912,7 @@
      ;;  [:p "Clearing the cache will discard open graphs. You will lose unsaved changes."])
      ]))
 
-(rum/defc settings-account-usage-description [pro-account? graph-usage]
+(hsx/defc settings-account-usage-description [pro-account? graph-usage]
   (let [count-usage (count graph-usage)
         count-limit (if pro-account? 10 1)
         count-percent (js/Math.round (/ count-usage count-limit 0.01))
@@ -921,7 +946,7 @@
      ; storage-usage-formatted "GB of " storage-limit "GB total storage"
      ; [:strong.text-white " (" storage-percent-formatted "%)"]]))
 
-(rum/defc settings-account-usage-graphs [_pro-account? graph-usage]
+(hsx/defc settings-account-usage-graphs [_pro-account? graph-usage]
   (when (< 0 (count graph-usage))
     [:div.grid.gap-3 {:style {:grid-template-columns (str "repeat(" (count graph-usage) ", 1fr)")}}
      (for [{:keys [name used-percent]} graph-usage
@@ -933,11 +958,13 @@
                                         :min-width "0.5rem"
                                         :max-width "100%"}}]])]))
 
-(rum/defc ^:large-vars/cleanup-todo settings-account < rum/reactive
+(hsx/defc ^:large-vars/cleanup-todo settings-account
   []
   (let [graph-usage []
-        logged-in? (user-handler/logged-in?)
-        user-info (state/get-user-info)
+        auth-refresh-token (state/use-sub :auth/refresh-token)
+        logged-in? (and (string? auth-refresh-token)
+                        (not (string/blank? auth-refresh-token)))
+        user-info (state/use-sub :user/info)
         paid-user? (#{"active" "on_trial" "cancelled"} (:LemonStatus user-info))
         gift-user? (some #{"pro"} (:UserGroups user-info))
         pro-account? (or paid-user? gift-user?)
@@ -1075,27 +1102,29 @@
              [:li (t :account/early-access-alpha-beta)]
              [:li (t :account/upcoming-cloud-features)]]]]]])]]))
 
-(rum/defc settings-features < rum/reactive
+(hsx/defc settings-features
   []
-  (let [current-repo (state/get-current-repo)
-        enable-journals? (state/enable-journals? current-repo)
+  (let [_config (state/use-sub :config)
+        app-base-info (state/use-sub :electron/app-base-info)
+        app-user-cfgs (state/use-sub :electron/user-cfgs)
+        default-home-page (state/use-sub-default-home-page)
+        current-repo (state/get-current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
+        semantic-search-enabled? (true? (:feature/enable-semantic-search? app-user-cfgs))
         logged-in? (user-handler/logged-in?)]
     [:div.panel-wrap.is-features.mb-8
-     (journal-row enable-journals?)
-     (when (not enable-journals?)
-       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-        [:label.block.text-sm.font-medium.leading-5.opacity-70
-         {:for "default page"}
-         (t :settings.features/home-default-page)]
-        [:div.mt-1.sm:mt-0.sm:col-span-2
-         [:div.max-w-lg.rounded-md.sm:max-w-xs
-          [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
-           {:default-value (state/sub-default-home-page)
-            :on-blur       update-home-page
-            :on-key-press  (fn [e]
-                             (when (= "Enter" (util/ekey e))
-                               (update-home-page e)))}]]]])
+     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+      [:label.block.text-sm.font-medium.leading-5.opacity-70
+       {:for "default page"}
+       (t :settings.features/home-default-page)]
+      [:div.mt-1.sm:mt-0.sm:col-span-2
+       [:div.max-w-lg.rounded-md.sm:max-w-xs
+        [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
+         {:default-value default-home-page
+          :on-blur       update-home-page
+          :on-key-press  (fn [e]
+                           (when (= "Enter" (util/ekey e))
+                             (update-home-page e)))}]]]]
      (when (and web-platform? config/feature-plugin-system-on?)
        (plugin-system-switcher-row))
      (when (util/electron?)
@@ -1103,6 +1132,8 @@
      (when (util/electron?)
        (markdown-mirror-row t))
      (flashcards-switcher-row enable-flashcards?)
+     (when (semantic-search-setting-supported? app-base-info)
+       (semantic-search-row t semantic-search-enabled?))
      (when-not web-platform?
        [:div.mt-1.sm:mt-0.sm:col-span-2
         [:hr]
@@ -1122,8 +1153,7 @@
 
 (def DEFAULT-ACTIVE-TAB-STATE (if config/ENABLE-SETTINGS-ACCOUNT-TAB [:account :account] [:general :general]))
 
-(rum/defc settings-effect
-  < rum/static
+(hsx/defc settings-effect
   [active]
 
   (hooks/use-effect!
@@ -1138,7 +1168,7 @@
 
   [:<>])
 
-(rum/defc settings-rtc-members
+(hsx/defc settings-rtc-members
   []
   (let [[invite-email set-invite-email!] (hooks/use-state "")
         [loading? set-loading!] (hooks/use-state true)
@@ -1161,7 +1191,6 @@
      {:on-key-press (fn [e]
                       (when (= "Enter" (.-key e))
                         (invite-user!)))}
-     [:h2.opacity-50.font-medium (t :collaboration/members)]
      [:div.users.flex.flex-col.gap-1
       (if loading?
         (for [i (range 2)]
@@ -1198,7 +1227,7 @@
                                  (when (and graph-uuid member-id)
                                    (-> (rtc-handler/<rtc-remove-member! graph-uuid member-id)
                                        (p/then (fn []
-                                                 (rtc-handler/<rtc-get-users-info)))
+                                                 (rtc-handler/<rtc-get-users-info true)))
                                        (p/catch (fn [e]
                                                   (notification/show! (t :collaboration/remove-access-error) :error)
                                                   (log/error :db-sync/remove-member-failed {:error e
@@ -1214,12 +1243,12 @@
        {:on-click invite-user!}
        (t :collaboration/invite))]]))
 
-(rum/defc settings-collaboration
+(hsx/defc settings-collaboration
   []
   [:div.panel-wrap.is-collaboration.mb-8
    (settings-rtc-members)])
 
-(rum/defc forgot-password
+(hsx/defc forgot-password
   [token refresh-token user-uuid]
   (let [[new-password set-new-password!] (hooks/use-state "")
         [force-reset-status set-force-reset-status!] (hooks/use-state nil)
@@ -1247,7 +1276,7 @@
        :disabled (string/blank? new-password)}
       (t :encryption/force-reset-password))]))
 
-(rum/defc reset-encryption-password
+(hsx/defc reset-encryption-password
   [current-password new-password {:keys [set-new-password!
                                          set-current-password!
                                          reset-password-status
@@ -1280,7 +1309,7 @@
       [:a.opacity-70.hover:opacity-100 {:on-click #(set-reset! true)}
        (t :encryption/reset-password)])))
 
-(rum/defc encryption
+(hsx/defc encryption
   []
   (let [user-uuid (user-handler/user-uuid)
         token (state/get-auth-id-token)
@@ -1351,7 +1380,7 @@
                                          :refresh-token refresh-token
                                          :user-uuid user-uuid})])))]]))
 
-(rum/defc mcp-server-row
+(hsx/defc mcp-server-row
   [t]
   (let [[checked set-checked!] (hooks/use-state false)]
 
@@ -1369,7 +1398,7 @@
                           (storage/set ::storage-spec/http-server-enabled true))
                         (-> (ipc/ipc :server/set-config {:mcp-enabled? new-val})
                             ;; Don't start server if it's not running
-                            (p/then #(when (= "running" (state/sub [:electron/server :status]))
+                            (p/then #(when (= "running" (state/get-state [:electron/server :status]))
                                        (p/let [_ (p/delay 1000)]
                                          (ipc/ipc :server/do :restart))))
                             (p/catch #(notification/show! (str %) :error)))))]
@@ -1380,42 +1409,34 @@
               [:span.text-sm.opacity-50
                (t :settings.ai/enable-mcp-server-desc)]))))
 
-(rum/defc settings-ai
+(hsx/defc settings-ai
   []
   [:div.panel-wrap
    (when (util/electron?)
      (mcp-server-row t))])
 
-(rum/defcs ^:large-vars/cleanup-todo settings
-  < (rum/local DEFAULT-ACTIVE-TAB-STATE ::active)
-  {:will-mount
-   (fn [state]
-     (state/load-app-user-cfgs)
-     state)
-   :did-mount
-   (fn [state]
-     (let [active-tab (first (:rum/args state))
-           active-tab (if (and (= active-tab :ai) (not (util/electron?)))
-                        :advanced
-                        active-tab)
-           *active (::active state)]
-       (when (keyword? active-tab)
-         (reset! *active [active-tab nil])))
-     state)
-   :will-unmount
-   (fn [state]
-     (state/close-settings!)
-     state)}
-  rum/reactive
-  [state _active-tab]
-  (let [current-repo (state/sub :git/current-repo)
-        _installed-plugins (state/sub :plugin/installed-plugins)
+(hsx/defc ^:large-vars/cleanup-todo settings
+  [_active-tab]
+  (let [current-repo (state/use-sub :git/current-repo)
+        _installed-plugins (state/use-sub :plugin/installed-plugins)
         plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
-        *active (::active state)
+        *active (hooks/use-memo #(atom DEFAULT-ACTIVE-TAB-STATE) [])
+        [active] (hooks/use-atom *active)
         logged-in? (user-handler/logged-in?)]
+    (hooks/use-effect!
+     (fn []
+       (state/load-app-user-cfgs)
+       (state/load-electron-app-base-info)
+       (let [active-tab (if (and (= _active-tab :ai) (not (util/electron?)))
+                          :advanced
+                          _active-tab)]
+         (when (keyword? active-tab)
+           (reset! *active [active-tab nil])))
+       #(state/close-settings!))
+     [])
 
     [:div#settings.cp__settings-main
-     (settings-effect @*active)
+     (settings-effect active)
      [:div.cp__settings-inner
       [:aside.md:w-64 {:style {:min-width "10rem"}}
        [:header.cp__settings-header
@@ -1445,22 +1466,22 @@
             [:li.settings-menu-item
              {:key      text
               :data-id  (name text)
-              :class    (classnames [{:active (= label (first @*active))}])
+              :class    (classnames [{:active (= label (first active))}])
               :on-click (fn []
                           (if (= label :plugins-setting)
                             (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])
-                            (reset! *active [label (first @*active)])))}
+                            (reset! *active [label (first active)])))}
 
              [:a.flex.items-center.settings-menu-link icon [:strong text]]]))]]
 
       [:article
        [:header.cp__settings-header
-        [:h1.cp__settings-category-title (t (keyword (str "settings/" (name (first @*active)))))]]
+        [:h1.cp__settings-category-title (t (keyword (str "settings/" (name (first active)))))]]
 
-      (case (first @*active)
+      (case (first active)
 
         :plugins-setting
-        (let [label (second @*active)]
+        (let [label (second active)]
           (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])
           (reset! *active [label label])
           nil)

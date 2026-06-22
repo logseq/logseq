@@ -39,6 +39,8 @@
                      (fn [{:keys [entity dispatch-key]}]
                        (let [entity (d/entity db (:db/id entity))]
                          (cond
+                           (= :logseq.property.embedding/hnsw-label (:db/ident entity))
+                           (db-migrate/delete-property db :logseq.property.embedding/hnsw-label)
                            (some? (:logseq.property/parent entity))
                            [[:db/retract (:db/id entity) :logseq.property/parent]]
                            (some? (:hide? entity))

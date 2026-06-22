@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Bozuk eklenti \"{1}\" kaldırıldı."
 
  :plugin.proxy/direct "Doğrudan"
+ :plugin.proxy/host-port-required "Ana makine ve port gereklidir"
  :plugin.proxy/system "Sistem"
  :plugin.proxy/test-url "URL'yi test et"
  :plugin.proxy/testing "Test ediliyor"
@@ -1586,10 +1587,8 @@
  :settings.editor/wide-mode "Geniş mod"
 
  :settings.features/enable-flashcards "Bilgi kartlarını etkinleştir"
- :settings.features/enable-journals "Günlük"
  :settings.features/home-default-page "Varsayılan ana sayfayı ayarla"
  :settings.features/home-default-page-update-success "Ana sayfa güncellendi"
- :settings.features/journals-enable-success "Günlükler etkinleştirildi"
  :settings.features/login-prompt "Yeni özelliklere herkesten önce erişmek için bir Open Collective Sponsoru veya Logseq'in Destekçisi olmanız ve oturum açmanız gerekir."
  :settings.features/page-not-found "\"{1}\" sayfası henüz mevcut değil. Lütfen önce o sayfayı oluşturun ve sonra tekrar deneyin."
  :settings.features/plugin-system "Eklenti sistemi"

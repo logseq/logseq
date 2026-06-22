@@ -41,6 +41,16 @@ adds rules that users often use"
                                             [?t :block/name ?tag-name]]}
                                   {:current-page-fn (constantly current-page)})))
 
+(deftest query-with-empty-rules-input
+  (load-test-files [{:page {:block/title "rules-input"}
+                     :blocks [{:block/title "block with empty rules input"}]}])
+  (is (= ["block with empty rules input"]
+         (map :block/title
+              (custom-query {:query '[:find (pull ?b [*])
+                                      :in $ %
+                                      :where
+                                      [?b :block/title "block with empty rules input"]]})))))
+
 ;; TODO: Move this test to inputs-test
 (deftest resolve-input-for-timestamp-inputs
   (load-test-files

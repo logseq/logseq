@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Beskadigde plugin \"{1}\" verwyder."
 
  :plugin.proxy/direct "Direk"
+ :plugin.proxy/host-port-required "Gasheer en poort word verlang"
  :plugin.proxy/system "Stelsel"
  :plugin.proxy/test-url "Toets-URL"
  :plugin.proxy/testing "Toets tans"
@@ -1586,10 +1587,8 @@
  :settings.editor/wide-mode "Wye modus"
 
  :settings.features/enable-flashcards "Aktiveer flitskaarte"
- :settings.features/enable-journals "Aktiveer joernale"
  :settings.features/home-default-page "Verstek tuisbladsy"
  :settings.features/home-default-page-update-success "Verstekbladsy opgedateer"
- :settings.features/journals-enable-success "Joernale geaktiveer"
  :settings.features/login-prompt "Meld aan om te sinkroniseer"
  :settings.features/page-not-found "Die bladsy \"{1}\" bestaan nog nie. Skep asseblief eers daardie bladsy en probeer dan weer."
  :settings.features/plugin-system "Uitbreidingstelsel"

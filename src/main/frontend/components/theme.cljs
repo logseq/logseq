@@ -8,20 +8,19 @@
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.rum :refer [use-mounted]]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]
-            [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [logseq.shui.ui :as shui]))
 
-(rum/defc scrollbar-measure
+(hsx/defc scrollbar-measure
   []
-  (let [*el (rum/use-ref nil)]
+  (let [*el (hooks/use-ref nil)]
     (hooks/use-effect!
      (fn []
-       (when-let [el (rum/deref *el)]
+       (when-let [el (hooks/deref *el)]
          (let [w (- (.-offsetWidth el) (.-clientWidth el))
                c "custom-scrollbar"
                l (.-classList js/document.documentElement)]
@@ -32,11 +31,11 @@
      {:ref   *el
       :class "top-1/2 -left-1/2 z-[-999]"}]))
 
-(rum/defc ^:large-vars/cleanup-todo container < rum/static
+(hsx/defc ^:large-vars/cleanup-todo container
   [{:keys [route theme accent-color editor-font on-click current-repo db-restoring?
            settings-open? sidebar-open? system-theme? sidebar-blocks-len preferred-language]} child]
-  (let [mounted-fn (use-mounted)
-        [restored-sidebar? set-restored-sidebar?] (rum/use-state false)]
+  (let [mounted-fn (hooks/use-mounted)
+        [restored-sidebar? set-restored-sidebar?] (hooks/use-state false)]
 
     (hooks/use-effect!
      #(let [^js doc js/document.documentElement
@@ -140,8 +139,7 @@
      [settings-open?])
 
     [:div#root-container.theme-container
-     {:on-click on-click
-      :tab-index -1}
+     {:on-click on-click}
      child
 
      (pdf/default-embed-playground)

@@ -17,6 +17,7 @@
             [electron.configs :as cfgs]
             [electron.db :as db]
             [electron.db-worker :as db-worker]
+            [electron.embedding-server :as embedding-server]
             [electron.find-in-page :as find]
             [electron.handler-interface :refer [handle]]
             [electron.i18n :as i18n]
@@ -30,7 +31,6 @@
             [electron.utils :as utils]
             [electron.window :as win]
             [electron.graph-switch-flow :as graph-switch-flow]
-            [logseq.cli.common.graph :as cli-common-graph]
             [logseq.cli.common :as cli-common]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
@@ -196,7 +196,7 @@
 (defn get-graphs
   "Returns all graph names"
   []
-  (distinct (cli-common-graph/get-db-based-graphs)))
+  (distinct (common-graph/get-db-based-graphs)))
 
 (defn- canonical-repo
   [graph]
@@ -239,7 +239,14 @@
 (defmethod handle :db-worker-runtime [^js window [_ repo]]
   (if (string/blank? repo)
     (p/rejected (ex-info "repo is required" {:code :missing-repo}))
-    (db-worker/ensure-runtime! (canonical-repo repo) (.-id window))))
+    (p/let [embedding-endpoint (when (cfgs/semantic-search-enabled?)
+                                 (embedding-server/ensure-endpoint! app))]
+      (db-worker/ensure-runtime! (canonical-repo repo)
+                                 (.-id window)
+                                 (cond-> {}
+                                   embedding-endpoint
+                                   (assoc :embedding-endpoint embedding-endpoint
+                                          :embedding-model-id (.-LOGSEQ_EMBEDDING_MODEL js/process.env)))))))
 
 (defmethod handle :releaseDbWorkerRuntime [^js window [_ repo]]
   (if (string/blank? repo)
@@ -281,17 +288,15 @@
    (utils/save-proxy-settings options)))
 
 (defmethod handle :testProxyUrl [_win [_ url options]]
-  ;; FIXME: better not to set proxy while testing url
-  (let [_ (utils/<set-proxy options)
-        start-ms (.getTime (js/Date.))]
-    (-> (utils/fetch url)
+  (let [start-ms (.getTime (js/Date.))]
+    (-> (utils/fetch url {:proxy options})
         (p/timeout 10000)
         (p/then (fn [resp]
                   (let [code (.-status resp)
                         response-ms (- (.getTime (js/Date.)) start-ms)]
                     (if (<= 200 code 299)
-                      #js {:code code
-                           :response-ms response-ms}
+                      {:code code
+                       :response-ms response-ms}
                       (p/rejected (js/Error. (str "HTTP status " code)))))))
         (p/catch (fn [e]
                    (if (instance? p/TimeoutException e)
@@ -319,21 +324,37 @@
 (defmethod handle :quitApp []
   (.quit app))
 
+(defn- enabling-semantic-search?
+  [k v]
+  (and (= k :feature/enable-semantic-search?)
+       (true? v)))
+
 (defmethod handle :userAppCfgs [window [_ k v]]
   (let [config (cfgs/get-config)]
     (if-let [k (and k (keyword k))]
       (if-not (nil? v)
-        (do (cfgs/set-item! k v)
-            (when (= k :spell-check)
-              (spell-check/apply-window-spellcheck! window (spell-check/session-spellcheck-enabled? v)))
-            (state/set-state! [:config k] v)
-            nil)
+        (p/let [python-available? (if (enabling-semantic-search? k v)
+                                    (embedding-server/python-command-available! "python3")
+                                    true)]
+          (if-not python-available?
+            (p/rejected (ex-info "python3 is required to enable semantic search"
+                                 {:code :missing-python3}))
+            (do (cfgs/set-item! k v)
+                (when (= k :spell-check)
+                  (spell-check/apply-window-spellcheck! window (spell-check/session-spellcheck-enabled? v)))
+                (when (and (= k :feature/enable-semantic-search?)
+                           (false? v))
+                  (embedding-server/stop!))
+                (state/set-state! [:config k] v)
+                nil)))
         (cfgs/get-item k))
       config)))
 
 (defmethod handle :getAppBaseInfo [^js win [_ _opts]]
   {:isFullScreen (.isFullScreen win)
-   :isMaximized (.isMaximized win)})
+   :isMaximized (.isMaximized win)
+   :platform (.-platform js/process)
+   :arch (.-arch js/process)})
 
 (defmethod handle :getAssetsFiles [^js win [_ {:keys [exts]}]]
   (when-let [graph-path (state/get-window-graph-path win)]

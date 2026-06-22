@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Повреждённый плагин \"{1}\" удалён."
 
  :plugin.proxy/direct "Прямое подключение"
+ :plugin.proxy/host-port-required "Хост и порт обязательны"
  :plugin.proxy/system "Система"
  :plugin.proxy/test-url "Проверить URL"
  :plugin.proxy/testing "Проверка"
@@ -1586,10 +1587,8 @@
  :settings.editor/wide-mode "Широкий режим"
 
  :settings.features/enable-flashcards "Включить карточки"
- :settings.features/enable-journals "Журналы"
  :settings.features/home-default-page "Установить домашнюю страницу по умолчанию"
  :settings.features/home-default-page-update-success "Домашняя страница обновлена"
- :settings.features/journals-enable-success "Дневники включены"
  :settings.features/login-prompt "Чтобы получить доступ к новым функциям раньше других, вы должны быть открытым коллективным спонсором или сторонником Logseq и, следовательно, войти в систему первым."
  :settings.features/page-not-found "Страница «{1}» пока не существует. Сначала создайте эту страницу, а затем повторите попытку."
  :settings.features/plugin-system "Система плагинов"

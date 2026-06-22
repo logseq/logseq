@@ -19,6 +19,7 @@ const builtinModuleSet = new Set([
   ...builtinModules.map((moduleName) => `node:${moduleName}`),
 ]);
 const externalModuleSet = new Set([
+  "@zvec/zvec",
   "keytar",
   "ws",
 ]);

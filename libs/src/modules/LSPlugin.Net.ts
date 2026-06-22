@@ -455,9 +455,8 @@ export class LSPluginNet {
     }
 
     const abortable = Boolean(options.abortable || options.signal)
-    // TODO: instead exper_request of callable apis
-    const reqId = this._ctx.Experiments.invokeExperMethod(
-      'request',
+    const reqId = await this._ctx._execCallableAPIAsync(
+      'exper_request',
       this._ctx.baseInfo.id,
       {
         url: options.url,

@@ -77,6 +77,7 @@
 (deftest test-execute-upsert-asset-create-applies-metadata-and-copies-file
   (async done
     (let [add-actions* (atom [])
+          lifecycle-calls* (atom [])
           copy-calls* (atom [])
           action {:type :upsert-asset
                   :mode :create
@@ -84,16 +85,19 @@
                   :graph "demo-graph"
                   :asset-path "/tmp/logo.png"
                   :content "Logo"
-                  :blocks [{:block/title "Logo"}] }]
+                  :blocks [{:block/title "Logo"
+                            :block/uuid (uuid "00000000-0000-0000-0000-000000000101")}] }]
       (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                       (p/resolved (assoc config :base-url "http://example")))
                           upsert-command/asset-file-exists? (fn [_] true)
                           upsert-command/asset-file-size-bytes (fn [_] 123)
                           upsert-command/asset-file-checksum (fn [_] "sha-256-value")
                           upsert-command/copy-asset-file-to-graph! (fn [_ repo block-uuid asset-type source-path]
+                                                                     (swap! lifecycle-calls* conj :copy)
                                                                      (swap! copy-calls* conj [repo block-uuid asset-type source-path])
                                                                      "/tmp/copied/logo.png")
                           add-command/execute-add-block (fn [add-action _]
+                                                          (swap! lifecycle-calls* conj :add-block)
                                                           (swap! add-actions* conj add-action)
                                                           (p/resolved {:status :ok
                                                                        :data {:result [101]}}))
@@ -127,7 +131,8 @@
                        (uuid "00000000-0000-0000-0000-000000000101")
                        "png"
                        "/tmp/logo.png"]]
-                     @copy-calls*))))
+                     @copy-calls*))
+              (is (= [:copy :add-block] @lifecycle-calls*))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -773,4 +778,3 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
-

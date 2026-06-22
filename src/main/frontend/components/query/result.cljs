@@ -4,6 +4,7 @@
             [frontend.db :as db]
             [frontend.db.query-custom :as query-custom]
             [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.hooks :as db-hooks]
             [frontend.db.query-react :as query-react]
             [frontend.db.utils :as db-utils]
             [frontend.modules.outliner.tree :as tree]
@@ -13,8 +14,7 @@
             [frontend.util :as util]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+            [promesa.core :as p]))
 
 (defn run-custom-query
   [config query *result *query-error]
@@ -25,38 +25,45 @@
     (try
       (cond
         (:dsl-query? config)
-        (let [result (let [q (:query query)
-                           form (common-util/safe-read-string {:log-error? false} q)]
-                       (cond
-                         (and (symbol? form)
-                              ;; Queries only containing template should trigger a query
-                              (not (re-matches template/template-re (string/trim q))))
-                         nil
+        (let [direct-result (volatile! ::none)
+              result-ref (let [q (:query query)
+                               form (common-util/safe-read-string {:log-error? false} q)]
+                           (cond
+                             (and (symbol? form)
+                                  ;; Queries only containing template should trigger a query
+                                  (not (re-matches template/template-re (string/trim q))))
+                             nil
 
-                         (re-matches #"^\".*\"$" q) ; full-text search
-                         (do
-                           (p/let [blocks (search/block-search repo (string/trim form) {:limit 30})]
-                             (when (seq blocks)
-                               (let [result (->> blocks
-                                                 (keep (fn [b]
-                                                         (when-not (= (:block/uuid b) current-block-uuid)
-                                                           (let [entity (or (db/entity [:block/uuid (:block/uuid b)]) b)]
-                                                             (when-not (ldb/hidden? entity)
-                                                               entity))))))]
-                                 (reset! *result result))))
-                           (rum/react *result))
+                             (re-matches #"^\".*\"$" q) ; full-text search
+                             (do
+                               (p/let [blocks (search/block-search repo (string/trim form) {:limit 30})]
+                                 (when (seq blocks)
+                                   (let [result (->> blocks
+                                                     (keep (fn [b]
+                                                             (when-not (= (:block/uuid b) current-block-uuid)
+                                                               (let [entity (or (db/entity [:block/uuid (:block/uuid b)]) b)]
+                                                                 (when-not (ldb/hidden? entity)
+                                                                   entity))))))]
+                                     (reset! *result result))))
+                               *result)
 
-                         :else
-                         (let [result (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)})]
-                           (when (util/atom? result)
-                             (rum/react result)))))]
-          [nil result])
+                             :else
+                             (let [result (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)})]
+                               (if (util/atom? result)
+                                 result
+                                 (do
+                                   (vreset! direct-result result)
+                                   nil)))))
+              result (db-hooks/use-query result-ref)]
+          [nil (if (= ::none @direct-result)
+                 result
+                 @direct-result)])
 
         :else
         (let [[k result] (query-custom/custom-query query {:current-block-uuid current-block-uuid
                                                            :built-in-query? (:built-in-query? config)
                                                            :today-query? (:today-query? config)})]
-          [k (rum/react result)]))
+          [k (db-hooks/use-query result)]))
       (catch :default e
         (js/console.error e)
         (reset! *query-error e)

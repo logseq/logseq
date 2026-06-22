@@ -12,7 +12,7 @@
             [goog.dom :as gdom]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.shui.hooks :as hooks]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- blur-if-compositing
   "Call blur on the textarea if it is in composition mode so IME can commit composing text."
@@ -174,7 +174,7 @@
             (camera-action)
             (upload-asset-action)
             (audio-action)]
-     :trailing nil}
+     :trailing (keyboard-action)}
     (let [keyboard (keyboard-action)
           main-actions [(undo-action)
                         (todo-action)
@@ -200,7 +200,7 @@
   [main trailing]
   (into {} (map (juxt :id :handler) (concat main (when trailing [trailing])))))
 
-(rum/defc native-toolbar
+(hsx/defc native-toolbar
   [show? {:keys [main trailing]}]
   (let [handlers-ref (hooks/use-ref nil)
         native-actions (mapv action->native main)
@@ -236,10 +236,10 @@
 
     [:<>]))
 
-(rum/defc mobile-bar < rum/reactive
+(hsx/defc mobile-bar
   []
-  (let [editing? (state/sub :editor/editing?)
-        code-block? (state/sub :editor/code-block-context)
+  (let [editing? (state/use-sub :editor/editing?)
+        code-block? (state/use-sub :editor/code-block-context)
         show? (and (not code-block?)
                    editing?)
         actions (toolbar-actions)]

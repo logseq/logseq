@@ -5,6 +5,39 @@ directories:
   buildResources: .
   output: dist
 
+files:
+  - "**/*"
+  - "!dist/**"
+  - "!mobile/**"
+  - "!android/**"
+  - "!ios/**"
+  - "!js/react.development.js"
+  - "!js/react-dom.development.js"
+  - "!js/publishing/*.map"
+  - "!js/publishing/manifest.edn"
+  - "!js/publishing/module-loader.*"
+  - "!js/sqlite3.wasm"
+  - "!css/fonts/tabler-icons.eot"
+  - "!css/fonts/tabler-icons.ttf"
+  - "!css/fonts/tabler-icons.woff"
+  - "!**/node_modules/**/*.map"
+  - "!**/node_modules/**/*.d.ts"
+  - "!**/node_modules/**/*.d.cts"
+  - "!**/node_modules/**/*.d.mts"
+  - "!**/node_modules/**/*.{ts,cts,mts}"
+  - "!**/node_modules/**/*.{c,cc,cpp,h,hpp,gyp}"
+  - "!**/node_modules/**/*.test-d.ts"
+  - "!**/node_modules/**/*.test-d.cts"
+  - "!**/node_modules/**/*.test-d.mts"
+  - "!**/node_modules/**/*.{test,spec}.{js,cjs,mjs,ts,cts,mts}"
+  - "!**/node_modules/**/*{example,benchmark,bench,tests,runkit}*.{js,cjs,mjs,ts,cts,mts}"
+  - "!**/node_modules/**/*.{md,markdown}"
+  - "!**/node_modules/**/{test,tests,__tests__,powered-test,example,examples,benchmark,benchmarks}/**"
+  - "!**/node_modules/**/{tsconfig.json,eslint.config.js,.editorconfig}"
+
+toolsets:
+  appimage: "1.0.2"
+
 protocols:
   - name: logseq
     schemes:
@@ -18,6 +51,8 @@ publish:
 extraResources:
   - from: .agents/skills/logseq-cli/SKILL.md
     to: .agents/skills/logseq-cli/SKILL.md
+  - from: ../sidecar
+    to: sidecar
 
 mac:
   artifactName: ${productName}-darwin-${arch}-${version}.${ext}

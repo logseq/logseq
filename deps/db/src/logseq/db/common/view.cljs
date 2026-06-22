@@ -613,7 +613,12 @@
                                           group-by-closed-values?
                                           (:block/order by-value)
                                           ref-property?
-                                          (db-property/property-value-content by-value)
+                                          ;; For value-ref types (e.g. :number), group-values has already
+                                          ;; extracted the scalar content, so by-value is no longer an entity.
+                                          ;; Only re-extract for entity group keys (e.g. :node/:class).
+                                          (if (de/entity? by-value)
+                                            (db-property/property-value-content by-value)
+                                            by-value)
                                           :else
                                           by-value)))]
                           (sort (common-util/by-sorting

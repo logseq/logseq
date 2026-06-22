@@ -1,17 +1,13 @@
 (ns logseq.shui.icon.v2
   (:require
    [camel-snake-kebab.core :as csk]
-   [cljs-bean.core :as bean]
-   [clojure.set :as set]
    [clojure.string :as string]
-   [clojure.walk :as w]
-   [daiquiri.interpreter :as interpreter]
    [goog.object :as gobj]
    [goog.string :as gstring]
-   [logseq.shui.util :as shui-utils]
-   [rum.core :as rum]))
+   [io.factorhouse.hsx.core :as hsx]
+   [logseq.shui.util :as shui-utils]))
 
-(rum/defc root
+(hsx/defc root
   ([name] (root name nil))
   ([name {:keys [extension? font? class] :as opts}]
    (when (and (string? name)

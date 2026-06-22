@@ -4,10 +4,8 @@
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
             [frontend.db.react :as react]
             [frontend.handler.editor :as editor-handler]
-            [frontend.mixins :as mixins]
             [frontend.state :as state]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
@@ -15,7 +13,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- add-new-class-object!
   [class properties]
@@ -84,7 +82,7 @@
               full-data (:full-data table)]
           (set-data! (vec (concat full-data ids))))))))
 
-(rum/defc class-objects-inner < rum/static
+(hsx/defc class-objects-inner
   [config class properties]
   (let [*ref (hooks/use-ref nil)
         db-ident (:db/ident class)
@@ -121,14 +119,14 @@
                                                                             :class-schema? true
                                                                             :target (.-target e)}]))})]))
 
-(rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
-  [state class config]
-  (when class
-    (let [class (db/sub-block (:db/id class))
-          config (assoc config :container-id (:container-id state))
-          properties (outliner-property/get-class-properties class)]
-      [:div.ml-1
-       (class-objects-inner config class properties)])))
+(hsx/defc class-objects
+  [class config]
+  (let [class (db/sub-block (:db/id class))
+        container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
+        config (assoc config :container-id (or (:container-id config) (state/get-container-id container-key)))
+        properties (outliner-property/get-class-properties class)]
+    [:div.ml-1
+     (class-objects-inner config class properties)]))
 
 (defn- add-new-property-object!
   [property properties]
@@ -144,7 +142,7 @@
     (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 {:container-id :unknown-container})
     block))
 
-(rum/defc property-related-objects-inner < rum/static
+(hsx/defc property-related-objects-inner
   [config property properties]
   (let [columns (build-property-object-columns config property properties)]
     (views/view {:config config
@@ -160,14 +158,14 @@
                  :show-add-property? false})))
 
 ;; Show all nodes containing the given property
-(rum/defcs property-related-objects < rum/reactive db-mixins/query mixins/container-id
-  [state property config]
-  (when property
-    (let [property' (db/sub-block (:db/id property))
-          config (assoc config :container-id (:container-id state))
-          ;; Show tags to help differentiate property rows
-          properties (if (= (:db/ident property) :block/tags)
-                       [property']
-                       [property' (db/entity :block/tags)])]
-      [:div.ml-1
-       (property-related-objects-inner config property' properties)])))
+(hsx/defc property-related-objects
+  [property config]
+  (let [property' (db/sub-block (:db/id property))
+        container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
+        config (assoc config :container-id (or (:container-id config) (state/get-container-id container-key)))
+        ;; Show tags to help differentiate property rows
+        properties (if (= (:db/ident property) :block/tags)
+                     [property']
+                     [property' (db/entity :block/tags)])]
+    [:div.ml-1
+     (property-related-objects-inner config property' properties)]))

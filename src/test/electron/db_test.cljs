@@ -7,8 +7,8 @@
             [electron.db-worker :as db-worker]
             [frontend.test.node-helper :as node-helper]
             [goog.object :as gobj]
-            [logseq.cli.common.graph :as cli-common-graph]
             [logseq.cli.transport :as cli-transport]
+            [logseq.common.graph :as common-graph]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.backup :as sqlite-backup]
             [logseq.db-worker.graph-backup :as graph-backup]
@@ -27,7 +27,7 @@
 
 (deftest ensure-graph-dir-uses-encoded-directory-name
   (let [graphs-dir (node-helper/create-tmp-dir "electron-db-graph-dir")]
-    (with-redefs [cli-common-graph/get-db-graphs-dir (fn [] graphs-dir)]
+    (with-redefs [common-graph/get-db-graphs-dir (fn [] graphs-dir)]
       (let [graph-dir (electron-db/ensure-graph-dir! "logseq_db_foo/bar")]
         (is (= (node-path/join graphs-dir "foo~2Fbar") graph-dir))
         (is (fs/existsSync graph-dir))))))
@@ -36,7 +36,7 @@
   (let [graphs-dir (node-helper/create-tmp-dir "electron-db-save")
         payload (.from js/Buffer "db-data")
         db-name "logseq_db_foo/bar"]
-    (with-redefs [cli-common-graph/get-db-graphs-dir (fn [] graphs-dir)]
+    (with-redefs [common-graph/get-db-graphs-dir (fn [] graphs-dir)]
       (let [[_ db-path] (common-sqlite/get-db-full-path graphs-dir db-name)]
         (fs/ensureDirSync (node-path/dirname db-path))
         (fs/writeFileSync db-path payload))
@@ -69,8 +69,8 @@
     (let [graphs-dir (node-helper/create-tmp-dir "electron-db-backup")
           db-name "logseq_db_foo/bar"
           DatabaseSync (resolve-database-sync-ctor)
-          original-get-db-graphs-dir cli-common-graph/get-db-graphs-dir]
-      (set! cli-common-graph/get-db-graphs-dir (fn [] graphs-dir))
+          original-get-db-graphs-dir common-graph/get-db-graphs-dir]
+      (set! common-graph/get-db-graphs-dir (fn [] graphs-dir))
       (let [[_ db-path] (common-sqlite/get-db-full-path graphs-dir db-name)]
         (fs/ensureDirSync (node-path/dirname db-path))
         (let [source-db (new DatabaseSync db-path)]
@@ -90,7 +90,7 @@
             (p/catch (fn [e]
                        (is false (str "unexpected error: " e))))
             (p/finally (fn []
-                         (set! cli-common-graph/get-db-graphs-dir original-get-db-graphs-dir)
+                         (set! common-graph/get-db-graphs-dir original-get-db-graphs-dir)
                          (done))))))))
 
 (deftest backup-db-uses-shared-backup-layout-and-metadata
@@ -102,7 +102,7 @@
           backup-calls (atom [])]
       (fs/ensureDirSync (node-path/dirname db-path))
       (fs/writeFileSync db-path "seed")
-      (-> (p/with-redefs [cli-common-graph/get-db-graphs-dir (fn [] graphs-dir)
+      (-> (p/with-redefs [common-graph/get-db-graphs-dir (fn [] graphs-dir)
                           sqlite-backup/backup-db-file! (fn [src dst]
                                                           (swap! sqlite-calls conj [src dst])
                                                           (fs/writeFileSync dst "copied")
@@ -142,7 +142,7 @@
           backup-calls (atom [])]
       (fs/ensureDirSync (node-path/dirname db-path))
       (fs/writeFileSync db-path "seed")
-      (-> (p/with-redefs [cli-common-graph/get-db-graphs-dir (fn [] graphs-dir)
+      (-> (p/with-redefs [common-graph/get-db-graphs-dir (fn [] graphs-dir)
                           sqlite-backup/backup-db-file! (fn [src dst]
                                                           (swap! fallback-calls conj [src dst])
                                                           (p/rejected (ex-info "fallback should not run" {})))
@@ -181,7 +181,7 @@
           runtime {:runtime true}
           worker-calls (atom [])
           backup-calls (atom [])]
-      (-> (p/with-redefs [cli-common-graph/get-db-graphs-dir (fn [] graphs-dir)
+      (-> (p/with-redefs [common-graph/get-db-graphs-dir (fn [] graphs-dir)
                           db-worker/ensure-runtime! (fn [repo window-id]
                                                       (swap! worker-calls conj [:ensure-runtime repo window-id])
                                                       (p/resolved runtime))
@@ -221,7 +221,7 @@
           db-name "logseq_db_demo"
           runtime {:runtime true}
           worker-calls (atom [])]
-      (-> (p/with-redefs [cli-common-graph/get-db-graphs-dir (fn [] graphs-dir)
+      (-> (p/with-redefs [common-graph/get-db-graphs-dir (fn [] graphs-dir)
                           db-worker/ensure-runtime! (fn [repo window-id]
                                                       (swap! worker-calls conj [:ensure-runtime repo window-id])
                                                       (p/resolved runtime))
@@ -252,7 +252,7 @@
         (write-backup! graphs-dir db-name (str "auto-" idx) :electron-auto idx))
       (write-backup! graphs-dir db-name "manual-old" :electron-manual 0)
       (write-backup! graphs-dir db-name "cli-old" :cli 0)
-      (-> (p/with-redefs [cli-common-graph/get-db-graphs-dir (fn [] graphs-dir)
+      (-> (p/with-redefs [common-graph/get-db-graphs-dir (fn [] graphs-dir)
                           db-worker/ensure-runtime! (fn [repo window-id]
                                                       (swap! worker-calls conj [:ensure-runtime repo window-id])
                                                       (p/resolved runtime))
@@ -280,7 +280,7 @@
           runtime {:runtime true}
           worker-calls (atom [])
           backup-calls (atom [])]
-      (-> (p/with-redefs [cli-common-graph/get-db-graphs-dir (fn [] graphs-dir)
+      (-> (p/with-redefs [common-graph/get-db-graphs-dir (fn [] graphs-dir)
                           db-worker/ensure-runtime! (fn [repo window-id]
                                                       (swap! worker-calls conj [:ensure-runtime repo window-id])
                                                       (p/resolved runtime))
@@ -308,7 +308,7 @@
           db-name "logseq_db_demo"
           runtime {:runtime true}
           worker-calls (atom [])]
-      (-> (p/with-redefs [cli-common-graph/get-db-graphs-dir (fn [] graphs-dir)
+      (-> (p/with-redefs [common-graph/get-db-graphs-dir (fn [] graphs-dir)
                           db-worker/ensure-runtime! (fn [repo window-id]
                                                       (swap! worker-calls conj [:ensure-runtime repo window-id])
                                                       (p/resolved runtime))

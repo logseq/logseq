@@ -1,6 +1,7 @@
 (ns frontend.handler.plugin
   "System-component-like ns that provides all high level plugin functionality"
-  (:require [camel-snake-kebab.core :as csk]
+  (:require ["react-dom/client" :as rdc]
+            [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -24,7 +25,7 @@
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn- normalize-keyword-for-json
   [input]
@@ -354,6 +355,7 @@
                                             [(t :plugin/up-to-date ":)") :success]
 
                                             [error-code :error])
+                               rate-limit-error? (some-> msg str (string/includes? "API rate limit"))
                                pending? (seq (:plugin/updates-pending @state/state))]
 
                            (if (and only-check pending?)
@@ -365,11 +367,12 @@
                                  (state/consume-updates-from-coming-plugin! payload true))
 
                                ;; notify human tips
-                               (notification/show!
-                                 (str
-                                   (if (= :error type) "[Error]" "")
-                                   "<" (:id payload) "> "
-                                   msg) type)))
+                               (when-not rate-limit-error?
+                                 (notification/show!
+                                   (str
+                                     (if (= :error type) "[Error]" "")
+                                     "<" (:id payload) "> "
+                                     msg) type))))
 
                            (when-not fake-error?
                              (js/console.error "Update Error:" (:error-code payload))))
@@ -1119,7 +1122,7 @@
 
 (defn op-pinned-toolbar-item!
   [key op]
-  (let [pinned (state/sub [:plugin/preferences :pinnedToolbarItems])
+  (let [pinned (get-in @state/state [:plugin/preferences :pinnedToolbarItems])
         pinned (into #{} pinned)]
     (when-let [op-fn (case op
                        :add conj
@@ -1129,7 +1132,7 @@
 (defn- remove-pinned-toolbar-items-of-plugin!
   [pid]
   (let [prefix (str (name pid) ":")
-        pinned (state/sub [:plugin/preferences :pinnedToolbarItems])
+        pinned (get-in @state/state [:plugin/preferences :pinnedToolbarItems])
         pinned (if (sequential? pinned) (vec pinned) [])
         updated-pinned (->> pinned
                             (remove #(and (string? %) (string/starts-with? % prefix)))
@@ -1187,9 +1190,9 @@
       url)))
 
 ;; components
-(rum/defc lsp-indicator < rum/reactive
+(hsx/defc lsp-indicator
   []
-  (let [text (or (state/sub :plugin/indicator-text) (when (not (util/electron?)) (t :plugin/loading-indicator)))]
+  (let [text (or (state/use-sub :plugin/indicator-text) (when (not (util/electron?)) (t :plugin/loading-indicator)))]
     (when-not (true? text)
       [:div.flex.align-items.justify-center.h-screen.w-full.preboot-loading
        [:span.flex.items-center.justify-center.flex-col
@@ -1202,8 +1205,7 @@
 
   (let [el (js/document.createElement "div")]
     (.appendChild js/document.body el)
-    (rum/mount
-      (lsp-indicator) el))
+    (.render (rdc/createRoot el) (lsp-indicator)))
 
   (-> (p/let [root (init-ls-dotdir-root)
               _ (.setupPluginCore js/LSPlugin (bean/->js {:localUserConfigRoot root :dotConfigRoot root}))
@@ -1272,7 +1274,7 @@
                                           (let [theme (bean/->clj theme)
                                                 theme (assets-theme-to-file theme)
                                                 url (:url theme)
-                                                mode (or (:mode theme) (state/sub :ui/theme))]
+                                                mode (or (:mode theme) (:ui/theme @state/state))]
                                             (when mode
                                               (state/set-custom-theme! mode theme)
                                               (state/set-theme-mode! mode))

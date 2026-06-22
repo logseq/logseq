@@ -1,7 +1,31 @@
 (ns logseq.cli.e2e.sync-fixture-test
-  (:require [clojure.string :as string]
+  (:require [babashka.fs :as fs]
+            [clojure.java.shell :as shell]
+            [clojure.string :as string]
             [clojure.test :refer [deftest is testing]]
             [logseq.cli.e2e.sync-fixture :as sync-fixture]))
+
+(deftest prepare-sync-config-writes-oauth-token-endpoint
+  (let [tmp-dir (fs/create-temp-dir {:prefix "logseq-cli-sync-config-test-"})
+        auth-path (fs/path tmp-dir "auth.json")
+        config-path (fs/path tmp-dir "cli.edn")
+        script (fs/path "cli-e2e" "scripts" "prepare_sync_config.py")
+        result (do
+                 (spit (str auth-path) "{\"refresh-token\":\"refresh-token\"}\n")
+                 (shell/sh "python3" (str script)
+                           "--output" (str config-path)
+                           "--auth-path" (str auth-path)
+                           "--http-base" "http://127.0.0.1:18080"
+                           "--ws-url" "ws://127.0.0.1:18080/sync/%s"))]
+    (try
+      (is (= 0 (:exit result)) (:err result))
+      (let [config (slurp (str config-path))]
+        (is (string/includes? config ":http-base \"http://127.0.0.1:18080\""))
+        (is (string/includes? config ":ws-url \"ws://127.0.0.1:18080/sync/%s\""))
+        (is (string/includes? config ":oauth-token-endpoint "))
+        (is (string/includes? config "https://logseq-prod.auth.us-east-1.amazoncognito.com/oauth2/token")))
+      (finally
+        (fs/delete-tree tmp-dir)))))
 
 (deftest prepare-case-injects-case-local-sync-resources
   (let [suite-context {:sync-port "18080"

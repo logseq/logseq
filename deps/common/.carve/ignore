@@ -7,6 +7,10 @@ logseq.common.graph/get-default-graphs-dir
 ;; API fn
 logseq.common.graph/expand-home
 ;; API fn
+logseq.common.graph/get-db-graphs-dir
+;; API fn
+logseq.common.graph/get-db-based-graphs
+;; API fn
 logseq.common.authorization/verify-jwt
 
 ;; Profile utils

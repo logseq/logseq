@@ -4,7 +4,7 @@
             [frontend.db.model :as model]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defn class-children-aux
   [class {:keys [default-collapsed?] :as opts}]
@@ -23,7 +23,7 @@
               {:default-collapsed? default-collapsed?})
              title)))])))
 
-(rum/defc class-children
+(hsx/defc class-children
   [class]
   (when (seq (:logseq.property.class/_extends class))
     (let [children-pages (set (model/get-structured-children (state/get-current-repo) (:db/id class)))

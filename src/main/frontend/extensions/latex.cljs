@@ -5,35 +5,34 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-;; TODO: extracted to a rum mixin
+;; TODO: extract this loading lifecycle
 (defn loaded? []
   js/window.katex)
 
 (defonce *loading? (atom false))
 
 (defn render!
-  [state]
-  (let [[s _ display?] (:rum/args state)
-        id (:id state)]
-    (try
-      (when-let [elem (gdom/getElement id)]
-        (js/katex.render s elem
-                         #js {:displayMode display?
-                              :throwOnError false
-                              :strict false}))
+  [id s display?]
+  (try
+    (when-let [elem (gdom/getElement id)]
+      (js/katex.render s elem
+                       #js {:displayMode display?
+                            :throwOnError false
+                            :strict false}))
 
-      (catch :default e
-        (js/console.error e)))))
+    (catch :default e
+      (js/console.error e))))
 
 (defn- load-and-render!
-  [state]
+  [id s display?]
   (if (loaded?)
     (do
       (reset! *loading? false)
-      (render! state))
+      (render! id s display?))
     (when-not @*loading?
       (reset! *loading? true)
       (loader/load "./js/katex.min.js"
@@ -47,22 +46,16 @@
                                         (p/all)
                                         (p/finally (fn []
                                                      (reset! *loading? false)
-                                                     (render! state)))))))
-                   state))))
+                                                     (render! id s display?)))))))))))
 
-(defn- state-&-load-and-render!
-  [state]
-  (load-and-render! state)
-  state)
-
-(rum/defcs latex < rum/reactive
-  {:init (fn [state]
-           (assoc state :id (str (random-uuid))))
-   :did-mount  state-&-load-and-render!
-   :did-update state-&-load-and-render!}
-  [state s block? _display?]
-  (let [id (:id state)
-        loading? (rum/react *loading?)]
+(hsx/defc latex
+  [s block? display?]
+  (let [id (hooks/use-memo #(str (random-uuid)) [])
+        loading? (first (hooks/use-atom *loading?))]
+    (hooks/use-effect!
+     (fn []
+       (load-and-render! id s display?))
+     [id s display? loading?])
     (if loading?
       (ui/loading)
       (let [element (if block?

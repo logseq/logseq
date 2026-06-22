@@ -1217,6 +1217,7 @@
  :plugin.package-config/remove-installed-success "已移除損壞的外掛「{1}」。"
 
  :plugin.proxy/direct "直接連線"
+ :plugin.proxy/host-port-required "主機和連接埠不能為空"
  :plugin.proxy/system "系統"
  :plugin.proxy/test-url "測試 URL"
  :plugin.proxy/testing "測試中"
@@ -1599,10 +1600,8 @@
  :settings.editor/wide-mode "寬屏模式"
 
  :settings.features/enable-flashcards "啟用卡片"
- :settings.features/enable-journals "啟用日記頁面"
  :settings.features/home-default-page "設定預設首頁"
  :settings.features/home-default-page-update-success "首頁預設頁面已更新成功！"
- :settings.features/journals-enable-success "已啟用日誌頁"
  :settings.features/login-prompt "你必須是 Logseq 的 Open Collective Sponsor 或 Backer 以使用新功能。（需要登入）"
  :settings.features/page-not-found "頁面「{1}」尚不存在。請先建立該頁面，然後再試一次。"
  :settings.features/plugin-system "外掛系統"

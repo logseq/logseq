@@ -6,8 +6,13 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
-            [logseq.outliner.page :as outliner-page]))
+            [logseq.outliner.op :as outliner-op]
+            [logseq.outliner.page :as outliner-page]
+            [logseq.outliner.recycle :as outliner-recycle]))
 
 (deftest test-built-in-page-updates-that-should-be-reverted
   (let [conn (db-test/create-conn-with-blocks
@@ -109,6 +114,102 @@
             "Tagging an existing empty child block with #Comments should target its parent"))
       (finally
         ;; return global fn back to previous behavior
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest batch-import-edn-datom-format-with-shifted-builtin-eids-test
+  (let [source-conn (d/create-conn db-schema/schema)
+        _ (d/transact! source-conn [{:block/uuid (random-uuid)}])
+        _ (d/transact! source-conn (sqlite-create-graph/build-db-initial-data "{}"))
+        export-edn (sqlite-export/build-export @source-conn {:export-type :graph})
+        source-purple-eid (some (fn [[e a v]]
+                                  (when (and (= a :db/ident)
+                                             (= v :logseq.property/color.purple))
+                                    e))
+                                (:datoms export-edn))
+        conn (sqlite-export/create-conn)
+        dest-purple-eid (:db/id (d/entity @conn :logseq.property/color.purple))]
+    (assert (= :datoms (::sqlite-export/graph-format export-edn))
+            "Test relies on a datom-format export")
+    (assert (and source-purple-eid dest-purple-eid (not= source-purple-eid dest-purple-eid))
+            "Test relies on shifted built-in eids between source and dest")
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (let [result (outliner-op/apply-ops!
+                    conn
+                    [[:batch-import-edn [export-edn {:tx-meta {:import-db? true}}]]]
+                    {})]
+        (is (nil? (:error result)))
+        (is (= :logseq.property/color.purple
+               (:db/ident (d/entity @conn :logseq.property/color.purple)))
+            "color.purple ident is preserved after datom import despite eid shift"))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest permanent-delete-recycled-page-with-transact-pipeline-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "b1"}]}])
+        page (ldb/get-page @conn "page1")
+        block (db-test/find-block-by-content @conn "b1")
+        page-uuid (:block/uuid page)
+        block-uuid (:block/uuid block)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (outliner-page/delete! conn page-uuid {})
+      (is (true? (ldb/recycled? (d/entity @conn [:block/uuid page-uuid]))))
+      (outliner-op/apply-ops! conn [[:recycle-delete-permanently [page-uuid]]] {})
+      (is (nil? (d/entity @conn [:block/uuid page-uuid])))
+      (is (nil? (d/entity @conn [:block/uuid block-uuid])))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest permanent-delete-recycled-page-removes-blocks-parented-by-page-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}}
+               {:page {:block/title "page2"}}])
+        page1 (ldb/get-page @conn "page1")
+        page2 (ldb/get-page @conn "page2")
+        block-uuid (random-uuid)
+        now (common-util/time-ms)]
+    (d/transact! conn [{:block/uuid block-uuid
+                        :block/title "parented by page1"
+                        :block/created-at now
+                        :block/updated-at now
+                        :block/parent (:db/id page1)
+                        :block/page (:db/id page2)
+                        :block/order "a0"}])
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (ldb/transact! conn
+                     (outliner-recycle/recycle-page-tx-data @conn page1 {})
+                     {:outliner-op :delete-page})
+      (is (true? (ldb/recycled? (d/entity @conn (:db/id page1)))))
+      (is (true? (outliner-recycle/permanently-delete! conn (:block/uuid page1))))
+      (is (nil? (d/entity @conn [:block/uuid block-uuid])))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest permanent-delete-recycled-block-with-transact-pipeline-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "parent"
+                          :build/children [{:block/title "child"}]}]}])
+        parent (db-test/find-block-by-content @conn "parent")
+        child (db-test/find-block-by-content @conn "child")
+        parent-uuid (:block/uuid parent)
+        child-uuid (:block/uuid child)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (ldb/transact! conn
+                     (outliner-recycle/recycle-blocks-tx-data @conn [parent] {})
+                     {:outliner-op :delete-blocks})
+      (is (true? (ldb/recycled? (d/entity @conn [:block/uuid parent-uuid]))))
+      (outliner-op/apply-ops! conn
+                              [[:recycle-delete-permanently [parent-uuid]]]
+                              {:db-sync/tx-id (random-uuid)})
+      (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
+      (is (nil? (d/entity @conn [:block/uuid child-uuid])))
+      (finally
         (ldb/register-transact-pipeline-fn! identity)))))
 
 (deftest code-block-tag-addition-preserves-explicit-code-lang-test
@@ -283,4 +384,30 @@
       (is (some? (db-test/find-block-by-content @conn "auto [[Target Page]]")))
       (finally
         ;; return global fn back to previous behavior
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest import-tx-skips-property-history-recording-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "task block"}]}]})
+        block (db-test/find-block-by-content @conn "task block")
+        history-count #(count (d/q '[:find ?e :where [?e :logseq.property.history/property]] @conn))]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (testing "Baseline: a normal status change records property history"
+        (let [before (history-count)]
+          (ldb/transact! conn [[:db/add (:db/id block)
+                                :logseq.property/status :logseq.property/status.todo]])
+          (is (= (inc before) (history-count))
+              "One :logseq.property.history entry is recorded for a user-driven status change")))
+
+      (testing "Import: setting a history-enabled property with ::sqlite-export/imported-data? does not record history"
+        (let [before (history-count)]
+          (ldb/transact! conn
+                         [[:db/add (:db/id block)
+                           :logseq.property/status :logseq.property/status.doing]]
+                         {::sqlite-export/imported-data? true})
+          (is (= before (history-count))
+              "No :logseq.property.history entries are added for an imported transaction")))
+      (finally
         (ldb/register-transact-pipeline-fn! identity)))))

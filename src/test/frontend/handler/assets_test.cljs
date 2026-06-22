@@ -3,6 +3,7 @@
             [frontend.config :as config]
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets]
+            [frontend.util :as util]
             [promesa.core :as p]))
 
 (defn- uint8->vec
@@ -82,3 +83,45 @@
                        (set! fs/stat original-stat)
                        (set! fs/readdir original-readdir)
                        (done)))))))
+
+(deftest resolve-asset-real-path-url-electron-test
+  (with-redefs [util/electron? (constantly true)
+                config/get-repo-dir (constantly "/Users/charlie/graph")]
+    (is (= "assets:///Users/charlie/graph/assets/test.png"
+           (#'assets/resolve-asset-real-path-url "some-repo" "assets/test.png")))))
+
+(deftest normalize-asset-resource-url-electron-test
+  (with-redefs [util/electron? (constantly true)]
+    (is (= "assets:///Users/charlie/graph/assets/test.png"
+           (assets/normalize-asset-resource-url "/Users/charlie/graph/assets/test.png")))))
+
+(deftest normalize-asset-resource-url-electron-windows-test
+  (with-redefs [util/electron? (constantly true)
+                util/win32? true]
+    (is (= "assets:///C/logseq__colon/Users/charlie/graph/assets/test.png"
+           (assets/normalize-asset-resource-url "C:/Users/charlie/graph/assets/test.png")))))
+
+(deftest make-asset-url-electron-test
+  (async done
+    (with-redefs [util/electron? (constantly true)
+                  config/get-repo-dir (constantly "/Users/charlie/graph")]
+      (-> (assets/<make-asset-url "assets/test.png")
+          (p/then (fn [url]
+                    (is (= "assets:///Users/charlie/graph/assets/test.png" url))
+                    (done)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))
+
+(deftest make-asset-url-electron-windows-test
+  (async done
+    (with-redefs [util/electron? (constantly true)
+                  util/win32? true
+                  config/get-repo-dir (constantly "C:/Users/charlie/graph")]
+      (-> (assets/<make-asset-url "assets/test.png")
+          (p/then (fn [url]
+                    (is (= "assets:///C/logseq__colon/Users/charlie/graph/assets/test.png" url))
+                    (done)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))

@@ -9,9 +9,9 @@
             [clojure.string :as string]
             [electron.configs :as cfgs]
             [electron.logger :as logger]
+            [electron.mcp-server :as desktop-mcp-server]
             [electron.utils :as utils]
             [electron.window :as window]
-            [logseq.cli.common.mcp.server :as cli-common-mcp-server]
             [promesa.core :as p]))
 
 (defonce ^:private *win (atom nil))
@@ -23,13 +23,19 @@
 (defonce *state
   (atom nil))
 
+(defn- normalize-tokens
+  [tokens]
+  (if (nil? tokens)
+    []
+    (vec tokens)))
+
 (defn- reset-state!
   []
   (reset! *state {:status    nil                            ;; :running :starting :closing :closed :error
                   :error     nil
                   :host      (get-host)
                   :port      (get-port)
-                  :tokens    (cfgs/get-item :server/tokens)
+                  :tokens    (normalize-tokens (cfgs/get-item :server/tokens))
                   :autostart (cfgs/get-item :server/autostart)
                   :mcp-enabled? (cfgs/get-item :server/mcp-enabled?)}))
 
@@ -47,10 +53,13 @@
 (defn set-config!
   [config]
   (when-let [config (and (map? config) (dissoc config :status))]
-    (reset! *state (merge @*state config))
-    (doseq [[k v] config]
-      (cfgs/set-item! (keyword (str "server/" (name k))) v))
-    (load-state-to-renderer!)))
+    (let [config (cond-> config
+                   (contains? config :tokens)
+                   (update :tokens normalize-tokens))]
+      (reset! *state (merge @*state config))
+      (doseq [[k v] config]
+        (cfgs/set-item! (keyword (str "server/" (name k))) v))
+      (load-state-to-renderer!))))
 
 (defn- setup-state-watch!
   []
@@ -137,13 +146,13 @@
                  (if-let [meth' (resolve-real-api-method meth)]
                    (invoke-logseq-api! meth' args)
                    #js {:error (str "No method found for " (pr-str meth))}))
-        mcp-server (cli-common-mcp-server/create-mcp-api-server api-fn)]
+        mcp-server (desktop-mcp-server/create-mcp-api-server api-fn)]
     (logger/debug "[server] MCP routes initialized")
     (.post server "/mcp"
-           #(cli-common-mcp-server/handle-post-request mcp-server {:port (get-port)
-                                                                   :host (get-host)} %1 %2))
-    (.get server "/mcp" cli-common-mcp-server/handle-get-request)
-    (.delete server "/mcp" cli-common-mcp-server/handle-get-request)))
+           #(desktop-mcp-server/handle-post-request mcp-server {:port (get-port)
+                                                                :host (get-host)} %1 %2))
+    (.get server "/mcp" desktop-mcp-server/handle-get-request)
+    (.delete server "/mcp" desktop-mcp-server/handle-delete-request)))
 
 (defn start!
   []

@@ -4,8 +4,8 @@
             ["path" :as node-path]
             [electron.db-worker :as db-worker]
             [lambdaisland.glogi :as log]
-            [logseq.cli.common.graph :as cli-common-graph]
             [logseq.cli.transport :as cli-transport]
+            [logseq.common.graph :as common-graph]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.backup :as sqlite-backup]
@@ -23,12 +23,12 @@
 
 (defn ensure-graphs-dir!
   []
-  (fs/ensureDirSync (cli-common-graph/get-db-graphs-dir)))
+  (fs/ensureDirSync (common-graph/get-db-graphs-dir)))
 
 (defn ensure-graph-dir!
   [db-name]
   (ensure-graphs-dir!)
-  (let [graph-dir (node-path/join (cli-common-graph/get-db-graphs-dir)
+  (let [graph-dir (node-path/join (common-graph/get-db-graphs-dir)
                                   (graph-dir/repo->encoded-graph-dir-name db-name))]
     (fs/ensureDirSync graph-dir)
     graph-dir))
@@ -36,7 +36,7 @@
 (defn get-db
   [db-name]
   (let [_ (ensure-graph-dir! db-name)
-        [_db-name db-path] (common-sqlite/get-db-full-path (cli-common-graph/get-db-graphs-dir) db-name)]
+        [_db-name db-path] (common-sqlite/get-db-full-path (common-graph/get-db-graphs-dir) db-name)]
     (when (fs/existsSync db-path)
       (fs/readFileSync db-path))))
 
@@ -51,7 +51,7 @@
   (let [_ (ensure-graph-dir! db-name)
         source (backup-source opts)]
     (graph-backup/<create-backup!
-     (cond-> {:graphs-dir (cli-common-graph/get-db-graphs-dir)
+     (cond-> {:graphs-dir (common-graph/get-db-graphs-dir)
               :repo db-name
               :backup-name (graph-backup/build-backup-name db-name nil)
               :source source
@@ -62,7 +62,7 @@
 
 (defn backup-db-with-sqlite-backup!
   [db-name {:keys [force-backup? sqlite-backup!]}]
-  (let [[_db-name db-path] (common-sqlite/get-db-full-path (cli-common-graph/get-db-graphs-dir) db-name)]
+  (let [[_db-name db-path] (common-sqlite/get-db-full-path (common-graph/get-db-graphs-dir) db-name)]
     (<create-graph-backup!
      db-name
      {:force-backup? force-backup?}

@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Plugin danneggiato \"{1}\" rimosso."
 
  :plugin.proxy/direct "Diretto"
+ :plugin.proxy/host-port-required "Host e porta sono richiesti"
  :plugin.proxy/system "Sistema"
  :plugin.proxy/test-url "URL di test"
  :plugin.proxy/testing "Test in corso"
@@ -1586,10 +1587,8 @@
  :settings.editor/wide-mode "Modalità ampia"
 
  :settings.features/enable-flashcards "Flashcard"
- :settings.features/enable-journals "Diario"
  :settings.features/home-default-page "Imposta la home page predefinita"
  :settings.features/home-default-page-update-success "Pagina iniziale predefinita aggiornata"
- :settings.features/journals-enable-success "Diari abilitati"
  :settings.features/login-prompt "Per avere accesso a nuove funzionalità prima di tutti gli altri devi essere uno sponsor di Open Collective oppure supportare Logseq, quindi devi prima accedere."
  :settings.features/page-not-found "La pagina \"{1}\" non esiste ancora. Per favore crea prima quella pagina e poi riprova."
  :settings.features/plugin-system "Sistema di plugin"

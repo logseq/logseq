@@ -113,7 +113,6 @@ The top-level help groups commands into graph inspection/editing, graph manageme
 - `login`
 - `logout`
 - `agent bridge`
-- `agent bridge list`
 - `completion`
 - `debug pull`
 - `skill show`
@@ -124,9 +123,7 @@ The top-level help groups commands into graph inspection/editing, graph manageme
 
 ### Agent bridge
 
-`agent bridge` is the first AgentBridge command surface. It resolves the target graph using normal CLI config precedence, resolves the AgentBridge name from `:agent-name` in `cli.edn` or the machine hostname, checks that `codex` is available, starts or reuses the graph's db-worker-node, registers the AgentBridge name in the graph, scans TODO `#Task` blocks assigned to that AgentBridge name, and listens to db-worker-node events for follow-up scans. Matched tasks are routed to `codex exec --json`; the bridge records the Codex session/thread id in `agent-bridge-sessions.edn` and writes it to the task's `agent-session-id` property. `--dry-run` performs the setup and scan but only prints the Codex commands it would run.
-
-`agent bridge list` reads root-dir scoped bridge session records from `agent-bridge-sessions.edn`. Human output uses the columns `SESSION`, `STATUS`, `BACKEND`, `GRAPH`, `BLOCK`, `AGENT`, `STARTED`, and `UPDATED`, ending with `Count: N`. Completed sessions are hidden by default; use `--all` to include them.
+`agent bridge` is the first AgentBridge command surface. It resolves the target graph using normal CLI config precedence, resolves the AgentBridge name from `:agent-name` in `cli.edn` or the machine hostname, checks that `codex` is available, starts or reuses the graph's db-worker-node, registers the AgentBridge name in the graph, initializes the per-agent master prompt, scans TODO `#Task` blocks assigned to that AgentBridge name, and listens to db-worker-node events for follow-up scans. Matched task and comment requests are dispatched to the master Codex session.
 
 ## Global flags and output modes
 
@@ -307,10 +304,10 @@ Graph management commands use `--graph` or the configured current graph, dependi
 - `graph validate --graph <name> [--fix]` delegates validation to the worker.
 - `graph info --graph <name>` reads graph metadata and `logseq.kv/*` values; human output redacts sensitive KV keys matching token/secret/password.
 - `graph export --graph <name> --type edn|sqlite --file <path>` exports EDN graph data or a SQLite snapshot.
-  - For `--type edn`, the CLI also accepts `--include-timestamps`, `--exclude-built-in-pages`, and `--exclude-namespaces <csv>`.
-  - `--exclude-namespaces` is normalized as trimmed CSV values with empty segments removed and duplicates collapsed; the worker receives the final value as a keyword set.
-  - `--exclude-namespaces` intentionally reduces some backend export validation strictness because excluded ontology namespaces cannot be validated the same way.
-  - For `--type sqlite`, the CLI rejects those EDN-only flags and invokes `:thread-api/backup-db-sqlite` so the worker writes the snapshot directly to the requested file path.
+  - For `--type edn`, the CLI also accepts `--edn-options/-e <edn-map>` and `--pretty-print/-p`.
+  - `--edn-options` is parsed as EDN (via babashka.cli's `:coerce :edn`) and must be a map; non-map values are rejected. `:export-type` (if present) overrides the default `:graph` and becomes the payload's `:export-type`; all other keys are forwarded to the worker as `:graph-options`. Passing `'{:export-type :graph-human :include-timestamps? true}'` selects the `:graph-human` worker export path with timestamps enabled.
+  - `--pretty-print` routes the EDN file write through `cljs.pprint/pprint` via the `:pretty?` option on `transport/write-output`; the result still round-trips through `graph import --type edn`.
+  - For `--type sqlite`, the CLI rejects `--edn-options` and `--pretty-print` and invokes `:thread-api/backup-db-sqlite` so the worker writes the snapshot directly to the requested file path.
 - `graph import --graph <name> --type edn|sqlite --input <path>` imports EDN or SQLite data. SQLite import requires the target graph to be missing; EDN import can target a graph action that the worker can open.
 
 Graph backups are SQLite snapshot helpers under the graph's backup directory:

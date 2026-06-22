@@ -112,6 +112,11 @@
   [opts]
   (db-worker-node/start-daemon! (update opts :log-level #(or % "error"))))
 
+(defn- semantic-search-integration-enabled?
+  []
+  (and (= "darwin" (.-platform js/process))
+       (some? (gobj/get (.-env js/process) "LOGSEQ_EMBEDDINGS_URL"))))
+
 (defn- noisy-debug-line?
   [line]
   (or (string/includes? line ":listen-db-changes!")
@@ -966,6 +971,82 @@
                                                          (not (string/includes? contents (str (.-pid js/process) " ")))))
                                                  (done)))))
                               (done))))))))
+
+(deftest db-worker-node-vector-search-finds-outline-context-after-rebuild
+  (if-not (semantic-search-integration-enabled?)
+    (is true "Skipping semantic search integration test without a macOS embedding endpoint")
+    (async done
+           (let [daemon (atom nil)
+                 data-dir (node-helper/create-tmp-dir "db-worker-vector-search")
+                 repo (str "logseq_db_vector_search_" (subs (str (random-uuid)) 0 8))
+                 now (js/Date.now)
+                 page-uuid (random-uuid)
+                 manu-uuid (random-uuid)
+                 manu-team-uuid (random-uuid)
+                 tony-uuid (random-uuid)
+                 tony-team-uuid (random-uuid)]
+             (-> (p/let [{:keys [host port stop!]}
+                         (start-daemon! {:root-dir data-dir
+                                         :repo repo})
+                         _ (reset! daemon {:stop! stop!})
+                         _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                         _ (invoke host port "thread-api/transact"
+                                   [repo
+                                    [{:block/uuid page-uuid
+                                      :block/title "Teams"
+                                      :block/name "teams"
+                                      :block/tags #{:logseq.class/Page}
+                                      :block/created-at now
+                                      :block/updated-at now}
+                                     {:block/uuid manu-uuid
+                                      :block/title "which team is Manu in?"
+                                      :block/page [:block/uuid page-uuid]
+                                      :block/parent [:block/uuid page-uuid]
+                                      :block/order "a0"
+                                      :block/created-at now
+                                      :block/updated-at now}
+                                     {:block/uuid manu-team-uuid
+                                      :block/title "Spurs"
+                                      :block/page [:block/uuid page-uuid]
+                                      :block/parent [:block/uuid manu-uuid]
+                                      :block/order "a0"
+                                      :block/created-at now
+                                      :block/updated-at now}
+                                     {:block/uuid tony-uuid
+                                      :block/title "Which team is Tony in?"
+                                      :block/page [:block/uuid page-uuid]
+                                      :block/parent [:block/uuid page-uuid]
+                                      :block/order "b0"
+                                      :block/created-at now
+                                      :block/updated-at now}
+                                     {:block/uuid tony-team-uuid
+                                      :block/title "Spurs"
+                                      :block/page [:block/uuid page-uuid]
+                                      :block/parent [:block/uuid page-uuid]
+                                      :block/order "c0"
+                                      :block/created-at now
+                                      :block/updated-at now}]
+                                    {}
+                                    nil])
+                         _ (invoke host port "thread-api/search-build-blocks-indice-in-worker" [repo true])
+                         manu-results (invoke host port "thread-api/search-blocks" [repo "manu spurs" {:limit 10}])
+                         tony-results (invoke host port "thread-api/search-blocks" [repo "tony spurs" {:limit 10}])]
+                   (is (some #(= manu-uuid (:block/uuid %)) manu-results)
+                       (str "Expected Manu vector result, got: " (pr-str (map :block/title manu-results))))
+                   (is (= manu-uuid (:block/uuid (first manu-results)))
+                       (str "Expected Manu vector result first, got: " (pr-str (map :block/title manu-results))))
+                   (is (some #(= tony-uuid (:block/uuid %)) tony-results)
+                       (str "Expected Tony vector result, got: " (pr-str (map :block/title tony-results))))
+                   (is (= tony-uuid (:block/uuid (first tony-results)))
+                       (str "Expected Tony vector result first, got: " (pr-str (map :block/title tony-results)))))
+                 (p/catch (fn [e]
+                            (println "[db-worker-node-test] vector-search error:" e)
+                            (is false (str e))))
+                 (p/finally (fn []
+                              (if-let [stop! (:stop! @daemon)]
+                                (-> (stop!)
+                                    (p/finally done))
+                                (done)))))))))
 
 (deftest db-worker-node-import-edn
   (async done

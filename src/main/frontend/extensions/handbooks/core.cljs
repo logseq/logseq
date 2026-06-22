@@ -9,9 +9,7 @@
             [frontend.extensions.lightbox :as lightbox]
             [frontend.extensions.video.youtube :as youtube]
             [frontend.handler.notification :as notification]
-            [frontend.modules.shortcut.config :as shortcut-config]
-            [frontend.rum :as r]
-            [frontend.search :as search]
+            [frontend.modules.shortcut.config :as shortcut-config]            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
@@ -19,7 +17,7 @@
             [logseq.shui.hooks :as hooks]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defonce *config (atom {}))
 
@@ -87,7 +85,7 @@
           _ (when-not (aget js/window "Glide")
               (util/js-load$ (str util/JS_ROOT "/glide/glide.min.js")))]))
 
-(rum/defc topic-card
+(hsx/defc topic-card
   [{:keys [key title description cover] :as _topic} nav-fn! opts]
   [:button.w-full.topic-card.flex.text-left
    (merge
@@ -100,7 +98,7 @@
     [:strong title]
     [:span description]]])
 
-(rum/defc pane-category-topics
+(hsx/defc pane-category-topics
   [handbook-nodes pane-state nav!]
 
   [:div.pane.pane-category-topics
@@ -108,11 +106,10 @@
     (let [category-key (:key (second pane-state))]
       (when-let [category (get handbook-nodes category-key)]
         (for [topic (:children category)]
-          (rum/with-key
-            (topic-card topic #(nav! [:topic-detail topic (display-category-title category)] pane-state) nil)
-            (:key topic)))))]])
+          ^{:key (:key topic)}
+          [topic-card topic #(nav! [:topic-detail topic (display-category-title category)] pane-state) nil])))]])
 
-(rum/defc media-render
+(hsx/defc media-render
   [src]
   (let [src (util/trim-safe src)
         extname (some-> src (util/full-path-extname) (subs 1))
@@ -127,9 +124,9 @@
 
       :else [:img {:src src}])))
 
-(rum/defc chapter-select
+(hsx/defc chapter-select
   [topic children on-select]
-  (let [[open?, set-open?] (rum/use-state false)]
+  (let [[open?, set-open?] (hooks/use-state false)]
     (hooks/use-effect!
      (fn []
        (when-let [^js el (js/document.querySelector "[data-identity=logseq-handbooks]")]
@@ -158,11 +155,11 @@
               [:a.flex {:tabIndex "0" :on-click #(on-select (:key c))}
                (or (:title c) (:key c))]]))])]]))
 
-(rum/defc ^:large-vars/cleanup-todo pane-topic-detail
+(hsx/defc ^:large-vars/cleanup-todo pane-topic-detail
   [handbook-nodes pane-state nav!]
 
-  (let [[deps-pending?, set-deps-pending?] (rum/use-state false)
-        *id-ref (rum/use-ref (str "glide--" (js/Date.now)))]
+  (let [[deps-pending?, set-deps-pending?] (hooks/use-state false)
+        *id-ref (hooks/use-ref (str "glide--" (js/Date.now)))]
 
     ;; load deps assets
     (hooks/use-effect!
@@ -170,8 +167,8 @@
        (set-deps-pending? true)
        (-> (load-glide-assets!)
            (p/then (fn [] (js/setTimeout
-                           #(when (js/document.getElementById (rum/deref *id-ref))
-                              (doto (js/window.Glide. (str "#" (rum/deref *id-ref))) (.mount))) 50)))
+                           #(when (js/document.getElementById (hooks/deref *id-ref))
+                              (doto (js/window.Glide. (str "#" (hooks/deref *id-ref))) (.mount))) 50)))
            (p/finally #(set-deps-pending? false))))
      [])
 
@@ -216,7 +213,7 @@
                              (string? demos) (list))]
                  (if (> (count demos) 1)
                    [:div.flex.demos.glide
-                    {:id (rum/deref *id-ref)}
+                    {:id (hooks/deref *id-ref)}
 
                     [:div.glide__track {:data-glide-el "track"}
                      [:div.glide__slides
@@ -263,7 +260,7 @@
                       [:div (when next (ui/button [:span.flex.items-center (t :help.handbook/next-chapter) (ui/icon "arrow-right")]
                                                   :small? true :on-click #(nav! [:topic-detail (nth chapters next) (display-category-title parent)] pane-state)))]]))])]]))))))
 
-(rum/defc pane-dashboard
+(hsx/defc pane-dashboard
   [handbooks-nodes pane-state nav-to-pane!]
   (when-let [root (get handbooks-nodes "__root")]
     [:div.pane.dashboard-pane
@@ -312,7 +309,7 @@
               :else
               [:span (str total " " (util/safe-lower-case (t :help.handbook/topics)))])]]))]]))
 
-(rum/defc pane-settings
+(hsx/defc pane-settings
   [dev-watch? set-dev-watch?]
   [:div.pane.pane-settings
    [:div.item
@@ -321,12 +318,12 @@
      (ui/toggle dev-watch? #(set-dev-watch? (not dev-watch?)) true)]
     [:small.opacity-30 (t :help.handbook/resources-from (get-handbooks-endpoint "/"))]]])
 
-(rum/defc search-bar
+(hsx/defc search-bar
   [pane-state nav! handbooks-nodes search-state set-search-state!]
-  (let [*input-ref (rum/use-ref nil)
-        [q, set-q!] (rum/use-state "")
-        [results, set-results!] (rum/use-state nil)
-        [selected, set-selected!] (rum/use-state 0)
+  (let [*input-ref (hooks/use-ref nil)
+        [q, set-q!] (hooks/use-state "")
+        [results, set-results!] (hooks/use-state nil)
+        [selected, set-selected!] (hooks/use-state 0)
         select-fn! #(when-let [ldx (and (seq results) (dec (count results)))]
                       (set-selected!
                        (case %
@@ -336,8 +333,8 @@
 
         q (util/trim-safe q)
         active? (not (string/blank? (util/trim-safe q)))
-        reset-q! #(->> "" (set! (.-value (rum/deref *input-ref))) (set-q!))
-        focus-q! #(some-> (rum/deref *input-ref) (.focus))]
+        reset-q! #(->> "" (set! (.-value (hooks/deref *input-ref))) (set-q!))
+        focus-q! #(some-> (hooks/deref *input-ref) (.focus))]
 
     (hooks/use-effect!
      #(focus-q!)
@@ -411,12 +408,11 @@
        [:div.search-results-wrap
         [:div.results-wrap
          (for [[idx topic] (medley/indexed results)]
-           (rum/with-key
-             (topic-card topic #(nav! [:topic-detail topic (:title topic)] pane-state)
-                         {:class (util/classnames [{:active (= selected idx)}])})
-             (:key topic)))]])]))
+           ^{:key (:key topic)}
+           [topic-card topic #(nav! [:topic-detail topic (:title topic)] pane-state)
+            {:class (util/classnames [{:active (= selected idx)}])}])]])]))
 
-(rum/defc link-card
+(hsx/defc link-card
   [opts child]
 
   (let [{:keys [href]} opts]
@@ -426,7 +422,7 @@
        (assoc :on-click #(util/open-url href)))
      child]))
 
-;(rum/defc related-topics
+;(hsx/defc related-topics
 ;  []
 ;  [:div.related-topics
 ;   (link-card {} [:strong.text-md "How to do something?"])])
@@ -439,9 +435,9 @@
 
 (defonce discord-endpoint "https://plugins.logseq.io/ds")
 
-(rum/defc footer-link-cards
+(hsx/defc footer-link-cards
   []
-  (let [[config _] (r/use-atom *config)
+  (let [[config _] (hooks/use-atom *config)
         discord-count (:discord-online config)]
 
     (hooks/use-effect!
@@ -484,25 +480,25 @@
           [:strong.opacity-60 "800+"] ;; TODO: fetch real data
           [:span.opacity-70.font-light (str " " (t :help.handbook/monthly-posts))]]]])]]))
 
-(rum/defc ^:large-vars/data-var content
+(hsx/defc ^:large-vars/data-var content
   []
   (let [[active-pane-state, set-active-pane-state!]
-        (rum/use-state [:dashboard nil (t :help.handbook/title)])
+        (hooks/use-state [:dashboard nil (t :help.handbook/title)])
 
         [handbooks-state, set-handbooks-state!]
-        (rum/use-state nil)
+        (hooks/use-state nil)
 
         [handbooks-nodes, set-handbooks-nodes!]
-        (rum/use-state nil)
+        (hooks/use-state nil)
 
         [history-state, set-history-state!]
-        (rum/use-state ())
+        (hooks/use-state ())
 
         [dev-watch?, set-dev-watch?]
-        (rum/use-state (storage/get :handbooks-dev-watch?))
+        (hooks/use-state (storage/get :handbooks-dev-watch?))
 
         [search-state, set-search-state!]
-        (rum/use-state {:active? false})
+        (hooks/use-state {:active? false})
 
         reset-handbooks! #(set-handbooks-state! {:status nil :data nil :error nil})
         update-handbooks! #(set-handbooks-state! (fn [v] (merge v %)))
@@ -539,7 +535,7 @@
                             (conj (sequence history-state) prev-state))))
                        (set-active-pane-state! next-state))
 
-        [scrolled?, set-scrolled!] (rum/use-state false)
+        [scrolled?, set-scrolled!] (hooks/use-state false)
         on-scroll (hooks/use-memo
                    #(util/debounce (fn [^js e] (set-scrolled! (not (< (.. e -target -scrollTop) 10)))) 100)
                    [])]

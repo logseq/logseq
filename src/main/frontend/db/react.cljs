@@ -11,6 +11,7 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util]
+            [goog.object :as gobj]
             [promesa.core :as p]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
@@ -29,16 +30,22 @@
   [k]
   (@*collapsed-queries k))
 
-;; Current dynamic component
-(def ^:dynamic *query-component* nil)
-
-;; Which reactive queries are triggered by the current component
-(def ^:dynamic *reactive-queries* nil)
-
 ;; component -> query-key
 (defonce component->query-key (volatile! {}))
 ;; query-key -> component-set
 (defonce query-key->components (volatile! {}))
+
+(def ^:private query-key-prop "__logseq_query_key")
+
+(defn- set-query-key!
+  [result-atom k]
+  (gobj/set result-atom query-key-prop k)
+  result-atom)
+
+(defn query-key
+  [result-atom]
+  (when result-atom
+    (gobj/get result-atom query-key-prop)))
 
 (defn set-new-result!
   [k new-result]
@@ -83,6 +90,16 @@
       (when (empty? (get @query-key->components query))
         (remove-q! query))))
   (vswap! component->query-key dissoc component))
+
+(defn- request-query-component-render!
+  [component]
+  (when (fn? component)
+    (component)))
+
+(defn- refresh-query-components!
+  [k]
+  (doseq [component (get @query-key->components k)]
+    (request-query-component-render! component)))
 
 ;; Reactive query
 
@@ -131,17 +148,12 @@
            :or {use-cache? true
                 transform-fn identity}} query & inputs]
   ;; {:pre [(s/valid? :frontend.worker.react/block k)]}
-  (let [origin-key k
-        k (vec (cons repo k))]
+  (let [k (vec (cons repo k))]
     (when-let [db (conn/get-db repo)]
       (let [result-atom (get-query-cached-result k)]
-        (when-let [component *query-component*]
-          (add-query-component! k component))
-        (when-let [queries *reactive-queries*]
-          (swap! queries conj origin-key))
         (if (and use-cache? result-atom)
-          result-atom
-          (let [result-atom (or result-atom (atom nil))
+          (set-query-key! result-atom k)
+          (let [result-atom (set-query-key! (or result-atom (atom nil)) k)
                 p-or-value (<q-aux repo db query-fn inputs-fn k query inputs built-in-query?)]
             (when-not disable-reactive?
               (add-q! k query inputs result-atom transform-fn query-fn inputs-fn))
@@ -168,7 +180,8 @@
   (p/let [p-or-value (<q-aux graph db query-fn inputs-fn k query inputs built-in-query?)
           result' (transform-fn p-or-value)]
     (when-not (= result' result)
-      (set-new-result! k result'))))
+      (set-new-result! k result'))
+    (refresh-query-components! k)))
 
 (defn refresh-affected-queries!
   [repo-url affected-keys & {:keys [skip-kv-custom-keys?]

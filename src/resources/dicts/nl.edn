@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Beschadigde plugin \"{1}\" verwijderd."
 
  :plugin.proxy/direct "Direct"
+ :plugin.proxy/host-port-required "Host en poort zijn vereist"
  :plugin.proxy/system "Systeem"
  :plugin.proxy/test-url "Test-URL"
  :plugin.proxy/testing "Testen"
@@ -1586,10 +1587,8 @@
  :settings.editor/wide-mode "Brede modus"
 
  :settings.features/enable-flashcards "Flashcards inschakelen"
- :settings.features/enable-journals "Journaals"
  :settings.features/home-default-page "De standaard startpagina instellen"
  :settings.features/home-default-page-update-success "Startpagina bijgewerkt"
- :settings.features/journals-enable-success "Dagboeken ingeschakeld"
  :settings.features/login-prompt "Log in om te synchroniseren"
  :settings.features/page-not-found "De pagina \"{1}\" bestaat nog niet. Maak eerst die pagina aan en probeer het vervolgens opnieuw."
  :settings.features/plugin-system "Plug-insysteem"

@@ -7,7 +7,7 @@
             [logseq.shui.ui :as shui]
             [mobile.state :as mobile-state]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defonce *last-popup? (atom nil))
 (defonce *last-popup-data (atom nil))
@@ -133,7 +133,7 @@
 (set! shui/popup-show! popup-show!)
 (set! shui/popup-hide! popup-hide!)
 
-(rum/defc popup
+(hsx/defc popup
   [opts content-fn]
   (let [title (or (:title opts) (when (string? content-fn) content-fn))
         content (if (fn? content-fn)

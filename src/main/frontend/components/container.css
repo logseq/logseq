@@ -515,7 +515,7 @@
   }
 
   &-btn {
-    @apply fixed bottom-4 right-4 sm:right-8 opacity-70 hover:opacity-100;
+    @apply fixed bottom-4 right-4 sm:right-8 opacity-70 hover:opacity-100 z-[var(--ls-z-index-level-3)];
 
     > .inner {
       @apply rounded-full h-8 w-8 flex items-center justify-center
@@ -526,7 +526,7 @@
   }
 
   &-menu-popup {
-    @apply fixed bottom-14 right-8 z-10 border rounded-lg min-w-[260px] shadow;
+    @apply fixed bottom-14 right-8 z-[var(--ls-z-index-level-3)] border rounded-lg min-w-[260px] shadow;
 
     background-color: var(--ls-secondary-background-color, var(--rx-gray-03));
 

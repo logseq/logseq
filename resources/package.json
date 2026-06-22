@@ -12,7 +12,9 @@
     "electron:dev": "electron .",
     "electron:debug": "electron --inspect=9229 .",
     "electron:make": "electron-builder --config electron-builder.yml --publish never",
+    "electron:make-unsigned": "node ../scripts/electron-builder-unsigned.mjs",
     "electron:make-linux-arm64": "electron-builder --config electron-builder.yml --linux AppImage zip --arm64 --publish never",
+    "electron:publish-snap": "electron-builder --linux snap --x64 --publish always",
     "electron:make-macos-arm64": "electron-builder --config electron-builder.yml --mac dmg zip --arm64 --publish never",
     "electron:make-win-arm64": "electron-builder --config electron-builder.yml --win nsis zip --arm64 --publish never",
     "electron:publish:github": "electron-builder --config electron-builder.yml --publish always",
@@ -33,7 +35,7 @@
     "extract-zip": "2.0.1",
     "fastify": "5.8.2",
     "fs-extra": "^11.3.4",
-    "https-proxy-agent": "8.0.0",
+    "https-proxy-agent": "7.0.6",
     "keytar": "^7.9.0",
     "mldoc": "^1.5.9",
     "node-fetch": "3.3.2",
@@ -42,22 +44,30 @@
     "remove-accents": "0.5.0",
     "sanitize-filename": "1.6.4",
     "semver": "7.7.4",
-    "socks-proxy-agent": "9.0.0",
+    "socks-proxy-agent": "8.0.5",
     "string-width": "8.2.0",
     "tiny-pinyin": "1.3.2",
     "ws": "^8.20.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "electron": "39.8.8",
+    "electron": "42.3.0",
     "electron-builder": "26.8.2",
     "electron-devtools-installer": "4.0.0"
+  },
+  "optionalDependencies": {
+    "@zvec/bindings-darwin-arm64": "0.4.0",
+    "@zvec/bindings-linux-arm64": "0.4.0",
+    "@zvec/bindings-linux-x64": "0.4.0",
+    "@zvec/bindings-win32-x64": "0.4.0",
+    "@zvec/zvec": "0.4.0"
   },
   "resolutions": {
     "node-abi": "4.28.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@zvec/zvec",
       "electron",
       "electron-winstaller",
       "keytar"
