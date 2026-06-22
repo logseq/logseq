@@ -845,6 +845,24 @@ should be done through this fn in order to get global config and config defaults
       :else      (swap! state update path f)))
   nil)
 
+(defn- edit-block-fn-queue
+  [value]
+  (cond
+    (vector? value) value
+    (fn? value) [value]
+    :else []))
+
+(defn queue-edit-block-fn!
+  [f]
+  (when (fn? f)
+    (update-state! :editor/edit-block-fn #(conj (edit-block-fn-queue %) f))))
+
+(defn take-edit-block-fn!
+  []
+  (when-let [[f & more] (seq (edit-block-fn-queue @(:editor/edit-block-fn @state)))]
+    (set-state! :editor/edit-block-fn (vec more))
+    f))
+
 ;; State getters and setters
 ;; =========================
 ;; These fns handle any key except :config.
