@@ -67,6 +67,15 @@
     (windows-drive-absolute-path? path)
     (string/replace-first #":" "/logseq__colon/")))
 
+(defn asset-protocol-url->media-url
+  [url]
+  (if (and (common-config/local-protocol-asset? url)
+           (not (util/electron?)))
+    (-> url
+        (string/replace-first common-config/asset-protocol "file://")
+        (string/replace "/logseq__colon/" ":/"))
+    url))
+
 (defn resolve-asset-real-path-url
   [repo rpath]
   (when-let [rpath (and (string? rpath)
