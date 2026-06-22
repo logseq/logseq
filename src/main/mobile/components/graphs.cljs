@@ -1,9 +1,9 @@
 (ns mobile.components.graphs
   "Mobile graphs"
   (:require [frontend.components.repo :as repo]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc page < rum/reactive
+(hsx/defc page
   []
   [:div.app-index-graphs
    (repo/repos-cp)])

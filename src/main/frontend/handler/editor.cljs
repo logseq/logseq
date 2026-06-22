@@ -65,8 +65,7 @@
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+            [promesa.core :as p]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -75,6 +74,11 @@
 
 (def clear-selection! state/clear-selection!)
 (def edit-block! block-handler/edit-block!)
+
+(defn- event-code
+  [e]
+  (or (gobj/getValueByKeys e "event_" "code")
+      (gobj/get e "code")))
 
 (defn- outliner-save-block!
   [block & {:as opts}]
@@ -557,7 +561,7 @@
               [result-promise sibling? next-block] (insert-fn (assoc config :right-sibling right-sibling) block'' value)
               edit-block-f #(edit-pending-new-block! next-block sibling?)]
           (p/do!
-           (state/set-state! :editor/edit-block-fn edit-block-f)
+           (state/queue-edit-block-fn! edit-block-f)
            result-promise
            (clear-when-saved!)))))
     (p/catch (fn [e]
@@ -834,7 +838,7 @@
                   (let [children (:block/_parent (db/entity (:db/id block)))]
                     (p/do!
                      (mobile-util/mobile-focus-hidden-input)
-                     (state/set-state! :editor/edit-block-fn edit-block-f)
+                     (state/queue-edit-block-fn! edit-block-f)
                      (ui-outliner-tx/transact!
                       transact-opts
                       (when (seq children)
@@ -844,7 +848,7 @@
 
                   :else
                   (p/do!
-                   (state/set-state! :editor/edit-block-fn edit-block-f)
+                   (state/queue-edit-block-fn! edit-block-f)
                    (delete-block-aux! block)))))))))))
 
 (defn move-blocks!
@@ -892,7 +896,7 @@
        (when (and sibling-block (not mobile?))
          (let [{:keys [edit-block-f]} (move-to-prev-block repo sibling-block
                                                           "")]
-           (state/set-state! :editor/edit-block-fn edit-block-f)))
+           (state/queue-edit-block-fn! edit-block-f)))
        (let [journals (and mobile? (filter ldb/journal? blocks'))
              blocks (remove (fn [b] (contains? (set (map :db/id journals)) (:db/id b))) blocks)]
          (when (or (seq journals) (seq blocks))
@@ -1201,7 +1205,8 @@
              (some-> node .-getAttribute)
              (or (dom/attr node "blockid")
                  (some-> node (dom/attr "id") (string/replace #"^ls-block-" ""))))]
-    (when (util/uuid-string? id)
+    (when (and (string? id)
+               (util/uuid-string? id))
       (uuid id))))
 
 (defn- selection-node-for-block-id
@@ -2257,7 +2262,7 @@
         target (when e (.-target e))]
     (when (or (nil? target)
               (inside-of-editor-block target))
-      (if (or (state/doc-mode-enter-for-new-line?) (inside-of-single-block (rum/dom-node state)))
+      (if (or (state/doc-mode-enter-for-new-line?) (inside-of-single-block (:node state)))
         (keydown-new-line)
         (do
           (when e (.preventDefault e))
@@ -2266,7 +2271,7 @@
 (defn keydown-new-line-handler [e]
   (let [state (get-state)]
     (when (or (nil? (.-target e)) (inside-of-editor-block (.-target e)))
-      (if (and (state/doc-mode-enter-for-new-line?) (not (inside-of-single-block (rum/dom-node state))))
+      (if (and (state/doc-mode-enter-for-new-line?) (not (inside-of-single-block (:node state))))
         (keydown-new-block state)
         (do
           (.preventDefault e)
@@ -3138,7 +3143,7 @@
              (gobj/get e "key")
              (if (mobile-util/native-android?)
                (gobj/get e "key")
-               (gobj/getValueByKeys e "event_" "code"))
+               (event-code e))
                 ;; #3440
               (util/goog-event-is-composing? e true)])
             comment-editor? (:comment-editor? (last (state/get-editor-args)))]

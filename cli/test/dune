@@ -1,0 +1,27 @@
+(melange.emit
+ (target node)
+ (modules test_support cli_parity_test_cases test_cases fake_codex)
+ (module_systems commonjs)
+ (libraries
+  logseq_cli_platform_node
+  logseq_cli
+  melange-edn
+  melange-fest
+  melange-fetch
+  melange.node)
+ (preprocess
+  (pps melange.ppx)))
+
+(rule
+ (alias runtest)
+ (deps
+  (alias ../bin/melange)
+  (alias ./melange)
+  (:test_cases ./node/test/test_cases.js)
+  (:fake_codex ./node/test/fake_codex.js)
+  (:entrypoint ../bin/logseq_cli_melange/bin/main.js))
+ (action
+  (setenv
+   LOGSEQ_CLI_MELANGE_ENTRYPOINT
+   %{entrypoint}
+   (run node --test %{test_cases}))))

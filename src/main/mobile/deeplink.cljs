@@ -39,7 +39,7 @@
   [url-target]
   (when (seq url-target)
     (p/let [registry (graph-handler/<get-graph-registry)
-            repos (->> (state/sub [:me :repos])
+            repos (->> (state/get-repos)
                        (remove #(= (:url %) config/demo-repo)))
             target-repo (:repo (graph-handler/resolve-registry-target
                                 (concat registry
@@ -69,7 +69,7 @@
                                    last
                                    string/lower-case)
             current-graph-name (get-graph-name-fn current-repo-url)
-            repos (->> (state/sub [:me :repos])
+            repos (->> (state/get-repos)
                        (remove #(= (:url %) config/demo-repo))
                        (map :url))
             repo-names (map #(get-graph-name-fn %) repos)]

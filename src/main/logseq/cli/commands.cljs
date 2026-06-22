@@ -325,6 +325,14 @@
     :else
     nil))
 
+(defn- validate-agent-bridge
+  [summary {:keys [command args cmds]}]
+  (when (and (= command :agent-bridge)
+             (seq args))
+    (command-core/unknown-command-result
+     summary
+     (str "unknown command: " (string/join " " (concat cmds args))))))
+
 (defn- validate-graph-sync-and-completion
   [summary {:keys [command opts import-export-type completion-shell-error]}]
   (cond
@@ -379,6 +387,7 @@
   (or (validate-write-and-upsert summary validation-context)
       (validate-target-query-and-search summary validation-context)
       (validate-option-contracts summary validation-context)
+      (validate-agent-bridge summary validation-context)
       (validate-graph-sync-and-completion summary validation-context)))
 
 (defn- command-has-content?
@@ -426,8 +435,7 @@
   [summary {:keys [command opts args cmds spec long-desc examples]}]
   (let [opts (-> opts
                  command-core/normalize-opts
-                 (#(list-command/normalize-options command %))
-                 (#(graph-command/normalize-options command %)))
+                 (#(list-command/normalize-options command %)))
         args (vec args)
         cmd-summary (command-core/command-summary {:cmds cmds
                                                    :spec spec
@@ -589,7 +597,7 @@
         (:graph-list :graph-create :graph-switch :graph-remove :graph-validate :graph-info)
         (graph-command/build-graph-action command graph repo options)
 
-        (:agent-bridge :agent-bridge-list)
+        :agent-bridge
         (agent-command/build-action command options repo graph)
 
         :graph-backup-list
@@ -701,7 +709,6 @@
                        (case (:type action)
                          :graph-list (graph-command/execute-graph-list action config)
                          :agent-bridge (agent-command/execute-bridge action config)
-                         :agent-bridge-list (agent-command/execute-list action config)
                          :graph-backup-list (graph-command/execute-graph-backup-list action config)
                          :graph-backup-create (graph-command/execute-graph-backup-create action config)
                          :graph-backup-restore (graph-command/execute-graph-backup-restore action config)

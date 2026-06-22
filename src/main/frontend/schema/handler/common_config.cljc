@@ -9,7 +9,6 @@
     [:ui/enable-tooltip? :boolean]
     [:ui/show-brackets? :boolean]
     [:feature/enable-search-remove-accents? :boolean]
-    [:feature/enable-journals? :boolean]
     [:feature/enable-flashcards? :boolean]
     [:feature/disable-scheduled-and-deadline-query? :boolean]
     [:scheduled/future-days :int]

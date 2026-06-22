@@ -21,7 +21,7 @@
             [mobile.init :as init]
             [mobile.state :as mobile-state]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (defonce audio-file-format "yyyy-MM-dd HH:mm:ss")
 
@@ -94,7 +94,7 @@
                     (p/catch #(log/error :transcribe-audio-error %))))))
           (p/finally #(reset! *target-block nil))))))
 
-(rum/defc record-button
+(hsx/defc record-button
   []
   (let [*timer-ref (hooks/use-ref nil)
         [*recorder _] (hooks/use-state (atom nil))
@@ -136,7 +136,7 @@
                                          (.click (js/document.getElementById "recording-button"))
                                          (try
                                            (let [t (ms-to-time-format time)]
-                                             (when-let [node (rum/deref *timer-ref)]
+                                             (when-let [node (hooks/deref *timer-ref)]
                                                (set! (. node -textContent) t)))
                                            (catch js/Error e
                                              (log/warn :bad-progress-time e))))))
@@ -169,7 +169,7 @@
                                  (.stopRecording ^js @*recorder))}
                     (shui/tabler-icon "player-stop" {:size 22}))]]]))
 
-(rum/defc audio-recorder-aux < rum/static
+(hsx/defc audio-recorder-aux
   []
   [:div.app-audio-recorder
    [:div.flex.flex-row.justify-between.items-center.font-medium

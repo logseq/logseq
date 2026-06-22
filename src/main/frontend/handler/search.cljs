@@ -5,9 +5,7 @@
             [electron.ipc :as ipc]
             [frontend.common.search-fuzzy :as fuzzy]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.handler.notification :as notification]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -109,13 +107,11 @@
    (rebuild-indices! false))
   ([notice?]
    (println "Starting to rebuild search indices!")
-   (when (state/get-current-repo)
+   (when-let [repo (state/get-current-repo)]
+     (when notice?
+       (state/set-state! [:search/index-build-notify-repos repo] true))
      (p/do!
-      (search/rebuild-indices!)
-      (when notice?
-        (notification/show!
-         (t :search/indices-rebuilt-success)
-         :success))))))
+      (search/rebuild-indices!)))))
 
 (defn highlight-exact-query
   [content q]
@@ -153,4 +149,4 @@
                                         content
                                         result)))
                              (conj result [:span content])))]
-            [:span {:class "m-0"} elements]))))))
+            (into [:span {:class "m-0"}] elements)))))))

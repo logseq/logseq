@@ -1,8 +1,8 @@
 (ns frontend.components.avatar
   (:require [clojure.string :as string]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.ui :as shui]
-            [logseq.shui.util :as shui-util]
-            [rum.core :as rum]))
+            [logseq.shui.util :as shui-util]))
 
 (defonce ^:private latin-or-number-re
   (js/RegExp. "^[\\p{Script=Latin}\\p{Number}]" "u"))
@@ -39,7 +39,7 @@
                                   letters))
                string/upper-case)))))))
 
-(rum/defc user-avatar
+(hsx/defc user-avatar
   [{:keys [name title uuid avatar-src class style fallback fallback-length fallback-props image-props]
     :or {fallback-length 2}}]
   (let [color (when uuid (shui-util/uuid-color uuid))

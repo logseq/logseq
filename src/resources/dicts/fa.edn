@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "افزونهٔ خراب «{1}» حذف شد."
 
  :plugin.proxy/direct "مستقیم"
+ :plugin.proxy/host-port-required "میزبان و پورت الزامی است"
  :plugin.proxy/system "سیستم"
  :plugin.proxy/test-url "آزمون URL"
  :plugin.proxy/testing "در حال آزمایش"
@@ -1586,10 +1587,8 @@
  :settings.editor/wide-mode "حالت عریض"
 
  :settings.features/enable-flashcards "فعال‌سازی فلش‌کارت‌ها"
- :settings.features/enable-journals "فعال‌سازی روزنامه‌ها"
  :settings.features/home-default-page "صفحه پیش‌فرض خانه"
  :settings.features/home-default-page-update-success "صفحه پیش‌فرض به‌روزرسانی شد"
- :settings.features/journals-enable-success "روزنامه‌ها فعال شد"
  :settings.features/login-prompt "برای همگام‌سازی وارد شوید"
  :settings.features/page-not-found "صفحه «{1}» هنوز وجود ندارد. لطفاً ابتدا آن صفحه را ایجاد کنید و سپس دوباره امتحان کنید."
  :settings.features/plugin-system "سیستم افزونه"

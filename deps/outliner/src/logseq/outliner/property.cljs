@@ -112,6 +112,76 @@
            (ldb/internal-page? block)
            (not (block-classes-provide-property? @conn block property-id)))))
 
+(defn- class-lookup-ref?
+  [value]
+  ;; Class extends accepts only entity refs that can point at class blocks.
+  ;; Keep this narrow to avoid per-value schema/entity lookups while parsing vectors.
+  (and (vector? value)
+       (= 2 (count value))
+       (contains? #{:db/ident :block/uuid} (first value))))
+
+(defn- single-entity-ref?
+  [value]
+  (or (de/entity? value)
+      (integer? value)
+      (keyword? value)
+      (class-lookup-ref? value)))
+
+(defn- ->entity-ids
+  [db value]
+  (letfn [(entity-id [item]
+            (or (cond
+                  (de/entity? item) (:db/id item)
+                  (integer? item) item
+                  (keyword? item) (:db/id (d/entity db item))
+                  (class-lookup-ref? item) (:db/id (d/entity db item)))
+                (throw (ex-info "Unsupported class extends entity reference"
+                                {:value item}))))]
+    (->> (cond
+           (nil? value) []
+           (single-entity-ref? value) [value]
+           (coll? value) value
+           :else [value])
+         (map entity-id))))
+
+(defn- class-ancestor-ids
+  [db class-ids]
+  (set (mapcat (fn [class-id]
+                 (some->> (d/entity db class-id)
+                          ldb/get-class-extends
+                          (map :db/id)))
+               class-ids)))
+
+(defn- direct-extends-retraction-tx-data
+  [class redundant-parent-ids]
+  (when (and (ldb/class? class) (seq redundant-parent-ids))
+    (keep (fn [parent]
+            (when (contains? redundant-parent-ids (:db/id parent))
+              [:db/retract (:db/id class) :logseq.property.class/extends (:db/id parent)]))
+          (:logseq.property.class/extends class))))
+
+(defn- canonical-extends-ids
+  [db value]
+  (let [parent-ids (vec (->entity-ids db value))]
+    (remove (class-ancestor-ids db parent-ids) parent-ids)))
+
+(defn- normalize-extends-value
+  [db value]
+  (let [ids (vec (canonical-extends-ids db value))]
+    (if (single-entity-ref? value)
+      (first ids)
+      ids)))
+
+(defn- redundant-extends-retraction-tx-data
+  [db class value]
+  (let [parent-ids (set (->entity-ids db value))
+        ancestor-ids (class-ancestor-ids db parent-ids)
+        inherited-parent-ids (set/union parent-ids ancestor-ids)]
+    (concat
+     (direct-extends-retraction-tx-data class ancestor-ids)
+     (mapcat #(direct-extends-retraction-tx-data (d/entity db %) inherited-parent-ids)
+             (db-class/get-structured-children db (:db/id class))))))
+
 (defn- build-property-value-tx-data
   [conn block property-id value]
   (when (some? value)
@@ -122,9 +192,13 @@
           multiple-values-empty? (and (sequential? old-value)
                                       (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
           extends? (= property-id :logseq.property.class/extends)
+          tx-value (if extends?
+                     (let [value' (normalize-extends-value @conn value)]
+                       (if (coll? value') (set value') value'))
+                     value)
           update-block-tx (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                             true
-                            (assoc property-id value)
+                            (assoc property-id tx-value)
                             (should-add-task-tag-for-property? conn block property-id)
                             (assoc :block/tags :logseq.class/Task)
                             (= :logseq.property/template-applied-to property-id)
@@ -135,9 +209,7 @@
         retract-multiple-values?
         (conj [:db/retract (:db/id update-block-tx) property-id])
         extends?
-        (concat
-         (let [extends (ldb/get-class-extends (d/entity @conn value))]
-           (map (fn [extend] [:db/retract (:db/id block) property-id (:db/id extend)]) extends)))
+        (into (redundant-extends-retraction-tx-data @conn block value))
         true
         (conj update-block-tx)))))
 
@@ -535,10 +607,11 @@
   (when (= property-id :block/tags)
     (outliner-validate/validate-tags-property @conn block-eids v))
   (when (= property-id :logseq.property.class/extends)
-    (outliner-validate/validate-extends-property
-     @conn
-     (if (number? v) (d/entity @conn v) v)
-     (map #(d/entity @conn %) block-eids))))
+    (doseq [parent-id (->entity-ids @conn v)]
+      (outliner-validate/validate-extends-property
+       @conn
+       (d/entity @conn parent-id)
+       (map #(d/entity @conn %) block-eids)))))
 
 (defn- normalize-default-url-property-value
   [conn property value]
@@ -601,7 +674,7 @@
                                :i18n-key :page.validation/alias-batch-multiple-owners
                                :message "Aliases can't be batch-set on multiple pages."}}))))
 
-(defn batch-set-property!
+(defn ^:large-vars/cleanup-todo batch-set-property!
   "Sets properties for multiple blocks. Automatically handles property value refs.
    Does no validation of property values. For :many properties, passing a collection
    replaces existing values in one call, while passing a scalar preserves add-single-value behavior."
@@ -622,12 +695,20 @@
            many? (= :db.cardinality/many (:db/cardinality property))
            entity-id? (and (:entity-id? options) (number? v))
            ref? (contains? db-property-type/all-ref-property-types property-type)
+           extends? (= property-id :logseq.property.class/extends)
            default-url-not-closed? (and (contains? #{:default :url} property-type)
+                                        (not extends?)
                                         (not (seq (entity-plus/lookup-kv-then-entity property :property/closed-values))))
-           v' (if (and ref? (not entity-id?))
+           v' (cond
+                extends?
+                (normalize-extends-value @conn v)
+
+                (and ref? (not entity-id?))
                 (if default-url-not-closed?
                   (normalize-and-validate-default-url-property-values conn property v many?)
                   (convert-ref-property-values conn property-id v property-type {:many? many?}))
+
+                :else
                 v)
            _ (when (nil? v')
                (throw (ex-info "Property value must be not nil" {:v v})))
@@ -730,8 +811,15 @@
            property (d/entity @conn property-id)
            property-type (get property :logseq.property/type :default)
            ref? (db-property-type/all-ref-property-types property-type)
-           v' (if ref?
+           extends? (= property-id :logseq.property.class/extends)
+           v' (cond
+                extends?
+                (normalize-extends-value @conn v)
+
+                ref?
                 (convert-ref-property-value conn property-id v property-type block-eid)
+
+                :else
                 v)]
        (when-not (and block property)
          (throw (ex-info "Set block property failed: block or property doesn't exist"
@@ -744,8 +832,9 @@
          (do
            (when (= property-id :block/tags)
              (outliner-validate/validate-tags-property @conn [block-eid] v'))
-           (when (= property-id :logseq.property.class/extends)
-             (outliner-validate/validate-extends-property @conn v' [block]))
+           (when extends?
+             (doseq [parent-id (->entity-ids @conn v')]
+               (outliner-validate/validate-extends-property @conn (d/entity @conn parent-id) [block])))
            (cond
              db-attribute?
              (set-block-db-attribute! conn block property property-id v v')

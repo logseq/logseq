@@ -16,27 +16,12 @@
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
-(def ^:private bridge-spec
-  {:dry-run {:desc "Print Codex commands without starting Codex or writing agent-session-id"
-             :coerce :boolean}})
-
-(def ^:private bridge-list-spec
-  {:all {:desc "Include completed sessions"
-         :coerce :boolean}})
-
 (def entries
   [(core/command-entry ["agent" "bridge"]
                        :agent-bridge
                        "Run task agent bridge"
-                       bridge-spec
-                       {:examples ["logseq agent bridge --graph my-graph"
-                                   "logseq agent bridge --graph my-graph --dry-run"]})
-   (core/command-entry ["agent" "bridge" "list"]
-                       :agent-bridge-list
-                       "List agent bridge sessions"
-                       bridge-list-spec
-                       {:examples ["logseq agent bridge list"
-                                   "logseq agent bridge list --all"]})])
+                       {}
+                       {:examples ["logseq agent bridge --graph my-graph"]})])
 
 (defn- trim-non-empty
   [value]
@@ -62,7 +47,7 @@
                            "agent-name cannot be resolved from cli.edn or hostname")}}))))
 
 (defn build-action
-  [command options repo graph]
+  [command _options repo graph]
   (case command
     :agent-bridge
     (if-not (seq repo)
@@ -72,13 +57,7 @@
       {:ok? true
        :action {:type :agent-bridge
                 :repo repo
-                :graph graph
-                :dry-run? (boolean (:dry-run options))}})
-
-    :agent-bridge-list
-    {:ok? true
-     :action {:type :agent-bridge-list
-              :all? (boolean (:all options))}}
+                :graph graph}})
 
     {:ok? false
      :error {:code :unknown-command
@@ -89,6 +68,13 @@
 (defn- task-tag?
   [tag]
   (= :logseq.class/Task (:db/ident tag)))
+
+(defn- code-block-tag?
+  [tag]
+  (= :logseq.class/Code-block
+     (if (keyword? tag)
+       tag
+       (:db/ident tag))))
 
 (defn- assignee-values
   [block]
@@ -136,55 +122,73 @@
 
 (def comment-prompt-template-title "Comment prompt template")
 
+(def ^:private graph-scope-line
+  "Do not operate outside the target graph.")
+
+(def ^:private task-result-line
+  "Write task results back into the graph.")
+
+(def ^:private task-finish-reaction-line
+  "When the task or subagent finishes, remove the `eyes` reaction from the task block whether it succeeded or failed.")
+
+(def ^:private comment-completion-line
+  "Complete the request from the mentioned comment.")
+
+(def ^:private graph-report-lines
+  ["If the target graph is sync-enabled, make sure it is synced after writing back to the graph."
+   "Keep the report short when possible."
+   "Report blockers only if there is a blocker."
+   "Report root cause and Steps to verify only for bug fixes."])
+
+(def ^:private comment-reply-instruction-lines
+  ["Reply instructions:"
+   "For a short reply, append a comment after the requesting comment."
+   "For a long reply, write a normal block tree after the comments area and append a comment that references that tree."
+   "When referencing result blocks in DB graphs, reference result blocks with [[block-uuid]], not ((block-uuid))."
+   "If the request is blocked or fails, make that clear in the reply."])
+
 (def ^:private default-task-prompt-template
   (string/join
    "\n"
-   ["You are handling a Logseq AgentBridge task."
-    ""
-    "Graph: {{graph}}"
-    "Block UUID: {{block-uuid}}"
-    "AgentBridge name: {{agent-name}}"
-    ""
-    "Do not operate outside the target graph."
-    "Write task results back into the graph."
-    "If the target graph is sync-enabled, make sure it is synced after writing back to the graph."
-    "Keep the report short when possible."
-    "Report blockers only if there is a blocker."
-    "Report root cause and Steps to verify only for bug fixes."
-    ""
-    "Task block tree:"
-    "{{task-block-tree}}"]))
+   (concat
+    ["You are handling a Logseq AgentBridge task."
+     ""
+     "Graph: {{graph}}"
+     "Block UUID: {{block-uuid}}"
+     "AgentBridge name: {{agent-name}}"
+	     ""
+	     graph-scope-line
+	     task-result-line]
+	    [task-finish-reaction-line]
+	    graph-report-lines
+    [""
+     "Task block tree:"
+     "{{task-block-tree}}"])))
 
 (def ^:private default-comment-prompt-template
   (string/join
    "\n"
-   ["You are handling a Logseq AgentBridge comment request."
-    ""
-    "Graph: {{graph}}"
-    "Comment UUID: {{comment-uuid}}"
-    "AgentBridge name: {{agent-name}}"
-    ""
-    "Do not operate outside the target graph."
-    "Complete the request from the mentioned comment."
-    "If the target graph is sync-enabled, make sure it is synced after writing back to the graph."
-    "Keep the report short when possible."
-    "Report blockers only if there is a blocker."
-    "Report root cause and Steps to verify only for bug fixes."
-    ""
-    "Comment target context:"
-    "{{comment-target-context}}"
-    ""
-    "Comment thread context:"
-    "{{comment-thread-context}}"
-    ""
-    "Requesting comment:"
-    "{{requesting-comment}}"
-    ""
-    "Reply instructions:"
-    "For a short reply, append a comment after the requesting comment."
-    "For a long reply, write a normal block tree after the comments area and append a comment that references that tree."
-    "When referencing result blocks in DB graphs, reference result blocks with [[block-uuid]], not ((block-uuid))."
-    "If the request is blocked or fails, make that clear in the reply."]))
+   (concat
+    ["You are handling a Logseq AgentBridge comment request."
+     ""
+     "Graph: {{graph}}"
+     "Comment UUID: {{comment-uuid}}"
+     "AgentBridge name: {{agent-name}}"
+     ""
+     graph-scope-line
+     comment-completion-line]
+    graph-report-lines
+    [""
+     "Comment target context:"
+     "{{comment-target-context}}"
+     ""
+     "Comment thread context:"
+     "{{comment-thread-context}}"
+     ""
+     "Requesting comment:"
+     "{{requesting-comment}}"
+     ""]
+    comment-reply-instruction-lines)))
 
 (def ^:private prompt-template-vars
   {:task #{"graph"
@@ -276,7 +280,7 @@
     "agent-name" agent-name
     "task-block-tree" (or tree-text (:block/title block) "")}))
 
-(defn- build-comment-codex-prompt
+(defn build-comment-codex-prompt
   [{:keys [graph agent-name comment-tree-text comments-area-tree-text target-tree-texts]
     comment-block :comment
     prompt-template :prompt-template}]
@@ -289,6 +293,89 @@
     "comment-target-context" (string/join "\n" (remove string/blank? target-tree-texts))
     "comment-thread-context" (or comments-area-tree-text (:block/title (:block/parent comment-block)) "")
     "requesting-comment" (or comment-tree-text (:block/title comment-block) "")}))
+
+(defn- project-dir-line
+  [project-dir]
+  (when-let [project-dir (trim-non-empty project-dir)]
+    (str "Project directory: " project-dir)))
+
+(defn- master-dispatch-header-lines
+  [{:keys [request-kind graph agent-name project-dir]}]
+  (cond-> ["You are handling a Logseq AgentBridge master dispatch request."
+           ""
+           (str "Request kind: " (name request-kind))
+           (str "Graph: " graph)
+           (str "AgentBridge name: " agent-name)]
+    (project-dir-line project-dir) (conj (project-dir-line project-dir))
+    true (into [""
+                graph-scope-line
+                "Only the master agent may write task results back into the target graph."
+                "Subagents may read graph context but must not write graph content."
+                "Route this request according to the master prompt policy."])
+	    (= :task request-kind) (conj "After launching the subagent with `codex exec`, write that subagent session id to the task block's `:logseq.property.agent/session-id` property.")))
+
+(def ^:private master-task-dispatch-contract-lines
+  (into [task-result-line
+         task-finish-reaction-line]
+        graph-report-lines))
+
+(def ^:private master-comment-dispatch-contract-lines
+  (into [comment-completion-line]
+        (concat
+         graph-report-lines
+         [""]
+         comment-reply-instruction-lines)))
+
+(defn- inherited-task-session-lines
+  [{:keys [parent-block-uuid session-id]}]
+  (when (and parent-block-uuid (seq session-id))
+    [""
+     (str "Inherited parent task UUID: " parent-block-uuid)
+     (str "Inherited subagent session id: " session-id)
+     "Continue this child task in the inherited subagent session instead of launching a new subagent."]))
+
+(defn- build-master-task-dispatch-prompt
+  [{:keys [graph agent-name project-dir block tree-text inherited-session]}]
+  (string/join
+   "\n"
+   (concat
+    (master-dispatch-header-lines {:request-kind :task
+                                   :graph graph
+                                   :agent-name agent-name
+                                   :project-dir project-dir})
+    [""]
+    master-task-dispatch-contract-lines
+    [""
+     (str "Block UUID: " (block-uuid-str block))
+     ""]
+    (inherited-task-session-lines inherited-session)
+    [""
+     "Task block tree:"
+     (or tree-text (:block/title block) "")])))
+
+(defn- build-master-comment-dispatch-prompt
+  [{:keys [graph agent-name project-dir comment-tree-text comments-area-tree-text target-tree-texts]
+    comment-block :comment}]
+  (string/join
+   "\n"
+   (concat
+    (master-dispatch-header-lines {:request-kind :comment
+                                   :graph graph
+                                   :agent-name agent-name
+                                   :project-dir project-dir})
+    [""]
+    master-comment-dispatch-contract-lines
+    [""
+     (str "Comment UUID: " (block-uuid-str comment-block))
+     ""
+     "Comment target context:"
+     (string/join "\n" (remove string/blank? target-tree-texts))
+     ""
+     "Comment thread context:"
+     (or comments-area-tree-text (:block/title (:block/parent comment-block)) "")
+     ""
+     "Requesting comment:"
+     (or comment-tree-text (:block/title comment-block) "")])))
 
 (defn- codex-exec-prefix
   [codex-bin]
@@ -406,69 +493,6 @@
               (reset! child-closed? true)
               (finalize!)))))))
 
-(defn session-store-path
-  [{:keys [root-dir]}]
-  (node-path/join root-dir "agent-bridge-sessions.edn"))
-
-(defn- read-session-store
-  [config]
-  (let [path (session-store-path config)]
-    (if (fs/existsSync path)
-      (reader/read-string (fs/readFileSync path "utf8"))
-      {:sessions []})))
-
-(defn- write-session-store!
-  [config store]
-  (let [path (session-store-path config)
-        dir (node-path/dirname path)]
-    (fs/mkdirSync dir #js {:recursive true})
-    (fs/writeFileSync path (pr-str store) "utf8")
-    store))
-
-(def ^:private terminal-session-statuses #{:completed :failed})
-
-(defn- merge-session-record
-  [existing session]
-  (let [merged (merge existing session)]
-    (if (and (contains? terminal-session-statuses (:status existing))
-             (= :running (:status session)))
-      (assoc merged :status (:status existing))
-      merged)))
-
-(defn record-session!
-  [config session]
-  (let [store (read-session-store config)
-        sessions (vec (:sessions store))
-        session-id (:session session)
-        sessions' (if (some #(= session-id (:session %)) sessions)
-                    (mapv (fn [existing]
-                            (if (= session-id (:session existing))
-                              (merge-session-record existing session)
-                              existing))
-                          sessions)
-                    (conj sessions session))]
-    (write-session-store! config (assoc store :sessions sessions'))
-    session))
-
-(defn update-session-status!
-  [config session-id status]
-  (record-session! config {:session session-id
-                           :status status
-                           :updated-at (js/Date.now)}))
-
-(defn list-sessions
-  [config {:keys [all?]}]
-  (let [sessions (vec (:sessions (read-session-store config)))]
-    (if all?
-      sessions
-      (vec (remove #(= :completed (:status %)) sessions)))))
-
-(defn execute-list
-  [action config]
-  {:status :ok
-   :command :agent-bridge-list
-   :data {:sessions (list-sessions config {:all? (:all? action)})}})
-
 (defn- now-iso
   []
   (.toISOString (js/Date.)))
@@ -483,6 +507,92 @@
    :command :agent-bridge
    :error {:code code
            :message message}})
+
+(defn- bridge-lock-name
+  [graph agent-name]
+  (str (js/encodeURIComponent (str graph))
+       "--"
+       (js/encodeURIComponent (str agent-name))
+       ".lock"))
+
+(defn- bridge-lock-dir
+  [{:keys [root-dir]} graph agent-name]
+  (node-path/join root-dir "agent-bridge-locks" (bridge-lock-name graph agent-name)))
+
+(defn- bridge-lock-owner-path
+  [lock-dir]
+  (node-path/join lock-dir "owner.edn"))
+
+(defn- process-running?
+  [pid]
+  (try
+    (.kill js/process pid 0)
+    true
+    (catch :default e
+      (not= "ESRCH" (.-code e)))))
+
+(defn- stale-bridge-lock?
+  [lock-dir]
+  (try
+    (let [owner (reader/read-string
+                 (fs/readFileSync (bridge-lock-owner-path lock-dir) "utf8"))
+          pid (:pid owner)]
+      (and (integer? pid)
+           (not (process-running? pid))))
+    (catch :default _e
+      true)))
+
+(defn- bridge-lock-error
+  [graph agent-name]
+  {:ok? false
+   :error {:code :agent-bridge-already-running
+           :message (str "agent bridge is already running for graph '"
+                         graph
+                         "' and AgentBridge name '"
+                         agent-name
+                         "'")}})
+
+(defn- acquire-bridge-lock!
+  ([config graph agent-name]
+   (acquire-bridge-lock! config graph agent-name false))
+  ([config graph agent-name retried?]
+   (let [lock-dir (bridge-lock-dir config graph agent-name)
+         lock-parent (node-path/dirname lock-dir)]
+     (fs/mkdirSync lock-parent #js {:recursive true})
+     (try
+       (fs/mkdirSync lock-dir)
+       (let [released? (atom false)
+             owner {:pid (.-pid js/process)
+                    :graph graph
+                    :agent agent-name
+                    :started-at (now-iso)}
+             release! (fn []
+                        (when-not @released?
+                          (reset! released? true)
+                          (fs/rmSync lock-dir #js {:recursive true :force true})))]
+         (fs/writeFileSync (bridge-lock-owner-path lock-dir) (pr-str owner) "utf8")
+         (.once js/process "exit" (fn [& _] (release!)))
+         {:ok? true
+          :release! release!})
+       (catch :default e
+         (if (and (= "EEXIST" (.-code e))
+                  (not retried?)
+                  (stale-bridge-lock? lock-dir))
+           (do
+             (fs/rmSync lock-dir #js {:recursive true :force true})
+             (acquire-bridge-lock! config graph agent-name true))
+           (bridge-lock-error graph agent-name)))))))
+
+(defn- with-bridge-lock!
+  [config graph agent-name f]
+  (let [lock-result (acquire-bridge-lock! config graph agent-name)]
+    (if-not (:ok? lock-result)
+      (bridge-error (get-in lock-result [:error :code])
+                    (get-in lock-result [:error :message]))
+      (-> (p/let [result (f)]
+            result)
+          (p/finally (fn []
+                       ((:release! lock-result))))))))
 
 (defn- log-bridge-exit!
   [{:keys [repo graph agent-name reason exit-code error]}]
@@ -526,6 +636,85 @@
     :in $ ?agent-page-name
     :where
     [?p :block/name ?agent-page-name]])
+
+(def master-prompt-wrapper-title "AgentBridge master prompt")
+
+(defn- default-master-prompt
+  []
+  (string/join
+   "\n"
+   ["# AgentBridge Master Agent"
+    ""
+    "## Role"
+    "You are the graph-scoped master agent for Logseq AgentBridge."
+    "Classify incoming work and decide whether to dispatch a simple, read-only project, or read/write project subagent."
+    ""
+    "## Graph Safety"
+    "Do not operate outside the target graph."
+    "Only the master agent may write task results back into the target graph."
+    "Subagents may read graph context but must not write graph content."
+	    "Subagents must return graph updates or final report content to the master agent instead of writing to the graph."
+	    "When dispatching a subagent for a task, write the subagent Codex session id to the task block's `:logseq.property.agent/session-id` property."
+	    "Child task blocks and comment requests under a task with `:logseq.property.agent/session-id` must continue in that same subagent session."
+	    task-finish-reaction-line
+	    "If the target graph is sync-enabled, make sure it is synced after writing back to the graph."
+    ""
+    "## Task Classification"
+    "| Task type | Examples | Working directory | Write behavior | Concurrency |"
+    "| --- | --- | --- | --- | --- |"
+    "| Simple | Translation, rewrite, small lookup, simple search | Fresh temporary directory | No project writes | Can run concurrently |"
+    "| Read-only project | Code review, code explanation, implementation lookup | Project directory | No writes | Can run concurrently |"
+    "| Read/write project | Bug fix, feature implementation, test update | Project directory on new branch from `origin/master` | Writes allowed after branch setup | Only one at a time |"
+    ""
+    "Fail fast when task type is ambiguous and the consequence of choosing writable mode is material."
+    ""
+    "## Subagent Execution"
+    "Run simple tasks in a clean temporary directory."
+    "Run read-only project tasks in the project directory without write access expectations."
+    "Writable project subagents must start from `origin/master` and create a new branch before modifying the project."
+    "Serialize writable project subagents; keep only one writable project subagent active at a time."
+    "Make the writable lock visible in graph reporting when a writable task waits."
+    ""
+    "## Result Reporting"
+    "Keep graph reports short unless a blocker occurs."
+    "Report blockers only if there is a blocker."
+    "Report root cause and Steps to verify only for bug fixes."
+    ""
+    "## Failure Handling"
+    "Fail fast on malformed graph state or unclear dispatch requirements."
+    "Do not silently recover from programmer errors."]))
+
+(def agent-master-prompt-blocks-query
+  '[:find [(pull ?b [:db/id
+                     :block/uuid
+                     :block/title
+                     :block/order
+                     :logseq.property/deleted-at
+                     {:block/parent [:db/id
+                                     :logseq.property/deleted-at
+                                     {:block/parent [:db/id
+                                                     :logseq.property/deleted-at]}]}
+                     {:block/_parent [:db/id
+                                      :block/uuid
+                                      :block/title
+                                      :block/order
+                                      :logseq.property/deleted-at
+                                      {:block/tags [:db/id
+                                                    :db/ident
+                                                    :block/name
+                                                    :block/title]}
+                                      {:block/parent [:db/id
+                                                      :logseq.property/deleted-at
+                                                      {:block/parent [:db/id
+                                                                      :logseq.property/deleted-at]}]}
+                                      {:block/_parent [:db/id
+                                                       :block/uuid
+                                                       :block/title
+                                                       :block/order
+                                                       :logseq.property/deleted-at]}]}]) ...]
+    :in $ ?page-id
+    :where
+    [?b :block/parent ?page-id]])
 
 (declare ensure-registry-page!)
 
@@ -644,6 +833,43 @@
   [text]
   (when (string? text)
     (map second (re-seq #"(?s)```[^\n`]*\n(.*?)```" text))))
+
+(defn- default-master-prompt-block
+  []
+  {:block/title master-prompt-wrapper-title
+   :block/children [{:block/title (default-master-prompt)
+                     :block/tags [:logseq.class/Code-block]
+                     :logseq.property.node/display-type :code
+                     :logseq.property.code/lang "markdown"}]})
+
+(defn- first-live-child-block
+  [blocks]
+  (first (remove ldb/recycled? (sort-by #(or (:block/order %) "") blocks))))
+
+(defn- master-prompt-from-block
+  [block]
+  (when-not (= master-prompt-wrapper-title (:block/title block))
+    (throw (ex-info "agent bridge master prompt wrapper is invalid"
+                    {:code :agent-master-prompt-invalid
+                     :reason :invalid-master-prompt-wrapper})))
+  (let [prompts (->> (child-blocks block)
+                     (remove ldb/recycled?)
+                     (filter #(some code-block-tag? (:block/tags %)))
+                     (keep (comp trim-non-empty :block/title))
+                     vec)]
+    (cond
+      (empty? prompts)
+      (throw (ex-info "agent bridge master prompt code block is missing"
+                      {:code :agent-master-prompt-invalid
+                       :reason :missing-master-prompt-code-block}))
+
+      (> (count prompts) 1)
+      (throw (ex-info "agent bridge master prompt must contain one code block"
+                      {:code :agent-master-prompt-invalid
+                       :reason :multiple-master-prompt-code-blocks}))
+
+      :else
+      (first prompts))))
 
 (defn- prompt-template-from-block
   [template-kind block]
@@ -778,6 +1004,13 @@
                                          (registry-page-name)]])]
     (first-live-entity pages)))
 
+(defn- pull-agent-page
+  [cfg repo agent-name]
+  (p/let [pages (transport/invoke cfg :thread-api/q
+                                  [repo [registered-agent-query
+                                         (agent-page-name agent-name)]])]
+    (first-live-entity pages)))
+
 (defn- ensure-registry-page!
   [cfg repo]
   (p/let [existing (pull-registry-page cfg repo)]
@@ -819,6 +1052,32 @@
               (throw (ex-info "agent bridge agent page not found after create"
                               {:code :agent-registration-failed})))))))))
 
+(defn ensure-agent-master-prompt!
+  [cfg repo agent-name]
+  (p/let [agent-page (pull-agent-page cfg repo agent-name)
+          page-id (:db/id agent-page)
+          page-uuid (:block/uuid agent-page)
+          _ (when-not page-id
+              (throw (ex-info "agent bridge agent page not found"
+                              {:code :agent-master-prompt-initialization-failed})))
+          _ (when-not page-uuid
+              (throw (ex-info "agent bridge agent page uuid not found"
+                              {:code :agent-master-prompt-initialization-failed})))
+          blocks (transport/invoke cfg :thread-api/q
+                                   [repo [agent-master-prompt-blocks-query page-id]])]
+    (if-let [first-block (first-live-child-block blocks)]
+      (master-prompt-from-block first-block)
+      (p/let [_ (transport/invoke cfg :thread-api/apply-outliner-ops
+                                  [repo [[:insert-blocks [(flatten-prompt-template-blocks
+                                                           [(default-master-prompt-block)])
+                                                          page-uuid
+                                                          {:outliner-op :insert-blocks
+                                                           :sibling? false
+                                                           :bottom? false
+                                                           :keep-uuid? true}]]]
+                                   {}])]
+        (default-master-prompt)))))
+
 (defn write-agent-session-id!
   [cfg repo block-uuid session-id]
   (p/let [_ (transport/invoke cfg :thread-api/apply-outliner-ops
@@ -831,8 +1090,6 @@
 
 (def ^:private task-start-reaction "eyes")
 (def ^:private comment-start-reaction "eyes")
-(def ^:private comment-complete-reaction "white_check_mark")
-(def ^:private comment-failed-reaction "x")
 
 (def ^:private reaction-query
   '[:find ?r .
@@ -881,6 +1138,7 @@
                      {:logseq.property/status [:db/ident :block/title]}
                      {:logseq.property/assignee [:db/id :block/title :block/name :db/ident]}
                      :logseq.property.agent/session-id
+                     {:block/parent [:db/id]}
                      *]) ...]
     :in $ ?agent-name
     :where
@@ -909,67 +1167,58 @@
                                (:block/title block))}))
            (filter #(routable-task? % agent-name) blocks)))))
 
-(defn- dry-run-commands
-  [graph agent-name prompt-templates tasks]
-  (mapv (fn [{:keys [block tree-text]}]
-          (let [prompt (build-codex-prompt {:graph graph
-                                            :agent-name agent-name
-                                            :block block
-                                            :tree-text tree-text
-                                            :prompt-template (:task prompt-templates)})
-                command (build-codex-command prompt {})]
-            {:block (block-uuid-str block)
-             :backend :codex
-             :command command
-             :preview (command-preview command)}))
-        tasks))
-
 (defn- emit-log!
   [config line]
   (if-let [f (:log-fn config)]
     (f line)
     (.write (.-stdout js/process) (str line "\n"))))
 
-(defn- session-record
-  [graph agent-name block session-id status]
-  {:session session-id
-   :status status
-   :backend :codex
-   :graph graph
-   :block (block-uuid-str block)
-   :agent agent-name
-   :started-at (js/Date.now)
-   :updated-at (js/Date.now)})
-
-(defn- route-task!
-  [cfg {:keys [repo graph agent-name prompt-templates]} {:keys [block tree-text]}]
-  (let [prompt (build-codex-prompt {:graph graph
-                                    :agent-name agent-name
-                                    :block block
-                                    :tree-text tree-text
-                                    :prompt-template (:task prompt-templates)})
-        command (build-codex-command prompt {})
+(defn ensure-master-session!
+  [cfg {:keys [master-prompt]}]
+  (let [command (build-codex-command master-prompt {})
         preview (command-preview command)]
-    (emit-log! cfg (log-line (str "Codex command prepared for " (block-uuid-str block) ": " preview)))
-    (p/let [{:keys [session]} (start-codex! command
-                                            {:on-exit (fn [code session-id]
-                                                        (when session-id
-                                                          (update-session-status! cfg session-id
-                                                                                  (if (zero? (or code 1))
-                                                                                    :completed
-                                                                                    :failed))))})
+    (emit-log! cfg (log-line (str "Codex master command prepared: " preview)))
+    (p/let [{:keys [session] :as result} (start-codex! command {})
             _ (when-not (seq session)
-                (throw (ex-info "codex session id missing"
-                                {:code :codex-session-id-missing})))
-            cfg* (cli-server/ensure-server! cfg repo)
-            _ (record-session! cfg* (session-record graph agent-name block session :running))
-            _ (write-agent-session-id! cfg* repo (:block/uuid block) session)
-            _ (mark-agent-bridge-task-started! cfg* repo block)]
-      (emit-log! cfg (log-line (str "agent-session-id written for " (block-uuid-str block))))
-      {:block (block-uuid-str block)
+                (throw (ex-info "codex master session id missing"
+                                {:code :codex-session-id-missing})))]
+      result)))
+
+(defn- dispatch-to-master!
+  [cfg {:keys [master-session]} {:keys [prompt request block]}]
+  (let [command (build-codex-resume-command master-session prompt {})
+        preview (command-preview command)]
+    (emit-log! cfg (log-line (str "Codex master dispatch prepared"
+                                  (when block (str " for " (block-uuid-str block)))
+                                  ": " preview)))
+    (p/let [{:keys [session]} (start-codex! command {})
+            _ (when-not (seq session)
+                (throw (ex-info "codex master dispatch session id missing"
+                                {:code :codex-session-id-missing})))]
+      {:block (some-> block block-uuid-str)
        :session session
        :backend :codex
+       :request request
        :preview preview})))
+
+(declare nearest-ancestor-task-session)
+
+(defn- dispatch-task-to-master!
+  [cfg {:keys [repo graph agent-name project-dir] :as opts} {:keys [block tree-text]}]
+  (p/let [inherited-session (nearest-ancestor-task-session cfg repo block)
+          result (dispatch-to-master!
+                  cfg
+                  opts
+                  {:request :task
+                   :block block
+                   :prompt (build-master-task-dispatch-prompt {:graph graph
+                                                               :agent-name agent-name
+                                                               :project-dir project-dir
+                                                               :block block
+                                                               :tree-text tree-text
+                                                               :inherited-session inherited-session})})
+          _ (mark-agent-bridge-task-started! cfg repo block)]
+    result))
 
 (defn- claim-routing-block!
   [routing-blocks* block-id]
@@ -985,16 +1234,25 @@
         :else
         (recur)))))
 
+(defn- master-session-required-error
+  [request opts]
+  (when-not (seq (:master-session opts))
+    (ex-info "AgentBridge routing requires an active master session"
+             {:code :agent-bridge-master-session-required
+              :request request})))
+
 (defn- route-task-once!
   [cfg {:keys [routing-blocks*] :as opts} {:keys [block] :as task}]
-  (let [block-id (block-uuid-str block)]
-    (if (and routing-blocks* block-id)
-      (if (claim-routing-block! routing-blocks* block-id)
-        (-> (route-task! cfg opts task)
-            (p/finally (fn []
-                         (swap! routing-blocks* disj block-id))))
-        (p/resolved nil))
-      (route-task! cfg opts task))))
+  (if-let [e (master-session-required-error :task opts)]
+    (p/rejected e)
+    (let [block-id (block-uuid-str block)]
+      (if (and routing-blocks* block-id)
+        (if (claim-routing-block! routing-blocks* block-id)
+          (-> (dispatch-task-to-master! cfg opts task)
+              (p/finally (fn []
+                           (swap! routing-blocks* disj block-id))))
+          (p/resolved nil))
+        (dispatch-task-to-master! cfg opts task)))))
 
 (def ^:private max-concurrent-routes 4)
 
@@ -1008,13 +1266,15 @@
           (partition-all limit coll)))
 
 (defn- process-tasks!
-  [cfg {:keys [repo graph agent-name prompt-templates routing-blocks*]}]
+  [cfg {:keys [repo graph agent-name prompt-templates routing-blocks* master-session project-dir]}]
   (p/let [tasks (list-routable-tasks cfg repo agent-name)]
     (p-map-batched max-concurrent-routes
                    #(route-task-once! cfg {:repo repo
                                            :graph graph
                                            :agent-name agent-name
                                            :prompt-templates prompt-templates
+                                           :master-session master-session
+                                           :project-dir project-dir
                                            :routing-blocks* routing-blocks*}
                                       %)
                    tasks)))
@@ -1035,7 +1295,43 @@
    {:logseq.property/status [:db/ident :block/title]}
    {:logseq.property/assignee [:db/id :block/title :block/name :db/ident]}
    :logseq.property.agent/session-id
+   {:block/parent [:db/id]}
    '*])
+
+(def ^:private task-ancestor-session-selector
+  [:db/id
+   :block/uuid
+   :block/title
+   {:block/tags [:db/ident :block/title]}
+   :logseq.property.agent/session-id
+   {:block/parent [:db/id]}])
+
+(defn- block-db-id
+  [value]
+  (cond
+    (map? value) (:db/id value)
+    (number? value) value
+    :else nil))
+
+(defn- parent-block-id
+  [block]
+  (block-db-id (:block/parent block)))
+
+(defn- nearest-ancestor-task-session
+  [cfg repo block]
+  (letfn [(step [parent-id]
+            (if-not parent-id
+              (p/resolved nil)
+              (p/let [parent (transport/invoke cfg :thread-api/pull
+                                                [repo task-ancestor-session-selector parent-id])
+                      session-id (trim-non-empty
+                                  (get parent agent-session-id-property-ident))]
+                (if (and session-id
+                         (some task-tag? (:block/tags parent)))
+                  {:parent-block-uuid (:block/uuid parent)
+                   :session-id session-id}
+                  (step (parent-block-id parent))))))]
+    (step (parent-block-id block))))
 
 (def ^:private comment-block-selector
   [:db/id
@@ -1208,89 +1504,49 @@
   [cfg repo target-uuid emoji-id]
   (ensure-reaction! cfg repo target-uuid emoji-id))
 
-(defn- comment-session-record
-  [graph agent-name comment-block session-id status]
-  (assoc (session-record graph agent-name comment-block session-id status)
-         :request :comment))
-
-(defn- comment-target-session-id
-  [agent-name block]
-  (if (contains? (assignee-values block) agent-name)
-    (p/resolved (trim-non-empty (get block agent-session-id-property-ident)))
-    (p/resolved nil)))
-
-(defn- route-comment!
-  [cfg {:keys [repo graph agent-name prompt-templates]} comment-block]
-  (p/catch
-   (p/let [comment-uuid (:block/uuid comment-block)
-           _ (when-not comment-uuid
-               (throw (ex-info "comment block uuid is missing"
-                               {:code :agent-comment-uuid-missing})))
-           session-property-ident agent-session-id-property-ident
-           comments-area (pull-comments-area cfg repo comment-block session-property-ident)
-           _ (when-not (comments-area? comments-area)
-               (throw (ex-info "comment parent is not a comments area"
-                               {:code :agent-comment-parent-invalid
-                                :block (block-uuid-str comment-block)})))
-           target-blocks (vec (:logseq.property.comments/blocks comments-area))
-           _ (ensure-comment-reaction! cfg repo comment-uuid comment-start-reaction)
-           target-tree-texts (p/all (mapv #(show-block-tree cfg repo %) target-blocks))
-           comments-area-tree-text (show-block-tree cfg repo comments-area)
-           comment-tree-text (show-block-tree cfg repo comment-block)
-           prompt (build-comment-codex-prompt {:graph graph
-                                               :agent-name agent-name
-                                               :comment comment-block
-                                               :target-tree-texts target-tree-texts
-                                               :comments-area-tree-text comments-area-tree-text
-                                               :comment-tree-text comment-tree-text
-                                               :prompt-template (:comment prompt-templates)})
-           target-session-ids (p/all (mapv #(comment-target-session-id agent-name %)
-                                           target-blocks))
-           resume-session-id (first (keep identity target-session-ids))
-           command (if resume-session-id
-                     (build-codex-resume-command resume-session-id prompt {})
-                     (build-codex-command prompt {}))
-           preview (command-preview command)
-           _ (emit-log! cfg (log-line (str "Codex command prepared for comment " (block-uuid-str comment-block) ": " preview)))
-           {:keys [session]} (start-codex! command
-                                           {:on-exit (fn [code session-id]
-                                                       (when session-id
-                                                         (update-session-status! cfg session-id
-                                                                                 (if (zero? (or code 1))
-                                                                                   :completed
-                                                                                   :failed)))
-                                                       (-> (ensure-comment-reaction! cfg repo comment-uuid
-                                                                                     (if (zero? (or code 1))
-                                                                                       comment-complete-reaction
-                                                                                       comment-failed-reaction))
-                                                           (p/catch (fn [e]
-                                                                      (log/error :agent-bridge-comment-reaction-failed e)))))})
-           _ (when-not (seq session)
-               (throw (ex-info "codex session id missing"
-                               {:code :codex-session-id-missing})))
-           cfg* (cli-server/ensure-server! cfg repo)
-           _ (record-session! cfg* (comment-session-record graph agent-name comment-block session :running))]
-     {:block (block-uuid-str comment-block)
-      :session session
-      :backend :codex
-      :preview preview
-      :request :comment})
-   (fn [e]
-     (if-let [comment-uuid (:block/uuid comment-block)]
-       (p/let [_ (ensure-comment-reaction! cfg repo comment-uuid comment-failed-reaction)]
-         (throw e))
-       (p/rejected e)))))
+(defn- dispatch-comment-to-master!
+  [cfg {:keys [repo graph agent-name project-dir] :as opts} comment-block]
+  (p/let [comment-uuid (:block/uuid comment-block)
+          _ (when-not comment-uuid
+              (throw (ex-info "comment block uuid is missing"
+                              {:code :agent-comment-uuid-missing})))
+          comments-area (pull-comments-area cfg repo comment-block agent-session-id-property-ident)
+          _ (when-not (comments-area? comments-area)
+              (throw (ex-info "comment parent is not a comments area"
+                              {:code :agent-comment-parent-invalid
+                               :block (block-uuid-str comment-block)})))
+          target-blocks (vec (:logseq.property.comments/blocks comments-area))
+          target-tree-texts (p/all (mapv #(show-block-tree cfg repo %) target-blocks))
+          comments-area-tree-text (show-block-tree cfg repo comments-area)
+          comment-tree-text (show-block-tree cfg repo comment-block)
+          result (dispatch-to-master!
+                  cfg
+                  opts
+                  {:request :comment
+                   :block comment-block
+                   :prompt (build-master-comment-dispatch-prompt
+                            {:graph graph
+                             :agent-name agent-name
+                             :project-dir project-dir
+                             :comment comment-block
+                             :target-tree-texts target-tree-texts
+                             :comments-area-tree-text comments-area-tree-text
+                             :comment-tree-text comment-tree-text})})
+          _ (ensure-comment-reaction! cfg repo comment-uuid comment-start-reaction)]
+    result))
 
 (defn- route-comment-once!
   [cfg {:keys [routing-blocks*] :as opts} comment-block]
-  (let [block-id (block-uuid-str comment-block)]
-    (if (and routing-blocks* block-id)
-      (if (claim-routing-block! routing-blocks* block-id)
-        (-> (route-comment! cfg opts comment-block)
-            (p/finally (fn []
-                         (swap! routing-blocks* disj block-id))))
-        (p/resolved nil))
-      (route-comment! cfg opts comment-block))))
+  (if-let [e (master-session-required-error :comment opts)]
+    (p/rejected e)
+    (let [block-id (block-uuid-str comment-block)]
+      (if (and routing-blocks* block-id)
+        (if (claim-routing-block! routing-blocks* block-id)
+          (-> (dispatch-comment-to-master! cfg opts comment-block)
+              (p/finally (fn []
+                           (swap! routing-blocks* disj block-id))))
+          (p/resolved nil))
+        (dispatch-comment-to-master! cfg opts comment-block)))))
 
 (defn- route-assignee-datom!
   [cfg {:keys [repo agent-name] :as opts} datom]
@@ -1333,7 +1589,7 @@
         (p/all routing)))))
 
 (defn- listen-forever!
-  [cfg {:keys [repo graph agent-name prompt-templates routing-blocks*]}]
+  [cfg {:keys [repo graph agent-name prompt-templates routing-blocks* master-session project-dir]}]
   (let [routing-blocks* (or routing-blocks* (atom #{}))
         handle-error! (fn [e]
                         (emit-log! cfg (log-line (str "Codex invocation failed: "
@@ -1352,6 +1608,8 @@
                                                           :graph graph
                                                           :agent-name agent-name
                                                           :prompt-templates prompt-templates
+                                                          :master-session master-session
+                                                          :project-dir project-dir
                                                           :routing-blocks* routing-blocks*}
                                                          payload)
                          (p/catch handle-error!))
@@ -1378,54 +1636,57 @@
               logs (conj logs
                          (log-line (str "using agent name: " agent-name))
                          (log-line "checking codex cli ..."))]
-          (if-not (codex-available? nil)
-            (bridge-error :codex-not-found "codex executable is not available")
-            (p/let [cfg (cli-server/ensure-server! config repo)
-                    logs (conj logs (log-line "checking prompt templates ..."))
-                    prompt-templates (ensure-agent-bridge-prompt-templates! cfg repo)
-                    logs (conj logs (log-line "registering agent bridge ..."))
-                    _ (register-agent-bridge! cfg repo agent-name)]
-              (if (:dry-run? action)
-                (p/let [tasks (list-routable-tasks cfg repo agent-name)
-                        commands (dry-run-commands graph agent-name prompt-templates tasks)
-                        logs (into (conj logs (log-line "listening graph changes ..."))
-                                   (map (fn [{:keys [block preview]}]
-                                          (log-line (str "would run Codex command for " block ": " preview)))
-                                        commands))]
-                  {:status :ok
-                   :command :agent-bridge
-                   :data {:mode :dry-run
-                          :graph graph
-                          :agent-name agent-name
-                          :logs logs
-                          :commands commands}})
-                (if (:process-once? action)
-                  (do
-                    (doseq [line (conj logs (log-line "listening graph changes ..."))]
-                      (emit-log! cfg line))
-                    (let [routing-blocks* (atom #{})]
-                      (p/let [routed (process-tasks! cfg {:repo repo
-                                                          :graph graph
-                                                          :agent-name agent-name
-                                                          :prompt-templates prompt-templates
-                                                          :routing-blocks* routing-blocks*})]
-                        {:status :ok
-                         :command :agent-bridge
-                         :data {:mode :processed-once
-                                :graph graph
-                                :agent-name agent-name
-                                :routed routed}})))
-                  (let [routing-blocks* (atom #{})
-                        listen-promise (listen-forever! cfg {:repo repo
-                                                             :graph graph
-                                                             :agent-name agent-name
-                                                             :prompt-templates prompt-templates
-                                                             :routing-blocks* routing-blocks*})]
-                    (doseq [line (conj logs (log-line "listening graph changes ..."))]
-                      (emit-log! cfg line))
-                    (p/let [_ (process-tasks! cfg {:repo repo
-                                                   :graph graph
-                                                   :agent-name agent-name
-                                                   :prompt-templates prompt-templates
-                                                   :routing-blocks* routing-blocks*})]
-                      listen-promise)))))))))))
+          (with-bridge-lock! config graph agent-name
+            (fn []
+              (if-not (codex-available? nil)
+                (bridge-error :codex-not-found "codex executable is not available")
+                (p/let [cfg (cli-server/ensure-server! config repo)
+                        logs (conj logs (log-line "registering agent bridge ..."))
+                        _ (register-agent-bridge! cfg repo agent-name)
+                        logs (conj logs (log-line "checking master prompt ..."))
+                        master-prompt (ensure-agent-master-prompt! cfg repo agent-name)
+                        logs (conj logs (log-line "checking prompt templates ..."))
+                        prompt-templates (ensure-agent-bridge-prompt-templates! cfg repo)]
+                  (if (:process-once? action)
+                    (p/let [master-record (ensure-master-session! cfg {:graph graph
+                                                                       :agent-name agent-name
+                                                                       :master-prompt master-prompt})
+                            master-session (:session master-record)]
+                      (doseq [line (conj logs (log-line "listening graph changes ..."))]
+                        (emit-log! cfg line))
+                      (let [routing-blocks* (atom #{})]
+                        (p/let [routed (process-tasks! cfg {:repo repo
+                                                            :graph graph
+                                                            :agent-name agent-name
+                                                            :prompt-templates prompt-templates
+                                                            :master-session master-session
+                                                            :project-dir (:project-dir config)
+                                                            :routing-blocks* routing-blocks*})]
+                          {:status :ok
+                           :command :agent-bridge
+                           :data {:mode :processed-once
+                                  :graph graph
+                                  :agent-name agent-name
+                                  :routed routed}})))
+                    (p/let [master-record (ensure-master-session! cfg {:graph graph
+                                                                       :agent-name agent-name
+                                                                       :master-prompt master-prompt})
+                            master-session (:session master-record)]
+                      (let [routing-blocks* (atom #{})
+                            listen-promise (listen-forever! cfg {:repo repo
+                                                                 :graph graph
+                                                                 :agent-name agent-name
+                                                                 :prompt-templates prompt-templates
+                                                                 :master-session master-session
+                                                                 :project-dir (:project-dir config)
+                                                                 :routing-blocks* routing-blocks*})]
+                        (doseq [line (conj logs (log-line "listening graph changes ..."))]
+                          (emit-log! cfg line))
+                        (p/let [_ (process-tasks! cfg {:repo repo
+                                                       :graph graph
+                                                       :agent-name agent-name
+                                                       :prompt-templates prompt-templates
+                                                       :master-session master-session
+                                                       :project-dir (:project-dir config)
+                                                       :routing-blocks* routing-blocks*})]
+                          listen-promise)))))))))))))

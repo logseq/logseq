@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.search :as search]
+            [frontend.worker.search-benchmark :as search-benchmark]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
 
@@ -534,6 +535,507 @@
           (is (= (str page-id) (:id indexed)))
           (is (= "Artificial Intelligence ai" (:title indexed))))))))
 
+(deftest block-index-does-not-generate-vector-embedding
+  (testing "desktop vector embeddings are supplied by the platform embedding backend"
+    (let [block-id #uuid "00000000-0000-0000-0000-000000000238"
+          page-id #uuid "00000000-0000-0000-0000-000000000239"
+          block {:db/id 1
+                 :block/uuid block-id
+                 :block/title "Local-first semantic search"
+                 :block/page {:block/uuid page-id}}]
+      (with-redefs [ldb/page? (constantly false)
+                    ldb/object? (constantly false)
+                    ldb/journal? (constantly false)
+                    ldb/closed-value? (constantly false)
+                    ldb/get-title-with-parents (fn [entity] (:block/title entity))]
+        (let [indexed (search/block->index block)]
+          (is (= "Local-first semantic search" (:title indexed)))
+          (is (not (contains? indexed :embedding))))))))
+
+(deftest block-index-includes-bounded-vector-context
+  (testing "vector-only text includes local block context without changing the keyword title"
+    (let [page-id #uuid "00000000-0000-0000-0000-000000000240"
+          block-id #uuid "00000000-0000-0000-0000-000000000241"
+          page {:db/id 1
+                :page? true
+                :block/uuid page-id
+                :block/title "Search Design"}
+          grandparent {:db/id 2
+                       :block/uuid #uuid "00000000-0000-0000-0000-000000000242"
+                       :block/title "Architecture"
+                       :block/parent page}
+          parent {:db/id 3
+                  :block/uuid #uuid "00000000-0000-0000-0000-000000000243"
+                  :block/title "Vector index"
+                  :block/parent grandparent}
+          prev-sibling {:db/id 4
+                        :block/uuid #uuid "00000000-0000-0000-0000-000000000244"
+                        :block/title "Keyword search"
+                        :block/order "a"}
+          sibling-anchor {:db/id 5
+                          :block/uuid block-id
+                          :block/title "Hybrid retrieval"
+                          :block/order "b"}
+          next-sibling {:db/id 6
+                        :block/uuid #uuid "00000000-0000-0000-0000-000000000245"
+                        :block/title "Ranking policy"
+                        :block/order "c"}
+          child {:db/id 7
+                 :block/uuid #uuid "00000000-0000-0000-0000-000000000246"
+                 :block/title "Cross block context"
+                 :block/order "a"}
+          block (assoc sibling-anchor
+                       :block/page page
+                       :block/parent (assoc parent :block/_parent [prev-sibling sibling-anchor next-sibling])
+                       :block/_parent [child])]
+      (with-redefs [ldb/page? (fn [entity] (true? (:page? entity)))
+                    ldb/object? (constantly false)
+                    ldb/journal? (constantly false)
+                    ldb/closed-value? (constantly false)
+                    ldb/hidden? (constantly false)
+                    ldb/get-title-with-parents (fn [entity] (:block/title entity))]
+        (let [indexed (search/block->index block)
+              vector-title (:vector-title indexed)]
+          (is (= "Hybrid retrieval" (:title indexed)))
+          (is (string/includes? vector-title "Page: Search Design"))
+          (is (string/includes? vector-title "Path: Architecture > Vector index"))
+          (is (string/includes? vector-title "Previous: Keyword search"))
+          (is (string/includes? vector-title "Block: Hybrid retrieval"))
+          (is (string/includes? vector-title "Children: Cross block context"))
+          (is (string/includes? vector-title "Next: Ranking policy")))))))
+
+(deftest build-blocks-indice-reuses-sorted-vector-context
+  (testing "large pages do not sort the same sibling set once per indexed block"
+    (let [page-id #uuid "00000000-0000-0000-0000-000000000250"
+          page {:db/id 1
+                :page? true
+                :block/uuid page-id
+                :block/title "Search Perf"}
+          blocks (mapv (fn [idx]
+                         {:db/id (+ 100 idx)
+                          :block/uuid (uuid (test-uuid-string (+ 250 idx)))
+                          :block/title (str "Sibling " idx)
+                          :block/order idx
+                          :block/parent page
+                          :block/page page})
+                       (range 40))
+          page (assoc page :block/_parent blocks)
+          blocks (mapv #(assoc % :block/parent page) blocks)
+          sort-calls (atom 0)]
+      (with-redefs [search/get-all-blocks (fn [_db] blocks)
+                    ldb/sort-by-order (fn [children]
+                                        (swap! sort-calls inc)
+                                        (sort-by :block/order children))
+                    ldb/page? (fn [entity] (true? (:page? entity)))
+                    ldb/object? (constantly false)
+                    ldb/journal? (constantly false)
+                    ldb/closed-value? (constantly false)
+                    ldb/hidden? (constantly false)
+                    ldb/get-title-with-parents (fn [entity] (:block/title entity))]
+        (is (= 40 (count (search/build-blocks-indice :db))))
+        (is (<= @sort-calls 2))))))
+
+(deftest expand-vector-context-blocks-includes-neighbor-anchors
+  (testing "incremental vector updates refresh anchors whose context includes the changed block"
+    (let [page {:db/id 1
+                :page? true
+                :block/uuid #uuid "00000000-0000-0000-0000-000000000290"
+                :block/title "Search"}
+          parent {:db/id 2
+                  :block/uuid #uuid "00000000-0000-0000-0000-000000000291"
+                  :block/title "Parent"
+                  :block/page page}
+          prev {:db/id 3
+                :block/uuid #uuid "00000000-0000-0000-0000-000000000292"
+                :block/title "Previous"
+                :block/order 1
+                :block/page page}
+          current {:db/id 4
+                   :block/uuid #uuid "00000000-0000-0000-0000-000000000293"
+                   :block/title "Current"
+                   :block/order 2
+                   :block/page page}
+          next {:db/id 5
+                :block/uuid #uuid "00000000-0000-0000-0000-000000000294"
+                :block/title "Next"
+                :block/order 3
+                :block/page page}
+          child {:db/id 6
+                 :block/uuid #uuid "00000000-0000-0000-0000-000000000295"
+                 :block/title "Child"
+                 :block/order 1
+                 :block/page page}
+          parent (assoc parent :block/_parent [prev current next])
+          current (assoc current
+                         :block/parent parent
+                         :block/_parent [child])]
+      (with-redefs [ldb/sort-by-order (fn [children] (sort-by :block/order children))
+                    ldb/hidden? (constantly false)]
+        (is (= [(uuid "00000000-0000-0000-0000-000000000293")
+                (uuid "00000000-0000-0000-0000-000000000291")
+                (uuid "00000000-0000-0000-0000-000000000292")
+                (uuid "00000000-0000-0000-0000-000000000294")
+                (uuid "00000000-0000-0000-0000-000000000295")]
+               (mapv :block/uuid (search/expand-vector-context-blocks [current]))))))))
+
+(deftest sync-search-indice-refreshes-vector-context-on-structure-change
+  (testing "moving a block under a parent re-embeds the parent with child context"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Teams"}
+                                     :blocks [{:block/title "which team is Manu in?"}
+                                              {:block/title "Spurs"}]}]})
+          manu (db-test/find-block-by-content @conn "which team is Manu in?")
+          spurs (db-test/find-block-by-content @conn "Spurs")
+          tx-report (d/transact! conn [[:db/add (:db/id spurs) :block/parent (:db/id manu)]])
+          blocks-to-add (:blocks-to-add (search/sync-search-indice tx-report))
+          manu-index (some #(when (= "which team is Manu in?" (:title %)) %) blocks-to-add)]
+      (is (some? manu-index))
+      (is (true? (some-> (:vector-title manu-index)
+                         (string/includes? "Children: Spurs"))))))
+
+  (testing "reordering a sibling re-embeds the previous block with next-sibling context"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Teams"}
+                                     :blocks [{:block/title "Spurs"
+                                               :block/order "a"}
+                                              {:block/title "Which team is Tony in?"
+                                               :block/order "b"}]}]})
+          spurs (db-test/find-block-by-content @conn "Spurs")
+          tx-report (d/transact! conn [[:db/add (:db/id spurs) :block/order "c"]])
+          blocks-to-add (:blocks-to-add (search/sync-search-indice tx-report))
+          tony-index (some #(when (= "Which team is Tony in?" (:title %)) %) blocks-to-add)]
+      (is (some? tony-index))
+      (is (true? (some-> (:vector-title tony-index)
+                         (string/includes? "Next: Spurs")))))))
+
+(deftest search-blocks-includes-vector-only-results
+  (testing "zvec vector hits are merged into desktop search even when SQLite has no keyword hit"
+    (let [page-id (test-uuid-string 900)
+          vector-id (test-uuid-string 901)
+          blocks {vector-id {:db/id 901
+                             :block/uuid (uuid vector-id)
+                             :block/title "Semantic only result"
+                             :block/page {:block/uuid (uuid page-id)}}}
+          query-embedding [0.1 0.2 0.3]
+          vector-queries (atom [])
+          vector-index {:query (fn [embedding limit page]
+                                 (swap! vector-queries conj {:embedding embedding
+                                                             :limit limit
+                                                             :page page})
+                                 [{:id vector-id
+                                   :page page-id
+                                   :vector-score 0.91}])}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (get blocks (str id)))
+                    d/pull-many (fn [_db _selector lookup-refs]
+                                  (mapv (fn [[_attr id]]
+                                          (get blocks (str id)))
+                                        lookup-refs))
+                    ldb/hidden? (constantly false)
+                    ldb/page? (constantly false)
+                    ldb/built-in? (constantly false)]
+        (let [result (vec (search/search-blocks (atom :db)
+                                                (checking-db)
+                                                vector-index
+                                                "meaning based query"
+                                                {:limit 10
+                                                 :enable-snippet? false
+                                                 :feature/enable-semantic-search? true
+                                                 :query-embedding query-embedding}))]
+          (is (= [{:db/id 901
+                   :block/title "Semantic only result"}]
+                 (mapv #(select-keys % [:db/id :block/title]) result)))
+          (is (= 1 (count @vector-queries)))
+          (is (= query-embedding
+                 (:embedding (first @vector-queries)))))))))
+
+(deftest search-blocks-excludes-built-in-class-vector-results-when-built-ins-disabled
+  (testing "built-in classes do not hide user block vector matches in block reference search"
+    (let [built-in-id (test-uuid-string 905)
+          user-id (test-uuid-string 906)
+          page-id (test-uuid-string 907)
+          blocks {built-in-id {:db/id 905
+                               :block/uuid (uuid built-in-id)
+                               :block/title "Cards"
+                               :block/page {:block/uuid (uuid page-id)}
+                               :logseq.property/built-in? true}
+                  user-id {:db/id 906
+                           :block/uuid (uuid user-id)
+                           :block/title "which team is Manu in?"
+                           :block/page {:block/uuid (uuid page-id)}}}
+          vector-index {:query (fn [_embedding _limit _page]
+                                 [{:id built-in-id
+                                   :page page-id
+                                   :vector-score 0.99}
+                                  {:id user-id
+                                   :page page-id
+                                   :vector-score 0.98}])}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (get blocks (str id)))
+                    d/pull-many (fn [_db _selector lookup-refs]
+                                  (mapv (fn [[_attr id]]
+                                          (get blocks (str id)))
+                                        lookup-refs))
+                    ldb/hidden? (constantly false)
+                    ldb/page? (constantly false)
+                    ldb/built-in? (fn [block]
+                                    (true? (:logseq.property/built-in? block)))
+                    ldb/class? (fn [block]
+                                 (= (:db/id block) 905))]
+        (let [result (vec (search/search-blocks (atom :db)
+                                                (checking-db)
+                                                vector-index
+                                                "manu spurs"
+                                                {:limit 10
+                                                 :built-in? false
+                                                 :enable-snippet? false
+                                                 :feature/enable-semantic-search? true
+                                                 :query-embedding [0.1 0.2 0.3]}))]
+          (is (= ["which team is Manu in?"]
+                 (mapv :block/title result))))))))
+
+(deftest search-blocks-limits-vector-results-before-combining
+  (testing "large graph vector search caps semantic hits and drops low scores before merging"
+    (let [page-id (test-uuid-string 930)
+          vector-ids (mapv test-uuid-string (range 931 1931))
+          blocks (into {}
+                       (map-indexed (fn [idx id]
+                                      [id {:db/id (+ 931 idx)
+                                           :block/uuid (uuid id)
+                                           :block/title (if (even? idx)
+                                                          (str "Strong vector result " idx)
+                                                          (str "Weak vector result " idx))
+                                           :block/page {:block/uuid (uuid page-id)}}])
+                                    vector-ids))
+          consumed (atom 0)
+          query-limits (atom [])
+          vector-results (fn vector-results [ids]
+                           (lazy-seq
+                            (when-let [ids (seq ids)]
+                              (let [id (first ids)
+                                    idx @consumed]
+                                (cons (do
+                                        (swap! consumed inc)
+                                        {:id id
+                                         :page page-id
+                                         :vector-score (if (even? idx) 0.51 0.5)})
+                                      (vector-results (rest ids)))))))
+          vector-index {:query (fn [_embedding limit _page]
+                                 (swap! query-limits conj limit)
+                                 (take limit (vector-results vector-ids)))}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (get blocks (str id)))
+                    d/pull-many (fn [_db _selector lookup-refs]
+                                  (mapv (fn [[_attr id]]
+                                          (get blocks (str id)))
+                                        lookup-refs))
+                    ldb/hidden? (constantly false)
+                    ldb/page? (constantly false)
+                    ldb/built-in? (constantly false)]
+        (let [result (doall (search/search-blocks (atom :db)
+                                                  (checking-db)
+                                                  vector-index
+                                                  "semantic large graph"
+                                                  {:limit 50
+                                                   :enable-snippet? false
+                                                   :feature/enable-semantic-search? true
+                                                   :query-embedding [0.1 0.2 0.3]}))]
+          (is (= [10] @query-limits))
+          (is (= 5 (count result)))
+          (is (every? #(string/starts-with? % "Strong")
+                      (map :block/title result)))
+          (is (= 10 @consumed)))))))
+
+(deftest reciprocal-rank-fusion-promotes-cross-source-agreement
+  (testing "a result found by both keyword and vector search outranks a vector-only top hit"
+    (let [rrf #'search/reciprocal-rank-fusion
+          result (rrf [[{:id "keyword-only"}
+                        {:id "shared"}]
+                       [{:id "vector-only"}
+                        {:id "shared"}]])]
+      (is (= ["shared" "keyword-only" "vector-only"]
+             (mapv :id result))))))
+
+(deftest search-blocks-hybrid-ranks-keyword-and-vector-results
+  (testing "SQLite keyword hits and zvec vector hits share the final ranking"
+    (let [keyword-id (test-uuid-string 910)
+          vector-id (test-uuid-string 911)
+          page-id (test-uuid-string 912)
+          blocks {keyword-id {:db/id 910
+                              :block/uuid (uuid keyword-id)
+                              :block/title "alpha keyword"
+                              :block/page {:block/uuid (uuid page-id)}}
+                  vector-id {:db/id 911
+                             :block/uuid (uuid vector-id)
+                             :block/title "related semantic result"
+                             :block/page {:block/uuid (uuid page-id)}}}
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")]
+                            (cond
+                              (string/includes? sql "title match ?")
+                              (clj->js [[keyword-id page-id "alpha keyword" -16 nil]])
+
+                              :else
+                              #js [])))}
+          vector-index {:query (fn [_embedding _limit _page]
+                                 [{:id vector-id
+                                   :page page-id
+                                   :vector-score 4.0}])}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (get blocks (str id)))
+                    d/pull-many (fn [_db _selector lookup-refs]
+                                  (mapv (fn [[_attr id]]
+                                          (get blocks (str id)))
+                                        lookup-refs))
+                    ldb/hidden? (constantly false)
+                    ldb/page? (constantly false)
+                    ldb/built-in? (constantly false)]
+        (let [result (vec (search/search-blocks (atom :db)
+                                               db
+                                               vector-index
+                                               "alpha"
+                                               {:limit 10
+                                                :enable-snippet? false
+                                                :feature/enable-semantic-search? true
+                                                :query-embedding [0.4 0.5 0.6]}))]
+          (is (= ["alpha keyword" "related semantic result"]
+                 (mapv :block/title result))))))))
+
+(deftest search-blocks-filters-weak-vector-result
+  (testing "weak semantic hits are dropped even when exact keyword hits exist"
+    (let [keyword-id (test-uuid-string 920)
+          vector-id (test-uuid-string 921)
+          page-id (test-uuid-string 922)
+          blocks {keyword-id {:db/id 920
+                              :block/uuid (uuid keyword-id)
+                              :block/title "alpha"
+                              :block/page {:block/uuid (uuid page-id)}}
+                  vector-id {:db/id 921
+                             :block/uuid (uuid vector-id)
+                             :block/title "contextually adjacent but weak"
+                             :block/page {:block/uuid (uuid page-id)}}}
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")]
+                            (cond
+                              (string/includes? sql "title = ?")
+                              (clj->js [[keyword-id page-id "alpha"]])
+
+                              :else
+                              #js [])))}
+          vector-index {:query (fn [_embedding _limit _page]
+                                 [{:id vector-id
+                                   :page page-id
+                                   :vector-score 0.34}])}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (get blocks (str id)))
+                    d/pull-many (fn [_db _selector lookup-refs]
+                                  (mapv (fn [[_attr id]]
+                                          (get blocks (str id)))
+                                        lookup-refs))
+                    ldb/hidden? (constantly false)
+                    ldb/page? (constantly false)
+                    ldb/built-in? (constantly false)]
+        (let [result (vec (search/search-blocks (atom :db)
+                                                db
+                                                vector-index
+                                                "alpha"
+                                                {:limit 10
+                                                 :enable-snippet? false
+                                                 :feature/enable-semantic-search? true
+                                                 :query-embedding [0.4 0.5 0.6]}))]
+          (is (= ["alpha"]
+                 (mapv :block/title result))))))))
+
+(deftest combine-results-uses-vector-context-terms-as-semantic-tie-breaker
+  (testing "embedded context terms can promote a lower raw vector hit without page/tag boosts inverting rank"
+    (let [unrelated-id (test-uuid-string 930)
+          page-id (test-uuid-string 931)
+          semantic-id (test-uuid-string 932)
+          tag-id (test-uuid-string 933)
+          blocks {unrelated-id {:db/id 930
+                                :block/uuid (uuid unrelated-id)
+                                :block/title "Which team is Tony in?"}
+                  page-id {:db/id 931
+                           :block/uuid (uuid page-id)
+                           :block/title "nba"
+                           :page? true}
+                  semantic-id {:db/id 932
+                               :block/uuid (uuid semantic-id)
+                               :block/title "which team is Manu in?"}
+                  tag-id {:db/id 933
+                          :block/uuid (uuid tag-id)
+                          :block/title "generic tagged result"
+                          :block/tags [{:db/id 934}]}}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (get blocks (str id)))
+                    d/pull-many (fn [_db _selector lookup-refs]
+                                  (mapv (fn [[_attr id]]
+                                          (get blocks (str id)))
+                                        lookup-refs))
+                    ldb/hidden? (constantly false)
+                    ldb/page? :page?]
+        (let [db #js {:exec (constantly #js [])}
+              vector-index {:query (fn [_embedding _limit _page]
+                                      [{:id unrelated-id
+                                       :vector-score 0.72
+                                       :title "Which team is Tony in?"
+                                       :vector-title "Previous: which team is Manu in?\nBlock: Which team is Tony in?\nNext: Spurs"}
+                                      {:id page-id
+                                       :vector-score 0.70
+                                       :title "nba"
+                                       :vector-title "Page: nba\nBlock: nba"}
+                                      {:id semantic-id
+                                       :vector-score 0.69
+                                       :title "which team is Manu in?"
+                                       :vector-title "Block: which team is Manu in?\nChildren: Spurs"}
+                                      {:id tag-id
+                                       :vector-score 0.68
+                                       :title "generic tagged result"
+                                       :vector-title "Block: generic tagged result"}])}
+              result (vec (search/search-blocks (atom :db)
+                                                db
+                                                vector-index
+                                                "manu spurs"
+                                                {:limit 10
+                                                 :enable-snippet? false
+                                                 :feature/enable-semantic-search? true
+                                                 :query-embedding [0.4 0.5 0.6]}))]
+          (is (= ["which team is Manu in?"
+                  "Which team is Tony in?"
+                  "nba"
+                  "generic tagged result"]
+                 (mapv :block/title result))))))))
+
+(deftest benchmark-scoring-keeps-keyword-result-ahead-of-strong-vector-only-hit
+  (testing "hybrid RRF weighting preserves keyword precision at rank 1"
+    (let [keyword-id (test-uuid-string 940)
+          vector-id (test-uuid-string 941)
+          page-id (test-uuid-string 942)
+          blocks {keyword-id {:db/id 940
+                              :block/uuid (uuid keyword-id)
+                              :block/title "keyword hit"
+                              :block/page {:block/uuid (uuid page-id)}}
+                  vector-id {:db/id 941
+                             :block/uuid (uuid vector-id)
+                             :block/title "semantic only"
+                             :block/page {:block/uuid (uuid page-id)}}}]
+      (with-redefs [d/pull-many (fn [_db _selector lookup-refs]
+                                  (mapv (fn [[_attr id]]
+                                          (get blocks (str id)))
+                                        lookup-refs))
+                    ldb/hidden? (constantly false)
+                    ldb/page? (constantly false)]
+        (let [result (search/combine-results
+                      :db
+                      [{:id keyword-id
+                        :keyword-score 0.1
+                        :title "keyword hit"}]
+                      [{:id vector-id
+                        :vector-score 1000
+                        :title "semantic only"}])
+              score (search-benchmark/score-results result [keyword-id] 1)]
+          (is (= 1 (:recall-at-1 score))))))))
+
 (deftest search-result-keeps-page-title-when-alias-matches
   (testing "alias matches annotate the page result without replacing its title"
     (let [page-id #uuid "00000000-0000-0000-0000-000000000236"
@@ -616,6 +1118,36 @@
                        :page (str page-id)
                        :title "Artificial Intelligence ai"})]
           (is (= "Artificial Intelligence" (:block/title result)))
+          (is (not (contains? result :alias))))))))
+
+(deftest search-result-replaces-page-title-uuid-refs-without-alias-title
+  (testing "page result titles resolve uuid refs but do not display alias titles from the search index"
+    (let [page-id #uuid "00000000-0000-0000-0000-000000000246"
+          ref-id #uuid "00000000-0000-0000-0000-000000000247"
+          page {:db/id 1
+                :block/uuid page-id
+                :block/title (str "Artificial [[" ref-id "]]")
+                :block/refs [{:block/uuid ref-id
+                              :block/title "Machine Learning"}]
+                :block/alias [{:db/id 2
+                               :block/uuid #uuid "00000000-0000-0000-0000-000000000248"
+                               :block/title "ai"}]}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (when (= id page-id)
+                                 page))
+                    ldb/page? (fn [entity] (= (:db/id entity) (:db/id page)))
+                    ldb/object? (constantly false)
+                    ldb/built-in? (constantly false)
+                    ldb/hidden? (constantly false)]
+        (let [result (#'search/search-result->block-result
+                      (atom :db)
+                      "Artificial"
+                      nil
+                      {:enable-snippet? false}
+                      {:id (str page-id)
+                       :page (str page-id)
+                       :title "Artificial [[Machine Learning]] ai"})]
+          (is (= "Artificial [[Machine Learning]]" (:block/title result)))
           (is (not (contains? result :alias))))))))
 
 (deftest search-result-snippet-uses-canonical-page-title

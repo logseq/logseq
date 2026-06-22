@@ -6,7 +6,6 @@
 @import "packages/ui/src/colors.css";
 @import "packages/ui/src/index.css";  /* Tailwind base imported here */
 @import "resources/css/shui.css";
-@import "inter-ui/inter.css";
 
 @import "photoswipe/dist/photoswipe.css";
 @import "katex/dist/katex.min.css";

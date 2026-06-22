@@ -25,6 +25,8 @@
    :options ["--fix"
              "--type"
              "--file"
+             "--edn-options"
+             "--pretty-print"
              "--input"
              "--name"
              "--src"
@@ -81,6 +83,8 @@
              "--update-tags"
              "--update-properties"
              "--remove-tags"
+             "--remove-properties"
+             "--add-properties"
              "--remove-properties"
              "--page"
              "--name"
@@ -155,9 +159,8 @@
    :options ["--dev-script"]}
 
   :agent
-  {:commands ["agent bridge"
-              "agent bridge list"]
-   :options ["--all"]}
+  {:commands ["agent bridge"]
+   :options []}
 
   :completion
   {:commands ["completion"]
