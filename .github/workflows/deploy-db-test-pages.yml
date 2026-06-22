@@ -12,6 +12,10 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      deployments: write
 
     steps:
       - uses: actions/download-artifact@v4
@@ -28,7 +32,7 @@ jobs:
       #       exit 1
       #     fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
@@ -80,11 +84,9 @@ jobs:
           destination-dir: ./
 
       - name: Publish to Cloudflare Pages
-        uses: cloudflare/pages-action@1
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 2553ea8236c11ea0f88de28fce1cbfee
-          projectName: "logseq-db-test"
-          directory: "public"
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          branch: "main"
+          command: pages deploy public --project-name logseq-db-test --branch main

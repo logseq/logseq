@@ -3,7 +3,7 @@
             [cljs-time.core :as t]
             [cljs.test :refer [deftest is]]
             [datascript.core :as d]
-            [logseq.cli.common.file :as common-file]
+            [logseq.common.export.file :as common-file]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db.frontend.property :as db-property]))
 

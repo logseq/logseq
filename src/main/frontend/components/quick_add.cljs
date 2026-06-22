@@ -7,36 +7,33 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [io.factorhouse.hsx.core :as hsx]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
-            [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [logseq.shui.ui :as shui]))
 
-(rum/defc page-blocks
+(hsx/defc page-blocks
   [page]
-  (let [[scroll-container set-scroll-container] (rum/use-state nil)
-        *ref (rum/use-ref nil)]
+  (let [[scroll-container set-scroll-container] (hooks/use-state nil)
+        *ref (hooks/use-ref nil)]
     (hooks/use-effect!
-     #(set-scroll-container (rum/deref *ref))
+     #(set-scroll-container (hooks/deref *ref))
      [])
     [:div.content-inner
      {:ref *ref}
      (when scroll-container
        (page/page-blocks-cp page {:scroll-container scroll-container}))]))
 
-(rum/defc quick-add <
-  {:will-mount (fn [state]
-                 (state/clear-selection!)
-                 state)
-   :will-unmount (fn [state]
-                   (state/clear-selection!)
-                   state)
-   :did-mount (fn [state]
-                (when-not (util/mobile?)
-                  (editor-handler/quick-add-open-last-block!))
-                state)}
+(hsx/defc quick-add
   []
+  (hooks/use-effect!
+   (fn []
+     (state/clear-selection!)
+     (when-not (util/mobile?)
+       (editor-handler/quick-add-open-last-block!))
+     #(state/clear-selection!))
+   [])
   (when (model/get-today-journal-page)
     (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
       (let [mobile? (util/mobile?)

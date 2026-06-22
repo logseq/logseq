@@ -1,9 +1,9 @@
 (ns mobile.components.favorites
   "Favorites tab content"
   (:require [frontend.components.left-sidebar :as app-left-sidebar]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc favorites
+(hsx/defc favorites
   []
   [:div.left-sidebar-inner
    [:div.sidebar-contents-container

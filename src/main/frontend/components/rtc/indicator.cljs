@@ -15,7 +15,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (comment
   (def rtc-state-schema
@@ -116,7 +116,7 @@
     :sync/assets-uploading (t :sync/assets-uploading)
     :sync/assets-downloading (t :sync/assets-downloading)))
 
-(rum/defc assets-progressing
+(hsx/defc assets-progressing
   [progress]
   (let [downloading (->>
                      (keep (fn [[id {:keys [direction loaded total]}]]
@@ -155,7 +155,7 @@
             (ui/indicator-progress-pie percent)
             (:block/title block)])]])]))
 
-(rum/defc details
+(hsx/defc details
   []
   (let [online? (hooks/use-flow-state flows/network-online-event-flow)
         repo (state/get-current-repo)
@@ -207,7 +207,7 @@
                                                            {:stop-before-start? true}))}
                      (t :sync/start-sync))])]))
 
-(rum/defc indicator
+(hsx/defc indicator
   []
   (let [detail-info                 (hooks/use-flow-state (m/watch *detail-info))
         _                           (hooks/use-flow-state flows/current-login-user-flow)
@@ -271,7 +271,7 @@
                  (let [graph-uuid (:graph-uuid first-log)]
                    (take-while (fn [log] (= (str graph-uuid) (str (:graph-uuid log)))) logs))))))))
 
-(rum/defc downloading-logs
+(hsx/defc downloading-logs
   []
   (let [download-logs-flow (accumulated-logs-flow *accumulated-download-logs)
         download-logs (hooks/use-flow-state download-logs-flow)]
@@ -280,7 +280,7 @@
        (for [log download-logs]
          [:div (string/capitalize (:message log))])])))
 
-(rum/defc uploading-logs
+(hsx/defc uploading-logs
   []
   (let [upload-logs-flow (accumulated-logs-flow *accumulated-upload-logs)
         upload-logs (hooks/use-flow-state upload-logs-flow)]
@@ -294,17 +294,18 @@
        (m/eduction (map (fn [log] (not= :download-completed (:sub-type log)))))
        (c.m/continue-flow false)))
 
-(rum/defc downloading-detail
+(hsx/defc downloading-detail
   []
-  (when (true? (hooks/use-flow-state downloading?-flow))
-    (shui/button
-     {:class   "opacity-50"
-      :variant :ghost
-      :size    :sm
-      :on-click #(shui/popup-show! (.-target %)
-                                   (downloading-logs)
-                                   {:align "end"})}
-     (t :sync/downloading))))
+  (let [downloading? (hooks/use-flow-state downloading?-flow)]
+    (when (true? downloading?)
+      (shui/button
+       {:class   "opacity-50"
+        :variant :ghost
+        :size    :sm
+        :on-click #(shui/popup-show! (.-target %)
+                                     (downloading-logs)
+                                     {:align "end"})}
+       (t :sync/downloading)))))
 
 (def ^:private upload?-flow
   (->> rtc-flows/rtc-upload-log-flow
@@ -319,14 +320,15 @@
                                 (on-success)))))]
     (task (fn []) (fn []))))
 
-(rum/defc uploading-detail
+(hsx/defc uploading-detail
   []
-  (when (true? (hooks/use-flow-state upload?-flow))
-    (shui/button
-     {:class   "opacity-50"
-      :variant :ghost
-      :size    :sm
-      :on-click #(shui/popup-show! (.-target %)
-                                   (uploading-logs)
-                                   {:align "end"})}
-     (t :sync/uploading))))
+  (let [upload? (hooks/use-flow-state upload?-flow)]
+    (when (true? upload?)
+      (shui/button
+       {:class   "opacity-50"
+        :variant :ghost
+        :size    :sm
+        :on-click #(shui/popup-show! (.-target %)
+                                     (uploading-logs)
+                                     {:align "end"})}
+       (t :sync/uploading)))))

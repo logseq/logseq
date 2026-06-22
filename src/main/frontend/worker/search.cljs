@@ -13,6 +13,10 @@
             [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.text :as text]))
 
+(def ^:private max-vector-search-results 10)
+(def ^:private min-vector-search-score 0.5)
+(def ^:private vector-upsert-batch-size 1024)
+
 (defn- add-blocks-fts-triggers!
   "Table bindings of blocks tables and the blocks FTS virtual tables"
   [db]
@@ -108,8 +112,6 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defn- throw-upsert-blocks-error!
   [item]
-  (js/console.error "Upsert blocks wrong data: ")
-  (js/console.dir item)
   (throw (ex-info "Search upsert-blocks wrong data: "
                   (bean/->clj item))))
 
@@ -145,6 +147,16 @@ DROP TRIGGER IF EXISTS blocks_au;
 (def ^:private snippet-ellipsis "\u00A0\u00A0\u00A0...\u00A0\u00A0\u00A0") ;; \u00A0 is No-Break Space (NBSP)
 (def ^:private query-boolean-operators #{"and" "or" "not" "|" "&"})
 (def ^:private query-break-chars #{\, \. \; \! \? \uFF0C \u3002 \uFF1B \uFF01 \uFF1F \u3001}) ;; , . ; ! ? ， 。 ； ！ ？ 、
+(def vector-embedding-dimension 384)
+(def vector-context-version 2)
+(def ^:private rrf-k 60)
+(def ^:private keyword-rrf-weight 1.25)
+(def ^:private vector-rrf-weight 1.0)
+(def ^:private source-score-tie-break-weight 0.000001)
+(def ^:private primary-title-term-match-boost 0.004)
+(def ^:private title-term-match-boost 0.002)
+(def ^:private context-term-match-boost 0.0005)
+(def ^:private max-vector-term-match-boost 0.005)
 
 (defn- query->terms
   [q]
@@ -537,6 +549,166 @@ DROP TRIGGER IF EXISTS blocks_au;
            (string/join " "))
       title)))
 
+(def ^:private vector-context-parent-depth 3)
+(def ^:private vector-context-child-limit 2)
+(def ^:private vector-context-segment-max-length 320)
+
+(defn- truncate-vector-context-segment
+  [text]
+  (let [text (str text)]
+    (if (> (count text) vector-context-segment-max-length)
+      (subs text 0 vector-context-segment-max-length)
+      text)))
+
+(defn- vector-context-title
+  [block]
+  (let [title (some-> (:block/title block)
+                      str
+                      string/trim)]
+    (when-not (string/blank? title)
+      (truncate-vector-context-segment title))))
+
+(defn- vector-context-segment
+  [label text]
+  (when-not (string/blank? text)
+    (str label ": " text)))
+
+(defn- vector-context-page-title
+  [block]
+  (vector-context-title (:block/page block)))
+
+(defn- vector-context-parent-path
+  [block]
+  (->> (loop [parent (:block/parent block)
+              result []]
+         (cond
+           (nil? parent)
+           result
+
+           (ldb/page? parent)
+           result
+
+           (>= (count result) vector-context-parent-depth)
+           result
+
+           :else
+           (recur (:block/parent parent) (conj result parent))))
+       reverse
+       (keep vector-context-title)
+       (string/join " > ")))
+
+(defn- vector-context-block-id
+  [block]
+  (or (:db/id block) (:block/uuid block)))
+
+(defn- same-vector-context-block?
+  [a b]
+  (let [a-id (vector-context-block-id a)]
+    (and a-id
+         (= a-id (vector-context-block-id b)))))
+
+(defn- vector-context-siblings
+  [block]
+  (some->> (:block/_parent (:block/parent block))
+           seq
+           ldb/sort-by-order
+           vec))
+
+(defn- vector-context-sibling
+  [block offset]
+  (let [siblings (vector-context-siblings block)
+        idx (some->> siblings
+                     (keep-indexed (fn [i sibling]
+                                     (when (same-vector-context-block? sibling block)
+                                       i)))
+                     first)
+        sibling-idx (when idx (+ idx offset))]
+    (when (and sibling-idx
+               (<= 0 sibling-idx)
+               (< sibling-idx (count siblings)))
+      (nth siblings sibling-idx))))
+
+(defn- vector-context-child-titles
+  [block]
+  (some->> (:block/_parent block)
+           seq
+           ldb/sort-by-order
+           (take vector-context-child-limit)
+           (keep vector-context-title)
+           (string/join " | ")))
+
+(defn- vector-context-child-titles-from-cache
+  [children-by-parent-id block]
+  (some->> (get children-by-parent-id (vector-context-block-id block))
+           seq
+           (take vector-context-child-limit)
+           (keep vector-context-title)
+           (string/join " | ")))
+
+(defn- vector-context-children-by-parent-id
+  [blocks]
+  (let [children-by-parent-id (reduce (fn [result block]
+                                        (if-let [parent-id (some-> (:block/parent block)
+                                                                   vector-context-block-id)]
+                                          (update result parent-id (fnil conj []) block)
+                                          result))
+                                      {}
+                                      blocks)]
+    (into {}
+          (map (fn [[parent-id children]]
+                 [parent-id (vec (ldb/sort-by-order children))]))
+          children-by-parent-id)))
+
+(defn- vector-context-neighbor-title-by-id
+  [children-by-parent-id]
+  (reduce-kv
+   (fn [result _parent-id children]
+     (reduce (fn [result [idx child]]
+               (let [block-id (vector-context-block-id child)]
+                 (if block-id
+                   (assoc result block-id
+                          {:previous-title (vector-context-title (get children (dec idx)))
+                           :next-title (vector-context-title (get children (inc idx)))})
+                   result)))
+             result
+             (map-indexed vector children)))
+   {}
+   children-by-parent-id))
+
+(defn build-vector-context-cache
+  [blocks]
+  (let [children-by-parent-id (vector-context-children-by-parent-id blocks)]
+    {:children-by-parent-id children-by-parent-id
+     :neighbor-title-by-id (vector-context-neighbor-title-by-id children-by-parent-id)}))
+
+(defn- block->vector-title
+  ([block title]
+   (block->vector-title nil block title))
+  ([context block title]
+   (let [block-id (vector-context-block-id block)
+         neighbor-titles (get-in context [:neighbor-title-by-id block-id])
+         previous-title (if context
+                          (:previous-title neighbor-titles)
+                          (vector-context-title (vector-context-sibling block -1)))
+         next-title (if context
+                      (:next-title neighbor-titles)
+                      (vector-context-title (vector-context-sibling block 1)))
+         child-titles (if context
+                        (vector-context-child-titles-from-cache (:children-by-parent-id context) block)
+                        (vector-context-child-titles block))]
+    (->> [(vector-context-segment "Page" (vector-context-page-title block))
+          (vector-context-segment "Path" (vector-context-parent-path block))
+          (vector-context-segment "Previous" previous-title)
+          (vector-context-segment "Block" (truncate-vector-context-segment title))
+          (vector-context-segment "Children" child-titles)
+          (vector-context-segment "Next" next-title)]
+         (keep identity)
+         (string/join "\n")))))
+
+(defn- block-result-title
+  [block]
+  (db-content/recur-replace-uuid-in-block-title block))
+
 (defn- matched-alias
   [q block]
   (when-not (string/blank? q)
@@ -549,9 +721,8 @@ DROP TRIGGER IF EXISTS blocks_au;
                             first)]
         (select-keys alias [:block/uuid :block/title])))))
 
-(defn block->index
-  "Convert a block to the index for searching"
-  [{:block/keys [uuid page title] :as block}]
+(defn- block->index*
+  [context {:block/keys [uuid page title] :as block}]
   (when-not (or
              (ldb/closed-value? block)
              (and (string? title) (> (count title) 10000))
@@ -561,10 +732,21 @@ DROP TRIGGER IF EXISTS blocks_au;
         (when uuid
           {:id (str uuid)
            :page (str (or (:block/uuid page) uuid))
-           :title (if (page-or-object? block) title (sanitize title))}))
+           :title (if (page-or-object? block) title (sanitize title))
+           :vector-title (block->vector-title context block title)}))
       (catch :default e
         (prn "Error: failed to run block->index on block " (:db/id block))
         (js/console.error e)))))
+
+(defn block->index
+  "Convert a block to the index for searching"
+  [block]
+  (block->index* nil block))
+
+(defn block->index-with-context
+  "Convert a block with a precomputed vector context cache."
+  [context block]
+  (block->index* context block))
 
 (def ^:private search-result-block-key ::block)
 
@@ -597,39 +779,171 @@ DROP TRIGGER IF EXISTS blocks_au;
            (into {}))
       {})))
 
-;; Combine and re-rank keyword results
+(defn- merge-score
+  [left right score-key]
+  (let [left-score (get left score-key)
+        right-score (get right score-key)]
+    (cond
+      (and (number? left-score) (number? right-score)) (max left-score right-score)
+      (some? right-score) right-score
+      :else left-score)))
+
+(defn- merge-search-result
+  [left right]
+  (merge left right
+         {:keyword-score (merge-score left right :keyword-score)
+          :vector-score (merge-score left right :vector-score)}))
+
+(defn- unique-search-results
+  [results]
+  (->> (or results [])
+       (reduce (fn [{:keys [by-id] :as acc} {:keys [id] :as result}]
+                 (if (nil? id)
+                   acc
+                   (cond-> acc
+                     (not (contains? by-id id))
+                     (update :order conj id)
+
+                     true
+                     (update :by-id
+                             (fn [m]
+                               (update m id
+                                       #(if %
+                                          (merge-search-result % result)
+                                          result)))))))
+               {:order []
+                :by-id {}})
+       ((fn [{:keys [order by-id]}]
+          (mapv by-id order)))))
+
+(defn reciprocal-rank-fusion
+  ([result-lists]
+   (reciprocal-rank-fusion result-lists nil))
+  ([result-lists weights]
+   (let [scores (reduce-kv
+                 (fn [scores list-idx results]
+                   (let [weight (or (get weights list-idx) 1.0)]
+                     (reduce-kv
+                      (fn [scores rank {:keys [id] :as result}]
+                        (if id
+                          (update scores id
+                                  (fn [{existing-result :result
+                                        :keys [score top-rank]}]
+                                    {:result (or existing-result result)
+                                     :score (+ (or score 0)
+                                               (/ weight (+ rrf-k rank 1)))
+                                     :top-rank (min (or top-rank js/Infinity) rank)}))
+                          scores))
+                      scores
+                      (vec results))))
+                 {}
+                 (vec result-lists))]
+     (->> scores
+          vals
+          (sort-by (juxt (comp - :score)
+                         :top-rank
+                         (comp :id :result)))
+          (mapv (fn [{:keys [result score]}]
+                  (assoc result :rrf-score score)))))))
+
+(defn- rrf-score-by-id
+  [result-lists weights]
+  (reduce-kv
+   (fn [scores list-idx results]
+     (let [weight (or (get weights list-idx) 1.0)]
+       (reduce-kv
+        (fn [scores rank {:keys [id]}]
+          (if id
+            (update scores id (fnil + 0) (/ weight (+ rrf-k rank 1)))
+            scores))
+        scores
+        (vec results))))
+   {}
+   (vec result-lists)))
+
+(defn- matched-term-set
+  [text terms]
+  (if (string/blank? text)
+    #{}
+    (->> (find-matches text terms)
+         (map (comp string/lower-case :term))
+         set)))
+
+(defn- vector-term-match-score
+  [q result block]
+  (if (and (not (string/blank? q))
+           (:vector-score result))
+    (let [terms (vec (query->terms q))
+          title-matches (matched-term-set (or (:title result) (:block/title block)) terms)
+          context-matches (matched-term-set (:vector-title result) terms)
+          score (->> terms
+                     (map-indexed
+                      (fn [idx term]
+                        (let [term (string/lower-case term)]
+                          (cond
+                            (contains? title-matches term)
+                            (if (zero? idx)
+                              primary-title-term-match-boost
+                              title-term-match-boost)
+
+                            (contains? context-matches term)
+                            context-term-match-boost
+
+                            :else
+                            0))))
+                     (reduce + 0))]
+      (min max-vector-term-match-boost score))
+    0))
+
+;; Combine and re-rank keyword and vector results
 (defn combine-results
-  [db keyword-results]
-  (let [unique-results (loop [seen #{}
-                              results []
-                              remaining (seq keyword-results)]
-                         (if-let [{:keys [id] :as result} (first remaining)]
-                           (if (or (nil? id) (contains? seen id))
-                             (recur seen results (next remaining))
-                             (recur (conj seen id) (conj results result) (next remaining)))
-                           results))
-        block-by-id (pull-search-result-blocks db unique-results)
-        merged (keep (fn [{:keys [id] :as result}]
-                       (let [block (get block-by-id id)]
-                         (when-not (ldb/hidden? block)
-                           (let [keyword-score (if (ldb/page? block)
-                                                 (+ (or (:keyword-score result) 0.0) 2)
-                                                 (or (:keyword-score result) 0.0))
-                                 combined-score (+ keyword-score
-                                                   (cond
-                                                     (ldb/page? block)
-                                                     0.02
-                                                     (:block/tags block)
-                                                     0.01
-                                                     :else
-                                                     0))]
-                             (assoc result
-                                    search-result-block-key block
-                                    :combined-score combined-score
-                                    :keyword-score keyword-score)))))
-                     unique-results)
-        sorted-result (sort-by :combined-score #(compare %2 %1) merged)]
-    sorted-result))
+  ([db keyword-results]
+   (combine-results db keyword-results nil))
+  ([db keyword-results vector-results]
+   (combine-results db keyword-results vector-results nil))
+  ([db keyword-results vector-results q]
+   (let [keyword-results (vec (or keyword-results []))
+         vector-results (vec (or vector-results []))
+         use-rrf? (seq vector-results)
+         fused-score-by-id (when use-rrf?
+                             (rrf-score-by-id [keyword-results vector-results]
+                                              [keyword-rrf-weight vector-rrf-weight]))
+         unique-results (unique-search-results (concat keyword-results vector-results))
+         block-by-id (pull-search-result-blocks db unique-results)
+         merged (keep (fn [{:keys [id] :as result}]
+                        (let [block (get block-by-id id)]
+                          (when-not (ldb/hidden? block)
+                            (let [keyword-score (if (ldb/page? block)
+                                                  (+ (or (:keyword-score result) 0.0) 2)
+                                                  (or (:keyword-score result) 0.0))
+                                  vector-score (or (:vector-score result) 0.0)
+                                  base-score (if use-rrf?
+                                               (or (get fused-score-by-id id) 0.0)
+                                               keyword-score)
+                                  vector-match-score (if use-rrf?
+                                                       (vector-term-match-score q result block)
+                                                       0)
+                                  combined-score (+ base-score
+                                                    vector-match-score
+                                                    (* source-score-tie-break-weight
+                                                       (+ keyword-score vector-score))
+                                                    (if-not use-rrf?
+                                                      (cond
+                                                        (ldb/page? block)
+                                                        0.02
+                                                        (:block/tags block)
+                                                        0.01
+                                                        :else
+                                                        0)
+                                                      0))]
+                              (assoc result
+                                     search-result-block-key block
+                                     :title (or (:title result) (:block/title block))
+                                     :combined-score combined-score
+                                     :keyword-score keyword-score)))))
+                      unique-results)
+         sorted-result (sort-by :combined-score #(compare %2 %1) merged)]
+     sorted-result)))
 
 (defn- code-block?
   [code-class block]
@@ -656,8 +970,7 @@ DROP TRIGGER IF EXISTS blocks_au;
        (or (not (ldb/built-in? block))
            (not (ldb/private-built-in-page? block))
            (ldb/class? block))
-       (or (not (ldb/built-in? block))
-           (ldb/class? block))))
+       (not (ldb/built-in? block))))
    (or (not code-only?)
        (code-block? code-class block))))
 
@@ -669,14 +982,16 @@ DROP TRIGGER IF EXISTS blocks_au;
       (when (include-search-block? conn block code-class option)
         (let [alias-source (some-> (first (:block/_alias block))
                                    (select-keys [:block/uuid :block/title]))
-	              alias-match (matched-alias q block)
-	              display-title (if (:enable-snippet? option)
-	                              (if (page-or-object? block)
-	                                (ensure-highlighted-snippet snippet (:block/title block) q)
-	                                (ensure-highlighted-snippet snippet title q))
-                              (if (page-or-object? block)
-                                (:block/title block)
-                                (or snippet title)))
+              alias-match (matched-alias q block)
+              page-or-object-result? (page-or-object? block)
+              result-title (if page-or-object-result?
+                             (block-result-title block)
+                             (or title (:block/title block)))
+              display-title (if (:enable-snippet? option)
+                              (ensure-highlighted-snippet snippet result-title q)
+                              (if page-or-object-result?
+                                result-title
+                                (or snippet result-title)))
               block-page (or
                           (:block/uuid (:block/page block))
                           (when (and page (common-util/uuid-string? page))
@@ -719,6 +1034,23 @@ DROP TRIGGER IF EXISTS blocks_au;
                          (d/entity @conn [:block/uuid block-id]))]
       (include-search-block? conn block code-class option))))
 
+(defn- vector-search-blocks
+  [vector-index {:keys [limit page query-embedding]}]
+  (when-let [query-fn (:query vector-index)]
+    (when (seq query-embedding)
+      (let [limit' (min max-vector-search-results
+                        (or limit max-vector-search-results))]
+        (->> (query-fn query-embedding limit' page)
+             (take limit')
+             (keep (fn [{:keys [id page vector-score score] :as result}]
+                     (let [vector-score' (or vector-score score 0.0)]
+                       (when (and id (> vector-score' min-vector-search-score))
+                         (cond-> {:id id
+                                  :vector-score vector-score'}
+                           page (assoc :page page)
+                           (:title result) (assoc :title (:title result))
+                           (:vector-title result) (assoc :vector-title (:vector-title result))))))))))))
+
 (defn search-blocks
   "Options:
    * :page - the page to specifically search on
@@ -728,54 +1060,91 @@ DROP TRIGGER IF EXISTS blocks_au;
    * :dev? - Allow all nodes to be seen for development. Defaults to false
    * :code-only? - Whether to return only code blocks. Defaults to false
    * :built-in?  - Whether to return public built-in nodes for db graphs. Defaults to false"
-  [conn search-db q {:keys [limit search-limit page enable-snippet? page-only? code-only? include-matched-count?]
-                     :as option
-                     :or {enable-snippet? true}}]
-  (when-not (string/blank? q)
-    (let [option (assoc option :enable-snippet? enable-snippet?)
-          match-input (get-match-input q)
-          non-match-input (when (<= (count q) 2)
-                            (str "%" (string/replace q #"\s+" "%") "%"))
-          limit (or limit 100)
-          limit-p (or search-limit limit)
-          exact-title-result (when (and (not page-only?)
-                                        (exact-title-query? q))
-                               (search-blocks-exact-title-aux search-db q page limit-p))
-          enough-exact-title-results? (>= (count exact-title-result) limit-p)
-          ;; don't use sqlite snippet function anymore, all snippets will be handled by ensure-highlighted-snippet
-          select "select id, page, title, rank from blocks_fts where "
-          pg-sql (if page "page = ? and" "")
-          match-sql (if (ns-util/namespace-page? q)
-                      (str select pg-sql " title match ? or title match ? limit ?")
-                      (str select pg-sql " title match ? limit ?"))
-          non-match-sql (str select pg-sql " title like ? limit ?")
-          matched-result (when (and (not page-only?)
-                                    (not enough-exact-title-results?))
-                           (search-blocks-aux search-db match-sql q match-input page limit-p (ns-util/namespace-page? q)))
-          non-match-result (when (and (not page-only?) non-match-input)
-                             (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p)
-                                  (map (fn [result]
-                                         (assoc result :keyword-score (fuzzy/score q (:title result)))))))
-          skip-fuzzy? (or enough-exact-title-results?
-                          (and (multi-term-query? q)
-                               (seq matched-result)))
-          fuzzy-result (when-not skip-fuzzy?
-                         (search-blocks-fuzzy-aux search-db q page limit))
-          ;;  _ (prn :debug "Search results before combine:" enable-snippet? (map :snippet matched-result))
-          ;;  _ (doseq [item (concat fuzzy-result matched-result)]
-          ;;      (prn :debug :keyword-search-result item))
-          combined-result (combine-results @conn (concat exact-title-result fuzzy-result matched-result non-match-result))
-          code-class (when code-only?
-                       (d/entity @conn :logseq.class/Code-block))
-          matched-count (when include-matched-count?
-                          (count (filter #(search-result-visible? conn code-class option %) combined-result)))
-          result (->> combined-result
-                      (common-util/distinct-by :id)
-                      (keep #(search-result->block-result conn q code-class option %)))]
-      (if include-matched-count?
-        {:items (take limit result)
-         :matched-count matched-count}
-        (take limit result)))))
+  ([conn search-db q option]
+   (search-blocks conn search-db nil q option))
+  ([conn search-db vector-index q {:keys [limit search-limit page enable-snippet? page-only? code-only? include-matched-count?]
+                                   :as option
+                                   :or {enable-snippet? true}}]
+   (when-not (string/blank? q)
+     (let [option (assoc option :enable-snippet? enable-snippet?)
+           match-input (get-match-input q)
+           non-match-input (when (<= (count q) 2)
+                             (str "%" (string/replace q #"\s+" "%") "%"))
+           limit (or limit 100)
+           limit-p (or search-limit limit)
+           exact-title-result (when (and (not page-only?)
+                                         (exact-title-query? q))
+                                (search-blocks-exact-title-aux search-db q page limit-p))
+           enough-exact-title-results? (>= (count exact-title-result) limit-p)
+           ;; don't use sqlite snippet function anymore, all snippets will be handled by ensure-highlighted-snippet
+           select "select id, page, title, rank from blocks_fts where "
+           pg-sql (if page "page = ? and" "")
+           match-sql (if (ns-util/namespace-page? q)
+                       (str select pg-sql " title match ? or title match ? limit ?")
+                       (str select pg-sql " title match ? limit ?"))
+           non-match-sql (str select pg-sql " title like ? limit ?")
+           matched-result (when (and (not page-only?)
+                                     (not enough-exact-title-results?))
+                            (search-blocks-aux search-db match-sql q match-input page limit-p (ns-util/namespace-page? q)))
+           non-match-result (when (and (not page-only?) non-match-input)
+                              (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p)
+                                   (map (fn [result]
+                                          (assoc result :keyword-score (fuzzy/score q (:title result)))))))
+           skip-fuzzy? (or enough-exact-title-results?
+                           (and (multi-term-query? q)
+                                (seq matched-result)))
+           fuzzy-result (when-not skip-fuzzy?
+                          (search-blocks-fuzzy-aux search-db q page limit))
+           vector-result (when (and (not page-only?)
+                                    (:feature/enable-semantic-search? option))
+                           (vector-search-blocks vector-index {:limit limit-p
+                                                               :page page
+                                                               :query-embedding (:query-embedding option)}))
+           ;;  _ (prn :debug "Search results before combine:" enable-snippet? (map :snippet matched-result))
+           ;;  _ (doseq [item (concat fuzzy-result matched-result)]
+           ;;      (prn :debug :keyword-search-result item))
+           combined-result (combine-results @conn
+                                            (concat exact-title-result fuzzy-result matched-result non-match-result)
+                                            vector-result
+                                            q)
+           code-class (when code-only?
+                        (d/entity @conn :logseq.class/Code-block))
+           matched-count (when include-matched-count?
+                           (count (filter #(search-result-visible? conn code-class option %) combined-result)))
+           result (->> combined-result
+                       (common-util/distinct-by :id)
+                       (keep #(search-result->block-result conn q code-class option %)))]
+       (if include-matched-count?
+         {:items (take limit result)
+          :matched-count matched-count}
+         (take limit result))))))
+
+(defn upsert-vector-blocks!
+  [vector-index blocks]
+  (when-let [upsert-fn (:upsert! vector-index)]
+    (let [docs (->> blocks
+                    (keep (fn [{:keys [id page embedding vector-title]}]
+                            (when (and id page (seq embedding))
+                              (cond-> {:id id
+                                       :page page
+                                       :embedding embedding}
+                                vector-title
+                                (assoc :vector-title vector-title)))))
+                    vec)]
+      (when (seq docs)
+        (doseq [batch (partition-all vector-upsert-batch-size docs)]
+          (upsert-fn (vec batch)))))))
+
+(defn delete-vector-blocks!
+  [vector-index ids]
+  (when-let [delete-fn (:delete! vector-index)]
+    (when (seq ids)
+      (delete-fn ids))))
+
+(defn truncate-vector-index!
+  [vector-index]
+  (when-let [truncate-fn (:truncate! vector-index)]
+    (truncate-fn)))
 
 (defn truncate-table!
   [db]
@@ -793,8 +1162,26 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defn build-blocks-indice
   [db]
-  (->> (get-all-blocks db)
-       (keep block->index)))
+  (let [blocks (vec (get-all-blocks db))
+        context (build-vector-context-cache blocks)]
+    (->> blocks
+         (keep #(block->index* context %)))))
+
+(defn expand-vector-context-blocks
+  [blocks]
+  (->> blocks
+       (mapcat (fn [block]
+                 (let [parent (:block/parent block)]
+                   (concat [block
+                            parent
+                            (vector-context-sibling block -1)
+                            (vector-context-sibling block 1)]
+                           (some->> (:block/_parent block)
+                                    seq
+                                    ldb/sort-by-order)))))
+       (remove nil?)
+       (remove hidden-entity?)
+       (common-util/distinct-by vector-context-block-id)))
 
 (defn- get-blocks-from-datoms-impl
   [{:keys [db-after db-before]} datoms]
@@ -845,7 +1232,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                    (remove nil?))))]
     (when (seq datoms)
       (let [ref-affecting-attrs #{:block/uuid :block/name :block/title :block/properties :block/alias}
-            visibility-affecting-attrs #{:logseq.property/deleted-at :block/parent :block/page}
+            visibility-affecting-attrs #{:logseq.property/deleted-at :block/parent :block/page :block/order}
             ref-eids (->> datoms
                           (filter #(contains? ref-affecting-attrs (:a %)))
                           (mapcat (fn [{:keys [a e v]}]
@@ -868,8 +1255,11 @@ DROP TRIGGER IF EXISTS blocks_au;
   (let [data (:tx-data tx-report)
         datoms (filter
                 (fn [datom]
-                  ;; Capture direct changes on searchable block content, refs, and aliases.
-                  (contains? #{:block/uuid :block/name :block/title :block/properties :block/alias} (:a datom)))
+                  ;; Capture direct changes on searchable content and outline structure
+                  ;; because vector embeddings include parent, child, and sibling context.
+                  (contains? #{:block/uuid :block/name :block/title :block/properties :block/alias
+                               :block/parent :block/page :block/order}
+                             (:a datom)))
                 data)]
     (when (seq datoms)
       (get-blocks-from-datoms-impl tx-report datoms))))
@@ -879,7 +1269,8 @@ DROP TRIGGER IF EXISTS blocks_au;
   (let [{:keys [blocks-to-add blocks-to-remove]} (get-affected-blocks tx-report)]
     ;; update block indice
     (when (or (seq blocks-to-add) (seq blocks-to-remove))
-      (let [blocks-to-add' (keep block->index blocks-to-add)
+      (let [blocks-to-add (expand-vector-context-blocks blocks-to-add)
+            blocks-to-add' (keep block->index blocks-to-add)
             blocks-to-remove (set (concat (map (comp str :block/uuid) blocks-to-remove)
                                           (->>
                                            (set/difference

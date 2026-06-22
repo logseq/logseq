@@ -698,6 +698,7 @@
  :graph/create-error "创建图谱失败。"
  :graph/create-new "创建新知识库"
  :graph/creating "正在创建图谱"
+ :graph/db-worker-recovery-failed-error "无法重新连接图谱“{1}”的数据库 worker。请重试或重新打开图谱。"
  :graph/delete-local-action "删除本地图谱"
  :graph/delete-local-confirm-desc "确定要从 Logseq 中永久删除图谱“{1}”吗？"
  :graph/delete-server-action "从服务器删除"
@@ -763,8 +764,6 @@
  :graph.page/title "页面图谱"
 
  :graph.switch/add-graph-action "再添加一份图谱"
- :graph.switch/db-worker-unavailable-no-fallback-warning "图谱“{1}”的数据库 worker 不可用，且没有其他可用图谱。"
- :graph.switch/db-worker-unavailable-switching-warning "图谱“{1}”的数据库 worker 不可用。正在切换到图谱“{2}”。"
  :graph.switch/empty-desc "没有匹配的图谱。你想再添加一份图谱吗？"
  :graph.switch/prompt "切换到："
  :graph.switch/select-prompt "请选择一份图谱"
@@ -1285,6 +1284,7 @@
  :plugin.package-config/remove-installed-success "已移除损坏的插件“{1}”。"
 
  :plugin.proxy/direct "直连"
+ :plugin.proxy/host-port-required "主机和端口不能为空"
  :plugin.proxy/system "系统"
  :plugin.proxy/test-url "测试 URL"
  :plugin.proxy/testing "测试中"
@@ -1679,10 +1679,8 @@
  :settings.editor/wide-mode "宽屏模式"
 
  :settings.features/enable-flashcards "记忆卡片"
- :settings.features/enable-journals "开启日记"
  :settings.features/home-default-page "设置首页默认页面"
  :settings.features/home-default-page-update-success "主页默认页面已更新成功！"
- :settings.features/journals-enable-success "已启用日志页"
  :settings.features/login-prompt "你必须是 Logseq 的 Open Collective Sponsor 或者 Backer 才能提前使用新功能（仍在测试中），因此需要登录。"
  :settings.features/markdown-mirror "Markdown 镜像"
  :settings.features/markdown-mirror-desc "将已编辑页面的派生 Markdown 副本写入图谱的 mirror/markdown 文件夹。仅桌面端可用。"
@@ -1691,6 +1689,9 @@
  :settings.features/markdown-mirror-regenerate-success "Markdown 镜像已重新生成"
  :settings.features/page-not-found "页面“{1}”尚不存在。请先创建该页面，然后再试一次。"
  :settings.features/plugin-system "插件系统"
+ :settings.features/semantic-search "语义搜索"
+ :settings.features/semantic-search-desc "在搜索结果中包含语义匹配。适用于 macOS Apple 芯片设备。"
+ :settings.features/semantic-search-python3-missing "请安装 Python 3 以启用语义搜索。"
 
  :settings.general/accent-color "高亮色"
  :settings.general/accent-color-alert "选择高亮色可能会影响你选择的自定义主题。"

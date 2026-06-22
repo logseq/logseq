@@ -175,6 +175,40 @@
       (is (tx-touches-uuid? normalized-b target-uuid)
           (str "shape B unexpectedly dropped recreated block from normalized tx: " (pr-str normalized-b))))))
 
+(deftest apply-client-delete-blocks-removes-current-server-subtree-test
+  (testing "a delete-blocks tx deletes children that exist on the server but not in the client tx"
+    (let [conn (new-conn)
+          page-uuid (create-page! conn "Page")
+          parent-uuid (random-uuid)
+          child-uuid (random-uuid)
+          now (js/Date.now)
+          _ (d/transact! conn [{:block/uuid parent-uuid
+                                :block/title "parent"
+                                :block/created-at now
+                                :block/updated-at now
+                                :block/page [:block/uuid page-uuid]
+                                :block/parent [:block/uuid page-uuid]
+                                :block/order "a0"}
+                               {:block/uuid child-uuid
+                                :block/title "child"
+                                :block/created-at now
+                                :block/updated-at now
+                                :block/page [:block/uuid page-uuid]
+                                :block/parent [:block/uuid parent-uuid]
+                                :block/order "a0"}])
+          result (try
+                   (ldb/transact! conn
+                                  [[:db/retractEntity [:block/uuid parent-uuid]]]
+                                  {:op :apply-client-tx
+                                   :outliner-op :delete-blocks})
+                   :ok
+                   (catch :default e
+                     {:message (.-message e)
+                      :data (ex-data e)}))]
+      (is (= :ok result))
+      (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
+      (is (nil? (d/entity @conn [:block/uuid child-uuid]))))))
+
 (deftest normalize-tx-data-replay-equivalence-for-retract-recreate-fuzz-test
   (testing "normalized tx-data should replay to same db-after for normal-block retract/recreate patterns"
     (let [conn (new-conn)

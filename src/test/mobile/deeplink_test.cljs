@@ -17,10 +17,7 @@
                                         :graph-name "target"
                                         :graph-id "remote-uuid"}]))
                         state/get-current-repo (constantly "logseq_db_current")
-                        state/sub (fn [query]
-                                    (case query
-                                      [:me :repos] [{:url "logseq_db_target"}]
-                                      nil))
+                        state/get-repos (constantly [{:url "logseq_db_target"}])
                         state/pub-event! (fn [event] (swap! events conj event))
                         route-handler/redirect-to-page! (fn [page-id]
                                                           (swap! redirects conj page-id))]
@@ -45,10 +42,7 @@
                                         :graph-name "target"
                                         :graph-id "remote-uuid"}]))
                         state/get-current-repo (constantly "logseq_db_target")
-                        state/sub (fn [query]
-                                    (case query
-                                      [:me :repos] [{:url "logseq_db_target"}]
-                                      nil))
+                        state/get-repos (constantly [{:url "logseq_db_target"}])
                         route-handler/redirect-to-page! (fn [page-id]
                                                           (swap! redirects conj page-id))]
           (-> (deeplink/deeplink "https://logseq.com/page/page-uuid?graph-id=remote-uuid")

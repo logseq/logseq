@@ -2,6 +2,7 @@
   (:require [cljs-drag-n-drop.core :as dnd]
             [clojure.string :as string]
             [dommy.core :as d]
+            [frontend.components.block.selection :as block-selection]
             [frontend.components.content :as cp-content]
             [frontend.components.find-in-page :as find-in-page]
             [frontend.components.handbooks :as handbooks]
@@ -15,13 +16,11 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [interpolate-rich-text-node t]]
             [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.mixins :as mixins]
             [frontend.mobile.footer :as footer]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
@@ -39,32 +38,46 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
-(rum/defc main <
-  {:did-mount (fn [state]
-                (when-let [element (gdom/getElement "main-content-container")]
-                  (dnd/subscribe!
-                   element
-                   :upload-files
-                   {:drop (fn [_e files]
-                            (when-let [id (state/get-edit-input-id)]
-                              (let [format (get (state/get-edit-block) :block/format :markdown)]
-                                (editor-handler/upload-asset! id files format editor-handler/*asset-uploading? true))))})
-                  (common-handler/listen-to-scroll! element)
-                  (when (:margin-less-pages? (first (:rum/args state))) ;; makes sure full screen pages displaying without scrollbar
-                    (set! (.. element -scrollTop) 0)))
-                state)
-   :will-unmount (fn [state]
-                   (when-let [el (gdom/getElement "main-content-container")]
-                     (dnd/unsubscribe! el :upload-files))
-                   state)}
+(defn- focus-main-content-container-if-body!
+  []
+  (when-let [^js element (gdom/getElement "main-content-container")]
+    (let [active-element (.-activeElement js/document)]
+      (when (and (not (state/editing?))
+                 (not (state/modal-opened?))
+                 (or (nil? active-element)
+                     (identical? active-element (.-body js/document))))
+        (.focus element #js {:preventScroll true})))))
+
+(defn- schedule-main-content-focus! []
+  (util/schedule focus-main-content-container-if-body!))
+
+(hsx/defc main
   [{:keys [route-match margin-less-pages? route-name db-restoring? main-content]}]
-  (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
+  (let [left-sidebar-open? (state/use-sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
                                   (= :home route-name))
         margin-less-pages? (or (and (mobile-util/native-platform?) onboarding-and-home?) margin-less-pages?)]
+    (hooks/use-effect!
+     (fn []
+       (let [element (gdom/getElement "main-content-container")]
+         (when element
+           (dnd/subscribe!
+            element
+            :upload-files
+            {:drop (fn [_e files]
+                     (when-let [id (state/get-edit-input-id)]
+                       (let [format (get (state/get-edit-block) :block/format :markdown)]
+                         (editor-handler/upload-asset! id files format editor-handler/*asset-uploading? true))))})
+           (common-handler/listen-to-scroll! element)
+           (when margin-less-pages? ;; makes sure full screen pages displaying without scrollbar
+             (set! (.. element -scrollTop) 0)))
+         (schedule-main-content-focus!)
+         (when element
+           #(dnd/unsubscribe! element :upload-files))))
+     [margin-less-pages?])
     [:div#main-container.cp__sidebar-main-layout.flex-1.flex
      {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
 
@@ -108,43 +121,47 @@
 
 (defonce sidebar-inited? (atom false))
 
-(rum/defc main-content < rum/reactive db-mixins/query
-  {:init (fn [state]
-           (when-not @sidebar-inited?
-             (let [current-repo (state/sub :git/current-repo)
-                   default-home (app-left-sidebar/get-default-home-if-valid)
-                   sidebar (:sidebar default-home)
-                   sidebar (if (string? sidebar) [sidebar] sidebar)]
-               (when-let [pages (->> (seq sidebar)
-                                     (remove string/blank?))]
-                 (doseq [page pages]
-                   (let [page (util/safe-page-name-sanity-lc page)
-                         [db-id block-type] (if (= page "contents")
-                                              [(or (:db/id (db/get-page page)) "contents") :contents]
-                                              [(:db/id (db/get-page page)) :page])]
-                     (state/sidebar-add-block! current-repo db-id block-type)))
-                 (reset! sidebar-inited? true))))
-           state)}
+(hsx/defc main-content
   []
   (let [default-home (app-left-sidebar/get-default-home-if-valid)
-        current-repo (state/sub :git/current-repo)]
-    [:div
-     (cond
-       (and default-home
-            (= :home (state/get-current-route))
-            (not (state/route-has-p?))
-            (:page default-home))
-       (route-handler/redirect-to-page! (:page default-home))
+           current-repo (state/use-sub :git/current-repo)
+           redirect-target (cond
+                             (and default-home
+                                  (= :home (state/get-current-route))
+                                  (not (state/route-has-p?))
+                                  (:page default-home))
+                             [:page (:page default-home)]
 
-       (or (not (state/enable-journals? current-repo))
-           (let [latest-journals (db/get-latest-journals (state/get-current-repo) 1)]
-             (and config/publishing?
-                  (not default-home)
-                  (empty? latest-journals))))
-       (route-handler/redirect! {:to :all-pages})
-
-       :else
-       (journal/all-journals))]))
+                             (let [latest-journals (db/get-latest-journals (state/get-current-repo) 1)]
+                               (and config/publishing?
+                                    (not default-home)
+                                    (empty? latest-journals)))
+                             [:route :all-pages])]
+       (hooks/use-effect!
+        (fn []
+          (when-not @sidebar-inited?
+            (let [sidebar (:sidebar default-home)
+                  sidebar (if (string? sidebar) [sidebar] sidebar)]
+              (when-let [pages (->> (seq sidebar)
+                                    (remove string/blank?))]
+                (doseq [page pages]
+                  (let [page (util/safe-page-name-sanity-lc page)
+                        [db-id block-type] (if (= page "contents")
+                                             [(or (:db/id (db/get-page page)) "contents") :contents]
+                                             [(:db/id (db/get-page page)) :page])]
+                    (state/sidebar-add-block! current-repo db-id block-type)))
+                (reset! sidebar-inited? true)))))
+        [current-repo default-home])
+       (hooks/use-effect!
+        (fn []
+          (case (first redirect-target)
+            :page (route-handler/redirect-to-page! (second redirect-target))
+            :route (route-handler/redirect! {:to (second redirect-target)})
+            nil))
+        [redirect-target])
+       [:div
+        (when-not redirect-target
+          (journal/all-journals))]))
 
 (defn- hide-context-menu-and-clear-selection
   [e & {:keys [esc?]}]
@@ -160,11 +177,11 @@
       (state/pub-event! [:editor/hide-action-bar])
       (editor-handler/clear-selection!))))
 
-(rum/defc render-custom-context-menu
+(hsx/defc render-custom-context-menu
   [links position]
-  (let [ref (rum/use-ref nil)]
+  (let [ref (hooks/use-ref nil)]
     (hooks/use-effect!
-     #(let [el (rum/deref ref)
+     #(let [el (hooks/deref ref)
             {:keys [x y]} (util/calc-delta-rect-offset el js/document.documentElement)]
         (set! (.. el -style -transform)
               (str "translate3d(" (if (neg? x) x 0) "px," (if (neg? y) (- y 10) 0) "px" ",0)"))))
@@ -176,37 +193,38 @@
                :left (str (first position) "px")
                :top (str (second position) "px")}} links]]))
 
-(rum/defc custom-context-menu < rum/reactive
+(hsx/defc custom-context-menu
   []
-  (let [show? (state/sub :custom-context-menu/show?)
-        links (state/sub :custom-context-menu/links)
-        position (state/sub :custom-context-menu/position)]
+  (let [show? (state/use-sub :custom-context-menu/show?)
+        links (state/use-sub :custom-context-menu/links)
+        position (state/use-sub :custom-context-menu/position)]
     (when (and show? links position)
       (render-custom-context-menu links position))))
 
-(rum/defc new-block-mode < rum/reactive
+(hsx/defc new-block-mode
   []
-  (when (state/sub [:document/mode?])
-    (ui/tooltip
-     [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
-      {:on-click state/toggle-document-mode!}
-      "D"]
-     [:div.p-2
-      [:p.mb-2 [:b (t :editor.document-mode/title)]]
-      [:ul
-       [:li
-        [:p.inline-block.mr-1
-         (interpolate-rich-text-node
-          (t :editor.document-mode/new-block-hint)
-          [[:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :editor/new-line)
-                                                                :shortcut-id :editor/new-line)]])]
-        [:li
-         [:p.inline-block.mr-1
-          (interpolate-rich-text-node
-           (t :editor.document-mode/toggle-desc)
-           [[:div.inline-block.mr-1
-             (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :ui/toggle-document-mode)
-                                          :shortcut-id :ui/toggle-document-mode)]])]]]]])))
+  (let [document-mode? (state/use-sub [:document/mode?])]
+    (when document-mode?
+      (ui/tooltip
+       [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
+        {:on-click state/toggle-document-mode!}
+        "D"]
+       [:div.p-2
+        [:p.mb-2 [:b (t :editor.document-mode/title)]]
+        [:ul
+         [:li
+          [:p.inline-block.mr-1
+           (interpolate-rich-text-node
+            (t :editor.document-mode/new-block-hint)
+            [[:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :editor/new-line)
+                                                                  :shortcut-id :editor/new-line)]])]
+          [:li
+           [:p.inline-block.mr-1
+            (interpolate-rich-text-node
+             (t :editor.document-mode/toggle-desc)
+             [[:div.inline-block.mr-1
+               (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :ui/toggle-document-mode)
+                                            :shortcut-id :ui/toggle-document-mode)]])]]]]]))))
 
 (def help-menu-items
   [{:title (t :help/handbook) :icon "book-2" :on-click #(handbooks/toggle-handbooks)}
@@ -222,7 +240,7 @@
    :hr
    {:title (t :help/release-notes) :icon "asterisk" :href "https://docs.logseq.com/#/page/changelog"}])
 
-(rum/defc help-menu-popup
+(hsx/defc help-menu-popup
   []
   (hooks/use-effect!
    (fn []
@@ -256,15 +274,17 @@
    [:div.ft.pl-11.pb-3
     [:span.opacity.text-xs.opacity-30 "Logseq " version]]])
 
-(rum/defc help-button < rum/reactive
+(hsx/defc help-button
   []
-  (let [help-open? (state/sub :ui/help-open?)
-        handbooks-open? (state/sub :ui/handbooks-open?)]
+  (let [help-open? (state/use-sub :ui/help-open?)
+        handbooks-open? (state/use-sub :ui/handbooks-open?)]
     [:<>
      [:div.cp__sidebar-help-btn
       (ui/tooltip
        [:div.inner
-        {:on-click #(state/toggle! :ui/help-open?)}
+        {:on-click (fn [e]
+                     (util/stop-propagation e)
+                     (state/toggle! :ui/help-open?))}
         [:svg.scale-125 {:stroke "currentColor", :fill "none", :stroke-linejoin "round", :width "24", :view-box "0 0 24 24", :xmlns "http://www.w3.org/2000/svg", :stroke-linecap "round", :stroke-width "2", :class "icon icon-tabler icon-tabler-help-small", :height "24"}
          [:path {:stroke "none", :d "M0 0h24v24H0z", :fill "none"}]
          [:path {:d "M12 16v.01"}]
@@ -288,85 +308,85 @@
           menu-item
           (not submenu-trigger?)))))
 
-(rum/defc app-context-menu-observer
-  < rum/static
-  (mixins/event-mixin
-   (fn [state]
-        ;; fixme: this mixin will register global event listeners on window
-        ;; which might cause unexpected issues
-     (mixins/listen state js/window "contextmenu"
-                    (fn [^js e]
-                      (let [target (gobj/get e "target")
-                            block-el (.closest target ".bullet-container[blockid]")
-                            block-id (some-> block-el (.getAttribute "blockid"))
-                            {:keys [block block-ref]} (state/sub :block-ref/context)
-                            {:keys [page page-entity]} (state/sub :page-title/context)
-                            show!
-                            (fn [content & {:as option}]
-                              (shui/popup-show! e
-                                                (fn [{:keys [id]}]
-                                                  [:div {:on-click (fn [^js e]
-                                                                     (when-let [target (.-target e)]
-                                                                       (when (context-menu-click-should-hide? target)
-                                                                         (shui/popup-hide! id))))
-                                                         :data-keep-selection true}
-                                                   (if (fn? content)
-                                                     (content {:id id})
-                                                     content)])
-                                                (merge
-                                                 {:on-before-hide state/dom-clear-selection!
-                                                  :on-after-hide state/state-clear-selection!
-                                                  :content-props {:class "w-[280px] ls-context-menu-content"}
-                                                  :as-dropdown? true}
-                                                 option)))
-
-                            handled
-                            (cond
-                              (and page (not block-id))
-                              (do
-                                (show! (fn [{:keys [id]}]
-                                         (cp-content/page-title-custom-context-menu-content page-entity id)))
-                                (state/set-state! :page-title/context nil))
-
-                              block-ref
-                              (do
-                                (show! (cp-content/block-ref-custom-context-menu-content block block-ref))
-                                (state/set-state! :block-ref/context nil))
-
-                              ;; block selection
-                              (and (state/selection?) (not (d/has-class? target "bullet")))
-                              (let [selection-blocks (state/get-selection-blocks)]
-                                (if (= 1 (count selection-blocks))
-                                  (let [selected-block (first selection-blocks)
-                                        property-default-value? (when selected-block
-                                                                  (= "true" (d/attr selected-block "data-is-property-default-value")))]
-                                    (when-let [sel-block-id (some-> selected-block
-                                                                    (.getAttribute "blockid")
-                                                                    (parse-uuid))]
-                                      (p/do!
-                                       (db-async/<get-block (state/get-current-repo) sel-block-id {:children? false})
-                                       (show! (cp-content/block-context-menu-content
-                                               target sel-block-id property-default-value?)))))
-                                  (show! (cp-content/custom-context-menu-content)
-                                         {:id :blocks-selection-context-menu})))
-
-                                ;; block bullet
-                              (and block-id (parse-uuid block-id))
-                              (let [block (.closest target ".ls-block")
-                                    property-default-value? (when block
-                                                              (= "true" (d/attr block "data-is-property-default-value")))]
-                                (when block
-                                  (state/clear-selection!)
-                                  (state/conj-selection-block! block :down))
-                                (p/do!
-                                 (db-async/<get-block (state/get-current-repo) (uuid block-id) {:children? false})
-                                 (show! (cp-content/block-context-menu-content target (uuid block-id) property-default-value?))))
-
-                              :else
-                              false)]
-                        (when (not (false? handled))
-                          (util/stop e)))))))
+(hsx/defc app-context-menu-observer
   []
+  (hooks/use-effect!
+   (fn []
+     (let [handler
+           (fn [^js e]
+             (let [target (gobj/get e "target")
+                   block-el (.closest target ".bullet-container[blockid]")
+                   block-id (some-> block-el (.getAttribute "blockid"))
+                   {:keys [block block-ref]} (state/get-state :block-ref/context)
+                   {:keys [page page-entity]} (state/get-state :page-title/context)
+                   show!
+                   (fn [content & {:as option}]
+                     (shui/popup-show! e
+                                       (fn [{:keys [id]}]
+                                         [:div {:on-click (fn [^js e]
+                                                            (when-let [target (.-target e)]
+                                                              (when (context-menu-click-should-hide? target)
+                                                                (shui/popup-hide! id))))
+                                                :data-keep-selection true}
+                                          (if (fn? content)
+                                            (content {:id id})
+                                            content)])
+                                       (merge
+                                        {:on-before-hide state/dom-clear-selection!
+                                         :on-after-hide state/state-clear-selection!
+                                         :content-props {:class "w-[280px] ls-context-menu-content"}
+                                         :as-dropdown? true}
+                                        option)))
+
+                   handled
+                   (cond
+                     (and page (not block-id))
+                     (do
+                       (show! (fn [{:keys [id]}]
+                                (cp-content/page-title-custom-context-menu-content page-entity id)))
+                       (state/set-state! :page-title/context nil))
+
+                     block-ref
+                     (do
+                       (show! (cp-content/block-ref-custom-context-menu-content block block-ref))
+                       (state/set-state! :block-ref/context nil))
+
+                     ;; block selection
+                     (and (state/selection?) (not (d/has-class? target "bullet")))
+                     (let [selection-blocks (state/get-selection-blocks)]
+                       (if (= 1 (count selection-blocks))
+                         (let [selected-block (first selection-blocks)
+                               property-default-value? (when selected-block
+                                                         (= "true" (d/attr selected-block "data-is-property-default-value")))]
+                           (when-let [sel-block-id (some-> selected-block
+                                                           (.getAttribute "blockid")
+                                                           (parse-uuid))]
+                             (p/do!
+                              (db-async/<get-block (state/get-current-repo) sel-block-id {:children? false})
+                              (show! (cp-content/block-context-menu-content
+                                      target sel-block-id property-default-value?)))))
+                         (show! (cp-content/custom-context-menu-content)
+                                {:id :blocks-selection-context-menu})))
+
+                     ;; block bullet
+                     (and block-id (parse-uuid block-id))
+                     (let [block (.closest target ".ls-block")
+                           property-default-value? (when block
+                                                     (= "true" (d/attr block "data-is-property-default-value")))]
+                       (when block
+                         (state/clear-selection!)
+                         (state/conj-selection-block! block :down))
+                       (p/do!
+                        (db-async/<get-block (state/get-current-repo) (uuid block-id) {:children? false})
+                        (show! (cp-content/block-context-menu-content target (uuid block-id) property-default-value?))))
+
+                     :else
+                     false)]
+               (when (not (false? handled))
+                 (util/stop e))))]
+       (.addEventListener js/window "contextmenu" handler)
+       #(.removeEventListener js/window "contextmenu" handler)))
+   [])
   nil)
 
 (defn- on-mouse-up
@@ -378,52 +398,64 @@
                 (.closest (.-target e) "a"))
     (editor-handler/show-action-bar!)))
 
-(rum/defcs ^:large-vars/cleanup-todo root-container < rum/reactive
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/listen state js/window "pointerdown" hide-context-menu-and-clear-selection)
-     (mixins/listen state js/window "keydown"
-                    (fn [e]
-                      (cond
-                        (= 27 (.-keyCode e))
-                        (if (and (state/modal-opened?)
-                                 (not
-                                  (and
-                                                                          ;; FIXME: this does not work on CI tests
-                                   util/node-test?
-                                   (state/editing?))))
-                          (state/close-modal!)
-                          (hide-context-menu-and-clear-selection e {:esc? true})))
-                      (state/set-ui-last-key-code! (.-key e))))
-     (mixins/listen state js/window "keyup"
-                    (fn [_e]
-                      (state/set-state! :editor/latest-shortcut nil)))))
-  [state route-match main-content']
-  (let [current-repo (state/sub :git/current-repo)
-        theme (state/sub :ui/theme)
-        accent-color (some-> (state/sub :ui/radix-color) (name))
-        editor-font (state/sub :ui/editor-font)
-        system-theme? (state/sub :ui/system-theme?)
-        light? (= "light" (state/sub :ui/theme))
-        sidebar-open? (state/sub :ui/sidebar-open?)
-        settings-open? (state/sub :ui/settings-open?)
-        left-sidebar-open? (state/sub :ui/left-sidebar-open?)
-        wide-mode? (state/sub :ui/wide-mode?)
-        ls-block-hl-colored? (state/sub :pdf/block-highlight-colored?)
-        right-sidebar-blocks (state/sub-right-sidebar-blocks)
+(hsx/defc ^:large-vars/cleanup-todo root-container
+  [route-match main-content']
+  (let [current-repo (state/use-sub :git/current-repo)
+        theme (state/use-sub :ui/theme)
+        accent-color (some-> (state/use-sub :ui/radix-color) (name))
+        editor-font (state/use-sub :ui/editor-font)
+        system-theme? (state/use-sub :ui/system-theme?)
+        light? (= "light" theme)
+        sidebar-open? (state/use-sub :ui/sidebar-open?)
+        settings-open? (state/use-sub :ui/settings-open?)
+        left-sidebar-open? (state/use-sub :ui/left-sidebar-open?)
+        wide-mode? (state/use-sub :ui/wide-mode?)
+        ls-block-hl-colored? (state/use-sub :pdf/block-highlight-colored?)
+        right-sidebar-blocks (state/use-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
         margin-less-pages? (boolean (#{:graph} route-name))
-        db-restoring? (state/sub :db/restoring?)
+        db-restoring? (state/use-sub :db/restoring?)
         page? (= :page route-name)
         home? (= :home route-name)
-        native-titlebar? (state/sub [:electron/user-cfgs :window/native-titlebar?])
+        native-titlebar? (state/use-sub [:electron/user-cfgs :window/native-titlebar?])
         window-controls? (and (util/electron?) (not util/mac?) (not native-titlebar?))
         edit? (state/editing?)
         default-home (app-left-sidebar/get-default-home-if-valid)
         logged? (user-handler/logged-in?)
-        fold-button-on-right? (state/enable-fold-button-right?)
-        show-action-bar? (state/sub :mobile/show-action-bar?)
-        preferred-language (state/sub [:preferred-language])]
+        fold-button-on-right? (state/use-enable-fold-button-right?)
+        show-action-bar? (state/use-sub :mobile/show-action-bar?)
+        preferred-language (state/use-sub [:preferred-language])
+        uploading? (state/use-sub :rtc/uploading?)]
+    (hooks/use-effect!
+     (fn []
+       (let [keydown-handler (fn [e]
+                               (cond
+                                 (= 27 (.-keyCode e))
+                                 (if (and (state/modal-opened?)
+                                          (not
+                                           (and
+                                            ;; FIXME: this does not work on CI tests
+                                            util/node-test?
+                                            (state/editing?))))
+                                   (state/close-modal!)
+                                   (hide-context-menu-and-clear-selection e {:esc? true})))
+                               (state/set-ui-last-key-code! (.-key e)))
+             keyup-handler (fn [_e]
+                             (state/set-state! :editor/latest-shortcut nil))]
+         (.addEventListener js/window "pointerdown" hide-context-menu-and-clear-selection)
+         (.addEventListener js/window "pointerup" block-selection/clear-pointer-down!)
+         (.addEventListener js/window "pointercancel" block-selection/clear-pointer-down!)
+         (.addEventListener js/window "blur" block-selection/clear-pointer-down!)
+         (.addEventListener js/window "keydown" keydown-handler)
+         (.addEventListener js/window "keyup" keyup-handler)
+         #(do
+            (.removeEventListener js/window "pointerdown" hide-context-menu-and-clear-selection)
+            (.removeEventListener js/window "pointerup" block-selection/clear-pointer-down!)
+            (.removeEventListener js/window "pointercancel" block-selection/clear-pointer-down!)
+            (.removeEventListener js/window "blur" block-selection/clear-pointer-down!)
+            (.removeEventListener js/window "keydown" keydown-handler)
+            (.removeEventListener js/window "keyup" keyup-handler))))
+     [])
     (theme/container
      {:t t
       :theme theme
@@ -452,9 +484,12 @@
                  :ls-fold-button-on-right fold-button-on-right?
                  :ls-hl-colored ls-block-hl-colored?}])
        :on-pointer-up (fn []
-                        (when (and (> (count (state/get-selection-blocks)) 1)
-                                   (not (util/input? js/document.activeElement)))
-                          (util/clear-selection!)))}
+                        (when-let [container (gdom/getElement "app-container-wrapper")]
+                          (d/remove-class! container "blocks-selection-mode")
+                          (when (and (> (count (state/get-selection-blocks)) 1)
+                                     (not (util/input? js/document.activeElement)))
+                            (util/clear-selection!)))
+                        (schedule-main-content-focus!))}
 
       [:button#skip-to-main
        {:on-click #(ui/focus-element (ui/main-node))
@@ -465,7 +500,7 @@
       [:div.#app-container
        {:on-mouse-up on-mouse-up}
        [:div#left-container
-        {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
+        {:class (if sidebar-open? "overflow-hidden" "w-full")}
         (header/header {:light? light?
                         :current-repo current-repo
                         :logged? logged?
@@ -476,7 +511,7 @@
         (when (util/electron?)
           (find-in-page/search))
 
-        (if (state/sub :rtc/uploading?)
+        (if uploading?
           [:div.flex.items-center.justify-center.full-height-without-header
            (ui/loading (t :sync/creating-remote-graph))]
           (main {:route-match route-match

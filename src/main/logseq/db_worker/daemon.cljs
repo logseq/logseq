@@ -11,6 +11,8 @@
 (def ^:private valid-owner-sources
   #{:cli :electron :unknown})
 
+(def ^:private embedding-url-env "LOGSEQ_EMBEDDINGS_URL")
+
 (defn normalize-owner-source
   [owner-source]
   (let [owner-source (cond
@@ -222,12 +224,17 @@
              :interval-ms 50}))
 
 (defn spawn-server!
-  [{:keys [script repo root-dir owner-source create-empty-db?]}]
+  [{:keys [script repo root-dir owner-source create-empty-db? embedding-endpoint embedding-model-id]}]
   (let [owner-source (normalize-owner-source owner-source)
         detached? (not= owner-source :electron)
         args (clj->js (cond-> [script "--repo" repo "--root-dir" root-dir "--owner-source" (name owner-source)]
-                        create-empty-db? (conj "--create-empty-db")))
+                        create-empty-db? (conj "--create-empty-db")
+                        (seq embedding-endpoint) (conj "--embedding-endpoint" embedding-endpoint)
+                        (seq embedding-model-id) (conj "--embedding-model-id" embedding-model-id)))
         env (js/Object.assign #js {} (.-env js/process) #js {:ELECTRON_RUN_AS_NODE "1"})]
+    (when (and (= :electron owner-source)
+               (not (seq embedding-endpoint)))
+      (js-delete env embedding-url-env))
     (if-not script
       (do
         (log/warn :db-worker-daemon/missing-script {:repo repo :root-dir root-dir})

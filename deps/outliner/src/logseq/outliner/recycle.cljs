@@ -87,10 +87,13 @@
 
 (defn- page-block-subtree-ids
   [db page]
-  (->> (:block/_page page)
-       ldb/sort-by-order
-       (mapcat (fn [block]
-                 (map :db/id (block-subtree db block))))))
+  (let [root-blocks (->> (concat (:block/_page page)
+                                 (remove ldb/page? (:block/_parent page)))
+                         (common-util/distinct-by :db/id)
+                         ldb/sort-by-order)]
+    (->> root-blocks
+         (mapcat (fn [block]
+                   (map :db/id (block-subtree db block)))))))
 
 (defn- page-tree-ids
   [db page]

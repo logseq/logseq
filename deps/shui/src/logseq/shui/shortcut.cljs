@@ -11,7 +11,7 @@
    - Other keys are mapped via print-shortcut-key function"
   (:require [clojure.string :as string]
             [goog.userAgent]
-            [rum.core :as rum]))
+            [io.factorhouse.hsx.core :as hsx]))
 
 (def mac? goog.userAgent/MAC)
 
@@ -229,7 +229,7 @@
                (animate-element! key-el container highlight-row?))
              (animate-element! container container highlight-row?))))))))
 
-(rum/defc combo-keys
+(hsx/defc combo-keys
   "Renders combo keys (simultaneous key combinations) with separator."
   [keys binding {:keys [aria-label aria-hidden? glow?]}]
   (let [key-elements (map print-shortcut-key keys)
@@ -250,7 +250,7 @@
           :aria-hidden (if aria-label "true" "false")}
          key-text]))]))
 
-(rum/defc separate-keys
+(hsx/defc separate-keys
   "Renders separate keys (sequential key presses) with 4px gap."
   [keys binding {:keys [aria-label aria-hidden? glow?]}]
   (let [key-elements (map print-shortcut-key keys)
@@ -269,7 +269,7 @@
          :aria-hidden (if aria-label "true" "false")}
         key-text])]))
 
-(rum/defc compact-keys
+(hsx/defc compact-keys
   "Renders compact style (text-only, minimal styling)."
   [keys binding {:keys [aria-label aria-hidden?]}]
   (let [key-elements (map print-shortcut-key keys)
@@ -287,7 +287,7 @@
                  :margin-right "2px"}}
         key-text])]))
 
-(rum/defc chord-sequence-keys
+(hsx/defc chord-sequence-keys
   "Renders a chord sequence (multi-step key combinations) with 'then' separators.
    E.g., [['⌘' 'c'] ['⌘' 'r']] renders as: [⌘ C] then [⌘ R]"
   [groups binding {:keys [aria-label aria-hidden? glow? chord-separator]
@@ -326,7 +326,7 @@
                 :aria-hidden (if aria-label "true" "false")}
                key-text]))])))]))
 
-(rum/defc root
+(hsx/defc root
   "Main shortcut component with automatic style detection.
    
    Props:

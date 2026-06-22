@@ -1,30 +1,50 @@
 name: logseq/cli CI
 
 on:
-  # Path filters ensure jobs only kick off if a change is made to cli or
-  # its local dependencies
+  # Path filters ensure jobs only kick off if a change is made to the CLI or
+  # its local dependencies.
   push:
     branches: [master]
     paths:
-      - 'deps/cli/**'
+      - 'cli/**'
+      - 'src/main/logseq/cli/**'
+      - 'src/test/logseq/cli/**'
+      - 'cli-e2e/**'
+      - 'dist/logseq.js'
+      - 'scripts/prepare-cli-package.mjs'
+      - 'scripts/stage-cli-runtime.mjs'
+      - 'scripts/test-cli-release-config.mjs'
       - '.github/workflows/deps-cli.yml'
-      - '!deps/cli/**.md'
-      # Deps that logseq/cli depends on should trigger this workflow
+      - '!**/*.md'
+      # Deps that logseq/cli depends on should trigger this workflow.
       - 'deps/outliner/**'
       - 'deps/graph-parser/**'
       - 'deps/db/**'
       - 'deps/common/**'
+      - 'deps/db-sync/**'
+      - 'src/main/frontend/worker/**'
+      - 'src/main/logseq/db_worker/**'
   pull_request:
     branches: [master]
     paths:
-      - 'deps/cli/**'
+      - 'cli/**'
+      - 'src/main/logseq/cli/**'
+      - 'src/test/logseq/cli/**'
+      - 'cli-e2e/**'
+      - 'dist/logseq.js'
+      - 'scripts/prepare-cli-package.mjs'
+      - 'scripts/stage-cli-runtime.mjs'
+      - 'scripts/test-cli-release-config.mjs'
       - '.github/workflows/deps-cli.yml'
-      - '!deps/cli/**.md'
-      # Deps that logseq/cli depends on should trigger this workflow
+      - '!**/*.md'
+      # Deps that logseq/cli depends on should trigger this workflow.
       - 'deps/outliner/**'
       - 'deps/graph-parser/**'
       - 'deps/db/**'
       - 'deps/common/**'
+      - 'deps/db-sync/**'
+      - 'src/main/frontend/worker/**'
+      - 'src/main/logseq/db_worker/**'
   workflow_dispatch:
     inputs:
       git-ref:
@@ -40,16 +60,11 @@ on:
           - latest
         default: "latest"
 
-defaults:
-  run:
-    working-directory: deps/cli
-
 env:
   CLOJURE_VERSION: '1.12.4.1618'
-  # This is the same as 1.8.
   JAVA_VERSION: '21'
-  # This is the latest node version we can run.
   NODE_VERSION: '24'
+  OCAML_VERSION: '5.4.0'
   BABASHKA_VERSION: '1.12.215'
 
 jobs:
@@ -66,68 +81,54 @@ jobs:
           version: 10.33.0
 
       - name: Set up Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
-          cache-dependency-path: deps/cli/pnpm-lock.yaml
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            cli/pnpm-lock.yaml
 
       - name: Set up Java
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
 
-      # Clojure needed for bb step
       - name: Set up Clojure
         uses: DeLaGuardo/setup-clojure@13.5
         with:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
+      - name: Fetch OCaml deps
+        working-directory: cli
+        run: opam install . --deps-only --with-test --yes
 
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
 
-      - name: Run nbb-logseq tests
-        run: pnpm test
+      - name: Fetch CLI pnpm deps
+        run: pnpm --dir cli install --frozen-lockfile
 
-      # In this job because it depends on an npm package
-      - name: Load namespaces into nbb-logseq
-        run: bb test:load-all-namespaces-with-nbb .
+      - name: Run logseq CLI tests
+        run: opam exec -- pnpm --dir cli test
 
-  lint:
-    runs-on: ubuntu-latest
+      - name: Build logseq CLI
+        run: |
+          opam exec -- pnpm cli:release
+          pnpm db-worker-node:release:bundle
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Verify CLI publish config
+        run: node scripts/test-cli-release-config.mjs
 
-      - name: Set up Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'zulu'
-          java-version: ${{ env.JAVA_VERSION }}
-
-      - name: Set up Clojure
-        uses: DeLaGuardo/setup-clojure@13.5
-        with:
-          cli: ${{ env.CLOJURE_VERSION }}
-          bb: ${{ env.BABASHKA_VERSION }}
-
-      - name: Run clj-kondo lint
-        run: clojure -M:clj-kondo --lint src test
-
-      - name: Carve lint for unused vars
-        run: bb lint:carve
-
-      - name: Lint for vars that are too large
-        run: bb lint:large-vars
-
-      - name: Lint for namespaces that aren't documented
-        run: bb lint:ns-docstrings
-
-      - name: Lint for public vars that are private based on usage
-        run: bb lint:minimize-public-vars
+      - name: Smoke test CLI
+        run: node dist/logseq.js --help
 
   release:
     if: ${{ github.event_name == 'workflow_dispatch' }}
@@ -144,38 +145,58 @@ jobs:
           version: 10.33.0
 
       - name: Set up Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
-          cache-dependency-path: deps/cli/pnpm-lock.yaml
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            cli/pnpm-lock.yaml
 
       - name: Set up Java
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
 
-      # Clojure needed for bb step
       - name: Set up Clojure
         uses: DeLaGuardo/setup-clojure@13.5
         with:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
+      - name: Fetch OCaml deps
+        working-directory: cli
+        run: opam install . --deps-only --with-test --yes
+
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
 
-      - name: Bundle vendor deps
-        run: bb build:vendor-nbb-deps
+      - name: Fetch CLI pnpm deps
+        run: pnpm --dir cli install --frozen-lockfile
 
-      # - name: Debug package
-      #   run: pnpm pack && tar -tf logseq-cli-*.tgz
+      - name: Build logseq CLI
+        run: |
+          opam exec -- pnpm cli:release
+          pnpm db-worker-node:release:bundle
+
+      - name: Prepare npm package
+        run: node scripts/prepare-cli-package.mjs
+
+      - name: Smoke test npm package
+        run: node dist/cli-package/dist/logseq.js --help
 
       - name: Authenticate with registry
+        working-directory: dist/cli-package
         env:
           NPM_TOKEN: ${{ secrets.NPM_CLI_TOKEN }}
         run: echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
 
       - name: Publish package
+        working-directory: dist/cli-package
         run: npm publish --tag "${{ github.event.inputs.release-tag || 'alpha' }}" --access public

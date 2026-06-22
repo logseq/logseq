@@ -27,6 +27,22 @@
       (gobj/set bind k v))
     bind))
 
+(defn- set-process-platform-arch!
+  [platform arch]
+  (let [platform-descriptor (js/Object.getOwnPropertyDescriptor js/process "platform")
+        arch-descriptor (js/Object.getOwnPropertyDescriptor js/process "arch")]
+    (js/Object.defineProperty js/process "platform"
+                              #js {:value platform
+                                   :enumerable true
+                                   :configurable true})
+    (js/Object.defineProperty js/process "arch"
+                              #js {:value arch
+                                   :enumerable true
+                                   :configurable true})
+    (fn []
+      (js/Object.defineProperty js/process "platform" platform-descriptor)
+      (js/Object.defineProperty js/process "arch" arch-descriptor))))
+
 (defn- <open-test-db
   []
   (let [root-dir (node-helper/create-tmp-dir "platform-node")
@@ -59,6 +75,80 @@
   (let [source (node-platform-source)]
     (is (string/includes? source "\"node:sqlite\""))
     (is (not (string/includes? source "\"better-sqlite3\"")))))
+
+(deftest node-platform-loads-zvec-lazily
+  (let [source (node-platform-source)]
+    (is (not (string/includes? source "[\"@zvec/zvec\" :as zvec]")))
+    (is (string/includes? source "(js/require \"@zvec/zvec\")"))))
+
+(deftest node-platform-disables-vector-embedding-off-macos
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-no-vector-embedding")
+          restore! (set-process-platform-arch! "linux" "x64")]
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})]
+            (is (nil? (:embedding platform)))
+            (is (nil? (:vector platform))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (restore!)
+                       (done)))))))
+
+(deftest node-platform-disables-vector-embedding-on-macos-x64
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-vector-embedding-x64")
+          restore! (set-process-platform-arch! "darwin" "x64")]
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})]
+            (is (nil? (:embedding platform)))
+            (is (nil? (:vector platform))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (restore!)
+                       (done)))))))
+
+(deftest node-platform-embedding-backend-calls-local-server
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-embedding-text")
+          restore-platform! (set-process-platform-arch! "darwin" "arm64")
+          original-fetch js/fetch
+          calls (atom [])]
+      (set! js/fetch
+            (fn [url opts]
+              (swap! calls conj {:url url
+                                 :method (gobj/get opts "method")
+                                 :headers (js->clj (gobj/get opts "headers"))
+                                 :body (js->clj (js/JSON.parse (gobj/get opts "body"))
+                                                :keywordize-keys true)})
+              (p/resolved #js {:ok true
+                                :status 200
+                                :json (fn []
+                                        (p/resolved
+                                         (clj->js {:data [{:index 1
+                                                           :embedding [4 5 6]}
+                                                          {:index 0
+                                                           :embedding [1 2 3]}]})))})))
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir
+                                                         :embedding-endpoint "http://127.0.0.1:8765/v1/embeddings"})
+                  embeddings ((get-in platform [:embedding :embed-texts]) ["hello" "world"])]
+            (is (= [[1 2 3] [4 5 6]] embeddings))
+            (is (= [{:url "http://127.0.0.1:8765/v1/embeddings"
+                     :method "POST"
+                     :headers {"Content-Type" "application/json"}
+                     :body {:model "all-MiniLM-L6-v2"
+                            :input ["hello" "world"]}}]
+                   @calls)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! js/fetch original-fetch)
+                       (restore-platform!)
+                       (done)))))))
+
+(deftest node-platform-vector-page-query-topks-expand-adaptively
+  (let [topks #'platform-node/vector-query-topks]
+    (is (= [10] (topks 10 nil)))
+    (is (= [40 160 640] (topks 10 "page-1")))))
 
 (deftest node-platform-backup-uses-shared-sqlite-backup-implementation
   (let [source (node-platform-source)]
