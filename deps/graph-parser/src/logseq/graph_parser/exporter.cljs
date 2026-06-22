@@ -422,6 +422,16 @@
 (def ^:private custom-status-marker?
   #{"WAIT" "WAITING" "IN-PROGRESS"})
 
+(def ^:private status-markers
+  (set/union (set (keys built-in-status-markers)) custom-status-marker?))
+
+(defn- marker-only-block-title
+  [block]
+  (when-let [title (:block/title block)]
+    (let [title' (string/trim title)]
+      (when (contains? status-markers title')
+        title'))))
+
 (defn- find-status-choice-by-content
   [db marker]
   (some #(when (= marker (db-property/closed-value-content %)) %)
@@ -451,7 +461,8 @@
 (defn- update-block-marker
   "If a block has a marker, convert it to a task object"
   [block db {:keys [log-fn] :as options}]
-  (if-let [marker (:block/marker block)]
+  (if-let [marker (or (:block/marker block)
+                      (marker-only-block-title block))]
     (let [status-ident (cond
                          (contains? built-in-status-markers marker)
                          (built-in-status-markers marker)
