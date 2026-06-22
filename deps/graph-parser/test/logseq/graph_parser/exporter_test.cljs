@@ -111,6 +111,17 @@
             db title)
        (map #(d/entity db %))))
 
+(defn- task-blocks-by-title
+  [db title]
+  (->> (d/q '[:find [?b ...]
+              :in $ ?title
+              :where
+              [?b :block/page]
+              [?b :block/title ?title]
+              [?b :block/tags :logseq.class/Task]]
+            db title)
+       (map #(d/entity db %))))
+
 (defn- report-retracts-block-uuid?
   [tx-report block-uuid]
   (boolean
@@ -315,7 +326,18 @@
 (deftest-async import-preserves-legacy-task-markers-as-status-choices
   (p/let [file (write-temp-graph-file
                  "pages/tasks.md"
-                 "- TODO todo item\n- LATER later item\n- NOW now item\n- DOING doing item\n- WAIT waiting item\n- WAITING waiting full item\n- IN-PROGRESS in-progress item\n- DONE done item\n")
+                 (str "- TODO\n"
+                      "- DONE\n"
+                      "- I recorded a [[voice note]].\n"
+                      "  - TODO\n"
+                      "- TODO todo item\n"
+                      "- LATER later item\n"
+                      "- NOW now item\n"
+                      "- DOING doing item\n"
+                      "- WAIT waiting item\n"
+                      "- WAITING waiting full item\n"
+                      "- IN-PROGRESS in-progress item\n"
+                      "- DONE done item\n"))
           conn (db-test/create-conn)
           _ (db-pipeline/add-listener conn)
           _ (import-files-to-db [file] conn {})]
@@ -328,6 +350,19 @@
     (is (= :logseq.property/status.done
            (:db/ident (block-status @conn "done item")))
         "DONE still imports to the built-in Done status")
+    (is (= {:logseq.property/status.todo 2
+            :logseq.property/status.done 1}
+           (frequencies (map #(-> % db-test/readable-properties :logseq.property/status)
+                             (task-blocks-by-title @conn ""))))
+        "Built-in task markers without titles still import as tasks")
+    (let [nested-empty-task (first (ordered-children (db-test/find-block-by-content @conn #"recorded")))]
+      (is (= "" (:block/title nested-empty-task))
+          "Nested nameless task keeps an empty title")
+      (is (= {:logseq.property/status :logseq.property/status.todo
+              :block/tags [:logseq.class/Task]}
+             (select-keys (db-test/readable-properties nested-empty-task)
+                          [:logseq.property/status :block/tags]))
+          "Nested nameless TODO keeps its task properties"))
     (is (= :logseq.property/status.todo
            (:db/ident (block-status @conn "later item")))
         "LATER imports to the built-in Todo status")
@@ -585,7 +620,7 @@
       (is (= 34 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 9 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
-      (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
+      (is (= 6 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
       (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Cards]] @conn))))
@@ -733,6 +768,12 @@
               :block/tags [:logseq.class/Task]}
              (db-test/readable-properties (db-test/find-block-by-content @conn "status test")))
           "status block has correct task properties and class")
+      (let [empty-title-task (first (task-blocks-by-title @conn ""))]
+        (is (= {:logseq.property/status :logseq.property/status.todo
+                :block/tags [:logseq.class/Task]}
+               (select-keys (db-test/readable-properties empty-title-task)
+                            [:logseq.property/status :block/tags]))
+            "Empty-title TODO from file graph imports as a task"))
 
       (is (= #{:logseq.property/status :block/tags}
              (set (keys (db-test/readable-properties (db-test/find-block-by-content @conn "old todo block")))))
