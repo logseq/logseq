@@ -2975,40 +2975,81 @@
                             trigger-bottom-pill-edit!))}
        (ui/icon "edit" {:size 15})])]]))
 
-(def ^:private max-bottom-property-pills-per-line 3)
-
 (defn- bottom-property-pill-items
   [block properties opts]
-  (let [last-index (dec (count properties))]
-    (mapcat
-     (fn [index property]
-       (cond-> [(bottom-property-pill-cp block property opts)]
-         (and (< index last-index)
-              (zero? (mod (inc index) max-bottom-property-pills-per-line)))
-         (conj [:div.bottom-property-pill-line-break
-                {:key (str "bottom-property-pill-line-break-" (:db/id block) "-" index)
-                 :aria-hidden true}])))
-    (cljs.core/range)
-     properties)))
+  (mapv (fn [property]
+          (bottom-property-pill-cp block property opts))
+        properties))
+
+(defn- measure-bottom-pills-overflow!
+  [^js el *overflow?]
+  (when el
+    (let [overflow? (> (.-scrollWidth el) (inc (.-clientWidth el)))]
+      (when (not= overflow? @*overflow?)
+        (reset! *overflow? overflow?)))))
+
+(hsx/defc bottom-properties-more-button
+  [block properties opts]
+  (let [label (t :header/more)]
+    (shui/button
+     {:variant :secondary
+      :size :sm
+      :class "bottom-property-control-btn bottom-property-more-btn"
+      :tab-index 0
+      :data-bottom-row-nav true
+      :aria-label label
+      :on-click (fn [e]
+                  (util/stop e)
+                  (shui/popup-show!
+                   (.-currentTarget e)
+                   (fn [_id]
+                     [:div.positioned-properties.block-below.bottom-properties-more-popup.flex.flex-col.gap-2.p-2.overflow-auto
+                      {:style {:max-width "min(80vw, 640px)"
+                               :max-height "min(70vh, 480px)"}}
+                      (bottom-property-pill-items block properties opts)])
+                   {:as-dropdown? true}))}
+     label)))
 
 (defn- block-below-positioned-properties-cp
   [block properties opts show-hidden-properties-toggle? show-add-property-button?]
-  [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden
-   [:div.bottom-properties-row.flex.flex-row.gap-2.items-center.flex-wrap.overflow-x-hidden
-    {:data-bottom-properties-row (:block/uuid block)
-     :tab-index -1
-     :on-key-down handle-bottom-properties-row-key-down!}
-    (bottom-property-pill-items block properties opts)
-    (when show-hidden-properties-toggle?
-      (property-component/hidden-properties-toggle-button block {:icon-only? true
-                                                                 :bottom-row-nav? true
-                                                                 :tab-index 0}))
-    (when show-add-property-button?
-      (property-component/new-property block (assoc opts
-                                                    :property-position :block-below
-                                                    :bottom-row-nav? true
-                                                    :icon-only? true
-                                                    :tab-index 0)))]])
+  (let [*pills-el (hooks/use-ref nil)
+        *overflow? (hooks/use-memo #(atom false) [(:block/uuid block) (count properties)])
+        [overflow?] (hooks/use-atom *overflow?)]
+    (hooks/use-effect!
+     (fn []
+       (let [^js el (.-current *pills-el)
+             measure! #(measure-bottom-pills-overflow! el *overflow?)
+             observer (when (and el (exists? js/ResizeObserver))
+                        (js/ResizeObserver. measure!))]
+         (measure!)
+         (when observer
+           (.observe observer el))
+         (.addEventListener js/window "resize" measure!)
+         (fn []
+           (when observer
+             (.disconnect observer))
+           (.removeEventListener js/window "resize" measure!))))
+     [(:block/uuid block) properties show-hidden-properties-toggle? show-add-property-button?])
+    [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden
+     [:div.bottom-properties-row.flex.flex-row.gap-2.items-center.flex-nowrap.overflow-x-hidden
+      {:data-bottom-properties-row (:block/uuid block)
+       :tab-index -1
+       :on-key-down handle-bottom-properties-row-key-down!}
+      [:div.bottom-properties-pills-strip.flex.flex-row.gap-2.items-center.flex-nowrap.overflow-x-hidden.min-w-0.flex-1
+       {:ref #(set! (.-current *pills-el) %)}
+       (bottom-property-pill-items block properties opts)]
+      (when overflow?
+        (bottom-properties-more-button block properties opts))
+      (when show-hidden-properties-toggle?
+        (property-component/hidden-properties-toggle-button block {:icon-only? true
+                                                                   :bottom-row-nav? true
+                                                                   :tab-index 0}))
+      (when show-add-property-button?
+        (property-component/new-property block (assoc opts
+                                                      :property-position :block-below
+                                                      :bottom-row-nav? true
+                                                      :icon-only? true
+                                                      :tab-index 0)))]]))
 
 (hsx/defc block-positioned-properties
   [config block position]
@@ -4191,7 +4232,7 @@
             :hide-block-refs-count? hide-block-refs-count?
             :*show-query? *show-query?})))]]
 
-   (when (and (not collapsed?) (not (or table? property?)))
+   (when (and (not collapsed?) (not (or table? property?)) (not (:page-title? config)))
      (block-positioned-properties config block :block-below))
 
    (when-not (or (:table? config) (:property? config))
