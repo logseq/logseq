@@ -125,3 +125,9 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))
                      (done)))))))
+
+(deftest asset-protocol-url->media-url-keeps-electron-assets-protocol-test
+  (with-redefs [util/electron? (constantly true)]
+    (let [url "assets:///C/logseq__colon/Users/charlie/graph/assets/test.mp3"]
+      (is (= url
+             (assets/asset-protocol-url->media-url url))))))

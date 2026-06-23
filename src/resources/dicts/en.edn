@@ -1136,6 +1136,7 @@
  :page.delete/confirm-title "Are you sure you want to delete this page?"
  :page.delete/permanent-confirm-title "Are you sure you want to permanently delete this page?"
  :page.delete/success "Page \"{1}\" was deleted successfully!"
+ :page.delete/today-journal-truncate-success "Today's journal page content was deleted."
  :page.delete/total "Total: {1}"
  :page.delete/warning "These pages had their content deleted but were unable to be deleted: {1}. See javascript console for more details."
 
@@ -1295,6 +1296,7 @@
  :plugin.package-config/remove-installed-success "Removed broken plugin \"{1}\"."
 
  :plugin.proxy/direct "Direct"
+ :plugin.proxy/host-port-required "Host and port are required"
  :plugin.proxy/system "System"
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"

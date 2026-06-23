@@ -43,6 +43,10 @@
                            (db-migrate/delete-property db :logseq.property.embedding/hnsw-label)
                            (some? (:logseq.property/parent entity))
                            [[:db/retract (:db/id entity) :logseq.property/parent]]
+                           (and (ldb/class? entity) (:block/order entity))
+                           [[:db/retract (:db/id entity) :block/order]]
+                           (and (not (ldb/page? entity)) (:block/name entity))
+                           [[:db/retract (:db/id entity) :block/name]]
                            (some? (:hide? entity))
                            [[:db/retract (:db/id entity) :hide?]]
                            (some? (:public? entity))

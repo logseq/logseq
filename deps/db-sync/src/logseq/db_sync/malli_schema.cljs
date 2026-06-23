@@ -124,6 +124,9 @@
 (def graph-member-role-schema
   [:enum "manager" "member"])
 
+(def client-revision-entry
+  [:client-revision {:optional true} :string])
+
 (def graph-info-schema
   [:map
    [:graph-id :string]
@@ -190,6 +193,7 @@
 
 (def tx-batch-request-schema
   [:map
+   client-revision-entry
    [:t-before :int]
    [:txs [:sequential tx-entry-schema]]])
 
