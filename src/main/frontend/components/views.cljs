@@ -550,11 +550,12 @@
 (defn group-by-column?
   [column]
   (when-let [id (:id column)]
-    (when-not (= id :block/title)
-      (when-let [property (db/entity id)]
-        (and (contains? groupable-property-types (:logseq.property/type property))
-             (or (not (db-property/many? property))
-                 (contains? groupable-many-property-types (:logseq.property/type property))))))))
+    (or (= id :block/page)
+        (when-not (= id :block/title)
+          (when-let [property (db/entity id)]
+            (and (contains? groupable-property-types (:logseq.property/type property))
+                 (or (not (db-property/many? property))
+                     (contains? groupable-many-property-types (:logseq.property/type property)))))))))
 
 (defn- set-view-property!
   [view-entity property-ident value]

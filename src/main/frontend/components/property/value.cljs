@@ -502,6 +502,12 @@
       (= (.getTime given-date) (.getTime tomorrow))  (t :date.nlp/tomorrow)
       :else nil)))
 
+(defn- date-page-link-props
+  [other-position?]
+  (cond-> {}
+    other-position?
+    (assoc :on-click util/stop-propagation)))
+
 (hsx/defc datetime-value
   [value property-id repeated-task? {:keys [datetime? other-position? suppress-inline-edit-icon?]}]
   (when-let [date (t/to-default-time-zone (tc/from-long value))]
@@ -509,10 +515,11 @@
                    (when-let [page-cp (state/get-component :block/page-cp)]
                      (let [page-title (date/journal-name date)]
                        ^{:key page-title}
-                       [:<> (page-cp {:disable-preview? true
-                                      :show-non-exists-page? true
-                                      :label (human-date-label value)}
-                                     {:block/name page-title})]))
+                       [:span.inline-flex (date-page-link-props other-position?)
+                        (page-cp {:disable-preview? true
+                                  :show-non-exists-page? true
+                                  :label (human-date-label value)}
+                                 {:block/name page-title})]))
                    (when datetime?
                      (let [date (js/Date. value)
                            hours (.getHours date)
@@ -600,9 +607,9 @@
                                         (t/minus (t/seconds 1)))
                   content (when-let [page-cp (state/get-component :block/page-cp)]
                             ^{:key (:db/id value)}
-                            [:<> (page-cp {:disable-preview? true
-                                           :meta-click? other-position?
-                                           :label (human-date-label value)} value)])]
+                            [:span.inline-flex (date-page-link-props other-position?)
+                             (page-cp {:disable-preview? true
+                                       :label (human-date-label value)} value)])]
               (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} (:db/id property)))
                 (overdue compare-value content)
                 content))

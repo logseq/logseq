@@ -793,22 +793,39 @@
   [block-uuid]
   (contains? @*show-hidden-properties-block-ids block-uuid))
 
+(defn- use-hidden-properties-visible
+  [block-uuid]
+  (let [[visible? set-visible!] (hooks/use-state (hidden-properties-visible? block-uuid))]
+    (hooks/use-effect!
+     (fn []
+       (set-visible! (hidden-properties-visible? block-uuid))
+       (if block-uuid
+         (let [watch-key [:property/hidden-properties-visible block-uuid]]
+           (add-watch *show-hidden-properties-block-ids watch-key
+                      (fn [_key _ref old-ids new-ids]
+                        (let [old-visible? (contains? old-ids block-uuid)
+                              new-visible? (contains? new-ids block-uuid)]
+                          (when (not= old-visible? new-visible?)
+                            (set-visible! new-visible?)))))
+           (fn []
+             (remove-watch *show-hidden-properties-block-ids watch-key)))
+         (fn [])))
+     [block-uuid])
+    visible?))
+
 (defn- hidden-properties-toggle-label
   [show-hidden-properties?]
   (if show-hidden-properties?
-    "Collapse hidden properties"
-    "Show hidden properties"))
+    (t :property/collapse-hidden-properties)
+    (t :property/show-hidden-properties)))
 
-(defn has-hidden-properties?
-  [block {:keys [gallery-view?]}]
+(defn- display-properties
+  [block {:keys [gallery-view? page-title? sidebar-properties? tag-dialog?]} show-empty-and-hidden-properties?]
   (let [current-db (db/get-db)
-        show-empty-and-hidden-state (some-> @state/state
-                                            (get :ui/show-empty-and-hidden-properties?)
-                                            deref)
-        {:keys [mode show? ids]} show-empty-and-hidden-state
-        show-empty-and-hidden-properties? (and show?
-                                             (or (= mode :global)
-                                                 (and (set? ids) (contains? ids (:block/uuid block)))))
+        page-properties-area? (and (entity-util/page? block)
+                                   (or page-title?
+                                       sidebar-properties?
+                                       tag-dialog?))
         properties* (properties-for-display block)
         {:keys [properties recycled-only-property-ids]}
         (sanitize-property-values-for-display properties*)
@@ -825,6 +842,7 @@
                                (ldb/built-in? ent))
                           ;; other position
                           (when-not (or
+                                     page-properties-area?
                                      show-empty-and-hidden-properties?
                                      show-in-hidden-properties?)
                             (outliner-property/property-with-other-position? current-db block ent))
@@ -884,16 +902,31 @@
                                   (map (fn [p] [p (get properties p)]))
                                   (remove (fn [[property-id _]]
                                             (contains? recycled-only-property-ids property-id))))
+        full-properties (-> (concat block-own-properties'
+                                    (remove property-hide-f class-property-pairs))
+                            (remove-built-in-or-other-position-properties false))
         hidden-properties (-> (concat block-hidden-properties
                                       (filter property-hide-f class-property-pairs))
                               (remove-built-in-or-other-position-properties true))]
+    {:full-properties full-properties
+     :hidden-properties hidden-properties}))
+
+(defn has-hidden-properties?
+  [block opts]
+  (let [show-empty-and-hidden-state (some-> @state/state
+                                            (get :ui/show-empty-and-hidden-properties?)
+                                            deref)
+        {:keys [mode show? ids]} show-empty-and-hidden-state
+        show-empty-and-hidden-properties? (and show?
+                                             (or (= mode :global)
+                                                 (and (set? ids) (contains? ids (:block/uuid block)))))
+        {:keys [hidden-properties]} (display-properties block opts show-empty-and-hidden-properties?)]
     (boolean (seq hidden-properties))))
 
 (hsx/defc hidden-properties-toggle-button
   [block {:keys [icon-only? tab-index bottom-row-nav?] :as _opts}]
   (let [block-uuid (:block/uuid block)
-        [shown-block-ids] (hooks/use-atom *show-hidden-properties-block-ids)
-        show-hidden-properties? (contains? shown-block-ids block-uuid)
+        show-hidden-properties? (use-hidden-properties-visible block-uuid)
         label (hidden-properties-toggle-label show-hidden-properties?)]
     (when block-uuid
       (let [button
@@ -946,100 +979,16 @@
   [target-block {:keys [sidebar-properties? tag-dialog? skip-bidirectional-properties?] :as opts}]
   (let [*bidirectional-properties (hooks/use-memo #(atom nil) [])
         [bidirectional-properties] (hooks/use-atom *bidirectional-properties)
-        [shown-block-ids] (hooks/use-atom *show-hidden-properties-block-ids)
         id (hooks/use-memo #(str (random-uuid)) [])
-        current-db (db/get-db)
         block (resolve-linked-block-if-exists target-block)
-        show-hidden-properties? (contains? shown-block-ids (:block/uuid block))
+        show-hidden-properties? (use-hidden-properties-visible (:block/uuid block))
         show-properties? (or sidebar-properties? tag-dialog?)
         class? (entity-util/class? block)
         show-empty-and-hidden-properties? (let [{:keys [mode show? ids]} (state/use-sub :ui/show-empty-and-hidden-properties?)]
                                             (and show?
                                                  (or (= mode :global)
                                                      (and (set? ids) (contains? ids (:block/uuid block))))))
-        properties* (properties-for-display block)
-        {:keys [properties recycled-only-property-ids]}
-        (sanitize-property-values-for-display properties*)
-        remove-built-in-or-other-position-properties
-        (fn [properties show-in-hidden-properties?]
-          (remove (fn [property]
-                    (let [id (if (vector? property) (first property) property)]
-                      (or
-                       (= id :block/tags)
-                       (when-let [ent (db/entity id)]
-                         (or
-                          ;; built-in
-                          (and (not (ldb/public-built-in-property? ent))
-                               (ldb/built-in? ent))
-                          ;; other position
-                          (when-not (or
-                                     show-empty-and-hidden-properties?
-                                     show-in-hidden-properties?)
-                            (outliner-property/property-with-other-position? current-db block ent))
-
-                          (and (:gallery-view? opts)
-                               (contains? #{:logseq.property.class/properties} (:db/ident ent))))))))
-                  properties))
-        {:keys [all-classes classes-properties]} (outliner-property/get-block-classes-properties (db/get-db) (:db/id block))
-        classes-properties-set (set (map :db/ident classes-properties))
-        block-own-properties (->> properties
-                                  (remove (fn [[id _]] (contains? recycled-only-property-ids id)))
-                                  (remove (fn [[id _]] (classes-properties-set id))))
-        state-hide-empty-properties? (:ui/hide-empty-properties? (state/get-config))
-        ;; This section produces own-properties and full-hidden-properties
-        hide-with-property-id (fn [property-id]
-                                (let [property (db/entity property-id)]
-                                  (boolean
-                                   (cond
-                                     show-empty-and-hidden-properties?
-                                     false
-                                     state-hide-empty-properties?
-                                     (nil? (get properties property-id))
-                                     (and (:logseq.property/hide-empty-value property)
-                                          (nil? (get properties property-id)))
-                                     true
-                                     :else
-                                     (boolean (:logseq.property/hide? property))))))
-        property-hide-f (cond
-                          config/publishing?
-                          ;; Publishing is read only so hide all blank properties as they
-                          ;; won't be edited and distract from properties that have values
-                          (fn [[property-id property-value]]
-                            (or (nil? property-value)
-                                (hide-with-property-id property-id)))
-                          state-hide-empty-properties?
-                          (fn [[property-id property-value]]
-                            ;; User's selection takes precedence over config
-                            (if (:logseq.property/hide? (db/entity property-id))
-                              (hide-with-property-id property-id)
-                              (nil? property-value)))
-                          :else
-                          (comp hide-with-property-id first))
-        {block-hidden-properties true
-         block-own-properties' false} (group-by property-hide-f block-own-properties)
-        class-properties (loop [classes all-classes
-                                properties (set (map first block-own-properties'))
-                                result []]
-                           (if-let [class (first classes)]
-                             (let [cur-properties (->> (db-property/get-class-ordered-properties class)
-                                                       (map :db/ident)
-                                                       (remove properties))]
-                               (recur (rest classes)
-                                      (set/union properties (set cur-properties))
-                                      (if (seq cur-properties)
-                                        (into result cur-properties)
-                                        result)))
-                             result))
-        class-property-pairs (->> class-properties
-                                  (map (fn [p] [p (get properties p)]))
-                                  (remove (fn [[property-id _]]
-                                            (contains? recycled-only-property-ids property-id))))
-        full-properties (-> (concat block-own-properties'
-                                    (remove property-hide-f class-property-pairs))
-                            (remove-built-in-or-other-position-properties false))
-        hidden-properties (-> (concat block-hidden-properties
-                                      (filter property-hide-f class-property-pairs))
-                              (remove-built-in-or-other-position-properties true))
+        {:keys [full-properties hidden-properties]} (display-properties block opts show-empty-and-hidden-properties?)
         current-route-page? (= (str (:block/uuid block)) (state/get-current-page))
         root-block? (and (= (str (:block/uuid block)) (:id opts))
                          (not (entity-util/page? block)))
@@ -1049,7 +998,7 @@
     [:<>
      (when-not skip-bidirectional-properties?
        (load-bidirectional-properties block
-                                      (or root-block? (entity-util/page? block))
+                                      root-block?
                                       #(reset! *bidirectional-properties %)))
      (let [has-bidirectional-properties? (seq bidirectional-properties)]
        (cond

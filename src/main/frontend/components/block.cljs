@@ -2843,10 +2843,6 @@
     (.focus el)
     true))
 
-(defn- focus-first-bottom-row-item!
-  [^js row]
-  (focus-bottom-row-item! row 0))
-
 (defn- move-bottom-row-focus!
   [^js el direction]
   (when-let [^js row (.closest el ".bottom-properties-row")]
@@ -2870,23 +2866,6 @@
       (shui/popup-hide!)
       (.click trigger))
     true))
-
-(defn- current-bottom-pill
-  [^js el]
-  (some-> el (.closest ".bottom-property-pill-focusable")))
-
-(defn- input-cursor-at-boundary?
-  [^js input key]
-  (let [start (.-selectionStart input)
-        end (.-selectionEnd input)
-        value (or (.-value input) "")]
-    (and (number? start)
-         (number? end)
-         (= start end)
-         (case key
-           "ArrowUp" (zero? start)
-           "ArrowDown" (= start (count value))
-           false))))
 
 (defn- focus-block-editor-from-bottom-row!
   [^js row]
@@ -3030,38 +3009,6 @@
         *overflow? (hooks/use-memo #(atom false) [(:block/uuid block) (count properties)])
         [overflow?] (hooks/use-atom *overflow?)
         [expanded? set-expanded!] (hooks/use-state false)]
-    (hooks/use-effect!
-     (fn []
-       (let [block-uuid (:block/uuid block)
-             listener (fn [^js e]
-                        (let [key (util/ekey e)
-                              ^js active-el (.-activeElement js/document)
-                              edit-input-id (str "edit-block-" block-uuid)
-                              row (when block-uuid
-                                    (.querySelector js/document
-                                                    (str "[data-bottom-properties-row=\"" block-uuid "\"]")))]
-                          (when (and row
-                                     block-uuid
-                                     (contains? #{"ArrowUp" "ArrowDown"} key)
-                                     (not (or (.-metaKey e)
-                                              (.-ctrlKey e)
-                                              (.-altKey e)))
-                                     active-el
-                                     (= (.-id active-el) edit-input-id)
-                                     (input-cursor-at-boundary? active-el key))
-                            (util/stop e)
-                            (focus-first-bottom-row-item! row))
-
-                          (when (and row
-                                     (= key "Escape")
-                                     active-el
-                                     (.contains row active-el))
-                            (when-let [pill (current-bottom-pill active-el)]
-                              (js/setTimeout (fn [] (.focus pill)) 0)))))]
-         (.addEventListener js/document "keydown" listener)
-         (fn []
-           (.removeEventListener js/document "keydown" listener))))
-     [(:block/uuid block)])
     (hooks/use-effect!
      (fn []
        (let [^js el (.-current *pills-el)
