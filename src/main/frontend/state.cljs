@@ -1161,11 +1161,18 @@ should be done through this fn in order to get global config and config defaults
         selected-ids (set (get-selected-block-ids selected-blocks))
         _ (set-state! :selection/blocks blocks)
         new-ids (set (get-selection-block-ids))
-        removed (set/difference selected-ids new-ids)]
+        removed (set/difference selected-ids new-ids)
+        next-blocks (set (remove nil? blocks))
+        removed-nodes-without-blockid (->> selected-blocks
+                                           (remove nil?)
+                                           (remove #(contains? next-blocks %))
+                                           (remove #(dom/attr % "blockid")))]
     (mark-dom-blocks-as-selected blocks)
     (doseq [id removed]
       (doseq [node (dom/sel (util/format "[blockid='%s']" id))]
-        (unselect-node node)))))
+        (unselect-node node)))
+    (doseq [node removed-nodes-without-blockid]
+      (unselect-node node))))
 
 (defn set-selection-blocks!
   ([blocks]

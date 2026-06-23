@@ -195,6 +195,7 @@
 (defn header-cp
   [{:keys [view-entity column-set-sorting! state]} column]
   (let [sorting (:sorting state)
+        sortable? (not (false? (:sortable? column)))
         [asc?] (some (fn [item] (when (= (:id item) (:id column))
                                   (when-some [asc? (:asc? item)]
                                     [asc?]))) sorting)
@@ -203,18 +204,20 @@
                   (contains? (set (map :db/id (:logseq.property.table/pinned-columns view-entity)))
                              (:db/id property)))
         sub-content (fn [{:keys [id]}]
-                      (let [table-options [(shui/dropdown-menu-item
-                                            {:key "asc"
-                                             :on-click #(column-set-sorting! sorting column true)}
-                                            [:div.flex.flex-row.items-center.gap-1
-                                             (ui/icon "arrow-up" {:size 15})
-                                             [:div (t :view.table/sort-ascending)]])
-                                           (shui/dropdown-menu-item
-                                            {:key "desc"
-                                             :on-click #(column-set-sorting! sorting column false)}
-                                            [:div.flex.flex-row.items-center.gap-1
-                                             (ui/icon "arrow-down" {:size 15})
-                                             [:div (t :view.table/sort-descending)]])
+                      (let [table-options [(when sortable?
+                                             (shui/dropdown-menu-item
+                                              {:key "asc"
+                                               :on-click #(column-set-sorting! sorting column true)}
+                                              [:div.flex.flex-row.items-center.gap-1
+                                               (ui/icon "arrow-up" {:size 15})
+                                               [:div (t :view.table/sort-ascending)]]))
+                                           (when sortable?
+                                             (shui/dropdown-menu-item
+                                              {:key "desc"
+                                               :on-click #(column-set-sorting! sorting column false)}
+                                              [:div.flex.flex-row.items-center.gap-1
+                                               (ui/icon "arrow-down" {:size 15})
+                                               [:div (t :view.table/sort-descending)]]))
                                            (when property
                                              (shui/dropdown-menu-item
                                               {:on-click (fn [_e]
@@ -408,8 +411,20 @@
                          (add-to-sidebar!))}
             (ui/icon "layout-sidebar-right"))]]))]))
 
+(defn- page-column
+  []
+  {:id :block/page
+   :name (t :view.table/page)
+   :type :node
+   :sortable? false
+   :header header-cp
+   :cell (fn [_table row _column]
+           (when-let [page (:block/page row)]
+             (when-let [page-cp (state/get-component :block/page-cp)]
+               (page-cp {:disable-preview? true} page))))})
+
 (defn build-columns
-  [config properties & {:keys [with-object-name? with-id? add-tags-column? advanced-query?]
+  [config properties & {:keys [with-object-name? with-id? add-tags-column? add-page-column? advanced-query?]
                         :or {with-object-name? true
                              with-id? true
                              add-tags-column? true}}]
@@ -495,7 +510,9 @@
               :name (t :page/updated-at)
               :type :datetime
               :header header-cp
-              :cell timestamp-cell-cp})])
+              :cell timestamp-cell-cp})
+           (when add-page-column?
+             (page-column))])
          (remove nil?))))
 
 (defn sort-columns
@@ -533,11 +550,12 @@
 (defn group-by-column?
   [column]
   (when-let [id (:id column)]
-    (when-not (= id :block/title)
-      (when-let [property (db/entity id)]
-        (and (contains? groupable-property-types (:logseq.property/type property))
-             (or (not (db-property/many? property))
-                 (contains? groupable-many-property-types (:logseq.property/type property))))))))
+    (or (= id :block/page)
+        (when-not (= id :block/title)
+          (when-let [property (db/entity id)]
+            (and (contains? groupable-property-types (:logseq.property/type property))
+                 (or (not (db-property/many? property))
+                     (contains? groupable-many-property-types (:logseq.property/type property)))))))))
 
 (defn- set-view-property!
   [view-entity property-ident value]
@@ -814,14 +832,13 @@
   (let [display-type (:db/ident (:logseq.property.view/type view-entity))
         table? (= display-type :logseq.property.view/type.table)
         gallery? (= display-type :logseq.property.view/type.gallery)
-        group-by-columns (concat (when (or
-                                        (contains? #{:linked-references :unlinked-references}
-                                                   (:logseq.property.view/feature-type view-entity))
-                                        (:logseq.property/query view-entity))
-                                   [{:id :block/page
-                                     :name (t :view.table/page)}])
-                                         (filter (fn [column]
-                                                   (group-by-column? column)) columns))
+        group-by-columns (->> (concat (when (or
+                                             (contains? #{:linked-references :unlinked-references}
+                                                        (:logseq.property.view/feature-type view-entity))
+                                             (:logseq.property/query view-entity))
+                                        [(page-column)])
+                                      (filter group-by-column? columns))
+                              (medley/distinct-by :id))
         group-by-page? (some #{:block/page} (map :id group-by-columns))]
     (shui/dropdown-menu
      (shui/dropdown-menu-trigger
@@ -1977,7 +1994,9 @@
 
 (hsx/defc list-view
   [{:keys [config ref-matched-children-ids disable-virtualized?] :as option} view-entity {:keys [rows]} *scroller-ref]
-  (let [config (assoc config :container-id (view-container-id config))
+  (let [view-feature-type (:logseq.property.view/feature-type view-entity)
+        references-view? (contains? #{:linked-references :unlinked-references} view-feature-type)
+        config (assoc config :container-id (view-container-id config))
         lazy-item-render (fn [rows idx]
                            (lazy-item rows idx (assoc option :list-view? true)
                                       (fn [block]
@@ -1985,7 +2004,9 @@
                                                        (assoc config
                                                               :list-view? true
                                                               :block-level 1)
-                                                        (= :linked-references (:logseq.property.view/feature-type view-entity))
+                                                        references-view?
+                                                        (assoc :ref? true)
+                                                        (= :linked-references view-feature-type)
                                                         (assoc :ref-matched-children-ids ref-matched-children-ids))]
                                           (block-container config' block)))))
         list-cp (fn [rows]
