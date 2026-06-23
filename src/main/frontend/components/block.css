@@ -1642,6 +1642,11 @@ html.is-mac {
     background-color: var(--ls-secondary-background-color);
   }
 
+  .bottom-property-control-btn.bottom-property-more-btn {
+    @apply w-auto px-2;
+    border-radius: 9999px;
+  }
+
   .bottom-property-add-btn {
     @apply justify-center w-6 h-6 p-0 rounded-full;
     border-radius: 9999px;
