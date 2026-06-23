@@ -251,6 +251,7 @@ let metadata () =
       requires_graph = Command_id.requires_graph Command_id.Doctor;
       requires_auth = Command_id.requires_auth Command_id.Doctor;
       write_command = Command_id.is_write Command_id.Doctor;
+      human_table_headers_order = [];
     };
   ]
 

@@ -407,6 +407,8 @@ let () =
 
   test "CLI parity ustring decodes utf8 byte strings to JS unicode strings"
     (fun () ->
+      let ascii = Ustring.of_string "ABC" |> Ustring.to_string in
+      expect_equal "ascii text" "ABC" ascii;
       let utf8_byte_string =
         Js.String.fromCharCode 0xe4
         ^ Js.String.fromCharCode 0xb8
@@ -415,7 +417,17 @@ let () =
       let decoded = Ustring.of_string utf8_byte_string |> Ustring.to_string in
       expect_equal "decoded unicode text" (unicode_text [ 0x4e2d ]) decoded;
       expect_int "decoded JS length" 1 (String.length decoded);
-      expect_int "decoded char code" 0x4e2d (string_char_code_at decoded 0));
+      expect_int "decoded char code" 0x4e2d (string_char_code_at decoded 0);
+      let latin1_unicode =
+        "Diese Vorteile " ^ unicode_text [ 0x00f6 ] ^ " und "
+        ^ unicode_text [ 0x00fc ]
+      in
+      let preserved = Ustring.of_string latin1_unicode |> Ustring.to_string in
+      expect_equal "latin1 supplement unicode text" latin1_unicode preserved;
+      expect_int "latin1 supplement char code" 0x00f6
+        (string_char_code_at preserved 15);
+      expect_int "latin1 supplement char code 2" 0x00fc
+        (string_char_code_at preserved 21));
 
   test
     "CLI parity id parser accepts single multi comma whitespace and vector \
@@ -1395,6 +1407,28 @@ let () =
       expect_named_contains "header" output "ID  TITLE";
       expect_named_contains "blank value" output "2   -";
       expect_named_contains "footer" output "Count: 2");
+
+  test "CLI parity human table renders keyword headers without namespaces"
+    (fun () ->
+      let output =
+        Output.Human_output.create
+          ~headers:
+            [
+              "db/id";
+              "block/title";
+              ":logseq.property/status";
+              "Input/Output";
+            ]
+          ~rows:[ [ "1"; "Ship"; "logseq.property/status.todo"; "Ready" ] ]
+          ()
+        |> Output.Human_output.to_string
+      in
+      expect_named_contains "keyword headers" output "id  title  status";
+      expect_named_contains "plain slash header" output "Input/Output";
+      expect_named_not_contains "db namespace" output "db/id";
+      expect_named_not_contains "block namespace" output "block/title";
+      expect_named_not_contains "property namespace" output
+        ":logseq.property/status");
 
   test "CLI parity output mode parser accepts exact lowercase values only"
     (fun () ->
@@ -2580,6 +2614,48 @@ let () =
         (Show.build (config ~repo:"demo" ()) (Global_opts.create ())
            (Show.Parsed_show { base_opts with level = Some 0 })));
 
+  test_promise "CLI parity show rejects recycled pages" (fun () ->
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then
+              "[\"^ \
+               \",\"~:db/id\",42,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000042\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]"
+            else if Js.String.includes ~search:"thread-api/q" body then "[]"
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            {
+              Show.repo;
+              graph = Cli_config.repo_to_graph repo;
+              target = Show.By_page "home";
+              multi_id = false;
+              linked_references = false;
+              ref_id_footer = false;
+              page_hierarchy = false;
+              level = Some 10;
+            }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Show.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "show recycled page errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "show recycled code" "recycled-page"
+                (keyword_text err.Error.code)
+          | None -> fail_test "expected show error");
+          Js.Promise.resolve pass));
+
   test
     "CLI parity upsert validation rejects ambiguous and mode-specific options"
     (fun () ->
@@ -2591,6 +2667,7 @@ let () =
                  {
                    id = Some 1L;
                    page = Some "Home";
+                   restore = false;
                    update_tags_edn = None;
                    update_properties_edn = None;
                    remove_tags_edn = None;
@@ -2633,6 +2710,394 @@ let () =
                    no_scheduled = false;
                    no_deadline = false;
                  }))));
+
+  test "CLI parity upsert page parses restore option" (fun () ->
+      let request =
+        expect_parse_ok "upsert page restore"
+        [
+          "upsert";
+          "page";
+          "--page";
+          "Home";
+          "--restore";
+          "--update-properties";
+          "{\"status\" \"done\"}";
+        ]
+      in
+      match request.command with
+      | Cli_request.Upsert (Upsert.Parsed_page opts) ->
+          expect_equal "page" "Home" (expect_some "page" opts.page);
+          expect_bool "restore" true opts.restore
+      | _ -> fail_test "expected upsert page");
+
+  test_promise "CLI parity upsert page rejects recycled page by default"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                mode = Upsert.Create;
+                id = None;
+                page = Some "Home";
+                restore = false;
+                plan = Property.empty_update_plan;
+              }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert recycled page errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert recycled code" "recycled-page"
+                (keyword_text err.Error.code)
+          | None -> fail_test "expected upsert error");
+          expect_bool "no ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity upsert page update rejects recycled page by default"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then
+              "[\"^ \
+               \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                mode = Upsert.Update;
+                id = Some 50L;
+                page = None;
+                restore = false;
+                plan = Property.empty_update_plan;
+              }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert recycled page update errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert recycled update code" "recycled-page"
+                (keyword_text err.Error.code)
+          | None -> fail_test "expected upsert update error");
+          expect_bool "no update ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity upsert page restores recycled page when requested"
+    (fun () ->
+      let apply_calls = ref [] in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_calls := !apply_calls @ [ body ];
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let plan =
+            {
+              Property.empty_update_plan with
+              update_properties =
+                [
+                  {
+                    Property.key =
+                      Property.Key_ident
+                        (Edn_util.keyword_t "user.property/status");
+                    value = Edn_util.string "done";
+                  };
+                ];
+            }
+          in
+          let action =
+            Upsert.Upsert_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                mode = Upsert.Create;
+                id = None;
+                page = Some "Home";
+                restore = true;
+                plan;
+              }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert restore ok" false (Cli_result.is_error result);
+          expect_int "restore then update calls" 2 (List.length !apply_calls);
+          expect_named_contains "first op restores recycled page"
+            (List.nth !apply_calls 0) "restore-recycled";
+          expect_named_contains "second op updates restored page"
+            (List.nth !apply_calls 1) "batch-set-property";
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity upsert page restore rejects recycled page without uuid"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",50,\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                mode = Upsert.Create;
+                id = None;
+                page = Some "Home";
+                restore = true;
+                plan = Property.empty_update_plan;
+              }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert recycled restore without uuid errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert recycled restore without uuid code"
+                "recycled-page" (keyword_text err.Error.code)
+          | None -> fail_test "expected upsert restore error");
+          expect_bool "no restore ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise
+    "CLI parity upsert page update restore rejects recycled page without uuid"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then
+              "[\"^ \
+               \",\"~:db/id\",50,\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                mode = Upsert.Update;
+                id = Some 50L;
+                page = None;
+                restore = true;
+                plan = Property.empty_update_plan;
+              }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert recycled update restore without uuid errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert recycled update restore without uuid code"
+                "recycled-page" (keyword_text err.Error.code)
+          | None -> fail_test "expected upsert update restore error");
+          expect_bool "no update restore ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity upsert block create rejects recycled target page"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_block
+              (Upsert.Block_create
+                 {
+                   repo;
+                   graph = Cli_config.repo_to_graph repo;
+                   target = Upsert.Target_page "Home";
+                   pos = Block.Last_child;
+                   status = None;
+                   tags = [];
+                   properties = [];
+                   blocks = [ Block.make ~title:"Child" () ];
+                   update_plan = Property.empty_update_plan;
+                 })
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert block create recycled target errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert block create recycled code" "recycled-page"
+                (keyword_text err.Error.code)
+          | None -> fail_test "expected upsert block create error");
+          expect_bool "no create ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity upsert block update rejects recycled target page"
+    (fun () ->
+      let apply_called = ref false in
+      let pull_count = ref 0 in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then (
+              incr pull_count;
+              match !pull_count with
+              | 1 ->
+                  "[\"^ \
+                   \",\"~:db/id\",207,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000207\",\"~:block/title\",\"Source\"]"
+              | 2 ->
+                  "[\"^ \
+                   \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]"
+              | _ ->
+                  fail_test
+                    (Printf.sprintf "unexpected pull %d: %s" !pull_count body);
+                  "")
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_block
+              (Upsert.Block_update
+                 {
+                   repo;
+                   graph = Cli_config.repo_to_graph repo;
+                   source = Upsert.Source_id 207L;
+                   target = Some (Upsert.Target_page "Home");
+                   pos = Some Block.Last_child;
+                   update_tags = [];
+                   update_properties = [];
+                   remove_tags = [];
+                   remove_properties = [];
+                   content = None;
+                   source_label = Some "207";
+                   target_label = Some "page:Home";
+                 })
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert block update recycled target errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert block update recycled code" "recycled-page"
+                (keyword_text err.Error.code)
+          | None -> fail_test "expected upsert block update error");
+          expect_bool "no update ops applied" false !apply_called;
+          Js.Promise.resolve pass));
 
   test "CLI parity upsert block update property parsing keeps update contracts"
     (fun () ->
@@ -4171,6 +4636,7 @@ let () =
               requires_graph = false;
               requires_auth = false;
               write_command = false;
+              human_table_headers_order = [];
             };
             {
               id = Command_id.Graph_create;
@@ -4183,6 +4649,7 @@ let () =
               requires_graph = true;
               requires_auth = false;
               write_command = true;
+              human_table_headers_order = [];
             };
           ]
       in
@@ -4212,6 +4679,7 @@ let () =
               requires_graph = true;
               requires_auth = false;
               write_command = true;
+              human_table_headers_order = [];
             };
             {
               id = Command_id.Upsert_tag;
@@ -4224,6 +4692,7 @@ let () =
               requires_graph = true;
               requires_auth = false;
               write_command = true;
+              human_table_headers_order = [];
             };
           ]
       in
@@ -4246,6 +4715,7 @@ let () =
               requires_graph = true;
               requires_auth = false;
               write_command = true;
+              human_table_headers_order = [];
             };
           ]
       in
@@ -4535,7 +5005,7 @@ let () =
             | None -> fail_test "expected graph validation error")
       in
       let* () =
-        run_validate "[\"^ \",\"~:errors\",null,\"~:datom-count\",10]"
+        run_validate "[\"^ \",\"~:errors\",null,\"~:datoms\",10]"
           (fun valid ->
             expect_bool "valid graph status" false (Cli_result.is_error valid);
             let data =
@@ -5324,6 +5794,18 @@ let () =
         List.mem name option.names
       in
       let option_by_name name options = List.find_opt (has_name name) options in
+      let assert_timestamp_headers_last (command : Command_registry.command_meta) =
+        let headers = command.human_table_headers_order in
+        if List.mem "created-at" headers || List.mem "updated-at" headers then
+          match List.rev headers with
+          | "updated-at" :: "created-at" :: _ -> pass
+          | _ ->
+              fail_test
+                (Printf.sprintf "%s: expected created-at,updated-at suffix, got %s"
+                   (String.concat " " command.path)
+                   (String.concat "," headers))
+      in
+      List.iter assert_timestamp_headers_last registry.commands;
       let output_option =
         expect_some "global output option"
           (option_by_name "--output" Command_registry.global_options)
@@ -5426,6 +5908,13 @@ let () =
         (List.mem "title" tag_fields.choices);
       expect_bool "tag fields include uuid" true
         (List.mem "uuid" tag_fields.choices);
+      let list_task =
+        expect_some "list task"
+          (Command_registry.find_by_path [ "list"; "task" ] registry)
+      in
+      expect_equal "list task human header order"
+        "id,title,status,priority,scheduled,deadline,created-at,updated-at"
+        (String.concat "," list_task.human_table_headers_order);
       let show =
         expect_some "show command"
           (Command_registry.find_by_path [ "show" ] registry)
@@ -5487,7 +5976,9 @@ let () =
         expect_some "search content option"
           (option_by_name "--content" search_block.options)
       in
-      expect_equal "search content doc" "Content search text" search_content.doc);
+      expect_equal "search content doc" "Content search text" search_content.doc;
+      expect_equal "search block human header order" "id,ident,title"
+        (String.concat "," search_block.human_table_headers_order));
 
   test "CLI parity command registry help renders command and option details"
     (fun () ->
@@ -5615,6 +6106,7 @@ let () =
               requires_graph = false;
               requires_auth = false;
               write_command = false;
+              human_table_headers_order = [];
             };
           ]
       in
@@ -6410,6 +6902,32 @@ let () =
         (Format_types.format_result (message Output.Mode.Edn)
            (config ~output_format:(Output.Mode.Packed Output.Mode.Edn) ())));
 
+  test "CLI parity default human tables keep discovered header order" (fun () ->
+      let value =
+        Edn_util.map
+          [
+            ( Edn_util.keyword "items",
+              Edn_util.vector
+                [
+                  Edn_util.map
+                    [
+                      ( Edn_util.keyword "block/updated-at",
+                        Edn_util.int64 90000L );
+                      (Edn_util.keyword "block/title", Edn_util.string "Alpha");
+                      ( Edn_util.keyword "block/created-at",
+                        Edn_util.int64 40000L );
+                    ];
+                ] );
+          ]
+      in
+      let output =
+        Format_types.format_result
+          (Cli_result.ok Output.Mode.Human (Cli_result.Raw value))
+          (config ())
+      in
+      expect_equal "default table header order" "updated-at,title,created-at"
+        (headers_from output |> Array.to_list |> String.concat ","));
+
   test "CLI parity format graph list marks current graph and old graph dirs"
     (fun () ->
       let graph_list_data =
@@ -6486,13 +7004,23 @@ let () =
       in
       let list_output =
         Format_types.format_result
+          ~human_table_headers_order:
+            [ "id"; "ident"; "title"; "uuid"; "created-at"; "updated-at" ]
           (Cli_result.ok ~command:Command_id.List_page Output.Mode.Human
              (Cli_result.Raw list_value))
           (config ())
       in
-      expect_named_contains "list id header" list_output "db/id";
+      expect_named_contains "list id header" list_output "id";
       expect_named_contains "list title" list_output "Alpha";
       expect_named_contains "list count" list_output "Count: 1";
+      let empty_order_output =
+        Format_types.format_result ~human_table_headers_order:[]
+          (Cli_result.ok ~command:Command_id.List_page Output.Mode.Human
+             (Cli_result.Raw list_value))
+          (config ())
+      in
+      expect_equal "empty header order does not infer columns" "Count: 1"
+        (String.trim empty_order_output);
       let search_value =
         Edn_util.map
           [
@@ -6516,6 +7044,7 @@ let () =
       in
       let search_output =
         Format_types.format_result
+          ~human_table_headers_order:[ "id"; "ident"; "title" ]
           (Cli_result.ok ~command:Command_id.Search_block Output.Mode.Human
              (Cli_result.Raw search_value))
           (config ())
@@ -6532,6 +7061,14 @@ let () =
       in
       let human command value =
         Format_types.format_result
+          ~human_table_headers_order:
+            (let registry = (Cli.make_app_context ()).Cli.registry in
+             let meta =
+               expect_some "command metadata"
+                 (Command_registry.find_by_path (Command_id.to_path command)
+                    registry)
+             in
+             meta.human_table_headers_order)
           (Cli_result.ok ~command Output.Mode.Human (Cli_result.Raw value))
           (config ())
       in
@@ -6548,8 +7085,8 @@ let () =
                  ];
              ])
       in
-      expect_named_contains "tag id header" tag_output "db/id";
-      expect_named_contains "tag title header" tag_output "block/title";
+      expect_named_contains "tag id header" tag_output "id";
+      expect_named_contains "tag title header" tag_output "title";
       expect_named_contains "tag ident value" tag_output "logseq.class/Tag";
       let property_output =
         human Command_id.List_property
@@ -6571,10 +7108,9 @@ let () =
                  ];
              ])
       in
-      expect_named_contains "property type header" property_output
-        "logseq.property/type";
+      expect_named_contains "property type header" property_output "type";
       expect_named_contains "property cardinality header" property_output
-        "db/cardinality";
+        "cardinality";
       expect_named_contains "property cardinality value" property_output
         "db.cardinality/many";
       let task_output =
@@ -6592,10 +7128,46 @@ let () =
                  ];
              ])
       in
-      expect_named_contains "task status column" task_output
-        "logseq.property/status";
-      expect_named_contains "task priority column" task_output
-        "logseq.property/priority";
+      expect_named_contains "task status column" task_output "status";
+      expect_named_contains "task priority column" task_output "priority";
+      let unordered_task_output =
+        Format_types.format_result
+          ~human_table_headers_order:
+            [
+              "id";
+              "title";
+              "status";
+              "priority";
+              "scheduled";
+              "deadline";
+              "updated-at";
+              "created-at";
+            ]
+          (Cli_result.ok ~command:Command_id.List_task Output.Mode.Human
+             (Cli_result.Raw
+                (items
+                   [
+                     row
+                       [
+                         ( Edn_util.keyword "logseq.property/priority",
+                           Edn_util.keyword "logseq.property/priority.high" );
+                         (Edn_util.keyword "block/title", Edn_util.string "Ship");
+                         ( Edn_util.keyword "logseq.property/status",
+                           Edn_util.keyword "logseq.property/status.todo" );
+                         ( Edn_util.keyword "block/created-at",
+                           Edn_util.int64 40000L );
+                         ( Edn_util.keyword "block/updated-at",
+                           Edn_util.int64 90000L );
+                         (Edn_util.keyword "db/id", Edn_util.int64 12L);
+                         (Edn_util.keyword "block/uuid", Edn_util.string "u1");
+                       ];
+                   ])))
+          (config ())
+      in
+      expect_equal "ordered task headers"
+        "id,title,status,priority,updated-at,created-at"
+        (headers_from unordered_task_output |> Array.to_list
+        |> String.concat ",");
       let node_output =
         human Command_id.List_node
           (items
@@ -6610,8 +7182,8 @@ let () =
                  ];
              ])
       in
-      expect_named_contains "node type column" node_output "node/type";
-      expect_named_contains "node uuid column" node_output "block/uuid";
+      expect_named_contains "node type column" node_output "type";
+      expect_named_not_contains "node uuid column" node_output "uuid";
       let asset_output =
         human Command_id.List_asset
           (items
@@ -6627,10 +7199,8 @@ let () =
                  ];
              ])
       in
-      expect_named_contains "asset type column" asset_output
-        "logseq.property.asset/type";
-      expect_named_contains "asset size column" asset_output
-        "logseq.property.asset/size";
+      expect_named_contains "asset type column" asset_output "type";
+      expect_named_contains "asset size column" asset_output "size";
       expect_named_contains "asset raw size" asset_output "2552");
 
   test "CLI parity format list title truncation keeps current display contracts"
@@ -6649,6 +7219,8 @@ let () =
       in
       let truncated =
         Format_types.format_result
+          ~human_table_headers_order:
+            [ "id"; "ident"; "title"; "uuid"; "created-at"; "updated-at" ]
           (Cli_result.ok ~command:Command_id.List_page Output.Mode.Human
              (Cli_result.Raw (value "ABCDEFGH")))
           (config ~list_title_max_display_width:6 ())
@@ -6659,16 +7231,18 @@ let () =
         "ABCDEFGH";
       let multiline =
         Format_types.format_result
+          ~human_table_headers_order:
+            [ "id"; "ident"; "title"; "uuid"; "created-at"; "updated-at" ]
           (Cli_result.ok ~command:Command_id.List_page Output.Mode.Human
              (Cli_result.Raw (value "Line 1\nLine 2\nLine 3\nLine 4\nLine 5")))
           (config ())
       in
       expect_named_contains "multiline line one" multiline "Line 1";
-      expect_named_contains "multiline line two" multiline "Line 2";
+      expect_named_not_contains "multiline line two" multiline "Line 2";
       ignore ellipsis;
-      expect_named_contains "multiline line three" multiline "Line 3";
-      expect_named_contains "multiline line four" multiline "Line 4";
-      expect_named_contains "multiline line five" multiline "Line 5");
+      expect_named_not_contains "multiline line three" multiline "Line 3";
+      expect_named_not_contains "multiline line four" multiline "Line 4";
+      expect_named_not_contains "multiline line five" multiline "Line 5");
 
   test "CLI parity format upsert summaries use current generic tables"
     (fun () ->
