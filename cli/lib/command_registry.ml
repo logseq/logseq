@@ -260,6 +260,7 @@ let options_for_known_path = function
       @ property_update_options
   | [ "upsert"; "page" ] ->
       [ value "id" "id" "Page id"; value "page" "page" "Page name" ]
+      @ [ flag "restore" "Restore recycled page before updating" ]
       @ property_update_options
   | [ "upsert"; "asset" ] ->
       selector_options

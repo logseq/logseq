@@ -278,7 +278,14 @@ let block_selector =
   vector [ kw "db/id"; kw "block/uuid"; kw "block/name"; kw "block/title" ]
 
 let page_selector =
-  vector [ kw "db/id"; kw "block/uuid"; kw "block/name"; kw "block/title" ]
+  vector
+    [
+      kw "db/id";
+      kw "block/uuid";
+      kw "block/name";
+      kw "block/title";
+      kw "logseq.property/deleted-at";
+    ]
 
 let tag_selector =
   vector [ kw "db/id"; kw "block/uuid"; kw "block/name"; kw "block/title" ]
@@ -302,6 +309,15 @@ let ident_of_entity value =
   Option.bind (Edn_util.get value "db/ident") Edn_util.as_keyword_t
 
 let page_entity value = Option.is_some (Edn_util.get_string value "block/name")
+
+let recycled_entity value =
+  Option.is_some (Edn_util.get value "logseq.property/deleted-at")
+
+let page_not_found () =
+  Error.make (Edn_util.keyword_t "page-not-found") "page not found"
+
+let recycled_page_error () =
+  Error.make (Edn_util.keyword_t "recycled-page") "page is recycled"
 
 let pull invoke_config repo selector lookup =
   Transport.thread_api_pull invoke_config ~repo
@@ -471,11 +487,9 @@ let resolve_target invoke_config repo action =
         (fun entity ->
           match id_of_entity entity with
           | None ->
-              pure
-                (Error
-                   (Error.make
-                      (Edn_util.keyword_t "page-not-found")
-                      "page not found"))
+              pure (Error (page_not_found ()))
+          | Some _ when recycled_entity entity ->
+              pure (Error (recycled_page_error ()))
           | Some _ -> pure (Ok entity))
   | None, None, None ->
       pure
