@@ -119,6 +119,13 @@
       (replace-tag-ref content' page-name id)
       content')))
 
+(defn- ref-replacement-title
+  [{:block/keys [title] original-page-name :block.temp/original-page-name}]
+  (or (when (and (string? original-page-name)
+                 (not (common-util/uuid-string? original-page-name)))
+        original-page-name)
+      title))
+
 (defn title-ref->id-ref
   "Convert ref to id refs e.g. `[[page name]] -> [[uuid]]."
   [title refs & {:keys [replace-tag?]
@@ -139,10 +146,10 @@
                         ref)))
                    sort-refs)]
     (reduce
-     (fn [content {uuid' :block/uuid :block/keys [title]}]
-       (replace-page-ref-with-id content title uuid' replace-tag?))
+     (fn [content {uuid' :block/uuid :as ref}]
+       (replace-page-ref-with-id content (ref-replacement-title ref) uuid' replace-tag?))
      title
-     (filter :block/title refs'))))
+     (filter #(and (:block/title %) (:block/uuid %)) refs'))))
 
 (defn update-block-content
   "Replace `[[internal-id]]` with `[[page name]]`"

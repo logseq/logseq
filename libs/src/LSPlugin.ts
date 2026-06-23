@@ -828,6 +828,8 @@ export interface IEditorProxy extends Record<string, any> {
 
   deletePage: (pageName: BlockPageName) => Promise<void>
 
+  restorePage: (page: PageIdentity | EntityID) => Promise<boolean | null>
+
   renamePage: (oldName: string, newName: string) => Promise<void>
 
   getAllPages: (repo?: string) => Promise<PageEntity[] | null>

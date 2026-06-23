@@ -12,6 +12,11 @@
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
+(deftest coerce-http-request-does-not-add-client-revision-to-member-request-test
+  (is (= {:email "user@example.com"}
+         (#'db-sync/coerce-http-request :graph-members/create
+                                        {:email "user@example.com"}))))
+
 (deftest remove-member-request-test
   (async done
          (let [called (atom nil)]
