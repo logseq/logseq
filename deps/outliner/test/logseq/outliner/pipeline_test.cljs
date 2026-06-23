@@ -34,3 +34,14 @@
         "#Query class tag is included in :block/refs")
     (is (not (contains? refs query-property-id))
         "#Query block does not reference logseq.property/query through :block/refs")))
+
+(deftest db-rebuild-block-refs-removes-recursive-self-ref
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "self"}]}])
+        block (db-test/find-block-by-content @conn "self")
+        block' (assoc (d/pull @conn '[:db/id :block/uuid :block/title] (:db/id block))
+                      :block/title
+                      (str "self " (page-ref/->page-ref (:block/uuid block))))]
+    (is (empty? (outliner-pipeline/db-rebuild-block-refs @conn block'))
+        "A block should not rebuild a recursive ref to itself")))
