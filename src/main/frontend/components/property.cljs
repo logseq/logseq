@@ -889,14 +889,14 @@
     (properties-section block hidden-properties opts)))
 
 (hsx/defc load-bidirectional-properties
-  [block root-block? set-bidirectional-properties!]
+  [block root-block-or-page? set-bidirectional-properties!]
   (hooks/use-effect!
    (fn []
-     (when (and root-block? (:db/id block))
+     (when (and root-block-or-page? (:db/id block))
        (p/let [result (db-async/<get-bidirectional-properties (:db/id block))]
          (set-bidirectional-properties! result)))
      (fn []))
-   [root-block? (:db/id block)]))
+   [root-block-or-page? (:db/id block)]))
 
 (hsx/defc ^:large-vars/cleanup-todo properties-area
   [target-block {:keys [sidebar-properties? tag-dialog?] :as opts}]
@@ -1006,7 +1006,9 @@
                                                    (or current-route-page?
                                                        root-block?))]
     [:<>
-     (load-bidirectional-properties block root-block? #(reset! *bidirectional-properties %))
+     (load-bidirectional-properties block
+                                    (or root-block? (entity-util/page? block))
+                                    #(reset! *bidirectional-properties %))
      (let [has-bidirectional-properties? (seq bidirectional-properties)]
        (cond
          (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?)
@@ -1072,10 +1074,6 @@
                    (hidden-properties-toggle-button block {})])
                 (hidden-properties-cp block hidden-properties
                                       (assoc opts :show-hidden-properties? show-hidden-properties?))])
-
-             (when (and page? (not class?))
-               ^{:key (str id "-add-property")}
-               [new-property block opts])
 
              (mapv (fn [r]
                      (when (fn? (:render r))
