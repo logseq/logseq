@@ -4263,6 +4263,60 @@
             (is (= "remote missing block" (:block/title block)))
             (is (nil? (:block/collapsed? block)))))))))
 
+(deftest apply-remote-txs-skips-unrepaired-missing-block-deleted-in-batch-test
+  (testing "remote tx application can skip obsolete txs for a missing block deleted by the same batch"
+    (let [{:keys [conn client-ops-conn child2]} (setup-parent-child)
+          missing-uuid (random-uuid)
+          child2-uuid (:block/uuid child2)
+          repair-calls (atom [])
+          client (repair-client repair-calls (fn [_block-uuids] []))
+          remote-txs [{:tx-data [[:db/retract [:block/uuid missing-uuid] :block/title "remote old"]
+                                 [:db/add [:block/uuid missing-uuid] :block/title "remote new"]
+                                 [:db/retract [:block/uuid child2-uuid] :block/title (:block/title child2)]
+                                 [:db/add [:block/uuid child2-uuid] :block/title "remote child 2"]]}
+                      {:tx-data [[:db/retractEntity [:block/uuid missing-uuid]]]}]]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (#'sync-apply/apply-remote-txs! test-repo client remote-txs)
+
+          (is (= [[missing-uuid]] @repair-calls))
+          (is (nil? (d/entity @conn [:block/uuid missing-uuid])))
+          (is (= "remote child 2"
+                 (:block/title (d/entity @conn [:block/uuid child2-uuid]))))
+          (let [validation (db-validate/validate-local-db! @conn)]
+            (is (empty? (non-recycle-validation-entities validation))
+                (str (:errors validation)))))))))
+
+(deftest apply-remote-txs-skips-missing-block-created-then-deleted-in-batch-test
+  (testing "remote tx application should not keep a block created and deleted by the same batch"
+    (let [{:keys [conn client-ops-conn parent child2]} (setup-parent-child)
+          deleted-uuid (random-uuid)
+          child2-uuid (:block/uuid child2)
+          page-uuid (:block/uuid (:block/page parent))
+          repair-calls (atom [])
+          client (repair-client repair-calls (fn [_block-uuids] []))
+          remote-txs [{:tx-data [[:db/add "deleted-block" :block/uuid deleted-uuid]
+                                 [:db/add "deleted-block" :block/title "created then deleted"]
+                                 [:db/add "deleted-block" :block/page [:block/uuid page-uuid]]
+                                 [:db/add "deleted-block" :block/parent [:block/uuid page-uuid]]
+                                 [:db/add "deleted-block" :block/order "a0"]
+                                 [:db/add "deleted-block" :block/created-at 1760000000000]
+                                 [:db/add "deleted-block" :block/updated-at 1760000000000]
+                                 [:db/retract [:block/uuid child2-uuid] :block/title (:block/title child2)]
+                                 [:db/add [:block/uuid child2-uuid] :block/title "remote child 2"]]}
+                      {:tx-data [[:db/retractEntity [:block/uuid deleted-uuid]]]}]]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (#'sync-apply/apply-remote-txs! test-repo client remote-txs)
+
+          (is (= [[deleted-uuid]] @repair-calls))
+          (is (nil? (d/entity @conn [:block/uuid deleted-uuid])))
+          (is (= "remote child 2"
+                 (:block/title (d/entity @conn [:block/uuid child2-uuid]))))
+          (let [validation (db-validate/validate-local-db! @conn)]
+            (is (empty? (non-recycle-validation-entities validation))
+                (str (:errors validation)))))))))
+
 (deftest apply-remote-txs-repairs-missing-block-ref-value-test
   (testing "remote tx application fetches missing block lookup refs used as datom values"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
@@ -4410,6 +4464,38 @@
             (is (= [[child-uuid]] @repair-calls))
             (is (= page-id (:db/id (:block/page child1'))))
             (is (= "local title" (:block/title child1')))))))))
+
+(deftest apply-remote-txs-with-local-changes-skips-unrepaired-missing-block-deleted-in-batch-test
+  (testing "remote tx application can skip obsolete txs for a missing block deleted by the same batch"
+    (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+          missing-uuid (random-uuid)
+          child1-uuid (:block/uuid child1)
+          child2-uuid (:block/uuid child2)
+          repair-calls (atom [])
+          client (repair-client repair-calls (fn [_block-uuids] []))
+          remote-txs [{:tx-data [[:db/retract [:block/uuid missing-uuid] :block/title "remote old"]
+                                 [:db/add [:block/uuid missing-uuid] :block/title "remote new"]
+                                 [:db/retract [:block/uuid child2-uuid] :block/title (:block/title child2)]
+                                 [:db/add [:block/uuid child2-uuid] :block/title "remote child 2"]]}
+                      {:tx-data [[:db/retractEntity [:block/uuid missing-uuid]]]}]]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-core/save-block! conn
+                                     {:block/uuid child1-uuid
+                                      :block/title "local child 1"})
+          (is (= 1 (count (#'sync-apply/pending-txs test-repo))))
+
+          (#'sync-apply/apply-remote-txs! test-repo client remote-txs)
+
+          (is (= [[missing-uuid]] @repair-calls))
+          (is (nil? (d/entity @conn [:block/uuid missing-uuid])))
+          (is (= "local child 1"
+                 (:block/title (d/entity @conn [:block/uuid child1-uuid]))))
+          (is (= "remote child 2"
+                 (:block/title (d/entity @conn [:block/uuid child2-uuid]))))
+          (let [validation (db-validate/validate-local-db! @conn)]
+            (is (empty? (non-recycle-validation-entities validation))
+                (str (:errors validation)))))))))
 
 (deftest decrypt-repair-tx-data-decrypts-e2ee-block-datoms-test
   (testing "repair tx data decrypts encrypted server block datoms"

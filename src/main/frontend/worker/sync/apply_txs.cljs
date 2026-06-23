@@ -325,6 +325,98 @@
        distinct
        vec))
 
+(defn- repaired-block-uuids-in-tx-data
+  [tx-data]
+  (->> tx-data
+       (keep (fn [item]
+               (cond
+                 (map? item) (:block/uuid item)
+
+                 (and (vector? item)
+                      (= :db/add (first item))
+                      (= :block/uuid (nth item 2 nil))
+                      (uuid? (nth item 3 nil)))
+                 (nth item 3)
+
+                 :else nil)))
+       distinct
+       vec))
+
+(defn- block-uuid-ref
+  [v]
+  (cond
+    (uuid? v) v
+
+    (and (vector? v)
+         (= :block/uuid (first v))
+         (uuid? (second v)))
+    (second v)
+
+    :else nil))
+
+(defn- remote-txs-deleted-block-uuids
+  [remote-txs]
+  (->> remote-txs
+       (mapcat :tx-data)
+       (keep (fn [item]
+               (when (and (vector? item)
+                          (contains? #{:db/retractEntity :db.fn/retractEntity}
+                                     (first item)))
+                 (block-uuid-ref (second item)))))
+       distinct
+       vec))
+
+(defn- unrepaired-deleted-block-uuids
+  [missing-block-uuids repair-tx-data remote-txs]
+  (let [repaired-block-uuids (set (repaired-block-uuids-in-tx-data repair-tx-data))
+        deleted-block-uuids (set (remote-txs-deleted-block-uuids remote-txs))]
+    (->> missing-block-uuids
+         (remove repaired-block-uuids)
+         (filter deleted-block-uuids)
+         distinct
+         vec)))
+
+(defn- remote-tx-temp-id->block-uuid
+  [remote-txs]
+  (->> remote-txs
+       (mapcat :tx-data)
+       (keep (fn [item]
+               (when (and (vector? item)
+                          (= :db/add (first item))
+                          (= :block/uuid (nth item 2 nil))
+                          (uuid? (nth item 3 nil)))
+                 [(second item) (nth item 3)])))
+       (into {})))
+
+(defn- tx-item-entity-block-uuid
+  [temp-id->block-uuid item]
+  (when (vector? item)
+    (let [e (second item)]
+      (or (block-uuid-ref e)
+          (get temp-id->block-uuid e)))))
+
+(defn- drop-tx-items-for-block-uuids
+  [remote-txs block-uuids]
+  (let [block-uuids' (set block-uuids)
+        temp-id->block-uuid (remote-tx-temp-id->block-uuid remote-txs)]
+    (if (seq block-uuids')
+      (mapv (fn [remote-tx]
+              (update remote-tx :tx-data
+                      (fn [tx-data]
+                        (->> tx-data
+                             (remove (fn [item]
+                                       (contains? block-uuids'
+                                                  (tx-item-entity-block-uuid temp-id->block-uuid item))))
+                             vec))))
+            remote-txs)
+      remote-txs)))
+
+(defn- remote-txs-after-missing-block-repair
+  [missing-block-uuids repair-tx-data remote-txs]
+  (let [unrepaired-deleted-block-uuids' (unrepaired-deleted-block-uuids
+                                         missing-block-uuids repair-tx-data remote-txs)]
+    (drop-tx-items-for-block-uuids remote-txs unrepaired-deleted-block-uuids')))
+
 (defn enqueue-upload-repair!
   [repo block-uuids]
   (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -1320,13 +1412,22 @@
           (let [pre-repair-tx-data (<server-repair-blocks-tx-data repo client missing-block-uuids)
                 post-repair-tx-data (<server-repair-blocks-tx-data repo client invalid-repair-block-uuids)
                 apply-with-repair (fn [pre-repair-tx-data* post-repair-tx-data*]
-                                    (apply-remote-txs-after-server-repair!
-                                     (update apply-args :apply-context assoc
-                                             :pre-repair-tx-data pre-repair-tx-data*
-                                             :post-repair-tx-data post-repair-tx-data*
-                                             :prefetched-repair-block-uuids
-                                             (distinct (concat missing-block-uuids
-                                                               invalid-repair-block-uuids)))))]
+                                    (let [remote-txs' (remote-txs-after-missing-block-repair
+                                                       missing-block-uuids
+                                                       pre-repair-tx-data*
+                                                       remote-txs)
+                                          remote-tx-data' (mapcat :tx-data remote-txs')]
+                                      (apply-remote-txs-after-server-repair!
+                                       (-> apply-args
+                                           (assoc :remote-txs remote-txs'
+                                                  :remote-tx-data remote-tx-data')
+                                           (update :apply-context assoc
+                                                   :remote-txs remote-txs'
+                                                   :pre-repair-tx-data pre-repair-tx-data*
+                                                   :post-repair-tx-data post-repair-tx-data*
+                                                   :prefetched-repair-block-uuids
+                                                   (distinct (concat missing-block-uuids
+                                                                     invalid-repair-block-uuids)))))))]
             (if (or (p/promise? pre-repair-tx-data)
                     (p/promise? post-repair-tx-data))
               (p/let [pre-repair-tx-data* pre-repair-tx-data
@@ -1335,9 +1436,25 @@
               (apply-with-repair pre-repair-tx-data post-repair-tx-data)))
           (apply-remote-txs-after-server-repair! apply-args))
         (if (seq missing-block-uuids)
-          (after-repair-result
-           (<apply-server-repair-blocks! repo client conn missing-block-uuids)
-           #(apply-remote-txs-after-server-repair! apply-args))
+          (let [pre-repair-tx-data (<server-repair-blocks-tx-data repo client missing-block-uuids)
+                apply-with-repair (fn [pre-repair-tx-data*]
+                                    (let [remote-txs' (remote-txs-after-missing-block-repair
+                                                       missing-block-uuids
+                                                       pre-repair-tx-data*
+                                                       remote-txs)
+                                          remote-tx-data' (mapcat :tx-data remote-txs')
+                                          apply-args' (-> apply-args
+                                                          (assoc :remote-txs remote-txs'
+                                                                 :remote-tx-data remote-tx-data')
+                                                          (update :apply-context assoc
+                                                                  :remote-txs remote-txs'))]
+                                      (after-repair-result
+                                       (maybe-apply-repair-tx-data! conn pre-repair-tx-data*)
+                                       #(apply-remote-txs-after-server-repair! apply-args'))))]
+            (if (p/promise? pre-repair-tx-data)
+              (p/let [pre-repair-tx-data* pre-repair-tx-data]
+                (apply-with-repair pre-repair-tx-data*))
+              (apply-with-repair pre-repair-tx-data)))
           (apply-remote-txs-after-server-repair! apply-args))))
     (fail-fast :db-sync/missing-db {:repo repo :op :apply-remote-txs})))
 
