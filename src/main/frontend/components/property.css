@@ -33,6 +33,10 @@
   margin-left: 0;
 }
 
+.ls-block .ls-properties-area.ls-block-properties {
+  margin-left: 8px;
+}
+
 .grid-auto-fit {
   grid-template-columns: repeat(auto-fit, 120px);
 }
@@ -70,6 +74,14 @@
     @apply px-3 py-2 text-xs font-medium text-muted-foreground border-b border-gray-04;
   }
 
+  .hidden-properties-toggle-btn {
+    color: var(--ls-secondary-text-color);
+  }
+
+  .hidden-properties-toggle-btn:hover {
+    color: var(--ls-primary-text-color);
+  }
+
   .property-pair.property-panel-row {
     @apply grid items-start pr-3 gap-3 w-full;
     grid-template-columns: fit-content(260px) minmax(0, 1fr);
@@ -85,7 +97,7 @@
   }
 
   .property-key-panel .property-key-inner {
-    @apply w-full min-w-0;
+    @apply w-full min-w-0 min-h-[28px];
   }
 
   .property-key-panel .property-k {
