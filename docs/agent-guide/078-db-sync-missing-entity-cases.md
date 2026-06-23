@@ -48,7 +48,7 @@ modifies a block that the client does not have, then deletes that same block:
 Datascript fails while resolving the lookup ref in `t 45803`, before it can
 apply the later delete in `t 45804`.
 
-## Likely Cause
+## Root Cause
 
 The client local DB and client sync cursor are inconsistent for this block:
 
@@ -56,9 +56,40 @@ The client local DB and client sync cursor are inconsistent for this block:
 - The server assumes earlier txs created `6a37baf7...` locally.
 - The client DB does not contain that entity.
 
-This can happen if a restored local DB or snapshot is missing an entity whose
-creation happened before the stored cursor, or if an earlier remote apply/import
-advanced the cursor without leaving the corresponding entity in local DB.
+The reproduced root cause is the graph download path:
+
+1. The client called `/sync/:graph-id/pull` and read `:t` from that response.
+2. The client then downloaded a snapshot from `/sync/:graph-id/snapshot/stream`.
+3. Import finalization wrote the earlier `/pull` `:t` into client-op
+   `:local-tx`.
+
+Those are different requests. If the snapshot content is older than the `/pull`
+cursor, the client DB can miss entities whose create tx is at or before the
+stored cursor. Later catch-up starts after that cursor, so it never receives the
+create tx. The next remote edit for that UUID fails with `:entity-id/missing`.
+
+Local RED proof:
+
+```clojure
+;; /pull says the server is at t=2
+{:type "pull/ok" :t 2}
+
+;; the actual snapshot stream represents t=1
+;; old code finalized import with t=2
+```
+
+Pre-fix test result:
+
+```text
+expected: (= 1 @finalized-remote-t*)
+  actual: (not (= 1 2))
+```
+
+Test:
+
+```clojure
+frontend.worker.sync.download-test/download-finalizes-with-snapshot-t-not-preflight-pull-t-test
+```
 
 The iOS automatic journal creation is important because it creates a local
 pending tx before remote catch-up completes. It does not create the missing
@@ -154,7 +185,31 @@ frontend.worker.db-sync-test/apply-remote-txs-skips-missing-block-created-then-d
 
 ## Fix Boundary
 
-The fix should only prune obsolete tx items when all of these are true:
+### Root fix
+
+Graph download must not derive the imported DB cursor from a separate `/pull`
+response.
+
+Implemented boundary:
+
+- `download-graph-by-id!` no longer preflights `/pull`.
+- `/snapshot/stream` returns an `x-snapshot-t` header.
+- `download-graph-by-id!` finalizes import with `x-snapshot-t` from the actual
+  stream response.
+- `x-snapshot-t` is exposed through CORS.
+- `/snapshot/download` also returns a cheap `:t` field for protocol visibility,
+  but the client uses the stream response header for the imported cursor.
+
+Cloudflare Worker constraints:
+
+- Do not compute a full checksum while serving snapshot download.
+- Do not materialize the whole snapshot in memory.
+- Keep snapshot rows streamed in batches.
+
+### Existing bad-state guard
+
+The apply-side guard should only prune obsolete tx items when all of these are
+true:
 
 1. The remote batch references a block UUID missing from the local DB.
 2. The client requested server repair data for that UUID.
@@ -170,6 +225,24 @@ When pruning is needed, prune tx items whose entity is that block UUID, includin
 Do not drop unrelated tx items. Do not leave temp-id-created ghost entities.
 
 ## Verification Commands
+
+Root-cause download test:
+
+```bash
+bb dev:test -v frontend.worker.sync.download-test/download-finalizes-with-snapshot-t-not-preflight-pull-t-test
+```
+
+Download namespace:
+
+```bash
+bb dev:test -v frontend.worker.sync.download-test
+```
+
+Server protocol/handler tests:
+
+```bash
+bb dev:db-sync-test
+```
 
 Focused:
 
@@ -189,5 +262,21 @@ Latest local full result after the fix:
 
 ```text
 Ran 184 tests containing 665 assertions.
+0 failures, 0 errors.
+```
+
+Additional latest results:
+
+```text
+frontend.worker.sync.download-test
+Ran 4 tests containing 5 assertions.
+0 failures, 0 errors.
+
+bb dev:db-sync-test
+Ran 124 tests containing 3681 assertions.
+0 failures, 0 errors.
+
+frontend.worker.db-worker-test/db-sync-download-graph-by-id-cleans-temp-pool-on-failure-test
+Ran 1 tests containing 5 assertions.
 0 failures, 0 errors.
 ```

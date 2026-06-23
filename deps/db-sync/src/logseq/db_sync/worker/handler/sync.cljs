@@ -503,13 +503,16 @@
   (let [graph-id (graph-id-from-request request)]
     (if (not (seq graph-id))
       (http/bad-request "missing graph id")
-      (let [gzip? (and (snapshot-stream-gzip-enabled? self)
+      (let [t (t-now self)
+            gzip? (and (snapshot-stream-gzip-enabled? self)
                        (exists? js/CompressionStream))
             stream (cond-> (snapshot-export-stream self)
                      gzip?
                      (maybe-compress-stream))
             row-count (snapshot-row-count (.-sql self))
             headers (cond-> {"content-type" snapshot-content-type}
+                      t
+                      (assoc "x-snapshot-t" (str t))
                       gzip?
                       (assoc "content-encoding" snapshot-content-encoding))]
         (js/Response. stream
@@ -532,13 +535,15 @@
           (http/error-response "graph not ready" 409)
           (let [key (str "stream/" graph-id ".snapshot")
                 url (snapshot-stream-url request graph-id)
+                t (t-now self)
                 content-encoding (when (and (snapshot-stream-gzip-enabled? self)
                                             (exists? js/CompressionStream))
                                    snapshot-content-encoding)]
             (http/json-response :sync/snapshot-download
                                 (cond-> {:ok true
                                          :key key
-                                         :url url}
+                                         :url url
+                                         :t t}
                                   content-encoding
                                   (assoc :content-encoding content-encoding)))))))))
 
