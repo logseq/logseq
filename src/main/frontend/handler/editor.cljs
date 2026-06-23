@@ -561,7 +561,7 @@
               [result-promise sibling? next-block] (insert-fn (assoc config :right-sibling right-sibling) block'' value)
               edit-block-f #(edit-pending-new-block! next-block sibling?)]
           (p/do!
-           (state/set-state! :editor/edit-block-fn edit-block-f)
+           (state/queue-edit-block-fn! edit-block-f)
            result-promise
            (clear-when-saved!)))))
     (p/catch (fn [e]
@@ -838,7 +838,7 @@
                   (let [children (:block/_parent (db/entity (:db/id block)))]
                     (p/do!
                      (mobile-util/mobile-focus-hidden-input)
-                     (state/set-state! :editor/edit-block-fn edit-block-f)
+                     (state/queue-edit-block-fn! edit-block-f)
                      (ui-outliner-tx/transact!
                       transact-opts
                       (when (seq children)
@@ -848,7 +848,7 @@
 
                   :else
                   (p/do!
-                   (state/set-state! :editor/edit-block-fn edit-block-f)
+                   (state/queue-edit-block-fn! edit-block-f)
                    (delete-block-aux! block)))))))))))
 
 (defn move-blocks!
@@ -896,7 +896,7 @@
        (when (and sibling-block (not mobile?))
          (let [{:keys [edit-block-f]} (move-to-prev-block repo sibling-block
                                                           "")]
-           (state/set-state! :editor/edit-block-fn edit-block-f)))
+           (state/queue-edit-block-fn! edit-block-f)))
        (let [journals (and mobile? (filter ldb/journal? blocks'))
              blocks (remove (fn [b] (contains? (set (map :db/id journals)) (:db/id b))) blocks)]
          (when (or (seq journals) (seq blocks))

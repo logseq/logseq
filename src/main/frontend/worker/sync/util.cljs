@@ -6,6 +6,7 @@
             [logseq.db :as ldb]
             [frontend.worker.sync.client-op :as client-op]
             [logseq.common.util :as common-util]
+            [logseq.common.version :as build-version]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [promesa.core :as p]))
 
@@ -78,9 +79,17 @@
       (log/error :db-sync/malli-coerce-failed (merge context {:error e :value value}))
       invalid-coerce)))
 
+(defn- with-client-revision
+  [schema-key body]
+  (cond-> body
+    (and (= :sync/tx-batch schema-key)
+         (map? body)
+         (not (contains? body :client-revision)))
+    (assoc :client-revision (build-version/revision))))
+
 (defn coerce-http-request [schema-key body]
   (if-let [coercer (get db-sync-schema/http-request-coercers schema-key)]
-    (let [coerced (coerce coercer body {:schema schema-key :dir :request})]
+    (let [coerced (coerce coercer (with-client-revision schema-key body) {:schema schema-key :dir :request})]
       (when-not (= coerced invalid-coerce)
         coerced))
     body))

@@ -40,6 +40,10 @@
                  :stopPropagation #(reset! stopped? true)}
      :stopped? stopped?}))
 
+(defn- take-edit-block-fn!
+  []
+  (state/take-edit-block-fn!))
+
 (defn- delete-block
   [db block {:keys [embed? on-delete edit-content on-edit schedule-immediately?]}]
   (let [sibling-block (ldb/get-left-sibling (d/entity db (:db/id block)))
@@ -383,7 +387,7 @@
                                                                (p/resolved nil))]
           (editor/insert-new-block! nil nil)
           ((editor/keydown-tab-handler :right) event)
-          (p/let [_ (when-let [edit-block-f (state/get-state :editor/edit-block-fn)]
+          (p/let [_ (when-let [edit-block-f (take-edit-block-fn!)]
                        (edit-block-f))]
             (is @stopped? "Tab should still be consumed while the new block is pending")
             (is (empty? @current-block-indents) "Tab must not indent the block that was split by Enter")
@@ -402,6 +406,69 @@
                      (state/set-state! :editor/edit-block-fn nil)
             (state/set-state! :editor/pending-new-block nil)
             (set! (.-document js/globalThis) previous-document))))))
+
+(deftest-async rapid-enter-keeps-new-block-focus-callbacks-in-transaction-order
+  (let [current-block {:db/id 1
+                       :block/uuid (random-uuid)
+                       :block/title "first"}
+        first-new-block {:db/id 2
+                         :block/uuid (random-uuid)
+                         :block/title ""}
+        second-new-block {:db/id 3
+                          :block/uuid (random-uuid)
+                          :block/title ""}
+        inserted-blocks (atom [first-new-block second-new-block])
+        input #js {:value "first"}
+        edit-calls (atom [])
+        previous-document (.-document js/globalThis)]
+    (state/set-editing-block-id! [:unknown-container (:block/uuid current-block)])
+    (set! (.-document js/globalThis)
+          #js {:activeElement input
+               :getElementById (fn [_id] input)})
+    (-> (p/with-redefs [state/get-edit-input-id (constantly "edit-block-current")
+                        gdom/getElement (constantly input)
+                        util/get-selection-start (constantly 5)
+                        util/get-selection-end (constantly 5)
+                        db/entity (fn [lookup-ref]
+                                    (case lookup-ref
+                                      [:block/uuid (:block/uuid current-block)] current-block
+                                      [:block/uuid (:block/uuid first-new-block)] first-new-block
+                                      [:block/uuid (:block/uuid second-new-block)] second-new-block
+                                      current-block))
+                        editor/get-state (constantly {:block current-block
+                                                      :value "first"
+                                                      :config {}
+                                                      :block-container #js {}})
+                        editor/insert-new-block-aux! (fn [_config _block _value]
+                                                       (let [next-block (first @inserted-blocks)]
+                                                         (swap! inserted-blocks subvec 1)
+                                                         [(p/resolved true) true next-block]))
+                        editor/get-new-container-id (constantly nil)
+                        editor/edit-block! (fn [block pos opts]
+                                             (swap! edit-calls conj {:block block
+                                                                     :pos pos
+                                                                     :opts opts})
+                                             (p/resolved nil))]
+          (editor/insert-new-block! nil nil)
+          (editor/insert-new-block! nil nil)
+          (p/let [_ (when-let [edit-block-f (take-edit-block-fn!)]
+                       (edit-block-f))
+                  _ (when-let [edit-block-f (take-edit-block-fn!)]
+                      (edit-block-f))]
+            (is (= [{:block first-new-block
+                     :pos 0
+                     :opts {:container-id nil
+                            :custom-content ""}}
+                    {:block second-new-block
+                     :pos 0
+                     :opts {:container-id nil
+                            :custom-content ""}}]
+                   @edit-calls)
+                "Rapid Enter should keep one focus callback per inserted block, in transaction order")))
+        (p/finally (fn []
+                     (state/set-state! :editor/edit-block-fn nil)
+                     (state/set-state! :editor/pending-new-block nil)
+                     (set! (.-document js/globalThis) previous-document))))))
 
 (deftest-async indent-block-does-not-move-into-comments-area
   (load-test-files

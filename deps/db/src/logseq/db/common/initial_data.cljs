@@ -396,10 +396,16 @@
 (defn- get-all-user-datoms
   [db]
   (when (d/entity db :logseq.property.user/email)
-    (mapcat
-     (fn [d]
-       (d/datoms db :eavt (:e d)))
-     (d/datoms db :avet :logseq.property.user/email))))
+    (->> (d/datoms db :avet :logseq.property.user/email)
+         (mapcat
+          (fn [d] (d/datoms db :eavt (:e d)))))))
+
+(defn- get-list-style-values
+  [db]
+  (->> (d/datoms db :avet :logseq.property/order-list-type)
+       (map :v)
+       (distinct)
+       (mapcat (fn [v] (d/datoms db :eavt v)))))
 
 (defn get-initial-data
   "Returns current database schema and initial data"
@@ -424,6 +430,7 @@
         all-files (get-all-files db)
         structured-datoms (get-structured-datoms db)
         user-datoms (get-all-user-datoms db)
+        list-style-datoms (get-list-style-values db)
         pages-datoms (let [contents-id (get-first-page-by-title db "Contents")
                            capture-page-id (:db/id (db-db/get-built-in-page db common-config/quick-add-page-name))
                            views-id (get-first-page-by-title db common-config/views-page-name)
@@ -433,6 +440,7 @@
         data (->> (concat idents
                           structured-datoms
                           user-datoms
+                          list-style-datoms
                           favorites
                           recent-updated-pages
                           all-files
