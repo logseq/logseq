@@ -243,24 +243,27 @@
   (let [type (or (:logseq.property/type property) property-type :default)
         ident (:db/ident property)
         icon (cond
-               (= ident :block/tags)
-               "hash"
-               (string/starts-with? (str ident) ":plugin.")
-               "puzzle"
-               :else
-               (case type
-                 :number "number"
-                 :date "calendar"
-                 :datetime "calendar"
-                 :checkbox "checkbox"
-                 :url "link"
-                 :property "letter-p"
-                 :page "page"
-                 :node "point-filled"
-                 :asset "letter-a"
-                 "letter-t"))]
-    (ui/icon icon {:class "opacity-50"
-                   :size 15})))
+	               (= ident :block/tags)
+	               "hash"
+	               (string/starts-with? (str ident) ":plugin.")
+	               "puzzle"
+	               :else
+	               (case type
+	                 :number "number"
+	                 :date "calendar"
+	                 :datetime "calendar"
+	                 :checkbox "checkbox"
+	                 :url "link"
+	                 :property "letter-p"
+	                 :page "page"
+	                 :node "point-filled"
+	                 :asset "letter-a"
+	                 nil))]
+	    (if icon
+	      (ui/icon icon {:class "opacity-50"
+	                     :size 15})
+	      [:span.bullet-container
+	       [:span.bullet]])))
 
 (defn- property-input-on-chosen
   [block *property *property-key *show-new-property-config? {:keys [class-schema? remove-property?]}]
@@ -666,6 +669,20 @@
     :else
     false))
 
+(def ^:private class-page-metadata-properties
+  [:logseq.property.class/extends
+   :logseq.property.class/enable-bidirectional?])
+
+(defn- properties-for-display
+  [block]
+  (cond-> (:block/properties block)
+    (and (ldb/class? block)
+         (not (ldb/built-in? block)))
+    (merge (zipmap class-page-metadata-properties
+                   (map #(get block %) class-page-metadata-properties))
+           (when (nil? (:logseq.property.class/enable-bidirectional? block))
+             {:logseq.property.class/enable-bidirectional? false}))))
+
 (defn- filter-recycled-entity-values
   [value]
   (let [active-entity-value? (fn [item]
@@ -792,11 +809,7 @@
         show-empty-and-hidden-properties? (and show?
                                              (or (= mode :global)
                                                  (and (set? ids) (contains? ids (:block/uuid block)))))
-        properties* (cond-> (:block/properties block)
-                      (and (ldb/class? block)
-                           (not (ldb/built-in? block)))
-                      (assoc :logseq.property.class/enable-bidirectional?
-                             (:logseq.property.class/enable-bidirectional? block)))
+        properties* (properties-for-display block)
         {:keys [properties recycled-only-property-ids]}
         (sanitize-property-values-for-display properties*)
         remove-built-in-or-other-position-properties
@@ -939,15 +952,12 @@
         block (resolve-linked-block-if-exists target-block)
         show-hidden-properties? (contains? shown-block-ids (:block/uuid block))
         show-properties? (or sidebar-properties? tag-dialog?)
+        class? (entity-util/class? block)
         show-empty-and-hidden-properties? (let [{:keys [mode show? ids]} (state/use-sub :ui/show-empty-and-hidden-properties?)]
                                             (and show?
                                                  (or (= mode :global)
                                                      (and (set? ids) (contains? ids (:block/uuid block))))))
-        properties* (cond-> (:block/properties block)
-                      (and (ldb/class? block)
-                           (not (ldb/built-in? block)))
-                      (assoc :logseq.property.class/enable-bidirectional?
-                             (:logseq.property.class/enable-bidirectional? block)))
+        properties* (properties-for-display block)
         {:keys [properties recycled-only-property-ids]}
         (sanitize-property-values-for-display properties*)
         remove-built-in-or-other-position-properties
@@ -1044,11 +1054,12 @@
      (let [has-bidirectional-properties? (seq bidirectional-properties)]
        (cond
          (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?)
+              (not class?)
               (not show-hidden-properties?)
               (not has-bidirectional-properties?))
          nil
 
-         (and (empty? full-properties) (empty? hidden-properties) (not has-bidirectional-properties?))
+         (and (empty? full-properties) (empty? hidden-properties) (not class?) (not has-bidirectional-properties?))
          (when show-properties?
            ^{:key (str id "-add-property")}
            [new-property block opts])
@@ -1060,7 +1071,6 @@
                                 (remove (fn [[k _v]] (= k :logseq.property.class/properties))))
                show-properties-panel? (seq properties')
                page? (entity-util/page? block)
-               class? (entity-util/class? block)
                plugin-properties (->> (concat full-properties hidden-properties)
                                       (remove (fn [[k _v]] (= k :logseq.property.class/properties)))
                                       (into {}))
@@ -1133,7 +1143,7 @@
                   (let [properties (->> (:logseq.property.class/properties block)
                                         (map (fn [e] [(:db/ident e)])))
                         opts' (assoc opts :class-schema? true)]
-                    [:div.flex.flex-col.gap-1.ml-3.mt-2
+                    [:div.flex.flex-col.gap-1.mt-2
                      [:div {:style {:font-size 15}}
                       [:div.property-key.text-sm
                        (property-key-cp block (db/entity :logseq.property.class/properties) {})]

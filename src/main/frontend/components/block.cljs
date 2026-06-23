@@ -2844,6 +2844,10 @@
     (.focus el)
     true))
 
+(defn- focus-first-bottom-row-item!
+  [^js row]
+  (focus-bottom-row-item! row 0))
+
 (defn- move-bottom-row-focus!
   [^js el direction]
   (when-let [^js row (.closest el ".bottom-properties-row")]
@@ -2895,6 +2899,17 @@
                                     :max
                                     {:container-id container-id})))))
 
+(defn- handle-bottom-row-vertical-nav!
+  [^js row key]
+  (case key
+    "ArrowUp"
+    (focus-block-editor-from-bottom-row! row)
+
+    "ArrowDown"
+    (editor-handler/move-cross-boundary-up-down :down {:exclude-property? true})
+
+    nil))
+
 (defn- handle-bottom-properties-row-key-down!
   [e]
   (let [key (util/ekey e)
@@ -2904,12 +2919,12 @@
       (= "ArrowUp" key)
       (do
         (util/stop e)
-        (focus-block-editor-from-bottom-row! row))
+        (handle-bottom-row-vertical-nav! row key))
 
       (= "ArrowDown" key)
       (do
         (util/stop e)
-        (editor-handler/move-cross-boundary-up-down :down {:exclude-property? true}))
+        (handle-bottom-row-vertical-nav! row key))
 
       (contains? #{"ArrowLeft" "ArrowRight"} key)
       (do
@@ -2932,7 +2947,9 @@
       (contains? #{"ArrowUp" "ArrowDown"} key)
       (do
         (util/stop e)
-        (some-> (.closest pill ".bottom-properties-row") (.focus)))
+        (some-> pill
+                (.closest ".bottom-properties-row")
+                (handle-bottom-row-vertical-nav! key)))
 
       (contains? #{" " "Enter"} key)
       (do
@@ -2988,33 +3005,64 @@
       (when (not= overflow? @*overflow?)
         (reset! *overflow? overflow?)))))
 
-(hsx/defc bottom-properties-more-button
-  [block properties opts]
-  (let [label (t :header/more)]
+(hsx/defc bottom-properties-expand-button
+  [expanded? set-expanded!]
+  (let [label (t (if expanded?
+                   :property/collapse-bottom-pills
+                   :property/expand-bottom-pills))]
     (shui/button
      {:variant :secondary
       :size :sm
-      :class "bottom-property-control-btn bottom-property-more-btn"
+      :class "bottom-property-control-btn bottom-property-expand-btn"
       :tab-index 0
       :data-bottom-row-nav true
       :aria-label label
+      :aria-expanded (str expanded?)
       :on-click (fn [e]
                   (util/stop e)
-                  (shui/popup-show!
-                   (.-currentTarget e)
-                   (fn [_id]
-                     [:div.positioned-properties.block-below.bottom-properties-more-popup.flex.flex-col.gap-2.p-2.overflow-auto
-                      {:style {:max-width "min(80vw, 640px)"
-                               :max-height "min(70vh, 480px)"}}
-                      (bottom-property-pill-items block properties opts)])
-                   {:as-dropdown? true}))}
+                  (set-expanded! (not expanded?)))}
+     (ui/icon (if expanded? "chevron-up" "chevron-down")
+              {:size 16 :class "bottom-property-action-icon"})
      label)))
 
 (defn- block-below-positioned-properties-cp
   [block properties opts show-hidden-properties-toggle? show-add-property-button?]
   (let [*pills-el (hooks/use-ref nil)
         *overflow? (hooks/use-memo #(atom false) [(:block/uuid block) (count properties)])
-        [overflow?] (hooks/use-atom *overflow?)]
+        [overflow?] (hooks/use-atom *overflow?)
+        [expanded? set-expanded!] (hooks/use-state false)]
+    (hooks/use-effect!
+     (fn []
+       (let [block-uuid (:block/uuid block)
+             listener (fn [^js e]
+                        (let [key (util/ekey e)
+                              ^js active-el (.-activeElement js/document)
+                              edit-input-id (str "edit-block-" block-uuid)
+                              row (when block-uuid
+                                    (.querySelector js/document
+                                                    (str "[data-bottom-properties-row=\"" block-uuid "\"]")))]
+                          (when (and row
+                                     block-uuid
+                                     (contains? #{"ArrowUp" "ArrowDown"} key)
+                                     (not (or (.-metaKey e)
+                                              (.-ctrlKey e)
+                                              (.-altKey e)))
+                                     active-el
+                                     (= (.-id active-el) edit-input-id)
+                                     (input-cursor-at-boundary? active-el key))
+                            (util/stop e)
+                            (focus-first-bottom-row-item! row))
+
+                          (when (and row
+                                     (= key "Escape")
+                                     active-el
+                                     (.contains row active-el))
+                            (when-let [pill (current-bottom-pill active-el)]
+                              (js/setTimeout (fn [] (.focus pill)) 0)))))]
+         (.addEventListener js/document "keydown" listener)
+         (fn []
+           (.removeEventListener js/document "keydown" listener))))
+     [(:block/uuid block)])
     (hooks/use-effect!
      (fn []
        (let [^js el (.-current *pills-el)
@@ -3029,17 +3077,26 @@
            (when observer
              (.disconnect observer))
            (.removeEventListener js/window "resize" measure!))))
-     [(:block/uuid block) properties show-hidden-properties-toggle? show-add-property-button?])
-    [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden
-     [:div.bottom-properties-row.flex.flex-row.gap-2.items-center.flex-nowrap.overflow-x-hidden
-      {:data-bottom-properties-row (:block/uuid block)
+     [(:block/uuid block) properties show-hidden-properties-toggle? show-add-property-button? expanded?])
+    [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden.w-full.min-w-0
+     [:div
+      {:class (util/classnames
+               ["bottom-properties-row flex flex-row gap-2 items-center w-full min-w-0"
+                (if expanded?
+                  "flex-wrap overflow-x-hidden"
+                  "flex-nowrap overflow-x-hidden")])
+       :data-expanded (boolean expanded?)
+       :data-bottom-properties-row (:block/uuid block)
        :tab-index -1
        :on-key-down handle-bottom-properties-row-key-down!}
-      [:div.bottom-properties-pills-strip.flex.flex-row.gap-2.items-center.flex-nowrap.overflow-x-hidden.min-w-0.flex-1
-       {:ref #(set! (.-current *pills-el) %)}
+      [:div.bottom-properties-pills-strip.flex.flex-row.gap-2.items-center.min-w-0.flex-1.basis-0
+       {:class (util/classnames [(if expanded?
+                                   "flex-wrap overflow-x-hidden"
+                                   "flex-nowrap overflow-x-hidden")])
+        :ref #(set! (.-current *pills-el) %)}
        (bottom-property-pill-items block properties opts)]
-      (when overflow?
-        (bottom-properties-more-button block properties opts))
+      (when (or overflow? expanded?)
+        (bottom-properties-expand-button expanded? set-expanded!))
       (when show-hidden-properties-toggle?
         (property-component/hidden-properties-toggle-button block {:icon-only? true
                                                                    :bottom-row-nav? true
@@ -3075,40 +3132,6 @@
                                      (not config/publishing?))
         show-add-property-button? (and has-viewable-properties?
                                        show-page-add-property?)]
-    (when (= position :block-below)
-      (hooks/use-effect!
-       (fn []
-         (let [block-uuid (:block/uuid block)
-               listener (fn [^js e]
-                          (let [key (util/ekey e)
-                                ^js active-el (.-activeElement js/document)
-                                edit-input-id (str "edit-block-" block-uuid)
-                                row (when block-uuid
-                                      (.querySelector js/document
-                                                      (str "[data-bottom-properties-row=\"" block-uuid "\"]")))]
-                            (when (and row
-                                       has-viewable-properties?
-                                       block-uuid
-                                       (contains? #{"ArrowUp" "ArrowDown"} key)
-                                       (not (or (.-metaKey e)
-                                                (.-ctrlKey e)
-                                                (.-altKey e)))
-                                       active-el
-                                       (= (.-id active-el) edit-input-id)
-                                       (input-cursor-at-boundary? active-el key))
-                              (util/stop e)
-                              (.focus row))
-
-                            (when (and row
-                                       (= key "Escape")
-                                       active-el
-                                       (.contains row active-el))
-                              (when-let [pill (current-bottom-pill active-el)]
-                                (js/setTimeout (fn [] (.focus pill)) 0)))))]
-           (.addEventListener js/document "keydown" listener)
-           (fn []
-             (.removeEventListener js/document "keydown" listener))))
-       [(:block/uuid block) has-viewable-properties?]))
     (case position
         :block-below
         (when has-viewable-properties?
@@ -4600,11 +4623,6 @@
        [:div (when-not (:page-title? config) {:class "ls-block-content-indent"})
         (db-properties-cp config block {:in-block-container? true
                                         :skip-bidirectional-properties? (:page-title? config)})])
-
-     (when (and (:page-title? config)
-                (not (:library? config))
-                (not (or table? property?)))
-       (property-component/bidirectional-properties-area block config))
 
      (when (and show-query? (not (:table? config)))
        (let [query? (ldb/class-instance? (entity-plus/entity-memoized (db/get-db) :logseq.class/Query) block)
