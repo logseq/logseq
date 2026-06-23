@@ -47,7 +47,7 @@
       :view-feature-type :linked-references
       :show-items-count? true
       :additional-actions [reference-filter]
-      :columns (views/build-columns config [] {})
+      :columns (views/build-columns config [] {:add-page-column? true})
       :config config
       :foldable-options (when (and (:linked-refs-section? config)
                                    (zero? open-blocks-level))
@@ -95,6 +95,6 @@
          (views/view
           {:view-parent entity
            :view-feature-type :unlinked-references
-           :columns (views/build-columns config [] {})
+           :columns (views/build-columns config [] {:add-page-column? true})
            :foldable-options {:default-collapsed? true}
            :config config})]))))
