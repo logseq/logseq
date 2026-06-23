@@ -1640,8 +1640,7 @@
                   :size (or (:size stat) (some-> stat .-size) 0)
                   :external-url (or asset-link-or-name path)
                   :external-file-name asset-path}))
-        (p/catch (fn [error]
-                   (js/console.error error))))))
+        (p/catch (constantly nil)))))
 
 (defn- build-asset-tx
   [asset-data asset-name asset-link-or-name asset-link pdf-annotation-pages opts assets zotero-asset?]
