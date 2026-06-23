@@ -2344,6 +2344,13 @@
   [block-node]
   (some-> block-node (.querySelector ".bottom-properties-row")))
 
+(defn- focus-bottom-properties-row!
+  [row]
+  (when row
+    (if-let [first-pill (.querySelector row "[data-bottom-pill-focusable='true']")]
+      (.focus first-pill)
+      (.focus row))))
+
 (defn- node-attr
   [node attr]
   (or (some-> node (gobj/get attr))
@@ -2485,7 +2492,7 @@
          (.click trigger)
          (.focus trigger)))
      (when-let [row (bottom-properties-row-node sibling-block)]
-       (.focus row)))))
+       (focus-bottom-properties-row! row)))))
 
 (defn move-property-focus-up-down
   [direction]
@@ -2512,7 +2519,7 @@
       bottom-properties-row
       (do
         (state/clear-edit!)
-        (.focus bottom-properties-row))
+        (focus-bottom-properties-row! bottom-properties-row))
 
       (comments-area-node? sibling-block)
       (enter-comments-area-node! sibling-block)
@@ -2569,13 +2576,13 @@
                     current-bottom-properties-row)
                (do
                  (state/clear-edit!)
-                 (.focus current-bottom-properties-row))
+                 (focus-bottom-properties-row! current-bottom-properties-row))
 
                (and (= :up direction)
                     sibling-bottom-properties-row)
                (do
                  (state/clear-edit!)
-                 (.focus sibling-bottom-properties-row))
+                 (focus-bottom-properties-row! sibling-bottom-properties-row))
 
                (and (dom/has-class? sibling-block "block-add-button")
                     (util/rec-get-node current-block "ls-page-title"))
@@ -2584,7 +2591,7 @@
                bottom-properties-row
                (do
                  (state/clear-edit!)
-                 (.focus bottom-properties-row))
+                 (focus-bottom-properties-row! bottom-properties-row))
 
                property-value-container?
                (focus-trigger current-block sibling-block {:edit-navigation? true})

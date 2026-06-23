@@ -108,8 +108,9 @@
     @apply items-center;
   }
 
-  .property-pair.property-panel-row .property-icon {
-    display: none;
+  .property-pair.property-panel-row[data-property-type=checkbox] .property-value-panel.ls-block.property-value-container,
+  .property-pair.property-panel-row[data-property-type=checkbox] .property-value.property-value-panel-inner {
+    @apply items-center;
   }
 
   .property-panel-bullet {
@@ -334,27 +335,26 @@
   }
 }
 
-/* Bottom property pills need wrapping for long node references.
-   Keep this override in property.css so it wins against the default
-   `.property-value-inner .select-item { whitespace-nowrap; }` rule. */
 .positioned-properties.block-below .bottom-property-content .property-value-inner[data-type=node] .multi-values.jtrigger {
   min-width: 0;
   max-width: 100%;
   width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .positioned-properties.block-below .bottom-property-content .property-value-inner[data-type=node] .select-item,
 .positioned-properties.block-below .bottom-property-content .property-value-inner[data-type=node] .page-ref,
 .positioned-properties.block-below .bottom-property-content .property-value-inner[data-type=node] .block-title-wrap {
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   min-width: 0;
   max-width: 100%;
 }
 
 .positioned-properties.block-below .bottom-property-content .property-value-inner[data-type=node] .select-item {
-  display: block;
+  display: inline-flex;
 }
 
 .block-main-container .ls-properties-area {
@@ -376,10 +376,6 @@ input.simple-input:focus {
   @screen md {
     max-width: 720px;
   }
-}
-
-.property-key .bullet-container, .property-key .bullet-container .bullet {
-  border-radius: 0px;
 }
 
 /* TODO:  */

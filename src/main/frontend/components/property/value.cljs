@@ -2019,23 +2019,25 @@
           (:date :datetime)
           (property-value-date-picker block property value (merge opts {:editing? editing?}))
 
-          :checkbox
-          (let [add-property! (fn [value]
-                                (<add-property! block (:db/ident property) value opts)
-                                (when-let [on-checked-change (:on-checked-change opts)]
-                                  (on-checked-change value)))]
-            [:label.flex.w-full.as-scalar-value-wrap.cursor-pointer
-             (shui/checkbox {:class "jtrigger flex flex-row items-center"
-                             :disabled config/publishing?
-                             :auto-focus editing?
-                             :checked value
-                             :on-checked-change (fn []
-                                                  (add-property! (not value)))
-                             :on-key-down (fn [e]
-                                            (when (= (util/ekey e) "Enter")
-                                              (add-property! (not value)))
-                                            (when (contains? #{"Backspace" "Delete"} (util/ekey e))
-                                              (delete-block-property! block property)))})])
+	          :checkbox
+	          (let [add-property! (fn [value]
+	                                (<add-property! block (:db/ident property) value opts)
+	                                (when-let [on-checked-change (:on-checked-change opts)]
+	                                  (on-checked-change value)))]
+	            [:label.flex.w-full.items-center.as-scalar-value-wrap.cursor-pointer
+	             (shui/checkbox {:class "jtrigger flex flex-row items-center"
+	                             :style {:width 16
+	                                     :min-width 16}
+	                             :disabled config/publishing?
+	                             :auto-focus editing?
+	                             :checked value
+	                             :on-checked-change (fn []
+	                                                  (add-property! (not value)))
+	                             :on-key-down (fn [e]
+	                                            (when (= (util/ekey e) "Enter")
+	                                              (add-property! (not value)))
+	                                            (when (contains? #{"Backspace" "Delete"} (util/ekey e))
+	                                              (delete-block-property! block property)))})])
           ;; :others
           [:div.flex.flex-1
            (property-value-inner block property value opts)])))))

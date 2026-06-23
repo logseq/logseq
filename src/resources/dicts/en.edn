@@ -1,4 +1,5 @@
-{:account/authentication "Authentication"
+{
+ :account/authentication "Authentication"
  :account/benefits-desc "With a Logseq account, you can access cloud-based services like Logseq Sync and alpha/beta features."
  :account/billing "Billing"
  :account/billing-expired-on-label "Pro plan expired on: {1}"
@@ -827,6 +828,7 @@
  :help/privacy "Privacy policy"
  :help/reference-autocomplete "Page reference autocomplete"
  :help/release-notes "Release notes"
+ :help/revision "Revision: {1}"
  :help/roadmap "Roadmap"
  :help/search "Search pages/blocks/commands"
  :help/slash-autocomplete "Slash autocomplete"
@@ -1324,6 +1326,7 @@
  :property/choose-tag "Choose tag"
  :property/choose-tags "Choose tags"
  :property/clear-value "Clear"
+ :property/collapse-bottom-pills "Collapse"
  :property/configure "Configure property"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Property failed to create. Please try a different property name."
@@ -1335,6 +1338,7 @@
  :property/description-placeholder "description"
  :property/drag-to-reorder "Drag && Drop to reorder"
  :property/existing-values "Existing values:"
+ :property/expand-bottom-pills "Expand"
  :property/go-to-this-property "Go to this property"
  :property/hide-by-default "Hide by default"
  :property/hide-choice-for-tag "Hide choice for this tag"
@@ -1968,4 +1972,5 @@
  :zotero/attachments "Attachments"
  :zotero/imported-file-warning "This is a Zotero imported file, set Zotero data directory to open the file in Logseq."
  :zotero/linked-file-warning "This is a Zotero linked file, set Zotero linked attachment base directory to open the file in Logseq."
- :zotero/notes "Notes"}
+ :zotero/notes "Notes"
+}

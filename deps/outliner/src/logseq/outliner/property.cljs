@@ -1005,7 +1005,7 @@
            (ldb/class-instance? (entity-plus/entity-memoized db :logseq.class/Tag) block))))
 
 (defn- bottom-position-property?
-  [db block property]
+  [_db _block property]
   (let [property-id (:db/ident property)
         property-type (:logseq.property/type property)
         node-many? (and (= :node property-type)
@@ -1015,12 +1015,7 @@
                                  (not= :default property-type)
                                  (seq (:property/closed-values property)))
                              (not (schema-or-tag-related-property? property-id)))]
-    (if (tag-class-page? db block)
-      (or (contains? #{:logseq.property.class/extends
-                       :logseq.property.class/enable-bidirectional?}
-                     property-id)
-          default-bottom?)
-      default-bottom?)))
+    default-bottom?))
 
 (defn- resolved-property-position
   [db block property]
@@ -1062,12 +1057,8 @@
         classes-properties (when-not (tag-class-page? db block)
                              (:classes-properties (get-block-classes-properties db eid)))
         classes-properties-set (set (map :db/ident classes-properties))
-        tag-page-pill-properties (when (tag-class-page? db block)
-                                   [:logseq.property.class/extends
-                                    :logseq.property.class/enable-bidirectional?])
         positioned-property-ids (if (tag-class-page? db block)
-                                  (->> (concat own-properties tag-page-pill-properties)
-                                       distinct)
+                                  (distinct own-properties)
                                   (->> classes-properties
                                        (map :db/ident)
                                        (concat own-properties)
