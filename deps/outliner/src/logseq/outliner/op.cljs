@@ -131,6 +131,11 @@
      [:op :keyword]
      [:args [:tuple ::uuid ::option]]]]
 
+   [:restore-recycled
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::uuid]]]]
+
    [:recycle-delete-permanently
     [:catn
      [:op :keyword]
@@ -365,6 +370,10 @@
     :delete-page
     (let [[page-uuid opts] args]
       (reset! *result (outliner-page/delete! conn page-uuid (merge opts opts'))))
+
+    :restore-recycled
+    (let [[root-uuid] args]
+      (outliner-recycle/restore! conn root-uuid))
 
     :recycle-delete-permanently
     (let [[root-uuid] args]
