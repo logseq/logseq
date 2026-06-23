@@ -33,10 +33,11 @@
   - Broadcast once after a handled `tx/batch` that advanced server state (`t` increased); client should pull.
 - `{"type":"tx/reject","reason":"stale","t":<t>}`
   - Client tx is based on stale t.
-- `{"type":"tx/reject","reason":"db transact failed","t":<t>,"success-tx-ids":["<uuid>",...],"failed-tx-id":"<uuid>"}`
+- `{"type":"tx/reject","reason":"db transact failed","t":<t>,"checksum":"<hex>","success-tx-ids":["<uuid>",...],"failed-tx-id":"<uuid>"}`
   - Server-side transact/validation failed for one tx entry in the batch.
   - `success-tx-ids` are entries already applied before the failure.
   - `failed-tx-id` is the entry that failed.
+  - `checksum` is the stored entity checksum after the successful prefix; the server must not recompute the whole graph for this response.
   - Legacy servers may return `data` with rejected tx payload for debugging.
 - `{"type":"tx/reject","reason":"empty tx data"|"invalid tx"|"invalid t-before"|"snapshot upload in progress"}`
   - Invalid batch.

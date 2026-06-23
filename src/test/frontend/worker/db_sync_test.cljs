@@ -962,6 +962,50 @@
                          (fn []
                            (done)))))))))))
 
+(deftest tx-reject-partial-success-advances-local-cursor-test
+  (testing "partial tx/reject should not make the next pull replay already accepted local txs"
+    (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+          child1-uuid (:block/uuid child1)
+          child2-uuid (:block/uuid child2)
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-core/delete-blocks! conn [child1] {})
+          (outliner-core/save-block! conn
+                                     {:block/uuid child2-uuid
+                                      :block/title "local failed edit"}
+                                     {})
+          (let [[delete-entry failed-entry] (#'sync-apply/pending-txs test-repo)
+                delete-tx-id (:tx-id delete-entry)
+                failed-tx-id (:tx-id failed-entry)
+                raw-reject (js/JSON.stringify
+                            (clj->js {:type "tx/reject"
+                                      :reason "db transact failed"
+                                      :t 1
+                                      :success-tx-ids [(str delete-tx-id)]
+                                      :failed-tx-id (str failed-tx-id)}))]
+            (is (= 2 (count (#'sync-apply/pending-txs test-repo))))
+            (reset! (:inflight client) [delete-tx-id failed-tx-id])
+            (with-silenced-console-error
+              #(try
+                 (sync-handle-message/handle-message! test-repo client raw-reject)
+                 (is false "expected tx/reject to fail-fast")
+                 (catch :default error
+                   (is (= :db-sync/tx-rejected (:type (ex-data error)))))))
+            (let [delete-row (client-op-tx-row client-ops-conn delete-tx-id)
+                  failed-row (client-op-tx-row client-ops-conn failed-tx-id)]
+              (is (nil? (d/entity @conn [:block/uuid child1-uuid])))
+              (is (= "child 2"
+                     (:block/title (d/entity @conn [:block/uuid child2-uuid]))))
+              (is (= 0 (aget delete-row "pending")))
+              (is (= 0 (aget failed-row "pending")))
+              (is (= 1 (aget failed-row "failed")))
+              (is (= 1 (client-op/get-local-tx test-repo))))))))))
+
 (deftest tx-reject-missing-blocks-keeps-failed-tx-pending-and-retries-with-repair-test
   (testing "recoverable tx/reject should keep failed tx pending and prepend a repair entry for retry"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)

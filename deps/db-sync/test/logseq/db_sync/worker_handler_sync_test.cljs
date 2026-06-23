@@ -945,6 +945,7 @@
       (is (= 1 (:t response)))
       (is (= [success-tx-id] (:success-tx-ids response)))
       (is (= failed-tx-id (:failed-tx-id response)))
+      (is (= (storage/get-checksum sql) (:checksum response)))
       (is (= [{:type "changed" :t 1}] @changed-messages))
       (is (some? (d/entity @conn [:block/uuid success-block-uuid])))
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))))))

@@ -53,6 +53,67 @@ Verification:
 - Existing `tx/reject` tests for failed tx marking, selective success handling,
   recoverable missing-block repair, and stale reject behavior still pass.
 
+## Case 2: Partial Reject Leaves Cursor Behind Accepted Local Txs
+
+Status: reproduced and fixed locally.
+
+Test:
+
+`frontend.worker.db-sync-test/tx-reject-partial-success-advances-local-cursor-test`
+
+Sequence:
+
+1. Client and server both have block `B`.
+2. Client deletes `B` locally, then makes another local edit.
+3. The client sends both txs in one `tx/batch`.
+4. Server accepts the delete and advances remote `t`, then rejects the later
+   edit with `:success-tx-ids`, `:failed-tx-id`, and the new `:t`.
+5. Before the fix, the client marked the successful tx non-pending and rolled
+   back the failed tx, but did not advance `client_ops.local-tx`.
+6. The client graph now correctly lacks `B`, because the server accepted that
+   delete, but the next pull still starts from the old cursor.
+7. That pull can replay the accepted delete as a remote tx. Since `B` is already
+   missing locally, the replay can enter missing-block repair even though the
+   graph state itself is not behind.
+
+Root cause:
+
+`handle-tx-reject!` treated all non-stale rejects as failure bookkeeping and did
+not account for the successful prefix that the server had already committed.
+
+Fix direction:
+
+When a `tx/reject` includes successful tx ids and a newer remote `t`, advance the
+local cursor to that `t` after rollback and pending-state updates. The server
+also includes its stored sync checksum in partial reject responses so the client
+can validate the accepted boundary without asking the server to recompute a
+whole-graph checksum.
+
+Verification:
+
+- The RED test failed before the cursor change with `client_ops.local-tx` still
+  at `0` after the partial reject.
+- The same test passes after the cursor is advanced.
+- `logseq.db-sync.worker-handler-sync-test/tx-batch-reject-includes-success-and-failed-tx-ids-test`
+  now asserts that the partial reject response carries the stored server
+  checksum.
+
+## Checked But Not New Root Causes
+
+These were inspected because they can also combine local pending state with
+remote tx replay:
+
+- `tx/batch/ok`: already advances local cursor with
+  `max(current-local-tx, remote-tx)` and only clears inflight acked rows.
+- Stale/out-of-order `pull/ok`: existing tests ensure older pull responses do
+  not overwrite newer graph or cursor state.
+- Duplicate local/remote `create-page`, including the iOS auto-journal shape:
+  existing rebase tests preserve the page uuid and remote children instead of
+  deleting the remote entity.
+- Missing-block repair boundaries: existing tests cover normal repair and the
+  obsolete created/deleted or updated/deleted block cases, both with and without
+  local changes.
+
 ## Discarded Case: Pull Cursor Ahead of Debounced Graph Store
 
 Status: tested and not reproduced for normal remote apply.
@@ -72,4 +133,3 @@ storage reload reproduction did not lose the remote block after `pull/ok`.
 Conclusion:
 
 This is not the confirmed incremental-sync root cause for the current pass.
-

@@ -424,6 +424,7 @@
               (string? checksum) (assoc :checksum checksum)))
           (catch :default e
             (let [new-t (t-now self)
+                  checksum (current-checksum self)
                   {:keys [successful-tx-ids failed-tx-id missing-block-uuids]}
                   (ex-data e)]
               (log/error :db-sync/transact-failed e)
@@ -436,7 +437,8 @@
                        :t new-t}
                 (seq successful-tx-ids) (assoc :success-tx-ids successful-tx-ids)
                 failed-tx-id (assoc :failed-tx-id failed-tx-id)
-                (seq missing-block-uuids) (assoc :missing-block-uuids missing-block-uuids)))))
+                (seq missing-block-uuids) (assoc :missing-block-uuids missing-block-uuids)
+                (string? checksum) (assoc :checksum checksum)))))
         {:type "tx/reject"
          :reason "empty tx data"}))))
 
