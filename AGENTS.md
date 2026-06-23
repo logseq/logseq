@@ -27,6 +27,7 @@
 ## Testing Guidelines
 - Unit tests live in `src/test/` and should be runnable via `bb dev:lint-and-test`.
 - Name tests after their namespaces; use `-v` to target a specific test case.
+- For CLJS tests, avoid recompiling when source files have not changed since the last successful `cljs:test`; run against the existing compiled test artifact instead.
 - Run lint/tests before submitting PRs; keep changes green.
 
 ## *IMPORTANT*: Always respect directory-specific AGENTS.md based on file path

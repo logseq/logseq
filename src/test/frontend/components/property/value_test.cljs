@@ -82,6 +82,10 @@
     (is (true? @prevent-default-called?))
     (is (nil? (#'property-value/prevent-bottom-property-edit-pointer-dismiss other-event)))))
 
+(deftest date-page-link-stops-click-propagation-in-bottom-properties-test
+  (is (fn? (:on-click (#'property-value/date-page-link-props true))))
+  (is (nil? (:on-click (#'property-value/date-page-link-props false)))))
+
 (deftest direct-value-picker-type-test
   (is (true? (property-value/direct-value-picker-type? :date)))
   (is (true? (property-value/direct-value-picker-type? :datetime)))
