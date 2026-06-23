@@ -22,10 +22,22 @@
             [logseq.graph-parser.block :as gp-block]
             [promesa.core :as p]))
 
+(defn- with-ref-ids
+  [db date-formatter refs]
+  (mapv (fn [ref]
+          (if (and (map? ref)
+                   (:block/title ref)
+                   (nil? (:block/uuid ref)))
+            (gp-block/page-name->map (:block/title ref) db true date-formatter)
+            ref))
+        refs))
+
 (defn- paste-text-parseable
   [format text]
   (when-let [editing-block (state/get-edit-block)]
     (let [page-id (:db/id (:block/page editing-block))
+          current-db (db/get-db (state/get-current-repo))
+          date-formatter (state/get-date-formatter)
           blocks (block/extract-blocks
                   (mldoc/->edn text format)
                   text format
@@ -33,9 +45,14 @@
           blocks' (cond->> (gp-block/with-parent-and-order page-id blocks)
                     true
                     (map (fn [block]
-                           (let [refs (:block/refs block)]
+                           (let [refs (some->> (:block/refs block)
+                                               (with-ref-ids current-db date-formatter))]
                              (-> block
                                  (dissoc :block/tags)
+                                 (cond-> refs
+                                   (assoc :block/refs refs))
+                                 (cond-> (:logseq.property/heading block)
+                                   (update :block/title commands/clear-markdown-heading))
                                  (update :block/title (fn [title]
                                                         (let [title' (db-content/replace-tags-with-id-refs title refs)]
                                                           (db-content/title-ref->id-ref title' refs)))))))))]
