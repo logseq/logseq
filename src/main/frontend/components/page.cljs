@@ -10,6 +10,7 @@
             [frontend.components.library :as library]
             [frontend.components.objects :as objects]
             [frontend.components.plugins :as plugins]
+            [frontend.components.property :as property-component]
             [frontend.components.property.config :as property-config]
             [frontend.components.query :as query]
             [frontend.components.recycle :as recycle]
@@ -464,15 +465,19 @@
 
            [:div.relative.grid.gap-4.sm:gap-8.page-inner.mb-16
             (when-not (or block? sidebar?)
-              [:div.flex.flex-row.space-between
-               (when (ldb/page? page)
-                 (db-page-title page
-                                {:sidebar? sidebar?
-                                 :journals? journals?
-                                 :container-id container-id
-                                 :display-title page-display-title
-                                 :tag-dialog? tag-dialog?}))
-               (lsp-pagebar-slot)])
+              [:<>
+               [:div.flex.flex-row.space-between
+                (when (ldb/page? page)
+                  (db-page-title page
+                                 {:sidebar? sidebar?
+                                  :journals? journals?
+                                  :container-id container-id
+                                  :display-title page-display-title
+                                  :tag-dialog? tag-dialog?}))
+                (lsp-pagebar-slot)]
+               (when (and (ldb/page? page)
+                          (not (ldb/library? page)))
+                 (property-component/bidirectional-properties-area page config))])
 
             (when (and block? (not sidebar?))
               (component-block/breadcrumb {} repo (:block/uuid page) {}))

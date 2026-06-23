@@ -1528,12 +1528,34 @@ html.is-mac {
 }
 
 .positioned-properties.block-below {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+
   .block-content.inline {
     @apply flex;
   }
 
   .bottom-properties-row {
     @apply gap-1.5 py-1;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    max-height: 2rem;
+    overflow-y: hidden;
+    transition: max-height 160ms ease;
+    will-change: max-height;
+  }
+
+  .bottom-properties-row[data-expanded="true"] {
+    max-height: 24rem;
+  }
+
+  .bottom-properties-pills-strip {
+    flex: 1 1 0;
+    width: 0;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .bottom-properties-row:focus {
@@ -1548,6 +1570,7 @@ html.is-mac {
     box-shadow: none;
     position: relative;
     overflow: hidden;
+    flex: 0 0 auto;
   }
 
   .bottom-property-pill::after {
@@ -1560,10 +1583,7 @@ html.is-mac {
   }
 
   .bottom-property-pill.bottom-property-pill-wrap {
-    @apply h-auto;
-    min-height: 1.5rem; /* keep default 24px baseline, allow growth only when wrapped */
-    padding-top: 0;
-    padding-bottom: 0;
+    @apply h-6;
   }
 
   .bottom-property-pill-line-break {
@@ -1592,15 +1612,15 @@ html.is-mac {
   }
 
   .bottom-property-content {
-    @apply flex items-center gap-1 min-w-0 relative text-sm;
+    @apply flex items-center gap-1 min-w-0 relative text-sm whitespace-nowrap overflow-hidden;
   }
 
   .bottom-property-content.bottom-property-content-wrap {
-    @apply flex-1 flex-wrap min-w-0;
+    @apply min-w-0 overflow-hidden;
   }
 
   .bottom-property-pill-wrap .multi-values.jtrigger {
-    @apply min-w-0;
+    @apply min-w-0 overflow-hidden whitespace-nowrap;
   }
 
   .bottom-property-content .property-value-inner[data-type="node"] .jtrigger:hover .page-ref,
@@ -1642,8 +1662,9 @@ html.is-mac {
     background-color: var(--ls-secondary-background-color);
   }
 
-  .bottom-property-control-btn.bottom-property-more-btn {
+  .bottom-property-control-btn.bottom-property-expand-btn {
     @apply w-auto px-2;
+    align-self: flex-start;
     border-radius: 9999px;
   }
 
