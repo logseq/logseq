@@ -935,35 +935,36 @@
                                        :t 1
                                        :txs [{:t 1
                                               :tx (sqlite-util/write-transit-str remote-update-tx)}]}))]
-             (let [result (with-datascript-conns
-                            conn
-                            client-ops-conn
-                            (fn []
-                              (outliner-core/delete-blocks! conn [child1] {})
-                              (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))
-                                    raw-reject (js/JSON.stringify
-                                                (clj->js {:type "tx/reject"
-                                                          :reason "db transact failed"
-                                                          :t 0
-                                                          :failed-tx-id (str tx-id)}))]
-                                (reset! (:inflight client) [tx-id])
-                                (with-silenced-console-error
-                                  #(try
-                                     (sync-handle-message/handle-message! test-repo client raw-reject)
-                                     (is false "expected tx/reject to fail-fast")
-                                     (catch :default error
-                                       (is (= :db-sync/tx-rejected (:type (ex-data error)))))))
-                                (-> (sync-handle-message/handle-message! test-repo client raw-update)
-                                    (p/then
-                                     (fn []
-                                       (is (nil? @*last-sync-error))
-                                       (is (= 1 (client-op/get-local-tx test-repo)))
-                                       (is (= "server update"
-                                              (:block/title (d/entity @conn [:block/uuid child-uuid]))))))
-                                    (p/catch
-                                     (fn [error]
-                                       (is nil (str error))))))))]
-               (p/finally result done))))))
+             (p/finally
+              (with-datascript-conns
+                conn
+                client-ops-conn
+                (fn []
+                  (outliner-core/delete-blocks! conn [child1] {})
+                  (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))
+                        raw-reject (js/JSON.stringify
+                                    (clj->js {:type "tx/reject"
+                                              :reason "db transact failed"
+                                              :t 0
+                                              :failed-tx-id (str tx-id)}))]
+                    (reset! (:inflight client) [tx-id])
+                    (with-silenced-console-error
+                      #(try
+                         (sync-handle-message/handle-message! test-repo client raw-reject)
+                         (is false "expected tx/reject to fail-fast")
+                         (catch :default error
+                           (is (= :db-sync/tx-rejected (:type (ex-data error)))))))
+                    (-> (sync-handle-message/handle-message! test-repo client raw-update)
+                        (p/then
+                         (fn []
+                           (is (nil? @*last-sync-error))
+                           (is (= 1 (client-op/get-local-tx test-repo)))
+                           (is (= "server update"
+                                  (:block/title (d/entity @conn [:block/uuid child-uuid]))))))
+                        (p/catch
+                         (fn [error]
+                           (is nil (str error))))))))
+              done)))))
 
 (deftest tx-reject-partial-success-advances-local-cursor-test
   (testing "partial tx/reject should not make the next pull replay already accepted local txs"
