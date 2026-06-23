@@ -33,7 +33,6 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.graph-parser.text :as text]
-            [logseq.outliner.recycle :as outliner-recycle]
             [promesa.core :as p]))
 
 (def <create! page-common-handler/<create!)
@@ -51,23 +50,19 @@
 
 (defn restore-recycled!
   [root-uuid]
-  (when-let [root (db/entity [:block/uuid root-uuid])]
-    (when-let [tx-data (seq (outliner-recycle/restore-tx-data (db/get-db) root))]
-      (p/do!
-       (ui-outliner-tx/transact!
-        {:outliner-op :restore-recycled}
-        (outliner-op/transact! tx-data nil))
-       true))))
+  (p/do!
+   (ui-outliner-tx/transact!
+     {:outliner-op :restore-recycled}
+     (outliner-op/restore-recycled! root-uuid))
+   true))
 
 (defn delete-recycled-permanently!
   [root-uuid]
-  (when-let [root (db/entity [:block/uuid root-uuid])]
-    (when (seq (outliner-recycle/permanently-delete-tx-data (db/get-db) root))
-      (p/do!
-       (ui-outliner-tx/transact!
-        {:outliner-op :recycle-delete-permanently}
-        (outliner-op/recycle-delete-permanently! root-uuid))
-       true))))
+  (p/do!
+   (ui-outliner-tx/transact!
+     {:outliner-op :recycle-delete-permanently}
+     (outliner-op/recycle-delete-permanently! root-uuid))
+   true))
 
 (defn <unfavorite-page!
   [page-name]
@@ -95,9 +90,11 @@
   (when-let [db (conn/get-db)]
     (when-let [page (ldb/get-page db common-config/favorites-page-name)]
       (let [blocks (ldb/sort-by-order (:block/_parent page))]
-        (keep (fn [block]
-                (when-let [block-db-id (:db/id (:block/link block))]
-                  (d/entity db block-db-id))) blocks)))))
+        (->> blocks
+             (keep (fn [block]
+                     (when-let [block-db-id (:db/id (:block/link block))]
+                       (d/entity db block-db-id))))
+             (remove ldb/recycled?))))))
 
 (defn toggle-favorite! []
   ;; NOTE: in journals or settings, current-page is nil

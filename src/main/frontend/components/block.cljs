@@ -461,9 +461,8 @@
 (hsx/defc audio-cp
   ([src] (audio-cp src nil))
   ([src ext]
-   ;; Change protocol to allow media fragment uris to play
    (when src
-     (let [src (string/replace-first src common-config/asset-protocol "file://")
+     (let [src (assets-handler/asset-protocol-url->media-url src)
            opts {:controls true
                  :on-touch-start #(util/stop %)}]
        (case ext
