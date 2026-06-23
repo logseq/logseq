@@ -37,6 +37,31 @@
               (asset-cp (assoc config :disable-resize? true) row)]))
    :disable-hide? true})
 
+(defn build-class-object-columns
+  [config class properties]
+  (let [properties' (remove nil? properties)
+        columns* (views/build-columns config properties' {:add-tags-column? true
+                                                          :add-page-column? true})
+        columns (cond
+                  (= (:db/ident class) :logseq.class/Pdf-annotation)
+                  (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)
+                  (= (:db/ident class) :logseq.class/Asset)
+                  (remove #(contains? #{:logseq.property.asset/checksum} (:id %)) columns*)
+                  :else
+                  columns*)]
+    (if (= (:db/ident class) :logseq.class/Asset)
+      ;; Insert in front of tag's properties
+      (let [[before-cols after-cols] (split-with #(not (db-property/logseq-property? (:id %))) columns)]
+        (concat before-cols [(build-asset-file-column config)] after-cols))
+      columns)))
+
+(defn build-property-object-columns
+  [config property properties]
+  (let [tags? (= :block/tags (:db/ident property))]
+    (views/build-columns config properties
+                         (cond-> {:add-page-column? true}
+                           tags? (assoc :add-tags-column? false)))))
+
 (comment
   (defn- edit-new-object
     [ref id]
@@ -60,23 +85,9 @@
 (hsx/defc class-objects-inner
   [config class properties]
   (let [*ref (hooks/use-ref nil)
-        ;; Properties can be nil for published private graphs
-        properties' (remove nil? properties)
-        columns* (views/build-columns config properties' {:add-tags-column? true})
-        columns (cond
-                  (= (:db/ident class) :logseq.class/Pdf-annotation)
-                  (remove #(contains? #{:logseq.property/ls-type} (:id %)) columns*)
-                  (= (:db/ident class) :logseq.class/Asset)
-                  (remove #(contains? #{:logseq.property.asset/checksum} (:id %)) columns*)
-                  :else
-                  columns*)
         db-ident (:db/ident class)
         asset? (= db-ident :logseq.class/Asset)
-        columns (if asset?
-                  ;; Insert in front of tag's properties
-                  (let [[before-cols after-cols] (split-with #(not (db-property/logseq-property? (:id %))) columns)]
-                    (concat before-cols [(build-asset-file-column config)] after-cols))
-                  columns)
+        columns (build-class-object-columns config class properties)
         add-new-object! (when (or asset? (not (ldb/private-tags (:db/ident class))))
                           (fn [view table {:keys [properties]}]
                             (if (= :logseq.class/Asset (:db/ident class))
@@ -133,9 +144,7 @@
 
 (hsx/defc property-related-objects-inner
   [config property properties]
-  (let [tags? (= :block/tags (:db/ident property))
-        columns (views/build-columns config properties
-                                     (when tags? {:add-tags-column? false}))]
+  (let [columns (build-property-object-columns config property properties)]
     (views/view {:config config
                  :view-parent property
                  :view-feature-type :property-objects
