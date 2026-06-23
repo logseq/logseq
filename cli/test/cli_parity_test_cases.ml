@@ -2614,6 +2614,48 @@ let () =
         (Show.build (config ~repo:"demo" ()) (Global_opts.create ())
            (Show.Parsed_show { base_opts with level = Some 0 })));
 
+  test_promise "CLI parity show rejects recycled pages" (fun () ->
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then
+              "[\"^ \
+               \",\"~:db/id\",42,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000042\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]"
+            else if Js.String.includes ~search:"thread-api/q" body then "[]"
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            {
+              Show.repo;
+              graph = Cli_config.repo_to_graph repo;
+              target = Show.By_page "home";
+              multi_id = false;
+              linked_references = false;
+              ref_id_footer = false;
+              page_hierarchy = false;
+              level = Some 10;
+            }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Show.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "show recycled page errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "show recycled code" "recycled-page"
+                (keyword_text err.Error.code)
+          | None -> fail_test "expected show error");
+          Js.Promise.resolve pass));
+
   test
     "CLI parity upsert validation rejects ambiguous and mode-specific options"
     (fun () ->
@@ -2625,6 +2667,7 @@ let () =
                  {
                    id = Some 1L;
                    page = Some "Home";
+                   restore = false;
                    update_tags_edn = None;
                    update_properties_edn = None;
                    remove_tags_edn = None;
@@ -2667,6 +2710,394 @@ let () =
                    no_scheduled = false;
                    no_deadline = false;
                  }))));
+
+  test "CLI parity upsert page parses restore option" (fun () ->
+      let request =
+        expect_parse_ok "upsert page restore"
+        [
+          "upsert";
+          "page";
+          "--page";
+          "Home";
+          "--restore";
+          "--update-properties";
+          "{\"status\" \"done\"}";
+        ]
+      in
+      match request.command with
+      | Cli_request.Upsert (Upsert.Parsed_page opts) ->
+          expect_equal "page" "Home" (expect_some "page" opts.page);
+          expect_bool "restore" true opts.restore
+      | _ -> fail_test "expected upsert page");
+
+  test_promise "CLI parity upsert page rejects recycled page by default"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                mode = Upsert.Create;
+                id = None;
+                page = Some "Home";
+                restore = false;
+                plan = Property.empty_update_plan;
+              }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert recycled page errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert recycled code" "recycled-page"
+                (keyword_text err.Error.code)
+          | None -> fail_test "expected upsert error");
+          expect_bool "no ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity upsert page update rejects recycled page by default"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then
+              "[\"^ \
+               \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                mode = Upsert.Update;
+                id = Some 50L;
+                page = None;
+                restore = false;
+                plan = Property.empty_update_plan;
+              }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert recycled page update errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert recycled update code" "recycled-page"
+                (keyword_text err.Error.code)
+          | None -> fail_test "expected upsert update error");
+          expect_bool "no update ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity upsert page restores recycled page when requested"
+    (fun () ->
+      let apply_calls = ref [] in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_calls := !apply_calls @ [ body ];
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let plan =
+            {
+              Property.empty_update_plan with
+              update_properties =
+                [
+                  {
+                    Property.key =
+                      Property.Key_ident
+                        (Edn_util.keyword_t "user.property/status");
+                    value = Edn_util.string "done";
+                  };
+                ];
+            }
+          in
+          let action =
+            Upsert.Upsert_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                mode = Upsert.Create;
+                id = None;
+                page = Some "Home";
+                restore = true;
+                plan;
+              }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert restore ok" false (Cli_result.is_error result);
+          expect_int "restore then update calls" 2 (List.length !apply_calls);
+          expect_named_contains "first op restores recycled page"
+            (List.nth !apply_calls 0) "restore-recycled";
+          expect_named_contains "second op updates restored page"
+            (List.nth !apply_calls 1) "batch-set-property";
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity upsert page restore rejects recycled page without uuid"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",50,\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                mode = Upsert.Create;
+                id = None;
+                page = Some "Home";
+                restore = true;
+                plan = Property.empty_update_plan;
+              }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert recycled restore without uuid errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert recycled restore without uuid code"
+                "recycled-page" (keyword_text err.Error.code)
+          | None -> fail_test "expected upsert restore error");
+          expect_bool "no restore ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise
+    "CLI parity upsert page update restore rejects recycled page without uuid"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then
+              "[\"^ \
+               \",\"~:db/id\",50,\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                mode = Upsert.Update;
+                id = Some 50L;
+                page = None;
+                restore = true;
+                plan = Property.empty_update_plan;
+              }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert recycled update restore without uuid errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert recycled update restore without uuid code"
+                "recycled-page" (keyword_text err.Error.code)
+          | None -> fail_test "expected upsert update restore error");
+          expect_bool "no update restore ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity upsert block create rejects recycled target page"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_block
+              (Upsert.Block_create
+                 {
+                   repo;
+                   graph = Cli_config.repo_to_graph repo;
+                   target = Upsert.Target_page "Home";
+                   pos = Block.Last_child;
+                   status = None;
+                   tags = [];
+                   properties = [];
+                   blocks = [ Block.make ~title:"Child" () ];
+                   update_plan = Property.empty_update_plan;
+                 })
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert block create recycled target errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert block create recycled code" "recycled-page"
+                (keyword_text err.Error.code)
+          | None -> fail_test "expected upsert block create error");
+          expect_bool "no create ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity upsert block update rejects recycled target page"
+    (fun () ->
+      let apply_called = ref false in
+      let pull_count = ref 0 in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then (
+              incr pull_count;
+              match !pull_count with
+              | 1 ->
+                  "[\"^ \
+                   \",\"~:db/id\",207,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000207\",\"~:block/title\",\"Source\"]"
+              | 2 ->
+                  "[\"^ \
+                   \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]"
+              | _ ->
+                  fail_test
+                    (Printf.sprintf "unexpected pull %d: %s" !pull_count body);
+                  "")
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_block
+              (Upsert.Block_update
+                 {
+                   repo;
+                   graph = Cli_config.repo_to_graph repo;
+                   source = Upsert.Source_id 207L;
+                   target = Some (Upsert.Target_page "Home");
+                   pos = Some Block.Last_child;
+                   update_tags = [];
+                   update_properties = [];
+                   remove_tags = [];
+                   remove_properties = [];
+                   content = None;
+                   source_label = Some "207";
+                   target_label = Some "page:Home";
+                 })
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert block update recycled target errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert block update recycled code" "recycled-page"
+                (keyword_text err.Error.code)
+          | None -> fail_test "expected upsert block update error");
+          expect_bool "no update ops applied" false !apply_called;
+          Js.Promise.resolve pass));
 
   test "CLI parity upsert block update property parsing keeps update contracts"
     (fun () ->

@@ -336,6 +336,13 @@ let missing_entity value =
 let property_value_block value =
   Option.is_some (Edn_util.get value "logseq.property/created-from-property")
 
+let recycled_page value =
+  Option.is_some (Edn_util.get value "block/name")
+  && Option.is_some (Edn_util.get value "logseq.property/deleted-at")
+
+let recycled_page_error () =
+  Error.make (Edn_util.keyword_t "recycled-page") "page is recycled"
+
 let ident_value value =
   Option.map strip_keyword_prefix
     (Option.bind (Edn_util.get value "db/ident") Edn_util.as_string_like)
@@ -1497,6 +1504,10 @@ let execute_single mode action config target =
               pure
                 (Cli_result.error ~command:Command_id.Show mode
                    (entity_error target))
+            else if recycled_page value then
+              pure
+                (Cli_result.error ~command:Command_id.Show mode
+                   (recycled_page_error ()))
             else
               bind (attach_tree invoke_config action value) (fun value ->
                   bind (resolve_linked_blocks invoke_config action value)
@@ -1550,6 +1561,11 @@ let execute_with_mode action config mode =
                         if missing_entity value then
                           build_entries
                             ((id, Error (entity_error (By_id id))) :: acc)
+                            rest
+                        else if recycled_page value then
+                          build_entries
+                            ( (id, Error (recycled_page_error ()))
+                            :: acc )
                             rest
                         else
                           bind (attach_tree invoke_config action value)
