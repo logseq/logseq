@@ -1,5 +1,6 @@
 (ns frontend.handler.editor-test
   (:require [clojure.test :refer [async deftest is testing use-fixtures]]
+            [datascript.core :as d]
             [frontend.commands :as commands]
             [frontend.components.editor :as editor-component]
             [frontend.db :as db]
@@ -7,6 +8,7 @@
             [frontend.db.model :as model]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor]
+            [frontend.handler.paste :as paste-handler]
             [frontend.handler.route :as route-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.state :as state]
@@ -707,6 +709,92 @@
       (is (nil? (:logseq.property/deleted-at source')))
       (is (nil? (:logseq.property.recycle/original-page source')))
       (is (not= (:db/id recycle-page) (:db/id (:block/page source')))))))
+
+(deftest paste-og-copied-heading-page-refs-creates-journal-pages
+  (async done
+    (test-helper/load-test-files [{:page {:block/title "Paste target"}
+                                   :blocks [{:block/title "target"}]}])
+    (db/transact! [{:db/ident :logseq.class/Journal
+                    :logseq.property.journal/title-format "yyyy-MM-dd"}])
+    (let [target (test-helper/find-block-by-content "target")
+          clipboard "- ## [[2026-06-15]]\n\t- Nudeln mit Soße"]
+      (p/with-redefs [state/get-edit-block (constantly target)
+                      state/get-edit-content (constantly (:block/title target))
+                      state/get-block-op-type (constantly nil)
+                      state/set-block-op-type! (constantly nil)
+                      editor/edit-block! (constantly nil)]
+        (-> (#'paste-handler/paste-text-parseable :markdown clipboard)
+            (p/then
+             (fn [_]
+               (let [db (db/get-db)
+                     journal-id (ffirst (d/q '[:find ?e
+                                               :where
+                                               [?e :block/journal-day 20260615]]
+                                             db))
+                     journal (d/entity db journal-id)
+                     heading-block (ffirst
+                                    (d/q '[:find (pull ?b [:block/title
+                                                           :logseq.property/heading
+                                                           {:block/refs [:db/id :block/title :block/journal-day]}])
+                                           :where
+                                           [?b :logseq.property/heading 2]
+                                           [?b :block/refs ?r]
+                                           [?r :block/journal-day 20260615]]
+                                         db))]
+                 (is (= "2026-06-15" (:block/title journal)))
+                 (is (= 20260615 (:block/journal-day journal)))
+                 (is (= {:logseq.property/heading 2
+                         :block/title (str "[[" (:block/uuid journal) "]]")}
+                        (select-keys heading-block [:block/title :logseq.property/heading])))
+                 (is (= [20260615]
+                        (mapv :block/journal-day (:block/refs heading-block))))
+                 (done))))
+            (p/catch
+             (fn [e]
+               (is false (str e))
+               (done))))))))
+
+(deftest paste-og-copied-heading-page-refs-uses-default-journal-title
+  (async done
+    (test-helper/load-test-files [{:page {:block/title "Paste target"}
+                                   :blocks [{:block/title "target"}]}])
+    (let [target (test-helper/find-block-by-content "target")
+          clipboard "- ## [[2026-06-15]]\n\t- Nudeln mit Soße"]
+      (p/with-redefs [state/get-edit-block (constantly target)
+                      state/get-edit-content (constantly (:block/title target))
+                      state/get-block-op-type (constantly nil)
+                      state/set-block-op-type! (constantly nil)
+                      editor/edit-block! (constantly nil)]
+        (-> (#'paste-handler/paste-text-parseable :markdown clipboard)
+            (p/then
+             (fn [_]
+               (let [db (db/get-db)
+                     journal-id (ffirst (d/q '[:find ?e
+                                               :where
+                                               [?e :block/journal-day 20260615]]
+                                             db))
+                     journal (d/entity db journal-id)
+                     heading-block (ffirst
+                                    (d/q '[:find (pull ?b [:block/title
+                                                           :logseq.property/heading
+                                                           {:block/refs [:db/id :block/title :block/journal-day]}])
+                                           :where
+                                           [?b :logseq.property/heading 2]
+                                           [?b :block/refs ?r]
+                                           [?r :block/journal-day 20260615]]
+                                         db))]
+                 (is (= "Jun 15th, 2026" (:block/title journal)))
+                 (is (= 20260615 (:block/journal-day journal)))
+                 (is (= {:logseq.property/heading 2
+                         :block/title (str "[[" (:block/uuid journal) "]]")}
+                        (select-keys heading-block [:block/title :logseq.property/heading])))
+                 (is (= [20260615]
+                        (mapv :block/journal-day (:block/refs heading-block))))
+                 (done))))
+            (p/catch
+             (fn [e]
+               (is false (str e))
+               (done))))))))
 
 (deftest focused-root-block-operation-guards-test
   (let [root-block {:db/id 1}
