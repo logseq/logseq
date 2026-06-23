@@ -55,6 +55,10 @@ let cli_entrypoint_path () =
   let argv = Cli_platform.argv () in
   if Array.length argv > 1 then Some argv.(1) else None
 
+let parent_executable_path () =
+  let argv = Cli_platform.argv () in
+  if Array.length argv > 0 then argv.(0) else "node"
+
 let cli_dir_db_worker_script_paths () =
   match cli_entrypoint_path () with
   | Some entrypoint ->
@@ -258,33 +262,55 @@ let env_with_node_runtime () =
   in
   Array.of_list ("ELECTRON_RUN_AS_NODE=1" :: without_key "ELECTRON_RUN_AS_NODE")
 
+let db_worker_spawn_args ~executable ~script ~root_dir ~repo ~owner_source
+    ~create_empty_db =
+  let repo = Cli_primitive.string_of_repo repo in
+  [
+    executable;
+    script;
+    "--repo";
+    repo;
+    "--root-dir";
+    root_dir;
+    "--owner-source";
+    owner_source;
+  ]
+  @ if create_empty_db then [ "--create-empty-db" ] else []
+
+let shell_quote value =
+  let rec needs_quote i =
+    i < String.length value
+    &&
+    match value.[i] with
+    | ' ' | '\t' | '\n' | '\'' | '"' | '\\' -> true
+    | _ -> needs_quote (i + 1)
+  in
+  if value <> "" && not (needs_quote 0) then value
+  else "'" ^ String.concat "'\\''" (String.split_on_char '\'' value) ^ "'"
+
+let db_worker_command_line ~script ~root_dir ~repo ~owner_source
+    ~create_empty_db =
+  let executable = parent_executable_path () in
+  "ELECTRON_RUN_AS_NODE=1"
+  :: db_worker_spawn_args ~executable ~script ~root_dir ~repo ~owner_source
+       ~create_empty_db
+  |> List.map shell_quote |> String.concat " "
+
 let spawn_server_process ~script ~root_dir ~repo ~owner_source ~create_empty_db
     =
   let devnull = Cli_unix.openfile "/dev/null" [ Cli_unix.O_RDWR ] 0 in
   Fun.protect
     ~finally:(fun () -> Cli_unix.close devnull)
     (fun () ->
-      let repo = Cli_primitive.string_of_repo repo in
-      let args =
-        [
-          "env";
-          "node";
-          script;
-          "--repo";
-          repo;
-          "--root-dir";
-          root_dir;
-          "--owner-source";
-          owner_source;
-        ]
-      in
+      let executable = parent_executable_path () in
       let argv =
         Array.of_list
-          (args @ if create_empty_db then [ "--create-empty-db" ] else [])
+          (db_worker_spawn_args ~executable ~script ~root_dir ~repo
+             ~owner_source ~create_empty_db)
       in
       ignore
-        (Cli_unix.create_process_env "/usr/bin/env" argv
-           (env_with_node_runtime ()) devnull devnull devnull))
+        (Cli_unix.create_process_env executable argv (env_with_node_runtime ())
+           devnull devnull devnull))
 
 let find_repo_server config repo =
   Cli_effect.map
@@ -370,7 +396,12 @@ let start_server_unprofiled config repo ~create_empty_db =
                                    (Error.make
                                       (Edn_util.keyword_t
                                          "server-start-timeout-orphan")
-                                      "db-worker-node failed to start"))
+                                      ("db-worker-node failed to start. \
+                                        Command: "
+                                      ^ db_worker_command_line ~script
+                                          ~root_dir:(resolve_root_dir config)
+                                          ~repo ~owner_source:"cli"
+                                          ~create_empty_db)))
                           | Some () ->
                               bind
                                 (time "server.wait-publish" (fun () ->

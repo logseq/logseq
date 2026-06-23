@@ -19,6 +19,7 @@ type block_opts = {
 type page_opts = {
   id : Cli_primitive.db_id option;
   page : string option;
+  restore : bool;
   update_tags_edn : string option;
   update_properties_edn : string option;
   remove_tags_edn : string option;
@@ -127,6 +128,7 @@ type action =
       mode : mode;
       id : Cli_primitive.db_id option;
       page : string option;
+      restore : bool;
       plan : Property.update_plan;
     }
   | Upsert_task of {

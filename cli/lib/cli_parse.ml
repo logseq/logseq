@@ -198,6 +198,7 @@ let allowed_options_for_path = function
       [
         "id";
         "page";
+        "restore";
         "update-tags";
         "update-properties";
         "remove-tags";
@@ -545,6 +546,7 @@ let parsed_upsert_command ?(args = []) options = function
               {
                 id = int64_option "id" options;
                 page = option_value "page" options;
+                restore = option_present "restore" options;
                 update_tags_edn = option_value "update-tags" options;
                 update_properties_edn = option_value "update-properties" options;
                 remove_tags_edn = option_value "remove-tags" options;

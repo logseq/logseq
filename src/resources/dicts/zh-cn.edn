@@ -1133,6 +1133,7 @@
  :page.delete/confirm-title "确认要删除此页面吗？"
  :page.delete/permanent-confirm-title "确定要永久删除此页面吗？"
  :page.delete/success "页面“{1}”已成功删除！"
+ :page.delete/today-journal-truncate-success "今天的日志页面内容已删除。"
  :page.delete/total "总计: {1}"
  :page.delete/warning "这些页面的内容已删除，但无法删除：{1}。有关更多详细信息，请参阅 JavaScript 控制台。"
 
