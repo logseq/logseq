@@ -507,6 +507,37 @@
        distinct
        vec))
 
+(defn- tx-item-block-uuid-refs
+  [item]
+  (when (vector? item)
+    (keep block-uuid-ref [(second item) (nth item 3 nil)])))
+
+(defn- remote-txs-delete-only-block-uuid?
+  [remote-txs block-uuid]
+  (let [items (->> remote-txs
+                   (mapcat :tx-data)
+                   (filter (fn [item]
+                             (contains? (set (tx-item-block-uuid-refs item))
+                                        block-uuid)))
+                   vec)]
+    (and (seq items)
+         (every? (fn [item]
+                   (and (vector? item)
+                        (contains? #{:db/retractEntity :db.fn/retractEntity}
+                                   (first item))
+                        (= block-uuid (block-uuid-ref (second item)))))
+                 items))))
+
+(defn- locally-reversed-delete-only-block-uuids
+  [current-db base-db remote-txs missing-block-uuids]
+  (->> missing-block-uuids
+       (filter (fn [block-uuid]
+                 (and (nil? (d/entity current-db [:block/uuid block-uuid]))
+                      (some? (d/entity base-db [:block/uuid block-uuid]))
+                      (remote-txs-delete-only-block-uuid? remote-txs block-uuid))))
+       distinct
+       vec))
+
 (defn- remote-txs-invalid-repair-block-uuids
   [db remote-txs]
   (->> remote-txs
@@ -899,6 +930,14 @@
                            vec)]
         (when (seq local-txs)
           (reverse-local-txs! conn local-txs))))))
+
+(defn- remote-preflight-db
+  [conn local-txs]
+  (if (seq local-txs)
+    (let [temp-conn (ldb/transient-conn-from-db @conn)]
+      (reverse-local-txs! temp-conn local-txs)
+      @temp-conn)
+    @conn))
 
 (defn- invalid-rebase-op!
   [op data]
@@ -1407,6 +1446,16 @@
                          :local-txs local-txs
                          :remote-txs remote-txs
                          :temp-tx-meta temp-tx-meta}
+          current-db @conn
+          base-db (when has-local-changes?
+                    (remote-preflight-db conn local-txs))
+          missing-block-uuids* (remote-txs-missing-block-uuids current-db remote-txs)
+          delete-only-local-missing-block-uuids (when has-local-changes?
+                                                  (locally-reversed-delete-only-block-uuids
+                                                   current-db
+                                                   base-db
+                                                   remote-txs
+                                                   missing-block-uuids*))
           apply-args {:repo repo
                       :client client
                       :has-local-changes? has-local-changes?
@@ -1414,9 +1463,10 @@
                       :local-txs local-txs
                       :apply-context apply-context
                       :remote-tx-data remote-tx-data*}
-          missing-block-uuids (remote-txs-missing-block-uuids @conn remote-txs)
+          missing-block-uuids (remove (set delete-only-local-missing-block-uuids)
+                                      missing-block-uuids*)
           invalid-repair-block-uuids (when has-local-changes?
-                                       (remote-txs-invalid-repair-block-uuids @conn remote-txs))]
+                                       (remote-txs-invalid-repair-block-uuids current-db remote-txs))]
       (if has-local-changes?
         (if (or (seq missing-block-uuids)
                 (seq invalid-repair-block-uuids))

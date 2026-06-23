@@ -98,6 +98,63 @@ Verification:
   now asserts that the partial reject response carries the stored server
   checksum.
 
+## Case 3: Accepted Local Delete Replayed After Reload
+
+Status: reproduced and fixed locally.
+
+Test:
+
+`frontend.worker.db-sync-test/pull-ok-same-accepted-delete-after-reload-clears-local-pending-test`
+
+Sequence:
+
+1. Client and server both have block `B`.
+2. Client deletes `B` locally. The delete is persisted in `client_ops` as a
+   pending local tx, and `B` is removed from the client Datascript db.
+3. The delete is uploaded and accepted by the server, but the client reloads
+   before receiving or handling `tx/batch/ok`.
+4. After reload, inflight state is empty, but the pending delete remains in
+   `client_ops`; the graph db still lacks `B`.
+5. The next pull starts from the old cursor and returns the same accepted remote
+   delete: `[:db/retractEntity [:block/uuid B]]`.
+6. Before the fix, missing-block preflight inspected the current graph db before
+   rebase. Since the local pending delete had already removed `B`, the remote
+   delete was misclassified as a missing-block repair case.
+7. That repair path is wrong for this sequence. The real rebase base is produced
+   by first reversing local pending txs; at that point `B` exists, so the remote
+   delete is valid and should simply apply. The local pending delete then rebases
+   to a no-op and can be cleared.
+
+Root cause:
+
+Missing-block preflight treated every absent lookup ref in the current optimistic
+client db as a server-side missing entity. For accepted local delete replay, the
+entity is only absent because of a still-pending local delete that will be
+reversed before remote tx application.
+
+Fix direction:
+
+Keep normal missing-block preflight based on the current db so remote recreate,
+remote move, and real repair cases keep using the repair path. Only skip repair
+for a narrower case:
+
+- the block is missing in the current db,
+- reversing local pending txs in an isolated transient conn restores that block,
+- and every remote occurrence of that block is a pure `retractEntity`.
+
+This avoids server checksum work and does not ask Cloudflare Workers to compute
+or hold whole-graph state.
+
+Verification:
+
+- The RED test failed before the fix by entering repair and leaving the cursor
+  and pending state unchanged.
+- The same test passes after the preflight filter: the cursor advances, `B`
+  remains deleted, and the stale pending delete is cleared.
+- Existing local-delete plus remote-recreate and remote-move/delete repair tests
+  still pass, proving that non-delete-only remote uses are not hidden by the new
+  filter.
+
 ## Checked But Not New Root Causes
 
 These were inspected because they can also combine local pending state with
@@ -113,6 +170,7 @@ remote tx replay:
 - Missing-block repair boundaries: existing tests cover normal repair and the
   obsolete created/deleted or updated/deleted block cases, both with and without
   local changes.
+- Accepted local delete replay after reload: now covered by Case 3.
 
 ## Discarded Case: Pull Cursor Ahead of Debounced Graph Store
 

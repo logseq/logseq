@@ -773,16 +773,19 @@
                          :online-users (atom [])
                          :ws-state (atom :open)}]
              (reset! db-sync/*repo->latest-remote-tx {})
-             (with-datascript-conns conn client-ops-conn
-               (fn []
-                 (-> (p/let [_ (sync-handle-message/handle-message! test-repo client raw-new)
+             (-> (with-datascript-conns
+                   conn
+                   client-ops-conn
+                   (fn []
+                     (p/let [_ (sync-handle-message/handle-message! test-repo client raw-new)
                              _ (sync-handle-message/handle-message! test-repo client raw-stale)
                              parent' (d/entity @conn parent-id)]
                        (is (= "remote-new-title" (:block/title parent')))
-                       (is (= 2 (client-op/get-local-tx test-repo))))
-                     (p/finally (fn []
-                                  (reset! db-sync/*repo->latest-remote-tx latest-prev)
-                                  (done))))))))))
+                       (is (= 2 (client-op/get-local-tx test-repo))))))
+                 (p/finally
+                   (fn []
+                     (reset! db-sync/*repo->latest-remote-tx latest-prev)
+                     (done))))))))
 
 (deftest tx-reject-db-transact-failed-surfaces-rejected-tx-test
   (testing "tx/reject with db transact failed includes parsed rejected tx and emits rtc-log"
@@ -932,35 +935,35 @@
                                        :t 1
                                        :txs [{:t 1
                                               :tx (sqlite-util/write-transit-str remote-update-tx)}]}))]
-             (with-datascript-conns conn client-ops-conn
-               (fn []
-                 (outliner-core/delete-blocks! conn [child1] {})
-                 (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))
-                       raw-reject (js/JSON.stringify
-                                   (clj->js {:type "tx/reject"
-                                             :reason "db transact failed"
-                                             :t 0
-                                             :failed-tx-id (str tx-id)}))]
-                   (reset! (:inflight client) [tx-id])
-                   (with-silenced-console-error
-                     #(try
-                        (sync-handle-message/handle-message! test-repo client raw-reject)
-                        (is false "expected tx/reject to fail-fast")
-                        (catch :default error
-                          (is (= :db-sync/tx-rejected (:type (ex-data error)))))))
-                   (-> (sync-handle-message/handle-message! test-repo client raw-update)
-                       (p/then
-                        (fn []
-                          (is (nil? @*last-sync-error))
-                          (is (= 1 (client-op/get-local-tx test-repo)))
-                          (is (= "server update"
-                                 (:block/title (d/entity @conn [:block/uuid child-uuid]))))))
-                       (p/catch
-                        (fn [error]
-                          (is nil (str error))))
-                       (p/finally
-                         (fn []
-                           (done)))))))))))
+             (let [result (with-datascript-conns
+                            conn
+                            client-ops-conn
+                            (fn []
+                              (outliner-core/delete-blocks! conn [child1] {})
+                              (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))
+                                    raw-reject (js/JSON.stringify
+                                                (clj->js {:type "tx/reject"
+                                                          :reason "db transact failed"
+                                                          :t 0
+                                                          :failed-tx-id (str tx-id)}))]
+                                (reset! (:inflight client) [tx-id])
+                                (with-silenced-console-error
+                                  #(try
+                                     (sync-handle-message/handle-message! test-repo client raw-reject)
+                                     (is false "expected tx/reject to fail-fast")
+                                     (catch :default error
+                                       (is (= :db-sync/tx-rejected (:type (ex-data error)))))))
+                                (-> (sync-handle-message/handle-message! test-repo client raw-update)
+                                    (p/then
+                                     (fn []
+                                       (is (nil? @*last-sync-error))
+                                       (is (= 1 (client-op/get-local-tx test-repo)))
+                                       (is (= "server update"
+                                              (:block/title (d/entity @conn [:block/uuid child-uuid]))))))
+                                    (p/catch
+                                     (fn [error]
+                                       (is nil (str error))))))))]
+               (p/finally result done))))))
 
 (deftest tx-reject-partial-success-advances-local-cursor-test
   (testing "partial tx/reject should not make the next pull replay already accepted local txs"
@@ -3619,6 +3622,42 @@
                 (is (= 1 (count pending-after)))))))
         (finally
           (d/unlisten! remote-conn ::capture-remote-same-insert))))))
+
+(deftest pull-ok-same-accepted-delete-after-reload-clears-local-pending-test
+  (testing "pulling an already accepted local delete after reload should not leave a stale pending delete"
+    (async done
+           (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+                 child-uuid (:block/uuid child1)
+                 *last-sync-error (atom nil)
+                 client {:repo test-repo
+                         :graph-id "graph-1"
+                         :inflight (atom [])
+                         :online-users (atom [])
+                         :last-sync-error *last-sync-error
+                         :ws-state (atom :open)}
+                 raw-pull (js/JSON.stringify
+                           (clj->js {:type "pull/ok"
+                                     :t 1
+                                     :txs [{:t 1
+                                            :tx (sqlite-util/write-transit-str
+                                                 [[:db/retractEntity [:block/uuid child-uuid]]])}]}))
+                 result (with-datascript-conns
+                          conn
+                          client-ops-conn
+                          (fn []
+                            (outliner-core/delete-blocks! conn [child1] {})
+                            (is (= 1 (count (#'sync-apply/pending-txs test-repo))))
+                            (-> (sync-handle-message/handle-message! test-repo client raw-pull)
+                                (p/then
+                                 (fn []
+                                   (is (nil? @*last-sync-error))
+                                   (is (= 1 (client-op/get-local-tx test-repo)))
+                                   (is (nil? (d/entity @conn [:block/uuid child-uuid])))
+                                   (is (empty? (#'sync-apply/pending-txs test-repo)))))
+                                (p/catch
+                                 (fn [error]
+                                   (is nil (str error)))))))]
+             (p/finally result done)))))
 
 (deftest tx-batch-ok-stale-ack-does-not-regress-local-or-remote-checksum-state-test
   (testing "stale tx/batch/ok should not regress local tx or latest remote checksum state"
