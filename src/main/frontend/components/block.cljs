@@ -2254,6 +2254,7 @@
         icon-size (if collapsed? 12 14)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
         with-icon? (and (some? icon)
+                        (not (:hide-block-icon? config))
                         (or (and (db/page? block)
                                  (not (:library? config)))
                             (:logseq.property/icon block)
@@ -3521,10 +3522,10 @@
             [:div.opacity-70.hover:opacity-100
              (block-positioned-properties config block :block-right)])
 
-          (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
-                        (:property? config))
-            (when (seq (:block/tags block))
-              (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))])]]]))
+	          (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
+	                        (:property? config) (:hide-block-tags? config))
+	            (when (seq (:block/tags block))
+	              (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))])]]]))
 
 (defn non-dragging?
   [e]
@@ -4551,12 +4552,18 @@
           :inline? true})])
 
      (when (and (not (:library? config))
-             (or (:tag-dialog? config)
-               (and
-                 (not collapsed?)
-                 (not (or table? property?)))))
+                (or (:tag-dialog? config)
+                    (and
+                     (not collapsed?)
+                     (not (or table? property?)))))
        [:div (when-not (:page-title? config) {:class "ls-block-content-indent"})
-        (db-properties-cp config block {:in-block-container? true})])
+        (db-properties-cp config block {:in-block-container? true
+                                        :skip-bidirectional-properties? (:page-title? config)})])
+
+     (when (and (:page-title? config)
+                (not (:library? config))
+                (not (or table? property?)))
+       (property-component/bidirectional-properties-area block config))
 
      (when (and show-query? (not (:table? config)))
        (let [query? (ldb/class-instance? (entity-plus/entity-memoized (db/get-db) :logseq.class/Query) block)
