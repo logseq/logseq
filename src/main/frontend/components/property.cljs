@@ -1147,13 +1147,13 @@
                      [:div {:style {:font-size 15}}
                       [:div.property-key.text-sm
                        (property-key-cp block (db/entity :logseq.property.class/properties) {})]
-                      [:div.text-muted-foreground
+                      [:div.text-muted-foreground.ml-5
                        (t :class/tag-properties-desc)]]
                      [:div.gap-1.flex.flex-col
                       (properties-section block properties opts')
                       (hidden-properties-cp block hidden-properties
                                             (assoc opts :show-hidden-properties? show-hidden-properties?))
                       ^{:key (str id "-class-add-property")}
-                      [new-property block opts']]]))]])
+                      [:div.ml-5 [new-property block opts']]]]))]])
             (when-not skip-bidirectional-properties?
               (bidirectional-properties-section bidirectional-properties))])))]))
