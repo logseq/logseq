@@ -86,3 +86,15 @@
               {:logseq.property/type :datetime}
               {:property-position :block-below}))
       "Datetime edit button should be shown for bottom properties"))
+
+(deftest show-property-panel-bullet-for-closed-value-test
+  (is (true?
+       (boolean
+        (#'property-component/show-property-panel-bullet?
+         {:logseq.property/type :default
+          :property/closed-values [{:db/id 1}]}
+         {:db/id 1}))))
+  (is (false?
+       (#'property-component/show-property-panel-bullet?
+        {:logseq.property/type :default}
+        {:db/id 1}))))

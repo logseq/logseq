@@ -315,36 +315,46 @@
                         (and (= :default type) (seq (:property/closed-values property'))))
                     (reset! *show-new-property-config? false)))))))))))
 
+(defn- property-description-title
+  [property]
+  (let [property' (or (some-> (:db/id property) db/entity) property)]
+    (:block/title (:logseq.property/description property'))))
+
 (hsx/defc property-key-title
   [block property class-schema?]
-  (shui/trigger-as
-   :a
-   {:tabIndex 0
-    :title (or (:block/title (:logseq.property/description property))
-               (db-property/built-in-display-title property t))
-    :class "property-k flex select-none jtrigger w-full"
-    :on-pointer-down (fn [^js e]
-                       (when (util/meta-key? e)
-                         (route-handler/redirect-to-page! (:block/uuid property))
-                         (.preventDefault e)))
-    :on-click (fn [^js/MouseEvent e]
-                (when-not (util/meta-key? e)
-                  (shui/popup-show! (.-target e)
-                                    (fn []
-                                      (property-config/property-dropdown property block {:debug? (.-altKey e)
-                                                                                         :class-schema? class-schema?}))
-                                    {:content-props
-                                     {:class "ls-property-dropdown as-root"
-                                      :onEscapeKeyDown (fn [e]
-                                                         (util/stop e)
-                                                         (shui/popup-hide!)
-                                                         (when-let [input (state/get-input)]
-                                                           (.focus input)))}
-                                     :align "start"
-                                     :dropdown-menu? true
-                                     :as-dropdown? true})))}
+  (let [title (db-property/built-in-display-title property t)
+        description (property-description-title property)
+        key-title (shui/trigger-as
+                   :a
+                   {:tabIndex 0
+                    :class "property-k flex select-none jtrigger w-full"
+                    :on-pointer-down (fn [^js e]
+                                       (when (util/meta-key? e)
+                                         (route-handler/redirect-to-page! (:block/uuid property))
+                                         (.preventDefault e)))
+                    :on-click (fn [^js/MouseEvent e]
+                                (when-not (util/meta-key? e)
+                                  (shui/popup-show! (.-target e)
+                                                    (fn []
+                                                      (property-config/property-dropdown property block {:debug? (.-altKey e)
+                                                                                                         :class-schema? class-schema?}))
+                                                    {:content-props
+                                                     {:class "ls-property-dropdown as-root"
+                                                      :onEscapeKeyDown (fn [e]
+                                                                         (util/stop e)
+                                                                         (shui/popup-hide!)
+                                                                         (when-let [input (state/get-input)]
+                                                                           (.focus input)))}
+                                                     :align "start"
+                                                     :dropdown-menu? true
+                                                     :as-dropdown? true})))}
 
-   (db-property/built-in-display-title property t)))
+                   title)]
+    (if (string/blank? description)
+      key-title
+      (ui/tooltip
+       [:span.block.w-full key-title]
+       [:div.max-w-96.whitespace-pre-wrap description]))))
 
 (hsx/defc property-key-cp
   [block property {:keys [other-position? class-schema?]}]
@@ -602,16 +612,21 @@
                               (= :logseq.property/empty-placeholder (:db/ident item))))
                        value)))))
 
+(defn- show-property-panel-bullet?
+  [property value]
+  (let [type (get property :logseq.property/type :default)]
+    (or (seq (:property/closed-values property))
+        (not (contains? #{:default :url} type))
+        (empty-panel-property-value? value))))
+
 (hsx/defc property-cp
   [block k v {:keys [sortable-opts] :as opts}]
   (let [property-id (when (keyword? k) (:db/id (db/entity k)))
         property (db/sub-block property-id)]
     (when (and (keyword? k) property)
       (let [type (get property :logseq.property/type :default)
-            default-or-url? (contains? #{:default :url} type)
             empty-value? (empty-panel-property-value? v)
-            show-panel-bullet? (or (not default-or-url?)
-                                   empty-value?)
+            show-panel-bullet? (show-property-panel-bullet? property v)
             property-key-cp' (property-key-cp block property (select-keys opts [:class-schema?]))]
         [:div {:key (str "property-pair-" (:db/id block) "-" (:db/id property))
                :class (util/classnames ["property-pair property-panel-row"
@@ -795,12 +810,13 @@
 
 (defn- use-hidden-properties-visible
   [block-uuid]
-  (let [[visible? set-visible!] (hooks/use-state (hidden-properties-visible? block-uuid))]
+  (let [[visible? set-visible!] (hooks/use-state (hidden-properties-visible? block-uuid))
+        watch-key (hooks/use-memo #(str "hidden-properties-visible-" (random-uuid)) [])]
     (hooks/use-effect!
      (fn []
        (set-visible! (hidden-properties-visible? block-uuid))
        (if block-uuid
-         (let [watch-key [:property/hidden-properties-visible block-uuid]]
+         (do
            (add-watch *show-hidden-properties-block-ids watch-key
                       (fn [_key _ref old-ids new-ids]
                         (let [old-visible? (contains? old-ids block-uuid)
@@ -1067,7 +1083,7 @@
                     ^{:key (str "plugin-replace-" (:key replace-renderer))}
                     [:> (:render replace-renderer) props-for-plugin])
                   (when show-properties-panel?
-                    [:div.properties-panel.gap-8
+                    [:div.properties-panel
                      (properties-section block properties' opts)]))
 
                 (when-not class?
@@ -1075,8 +1091,10 @@
                    (when show-hidden-properties-toggle-button?
                      [:div.mb-1
                       (hidden-properties-toggle-button block {})])
-                   (hidden-properties-cp block hidden-properties
-                                         (assoc opts :show-hidden-properties? show-hidden-properties?))])
+                   (when (and show-hidden-properties? (seq hidden-properties))
+                     [:div.properties-panel
+                      (hidden-properties-cp block hidden-properties
+                                            (assoc opts :show-hidden-properties? true))])])
 
                 (when (and page? (not class?))
                   ^{:key (str id "-add-property")}
