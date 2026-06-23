@@ -211,6 +211,7 @@
   [remote-tx]
   (let [outliner-op (:outliner-op remote-tx)]
     (cond-> {:transact-remote? true
+             :persist-op? false
              :t (:t remote-tx)}
       outliner-op
       (assoc :outliner-op outliner-op)
@@ -1091,6 +1092,7 @@
   (let [{:keys [forward-ops inverse-ops]} (rebase-history-ops local-tx)
         tx-meta {:outliner-op :rebase
                  :original-outliner-op (:outliner-op local-tx)
+                 :db-sync/rebased-local? true
                  ;; Keep stable tx-id across rebases so one logical pending op
                  ;; doesn't fan out into duplicated pending rows.
                  :db-sync/tx-id (:tx-id local-tx)
@@ -1099,7 +1101,9 @@
         forward-ops' (if (seq forward-ops)
                        forward-ops
                        (let [tx-data (-> (:tx local-tx) normalize-tx-data-for-rebase)]
-                         [[:transact [tx-data {:db-sync/suppress-stale-rebase-transact-failed-log? true}]]]))]
+                         [[:transact [tx-data (assoc tx-meta
+                                                     :db-sync/suppress-stale-rebase-transact-failed-log?
+                                                     true)]]]))]
     (try
       (let [rebase-tx-report
             (ldb/batch-transact-with-temp-conn!
@@ -1172,7 +1176,9 @@
                                  (rebase-local-txs! repo conn local-txs rebase-db-before)))
 
                        {:listen-db (fn [{:keys [tx-meta tx-data] :as tx-report}]
-                                     (when (and (= :rebase (:outliner-op tx-meta)) (seq tx-data))
+                                     (when (and (= :rebase (:outliner-op tx-meta))
+                                                (:db-sync/rebased-local? tx-meta)
+                                                (seq tx-data))
                                        (swap! *rebase-tx-reports conj tx-report)))})]
         (doseq [tx-report @*rebase-tx-reports]
           (handle-local-tx! repo tx-report))
@@ -1355,21 +1361,28 @@
         (when (= repo (:repo client))
           (enqueue-flush-pending! repo client))))))
 
+(defn- persistable-local-tx-meta?
+  [tx-meta]
+  (and (not (:rtc-tx? tx-meta))
+       (not (:transact-remote? tx-meta))
+       (not (:sync-download-graph? tx-meta))
+       (:persist-op? tx-meta true)
+       (or (not= :rebase (:outliner-op tx-meta))
+           (:db-sync/rebased-local? tx-meta))))
+
 (defn enqueue-local-tx!
   [repo {:keys [tx-meta tx-data] :as tx-report}]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (when-not (or (:rtc-tx? tx-meta)
-                  (and (:batch-tx? @conn) (not= :rebase (:outliner-op tx-meta)))
-                  (:reverse? tx-meta))
-      (when (seq tx-data)
-        (enqueue-local-tx-aux repo tx-report)))))
+    (when (and (persistable-local-tx-meta? tx-meta)
+               (not (and (:batch-tx? @conn) (not= :rebase (:outliner-op tx-meta))))
+               (not (:reverse? tx-meta))
+               (seq tx-data))
+      (enqueue-local-tx-aux repo tx-report))))
 
 (defn handle-local-tx!
   [repo {:keys [tx-data tx-meta db-after] :as tx-report}]
   (when (and (seq tx-data)
-             (not (:rtc-tx? tx-meta))
-             (not (:sync-download-graph? tx-meta))
-             (:persist-op? tx-meta true))
+             (persistable-local-tx-meta? tx-meta))
     (enqueue-local-tx! repo tx-report)
     (asset-db-listener/generate-asset-ops repo tx-report)
     (when-let [client @worker-state/*db-sync-client]

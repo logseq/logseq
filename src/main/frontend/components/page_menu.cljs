@@ -61,10 +61,14 @@
   [page]
   (page-handler/<delete! (:block/uuid page)
                          (fn []
-                           (notification/show! (t :page.delete/success (:block/title page))
-                                               :success))
+                           (notification/show!
+                            (if (db-model/today-journal-page? page)
+                              (t :page.delete/today-journal-truncate-success)
+                              (t :page.delete/success (:block/title page)))
+                            :success))
                          {:error-handler (fn [{:keys [msg]}]
-                                           (notification/show! msg :warning))}))
+                                           (when msg
+                                             (notification/show! msg :warning)))}))
 
 (defn delete-page-confirm!
   [page]
