@@ -353,7 +353,7 @@
     (if (string/blank? description)
       key-title
       (ui/tooltip
-       [:span.block.w-full key-title]
+       key-title
        [:div.max-w-96.whitespace-pre-wrap description]))))
 
 (hsx/defc property-key-cp
@@ -950,6 +950,7 @@
              {:variant :secondary
               :size :sm
               :class (str "bottom-property-control-btn"
+                          " hidden-properties-toggle-btn"
                           (when icon-only? " bottom-property-add-btn"))
               :tab-index (or tab-index 0)
               :data-bottom-row-nav (when bottom-row-nav? true)
@@ -1069,7 +1070,8 @@
             (when show-properties-area?
               [:div.ls-properties-area
                {:id id
-                :class (util/classnames [{:ls-page-properties page?}])
+                :class (util/classnames [{:ls-page-properties page?
+                                          :ls-block-properties (not page?)}])
                 :tab-index 0}
                [:<>
                 (mapv (fn [r]

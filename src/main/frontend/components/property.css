@@ -33,6 +33,10 @@
   margin-left: 0;
 }
 
+.ls-block .ls-properties-area.ls-block-properties {
+  margin-left: 8px;
+}
+
 .grid-auto-fit {
   grid-template-columns: repeat(auto-fit, 120px);
 }
@@ -68,6 +72,14 @@
 
   .properties-panel-header {
     @apply px-3 py-2 text-xs font-medium text-muted-foreground border-b border-gray-04;
+  }
+
+  .hidden-properties-toggle-btn {
+    color: var(--ls-secondary-text-color);
+  }
+
+  .hidden-properties-toggle-btn:hover {
+    color: var(--ls-primary-text-color);
   }
 
   .property-pair.property-panel-row {
