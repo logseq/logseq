@@ -2067,6 +2067,7 @@ let metadata () =
       requires_graph = Command_id.requires_graph Command_id.Agent_bridge;
       requires_auth = Command_id.requires_auth Command_id.Agent_bridge;
       write_command = Command_id.is_write Command_id.Agent_bridge;
+      human_table_headers_order = [];
     };
   ]
 

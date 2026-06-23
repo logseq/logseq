@@ -129,6 +129,7 @@ let metadata () =
       requires_graph = Command_id.requires_graph Command_id.Debug_pull;
       requires_auth = Command_id.requires_auth Command_id.Debug_pull;
       write_command = Command_id.is_write Command_id.Debug_pull;
+      human_table_headers_order = [];
     };
   ]
 

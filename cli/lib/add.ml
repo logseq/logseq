@@ -320,7 +320,14 @@ let build_add_block_action (opts : opts) args repo =
                         })))
 
 let page_selector =
-  vector [ kw "db/id"; kw "block/uuid"; kw "block/name"; kw "block/title" ]
+  vector
+    [
+      kw "db/id";
+      kw "block/uuid";
+      kw "block/name";
+      kw "block/title";
+      kw "logseq.property/deleted-at";
+    ]
 
 let tag_selector =
   vector
@@ -398,6 +405,15 @@ let id_of_entity value = Edn_util.get_int64 value "db/id"
 let ident_of_entity value =
   Option.bind (Edn_util.get value "db/ident") Edn_util.as_keyword_t
 
+let recycled_entity value =
+  Option.is_some (Edn_util.get value "logseq.property/deleted-at")
+
+let page_not_found () =
+  Error.make (Edn_util.keyword_t "page-not-found") "page not found"
+
+let recycled_page_error () =
+  Error.make (Edn_util.keyword_t "recycled-page") "page is recycled"
+
 let pull_entity config repo selector lookup =
   Transport.thread_api_pull config ~repo
     ~selector:(Edn_util.expect_vector_t "add pull selector" selector)
@@ -462,20 +478,20 @@ let pull_created_page config repo name create_result =
 let ensure_page config repo page_name =
   let open Cli_effect in
   bind (pull_pages_by_name config repo page_name page_selector) (fun result ->
-      match Option.bind (first_entity result) uuid_of_entity with
-      | Some uuid -> pure (Ok uuid)
+      match first_entity result with
+      | Some entity when recycled_entity entity ->
+          pure (Error (recycled_page_error ()))
+      | Some entity -> (
+          match uuid_of_entity entity with
+          | Some uuid -> pure (Ok uuid)
+          | None -> pure (Error (page_not_found ())))
       | None ->
           bind (create_page config repo page_name) (fun create_result ->
               bind (pull_created_page config repo page_name create_result)
                 (fun page ->
                   match uuid_of_entity page with
                   | Some uuid -> pure (Ok uuid)
-                  | None ->
-                      pure
-                        (Error
-                           (Error.make
-                              (Edn_util.keyword_t "page-not-found")
-                              "page not found")))))
+                  | None -> pure (Error (page_not_found ())))))
 
 let resolve_add_target config (action : action) =
   let open Cli_effect in
