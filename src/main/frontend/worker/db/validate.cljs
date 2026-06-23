@@ -306,7 +306,8 @@
           (let [{:keys [errors] :as result} (validate-db-result @conn)]
             (log-validation-errors! errors)
             result))
-        db @conn]
+        db @conn
+        counts (assoc (db-validate/graph-counts db entities) :datoms datom-count)]
 
     (if errors
       (do
@@ -320,11 +321,11 @@
                                                :warning false]))
 
       (shared-service/broadcast-to-clients! :notification
-                                            [(str "Your graph is valid! " (assoc (db-validate/graph-counts db entities) :datoms datom-count))
+                                            [(str "Your graph is valid! " counts)
                                              :success false]))
-    {:errors errors
-     :datom-count datom-count
-     :invalid-entity-ids invalid-entity-ids}))
+    (merge {:errors errors
+            :invalid-entity-ids invalid-entity-ids}
+           counts)))
 
 (defn recompute-checksum-diagnostics
   [_repo conn {:keys [local-checksum remote-checksum] :as _sync-diagnostics}]

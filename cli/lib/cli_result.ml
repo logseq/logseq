@@ -18,6 +18,7 @@ type t = {
   context : Melange_edn.any option;
   output : 'o. 'o Output.Mode.t -> 'o Output.t;
   exit_code : int option;
+  human_table_headers_order : string list;
 }
 
 let data_value = function
@@ -110,14 +111,6 @@ let graph_info_field_value_text label value =
 
 let add_column acc label = if List.mem label acc then acc else acc @ [ label ]
 
-let move_datetime_columns_last columns =
-  let non_datetime, datetime =
-    List.partition (fun label -> not (is_datetime_field label)) columns
-  in
-  let created_at = List.filter is_created_at_field datetime in
-  let updated_at = List.filter is_updated_at_field datetime in
-  non_datetime @ created_at @ updated_at
-
 let table_columns items =
   items
   |> List.fold_left
@@ -126,7 +119,6 @@ let table_columns items =
          |> List.map (fun (key, _) -> field_label key)
          |> List.fold_left add_column acc)
        []
-  |> move_datetime_columns_last
 
 let field_by_label label fields =
   fields
@@ -384,6 +376,7 @@ let ok ?command ?context mode data =
     context;
     output = (fun mode -> output_for_data command mode data);
     exit_code = None;
+    human_table_headers_order = [];
   }
 
 let error ?command ?context mode error =
@@ -401,6 +394,7 @@ let error ?command ?context mode error =
     context;
     output;
     exit_code = Some 1;
+    human_table_headers_order = [];
   }
 
 let is_error t = t.status = Error
@@ -414,3 +408,6 @@ let data_value t =
   | Some data -> Some (data_value data)
 
 let with_command command t = { t with command = Some command }
+
+let with_human_table_headers_order human_table_headers_order t =
+  { t with human_table_headers_order }
