@@ -8,7 +8,7 @@
             [frontend.components.editor :as editor]
             [frontend.components.graph-actions :as graph-actions]
             [frontend.components.library :as library]
-            [frontend.components.objects :as objects]
+            [frontend.components.table.objects :as table-objects]
             [frontend.components.plugins :as plugins]
             [frontend.components.property.config :as property-config]
             [frontend.components.query :as query]
@@ -383,12 +383,12 @@
       (when class?
         (shui/tabs-content
          {:value "tag"}
-         (on-mounted (objects/class-objects page opts)
+         (on-mounted (table-objects/class-objects page opts)
                      (:on-tagged-nodes-rendered opts))))
       (when property?
         (shui/tabs-content
          {:value "property"}
-         (on-mounted (objects/property-related-objects page opts)
+         (on-mounted (table-objects/property-related-objects page opts)
                      (:on-tagged-nodes-rendered opts)))))]))
 
 (hsx/defc sidebar-page-properties

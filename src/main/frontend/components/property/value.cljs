@@ -53,23 +53,18 @@
   [m]
   (and (map? m) (:db/id m)))
 
-(defn- value->db-id
+(defn- selected-choice-values
   [value]
-  (cond
-    (entity-map? value)
-    (:db/id value)
-
-    (integer? value)
-    value
-
-    (keyword? value)
-    (:db/id (db/entity value))))
-
-(defn- property-value->ids
-  [value]
-  (if (and (coll? value) (not (map? value)))
-    (keep value->db-id value)
-    (some-> value value->db-id vector)))
+  (let [values (if (and (coll? value)
+                        (not (map? value)))
+                 value
+                 [value])]
+    (keep (fn [v]
+            (cond
+              (nil? v) nil
+              (entity-map? v) (:db/id v)
+              :else v))
+          values)))
 
 (hsx/defc property-empty-btn-value
   [property & opts]
@@ -257,9 +252,7 @@
         (ui-outliner-tx/transact!
          {:outliner-op :save-block}
          (db-property-handler/batch-delete-property-value! (map :db/id blocks) (:db/ident property) value))
-        (when (or (not many?)
-                  ;; values will be cleared
-                  (and many? (<= (count (get block (:db/ident property))) 1)))
+        (when-not many?
           (shui/popup-hide!))))
      (when (fn? refresh-result-f) (refresh-result-f)))))
 
@@ -786,7 +779,7 @@
         alias-source-page-id (:db/id alias-source-page)
         alias-source-page-owned? (and alias? (seq (:block/_alias alias-source-page)))
         selected-choices (when block
-                           (property-value->ids (get block (:db/ident property))))
+                           (selected-choice-values (get block (:db/ident property))))
         selected-choice-ids (set selected-choices)
         extends-property? (= (:db/ident property) :logseq.property.class/extends)
         children-pages (when extends-property? (model/get-structured-children repo (:db/id block)))
@@ -1124,9 +1117,7 @@
                                                             :refresh-result-f refresh-result-f})))
                selected-choices' (get block (:db/ident property))
                selected-choices (when-not (= type :checkbox)
-                                  (if (every? #(and (map? %) (:db/id %)) selected-choices')
-                                    (map :db/id selected-choices')
-                                    [selected-choices']))]
+                                  (selected-choice-values selected-choices'))]
          (select-aux block property
                      {:multiple-choices? multiple-choices?
                       :items items
@@ -1283,7 +1274,7 @@
          string-value))]))
 
 (hsx/defc closed-value-item
-  [value {:keys [inline-text icon?]}]
+  [value {:keys [inline-text icon? chip?]}]
   (let [eid (when value
               (if (entity-map? value) (:db/id value) [:block/uuid value]))
         block-id (:db/id (when eid (db/entity eid)))
@@ -1296,9 +1287,12 @@
          (cond
            icon
            (if icon?
-             (icon-component/icon icon {:color? true})
-             [:div.flex.flex-row.items-center.gap-1.h-6
-              (icon-component/icon icon {:color? true})
+             (icon-component/icon icon (cond-> {:color? true}
+                                         chip? (assoc :size 13)))
+             [:div.flex.flex-row.items-center.justify-center.gap-1
+              {:class (if chip? "h-4" "h-6")}
+              (icon-component/icon icon (cond-> {:color? true}
+                                          chip? (assoc :size 13)))
               (when value'
                 [:span value'])])
 
@@ -1309,15 +1303,25 @@
            [:span.number (str value')]
 
            :else
-           [:span.inline-flex.w-full
+           [:span {:class (if chip?
+                            "inline-flex items-center justify-center min-w-0 max-w-full"
+                            "inline-flex w-full")}
             (let [value' (str value')
                   value' (if (string/blank? value')
                            (t :ui/empty)
                            value')]
-              (inline-text {} :markdown value'))])))))
+              (inline-text (cond-> {}
+                             chip? (assoc :add-margin? false))
+                           :markdown value'))])))))
+
+(hsx/defc closed-value-chip
+  [value opts]
+  [:span.ls-property-choice-chip
+   [:span.ls-property-choice-chip-content
+    (closed-value-item value (assoc opts :chip? true))]])
 
 (hsx/defc select-item
-  [property type value {:keys [page-cp inline-text other-position? property-position table-view? _icon?] :as opts}]
+  [property type value {:keys [page-cp inline-text other-position? property-position table-view? closed-value-display _icon?] :as opts}]
   (let [closed-values? (seq (:property/closed-values property))
         tag? (or (:tag? opts) (= (:db/ident property) :block/tags))
         inline-text-cp (fn [content]
@@ -1329,7 +1333,9 @@
        (property-empty-btn-value property)
 
        closed-values?
-       (closed-value-item value opts)
+       (if (= closed-value-display :chip)
+         (closed-value-chip value opts)
+         (closed-value-item value opts))
 
        (or (entity-util/page? value)
            (seq (:block/tags value)))
@@ -1394,6 +1400,7 @@
                                          {:align "start"
                                           :as-dropdown? true
                                           :auto-focus? (not (false? popup-auto-focus-trigger?))
+                                          :content-props {:class "ls-property-select-dropdown-content"}
                                           :trigger-id trigger-id}
                                           (some? popup-focus-trigger?)
                                           (assoc :focus-trigger? popup-focus-trigger?))))]
@@ -1435,20 +1442,25 @@
                          :as opts}]
   (let [multiple-values? (db-property/many? property)
         class (str (when-not row? "flex flex-1 ")
+                   (when (:table-view? opts) "items-center ")
                    (when multiple-values? "property-value-content"))
         type (:logseq.property/type property)
-        text-ref-type? (db-property-type/text-ref-property-types type)]
+        text-ref-type? (db-property-type/text-ref-property-types type)
+        readonly? (:readonly? opts)
+        trigger? (not (or text-ref-type? readonly?))]
     [:div.cursor-text
      {:id (or dom-id (random-uuid))
       :tabIndex 0
-      :class (str class " " (when-not text-ref-type? "jtrigger"))
+      :class (str class " " (when trigger? "jtrigger"))
       :on-key-down (fn [e]
-                     (when-not text-ref-type?
+                     (when trigger?
                        (when (contains? #{"Backspace" "Delete"} (util/ekey e))
                          (delete-block-property! block property))))
       :style {:min-height 24}}
      (cond
-       (and (= :logseq.property/default-value (:db/ident property)) (nil? (:block/title value)))
+       (and (not readonly?)
+            (= :logseq.property/default-value (:db/ident property))
+            (nil? (:block/title value)))
        [:div.jtrigger.cursor-pointer.text-sm.px-2
         {:on-click #(<create-new-block! block property "")}
         (t :property/set-default-value)]
@@ -1475,8 +1487,9 @@
        :else
        (let [content (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))]
          (cond
-           (contains? (set (keys string-value-on-click))
-                      (:db/ident property))
+           (and (not readonly?)
+                (contains? (set (keys string-value-on-click))
+                           (:db/ident property)))
            [:div.w-full {:on-click (fn []
                                      (let [f (get string-value-on-click (:db/ident property))]
                                        (f block property)))}
@@ -1593,7 +1606,7 @@
   [^js target]
   (some? (some-> target (.closest asset-embedded-control-selector))))
 
-(def ^:private asset-thumb-fit-class
+(def asset-thumb-fit-class
   "CSS escape hatch that makes asset-cp's output fit the wrapper's bounding box.
   asset-cp wraps the <img> in a div.asset-container with no size constraint of
   its own, so max-h-full on the img resolves against an auto-sized parent and
@@ -1902,8 +1915,54 @@
           {:on-click show-grid-from-click!}
           (property-empty-text-value property opts)])))))
 
+(def property-type-display-modes
+  "Maps scalar property types to their default table display mode."
+  {:string :string-input
+   :number :number-input
+   :raw-number :display
+   :asset :asset-picker
+   :date :date-picker
+   :datetime :date-picker
+   :checkbox :checkbox})
+
+(defn- default-property-display-mode
+  "Returns the default scalar display mode for `type`."
+  [type]
+  (get property-type-display-modes type :display))
+
+;; TODO number need better handling
+(defn property-scalar-display-mode
+  "Classifies how a scalar property value should render before any UI side effects run."
+  [{:keys [property readonly? closed-values? select-mode?] :as opts}]
+  (let [type (:logseq.property/type property)]
+    (cond
+      (= :logseq.property/icon (:db/ident property))
+      :icon
+
+      readonly?
+      :readonly
+
+      closed-values?
+      :select
+
+      (= :number type)
+      (if (and select-mode? (:editing? opts))
+        :select
+        (if (:editing? opts)
+          :display
+          (default-property-display-mode type)))
+
+      (contains? #{:string :asset :date :datetime} type)
+      (default-property-display-mode type)
+
+      select-mode?
+      :select
+
+      :else
+      (default-property-display-mode type))))
+
 (hsx/defc property-scalar-value-aux
-  [block property value* {:keys [editing? on-chosen]
+  [block property value* {:keys [editing? on-chosen readonly?]
                           :as opts}]
   (let [property (model/sub-block (:db/id property))
         type (:logseq.property/type property)
@@ -1914,70 +1973,76 @@
         select-opts {:on-chosen on-chosen}
         value (if (and (entity-map? value*) (= (:db/ident value*) :logseq.property/empty-placeholder))
                 nil
-                value*)]
-    (cond
-      (= :logseq.property/icon (:db/ident property))
+                value*)
+        mode (property-scalar-display-mode {:property property
+                                            :editing? editing?
+                                            :readonly? readonly?
+                                            :closed-values? closed-values?
+                                            :select-mode? select-type?'})]
+    (case mode
+      :icon
       (icon-row block editing?)
 
-      (and (= type :number) (not editing?) (not closed-values?))
+      :readonly
+      (property-value-inner block property value opts)
+
+      :number-input
       (single-number-input block property value (:table-view? opts))
 
-      (= type :string)
+      :string-input
       (single-string-input block property value (:table-view? opts))
 
-      (= type :asset)
+      :asset-picker
       (asset-value-picker block property value (assoc opts :editing? editing?))
 
-      :else
-      (if (and select-type?'
-               (not (and (not closed-values?) (= type :date))))
-        (let [classes (outliner-property/get-block-classes (db/get-db) (:db/id block))
-              display-as-checkbox? (and (some
-                                         (fn [block]
-                                           (-> (set (map :db/id (:logseq.property/checkbox-display-properties block)))
-                                               (contains? (:db/id property))))
-                                         (conj classes block))
-                                        (seq (:property/closed-values property))
-                                        (boolean? (:logseq.property/choice-checkbox-state value*)))]
-          (if display-as-checkbox?
-            (let [checked? (:logseq.property/choice-checkbox-state value*)]
-              (shui/checkbox {:checked checked?
-                              :class "mt-1"
-                              :on-checked-change (fn [value]
-                                                   (let [choices (:property/closed-values property)
-                                                         choice (some (fn [choice] (when (= value (:logseq.property/choice-checkbox-state choice))
-                                                                                     choice)) choices)]
-                                                     (when choice
-                                                       (db-property-handler/set-block-property! (:db/id block) (:db/ident property) (:db/id choice)))))}))
-            (single-value-select block property value
-                                 select-opts
-                                 (assoc opts
-                                        :editing? editing?
-                                        :value-render (fn [] (select-item property type value opts))))))
-        (case type
-          (:date :datetime)
-          (property-value-date-picker block property value (merge opts {:editing? editing?}))
+      :select
+      (let [classes (outliner-property/get-block-classes (db/get-db) (:db/id block))
+            display-as-checkbox? (and (some
+                                       (fn [block]
+                                         (-> (set (map :db/id (:logseq.property/checkbox-display-properties block)))
+                                             (contains? (:db/id property))))
+                                       (conj classes block))
+                                      (seq (:property/closed-values property))
+                                      (boolean? (:logseq.property/choice-checkbox-state value*)))]
+        (if display-as-checkbox?
+          (let [checked? (:logseq.property/choice-checkbox-state value*)]
+            (shui/checkbox {:checked checked?
+                            :class "mt-1"
+                            :on-checked-change (fn [value]
+                                                 (let [choices (:property/closed-values property)
+                                                       choice (some (fn [choice] (when (= value (:logseq.property/choice-checkbox-state choice))
+                                                                                   choice)) choices)]
+                                                   (when choice
+                                                     (db-property-handler/set-block-property! (:db/id block) (:db/ident property) (:db/id choice)))))}))
+          (single-value-select block property value
+                               select-opts
+                               (assoc opts
+                                      :editing? editing?
+                                      :value-render (fn [] (select-item property type value opts))))))
 
-          :checkbox
-          (let [add-property! (fn [value]
-                                (<add-property! block (:db/ident property) value opts)
-                                (when-let [on-checked-change (:on-checked-change opts)]
-                                  (on-checked-change value)))]
-            [:label.flex.w-full.as-scalar-value-wrap.cursor-pointer
-             (shui/checkbox {:class "jtrigger flex flex-row items-center"
-                             :disabled config/publishing?
-                             :auto-focus editing?
-                             :checked value
-                             :on-checked-change (fn []
-                                                  (add-property! (not value)))
-                             :on-key-down (fn [e]
-                                            (when (= (util/ekey e) "Enter")
+      :date-picker
+      (property-value-date-picker block property value (merge opts {:editing? editing?}))
+
+      :checkbox
+      (let [add-property! (fn [value]
+                            (<add-property! block (:db/ident property) value opts)
+                            (when-let [on-checked-change (:on-checked-change opts)]
+                              (on-checked-change value)))]
+        [:label.flex.w-full.as-scalar-value-wrap.cursor-pointer
+         (shui/checkbox {:class "jtrigger flex flex-row items-center"
+                         :disabled config/publishing?
+                         :auto-focus editing?
+                         :checked value
+                         :on-checked-change (fn []
                                               (add-property! (not value)))
-                                            (when (contains? #{"Backspace" "Delete"} (util/ekey e))
-                                              (delete-block-property! block property)))})])
-          ;; :others
-          [:div.flex.flex-1
-           (property-value-inner block property value opts)])))))
+                         :on-key-down (fn [e]
+                                        (when (= (util/ekey e) "Enter")
+                                          (add-property! (not value)))
+                                        (when (contains? #{"Backspace" "Delete"} (util/ekey e))
+                                          (delete-block-property! block property)))})])
+
+      [:div.flex.flex-1
+       (property-value-inner block property value opts)])))
 
 (hsx/defc property-scalar-value
   [block property value* {:keys [container-id editing?]
@@ -1992,12 +2057,16 @@
   [block property v {:keys [on-chosen editing?] :as opts}]
   (let [type (:logseq.property/type property)
         date? (= type :date)
+        chip-display? (and (= (:closed-value-display opts) :chip)
+                           (or (seq (:property/closed-values property))
+                               (= :block/tags (:db/ident property))))
         *el (hooks/use-ref nil)
         items (cond->> (if (entity-map? v) #{v} v)
                 (= (:db/ident property) :block/tags)
                 (remove (fn [v] (contains? ldb/hidden-tags (:db/ident v)))))
-        select-cp (fn [select-opts target]
+        select-cp (fn [select-opts target *selected-choices]
                     (let [select-opts (merge {:multiple-choices? true
+                                              :selected-choices-atom *selected-choices
                                               :on-chosen (fn []
                                                            (when on-chosen (on-chosen)))}
                                              select-opts
@@ -2015,18 +2084,24 @@
 
                          (select block property select-opts opts))]))]
     (if editing?
-      (select-cp {} nil)
+      (select-cp {} nil nil)
       (let [toggle-fn shui/popup-hide!
-            content-fn (fn [{:keys [_id content-props]} target]
-                         (select-cp {:content-props content-props} target))
+            content-fn (fn [{:keys [_id content-props]} target *selected-choices]
+                         (select-cp {:content-props content-props} target *selected-choices))
             show-popup! (fn [^js e]
                           (let [target (.-target e)]
                             (when-not (or (util/link? target) (.closest target "a") config/publishing?)
-                              (shui/popup-show! (hooks/deref *el)
-                                                (fn [opts]
-                                                  (content-fn opts target))
-                                                {:as-dropdown? true :as-content? false
-                                                 :align "start" :auto-focus? true}))))]
+                              (let [trigger (hooks/deref *el)
+                                    popup-target (or (some-> trigger (.closest ".ls-table-cell")) trigger target)
+                                    *selected-choices (atom (set (selected-choice-values v)))]
+                                (shui/popup-show! popup-target
+                                                  (fn [opts]
+                                                    (content-fn opts target *selected-choices))
+                                                  {:as-dropdown? true
+                                                   :as-content? false
+                                                   :align "start"
+                                                   :auto-focus? true
+                                                   :content-props {:side-offset 0 :class "ls-property-select-dropdown-content"}})))))]
         [:div.multi-values.jtrigger
          {:tab-index "0"
           :ref *el
@@ -2046,13 +2121,17 @@
                (for [item items]
                  ^{:key (or (:block/uuid item) (str item))}
                  [asset-value-content item])
-               (concat
-                (->> (for [item items]
-                       ^{:key (or (:block/uuid item) (str item))}
-                       [select-item property type item (assoc opts :show-popup! show-popup!)])
-                     (interpose [:span.opacity-50.-ml-1 ","]))
-                (when date?
-                  [(property-value-date-picker block property nil {:toggle-fn toggle-fn})])))
+               (if chip-display?
+                 (for [item items]
+                   ^{:key (or (:block/uuid item) (str item))}
+                   [closed-value-chip item opts])
+                 (concat
+                  (->> (for [item items]
+                         ^{:key (or (:block/uuid item) (str item))}
+                         [select-item property type item (assoc opts :show-popup! show-popup!)])
+                       (interpose [:span.opacity-50.-ml-1 ","]))
+                  (when date?
+                    [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))))
              (if date?
                (property-value-date-picker block property nil {:toggle-fn toggle-fn})
                (if (= type :asset)

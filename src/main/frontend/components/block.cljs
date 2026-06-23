@@ -225,7 +225,7 @@
 (defonce *resizing-image? (atom false))
 
 (hsx/defc ^:large-vars/cleanup-todo asset-container
-  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text gallery-view?]}]
+  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text hide-title? gallery-view?]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)
         asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))]
@@ -264,7 +264,7 @@
          (cond-> {:loading "lazy"
                   :referrerPolicy "no-referrer"
                   :src src'}
-           (not gallery-view?)
+           (not (or hide-title? gallery-view?))
            (assoc :title title))
          metadata)]
        (when (and (not breadcrumb?)
@@ -416,6 +416,7 @@
                                              :positioned? positioned?
                                              :local? local?
                                              :full-text full-text
+                                             :hide-title? (:hide-title? config)
                                              :gallery-view? (:gallery-view? config)})]
     (if (or (:disable-resize? config)
             (:table-view? config)

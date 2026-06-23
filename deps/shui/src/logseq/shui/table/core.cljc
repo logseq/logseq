@@ -26,18 +26,23 @@
           ;; included ids
           (contains? (:selected-ids row-selection) id)))))
 
+(defn table-row-id
+  [row]
+  (if (map? row) (:db/id row) row))
+
 (defn- select-some?
   [row-selection rows]
-  (or
-   (and (seq (:selected-ids row-selection))
-        (some (:selected-ids row-selection) rows))
-   (and (seq (:excluded-ids row-selection))
-        (not= (count rows) (count (:excluded-ids row-selection))))))
+  (let [row-ids (keep table-row-id rows)]
+    (or
+     (and (seq (:selected-ids row-selection))
+          (some (:selected-ids row-selection) row-ids))
+     (and (seq (:excluded-ids row-selection))
+          (not= (count row-ids) (count (:excluded-ids row-selection)))))))
 
 (defn- select-all?
   [row-selection rows]
   (and (seq (:selected-ids row-selection))
-       (set/subset? (set rows)
+       (set/subset? (set (keep table-row-id rows))
                     (:selected-ids row-selection))))
 
 (defn- toggle-selected-all!
@@ -48,7 +53,7 @@
       (and group-by-property value)
       (let [new-selection (update row-selection :selected-ids
                                   (fn [ids]
-                                    (set/union (set ids) (set (:rows table)))))]
+                                    (set/union (set ids) (set (keep table-row-id (:rows table))))))]
         (set-row-selection! new-selection))
 
       value
@@ -57,7 +62,7 @@
       group-by-property
       (let [new-selection (update row-selection :selected-ids
                                   (fn [ids]
-                                    (set/difference (set ids) (set (:rows table)))))]
+                                    (set/difference (set ids) (set (keep table-row-id (:rows table))))))]
         (set-row-selection! new-selection))
 
       :else
@@ -92,16 +97,39 @@
     (set-sorting! value)
     value))
 
+(defn- column-replace-sorting!
+  [column set-sorting! asc?]
+  (let [value (when-not (nil? asc?)
+                [{:id (:id column) :asc? asc?}])]
+    (set-sorting! value)
+    value))
+
+(defn- column-append-sorting!
+  [column set-sorting! sorting asc?]
+  (let [id (:id column)
+        existing-column (some (fn [item] (when (= (:id item) id) item)) sorting)
+        value (->> (if existing-column
+                     (if (nil? asc?)
+                       (remove (fn [item] (= (:id item) id)) sorting)
+                       (map (fn [item] (if (= (:id item) id) (assoc item :asc? asc?) item)) sorting))
+                     (when-not (nil? asc?)
+                       (conj (vec sorting) {:id id :asc? asc?})))
+                   (remove nil?)
+                   vec)]
+    (set-sorting! value)
+    value))
+
 (defn get-selection-rows
   [row-selection rows]
   (if (:selected-all? row-selection)
-    (let [excluded-ids (:excluded-ids row-selection)]
+    (let [excluded-ids (:excluded-ids row-selection)
+          row-ids (keep table-row-id rows)]
       (if (seq excluded-ids)
-        (remove #(excluded-ids %) rows)
-        rows))
+        (remove #(excluded-ids %) row-ids)
+        row-ids))
     (let [selected-ids (:selected-ids row-selection)]
       (when (seq selected-ids)
-        (filter #(selected-ids %) rows)))))
+        (filter #(selected-ids %) (keep table-row-id rows))))))
 
 (defn table-option
   [{:keys [data columns state data-fns]
@@ -130,7 +158,9 @@
            :row-toggle-selected! (fn [row-selection row value] (row-toggle-selected! row value set-row-selection! row-selection))
            :toggle-selected-all! (fn [table value]
                                    (toggle-selected-all! table value set-row-selection!))
-           :column-set-sorting! (fn [sorting column asc?] (column-set-sorting! column set-sorting! sorting asc?)))))
+           :column-set-sorting! (fn [sorting column asc?] (column-set-sorting! column set-sorting! sorting asc?))
+           :column-replace-sorting! (fn [column asc?] (column-replace-sorting! column set-sorting! asc?))
+           :column-append-sorting! (fn [sorting column asc?] (column-append-sorting! column set-sorting! sorting asc?)))))
 
 (defn- get-prop-and-children
   [prop-and-children]
@@ -230,7 +260,7 @@
         _ (use-sticky-element! el-ref (:main-container prop) (not (mobile?)))]
     (into
      [:div.ls-table-header
-      (merge {:class "border-y transition-colors bg-gray-01"
+      (merge {:class "transition-colors bg-gray-01"
               :ref el-ref
               :style {:z-index 9}}
              (dissoc prop :main-container))]
@@ -245,23 +275,29 @@
   (let [[prop children] (get-prop-and-children prop-and-children)]
     (into
      [:div.ls-table-row.ls-block.flex.flex-row.items-center
-      (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted bg-gray-01 items-stretch"}
+      (merge {:class "transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted bg-gray-01 items-stretch"}
              prop)]
      children)))
 
 (hsx/defc table-cell
   [& prop-and-children]
-  (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div.ls-table-cell.flex.relative.h-full (dissoc prop :select? :add-property?)
+  (let [[prop children] (get-prop-and-children prop-and-children)
+        outer-class (str (:class prop)
+                         (when (:select? prop) " ls-table-select-cell")
+                         (when (:add-property? prop) " ls-table-add-property-cell"))
+        outer-prop (cond-> (dissoc prop :select? :add-property?)
+                     (seq outer-class)
+                     (assoc :class outer-class))]
+    [:div.ls-table-cell.flex.relative.h-full outer-prop
      (into
-      [:div {:class (str "flex align-middle w-full overflow-x-clip items-center"
+      [:div {:class (str "ls-table-cell-content flex align-middle h-full w-full overflow-x-clip items-center"
                          (cond
                            (:select? prop)
                            " px-0"
                            (:add-property? prop)
                            ""
                            :else
-                           " border-r px-2"))}]
+                           " px-2"))}]
       children)]))
 
 (hsx/defc table-actions

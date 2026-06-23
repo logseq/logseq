@@ -91,6 +91,17 @@
     (is (= #{}
            (#'property-value/asset-selected-ids {} property)))))
 
+(deftest selected-choice-values-test
+  (is (= [1]
+         (vec (#'property-value/selected-choice-values {:db/id 1}))))
+  (is (= [1]
+         (vec (#'property-value/selected-choice-values 1))))
+  (is (= [1 2]
+         (vec (#'property-value/selected-choice-values [{:db/id 1} {:db/id 2}]))))
+  (is (= #{1 2}
+         (set (#'property-value/selected-choice-values #{1 2}))))
+  (is (empty? (#'property-value/selected-choice-values nil))))
+
 (deftest assets-selected-first-test
   (let [assets [{:db/id 1 :block/title "one"}
                 {:db/id 2 :block/title "two"}
@@ -100,6 +111,73 @@
     (is (= [1 3 2]
            (mapv :db/id (#'property-value/assets-selected-first assets #{1 3})))
         "Selected assets stay in their original relative order")))
+
+(deftest property-scalar-display-mode-test
+  (let [mode (fn [opts]
+               (property-value/property-scalar-display-mode
+                (merge {:property {}
+                        :editing? false
+                        :closed-values? false
+                        :select-mode? false}
+                       opts)))]
+    (is (= :icon
+           (mode {:property {:db/ident :logseq.property/icon
+                             :logseq.property/type :map}})))
+    (is (= :readonly
+           (mode {:readonly? true
+                  :property {:db/ident :user.property/title
+                             :logseq.property/type :string}})))
+    (is (= :number-input
+           (mode {:property {:db/ident :user.property/count
+                             :logseq.property/type :number}})))
+    (is (= :select
+           (mode {:select-mode? true
+                  :closed-values? true
+                  :property {:db/ident :user.property/count
+                             :logseq.property/type :number}})))
+    (is (= :select
+           (mode {:editing? true
+                  :select-mode? true
+                  :property {:db/ident :user.property/count
+                             :logseq.property/type :number}})))
+    (is (= :display
+           (mode {:editing? true
+                  :property {:db/ident :user.property/count
+                             :logseq.property/type :number}})))
+    (is (= :string-input
+           (mode {:property {:db/ident :user.property/title
+                             :logseq.property/type :string}})))
+    (is (= :select
+           (mode {:closed-values? true
+                  :property {:db/ident :user.property/status
+                             :logseq.property/type :string}})))
+    (is (= :asset-picker
+           (mode {:property {:db/ident :user.property/asset
+                             :logseq.property/type :asset}})))
+    (is (= :select
+           (mode {:select-mode? true
+                  :closed-values? true
+                  :property {:db/ident :user.property/asset
+                             :logseq.property/type :asset}})))
+    (is (= :select
+           (mode {:select-mode? true
+                  :property {:db/ident :user.property/status
+                             :logseq.property/type :default}})))
+    (is (= :date-picker
+           (mode {:select-mode? true
+                  :property {:db/ident :user.property/date
+                             :logseq.property/type :date}})))
+    (is (= :select
+           (mode {:select-mode? true
+                  :closed-values? true
+                  :property {:db/ident :user.property/date
+                             :logseq.property/type :date}})))
+    (is (= :checkbox
+           (mode {:property {:db/ident :user.property/done?
+                             :logseq.property/type :checkbox}})))
+    (is (= :display
+           (mode {:property {:db/ident :logseq.property.asset/size
+                             :logseq.property/type :raw-number}})))))
 
 (deftest add-initial-node-choice-dedupes-existing-db-id-test
   (let [existing {:value {:db/id 100

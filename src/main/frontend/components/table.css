@@ -1,4 +1,8 @@
 .ls-table {
+  --ls-table-row-height: 32px;
+  --ls-table-inner-divider-color: hsl(var(--border));
+  --ls-table-edge-divider-color: var(--ls-border-color, hsl(var(--border)));
+
   .asset-container {
     @apply my-1;
   }
@@ -23,6 +27,10 @@
     @apply flex items-center cursor-pointer;
   }
 
+  .ls-table-asset-file-preview .asset-container img {
+    @apply cursor-pointer;
+  }
+
   .ls-table-rows {
     > .relative {
       @apply pt-[34px] pb-[38px];
@@ -34,7 +42,40 @@
   }
 
   .ls-table-row {
-    @apply h-[33px] min-h-[33px] max-h-[33px];
+    position: relative;
+    height: var(--ls-table-row-height);
+    min-height: var(--ls-table-row-height);
+    max-height: var(--ls-table-row-height);
+
+    &::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 1px;
+      pointer-events: none;
+      background-color: var(--ls-table-inner-divider-color);
+      z-index: 8;
+    }
+
+    &:hover > .sticky-columns {
+      background-color: hsl(var(--muted) / 0.5);
+    }
+
+    &[data-state="selected"] > .sticky-columns {
+      background-color: hsl(var(--muted));
+    }
+
+    &[data-asset-table-nested] {
+      --ls-table-asset-annotation-text-color: hsl(var(--muted-foreground));
+
+      .ls-table-cell-content,
+      .ls-table-cell-content :is(span, div, a, button, input, textarea) {
+        color: var(--ls-table-asset-annotation-text-color) !important;
+      }
+    }
+
     div, span, a {
       @apply whitespace-nowrap;
     }
@@ -48,10 +89,16 @@
     }
   }
 
+  div[data-testid='virtuoso-item-list'] > div:last-child .ls-table-row::after {
+    background-color: transparent;
+  }
+
   .ls-table-header {
     @apply flex flex-row items-center w-fit absolute left-0 top-0;
 
     min-width: 100%;
+    border-top: 1px solid var(--ls-table-edge-divider-color);
+    border-bottom: 1px solid var(--ls-table-edge-divider-color);
 
     will-change: transform;
     transform: translate3d(0, 0, 0);
@@ -78,14 +125,51 @@
   }
 
   .ls-table-header-cell {
-    @apply cursor-pointer transition-colors hover:bg-muted/50 text-left align-middle font-medium text-muted-foreground border-r;
+    @apply cursor-pointer transition-colors hover:bg-muted/50 text-left align-middle font-medium text-muted-foreground;
+    border-right: 1px solid var(--ls-table-edge-divider-color);
   }
 
   .ls-table-cell {
     @apply overflow-hidden;
   }
+
+  .ls-table-cell-content {
+    border-right: 1px solid var(--ls-table-inner-divider-color);
+  }
+
+  .ls-table-select-cell > .ls-table-cell-content,
+  .ls-table-add-property-cell > .ls-table-cell-content {
+    border-right: 0;
+  }
+
+  .ls-table-index-cell > .ls-table-cell-content {
+    @apply justify-end;
+  }
+
+  .property-value-inner[data-type="number"] > div,
+  .property-value-inner[data-type="raw-number"] > div,
+  .property-value-inner[data-type="row-number"] > div,
+  .property-value-inner[data-type="number"] .ls-number,
+  .property-value-inner[data-type="row-number"] .ls-number {
+    @apply w-full justify-end text-right;
+  }
+
+  .property-value-inner[data-type="number"] input,
+  .property-value-inner[data-type="row-number"] input {
+    @apply text-right;
+  }
+
   .ls-table-footer {
     @apply absolute left-0 bottom-[8px] w-full;
+  }
+
+  .ls-table-new-row {
+    border-top: 1px solid var(--ls-table-edge-divider-color);
+    border-bottom: 1px solid var(--ls-table-edge-divider-color);
+  }
+
+  .ls-table-new-row[data-empty="true"] {
+    border-top: 0;
   }
 
   .ls-table-resize-handle {
@@ -145,6 +229,13 @@ html.is-resizing-buf {
     @apply sticky left-0 z-[8] bg-gray-01;
 }
 
+.ls-table-new-row-content {
+    @apply sticky z-[8] bg-gray-01;
+    left: 0.5rem;
+}
+
 .table-action-bar {
+    width: max-content;
+    white-space: nowrap;
     z-index: 100;
 }
