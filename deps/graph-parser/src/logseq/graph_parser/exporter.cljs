@@ -585,8 +585,8 @@
                 :logseq.property/default-value :logseq.property.repeat/repeat-type.double-plus}})
 
 (defn- missing-repeat-type-property-tx
-  [db repeat-properties]
-  (when (and (:logseq.property.repeat/repeat-type repeat-properties)
+  [db repeat-property-values]
+  (when (and (:logseq.property.repeat/repeat-type repeat-property-values)
              (nil? (d/entity db :logseq.property.repeat/repeat-type)))
     (->> (or (not-empty (select-keys db-property/built-in-properties [:logseq.property.repeat/repeat-type]))
              {:logseq.property.repeat/repeat-type fallback-repeat-type-property})
