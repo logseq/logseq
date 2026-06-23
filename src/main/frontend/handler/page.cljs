@@ -95,9 +95,11 @@
   (when-let [db (conn/get-db)]
     (when-let [page (ldb/get-page db common-config/favorites-page-name)]
       (let [blocks (ldb/sort-by-order (:block/_parent page))]
-        (keep (fn [block]
-                (when-let [block-db-id (:db/id (:block/link block))]
-                  (d/entity db block-db-id))) blocks)))))
+        (->> blocks
+             (keep (fn [block]
+                     (when-let [block-db-id (:db/id (:block/link block))]
+                       (d/entity db block-db-id))))
+             (remove ldb/recycled?))))))
 
 (defn toggle-favorite! []
   ;; NOTE: in journals or settings, current-page is nil
