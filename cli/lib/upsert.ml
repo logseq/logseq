@@ -19,6 +19,7 @@ type block_opts = {
 type page_opts = {
   id : Cli_primitive.db_id option;
   page : string option;
+  restore : bool;
   update_tags_edn : string option;
   update_properties_edn : string option;
   remove_tags_edn : string option;
@@ -127,6 +128,7 @@ type action =
       mode : mode;
       id : Cli_primitive.db_id option;
       page : string option;
+      restore : bool;
       plan : Property.update_plan;
     }
   | Upsert_task of {
@@ -696,11 +698,27 @@ let build_page repo graph (opts : page_opts) =
       | Some id, page ->
           Ok
             (Upsert_page
-               { repo; graph; mode = Update; id = Some id; page; plan })
+               {
+                 repo;
+                 graph;
+                 mode = Update;
+                 id = Some id;
+                 page;
+                 restore = opts.restore;
+                 plan;
+               })
       | None, Some page ->
           Ok
             (Upsert_page
-               { repo; graph; mode = Create; id = None; page = Some page; plan })
+               {
+                 repo;
+                 graph;
+                 mode = Create;
+                 id = None;
+                 page = Some page;
+                 restore = opts.restore;
+                 plan;
+               })
       | None, None ->
           Error
             (Error.make
@@ -1438,6 +1456,15 @@ let rename_conflict current_entity target =
 
 let page_entity value = Option.is_some (name_of_entity value)
 
+let recycled_entity value =
+  Option.is_some (Edn_util.get value "logseq.property/deleted-at")
+
+let page_not_found () =
+  Error.make (Edn_util.keyword_t "page-not-found") "page not found"
+
+let recycled_page_error () =
+  Error.make (Edn_util.keyword_t "recycled-page") "page is recycled"
+
 let resolve_tag_id invoke_config repo tag =
   let open Cli_effect in
   match tag with
@@ -1936,6 +1963,10 @@ let execute_plan_on_uuids invoke_config repo block_uuids plan =
 
 let execute_page_plan invoke_config repo page_uuid plan =
   execute_plan_on_uuids invoke_config repo [ page_uuid ] plan
+
+let restore_recycled_page invoke_config repo page_uuid =
+  apply_outliner_ops invoke_config repo
+    [ vector [ kw "restore-recycled"; vector [ Edn_util.uuid page_uuid ] ] ]
 
 let pull_created_page invoke_config repo name create_result =
   match (Edn_util.as_vector create_result, Edn_util.as_list create_result) with
@@ -2510,29 +2541,44 @@ let execute_task_update mode invoke_config repo id uuid status_input
                            (upsert_id_not_found "task"
                               (Option.value id ~default:0L))))))
 
-let page_result_with_plan mode invoke_config repo page_id page_uuid plan =
+let page_result_with_plan ?(restore = false) mode invoke_config repo page_id
+    page_uuid plan =
   let open Cli_effect in
-  bind (execute_page_plan invoke_config repo page_uuid plan) (function
-    | Error err ->
-        pure (Cli_result.error ~command:Command_id.Upsert_page mode err)
-    | Ok _ -> pure (ok_page_ids mode [ page_id ]))
+  let restore_effect =
+    if restore then restore_recycled_page invoke_config repo page_uuid
+    else pure Edn_util.nil
+  in
+  bind restore_effect (fun _ ->
+      bind (execute_page_plan invoke_config repo page_uuid plan) (function
+      | Error err ->
+          pure (Cli_result.error ~command:Command_id.Upsert_page mode err)
+      | Ok _ -> pure (ok_page_ids mode [ page_id ])))
 
-let execute_create_page mode invoke_config repo name plan =
+let execute_create_page mode invoke_config repo name restore plan =
   let open Cli_effect in
   bind (pull_pages_by_name invoke_config repo name page_selector)
     (fun existing ->
       match first_entity existing with
       | Some page -> (
-          match (id_of_entity page, uuid_of_entity page) with
-          | Some id, Some uuid ->
-              page_result_with_plan mode invoke_config repo id uuid plan
-          | Some id, None -> pure (ok_page_ids mode [ id ])
-          | _ ->
-              pure
-                (Cli_result.error ~command:Command_id.Upsert_page mode
-                   (Error.make
-                      (Edn_util.keyword_t "page-not-found")
-                      "page not found after upsert")))
+          let recycled = recycled_entity page in
+          if recycled && not restore then
+            pure
+              (Cli_result.error ~command:Command_id.Upsert_page mode
+                 (recycled_page_error ()))
+          else
+            match (id_of_entity page, uuid_of_entity page) with
+            | Some id, Some uuid ->
+                page_result_with_plan ~restore:recycled mode invoke_config repo
+                  id uuid plan
+            | Some _, None when recycled ->
+                pure
+                  (Cli_result.error ~command:Command_id.Upsert_page mode
+                     (recycled_page_error ()))
+            | Some id, None -> pure (ok_page_ids mode [ id ])
+            | _ ->
+                pure
+                  (Cli_result.error ~command:Command_id.Upsert_page mode
+                     (page_not_found ())))
       | None ->
           bind (create_page invoke_config repo name) (fun create_result ->
               bind (pull_created_page invoke_config repo name create_result)
@@ -2544,11 +2590,9 @@ let execute_create_page mode invoke_config repo name plan =
                   | _ ->
                       pure
                         (Cli_result.error ~command:Command_id.Upsert_page mode
-                           (Error.make
-                              (Edn_util.keyword_t "page-not-found")
-                              "page not found after upsert")))))
+                           (page_not_found ())))))
 
-let execute_update_page mode invoke_config repo id plan =
+let execute_update_page mode invoke_config repo id restore plan =
   let open Cli_effect in
   bind (pull_entity_by_id invoke_config repo page_selector id) (fun entity ->
       match id_of_entity entity with
@@ -2560,10 +2604,20 @@ let execute_update_page mode invoke_config repo id plan =
           pure
             (Cli_result.error ~command:Command_id.Upsert_page mode
                (upsert_id_type_mismatch "Page" id))
+      | Some _ when recycled_entity entity && not restore ->
+          pure
+            (Cli_result.error ~command:Command_id.Upsert_page mode
+               (recycled_page_error ()))
       | Some id -> (
+          let recycled = recycled_entity entity in
           match uuid_of_entity entity with
           | Some uuid ->
-              page_result_with_plan mode invoke_config repo id uuid plan
+              page_result_with_plan ~restore:recycled mode invoke_config repo id
+                uuid plan
+          | None when recycled ->
+              pure
+                (Cli_result.error ~command:Command_id.Upsert_page mode
+                   (recycled_page_error ()))
           | None -> pure (ok_page_ids mode [ id ])))
 
 let update_plan_empty (plan : Property.update_plan) =
@@ -2807,20 +2861,20 @@ let execute_with_mode action config mode =
            (Error.make
               (Edn_util.keyword_t "not-implemented")
               "upsert tag is not implemented"))
-  | Upsert_page { repo; mode = Create; page = Some page; plan; _ } ->
+  | Upsert_page { repo; mode = Create; page = Some page; restore; plan; _ } ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
         (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_page mode err)
         | Ok invoke_config ->
-            execute_create_page mode invoke_config repo page plan)
-  | Upsert_page { repo; mode = Update; id = Some id; plan; _ } ->
+            execute_create_page mode invoke_config repo page restore plan)
+  | Upsert_page { repo; mode = Update; id = Some id; restore; plan; _ } ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
         (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_page mode err)
         | Ok invoke_config ->
-            execute_update_page mode invoke_config repo id plan)
+            execute_update_page mode invoke_config repo id restore plan)
   | Upsert_page _ ->
       pure
         (Cli_result.error ~command:Command_id.Upsert_page mode
