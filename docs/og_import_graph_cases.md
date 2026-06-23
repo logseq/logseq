@@ -47,9 +47,9 @@ GitHub `logseq/db-test` issues with the `import` label were audited on 2026-06-2
 ### Generated Markdown file graphs
 
 - Generated edge case.
-- Case: a deterministic random Markdown graph contains multiple pages and journals with mixed task markers, page refs, missing page refs, block refs, missing block refs, duplicated ids, broken ids, temporal markers, tags, properties, and nested blocks.
+- Case: deterministic random Markdown graphs contain multiple pages and journals with mixed task markers, page refs, missing page refs, block refs, missing block refs, duplicated ids, broken ids, temporal markers, tags, page properties, block properties, namespaces, aliases, missing asset links, tables, code fences, and nested blocks.
 - Expected import behavior: import the whole file graph without throwing, keep the generated block corpus, repair invalid identity/ref data through the normal import path, and keep the imported DB valid.
-- Regression test: `logseq.graph-parser.exporter-test/import-generated-markdown-file-graph`.
+- Regression tests: `logseq.graph-parser.exporter-test/import-generated-markdown-file-graph` and the local `^:integration` fuzz test `logseq.graph-parser.exporter-test/import-generated-markdown-file-graph-fuzz`.
 
 ### Recursive block refs
 
@@ -78,6 +78,13 @@ GitHub `logseq/db-test` issues with the `import` label were audited on 2026-06-2
 - Case: an OG graph links a PDF with a `file:///...pdf` URL instead of copying the PDF under `assets/`, while the annotation EDN and `hls__*.md` files are stored under the graph by decoded filename.
 - Expected import behavior: create an external Asset node for the linked PDF, keep the `file://` URL in asset metadata, import the PDF annotations, and point annotation blocks at the external Asset.
 - Regression test: `logseq.graph-parser.exporter-test/import-linked-file-pdf-annotations`.
+
+### Missing local PDF asset links
+
+- Generated edge case.
+- Case: imported Markdown links a local PDF under `assets/`, but the target file is absent from the selected file graph.
+- Expected import behavior: report the unresolved link through `ignored-assets`, continue importing without noisy stderr output, and keep the imported DB valid.
+- Regression test: `logseq.graph-parser.exporter-test/import-missing-local-pdf-asset-link-is-ignored-quietly`.
 
 ### Large flat files
 

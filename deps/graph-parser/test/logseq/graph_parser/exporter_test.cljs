@@ -276,6 +276,14 @@
    "Generated Epsilon"
    "Generated Zeta"])
 
+(def generated-file-graph-ref-page-names
+  (into generated-file-graph-page-names
+        ["Generated/Missing Namespace"
+         "Generated Nested/Child"
+         "Missing Alias Target"
+         "Missing Tag Target"
+         "Generated PDF"]))
+
 (def generated-file-graph-task-markers
   [nil "TODO" "DOING" "DONE" "LATER" "NOW" "WAITING"])
 
@@ -286,13 +294,50 @@
    "edge-case"
    "db-test"])
 
+(def generated-file-graph-test-seeds
+  [1309 42 8675309])
+
+(defn- generated-page-preamble
+  [*seed page-name]
+  (let [alias-name (str page-name " Alias " (next-random! *seed 30))
+        tag-page (random-choice! *seed generated-file-graph-ref-page-names)]
+    (case (next-random! *seed 5)
+      0 (str "alias:: [[" alias-name "]], [[Missing Alias Target]]\n"
+             "tags:: [[" tag-page "]], #generated-page\n"
+             "generated-page-rank:: " (next-random! *seed 100) "\n\n")
+      1 (str "title:: " page-name "\n"
+             "public:: true\n\n")
+      "")))
+
+(defn- generated-title-suffix
+  [*seed]
+  (case (next-random! *seed 8)
+    0 (str " [missing asset](../assets/missing-" (next-random! *seed 50) ".pdf)")
+    1 (str " ![missing image](../assets/missing-" (next-random! *seed 50) ".png)")
+    2 (str " [[" (random-choice! *seed generated-file-graph-ref-page-names) "]]")
+    3 " #[[generated multi tag]]"
+    ""))
+
+(defn- generated-extra-lines
+  [*seed index]
+  (case (next-random! *seed 8)
+    0 (str "  collapsed:: true\n"
+           "  background-color:: yellow\n")
+    1 (str "  alias:: [[Generated Block Alias " (next-random! *seed 100) "]]\n")
+    2 (str "  | generated | table |\n"
+           "  | row | " index " |\n")
+    3 (str "  ```clojure\n"
+           "  (def generated-" index " " (next-random! *seed 100) ")\n"
+           "  ```\n")
+    ""))
+
 (defn- generated-md-block
   [*seed index]
   (let [block-id (generated-uuid (inc index))
         duplicate-id (generated-uuid 1)
         missing-ref-id (generated-uuid (+ 2000 index))
         task-marker (random-choice! *seed generated-file-graph-task-markers)
-        page-name (random-choice! *seed generated-file-graph-page-names)
+        page-name (random-choice! *seed generated-file-graph-ref-page-names)
         missing-page-name (str "Generated Missing " (next-random! *seed 1000))
         tag (random-choice! *seed generated-file-graph-tags)
         ref-id (case (next-random! *seed 5)
@@ -308,26 +353,30 @@
                    missing-page-name
                    page-name)
         title-prefix (if task-marker (str task-marker " ") "")
+        title-suffix (generated-title-suffix *seed)
         temporal-line (case (next-random! *seed 6)
                         0 "  SCHEDULED: <2026-01-05 Mon .+1w>\n"
                         1 "  DEADLINE: <2026-01-09 Fri +2d>\n"
                         "")
+        extra-lines (generated-extra-lines *seed index)
         nested-line (when (zero? (next-random! *seed 3))
                       (str "  - nested generated block " index
                            " [[Generated Nested " (next-random! *seed 30) "]]\n"))]
     (str "- " title-prefix "generated block " index
-         " [[" page-ref "]] ((" ref-id ")) #" tag "\n"
+         " [[" page-ref "]] ((" ref-id ")) #" tag title-suffix "\n"
          temporal-line
          "  id:: " id-value "\n"
          "  generated-ref:: [[" page-name "]]\n"
          "  generated-rank:: " (next-random! *seed 100) "\n"
+         extra-lines
          nested-line)))
 
 (defn- generated-md-file-content
-  [*seed file-index block-count]
-  (apply str
-         (map #(generated-md-block *seed (+ (* file-index 100) %))
-              (range block-count))))
+  [*seed file-index page-name block-count]
+  (str (generated-page-preamble *seed page-name)
+       (apply str
+              (map #(generated-md-block *seed (+ (* file-index 100) %))
+                   (range block-count)))))
 
 (defn- generated-md-file-graph
   [seed]
@@ -335,14 +384,40 @@
         pages (map-indexed
                (fn [index page-name]
                  [(str "pages/" (string/replace (string/lower-case page-name) " " "_") ".md")
-                  (generated-md-file-content *seed index (+ 8 (next-random! *seed 8)))])
+                  (generated-md-file-content *seed index page-name (+ 8 (next-random! *seed 8)))])
                generated-file-graph-page-names)
         journals [["journals/2026_01_05.md"
-                   (generated-md-file-content *seed 20 (+ 8 (next-random! *seed 8)))]
+                   (generated-md-file-content *seed 20 "2026_01_05" (+ 8 (next-random! *seed 8)))]
                   ["journals/2026_01_06.md"
-                   (generated-md-file-content *seed 21 (+ 8 (next-random! *seed 8)))]]]
+                   (generated-md-file-content *seed 21 "2026_01_06" (+ 8 (next-random! *seed 8)))]
+                  ["assets/generated.md"
+                   "Generated asset content\n"]]]
     (into {"logseq/config.edn" "{:preferred-format :markdown\n :journal/page-title-format \"yyyy_MM_dd\"}\n"}
           (concat pages journals))))
+
+(defn- assert-generated-md-file-graph-imports
+  [seed]
+  (let [graph-dir (write-temp-file-graph (generated-md-file-graph seed))]
+    (p/let [conn (db-test/create-conn)
+            _ (db-pipeline/add-listener conn)
+            _ (import-file-graph-to-db graph-dir conn {})
+            generated-block-count (->> (d/q '[:find [?title ...]
+                                              :where [?b :block/title ?title]]
+                                            @conn)
+                                       (filter #(string/includes? % "generated block"))
+                                       count)
+            validation-errors (map :entity (:errors (db-validate/validate-local-db! @conn)))]
+      (is (<= 60 generated-block-count)
+          (str "Seed " seed " imports the generated block corpus"))
+      (is (empty? validation-errors)
+          (str "Seed " seed " generated Markdown file graph validates")))))
+
+(defn- assert-generated-md-file-graphs-import
+  [seeds]
+  (p/loop [remaining-seeds (seq seeds)]
+    (when remaining-seeds
+      (p/let [_ (assert-generated-md-file-graph-imports (first remaining-seeds))]
+        (p/recur (next remaining-seeds))))))
 
 ;; Tests
 ;; =====
@@ -612,19 +687,10 @@
           "Imported graph validates"))))
 
 (deftest-async import-generated-markdown-file-graph
-  (let [graph-dir (write-temp-file-graph (generated-md-file-graph 1309))]
-    (p/let [conn (db-test/create-conn)
-            _ (db-pipeline/add-listener conn)
-            _ (import-file-graph-to-db graph-dir conn {})
-            generated-block-count (->> (d/q '[:find [?title ...]
-                                              :where [?b :block/title ?title]]
-                                            @conn)
-                                       (filter #(string/includes? % "generated block"))
-                                       count)]
-      (is (<= 60 generated-block-count)
-          "Generated Markdown file graph imports the generated block corpus")
-      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
-          "Generated Markdown file graph validates"))))
+  (assert-generated-md-file-graphs-import generated-file-graph-test-seeds))
+
+(deftest-async ^:integration import-generated-markdown-file-graph-fuzz
+  (assert-generated-md-file-graphs-import (range 1 101)))
 
 (deftest-async export-doc-files-propagates-missing-block-ref-cleanup-report
   (let [missing-uuid #uuid "55555555-5555-5555-5555-555555555555"
@@ -662,6 +728,31 @@
     ["[[FIRST UUID]] and ![dino!](assets/subdir/partydino.gif)"
      "assets/subdir/partydino.gif"]
     "[[FIRST UUID]] and [[UUID]]"))
+
+(deftest-async import-missing-local-pdf-asset-link-is-ignored-quietly
+  (let [graph-dir (write-temp-file-graph
+                   {"logseq/config.edn" "{}"
+                    "pages/missing-asset.md" "- Missing local PDF [paper](../assets/missing-paper.pdf)\n"})
+        console-errors (atom [])
+        original-stderr-write (.-write (.-stderr js/process))]
+    (set! (.-write (.-stderr js/process))
+          (fn [& args]
+            (swap! console-errors conj (first args))
+            true))
+    (-> (p/let [conn (db-test/create-conn)
+                assets (atom [])
+                {:keys [import-state]} (import-file-graph-to-db graph-dir conn {:assets assets})]
+          (is (= [{:reason "No asset data found for this asset path"
+                   :path "../assets/missing-paper.pdf"
+                   :location {:block "Missing local PDF [paper](../assets/missing-paper.pdf)"}}]
+                 @(:ignored-assets import-state))
+              "Missing local PDF asset links are reported through ignored assets")
+          (is (empty? @console-errors)
+              "Missing local PDF asset links are ignored without noisy console errors")
+          (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+              "Imported graph validates"))
+        (p/finally (fn [_]
+                     (set! (.-write (.-stderr js/process)) original-stderr-write))))))
 
 (deftest extract-template-blocks
   (let [page-uuid (random-uuid)
