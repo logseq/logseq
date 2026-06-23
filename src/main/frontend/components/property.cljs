@@ -390,13 +390,29 @@
                 :editor-box (state/get-component :editor/box)
                 :default-collapsed? true
                 :bidirectional? true
-                :collapsable-page-title? true
                 :page-title? false
-                :ref? true}]
+                :ref? true
+                :hide-block-tags? true
+                :hide-block-icon? true}]
     (if (and blocks-container (seq entities))
       [:div.ls-bidirectional-block-container.w-full
        (blocks-container config entities)]
       [:span.opacity-60 (t :view.filter/empty)])))
+
+(defn- icon-id
+  [icon]
+  (cond
+    (string? icon) icon
+    (keyword? icon) (name icon)
+    (map? icon) (or (:id icon) (get icon "id"))))
+
+(defn- bidirectional-tab-icon
+  [class]
+  (let [icon (or (:logseq.property/icon class)
+                 (some :logseq.property/icon (sort-by :db/id (:block/tags class))))]
+    (when (and icon (not= "hash" (icon-id icon)))
+      [:span.inline-flex.items-center.shrink-0
+       (icon-component/icon icon {:size 16 :color? true})])))
 
 (hsx/defc bidirectional-properties-section
   [bidirectional-properties]
@@ -417,12 +433,14 @@
         (shui/tabs-list
          {:variant :line
           :class "h-8 gap-3"}
-         (for [{:keys [value title]} normalized-items]
+         (for [{:keys [value class title]} normalized-items]
            (shui/tabs-trigger
             {:key (str "bidirectional-tab-" value)
              :value value
              :class "px-0 py-1 text-base text-foreground"}
-            [:span title])))
+            [:span.inline-flex.items-center.gap-1.5
+             (bidirectional-tab-icon class)
+             [:span title]])))
         (for [{:keys [value entities]} normalized-items]
           (shui/tabs-content
            {:key (str "bidirectional-tab-content-" value)
@@ -898,8 +916,21 @@
      (fn []))
    [root-block-or-page? (:db/id block)]))
 
+(hsx/defc bidirectional-properties-area
+  [target-block opts]
+  (let [*bidirectional-properties (hooks/use-memo #(atom nil) [])
+        [bidirectional-properties] (hooks/use-atom *bidirectional-properties)
+        block (resolve-linked-block-if-exists target-block)
+        root-block? (and (= (str (:block/uuid block)) (:id opts))
+                         (not (entity-util/page? block)))]
+    [:<>
+     (load-bidirectional-properties block
+                                    (or root-block? (entity-util/page? block))
+                                    #(reset! *bidirectional-properties %))
+     (bidirectional-properties-section bidirectional-properties)]))
+
 (hsx/defc ^:large-vars/cleanup-todo properties-area
-  [target-block {:keys [sidebar-properties? tag-dialog?] :as opts}]
+  [target-block {:keys [sidebar-properties? tag-dialog? skip-bidirectional-properties?] :as opts}]
   (let [*bidirectional-properties (hooks/use-memo #(atom nil) [])
         [bidirectional-properties] (hooks/use-atom *bidirectional-properties)
         [shown-block-ids] (hooks/use-atom *show-hidden-properties-block-ids)
@@ -1006,9 +1037,10 @@
                                                    (or current-route-page?
                                                        root-block?))]
     [:<>
-     (load-bidirectional-properties block
-                                    (or root-block? (entity-util/page? block))
-                                    #(reset! *bidirectional-properties %))
+     (when-not skip-bidirectional-properties?
+       (load-bidirectional-properties block
+                                      (or root-block? (entity-util/page? block))
+                                      #(reset! *bidirectional-properties %)))
      (let [has-bidirectional-properties? (seq bidirectional-properties)]
        (cond
          (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?)
@@ -1026,7 +1058,7 @@
                properties' (->> (remove (fn [[k _v]] (contains? remove-properties k))
                                         full-properties)
                                 (remove (fn [[k _v]] (= k :logseq.property.class/properties))))
-               show-properties-panel? (or (seq properties') (seq bidirectional-properties))
+               show-properties-panel? (seq properties')
                page? (entity-util/page? block)
                class? (entity-util/class? block)
                plugin-properties (->> (concat full-properties hidden-properties)
@@ -1045,55 +1077,73 @@
                                     :props props-for-plugin}))
                prepend-renderers (filter #(= "prepend" (:mode %)) plugin-renderers)
                replace-renderer (first (filter #(= "replace" (:mode %)) plugin-renderers))
-               append-renderers (remove #(contains? #{"prepend" "replace"} (:mode %)) plugin-renderers)]
+               append-renderers (remove #(contains? #{"prepend" "replace"} (:mode %)) plugin-renderers)
+               show-hidden-properties-area? (and (not class?)
+                                                 (or show-hidden-properties-toggle-button?
+                                                     (and show-hidden-properties?
+                                                          (seq hidden-properties))))
+               show-class-properties-area? class?
+               show-properties-area? (or (seq prepend-renderers)
+                                         replace-renderer
+                                         show-properties-panel?
+                                         show-hidden-properties-area?
+                                         (seq append-renderers)
+                                         show-class-properties-area?)]
 
-           [:div.ls-properties-area
-            {:id id
-             :class (util/classnames [{:ls-page-properties page?}])
-             :tab-index 0}
-            [:<>
-             (mapv (fn [r]
-                     (when (fn? (:render r))
-                       ^{:key (str "plugin-prepend-" (:key r))}
-                       [:> (:render r) props-for-plugin]))
-                   prepend-renderers)
-
-             (if (and replace-renderer (fn? (:render replace-renderer)))
-               (when (fn? (:render replace-renderer))
-                 ^{:key (str "plugin-replace-" (:key replace-renderer))}
-                 [:> (:render replace-renderer) props-for-plugin])
-               (when show-properties-panel?
-                 [:div.properties-panel.gap-8
-                  (properties-section block properties' opts)
-                  (bidirectional-properties-section bidirectional-properties)]))
-
-             (when-not class?
+           [:<>
+            (when show-properties-area?
+              [:div.ls-properties-area
+               {:id id
+                :class (util/classnames [{:ls-page-properties page?}])
+                :tab-index 0}
                [:<>
-                (when show-hidden-properties-toggle-button?
-                  [:div.mb-1
-                   (hidden-properties-toggle-button block {})])
-                (hidden-properties-cp block hidden-properties
-                                      (assoc opts :show-hidden-properties? show-hidden-properties?))])
+                (mapv (fn [r]
+                        (when (fn? (:render r))
+                          ^{:key (str "plugin-prepend-" (:key r))}
+                          [:> (:render r) props-for-plugin]))
+                      prepend-renderers)
 
-             (mapv (fn [r]
-                     (when (fn? (:render r))
-                       ^{:key (str "plugin-append-" (:key r))}
-                       [:> (:render r) props-for-plugin]))
-                   append-renderers)
+                (if (and replace-renderer (fn? (:render replace-renderer)))
+                  (when (fn? (:render replace-renderer))
+                    ^{:key (str "plugin-replace-" (:key replace-renderer))}
+                    [:> (:render replace-renderer) props-for-plugin])
+                  (when show-properties-panel?
+                    [:div.properties-panel.gap-8
+                     (properties-section block properties' opts)]))
 
-             (when class?
-               (let [properties (->> (:logseq.property.class/properties block)
-                                     (map (fn [e] [(:db/ident e)])))
-                     opts' (assoc opts :class-schema? true)]
-                 [:div.flex.flex-col.gap-1.ml-3.mt-2
-                  [:div {:style {:font-size 15}}
-                   [:div.property-key.text-sm
-                    (property-key-cp block (db/entity :logseq.property.class/properties) {})]
-                   [:div.text-muted-foreground
-                    (t :class/tag-properties-desc)]]
-                  [:div.gap-1.flex.flex-col
-                   (properties-section block properties opts')
+                (when-not class?
+                  [:<>
+                   (when show-hidden-properties-toggle-button?
+                     [:div.mb-1
+                      (hidden-properties-toggle-button block {})])
                    (hidden-properties-cp block hidden-properties
-                                         (assoc opts :show-hidden-properties? show-hidden-properties?))
-                   ^{:key (str id "-class-add-property")}
-                   [new-property block opts']]]))]])))]))
+                                         (assoc opts :show-hidden-properties? show-hidden-properties?))])
+
+                (when (and page? (not class?))
+                  ^{:key (str id "-add-property")}
+                  [new-property block opts])
+
+                (mapv (fn [r]
+                        (when (fn? (:render r))
+                          ^{:key (str "plugin-append-" (:key r))}
+                          [:> (:render r) props-for-plugin]))
+                      append-renderers)
+
+                (when class?
+                  (let [properties (->> (:logseq.property.class/properties block)
+                                        (map (fn [e] [(:db/ident e)])))
+                        opts' (assoc opts :class-schema? true)]
+                    [:div.flex.flex-col.gap-1.ml-3.mt-2
+                     [:div {:style {:font-size 15}}
+                      [:div.property-key.text-sm
+                       (property-key-cp block (db/entity :logseq.property.class/properties) {})]
+                      [:div.text-muted-foreground
+                       (t :class/tag-properties-desc)]]
+                     [:div.gap-1.flex.flex-col
+                      (properties-section block properties opts')
+                      (hidden-properties-cp block hidden-properties
+                                            (assoc opts :show-hidden-properties? show-hidden-properties?))
+                      ^{:key (str id "-class-add-property")}
+                      [new-property block opts']]]))]])
+            (when-not skip-bidirectional-properties?
+              (bidirectional-properties-section bidirectional-properties))])))]))
