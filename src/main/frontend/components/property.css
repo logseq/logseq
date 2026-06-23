@@ -499,7 +499,7 @@ a.control-link {
 }
 
 .ls-page-title .ls-page-properties {
-  @apply mt-4;
+  @apply flex flex-col gap-4 mt-4;
 }
 
 .ls-property-add {
