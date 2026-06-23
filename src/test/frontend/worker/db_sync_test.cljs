@@ -913,6 +913,55 @@
               (is (= 1 (aget untouched-ent "pending")))
               (is (not= 1 (aget untouched-ent "failed"))))))))))
 
+(deftest tx-reject-rolls-back-failed-local-delete-before-later-remote-update-test
+  (testing "non-recoverable reject must not leave a local-only deletion that makes later remote txs miss the entity"
+    (async done
+           (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+                 child-uuid (:block/uuid child1)
+                 *last-sync-error (atom nil)
+                 client {:repo test-repo
+                         :graph-id "graph-1"
+                         :inflight (atom [])
+                         :online-users (atom [])
+                         :last-sync-error *last-sync-error
+                         :ws-state (atom :open)}
+                 remote-update-tx [[:db/retract [:block/uuid child-uuid] :block/title "child 1"]
+                                   [:db/add [:block/uuid child-uuid] :block/title "server update"]]
+                 raw-update (js/JSON.stringify
+                             (clj->js {:type "pull/ok"
+                                       :t 1
+                                       :txs [{:t 1
+                                              :tx (sqlite-util/write-transit-str remote-update-tx)}]}))]
+             (with-datascript-conns conn client-ops-conn
+               (fn []
+                 (outliner-core/delete-blocks! conn [child1] {})
+                 (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))
+                       raw-reject (js/JSON.stringify
+                                   (clj->js {:type "tx/reject"
+                                             :reason "db transact failed"
+                                             :t 0
+                                             :failed-tx-id (str tx-id)}))]
+                   (reset! (:inflight client) [tx-id])
+                   (with-silenced-console-error
+                     #(try
+                        (sync-handle-message/handle-message! test-repo client raw-reject)
+                        (is false "expected tx/reject to fail-fast")
+                        (catch :default error
+                          (is (= :db-sync/tx-rejected (:type (ex-data error)))))))
+                   (-> (sync-handle-message/handle-message! test-repo client raw-update)
+                       (p/then
+                        (fn []
+                          (is (nil? @*last-sync-error))
+                          (is (= 1 (client-op/get-local-tx test-repo)))
+                          (is (= "server update"
+                                 (:block/title (d/entity @conn [:block/uuid child-uuid]))))))
+                       (p/catch
+                        (fn [error]
+                          (is nil (str error))))
+                       (p/finally
+                         (fn []
+                           (done)))))))))))
+
 (deftest tx-reject-missing-blocks-keeps-failed-tx-pending-and-retries-with-repair-test
   (testing "recoverable tx/reject should keep failed tx pending and prepend a repair entry for retry"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)

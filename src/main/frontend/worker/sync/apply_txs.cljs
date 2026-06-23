@@ -889,6 +889,17 @@
         (keep identity)
         vec)))
 
+(defn rollback-local-txs!
+  [repo tx-ids]
+  (when (seq tx-ids)
+    (when-let [conn (worker-state/get-datascript-conn repo)]
+      (let [local-txs (->> tx-ids
+                           (keep #(client-op/get-local-tx-entry repo %))
+                           (filter (comp seq :reversed-tx))
+                           vec)]
+        (when (seq local-txs)
+          (reverse-local-txs! conn local-txs))))))
+
 (defn- invalid-rebase-op!
   [op data]
   (throw (ex-info "invalid rebase op" (assoc data :op op))))

@@ -221,13 +221,17 @@
         (if (or (contains? message :success-tx-ids)
                 (contains? message :failed-tx-id))
           (do
+            (when (and (not recoverable-missing?) failed-tx-id)
+              (sync-apply/rollback-local-txs! repo [failed-tx-id]))
             (sync-apply/mark-pending-txs-false! repo successful-tx-ids)
             (if recoverable-missing?
               (sync-apply/enqueue-upload-repair! repo missing-block-uuids)
               (when failed-tx-id
                 (sync-apply/mark-failed-txs! repo [failed-tx-id]))))
           ;; Backward compatibility for older servers without per-tx reject metadata.
-          (sync-apply/mark-failed-txs! repo inflight))
+          (do
+            (sync-apply/rollback-local-txs! repo inflight)
+            (sync-apply/mark-failed-txs! repo inflight)))
         (reset! (:inflight client) [])
         (broadcast-rtc-state! client)
         (sync-log-state/rtc-log :rtc.log/tx-rejected rejected-data)
