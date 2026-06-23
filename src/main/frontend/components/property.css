@@ -85,7 +85,7 @@
   }
 
   .property-key-panel .property-key-inner {
-    @apply w-full min-w-0;
+    @apply w-full min-w-0 min-h-[28px];
   }
 
   .property-key-panel .property-k {
