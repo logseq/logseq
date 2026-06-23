@@ -245,6 +245,105 @@
     (fs/writeFileSync file-path content)
     file-path))
 
+(defn- write-temp-file-graph
+  [files]
+  (let [dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-graph-parser-test-"))]
+    (doseq [[relative-path content] files]
+      (let [file-path (node-path/join dir relative-path)]
+        (fs/mkdirSync (node-path/dirname file-path) #js {:recursive true})
+        (fs/writeFileSync file-path content)))
+    dir))
+
+(defn- next-random!
+  [*seed n]
+  (let [next-seed (mod (* 48271 @*seed) 2147483647)]
+    (reset! *seed next-seed)
+    (mod next-seed n)))
+
+(defn- random-choice!
+  [*seed choices]
+  (nth choices (next-random! *seed (count choices))))
+
+(defn- generated-uuid
+  [n]
+  (str "10000000-0000-4000-8000-" (.padStart (.toString n 16) 12 "0")))
+
+(def generated-file-graph-page-names
+  ["Generated Alpha"
+   "Generated Beta"
+   "Generated Gamma"
+   "Generated Delta"
+   "Generated Epsilon"
+   "Generated Zeta"])
+
+(def generated-file-graph-task-markers
+  [nil "TODO" "DOING" "DONE" "LATER" "NOW" "WAITING"])
+
+(def generated-file-graph-tags
+  ["generated"
+   "import"
+   "file-graph"
+   "edge-case"
+   "db-test"])
+
+(defn- generated-md-block
+  [*seed index]
+  (let [block-id (generated-uuid (inc index))
+        duplicate-id (generated-uuid 1)
+        missing-ref-id (generated-uuid (+ 2000 index))
+        task-marker (random-choice! *seed generated-file-graph-task-markers)
+        page-name (random-choice! *seed generated-file-graph-page-names)
+        missing-page-name (str "Generated Missing " (next-random! *seed 1000))
+        tag (random-choice! *seed generated-file-graph-tags)
+        ref-id (case (next-random! *seed 5)
+                 0 block-id
+                 1 duplicate-id
+                 2 missing-ref-id
+                 (generated-uuid (inc (next-random! *seed 90))))
+        id-value (case (next-random! *seed 11)
+                   0 "broken-generated-id"
+                   1 duplicate-id
+                   block-id)
+        page-ref (if (zero? (next-random! *seed 3))
+                   missing-page-name
+                   page-name)
+        title-prefix (if task-marker (str task-marker " ") "")
+        temporal-line (case (next-random! *seed 6)
+                        0 "  SCHEDULED: <2026-01-05 Mon .+1w>\n"
+                        1 "  DEADLINE: <2026-01-09 Fri +2d>\n"
+                        "")
+        nested-line (when (zero? (next-random! *seed 3))
+                      (str "  - nested generated block " index
+                           " [[Generated Nested " (next-random! *seed 30) "]]\n"))]
+    (str "- " title-prefix "generated block " index
+         " [[" page-ref "]] ((" ref-id ")) #" tag "\n"
+         temporal-line
+         "  id:: " id-value "\n"
+         "  generated-ref:: [[" page-name "]]\n"
+         "  generated-rank:: " (next-random! *seed 100) "\n"
+         nested-line)))
+
+(defn- generated-md-file-content
+  [*seed file-index block-count]
+  (apply str
+         (map #(generated-md-block *seed (+ (* file-index 100) %))
+              (range block-count))))
+
+(defn- generated-md-file-graph
+  [seed]
+  (let [*seed (atom seed)
+        pages (map-indexed
+               (fn [index page-name]
+                 [(str "pages/" (string/replace (string/lower-case page-name) " " "_") ".md")
+                  (generated-md-file-content *seed index (+ 8 (next-random! *seed 8)))])
+               generated-file-graph-page-names)
+        journals [["journals/2026_01_05.md"
+                   (generated-md-file-content *seed 20 (+ 8 (next-random! *seed 8)))]
+                  ["journals/2026_01_06.md"
+                   (generated-md-file-content *seed 21 (+ 8 (next-random! *seed 8)))]]]
+    (into {"logseq/config.edn" "{:preferred-format :markdown\n :journal/page-title-format \"yyyy_MM_dd\"}\n"}
+          (concat pages journals))))
+
 ;; Tests
 ;; =====
 
@@ -511,6 +610,21 @@
           "Existing block refs are preserved, including forward refs from later files")
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Imported graph validates"))))
+
+(deftest-async import-generated-markdown-file-graph
+  (let [graph-dir (write-temp-file-graph (generated-md-file-graph 1309))]
+    (p/let [conn (db-test/create-conn)
+            _ (db-pipeline/add-listener conn)
+            _ (import-file-graph-to-db graph-dir conn {})
+            generated-block-count (->> (d/q '[:find [?title ...]
+                                              :where [?b :block/title ?title]]
+                                            @conn)
+                                       (filter #(string/includes? % "generated block"))
+                                       count)]
+      (is (<= 60 generated-block-count)
+          "Generated Markdown file graph imports the generated block corpus")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Generated Markdown file graph validates"))))
 
 (deftest-async export-doc-files-propagates-missing-block-ref-cleanup-report
   (let [missing-uuid #uuid "55555555-5555-5555-5555-555555555555"

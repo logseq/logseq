@@ -44,6 +44,13 @@ GitHub `logseq/db-test` issues with the `import` label were audited on 2026-06-2
 - Expected import behavior: keep the first block id, assign a new id to later duplicates, and keep the imported graph valid.
 - Regression test: `logseq.graph-parser.exporter-test/import-repairs-duplicated-block-ids`.
 
+### Generated Markdown file graphs
+
+- Generated edge case.
+- Case: a deterministic random Markdown graph contains multiple pages and journals with mixed task markers, page refs, missing page refs, block refs, missing block refs, duplicated ids, broken ids, temporal markers, tags, properties, and nested blocks.
+- Expected import behavior: import the whole file graph without throwing, keep the generated block corpus, repair invalid identity/ref data through the normal import path, and keep the imported DB valid.
+- Regression test: `logseq.graph-parser.exporter-test/import-generated-markdown-file-graph`.
+
 ### Recursive block refs
 
 - Generated edge case.
