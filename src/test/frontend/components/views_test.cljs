@@ -78,5 +78,6 @@
                                        :block/title {:logseq.property/type :string}
                                        :block/tags {:logseq.property/type :class
                                                     :db/cardinality :db.cardinality/many}))]
+    (is (views/group-by-column? {:id :block/page}))
     (is (not (views/group-by-column? {:id :block/title})))
     (is (views/group-by-column? {:id :block/tags}))))
