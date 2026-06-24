@@ -1362,6 +1362,11 @@ let () =
     (fun () ->
       let cjk = decode_uri_component "%E7%95%8C" in
       let combining_acute = decode_uri_component "%CC%81" in
+      let o_umlaut = decode_uri_component "%C3%B6" in
+      let accented_title =
+        decode_uri_component
+          "Diese%20Vorteile%20k%C3%B6nnten%20besonders%20f%C3%BCr%20eine"
+      in
       let repeat count value =
         String.concat "" (List.init count (fun _ -> value))
       in
@@ -1369,6 +1374,11 @@ let () =
       expect_int "cjk width" 2 (Display_width.width cjk);
       expect_int "combining width" 1
         (Display_width.width ("e" ^ combining_acute));
+      expect_int "latin-1 code point width" 1 (Display_width.width o_umlaut);
+      expect_int "latin-1 followed by ascii width" 4
+        (Display_width.width (o_umlaut ^ "abc"));
+      expect_int "accented latin title width" 41
+        (Display_width.width accented_title);
       expect_equal "short segment" "Project Alpha"
         (Display_width.truncate "Project Alpha" 24);
       expect_equal "exact ascii segment" "123456789012345678901234"
@@ -1380,7 +1390,12 @@ let () =
         (Display_width.truncate (repeat 12 cjk) 24);
       expect_equal "one over cjk segment"
         (repeat 11 cjk ^ Cli_platform.Symbols.ellipsis)
-        (Display_width.truncate (repeat 13 cjk) 24));
+        (Display_width.truncate (repeat 13 cjk) 24);
+      expect_equal "accented latin title truncation"
+        (decode_uri_component
+           "Diese%20Vorteile%20k%C3%B6nnten%20besonders%20f%C3%BCr%20ei"
+        ^ Cli_platform.Symbols.ellipsis)
+        (Display_width.truncate accented_title 40));
 
   test "CLI parity profile sessions aggregate repeated stages" (fun () ->
       expect_none "disabled profile" (Profile_types.create_session false);
@@ -7423,6 +7438,52 @@ let () =
       expect_named_not_contains "multiline line three" multiline "Line 3";
       expect_named_not_contains "multiline line four" multiline "Line 4";
       expect_named_not_contains "multiline line five" multiline "Line 5");
+
+  test "CLI parity list task aligns status after accented latin titles" (fun () ->
+      let accented_title =
+        decode_uri_component
+          "Diese%20Vorteile%20k%C3%B6nnten%20besonders%20f%C3%BCr%20eine"
+      in
+      let item id title =
+        Edn_util.map
+          [
+            (Edn_util.keyword "db/id", Edn_util.int64 id);
+            (Edn_util.keyword "block/title", Edn_util.string title);
+            ( Edn_util.keyword "logseq.property/status",
+              Edn_util.keyword "logseq.property/status.todo" );
+          ]
+      in
+      let value =
+        Edn_util.map
+          [
+            ( Edn_util.keyword "items",
+              Edn_util.vector [ item 1L "yyy"; item 2L accented_title ] );
+          ]
+      in
+      let output =
+        Format_types.format_result
+          ~human_table_headers_order:[ "id"; "title"; "status" ]
+          (Cli_result.ok ~command:Command_id.List_task Output.Mode.Human
+             (Cli_result.Raw value))
+          (config ())
+      in
+      let status_column line token =
+        match Js.String.indexOf ~search:token line with
+        | -1 ->
+            fail_test ("missing " ^ token ^ " in line:\n" ^ line ^ "\n" ^ output);
+            0
+        | index -> display_width (String.sub line 0 index)
+      in
+      match
+        Array.to_list (string_split (string_trim_end output) "\n")
+      with
+      | header :: short_row :: accented_row :: _footer :: [] ->
+          let expected = status_column header "status" in
+          expect_int "short task status column" expected
+            (status_column short_row "status.todo");
+          expect_int "accented task status column" expected
+            (status_column accented_row "status.todo")
+      | _ -> fail_test ("unexpected list task output:\n" ^ output));
 
   test "CLI parity format upsert summaries use current generic tables"
     (fun () ->
