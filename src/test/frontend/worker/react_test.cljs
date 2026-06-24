@@ -61,6 +61,34 @@
       (is (some #{[:frontend.worker.react/block (:db/id block-2)]} affected))
       (is (some #{[:frontend.worker.react/block (:db/id block-3)]} affected)))))
 
+(deftest affected-keys-bulk-insert-does-not-recompute-right-siblings-per-block
+  (let [block-count 300
+        conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Bulk insert"}}])
+        page (db-test/find-page-by-title @conn "Bulk insert")
+        right-sibling-calls (atom 0)
+        orig-right-sibling worker-react/affected-right-order-list-sibling-keys
+        tx-report (d/transact! conn
+                               (mapv (fn [idx]
+                                       {:block/uuid (random-uuid)
+                                        :block/title (str "Inserted " idx)
+                                        :block/page (:db/id page)
+                                        :block/parent (:db/id page)
+                                        :block/order (str "a" idx)
+                                        :block/created-at 1
+                                        :block/updated-at 1})
+                                     (range block-count)))]
+    (with-redefs [worker-react/affected-right-order-list-sibling-keys
+                  (fn [& args]
+                    (swap! right-sibling-calls inc)
+                    (apply orig-right-sibling args))]
+      (let [affected (worker-react/get-affected-queries-keys tx-report)]
+        (is (<= block-count
+                (count (filter (fn [[k]]
+                                 (= :frontend.worker.react/block k))
+                               affected))))
+        (is (<= @right-sibling-calls 4))))))
+
 (deftest affected-keys-order-list-descendants
   (testing "changing ordered-list parent type affects nested ordered-list descendants"
     (let [conn (db-test/create-conn-with-blocks
