@@ -254,7 +254,7 @@ let build ?registry:_ config globals parsed =
                       if dst = "" then
                         Error
                           (Error.make
-                             (Edn_util.keyword_t "missing-dst")
+                             (Error.Missing_dst)
                              "destination graph name is required")
                       else
                         let dst_graph = Cli_primitive.create_graph dst in
@@ -562,7 +562,7 @@ let graph_validate_result mode _config result =
       let count = List.length errors in
       Cli_result.error ~command:Command_id.Graph_validate mode
         (Error.make
-           (Edn_util.keyword_t "graph-validation-failed")
+           (Error.Graph_validation_failed)
            ("Graph invalid. Found "
            ^ format_count count "entity"
            ^ " with errors:\n"
@@ -720,7 +720,7 @@ let graph_backup_remove_result mode config graph src =
   else
     Cli_result.error ~command:Command_id.Graph_backup_remove mode
       (Error.make
-         (Edn_util.keyword_t "backup-not-found")
+         (Error.Backup_not_found)
          ("backup not found: " ^ src))
 
 let unlink_graph_dir config graph repo =
@@ -812,7 +812,7 @@ let graph_backup_create_result mode config graph repo name backup_name =
         in
         let error_result code message =
           Cli_result.error ~command:Command_id.Graph_backup_create mode
-            (Error.make (Edn_util.keyword_t code) message)
+            (Error.make code message)
         in
         let backup_effect =
           bind
@@ -825,7 +825,7 @@ let graph_backup_create_result mode config graph repo name backup_name =
               else (
                 remove_tree dir;
                 pure
-                  (error_result "missing-snapshot"
+                  (error_result Error.Missing_snapshot
                      ("snapshot did not create sqlite backup: " ^ tmp_path))))
         in
         catch backup_effect (fun exn ->
@@ -834,7 +834,7 @@ let graph_backup_create_result mode config graph repo name backup_name =
               (Cli_result.error ~command:Command_id.Graph_backup_create mode
                  (Error.make
                     ~context:(Edn_util.string (Printexc.to_string exn))
-                    (Edn_util.keyword_t "backup-create-failed")
+                    (Error.Backup_create_failed)
                     "backup create failed"))))
 
 let graph_create_data result =
@@ -997,8 +997,7 @@ let execute_graph_import mode graph repo opts config =
                                  new_graph))))
           in
           bind (Server_runtime.stop_server config repo) (function
-            | Error err
-              when err.Error.code = Edn_util.keyword_t "server-not-found" ->
+            | Error err when err.Error.code = Error.Server_not_found ->
                 import_after_stop ()
             | Error err ->
                 pure
@@ -1012,7 +1011,7 @@ let execute_graph_backup_restore mode source_graph dst_graph dst_repo src config
     Cli_effect.pure
       (Cli_result.error ~command:Command_id.Graph_backup_restore mode
          (Error.make
-            (Edn_util.keyword_t "backup-not-found")
+            (Error.Backup_not_found)
             ("backup not found: " ^ src)))
   else
     let opts = { import_type = Import_sqlite; input = db_path } in
@@ -1057,7 +1056,7 @@ let execute_graph_switch mode graph repo config =
   if not (graph_exists config graph) then
     pure
       (Cli_result.error ~command:Command_id.Graph_switch mode
-         (Error.make (Edn_util.keyword_t "graph-not-exists") "graph not exists"))
+         (Error.make (Error.Graph_not_exists) "graph not exists"))
   else
     bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
       (function
@@ -1086,18 +1085,17 @@ let execute_graph_remove mode graph repo config =
   if not (graph_exists config graph) then
     pure
       (Cli_result.error ~command:Command_id.Graph_remove mode
-         (Error.make (Edn_util.keyword_t "graph-not-exists") "graph not exists"))
+         (Error.make (Error.Graph_not_exists) "graph not exists"))
   else
     bind (Server_runtime.stop_server config repo) (function
-      | Error err when err.Error.code = Edn_util.keyword_t "server-not-found"
-        -> (
+      | Error err when err.Error.code = Error.Server_not_found -> (
           match unlink_graph_dir config graph repo with
           | Some _ -> pure removed_graph_result
           | None ->
               pure
                 (Cli_result.error ~command:Command_id.Graph_remove mode
                    (Error.make
-                      (Edn_util.keyword_t "graph-not-removed")
+                      (Error.Graph_not_removed)
                       "unable to remove graph")))
       | Error err ->
           pure (Cli_result.error ~command:Command_id.Graph_remove mode err)
@@ -1108,7 +1106,7 @@ let execute_graph_remove mode graph repo config =
               pure
                 (Cli_result.error ~command:Command_id.Graph_remove mode
                    (Error.make
-                      (Edn_util.keyword_t "graph-not-removed")
+                      (Error.Graph_not_removed)
                       "unable to remove graph"))))
 
 let execute_with_mode action config mode =

@@ -307,7 +307,7 @@ let resolve_selector registry selector =
         if missing <> [] then
           Error
             (Error.make
-               (Edn_util.keyword_t "missing-examples")
+               (Error.Missing_examples)
                ("missing examples metadata for: " ^ String.concat ", " missing))
         else
           let matched_commands =
