@@ -452,10 +452,10 @@
           (with-redefs [search/truncate-table! (fn [_db] nil)
                         search/upsert-blocks! (fn [_db _blocks] nil)
                         search/hidden-entity? (constantly false)
-                        search/block->index-with-context (fn [_context _entity]
-                                                           {:id "block-1"
-                                                            :page "page-1"
-                                                            :title "Hello"})]
+                        search/block->index (fn [_entity & _opts]
+                                              {:id "block-1"
+                                               :page "page-1"
+                                               :title "Hello"})]
             (-> (p/let [_ (build-index! test-repo true)
                         _ (<wait-for-progress! progress-calls
                                                (fn [calls]
@@ -513,10 +513,10 @@
                           search/truncate-vector-index! (fn [_vector-index] nil)
                           search/upsert-blocks! (fn [_db _blocks] nil)
                           search/hidden-entity? (constantly false)
-                          search/block->index-with-context (fn [_context _entity]
-                                                             {:id "block-1"
-                                                              :page "page-1"
-                                                              :title "Hello"})]
+                          search/block->index (fn [_entity & _opts]
+                                                {:id "block-1"
+                                                 :page "page-1"
+                                                 :title "Hello"})]
             (let [build-id (#'db-core/start-search-index-build! repo)]
               (-> (build-index! repo search-db conn build-id)
                 (p/then (fn [_]
@@ -616,10 +616,10 @@
           (with-redefs [search/truncate-table! (fn [_db] nil)
                         search/upsert-blocks! (fn [_db _blocks] nil)
                         search/hidden-entity? (constantly false)
-                        search/block->index-with-context (fn [_context _entity]
-                                                           {:id "block-1"
-                                                            :page "page-1"
-                                                            :title "Hello"})]
+                        search/block->index (fn [_entity & _opts]
+                                              {:id "block-1"
+                                               :page "page-1"
+                                               :title "Hello"})]
             (p/let [_ (build-index! test-repo true)
                     _ (<wait-for-progress! progress-calls
                                            (fn [calls]
@@ -713,7 +713,7 @@
                            (is false (str error)))))))))
      (p/finally done))))
 
-(deftest search-build-blocks-indice-in-worker-reuses-vector-context-test
+(deftest search-build-blocks-indice-in-worker-does-not-sort-vector-context-test
   (async done
     (->
      (restoring-worker-state
@@ -756,7 +756,7 @@
                         ldb/hidden? (constantly false)
                         ldb/get-title-with-parents (fn [entity] (:block/title entity))]
             (p/let [_ (build-index! test-repo true)]
-              (is (<= @sort-calls 2)))))))
+              (is (zero? @sort-calls)))))))
      (p/catch (fn [error]
                 (is false (str "unexpected error: " error))))
      (p/finally done))))
@@ -892,10 +892,10 @@
           (with-redefs [search/truncate-table! (fn [_db] nil)
                         search/upsert-blocks! (fn [_db _blocks] nil)
                         search/hidden-entity? (constantly false)
-                        search/block->index-with-context (fn [_context _entity]
-                                                           {:id "block-1"
-                                                            :page "page-1"
-                                                            :title "Hello"})]
+                        search/block->index (fn [_entity & _opts]
+                                              {:id "block-1"
+                                               :page "page-1"
+                                               :title "Hello"})]
             (p/let [result (build-index! test-repo false)
                     _ (p/delay 10)]
               (is (= db-core/search-db-version result))
