@@ -95,11 +95,11 @@ let read_config_file path =
     with exn ->
       Error
         (Error.make
-           (Edn_util.keyword_t "invalid-config")
+           (Error.Invalid_config)
            ("invalid config file: " ^ path ^ " (" ^ Printexc.to_string exn ^ ")"))
 
 let invalid_config message =
-  Error.make (Edn_util.keyword_t "invalid-config") message
+  Error.make (Error.Invalid_config) message
 
 let parse_int_value value =
   let value = String.trim value in
@@ -480,5 +480,5 @@ let update_config config patch =
     Cli_effect.pure
       (Error
          (Error.make
-            (Edn_util.keyword_t "config-write-failed")
+            (Error.Config_write_failed)
             ("failed to write config file: " ^ Printexc.to_string exn)))
