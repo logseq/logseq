@@ -101,36 +101,49 @@
          (:grid-template-columns property-value/asset-picker-items-grid-style))))
 
 (defn- class-set
-  [class]
-  (set (string/split (or class "") #"\s+")))
+  [class-str]
+  (set (string/split (or class-str "") #"\s+")))
 
 (deftest block-multiple-node-values-stay-in-one-row-test
-  (is (contains? (class-set (property-value/multiple-values-trigger-class {}))
-                 "min-w-0"))
-  (is (contains? (class-set (property-value/multiple-values-trigger-class {}))
-                 "flex-nowrap"))
-  (is (contains? (class-set (property-value/multiple-values-trigger-class {}))
-                 "multi-values-nowrap"))
-  (is (contains? (class-set (property-value/multiple-value-item-class {}))
-                 "shrink-0")))
+  (let [opts {:other-position? true
+              :show-popup! identity}]
+    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
+                   "min-w-0"))
+    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
+                   "flex-nowrap"))
+    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
+                   "multi-values-nowrap"))
+    (is (contains? (class-set (property-value/multiple-value-item-class opts))
+                   "shrink-0"))))
 
 (deftest expanded-multiple-node-values-can-wrap-test
-  (is (contains? (class-set (property-value/multiple-values-trigger-class {:expanded? true}))
-                 "flex-wrap"))
-  (is (contains? (class-set (property-value/multiple-values-trigger-class {:expanded? true}))
-                 "multi-values-expanded"))
-  (is (not (contains? (class-set (property-value/multiple-values-trigger-class {:expanded? true}))
-                      "flex-nowrap")))
-  (is (not (contains? (class-set (property-value/multiple-value-item-class {:expanded? true}))
-                      "shrink-0"))))
+  (let [opts {:expanded? true
+              :other-position? true
+              :show-popup! identity}]
+    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
+                   "flex-wrap"))
+    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
+                   "multi-values-expanded"))
+    (is (not (contains? (class-set (property-value/multiple-values-trigger-class opts))
+                        "flex-nowrap")))
+    (is (not (contains? (class-set (property-value/multiple-value-item-class opts))
+                        "shrink-0")))))
 
 (deftest page-multiple-node-values-can-wrap-test
-  (is (contains? (class-set (property-value/multiple-values-trigger-class {:page-property? true}))
+  (let [opts {:page-property? true
+              :show-popup! identity}]
+    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
+                   "flex-wrap"))
+    (is (not (contains? (class-set (property-value/multiple-values-trigger-class opts))
+                        "flex-nowrap")))
+    (is (not (contains? (class-set (property-value/multiple-value-item-class opts))
+                        "shrink-0")))))
+
+(deftest non-positioned-multiple-node-values-can-wrap-test
+  (is (contains? (class-set (property-value/multiple-values-trigger-class {}))
                  "flex-wrap"))
-  (is (not (contains? (class-set (property-value/multiple-values-trigger-class {:page-property? true}))
-                      "flex-nowrap")))
-  (is (not (contains? (class-set (property-value/multiple-value-item-class {:page-property? true}))
-                      "shrink-0"))))
+  (is (not (contains? (class-set (property-value/multiple-values-trigger-class {}))
+                      "flex-nowrap"))))
 
 (deftest asset-selected-ids-test
   (let [property {:db/ident :asset}]

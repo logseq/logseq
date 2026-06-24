@@ -1376,15 +1376,15 @@
               (inline-text {} :markdown value'))])))))
 
 (defn multiple-values-trigger-class
-  [{:keys [expanded? page-property?]}]
+  [{:keys [expanded? other-position? page-property?]}]
   (str "flex flex-1 min-w-0 flex-row items-center gap-1 "
-       (if (or expanded? page-property?)
-         (str "flex-wrap " (when expanded? "multi-values-expanded"))
-         "flex-nowrap multi-values-nowrap")))
+       (if (and other-position? (not expanded?) (not page-property?))
+         "flex-nowrap multi-values-nowrap"
+         (str "flex-wrap " (when expanded? "multi-values-expanded")))))
 
 (defn multiple-value-item-class
-  [{:keys [expanded? page-property?]}]
-  (when-not (or expanded? page-property?)
+  [{:keys [expanded? other-position? page-property? show-popup!]}]
+  (when (and show-popup! other-position? (not expanded?) (not page-property?))
     "shrink-0"))
 
 (hsx/defc select-item
