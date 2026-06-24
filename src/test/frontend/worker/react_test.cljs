@@ -61,6 +61,32 @@
       (is (some #{[:frontend.worker.react/block (:db/id block-2)]} affected))
       (is (some #{[:frontend.worker.react/block (:db/id block-3)]} affected)))))
 
+(deftest affected-keys-bulk-insert-does-not-recompute-right-siblings-per-block
+  (testing "bulk inserts keep affected query invalidation under the performance budget"
+    (let [block-count 300
+          conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Bulk insert"}}])
+          page (db-test/find-page-by-title @conn "Bulk insert")
+          tx-report (d/transact! conn
+                                 (mapv (fn [idx]
+                                         {:block/uuid (random-uuid)
+                                          :block/title (str "Inserted " idx)
+                                          :block/page (:db/id page)
+                                          :block/parent (:db/id page)
+                                          :block/order (str "a" idx)
+                                          :block/created-at 1
+                                          :block/updated-at 1})
+                                       (range block-count)))
+          started-at (system-time)
+          affected (worker-react/get-affected-queries-keys tx-report)
+          elapsed-ms (- (system-time) started-at)]
+      (println "affected-keys-bulk-insert elapsed:" elapsed-ms "ms")
+      (is (<= block-count
+              (count (filter (fn [[k]]
+                               (= :frontend.worker.react/block k))
+                             affected))))
+      (is (< elapsed-ms 1000)))))
+
 (deftest affected-keys-order-list-descendants
   (testing "changing ordered-list parent type affects nested ordered-list descendants"
     (let [conn (db-test/create-conn-with-blocks
