@@ -240,7 +240,6 @@
    [:ok :boolean]
    [:key :string]
    [:url :string]
-   [:t :int]
    [:content-encoding {:optional true} [:maybe :string]]])
 
 (def snapshot-upload-response-schema

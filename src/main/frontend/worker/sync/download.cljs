@@ -28,14 +28,6 @@
     (string? data) (.encode (js/TextEncoder.) data)
     :else (js/Uint8Array. data)))
 
-(defn- parse-non-negative-int
-  [value]
-  (when (some? value)
-    (let [n (js/parseInt value 10)]
-      (when (and (not (js/isNaN n))
-                 (>= n 0))
-        n))))
-
 (defn- gzip-bytes?
   [^js payload]
   (and (some? payload)
@@ -484,6 +476,15 @@
         (-> (p/let [_ (log-f {:sub-type :download-progress
                               :graph-uuid graph-id
                               :message "Preparing graph snapshot download"})
+                    _ (reset! stage* :fetch-pull)
+                    pull-resp (fetch-json (str base "/sync/" graph-id "/pull")
+                                          {:method "GET"}
+                                          :sync/pull)
+                    remote-tx (:t pull-resp)
+                    _ (when-not (integer? remote-tx)
+                        (throw (ex-info "non-integer remote-tx when downloading graph"
+                                        {:repo repo
+                                         :remote-tx remote-tx})))
                     _ (reset! stage* :fetch-snapshot-download)
                     snapshot-resp (fetch-json (str base "/sync/" graph-id "/snapshot/download")
                                               {:method "GET"}
@@ -501,12 +502,7 @@
                 (throw (ex-info "snapshot download failed"
                                 {:repo repo
                                  :status (.-status resp)})))
-              (let [snapshot-t (parse-non-negative-int (some-> resp .-headers (.get "x-snapshot-t")))
-                    _ (when-not (integer? snapshot-t)
-                        (throw (ex-info "missing snapshot stream tx"
-                                        {:repo repo
-                                         :snapshot-response-t (:t snapshot-resp)})))
-                    ensure-import! (fn []
+              (let [ensure-import! (fn []
                                      (if-let [import-id @import-id*]
                                        (p/resolved import-id)
                                        (p/let [_ (reset! stage* :prepare-import)
@@ -526,12 +522,12 @@
                                   :message "Graph snapshot downloaded"})
                         _ (when-let [import-id @import-id*]
                             (reset! stage* :finalize-import)
-                            (finalize-import! repo graph-id snapshot-t import-id))]
+                            (finalize-import! repo graph-id remote-tx import-id))]
                   (when-let [conn (worker-state/get-datascript-conn repo)]
                     (set-graph-sync-metadata! conn (uuid graph-id) graph-e2ee?))
                   {:repo repo
                    :graph-id graph-id
-                   :remote-tx snapshot-t
+                   :remote-tx remote-tx
                    :graph-e2ee? graph-e2ee?})))
             (p/catch (fn [error]
                        (when-let [import-id @import-id*]

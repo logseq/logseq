@@ -56,9 +56,7 @@
                  (fn [_url _opts]
                    (swap! calls conj :snapshot-stream)
                    (js/Promise.resolve
-                    (js/Response. nil
-                                  #js {:status 200
-                                       :headers #js {"x-snapshot-t" "42"}}))))
+                    (js/Response. nil #js {:status 200}))))
            (-> (p/with-redefs [sync-download/fetch-json (fn [_url _opts schema]
                                                           (case schema
                                                             :sync/pull
@@ -84,7 +82,7 @@
                             (reset! worker-state/*db-sync-config config-prev)
                             (done)))))))
 
-(deftest download-finalizes-with-snapshot-t-not-preflight-pull-t-test
+(deftest download-finalizes-with-preflight-pull-t-test
   (async done
          (let [config-prev @worker-state/*db-sync-config
                fetch-prev js/fetch
@@ -93,18 +91,14 @@
            (set! js/fetch
                  (fn [_url _opts]
                    (js/Promise.resolve
-                    (js/Response. nil
-                                  #js {:status 200
-                                       :headers #js {"x-snapshot-t" "1"}}))))
+                    (js/Response. nil #js {:status 200}))))
            (-> (p/with-redefs [sync-download/fetch-json (fn [_url _opts schema]
                                                           (case schema
                                                             :sync/pull
-                                                            (p/rejected (ex-info "download should not preflight pull"
-                                                                                  {:schema schema}))
+                                                            (p/resolved {:t 42})
 
                                                             :sync/snapshot-download
-                                                            (p/resolved {:url "https://sync.example.test/snapshot"
-                                                                         :t 2})
+                                                            (p/resolved {:url "https://sync.example.test/snapshot"})
 
                                                             (p/rejected (ex-info "unexpected schema" {:schema schema}))))
                                sync-download/prepare-import! (fn [_repo _reset? _graph-id _graph-e2ee?]
@@ -119,7 +113,7 @@
                                                                                (p/resolved {:chunk-count 1})))]
                  (sync-download/download-graph-by-id! "repo" "graph-1" false))
                (p/then (fn [_]
-                         (is (= 1 @finalized-remote-t*))))
+                         (is (= 42 @finalized-remote-t*))))
                (p/catch (fn [error]
                           (is false (str error))))
                (p/finally (fn []
