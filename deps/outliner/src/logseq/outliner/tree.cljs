@@ -96,7 +96,9 @@
       (assoc :block/refs (:block/refs e))
       (:block/children e)
       (assoc :block/children (:block/children e)))
-    e))
+    (cond-> e
+      (:db/id (:block/parent e))
+      (assoc :block/parent {:db/id (:db/id (:block/parent e))}))))
 
 (defn ^:api filter-top-level-blocks
   [blocks]

@@ -1022,7 +1022,7 @@
                :block/uuid #uuid "62f49b4c-aa84-416e-9554-b486b4e59b1b"
                :block/title "Visible child task"
                :block/page page-ref
-               :block/parent {:db/id 2}}
+               :block/parent (select-keys parent [:db/id :block/uuid :block/title])}
         [result] (tree/non-consecutive-blocks->vec-tree [parent child])]
     (is (= "Visible parent task" (:block/title result)))
     (is (= "Visible child task"
