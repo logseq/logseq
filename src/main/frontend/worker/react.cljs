@@ -77,33 +77,12 @@
     :else
     nil))
 
-(defn- ordered-siblings
-  [block]
-  (some->> (sibling-entities block)
-           (sort-by :block/order)))
-
-(defn- right-ordered-siblings
-  [block]
-  (when-let [siblings (seq (ordered-siblings block))]
-    (->> siblings
-         (drop-while #(not= (:db/id %) (:db/id block)))
-         rest)))
-
 (defn- collect-right-order-list-sibling-keys
   [siblings target-order-list-type]
   (when target-order-list-type
     (->> siblings
          (take-while #(= target-order-list-type (order-list-type %)))
          (map block-key))))
-
-(defn- affected-right-order-list-sibling-keys
-  [db block-id]
-  (when-let [block (and db (d/entity db block-id))]
-    (let [right-siblings (right-ordered-siblings block)
-          right-sibling (first right-siblings)]
-      (concat
-       (collect-right-order-list-sibling-keys right-siblings (order-list-type block))
-       (collect-right-order-list-sibling-keys right-siblings (order-list-type right-sibling))))))
 
 (defn- sibling-group-key
   [block]
