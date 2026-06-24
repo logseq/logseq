@@ -5343,10 +5343,9 @@
            *navigating-block (hooks/use-memo #(atom (:block/uuid initial-block)) [])
            [navigating-block] (hooks/use-atom *navigating-block)
         navigating-block-entity (db/entity [:block/uuid navigating-block])
-        navigated? (and
-                    navigating-block
-                    (not= (:db/id (:block/parent initial-block))
-                          (:db/id (:block/parent navigating-block-entity))))
+        navigated? (breadcrumb-model/navigated-between-parents? initial-block
+                                                                navigating-block
+                                                                navigating-block-entity)
         navigating-block-reactive (model/sub-block (:db/id navigating-block-entity))
         blocks (if navigated?
                  [navigating-block-reactive]
