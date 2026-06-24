@@ -3031,7 +3031,7 @@
                 (if expanded?
                   "flex-wrap overflow-x-hidden"
                   "flex-nowrap overflow-x-hidden")])
-       :data-expanded (boolean expanded?)
+       :data-expanded (str expanded?)
        :data-bottom-properties-row (:block/uuid block)
        :tab-index -1
        :on-key-down handle-bottom-properties-row-key-down!}
@@ -3040,7 +3040,7 @@
                                    "flex-wrap overflow-x-hidden"
                                    "flex-nowrap overflow-x-hidden")])
         :ref #(set! (.-current *pills-el) %)}
-       (bottom-property-pill-items block properties opts)]
+       (bottom-property-pill-items block properties (assoc opts :expanded? expanded?))]
       (when (or overflow? expanded?)
         (bottom-properties-expand-button expanded? set-expanded!))
       (when show-hidden-properties-toggle?

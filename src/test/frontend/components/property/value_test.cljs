@@ -1,5 +1,6 @@
 (ns frontend.components.property.value-test
   (:require [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
             [frontend.components.property.value :as property-value]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
@@ -98,6 +99,38 @@
   (is (= "100%" (:max-width property-value/asset-picker-grid-style)))
   (is (= "repeat(auto-fill, minmax(140px, 1fr))"
          (:grid-template-columns property-value/asset-picker-items-grid-style))))
+
+(defn- class-set
+  [class]
+  (set (string/split (or class "") #"\s+")))
+
+(deftest block-multiple-node-values-stay-in-one-row-test
+  (is (contains? (class-set (property-value/multiple-values-trigger-class {}))
+                 "min-w-0"))
+  (is (contains? (class-set (property-value/multiple-values-trigger-class {}))
+                 "flex-nowrap"))
+  (is (contains? (class-set (property-value/multiple-values-trigger-class {}))
+                 "multi-values-nowrap"))
+  (is (contains? (class-set (property-value/multiple-value-item-class {}))
+                 "shrink-0")))
+
+(deftest expanded-multiple-node-values-can-wrap-test
+  (is (contains? (class-set (property-value/multiple-values-trigger-class {:expanded? true}))
+                 "flex-wrap"))
+  (is (contains? (class-set (property-value/multiple-values-trigger-class {:expanded? true}))
+                 "multi-values-expanded"))
+  (is (not (contains? (class-set (property-value/multiple-values-trigger-class {:expanded? true}))
+                      "flex-nowrap")))
+  (is (not (contains? (class-set (property-value/multiple-value-item-class {:expanded? true}))
+                      "shrink-0"))))
+
+(deftest page-multiple-node-values-can-wrap-test
+  (is (contains? (class-set (property-value/multiple-values-trigger-class {:page-property? true}))
+                 "flex-wrap"))
+  (is (not (contains? (class-set (property-value/multiple-values-trigger-class {:page-property? true}))
+                      "flex-nowrap")))
+  (is (not (contains? (class-set (property-value/multiple-value-item-class {:page-property? true}))
+                      "shrink-0"))))
 
 (deftest asset-selected-ids-test
   (let [property {:db/ident :asset}]
