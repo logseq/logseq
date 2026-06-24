@@ -323,7 +323,9 @@
                              (dissoc :block/page)))
                      new-block)]
     (ui-outliner-tx/transact!
-     {:outliner-op :insert-blocks}
+     (cond-> {:outliner-op :insert-blocks}
+       (:editor/edit-block-fn-id config)
+       (assoc :editor/edit-block-fn-id (:editor/edit-block-fn-id config)))
      (save-current-block! {:current-block current-block})
      (outliner-op/insert-blocks! [new-block'] current-block {:sibling? sibling?
                                                              :keep-uuid? keep-uuid?
@@ -528,6 +530,7 @@
       (when-let [state (get-state)]
         (start-pending-new-block!)
         (let [{:keys [block value config]} state
+              edit-block-fn-id (random-uuid)
               value (if (string? block-value) block-value value)
               block-id (:block/uuid block)
               block-self? (block-self-alone-when-insert? config block-id)
@@ -558,12 +561,18 @@
 
                           :else
                           insert-new-block-aux!)
-              [result-promise sibling? next-block] (insert-fn (assoc config :right-sibling right-sibling) block'' value)
+              config (assoc config
+                            :right-sibling right-sibling
+                            :editor/edit-block-fn-id edit-block-fn-id)
+              [result-promise sibling? next-block] (insert-fn config block'' value)
               edit-block-f #(edit-pending-new-block! next-block sibling?)]
-          (p/do!
-           (state/queue-edit-block-fn! edit-block-f)
-           result-promise
-           (clear-when-saved!)))))
+          (-> (p/do!
+               (state/queue-edit-block-fn! edit-block-fn-id edit-block-f)
+               result-promise
+               (clear-when-saved!))
+              (p/catch (fn [e]
+                         (state/remove-edit-block-fn! edit-block-fn-id)
+                         (throw e)))))))
     (p/catch (fn [e]
                (clear-pending-new-block!)
                (throw e))))))
@@ -838,18 +847,20 @@
                   (let [children (:block/_parent (db/entity (:db/id block)))]
                     (p/do!
                      (mobile-util/mobile-focus-hidden-input)
-                     (state/queue-edit-block-fn! edit-block-f)
                      (ui-outliner-tx/transact!
                       transact-opts
                       (when (seq children)
                         (outliner-op/move-blocks! children prev-block {:sibling? false}))
                       (delete-block-aux! block)
-                      (save-block! repo prev-block new-content {}))))
+                      (save-block! repo prev-block new-content {}))
+                     (when edit-block-f
+                       (edit-block-f))))
 
                   :else
                   (p/do!
-                   (state/queue-edit-block-fn! edit-block-f)
-                   (delete-block-aux! block)))))))))))
+                   (delete-block-aux! block)
+                   (when edit-block-f
+                     (edit-block-f))))))))))))
 
 (defn move-blocks!
   [blocks target opts]
@@ -891,12 +902,10 @@
           block-parent (get uuid->dom-block (:block/uuid block))
           sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))
           blocks' (block-handler/get-top-level-blocks blocks)
-          mobile? (util/capacitor?)]
+          mobile? (util/capacitor?)
+          edit-block-f (when (and sibling-block (not mobile?))
+                         (:edit-block-f (move-to-prev-block repo sibling-block "")))]
       (p/do!
-       (when (and sibling-block (not mobile?))
-         (let [{:keys [edit-block-f]} (move-to-prev-block repo sibling-block
-                                                          "")]
-           (state/queue-edit-block-fn! edit-block-f)))
        (let [journals (and mobile? (filter ldb/journal? blocks'))
              blocks (remove (fn [b] (contains? (set (map :db/id journals)) (:db/id b))) blocks)]
          (when (or (seq journals) (seq blocks))
@@ -907,7 +916,9 @@
               (outliner-op/delete-blocks! blocks nil))
             (when (seq journals)
               (doseq [journal journals]
-                (outliner-op/delete-page! (:block/uuid journal)))))))))))
+                (outliner-op/delete-page! (:block/uuid journal)))))))
+       (when edit-block-f
+         (edit-block-f))))))
 
 (defn copy-block-ref!
   ([block-id]
@@ -2262,11 +2273,13 @@
         target (when e (.-target e))]
     (when (or (nil? target)
               (inside-of-editor-block target))
-      (if (or (state/doc-mode-enter-for-new-line?) (inside-of-single-block (:node state)))
-        (keydown-new-line)
-        (do
-          (when e (.preventDefault e))
-          (keydown-new-block state))))))
+      (if (pending-new-block?)
+        (when e (.preventDefault e))
+        (if (or (state/doc-mode-enter-for-new-line?) (inside-of-single-block (:node state)))
+          (keydown-new-line)
+          (do
+            (when e (.preventDefault e))
+            (keydown-new-block state)))))))
 
 (defn keydown-new-line-handler [e]
   (let [state (get-state)]
