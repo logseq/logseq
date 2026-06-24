@@ -1037,10 +1037,15 @@
                                 (remove (fn [[k _v]] (= k :logseq.property.class/properties))))
                show-properties-panel? (seq properties')
                page? (entity-util/page? block)
+               page-properties-area? (and page?
+                                          (or (:page-title? opts)
+                                              sidebar-properties?
+                                              tag-dialog?))
+               opts' (assoc opts :page-property? page-properties-area?)
                plugin-properties (->> (concat full-properties hidden-properties)
                                       (remove (fn [[k _v]] (= k :logseq.property.class/properties)))
                                       (into {}))
-               props-for-plugin (when (enable-block-properties-renderers? opts class?)
+               props-for-plugin (when (enable-block-properties-renderers? opts' class?)
                                   (clj->js {:blockId (str (:block/uuid block))
                                             :properties (into {} (map (fn [[k v]]
                                                                         [(subs (str k) 1)
@@ -1086,7 +1091,7 @@
                     [:> (:render replace-renderer) props-for-plugin])
                   (when show-properties-panel?
                     [:div.properties-panel
-                     (properties-section block properties' opts)]))
+                     (properties-section block properties' opts')]))
 
                 (when-not class?
                   [:<>
@@ -1096,11 +1101,11 @@
                    (when (and show-hidden-properties? (seq hidden-properties))
                      [:div.properties-panel
                       (hidden-properties-cp block hidden-properties
-                                            (assoc opts :show-hidden-properties? true))])])
+                                            (assoc opts' :show-hidden-properties? true))])])
 
                 (when (and page? (not class?))
                   ^{:key (str id "-add-property")}
-                  [new-property block opts])
+                  [new-property block opts'])
 
                 (mapv (fn [r]
                         (when (fn? (:render r))
