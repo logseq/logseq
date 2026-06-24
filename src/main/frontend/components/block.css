@@ -1764,7 +1764,6 @@ html.is-mac {
   text-overflow: ellipsis;
 }
 
-.block-content-wrapper svg,
 .view-actions svg {
   width: 18px;
   height: 18px;
