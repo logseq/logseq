@@ -6,7 +6,7 @@ type check_status = Ok | Warning | Error
 type check = {
   id : Cli_primitive.keyword;
   status : check_status;
-  code : Cli_primitive.keyword option;
+  code : Error.code option;
   message : string;
   path : Cli_primitive.path option;
   servers : Melange_edn.any list;
@@ -33,7 +33,9 @@ let check_value (check : check) =
   in
   let fields =
     match check.code with
-    | Some code -> (Edn_util.keyword "code", Edn_util.any code) :: fields
+    | Some code ->
+        (Edn_util.keyword "code", Edn_util.any (Error.code_to_keyword code))
+        :: fields
     | None -> fields
   in
   let fields =
@@ -61,7 +63,7 @@ let check_db_worker_script (Doctor { script_path }) =
     {
       id = Edn_util.keyword_t "db-worker-script";
       status = Error;
-      code = Some (Edn_util.keyword_t "doctor-script-missing");
+      code = Some (Error.Doctor_script_missing);
       message = "db-worker script is missing: " ^ path;
       path = Some path;
       servers = [];
@@ -71,7 +73,7 @@ let check_db_worker_script (Doctor { script_path }) =
     {
       id = Edn_util.keyword_t "db-worker-script";
       status = Error;
-      code = Some (Edn_util.keyword_t "doctor-script-unreadable");
+      code = Some (Error.Doctor_script_unreadable);
       message = "db-worker script path is not a file: " ^ path;
       path = Some path;
       servers = [];
@@ -93,7 +95,7 @@ let check_db_worker_script (Doctor { script_path }) =
       {
         id = Edn_util.keyword_t "db-worker-script";
         status = Error;
-        code = Some (Edn_util.keyword_t "doctor-script-unreadable");
+        code = Some (Error.Doctor_script_unreadable);
         message =
           "db-worker script is not readable: " ^ path ^ " ("
           ^ Printexc.to_string exn ^ ")";
@@ -125,7 +127,7 @@ let check_root_dir config =
     {
       id = Edn_util.keyword_t "root-dir";
       status = Error;
-      code = Some (Edn_util.keyword_t "root-dir-permission");
+      code = Some (Error.Root_dir_permission);
       message = "root-dir check failed: " ^ Printexc.to_string exn;
       path = Some path;
       servers = [];
@@ -176,7 +178,7 @@ let check_running_servers config =
         {
           id = Edn_util.keyword_t "running-servers";
           status = Warning;
-          code = Some (Edn_util.keyword_t "doctor-server-not-ready");
+          code = Some (Error.Doctor_server_not_ready);
           message =
             Humanize_types.format_count_with_noun (List.length starting)
               "server"
@@ -217,7 +219,7 @@ let execute_with_mode action config mode =
          (Error.make
             ~context:(report_value [ script_check ])
             (Option.value script_check.code
-               ~default:(Edn_util.keyword_t "doctor-error"))
+               ~default:(Error.Doctor_error))
             script_check.message))
   else
     let root_check = check_root_dir config in
@@ -228,7 +230,7 @@ let execute_with_mode action config mode =
            ~context:(report_value checks)
            (Error.make ~context:(report_value checks)
               (Option.value root_check.code
-                 ~default:(Edn_util.keyword_t "doctor-error"))
+                 ~default:(Error.Doctor_error))
               root_check.message))
     else
       Cli_effect.map

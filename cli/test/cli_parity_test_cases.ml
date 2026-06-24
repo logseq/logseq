@@ -45,7 +45,7 @@ let expect_error_code name expected = function
         else code
       in
       expect_equal name (normalize_code expected)
-        (normalize_code (Edn_util.keyword_to_string err.Error.code))
+        (normalize_code (Error.code_to_string err.Error.code))
   | Ok _ -> fail_test (name ^ ": expected Error")
 
 let expect_error_context_code name expected err =
@@ -901,7 +901,7 @@ let () =
           Js.Promise.resolve pass
       | Error err ->
           expect_equal "missing id token code" "missing-id-token"
-            (Edn_util.keyword_to_string err.Error.code);
+            (Error.code_to_string err.Error.code);
           Js.Promise.resolve pass);
 
   test_promise
@@ -1282,7 +1282,7 @@ let () =
         | Ok _ -> fail_test "invalid width: expected Error"
         | Error err ->
             expect_equal "invalid width code" "invalid-config"
-              (Edn_util.keyword_to_string err.Error.code);
+              (Error.code_to_string err.Error.code);
             expect_named_contains "invalid width message" err.Error.message
               "Expected integer");
         remove_tree root
@@ -1305,7 +1305,7 @@ let () =
         | Ok _ -> fail_test "invalid output: expected Error"
         | Error err ->
             expect_equal "invalid output code" "invalid-config"
-              (Edn_util.keyword_to_string err.Error.code);
+              (Error.code_to_string err.Error.code);
             expect_named_contains "invalid output message" err.Error.message
               "Expected one of human, json, edn");
         remove_tree root
@@ -1582,7 +1582,7 @@ let () =
       let ok = Cli_result.ok Output.Mode.Human (Cli_result.Message "ok") in
       expect_bool "ok is not error" false (Cli_result.is_error ok);
       expect_int "ok exit" 0 (Cli_result.exit_code ok);
-      let err = Error.make (Edn_util.keyword_t "missing-auth") "missing auth" in
+      let err = Error.make (Error.Missing_auth) "missing auth" in
       let error = Cli_result.error Output.Mode.Human err in
       expect_bool "error is error" true (Cli_result.is_error error);
       expect_int "error exit" 1 (Cli_result.exit_code error));
@@ -1590,7 +1590,7 @@ let () =
   test "CLI parity edn includes hint and human error stays concise" (fun () ->
       let err =
         Error.make ~hint:"Run `logseq login` first."
-          (Edn_util.keyword_t "missing-auth")
+          (Error.Missing_auth)
           "missing auth"
       in
       let edn = Format_types.to_edn (Cli_result.error Output.Mode.Edn err) in
@@ -2510,7 +2510,7 @@ let () =
           (match result.Cli_result.error with
           | Some err ->
               expect_equal "remove page target code" "invalid-target"
-                (keyword_text err.Error.code)
+                (Error.code_to_string err.Error.code)
           | None -> fail_test "expected remove error");
           expect_bool "delete not called" false !apply_called;
           Js.Promise.resolve pass));
@@ -2719,7 +2719,7 @@ let () =
           (match result.Cli_result.error with
           | Some err ->
               expect_equal "show recycled code" "recycled-page"
-                (keyword_text err.Error.code)
+                (Error.code_to_string err.Error.code)
           | None -> fail_test "expected show error");
           Js.Promise.resolve pass));
 
@@ -2840,7 +2840,7 @@ let () =
           (match result.Cli_result.error with
           | Some err ->
               expect_equal "upsert recycled code" "recycled-page"
-                (keyword_text err.Error.code)
+                (Error.code_to_string err.Error.code)
           | None -> fail_test "expected upsert error");
           expect_bool "no ops applied" false !apply_called;
           Js.Promise.resolve pass));
@@ -2888,7 +2888,7 @@ let () =
           (match result.Cli_result.error with
           | Some err ->
               expect_equal "upsert recycled update code" "recycled-page"
-                (keyword_text err.Error.code)
+                (Error.code_to_string err.Error.code)
           | None -> fail_test "expected upsert update error");
           expect_bool "no update ops applied" false !apply_called;
           Js.Promise.resolve pass));
@@ -2996,7 +2996,7 @@ let () =
           (match result.Cli_result.error with
           | Some err ->
               expect_equal "upsert recycled restore without uuid code"
-                "recycled-page" (keyword_text err.Error.code)
+                "recycled-page" (Error.code_to_string err.Error.code)
           | None -> fail_test "expected upsert restore error");
           expect_bool "no restore ops applied" false !apply_called;
           Js.Promise.resolve pass));
@@ -3045,7 +3045,7 @@ let () =
           (match result.Cli_result.error with
           | Some err ->
               expect_equal "upsert recycled update restore without uuid code"
-                "recycled-page" (keyword_text err.Error.code)
+                "recycled-page" (Error.code_to_string err.Error.code)
           | None -> fail_test "expected upsert update restore error");
           expect_bool "no update restore ops applied" false !apply_called;
           Js.Promise.resolve pass));
@@ -3096,7 +3096,7 @@ let () =
           (match result.Cli_result.error with
           | Some err ->
               expect_equal "upsert block create recycled code" "recycled-page"
-                (keyword_text err.Error.code)
+                (Error.code_to_string err.Error.code)
           | None -> fail_test "expected upsert block create error");
           expect_bool "no create ops applied" false !apply_called;
           Js.Promise.resolve pass));
@@ -3161,7 +3161,7 @@ let () =
           (match result.Cli_result.error with
           | Some err ->
               expect_equal "upsert block update recycled code" "recycled-page"
-                (keyword_text err.Error.code)
+                (Error.code_to_string err.Error.code)
           | None -> fail_test "expected upsert block update error");
           expect_bool "no update ops applied" false !apply_called;
           Js.Promise.resolve pass));
@@ -4055,7 +4055,7 @@ let () =
           (match result.Cli_result.error with
           | Some err ->
               expect_equal "sync not started code" "sync-not-started"
-                (keyword_text err.Error.code);
+                (Error.code_to_string err.Error.code);
               expect_equal "sync start hint"
                 "Run logseq sync start --graph demo first."
                 (expect_some "sync hint" err.hint)
@@ -4117,7 +4117,7 @@ let () =
             (match result.Cli_result.error with
             | Some err ->
                 expect_equal (label ^ " code") expected_code
-                  (keyword_text err.Error.code)
+                  (Error.code_to_string err.Error.code)
             | None -> fail_test (label ^ ": expected error"));
             expect_bool (label ^ " no request") false !request_called;
             Js.Promise.resolve pass)
@@ -4637,8 +4637,7 @@ let () =
         (Edn_util.keyword_to_string missing.id);
       expect_bool "doctor missing status" true (missing.status = Doctor.Error);
       expect_equal "doctor missing code" "doctor-script-missing"
-        (Edn_util.keyword_to_string
-           (expect_some "missing script code" missing.code));
+        (Error.code_to_string (expect_some "missing script code" missing.code));
       expect_equal "doctor missing path" missing_path
         (expect_some "missing script path" missing.path);
       let root = temp_dir "logseq-cli-parity-doctor-" in
@@ -5066,7 +5065,7 @@ let () =
             match invalid.Cli_result.error with
             | Some err ->
                 expect_equal "validation error code" "graph-validation-failed"
-                  (keyword_text err.Error.code);
+                  (Error.code_to_string err.Error.code);
                 expect_named_contains "validation error count" err.message
                   "Found 1 entity with errors:"
             | None -> fail_test "expected graph validation error")
@@ -5397,7 +5396,7 @@ let () =
           (match missing_restore.Cli_result.error with
           | Some err ->
               expect_equal "missing restore code" "backup-not-found"
-                (keyword_text err.Error.code)
+                (Error.code_to_string err.Error.code)
           | None -> fail_test "expected missing restore error");
           let* restore_result =
             effect_to_promise
@@ -6898,7 +6897,7 @@ let () =
                | Ok _ -> fail_promise "expected orphan timeout"
                | Error err ->
                    expect_equal "orphan error code" "server-start-timeout-orphan"
-                     (keyword_text err.Error.code);
+                     (Error.code_to_string err.Error.code);
                    expect_named_contains "orphan command executable"
                      err.Error.message Node.Process.argv.(0);
                    expect_named_contains "orphan command worker"
@@ -7631,7 +7630,7 @@ let () =
         Format_types.format_result
           (Cli_result.error ~command:Command_id.Graph_validate Output.Mode.Human
              (Error.make
-                (Edn_util.keyword_t "graph-validation-failed")
+                (Error.Graph_validation_failed)
                 "Found 1 entity with errors:\n({:entity {:db/id 1}})\n"))
           (config ())
       in
@@ -7691,7 +7690,7 @@ let () =
                   "Logseq restarted db-worker-node, but the replacement still \
                    reports a different revision. Check the installed Logseq \
                    build and retry"
-                (Edn_util.keyword_t "server-revision-mismatch-after-restart")
+                (Error.Server_revision_mismatch_after_restart)
                 "db-worker-node revision still does not match after restart"))
           (config ())
       in

@@ -298,7 +298,7 @@ let graph_exists_error graph =
   Error.make
     ~context:
       (Edn_util.map [ (Edn_util.keyword "graph", Edn_util.string graph_name) ])
-    (Edn_util.keyword_t "graph-exists")
+    (Error.Graph_exists)
     ("graph already exists: " ^ graph_name)
 
 let action_graph_exists config graph =
