@@ -1006,33 +1006,39 @@ DROP TRIGGER IF EXISTS blocks_au;
    (->> (get-all-blocks db)
         (keep #(block->index % opts)))))
 
+(defn- page-descendants
+  [page]
+  (loop [pages [page]
+         result []]
+    (if-let [page' (first pages)]
+      (let [children (->> (:block/_parent page')
+                          (filter ldb/page?)
+                          ldb/sort-by-order)]
+        (recur (concat (rest pages) children)
+               (conj result page')))
+      result)))
+
+(defn- page-tree
+  [db page]
+  (->> (page-descendants page)
+       (mapcat (fn [page']
+                 (concat
+                  [page']
+                  (mapcat #(ldb/get-block-and-children db (:block/uuid %))
+                          (ldb/sort-by-order (:block/_page page'))))))
+       distinct))
+
+(defn- entity-tree
+  [db entity]
+  (cond
+    (nil? entity) []
+    (ldb/page? entity) (page-tree db entity)
+    (:block/uuid entity) (ldb/get-block-and-children db (:block/uuid entity))
+    :else [entity]))
+
 (defn- get-blocks-from-datoms-impl
   [{:keys [db-after db-before]} datoms]
-  (letfn [(page-descendants [page]
-            (loop [pages [page]
-                   result []]
-              (if-let [page' (first pages)]
-                (let [children (->> (:block/_parent page')
-                                    (filter ldb/page?)
-                                    ldb/sort-by-order)]
-                  (recur (concat (rest pages) children)
-                         (conj result page')))
-                result)))
-          (page-tree [db page]
-            (->> (page-descendants page)
-                 (mapcat (fn [page']
-                           (concat
-                            [page']
-                            (mapcat #(ldb/get-block-and-children db (:block/uuid %))
-                                    (ldb/sort-by-order (:block/_page page'))))))
-                 distinct))
-          (entity-tree [db entity]
-            (cond
-              (nil? entity) []
-              (ldb/page? entity) (page-tree db entity)
-              (:block/uuid entity) (ldb/get-block-and-children db (:block/uuid entity))
-              :else [entity]))
-          (referrer-eids [db eids]
+  (letfn [(referrer-eids [db eids]
             (->> eids
                  (mapcat (fn [id]
                            (let [entity (d/entity db id)]
