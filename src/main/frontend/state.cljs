@@ -833,7 +833,7 @@ should be done through this fn in order to get global config and config defaults
 
 (defn take-edit-block-fn!
   []
-  (when-let [[f & more] (seq (edit-block-fn-queue @(:editor/edit-block-fn @state)))]
+  (when-let [[f & more] (seq (edit-block-fn-queue (get-state :editor/edit-block-fn)))]
     (set-state! :editor/edit-block-fn (vec more))
     f))
 

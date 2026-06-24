@@ -175,6 +175,22 @@
               :selection-direction :up}
              (state-editor/get-editor-info))))))
 
+(deftest edit-block-fn-queue-uses-plain-state
+  (let [original-state @state/state
+        calls (atom [])
+        edit-block-f #(swap! calls conj :edit-block)]
+    (try
+      (state/replace-state! (assoc original-state :editor/edit-block-fn nil))
+      (state/queue-edit-block-fn! edit-block-f)
+
+      (let [queued-f (state/take-edit-block-fn!)]
+        (is (= edit-block-f queued-f))
+        (queued-f)
+        (is (= [:edit-block] @calls))
+        (is (= [] (state/get-state :editor/edit-block-fn))))
+      (finally
+        (state/replace-state! original-state)))))
+
 (deftest state-sidebar-and-search-modules-share-state-mutations
   (let [original-state @state/state]
     (try
