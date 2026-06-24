@@ -267,7 +267,7 @@ let parse_blocks_edn ~label text =
       | None ->
           Error
             (Error.make
-               (Edn_util.keyword_t "invalid-blocks")
+               (Error.Invalid_blocks)
                "blocks must be a vector")))
 
 let read_file path = Cli_unix.read_text_file path
@@ -285,7 +285,7 @@ let read_blocks (opts : opts) args =
   | _ ->
       Error
         (Error.make
-           (Edn_util.keyword_t "missing-content")
+           (Error.Missing_content)
            "content is required")
 
 let build_add_block_action (opts : opts) args repo =
@@ -409,10 +409,10 @@ let recycled_entity value =
   Option.is_some (Edn_util.get value "logseq.property/deleted-at")
 
 let page_not_found () =
-  Error.make (Edn_util.keyword_t "page-not-found") "page not found"
+  Error.make (Error.Page_not_found) "page not found"
 
 let recycled_page_error () =
-  Error.make (Edn_util.keyword_t "recycled-page") "page is recycled"
+  Error.make (Error.Recycled_page) "page is recycled"
 
 let pull_entity config repo selector lookup =
   Transport.thread_api_pull config ~repo
@@ -508,7 +508,7 @@ let resolve_add_target config (action : action) =
               pure
                 (Error
                    (Error.make
-                      (Edn_util.keyword_t "target-not-found")
+                      (Error.Target_not_found)
                       "target block not found")))
   | None, Some uuid, _ ->
       bind
@@ -522,14 +522,14 @@ let resolve_add_target config (action : action) =
               pure
                 (Error
                    (Error.make
-                      (Edn_util.keyword_t "target-not-found")
+                      (Error.Target_not_found)
                       "target block not found")))
   | None, None, Some page_name -> ensure_page config action.repo page_name
   | None, None, None ->
       pure
         (Error
            (Error.make
-              (Edn_util.keyword_t "missing-target")
+              (Error.Missing_target)
               "target page or block is required"))
 
 let flatten_blocks blocks =
@@ -723,7 +723,7 @@ let resolve_created_ids config repo blocks insert_result =
                 pure
                   (Error
                      (Error.make
-                        (Edn_util.keyword_t "add-id-resolution-failed")
+                        (Error.Add_id_resolution_failed)
                         "unable to resolve created ids")))
   in
   loop [] uuids

@@ -462,8 +462,8 @@ let tag_id_of_result result =
       | Some id -> Ok id
       | None ->
           Error
-            (Error.make (Edn_util.keyword_t "tag-not-found") "tag not found"))
-  | _ -> Error (Error.make (Edn_util.keyword_t "tag-not-found") "tag not found")
+            (Error.make (Error.Tag_not_found) "tag not found"))
+  | _ -> Error (Error.make (Error.Tag_not_found) "tag not found")
 
 let property_entity value =
   Option.is_some (Edn_util.get value "logseq.property/type")
@@ -480,12 +480,12 @@ let property_ident_of_entity entity =
     | None ->
         Error
           (Error.make
-             (Edn_util.keyword_t "property-not-found")
+             (Error.Property_not_found)
              "property not found")
   else
     Error
       (Error.make
-         (Edn_util.keyword_t "property-not-found")
+         (Error.Property_not_found)
          "property not found")
 
 let property_ident_of_query result =
@@ -494,7 +494,7 @@ let property_ident_of_query result =
   | None ->
       Error
         (Error.make
-           (Edn_util.keyword_t "property-not-found")
+           (Error.Property_not_found)
            "property not found")
 
 let keyword_label ident =
@@ -699,7 +699,7 @@ let normalize_asset_options invoke_config repo options =
           pure
             (Error
                (Error.make
-                  (Edn_util.keyword_t "asset-tag-not-found")
+                  (Error.Asset_tag_not_found)
                   "asset tag not found")))
 
 let prepare_tag_item options item =

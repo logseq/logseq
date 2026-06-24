@@ -373,12 +373,12 @@ let bytes_of_output_data value =
 
 let unsupported_output_format format =
   Error.make
-    (Edn_util.keyword_t "unsupported-output-format")
+    (Error.Unsupported_output_format)
     ("unsupported output format: " ^ format)
 
 let unsupported_input_format format =
   Error.make
-    (Edn_util.keyword_t "unsupported-input-format")
+    (Error.Unsupported_input_format)
     ("unsupported input format: " ^ format)
 
 let write_output ~format ~path ~data =

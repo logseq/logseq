@@ -493,7 +493,7 @@ let validate_query query =
       if List.exists contains_db_id_datom_clause (after_where values) then
         Error
           (Error.make
-             (Edn_util.keyword_t "invalid-query")
+             (Error.Invalid_query)
              "invalid query: :db/id cannot be used as a datom attribute in \
               :where clauses. Bind entity ids through :in and --inputs.")
       else Ok query
@@ -606,7 +606,7 @@ let build ?registry:_ config _globals parsed =
           else if Option.is_none query_text && Option.is_none query_name then
             Error
               (Error.make
-                 (Edn_util.keyword_t "missing-query")
+                 (Error.Missing_query)
                  "query is required")
           else
             let query_result, entry =
@@ -618,13 +618,13 @@ let build ?registry:_ config _globals parsed =
                   | None ->
                       ( Error
                           (Error.make
-                             (Edn_util.keyword_t "unknown-query")
+                             (Error.Unknown_query)
                              ("unknown query: " ^ name)),
                         None ))
               | _ ->
                   ( Error
                       (Error.make
-                         (Edn_util.keyword_t "missing-query")
+                         (Error.Missing_query)
                          "query is required"),
                     None )
             in
