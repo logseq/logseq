@@ -803,6 +803,36 @@
     (is (contains? blocks-to-remove-set (str (:block/uuid parent))))
     (is (contains? blocks-to-remove-set (str (:block/uuid child))))))
 
+(deftest sync-search-indice-removes-block-descendants-when-parent-becomes-hidden
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "Hidden move"}
+                                   :blocks [{:block/title "Hidden parent"
+                                             :logseq.property/hide? true}
+                                            {:block/title "Moved parent"
+                                             :build/children [{:block/title "Moved child"}]}]}]})
+        hidden-parent (db-test/find-block-by-content @conn "Hidden parent")
+        moved-parent (db-test/find-block-by-content @conn "Moved parent")
+        moved-child (db-test/find-block-by-content @conn "Moved child")
+        tx-report (d/transact! conn [[:db/add (:db/id moved-parent) :block/parent (:db/id hidden-parent)]])
+        blocks-to-remove-set (:blocks-to-remove-set (search/sync-search-indice tx-report))]
+    (is (contains? blocks-to-remove-set (str (:block/uuid moved-parent))))
+    (is (contains? blocks-to-remove-set (str (:block/uuid moved-child))))))
+
+(deftest sync-search-indice-adds-block-descendants-when-parent-becomes-visible
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "Visible move"}
+                                   :blocks [{:block/title "Hidden parent"
+                                             :logseq.property/hide? true
+                                             :build/children [{:block/title "Moved parent"
+                                                               :build/children [{:block/title "Moved child"}]}]}]}]})
+        page (db-test/find-page-by-title @conn "Visible move")
+        moved-parent (db-test/find-block-by-content @conn "Moved parent")
+        tx-report (d/transact! conn [[:db/add (:db/id moved-parent) :block/parent (:db/id page)]])
+        blocks-to-add (:blocks-to-add (search/sync-search-indice tx-report))
+        titles (set (map :title blocks-to-add))]
+    (is (contains? titles "Moved parent"))
+    (is (contains? titles "Moved child"))))
+
 (deftest search-blocks-includes-vector-only-results
   (testing "zvec vector hits are merged into desktop search even when SQLite has no keyword hit"
     (let [page-id (test-uuid-string 900)

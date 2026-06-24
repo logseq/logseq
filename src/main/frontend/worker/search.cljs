@@ -1062,6 +1062,12 @@ DROP TRIGGER IF EXISTS blocks_au;
             (->> eids
                  (keep #(d/entity db %))
                  (mapcat page-descendant-eids)
+                 set))
+          (hidden-status-changed-eids-for [eids]
+            (->> eids
+                 (filter (fn [id]
+                           (not= (boolean (some-> (d/entity db-before id) hidden-entity?))
+                                 (boolean (some-> (d/entity db-after id) hidden-entity?)))))
                  set))]
     (when (seq datoms)
       (let [ref-affecting-attrs #{:block/uuid :block/name :block/title :block/properties :block/alias}
@@ -1089,6 +1095,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                                      (#(set/difference % block-page-eids)))
             page-hierarchy-before-eids (page-eids-for db-before page-hierarchy-eids)
             page-hierarchy-after-eids (page-eids-for db-after page-hierarchy-eids)
+            hidden-status-changed-eids (hidden-status-changed-eids-for direct-visibility-eids)
             deleted-eids (->> datoms
                               (filter #(= :logseq.property/deleted-at (:a %)))
                               (map :e)
@@ -1096,11 +1103,13 @@ DROP TRIGGER IF EXISTS blocks_au;
             remove-eids (set/union ref-eids
                                    (referrer-eids db-before ref-eids)
                                    direct-visibility-eids
+                                   (entity-tree-eids db-before hidden-status-changed-eids)
                                    (page-descendant-eids-for db-before page-hierarchy-before-eids)
                                    (entity-tree-eids db-before deleted-eids))
             add-eids (set/union ref-eids
                                 (referrer-eids db-after ref-eids)
                                 direct-visibility-eids
+                                (entity-tree-eids db-after hidden-status-changed-eids)
                                 (page-descendant-eids-for db-after page-hierarchy-after-eids)
                                 (entity-tree-eids db-after deleted-eids))]
         {:blocks-to-remove (entities-for db-before remove-eids)
