@@ -41,8 +41,10 @@
      :stopped? stopped?}))
 
 (defn- take-edit-block-fn!
-  []
-  (state/take-edit-block-fn!))
+  ([]
+   (state/take-edit-block-fn!))
+  ([tx-id]
+   (state/take-edit-block-fn! tx-id)))
 
 (defn- delete-block
   [db block {:keys [embed? on-delete edit-content on-edit schedule-immediately?]}]
@@ -110,9 +112,14 @@
                               [?p :block/name "page1"]
                               [?b :block/page ?p]]
                             @conn)
-                       ffirst)]
+                       ffirst)
+            edit-calls (atom [])]
       (delete-block @conn block
-                    {:on-delete (fn []
+                    {:on-edit (fn [block pos opts]
+                                (swap! edit-calls conj {:block block
+                                                        :pos pos
+                                                        :opts opts}))
+                     :on-delete (fn []
                                   (let [updated-blocks (->> (d/q '[:find (pull ?b [*])
                                                                    :where
                                                                    [?p :block/name "page1"]
@@ -124,10 +131,18 @@
                                         deleted-blocks (->> (d/q '[:find (pull ?b [*])
                                                                    :where
                                                                    [?b :block/title ""]]
-                                                                 @conn)
+                                                                  @conn)
                                                             (map first))]
                                     (is (= ["b1" "b2"] updated-blocks) "Visible page blocks stay on the page")
-                                    (is (empty? deleted-blocks) "Deleted block is removed from page db")))})))
+                                    (is (empty? deleted-blocks) "Deleted block is removed from page db")
+                                    (is (= {:block "b2"
+                                            :pos 2
+                                            :opts {:custom-content "b2"
+                                                   :tail-len 0
+                                                   :container-id nil}}
+                                           (some-> (last @edit-calls)
+                                                   (update :block :block/title)))
+                                        "Deleting an empty block should focus the previous block")))})))
 
   (testing "backspace deletes empty block in embedded context"
     ;; testing embed at this layer doesn't require an embed block since
@@ -350,6 +365,7 @@
         current-block-indents (atom [])
         pending-block-indents (atom [])
         edit-calls (atom [])
+        insert-config (atom nil)
         {:keys [event stopped?]} (fake-key-event)
         previous-document (.-document js/globalThis)]
     (state/set-editing-block-id! [:unknown-container (:block/uuid current-block)])
@@ -369,7 +385,8 @@
                                                       :value "first"
                                                       :config {}
                                                       :block-container #js {}})
-                        editor/insert-new-block-aux! (fn [_config _block _value]
+                        editor/insert-new-block-aux! (fn [config _block _value]
+                                                       (reset! insert-config config)
                                                        [(p/resolved true) true next-block])
                         editor/get-new-container-id (constantly nil)
                         editor/indent-outdent (fn [indent?]
@@ -387,7 +404,8 @@
                                                                (p/resolved nil))]
           (editor/insert-new-block! nil nil)
           ((editor/keydown-tab-handler :right) event)
-          (p/let [_ (when-let [edit-block-f (take-edit-block-fn!)]
+          (p/let [_ (when-let [edit-block-f (take-edit-block-fn!
+                                             (:editor/edit-block-fn-id @insert-config))]
                        (edit-block-f))]
             (is @stopped? "Tab should still be consumed while the new block is pending")
             (is (empty? @current-block-indents) "Tab must not indent the block that was split by Enter")
@@ -404,20 +422,18 @@
                 "The pending block should still enter edit mode after applying queued Tab")))
         (p/finally (fn []
                      (state/set-state! :editor/edit-block-fn nil)
-            (state/set-state! :editor/pending-new-block nil)
-            (set! (.-document js/globalThis) previous-document))))))
+                     (state/set-state! :editor/pending-new-block nil)
+                     (set! (.-document js/globalThis) previous-document))))))
 
-(deftest-async rapid-enter-keeps-new-block-focus-callbacks-in-transaction-order
+(deftest-async rapid-enter-waits-for-pending-new-block
   (let [current-block {:db/id 1
                        :block/uuid (random-uuid)
                        :block/title "first"}
         first-new-block {:db/id 2
                          :block/uuid (random-uuid)
                          :block/title ""}
-        second-new-block {:db/id 3
-                          :block/uuid (random-uuid)
-                          :block/title ""}
-        inserted-blocks (atom [first-new-block second-new-block])
+        inserted-blocks (atom [first-new-block])
+        insert-configs (atom [])
         input #js {:value "first"}
         edit-calls (atom [])
         previous-document (.-document js/globalThis)]
@@ -433,13 +449,16 @@
                                     (case lookup-ref
                                       [:block/uuid (:block/uuid current-block)] current-block
                                       [:block/uuid (:block/uuid first-new-block)] first-new-block
-                                      [:block/uuid (:block/uuid second-new-block)] second-new-block
                                       current-block))
                         editor/get-state (constantly {:block current-block
                                                       :value "first"
                                                       :config {}
+                                                      :node input
                                                       :block-container #js {}})
-                        editor/insert-new-block-aux! (fn [_config _block _value]
+                        editor/inside-of-single-block (constantly false)
+                        ldb/get-right-sibling (constantly nil)
+                        editor/insert-new-block-aux! (fn [config _block _value]
+                                                       (swap! insert-configs conj config)
                                                        (let [next-block (first @inserted-blocks)]
                                                          (swap! inserted-blocks subvec 1)
                                                          [(p/resolved true) true next-block]))
@@ -449,26 +468,91 @@
                                                                      :pos pos
                                                                      :opts opts})
                                              (p/resolved nil))]
-          (editor/insert-new-block! nil nil)
-          (editor/insert-new-block! nil nil)
-          (p/let [_ (when-let [edit-block-f (take-edit-block-fn!)]
-                       (edit-block-f))
-                  _ (when-let [edit-block-f (take-edit-block-fn!)]
-                      (edit-block-f))]
+          (editor/keydown-new-block-handler nil)
+          (editor/keydown-new-block-handler nil)
+          (p/let [_ (when-let [edit-block-f (take-edit-block-fn! (:editor/edit-block-fn-id (first @insert-configs)))]
+                       (edit-block-f))]
+            (is (= 1 (count @insert-configs))
+                "Enter should not start another insert while a new block is pending")
             (is (= [{:block first-new-block
-                     :pos 0
-                     :opts {:container-id nil
-                            :custom-content ""}}
-                    {:block second-new-block
                      :pos 0
                      :opts {:container-id nil
                             :custom-content ""}}]
                    @edit-calls)
-                "Rapid Enter should keep one focus callback per inserted block, in transaction order")))
+                "The pending block should enter edit mode once the insert transaction completes")))
         (p/finally (fn []
                      (state/set-state! :editor/edit-block-fn nil)
                      (state/set-state! :editor/pending-new-block nil)
                      (set! (.-document js/globalThis) previous-document))))))
+
+(deftest-async rejected-new-block-insert-removes-queued-edit-callback
+  (let [current-block {:db/id 1
+                       :block/uuid (random-uuid)
+                       :block/title "first"}
+        next-block {:db/id 2
+                    :block/uuid (random-uuid)
+                    :block/title ""}
+        input #js {:value "first"}
+        expected-error (js/Error. "insert failed")
+        result-promise (p/deferred)
+        insert-config (atom nil)
+        previous-document (.-document js/globalThis)]
+    (state/set-editing-block-id! [:unknown-container (:block/uuid current-block)])
+    (set! (.-document js/globalThis)
+          #js {:activeElement input
+               :getElementById (fn [_id] input)})
+    (-> (p/with-redefs [state/get-edit-input-id (constantly "edit-block-current")
+                        gdom/getElement (constantly input)
+                        util/get-selection-start (constantly 5)
+                        util/get-selection-end (constantly 5)
+                        db/entity (fn [lookup-ref]
+                                    (case lookup-ref
+                                      [:block/uuid (:block/uuid current-block)] current-block
+                                      [:block/uuid (:block/uuid next-block)] next-block
+                                      current-block))
+                        editor/get-state (constantly {:block current-block
+                                                      :value "first"
+                                                      :config {}
+                                                      :node input
+                                                      :block-container #js {}})
+                        editor/inside-of-single-block (constantly false)
+                        ldb/get-right-sibling (constantly nil)
+                        editor/insert-new-block-aux! (fn [config _block _value]
+                                                       (reset! insert-config config)
+                                                       [result-promise true next-block])
+                        editor/get-new-container-id (constantly nil)]
+          (let [insert-result (.catch (.then (editor/insert-new-block! nil nil)
+                                            (fn [_] ::resolved))
+                                      (fn [e] e))]
+            (.catch result-promise (fn [_] nil))
+            (p/let [_ (p/delay 0)
+                    _ (do
+                        (p/reject! result-promise expected-error)
+                        nil)
+                    result insert-result]
+              (is (identical? expected-error result)
+                  "Insert failure should still reject with the original error")
+              (is (nil? (take-edit-block-fn! (:editor/edit-block-fn-id @insert-config)))
+                  "Rejected insert should remove the queued tagged edit callback"))))
+        (p/finally (fn []
+                     (state/set-state! :editor/edit-block-fn nil)
+                     (state/set-state! :editor/pending-new-block nil)
+                     (set! (.-document js/globalThis) previous-document))))))
+
+(deftest tagged-enter-callback-does-not-block-delete-focus
+  (let [enter-tx-id (random-uuid)
+        edit-calls (atom [])]
+    (try
+      (state/queue-edit-block-fn! enter-tx-id #(swap! edit-calls conj :enter))
+      (state/queue-edit-block-fn! #(swap! edit-calls conj :delete-previous))
+      (when-let [edit-block-f (take-edit-block-fn! enter-tx-id)]
+        (edit-block-f))
+      (when-let [edit-block-f (take-edit-block-fn!)]
+        (edit-block-f))
+      (is (= [:enter :delete-previous] @edit-calls)
+          "Tagged Enter focus should not consume the untagged delete focus callback")
+      (finally
+        (state/set-state! :editor/edit-block-fn nil)))))
 
 (deftest-async indent-block-does-not-move-into-comments-area
   (load-test-files
