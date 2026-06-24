@@ -4478,6 +4478,51 @@
             (is (= "remote child" (:block/title child')))
             (is (= parent-uuid (:block/uuid (:block/parent child'))))))))))
 
+(deftest apply-remote-txs-repairs-missing-property-text-value-test
+  (testing "remote tx application fetches missing property text blocks used as UUID string values"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          parent-uuid (:block/uuid parent)
+          page-id (:db/id (:block/page parent))
+          property-uuid (random-uuid)
+          property-ident :user.property/remote-text
+          value-uuid (random-uuid)
+          now 1760000000000
+          repair-calls (atom [])
+          client (repair-client repair-calls
+                                (fn [_block-uuids]
+                                  [{:block/uuid value-uuid
+                                    :block/title "remote property text"
+                                    :block/page page-id
+                                    :block/parent (:db/id parent)
+                                    :block/order "a0"
+                                    :block/created-at now
+                                    :block/updated-at now}]))]
+      (with-datascript-conns
+        conn client-ops-conn
+        (fn []
+          (d/transact!
+           conn
+           [{:db/ident property-ident
+             :block/uuid property-uuid
+             :block/title "Remote Text"
+             :block/name "remote text"
+             :block/tags #{:logseq.class/Property}
+             :block/order "a0"
+             :block/created-at now
+             :block/updated-at now
+             :logseq.property/type :default
+             :db/cardinality :db.cardinality/one
+             :db/valueType :db.type/ref
+             :db/index true}])
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           client
+           [[:db/add [:block/uuid parent-uuid] property-ident (str value-uuid)]])
+          (let [value-block (d/entity @conn [:block/uuid value-uuid])]
+            (is (= [[value-uuid]] @repair-calls))
+            (is (= value-uuid (:block/uuid value-block)))
+            (is (= "remote property text" (:block/title value-block)))))))))
+
 (deftest apply-remote-txs-repairs-view-history-recycled-and-delete-dependencies-test
   (testing "remote tx application fetches dependent repair blocks from the server"
     (let [ids {:class-uuid (random-uuid)
