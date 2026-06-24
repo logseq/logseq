@@ -102,7 +102,7 @@ let execute_with_mode (Debug_pull action) config mode =
               pure
                 (Output_mode.error ~command:Command_id.Debug_pull mode
                    (Error.make
-                      (Edn_util.keyword_t "entity-not-found")
+                      (Error.Entity_not_found)
                       "entity not found"))
             else
               pure
