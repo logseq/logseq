@@ -755,6 +755,7 @@
 
 (deftest sync-search-indice-300-new-blocks-performance-when-semantic-search-enabled
   (let [{:keys [blocks-to-add elapsed-ms]} (run-sync-search-indice-new-blocks-case true)]
+    (println (str "sync-search-indice 300 new blocks with semantic search enabled took " elapsed-ms "ms"))
     (is (= sync-search-indice-performance-block-count (count blocks-to-add)))
     (is (< elapsed-ms sync-search-indice-performance-max-ms))
     (is (every? :vector-title blocks-to-add))
@@ -762,9 +763,19 @@
 
 (deftest sync-search-indice-300-new-blocks-performance-when-semantic-search-disabled
   (let [{:keys [blocks-to-add elapsed-ms]} (run-sync-search-indice-new-blocks-case false)]
+    (println (str "sync-search-indice 300 new blocks with semantic search disabled took " elapsed-ms "ms"))
     (is (= sync-search-indice-performance-block-count (count blocks-to-add)))
     (is (< elapsed-ms sync-search-indice-performance-max-ms))
     (is (not-any? #(contains? % :vector-title) blocks-to-add))))
+
+(deftest sync-search-indice-300-new-blocks-does-not-check-page-descendants
+  (let [page-checks (atom 0)]
+    (with-redefs [ldb/page? (fn [_entity]
+                              (swap! page-checks inc)
+                              false)]
+      (let [{:keys [blocks-to-add]} (run-sync-search-indice-new-blocks-case true)]
+        (is (= sync-search-indice-performance-block-count (count blocks-to-add)))
+        (is (<= @page-checks (* 2 sync-search-indice-performance-block-count)))))))
 
 (deftest sync-search-indice-removes-page-descendants-when-page-is-deleted
   (let [conn (db-test/create-conn-with-blocks

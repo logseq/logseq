@@ -1040,25 +1040,29 @@ DROP TRIGGER IF EXISTS blocks_au;
                               (map :db/id (:block/_refs entity))
                               (map :db/id (:block/_alias entity))))))
                  set))
+          (page-descendant-eids [page]
+            (set (map :db/id (page-descendants page))))
+          (entity-tree-eids [db eids]
+            (->> eids
+                 (keep #(d/entity db %))
+                 (mapcat #(entity-tree db %))
+                 (map :db/id)
+                 set))
           (entities-for [db eids]
             (->> eids
                  (keep #(d/entity db %))
                  distinct))
-          (entities-with-referrers-for [db eids]
-            (distinct
-             (concat (entities-for db eids)
-                     (entities-for db (referrer-eids db eids)))))
-          (entity-trees-for [db eids]
-            (->> eids
-                 (keep #(d/entity db %))
-                 (mapcat #(entity-tree db %))
-                 distinct))
-          (page-descendants-for [db eids]
+          (page-eids-for [db eids]
             (->> eids
                  (keep #(d/entity db %))
                  (filter ldb/page?)
-                 (mapcat page-descendants)
-                 distinct))]
+                 (map :db/id)
+                 set))
+          (page-descendant-eids-for [db eids]
+            (->> eids
+                 (keep #(d/entity db %))
+                 (mapcat page-descendant-eids)
+                 set))]
     (when (seq datoms)
       (let [ref-affecting-attrs #{:block/uuid :block/name :block/title :block/properties :block/alias}
             direct-visibility-affecting-attrs #{:block/parent :block/page :block/order}
@@ -1074,24 +1078,33 @@ DROP TRIGGER IF EXISTS blocks_au;
                                         (filter #(contains? direct-visibility-affecting-attrs (:a %)))
                                         (map :e)
                                         set)
+            block-page-eids (->> datoms
+                                 (filter #(= :block/page (:a %)))
+                                 (map :e)
+                                 set)
             page-hierarchy-eids (->> datoms
                                      (filter #(contains? page-hierarchy-affecting-attrs (:a %)))
                                      (map :e)
-                                     set)
+                                     set
+                                     (#(set/difference % block-page-eids)))
+            page-hierarchy-before-eids (page-eids-for db-before page-hierarchy-eids)
+            page-hierarchy-after-eids (page-eids-for db-after page-hierarchy-eids)
             deleted-eids (->> datoms
                               (filter #(= :logseq.property/deleted-at (:a %)))
                               (map :e)
-                              set)]
-        {:blocks-to-remove (distinct
-                            (concat (entities-with-referrers-for db-before ref-eids)
-                                    (entities-for db-before direct-visibility-eids)
-                                    (page-descendants-for db-before page-hierarchy-eids)
-                                    (entity-trees-for db-before deleted-eids)))
-         :blocks-to-add (->> (concat (entities-with-referrers-for db-after ref-eids)
-                                     (entities-for db-after direct-visibility-eids)
-                                     (page-descendants-for db-after page-hierarchy-eids)
-                                     (entity-trees-for db-after deleted-eids))
-                             distinct
+                              set)
+            remove-eids (set/union ref-eids
+                                   (referrer-eids db-before ref-eids)
+                                   direct-visibility-eids
+                                   (page-descendant-eids-for db-before page-hierarchy-before-eids)
+                                   (entity-tree-eids db-before deleted-eids))
+            add-eids (set/union ref-eids
+                                (referrer-eids db-after ref-eids)
+                                direct-visibility-eids
+                                (page-descendant-eids-for db-after page-hierarchy-after-eids)
+                                (entity-tree-eids db-after deleted-eids))]
+        {:blocks-to-remove (entities-for db-before remove-eids)
+         :blocks-to-add (->> (entities-for db-after add-eids)
                              (remove hidden-entity?))}))))
 
 (defn- get-affected-blocks
