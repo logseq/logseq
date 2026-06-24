@@ -432,8 +432,8 @@
                             (common-util/uuid-string? value))
                    (uuid value)))]))))
 
-(defn- drop-tx-items-for-block-uuids
-  [db remote-txs block-uuids]
+(defn- drop-tx-items-by-block-uuid-refs
+  [db remote-txs block-uuids block-uuid-refs-f]
   (let [block-uuids' (set block-uuids)
         temp-id->block-uuid (remote-tx-temp-id->block-uuid remote-txs)]
     (if (seq block-uuids')
@@ -442,14 +442,16 @@
                       (fn [tx-data]
                         (->> tx-data
                              (remove (fn [item]
-                                       (seq (set/intersection
-                                             block-uuids'
-                                             (set (or (tx-item-block-uuid-refs-in-item
-                                                       db temp-id->block-uuid item)
-                                                      []))))))
+                                       (some block-uuids'
+                                             (block-uuid-refs-f db temp-id->block-uuid item))))
                              vec))))
             remote-txs)
       remote-txs)))
+
+(defn- drop-tx-items-for-block-uuids
+  [db remote-txs block-uuids]
+  (drop-tx-items-by-block-uuid-refs db remote-txs block-uuids
+                                    tx-item-block-uuid-refs-in-item))
 
 (defn- tx-item-value-block-uuid-refs-in-item
   [db temp-id->block-uuid item]
@@ -467,22 +469,8 @@
 
 (defn- drop-tx-value-items-for-block-uuids
   [db remote-txs block-uuids]
-  (let [block-uuids' (set block-uuids)
-        temp-id->block-uuid (remote-tx-temp-id->block-uuid remote-txs)]
-    (if (seq block-uuids')
-      (mapv (fn [remote-tx]
-              (update remote-tx :tx-data
-                      (fn [tx-data]
-                        (->> tx-data
-                             (remove (fn [item]
-                                       (seq (set/intersection
-                                             block-uuids'
-                                             (set (or (tx-item-value-block-uuid-refs-in-item
-                                                       db temp-id->block-uuid item)
-                                                      []))))))
-                             vec))))
-            remote-txs)
-      remote-txs)))
+  (drop-tx-items-by-block-uuid-refs db remote-txs block-uuids
+                                    tx-item-value-block-uuid-refs-in-item))
 
 (defn- remote-txs-after-missing-block-repair
   [db missing-block-uuids repair-tx-data remote-txs]
@@ -590,8 +578,8 @@
   (let [items (->> remote-txs
                    (mapcat :tx-data)
                    (filter (fn [item]
-                             (contains? (set (tx-item-block-uuid-refs item))
-                                        block-uuid)))
+                             (some #{block-uuid}
+                                   (tx-item-block-uuid-refs item))))
                    vec)]
     (and (seq items)
          (every? (fn [item]
@@ -1605,13 +1593,10 @@
     (let [local-txs (pending-txs repo)
           has-local-changes? (boolean (seq local-txs))
           remote-tx-data* (mapcat :tx-data remote-txs)
-          temp-tx-meta {:rtc-tx? true
-                        :gen-undo-ops? false}
           apply-context {:repo repo
                          :conn conn
                          :local-txs local-txs
-                         :remote-txs remote-txs
-                         :temp-tx-meta temp-tx-meta}
+                         :remote-txs remote-txs}
           current-db @conn
           base-db (when has-local-changes?
                     (remote-preflight-db conn local-txs))
