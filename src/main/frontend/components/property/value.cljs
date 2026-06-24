@@ -1375,6 +1375,18 @@
                            value')]
               (inline-text {} :markdown value'))])))))
 
+(defn multiple-values-trigger-class
+  [{:keys [expanded? other-position? page-property?]}]
+  (str "flex flex-1 min-w-0 flex-row items-center gap-1 "
+       (if (and other-position? (not expanded?) (not page-property?))
+         "flex-nowrap multi-values-nowrap"
+         (str "flex-wrap " (when expanded? "multi-values-expanded")))))
+
+(defn multiple-value-item-class
+  [{:keys [expanded? other-position? page-property? show-popup!]}]
+  (when (and show-popup! other-position? (not expanded?) (not page-property?))
+    "shrink-0"))
+
 (hsx/defc select-item
   [property type value {:keys [page-cp inline-text other-position? property-position table-view? _icon?] :as opts}]
   (let [closed-values? (seq (:property/closed-values property))
@@ -1383,6 +1395,7 @@
                          [:div.flex.flex-row.items-center
                           (inline-text {} :markdown (macro-util/expand-value-if-macro content (state/get-macros)))])]
     [:div.select-item.cursor-pointer
+     {:class (multiple-value-item-class opts)}
      (cond
        (= value :logseq.property/empty-placeholder)
        (property-empty-btn-value property opts)
@@ -2109,7 +2122,7 @@
                            ("Backspace" "Delete")
                            (delete-block-property! block property)
                            :dune))
-          :class "flex flex-1 flex-row items-center flex-wrap gap-1"}
+          :class (multiple-values-trigger-class opts)}
          (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
            (if (and (seq items) not-empty-value?)
              (if (= type :asset)
