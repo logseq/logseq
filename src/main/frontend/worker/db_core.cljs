@@ -1347,9 +1347,9 @@
                     (keep #(d/entity db (:e %)))
                     (remove search/hidden-entity?)
                     vec)
-        vector-context (search/build-vector-context-cache blocks)
         total (count blocks)
         vector-index (worker-state/get-vector-index repo)
+        index-opts {:include-vector-title? (some? vector-index)}
         progress-for-fts (fn [processed]
                            (if (zero? total)
                              100
@@ -1382,7 +1382,7 @@
                                                            search-index-build-batch-size
                                                            search-index-build-time-budget-ms)
                processed' (+ processed (count batch))
-               indexed (vec (keep #(search/block->index-with-context vector-context %) batch))
+               indexed (vec (keep #(search/block->index % index-opts) batch))
                indexed-blocks' (into indexed-blocks indexed)
                progress (progress-for-fts processed')
                should-report? (> progress last-progress)]
