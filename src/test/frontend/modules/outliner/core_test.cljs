@@ -1010,3 +1010,20 @@
                :block/parent #:db{:id 2333},
                :block/page #:db{:id 2313},
                :block/level 3}]}]})))))
+
+(deftest non-consecutive-blocks->vec-tree-preserves-worker-pulled-block-fields
+  (let [page-ref #:db{:id 1}
+        parent {:db/id 2
+                :block/uuid #uuid "62f49b4c-f9f0-4739-9985-8bd55e4c68d4"
+                :block/title "Visible parent task"
+                :block/page page-ref
+                :block/parent page-ref}
+        child {:db/id 3
+               :block/uuid #uuid "62f49b4c-aa84-416e-9554-b486b4e59b1b"
+               :block/title "Visible child task"
+               :block/page page-ref
+               :block/parent {:db/id 2}}
+        [result] (tree/non-consecutive-blocks->vec-tree [parent child])]
+    (is (= "Visible parent task" (:block/title result)))
+    (is (= "Visible child task"
+           (:block/title (first (:block/children result)))))))

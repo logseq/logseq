@@ -87,14 +87,16 @@
 
 (defn ^:api block-entity->map
   [e]
-  (cond-> {:db/id (:db/id e)
-           :block/uuid (:block/uuid e)
-           :block/parent {:db/id (:db/id (:block/parent e))}
-           :block/page (:block/page e)}
-    (:block/refs e)
-    (assoc :block/refs (:block/refs e))
-    (:block/children e)
-    (assoc :block/children (:block/children e))))
+  (if (de/entity? e)
+    (cond-> {:db/id (:db/id e)
+             :block/uuid (:block/uuid e)
+             :block/parent {:db/id (:db/id (:block/parent e))}
+             :block/page (:block/page e)}
+      (:block/refs e)
+      (assoc :block/refs (:block/refs e))
+      (:block/children e)
+      (assoc :block/children (:block/children e)))
+    e))
 
 (defn ^:api filter-top-level-blocks
   [blocks]
