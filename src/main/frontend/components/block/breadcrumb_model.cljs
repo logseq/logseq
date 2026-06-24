@@ -245,6 +245,14 @@
        (remove string/blank?)
        (string/join " / ")))
 
+(defn navigated-between-parents?
+  [initial-block navigating-block navigating-block-entity]
+  (boolean
+   (and navigating-block
+        navigating-block-entity
+        (not= (:db/id (:block/parent initial-block))
+              (:db/id (:block/parent navigating-block-entity))))))
+
 ;; ---------------------------------------------------------------------------
 ;; Variant options
 ;; ---------------------------------------------------------------------------
