@@ -223,7 +223,7 @@
     (swap! (:atom conn) merge opts)
     conn))
 
-(defn- transient-conn-from-db
+(defn transient-conn-from-db
   "Create an isolated in-memory conn from `db` without invoking `d/store`."
   [db]
   (if-some [_storage (storage/storage db)]

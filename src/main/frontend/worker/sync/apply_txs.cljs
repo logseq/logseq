@@ -3,7 +3,6 @@
   (:require
    [clojure.set :as set]
    [datascript.core :as d]
-   [datascript.storage :as storage]
    [frontend.worker.platform :as platform]
    [frontend.worker.shared-service :as shared-service]
    [frontend.worker.state :as worker-state]
@@ -1073,22 +1072,10 @@
         (when (seq local-txs)
           (reverse-local-txs! conn local-txs))))))
 
-(defn- transient-conn-from-db
-  [db]
-  (let [conn (d/create-conn)]
-    (swap! (:atom conn)
-           merge
-           (if-some [_storage (storage/storage db)]
-             {:db db
-              :tx-tail []
-              :db-last-stored db}
-             {:db db}))
-    conn))
-
 (defn- remote-preflight-db
   [conn local-txs]
   (if (seq local-txs)
-    (let [temp-conn (transient-conn-from-db @conn)]
+    (let [temp-conn (ldb/transient-conn-from-db @conn)]
       (reverse-local-txs! temp-conn local-txs)
       @temp-conn)
     @conn))
