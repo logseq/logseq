@@ -48,7 +48,7 @@ let build ?registry:_ config _globals parsed =
           (Error.make
              ~hint:
                "Use: logseq search <block|page|property|tag> --content <query>"
-             (Edn_util.keyword_t "missing-query-text")
+             (Error.Missing_query_text)
              "query text is required")
       else
         Ok

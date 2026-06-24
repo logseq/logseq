@@ -164,7 +164,7 @@ let resolve_agent_name config hostname =
   | true, None ->
       Error
         (Error.make
-           (Edn_util.keyword_t "agent-name-invalid")
+           (Error.Agent_name_invalid)
            "agent-name in cli.edn must be a non-empty string")
   | false, _ -> (
       match Option.bind hostname trim_non_empty with
@@ -175,7 +175,7 @@ let resolve_agent_name config hostname =
           | None ->
               Error
                 (Error.make
-                   (Edn_util.keyword_t "agent-name-invalid")
+                   (Error.Agent_name_invalid)
                    "agent-name cannot be resolved from cli.edn or hostname")))
 
 let value_list = function
@@ -261,7 +261,7 @@ let validate_prompt_template template =
   if String.trim template.body = "" then
     Error
       (Error.make
-         (Edn_util.keyword_t "missing-template-code-block")
+         (Error.Missing_template_code_block)
          "agent bridge prompt template code block is missing")
   else
     let vars = template_vars template.body in
@@ -269,14 +269,14 @@ let validate_prompt_template template =
     | _ :: _ ->
         Error
           (Error.make
-             (Edn_util.keyword_t "unknown-template-vars")
+             (Error.Unknown_template_vars)
              "agent bridge prompt template has unknown variables")
     | [] -> (
         match list_diff template.required_vars vars with
         | _ :: _ ->
             Error
               (Error.make
-                 (Edn_util.keyword_t "missing-template-vars")
+                 (Error.Missing_template_vars)
                  "agent bridge prompt template is missing required variables")
         | [] -> Ok ())
 
@@ -323,7 +323,7 @@ let start_command_detached command =
   match command with
   | [] ->
       Error
-        (Error.make (Edn_util.keyword_t "codex-start-failed") "missing command")
+        (Error.make (Error.Codex_start_failed) "missing command")
   | bin :: _ -> (
       try
         ignore
@@ -334,12 +334,12 @@ let start_command_detached command =
       | Cli_unix.Cli_unix_error (_, op, detail) ->
           Error
             (Error.make
-               (Edn_util.keyword_t "codex-start-failed")
+               (Error.Codex_start_failed)
                ("failed to start codex " ^ op ^ ": " ^ detail))
       | exn ->
           Error
             (Error.make
-               (Edn_util.keyword_t "codex-start-failed")
+               (Error.Codex_start_failed)
                ("failed to start codex: " ^ Printexc.to_string exn)))
 
 let codex_available config =
@@ -377,7 +377,7 @@ let start_codex _config command =
   if result.Cli_unix.status <> 0 then
     Error
       (Error.make
-         (Edn_util.keyword_t "codex-start-failed")
+         (Error.Codex_start_failed)
          ("codex exited before startup completed: " ^ result.Cli_unix.stderr))
   else
     match parse_codex_session_id result.Cli_unix.stdout with
@@ -385,7 +385,7 @@ let start_codex _config command =
     | _ ->
         Error
           (Error.make
-             (Edn_util.keyword_t "codex-session-id-missing")
+             (Error.Codex_session_id_missing)
              "codex exited before reporting a session id")
 
 let ensure_master_session config master_prompt =
@@ -663,7 +663,7 @@ let prompt_template_from_block kind block =
       | _ ->
           Error
             (Error.make
-               (Edn_util.keyword_t "agent-prompt-template-invalid")
+               (Error.Agent_prompt_template_invalid)
                "agent bridge prompt template must contain one code block"))
 
 let blocks_by_title blocks title =
@@ -1114,17 +1114,17 @@ let master_prompt_from_block block =
       | [] ->
           Error
             (Error.make
-               (Edn_util.keyword_t "agent-master-prompt-invalid")
+               (Error.Agent_master_prompt_invalid)
                "agent bridge master prompt code block is missing")
       | _ ->
           Error
             (Error.make
-               (Edn_util.keyword_t "agent-master-prompt-invalid")
+               (Error.Agent_master_prompt_invalid)
                "agent bridge master prompt must contain one code block"))
   | _ ->
       Error
         (Error.make
-           (Edn_util.keyword_t "agent-master-prompt-invalid")
+           (Error.Agent_master_prompt_invalid)
            "agent bridge master prompt wrapper is invalid")
 
 let hex_digest_prefix byte_count seed =
@@ -1867,12 +1867,12 @@ let bridge_lock_owner graph agent_name =
 let bridge_lock_error graph agent_name =
   let graph = Cli_primitive.string_of_graph graph in
   Error.make
-    (Edn_util.keyword_t "agent-bridge-already-running")
+    (Error.Agent_bridge_already_running)
     ("agent bridge is already running for graph '" ^ graph
    ^ "' and AgentBridge name '" ^ agent_name ^ "'")
 
 let bridge_lock_failure message =
-  Error.make (Edn_util.keyword_t "agent-bridge-lock-failed") message
+  Error.make (Error.Agent_bridge_lock_failed) message
 
 let bridge_lock_owner_pid lock_dir =
   try
@@ -2046,7 +2046,7 @@ let execute_with_mode (Agent_bridge { repo; graph }) config mode =
         pure
           (Output_mode.error ~command:Command_id.Agent_bridge mode
              (Error.make
-                (Edn_util.keyword_t "codex-not-found")
+                (Error.Codex_not_found)
                 "codex executable is not available"))
       else
         with_bridge_lock config graph agent_name mode (fun () ->

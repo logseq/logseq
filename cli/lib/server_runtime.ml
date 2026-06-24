@@ -210,13 +210,13 @@ let ensure_repo_dir config repo =
     if not (Cli_unix.is_directory path) then
       Stdlib.Error
         (Error.make
-           (Edn_util.keyword_t "root-dir-permission")
+           (Error.Root_dir_permission)
            ("graph-dir is not a directory: " ^ path))
     else Stdlib.Ok path
   with exn ->
     Stdlib.Error
       (Error.make
-         (Edn_util.keyword_t "root-dir-permission")
+         (Error.Root_dir_permission)
          ("graph-dir is not readable/writable: " ^ path ^ " ("
         ^ Printexc.to_string exn ^ ")"))
 
@@ -249,7 +249,7 @@ let resolve_script_path config =
            ~context:
              (Edn_util.vector
                 (List.map (fun path -> Edn_util.string path) candidates))
-           (Edn_util.keyword_t "server-script-missing")
+           (Error.Server_script_missing)
            ("db-worker script is missing. Checked paths: "
            ^ String.concat ", " candidates))
 
@@ -394,8 +394,7 @@ let start_server_unprofiled config repo ~create_empty_db =
                               pure
                                 (Stdlib.Error
                                    (Error.make
-                                      (Edn_util.keyword_t
-                                         "server-start-timeout-orphan")
+                                      (Error.Server_start_timeout_orphan)
                                       ("db-worker-node failed to start. \
                                         Command: "
                                       ^ db_worker_command_line ~script
@@ -412,8 +411,7 @@ let start_server_unprofiled config repo ~create_empty_db =
                                       pure
                                         (Stdlib.Error
                                            (Error.make
-                                              (Edn_util.keyword_t
-                                                 "server-start-failed")
+                                              (Error.Server_start_failed)
                                               "db-worker-node failed to start"))
                                   | Some _ ->
                                       bind
@@ -429,15 +427,14 @@ let start_server_unprofiled config repo ~create_empty_db =
                                               pure
                                                 (Stdlib.Error
                                                    (Error.make
-                                                      (Edn_util.keyword_t
-                                                         "server-start-failed")
+                                                      (Error.Server_start_failed)
                                                       "db-worker-node failed \
                                                        to start"))))))
                 with exn ->
                   pure
                     (Stdlib.Error
                        (Error.make
-                          (Edn_util.keyword_t "server-start-failed")
+                          (Error.Server_start_failed)
                           ("failed to spawn db-worker-node: "
                          ^ Printexc.to_string exn)))))))
 
@@ -470,7 +467,7 @@ let ensure_server config repo ~create_empty_db =
                         pure
                           (Stdlib.Error
                              (Error.make
-                                (Edn_util.keyword_t "server-start-failed")
+                                (Error.Server_start_failed)
                                 "db-worker-node failed to publish health")))))
 
 let shutdown_server server =
@@ -493,14 +490,14 @@ let stop_server config repo =
         pure
           (Stdlib.Error
              (Error.make
-                (Edn_util.keyword_t "server-not-found")
+                (Error.Server_not_found)
                 "server is not running"))
     | Some server ->
         if not (owner_manageable server.owner_source) then
           pure
             (Stdlib.Error
                (Error.make
-                  (Edn_util.keyword_t "server-owned-by-other")
+                  (Error.Server_owned_by_other)
                   "server is owned by another process"))
         else
           let shutdown_timeout_span = Time.span_of_ms 5_000L in
@@ -533,13 +530,13 @@ let stop_server config repo =
                               pure
                                 (Stdlib.Error
                                    (Error.make
-                                      (Edn_util.keyword_t "server-stop-timeout")
+                                      (Error.Server_stop_timeout)
                                       "timed out stopping server"))))))
 
 let restart_server config repo =
   stop_server config repo >>= function
   | Stdlib.Ok _ -> start_server config repo ~create_empty_db:false
-  | Stdlib.Error err when err.code = Edn_util.keyword_t "server-not-found" ->
+  | Stdlib.Error err when err.code = Error.Server_not_found ->
       start_server config repo ~create_empty_db:false
   | Stdlib.Error err -> Cli_effect.pure (Stdlib.Error err)
 
@@ -682,7 +679,7 @@ let cleanup_revision_mismatched_servers config ~cli_revision =
                   stop_loop killed
                     (( server,
                        Error.make
-                         (Edn_util.keyword_t "server-cleanup-failed")
+                         (Error.Server_cleanup_failed)
                          "failed to stop revision-mismatched server" )
                     :: failed)
                     rest)

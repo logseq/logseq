@@ -110,15 +110,8 @@ let candidate_to_value (candidate : Error.candidate) =
 
 let error_to_value ?(edn = false) (error : Error.t) =
   let code_value =
-    if edn then Edn_util.any error.code
-    else
-      let code = Edn_util.keyword_to_string error.code in
-      let code =
-        if String.length code > 0 && code.[0] = ':' then
-          String.sub code 1 (String.length code - 1)
-        else code
-      in
-      Edn_util.string code
+    if edn then Edn_util.any (Error.code_to_keyword error.code)
+    else Edn_util.string (Error.code_to_string error.code)
   in
   let fields =
     [
@@ -420,7 +413,7 @@ let to_human ?human_table_headers_order result config =
   | _, _, (Output.Json _ | Output.Edn _) -> ""
 
 let format_error err _ =
-  "Error (" ^ Edn_util.keyword_to_string err.Error.code ^ "): " ^ err.message
+  "Error (" ^ Error.code_to_string err.Error.code ^ "): " ^ err.message
 
 let format_result ?human_table_headers_order result config =
   match (result.Cli_result.command, result.data) with
