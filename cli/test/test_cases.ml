@@ -25,12 +25,13 @@ let () =
   test "json error output includes hint" (fun () ->
       let err =
         Error.make ~hint:"Run logseq sync start --graph demo."
-          (Edn_util.keyword_t "sync-not-started")
-          "sync is not started for this graph"
+          Error.Sync_not_started "sync is not started for this graph"
       in
       let output =
         Format_types.to_json (Cli_result.error Output.Mode.Json err)
       in
+      expect_named_contains "json error code" output
+        "\"code\":\"sync-not-started\"";
       expect_named_contains "json error hint" output
         "\"hint\":\"Run logseq sync start --graph demo.\"")
 

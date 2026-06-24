@@ -28,7 +28,7 @@ let rec mkdir_p path =
 let root_dir_error path message =
   Error.make
     ~context:(Edn_util.map [ (Edn_util.keyword "path", Edn_util.string path) ])
-    (Edn_util.keyword_t "root-dir-permission")
+    (Error.Root_dir_permission)
     message
 
 let ensure_root_dir root =
