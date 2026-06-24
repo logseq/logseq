@@ -1551,6 +1551,10 @@ html.is-mac {
     max-height: 24rem;
   }
 
+  .bottom-properties-row[data-expanded="false"] .bottom-property-pill {
+    max-width: none;
+  }
+
   .bottom-properties-pills-strip {
     flex: 1 1 0;
     width: 0;
@@ -1584,6 +1588,14 @@ html.is-mac {
 
   .bottom-property-pill.bottom-property-pill-wrap {
     @apply h-6;
+  }
+
+  .bottom-properties-row[data-expanded="true"] .bottom-property-pill {
+    @apply h-auto max-w-full items-start;
+  }
+
+  .bottom-properties-row[data-expanded="true"] .bottom-property-content {
+    @apply whitespace-normal overflow-visible;
   }
 
   .bottom-property-pill-line-break {
