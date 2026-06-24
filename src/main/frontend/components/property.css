@@ -74,14 +74,6 @@
     @apply px-3 py-2 text-xs font-medium text-muted-foreground border-b border-gray-04;
   }
 
-  .hidden-properties-toggle-btn {
-    color: var(--ls-secondary-text-color);
-  }
-
-  .hidden-properties-toggle-btn:hover {
-    color: var(--ls-primary-text-color);
-  }
-
   .property-pair.property-panel-row {
     @apply grid items-start pr-3 gap-3 w-full;
     grid-template-columns: fit-content(260px) minmax(0, 1fr);
@@ -123,6 +115,29 @@
   .property-pair.property-panel-row[data-property-type=checkbox] .property-value-panel.ls-block.property-value-container,
   .property-pair.property-panel-row[data-property-type=checkbox] .property-value.property-value-panel-inner {
     @apply items-center;
+  }
+
+  .hidden-properties-toggle-row {
+    @apply pr-3;
+  }
+
+  .hidden-properties-toggle-key {
+    @apply w-full min-w-0 min-h-[28px] p-0 border-0 bg-transparent text-left cursor-pointer;
+    color: var(--ls-primary-text-color);
+    font: inherit;
+  }
+
+  .hidden-properties-toggle-key:hover {
+    color: var(--ls-primary-text-color);
+  }
+
+  .hidden-properties-toggle-key:focus,
+  .hidden-properties-toggle-key:focus-visible {
+    outline: none;
+  }
+
+  .hidden-properties-toggle-key .property-icon {
+    color: var(--ls-primary-text-color);
   }
 
   .property-panel-bullet {
@@ -527,7 +542,11 @@ a.control-link {
 }
 
 .ls-page-title .ls-page-properties {
-  @apply flex flex-col gap-4 mt-4;
+  @apply flex flex-col gap-0 mt-4;
+}
+
+.ls-page-title .ls-page-properties > .ls-new-property {
+  @apply mt-2;
 }
 
 .ls-property-add {
