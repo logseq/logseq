@@ -192,9 +192,9 @@
 ;;; ─── Sub-pickers ─────────────────────────────────────────────────────────────
 
 (hsx/defc year-picker
-  "Shows the current year with ‹/› navigation, sized to match the day calendar
-   width (276 px = 2×12 px padding + 7×36 px cells).  The ‹/› buttons call
-   on-navigate with the new year; clicking the year label calls on-select."
+  "Shows the current year with ‹/› navigation, sized to match the day calendar's
+   widened box (see endpoint-picker for the width rationale).  The ‹/› buttons
+   call on-navigate with the new year; clicking the year label calls on-select."
   [{:keys [year on-select on-navigate]}]
   [:div.flex.items-center.justify-center.gap-3
    {:style {:width "100%" :padding "12px"}}
@@ -210,8 +210,8 @@
                 (ui/icon "chevron-right" {:size 14}))])
 
 (hsx/defc month-grid
-  "A 4×3 month grid with year navigation, sized to match the day calendar width
-   (276 px = 2×12 px padding + 7×36 px cells).
+  "A 4×3 month grid with year navigation, sized to match the day calendar's
+   widened box (see endpoint-picker for the width rationale).
    on-navigate changes the display year;
    on-select is called with a YYYYMMDD integer for the chosen month."
   [{:keys [year month on-select on-navigate]}]
@@ -257,8 +257,12 @@
 ;;; ─── Single endpoint picker ──────────────────────────────────────────────────
 
 ;; Picker for a single start or end date.
-;; Renders inside a fixed-size 276×330 px box so that switching between
+;; Renders inside a fixed-size 340×330 px box so that switching between
 ;; Year / Month / Day precision does not resize the pop-over.
+;; Width is 340px (not 276px, the day-grid's own width) because the Day
+;; calendar's dropdown-style caption (month dropdown ~128px + year input
+;; ~100px + two 32px nav buttons, plus gaps) needs ~300px of content width;
+;; at 276px the nav buttons overlapped the year input.
 ;; on-select is called with a YYYYMMDD integer when the user picks a date.
 (hsx/defc endpoint-picker
   [{:keys [precision value on-select]}]
@@ -270,7 +274,7 @@
     ;; expands when the day calendar renders a 6-week month, which prevents the
     ;; small jump when switching away from Day precision.  330px safely covers
     ;; the tallest DayPicker layout (6 weeks × ~44px + caption + padding).
-    [:div {:style {:width "276px" :height "330px"
+    [:div {:style {:width "340px" :height "330px"
                    :display "flex" :flex-direction "column"
                    :align-items "flex-start" :overflow "hidden"}}
      (case precision
@@ -412,17 +416,26 @@
                           :start     final-start
                           :end       final-end}))))
 
-        ;; Renders a row of Year / Month / Day toggle buttons.
+        ;; Renders a "Precision:" label followed by a row of yyyy / yyyy-mm /
+        ;; yyyy-mm-dd toggle buttons.  Buttons use :xs sizing with tight
+        ;; horizontal padding so the whole row fits on one line within the
+        ;; endpoint-picker's column width.
+        precision-labels
+        {:year "yyyy" :month "yyyy-mm" :day "yyyy-mm-dd"}
+
         precision-buttons
         (fn [active-prec on-set!]
-          [:div.flex.gap-1
-           (for [p [:year :month :day]]
-             (shui/button
-              {:key      (name p)
-               :variant  (if (= p active-prec) :default :outline)
-               :size     :sm
-               :on-click (fn [] (on-set! p))}
-              (string/capitalize (name p))))])]
+          [:div.flex.items-center.gap-2
+           [:span.text-xs.text-muted-foreground "Precision:"]
+           [:div.flex.gap-1
+            (for [p [:year :month :day]]
+              (shui/button
+               {:key      (name p)
+                :variant  (if (= p active-prec) :default :outline)
+                :size     :xs
+                :class    "px-2"
+                :on-click (fn [] (on-set! p))}
+               (get precision-labels p)))]])]
 
     [:div.flex.flex-col.gap-3.p-1
 
@@ -544,7 +557,7 @@
            :size     :sm
            :on-click (fn [] (reset! *range? true))}
           (ui/icon "calendar-plus" {:size 14 :class "mr-1"})
-          "Add end"))
+          "Add end date"))
        (when range?
          (shui/button
           {:variant  :outline
