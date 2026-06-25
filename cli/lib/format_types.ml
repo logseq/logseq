@@ -44,7 +44,7 @@ let rec json_of_value value =
           Js.Dict.set object_ key (json_of_value v))
         xs;
       Js.Json.object_ object_
-  | _ -> Melange_edn.to_json value
+  | _ -> Melange_edn_melange.to_json value
 
 let data_to_value = function
   | Cli_result.Message s ->

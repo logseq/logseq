@@ -199,12 +199,12 @@ let value_rank value =
   match value with
   | Melange_edn.Any Melange_edn.Nil -> 0
   | Any (Bool _) -> 1
-  | Any (Int _ | Bigint _ | Float _ | Decimal _) -> 2
+  | Any (Int _ | Bigint _ | Float _ | Decimal _ | Ratio _) -> 2
   | Any (String _ | Symbol _ | Keyword _ | Tagged ("uuid", _)) -> 3
   | Any (Tagged ("transit/bytes", _)) -> 4
   | Any (List _ | Vector _ | Set _) -> 5
   | Any (Map _) -> 6
-  | Any (Char _ | Tagged _) -> 7
+  | Any (Char _ | Regex _ | Tagged _) -> 7
 
 let compare_value a b =
   let number value =
