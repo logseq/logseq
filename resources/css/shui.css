@@ -539,3 +539,23 @@ kbd.shui-shortcut-key-pressed,
     fill: none;
   }
 }
+
+.ui__toast-content {
+  &.untitled {
+    .ui__toast-header {
+      @apply absolute top-1 right-1 w-fit z-1;
+    }
+
+    .ui__toast-body {
+      @apply flex-initial py-2;
+    }
+
+    .ui__toast-text {
+      @apply flex flex-row items-center gap-2 overflow-auto;
+    }
+
+    .ui__toast-description {
+      @apply max-w-full overflow-auto;
+    }
+  }
+}
