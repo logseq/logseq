@@ -1972,8 +1972,8 @@
                      cli-db-worker/list-nodes (fn [db opt]
                                                 (swap! calls conj [:cli-list-nodes db opt])
                                                 [:node1])
-                     api-tools/get-page-data (fn [db title]
-                                               (swap! calls conj [:api-get-page-data db title])
+                     api-tools/get-page-data (fn [db title opts]
+                                               (swap! calls conj [:api-get-page-data db title opts])
                                                {:title title})
                      api-tools/list-properties (fn [db opt]
                                                  (swap! calls conj [:api-list-properties db opt])
@@ -1992,7 +1992,7 @@
          (is (= [:pg1] ((get-thread-api :thread-api/cli-list-pages) test-repo options)))
          (is (= [:task1] ((get-thread-api :thread-api/cli-list-tasks) test-repo options)))
          (is (= [:node1] ((get-thread-api :thread-api/cli-list-nodes) test-repo options)))
-         (is (= {:title page-title} ((get-thread-api :thread-api/api-get-page-data) test-repo page-title)))
+         (is (= {:title page-title} ((get-thread-api :thread-api/api-get-page-data) test-repo page-title nil)))
          (is (= [:ap1] ((get-thread-api :thread-api/api-list-properties) test-repo options)))
          (is (= [:at1] ((get-thread-api :thread-api/api-list-tags) test-repo options)))
          (is (= [:apg1] ((get-thread-api :thread-api/api-list-pages) test-repo options)))
