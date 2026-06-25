@@ -73,7 +73,8 @@
               (vec (remove #(= id (:id %)) pending-toasts))))
      (reset! *pending-toasts []))
    (when-let [{:keys [dismiss]} @*toast]
-     (dismiss id))))
+     ;; dismiss all
+     (dismiss))))
 
 (hsx/defc install-toaster
   []
