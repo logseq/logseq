@@ -1686,11 +1686,11 @@ let rec resolve_property_value_refs invoke_config repo value =
       in
       match value with
       | Melange_edn.Any (Melange_edn.Vector values) ->
-          resolve_values Edn_util.vector (Edn_util.iarray_to_list values)
+          resolve_values Edn_util.vector (Edn_util.array_to_list values)
       | Any (List values) ->
-          resolve_values Edn_util.list (Edn_util.iarray_to_list values)
+          resolve_values Edn_util.list (Edn_util.array_to_list values)
       | Any (Set values) ->
-          resolve_values Edn_util.set (Edn_util.iarray_to_list values)
+          resolve_values Edn_util.set (Edn_util.array_to_list values)
       | Any (Map fields) ->
           let rec loop acc = function
             | [] -> pure (Ok (Edn_util.map (List.rev acc)))
@@ -1700,7 +1700,7 @@ let rec resolve_property_value_refs invoke_config repo value =
                   | Error err -> pure (Error err)
                   | Ok value -> loop ((key, value) :: acc) rest)
           in
-          loop [] (Edn_util.iarray_to_list fields)
+          loop [] (Edn_util.array_to_list fields)
       | _ -> pure (Ok value))
 
 let rec resolve_property_assignments invoke_config repo = function
