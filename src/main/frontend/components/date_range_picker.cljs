@@ -565,7 +565,7 @@
            :on-click (fn []
                        (reset! *range? false)
                        (reset! *draft-end nil))}
-          "Remove end"))
+          "Remove end date"))
        (when del-btn?
          (shui/button
           {:variant  :ghost
