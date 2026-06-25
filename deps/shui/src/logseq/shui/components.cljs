@@ -1117,7 +1117,8 @@
         (let [data (.-data toast)
               variant (or (.-type toast) (prop data "variant"))
               action (prop data "action")
-              icon (prop data "icon")]
+              icon (prop data "icon")
+              title? (not (string/blank? (.-title toast)))]
           (react/createElement
            ToastRoot #js {:key (.-id toast)
                           :toast toast
@@ -1125,19 +1126,19 @@
                                          variant
                                          (prop data "className"))}
            (react/createElement
-            ToastContent #js {:className "ui__toast-content"
+            ToastContent #js {:className (str "ui__toast-content " (when-not title? "untitled"))
                               :data-base-ui-swipe-ignore "true"}
             (react/createElement
              "div" #js {:className "ui__toast-header"}
-             icon
-             (react/createElement ToastClose #js {:className "ui__toast-close"}
+              (when title? icon)
+              (react/createElement ToastClose #js {:className "ui__toast-close"}
                                   (react/createElement IconX #js {:className "h-4 w-4"})))
             (react/createElement
              "div" #js {:className "ui__toast-body"}
              (react/createElement
               "div" #js {:className "ui__toast-text"}
-              (when-let [title (.-title toast)]
-                (react/createElement ToastTitle #js {:className "ui__toast-title"} title))
+              (if-let [title (.-title toast)]
+                (react/createElement ToastTitle #js {:className "ui__toast-title"} title) icon)
               (when-let [description (.-description toast)]
                 (react/createElement ToastDescription #js {:className "ui__toast-description"} description)))
              action
