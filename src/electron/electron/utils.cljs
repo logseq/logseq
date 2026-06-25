@@ -2,11 +2,12 @@
   (:require ["electron" :refer [app BrowserWindow session]]
             ["fs-extra" :as fs]
             ["node-fetch" :default node-fetch]
-            ["open" :as open-external]
+            ["open" :as open-module]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.configs :as cfgs]
+            [electron.interop :as interop]
             [electron.logger :as logger]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
@@ -26,6 +27,8 @@
 (defonce extract-zip (js/require "extract-zip"))
 (defonce https-proxy-agent (js/require "https-proxy-agent"))
 (defonce socks-proxy-agent (js/require "socks-proxy-agent"))
+(defonce open-external
+  (interop/default-function-or-module open-module))
 
 (declare <resolve-fetch-proxy)
 
