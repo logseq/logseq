@@ -39,6 +39,10 @@
 ;; almost everywhere else they are not which could cause needless conflicts
 ;; with other config keys
 
+(defn- dev-mode-inactive?
+  []
+  (not (state/developer-mode?)))
+
 ;; To add a new entry to this map, first add it here and then provide a default
 ;; English label either via a matching `:command.*` key in `en.edn` or via
 ;; inline `:desc` for developer-only labels that intentionally stay out of i18n.
@@ -48,8 +52,8 @@
 ;;  * :fn - Fn or a qualified keyword that represents a fn
 ;;  * :desc - Optional default English label for non-translated developer-only
 ;;    shortcuts such as `(Dev)` commands
-;;  * :inactive - Optional boolean to disable a shortcut for certain conditions
-;;    e.g. a given platform or feature condition
+;;  * :inactive - Optional boolean or zero-arity predicate to disable a shortcut
+;;    for certain conditions e.g. a given platform or feature condition
 (def ^:large-vars/data-var all-built-in-keyboard-shortcuts
   {:pdf/previous-page                       {:binding "alt+p"
                                              :fn      pdf-utils/prev-page}
@@ -483,27 +487,27 @@
 
    :dev/gc-graph {:binding []
                   :desc "(Dev) Garbage collect graph (remove unused data in SQLite)"
-                  :inactive (not (state/developer-mode?))
+                  :inactive dev-mode-inactive?
                   :fn #(repo-handler/gc-graph! (state/get-current-repo))}
 
    :dev/replace-graph-with-db-file {:binding []
                                     :desc "(Dev) Replace graph with its db.sqlite file"
-                                    :inactive (or (not (util/electron?)) (not (state/developer-mode?)))
+                                    :inactive #(or (not (util/electron?)) (dev-mode-inactive?))
                                     :fn :frontend.handler.common.developer/replace-graph-with-db-file}
 
    :dev/show-block-data {:binding []
                          :desc "(Dev) Show block data"
-                         :inactive (not (state/developer-mode?))
+                         :inactive dev-mode-inactive?
                          :fn :frontend.handler.common.developer/show-block-data}
 
    :dev/show-block-ast {:binding []
                         :desc "(Dev) Show block AST"
-                        :inactive (not (state/developer-mode?))
+                        :inactive dev-mode-inactive?
                         :fn :frontend.handler.common.developer/show-block-ast}
 
    :dev/show-page-data {:binding []
                         :desc "(Dev) Show page data"
-                        :inactive (not (state/developer-mode?))
+                        :inactive dev-mode-inactive?
                         :fn :frontend.handler.common.developer/show-page-data}
 
    :misc/export-block-data {:binding []
@@ -520,23 +524,23 @@
 
    :dev/validate-db   {:binding []
                        :desc "(Dev) Validate current graph"
-                       :inactive (not (state/developer-mode?))
+                       :inactive dev-mode-inactive?
                        :fn :frontend.handler.common.developer/validate-db}
    :dev/recompute-checksum {:binding []
                             :desc "(Dev) Recompute graph checksum"
-                            :inactive (not (state/developer-mode?))
+                            :inactive dev-mode-inactive?
                             :fn :frontend.handler.common.developer/recompute-checksum-diagnostics}
    :dev/export-client-ops-sqlite {:binding []
                                   :desc "(Dev) Export client ops sqlite"
-                                  :inactive (not (state/developer-mode?))
+                                  :inactive dev-mode-inactive?
                                   :fn :frontend.handler.common.developer/export-client-ops-sqlite}
    :dev/rtc-stop {:binding []
                   :desc "(Dev) RTC Stop"
-                  :inactive (not (state/developer-mode?))
+                  :inactive dev-mode-inactive?
                   :fn :frontend.handler.common.developer/rtc-stop}
    :dev/rtc-start {:binding []
                    :desc "(Dev) RTC Start"
-                   :inactive (not (state/developer-mode?))
+                   :inactive dev-mode-inactive?
                    :fn :frontend.handler.common.developer/rtc-start}})
 
 (let [keyboard-commands
@@ -570,6 +574,13 @@
       (resolved-fn)
       (throw (ex-info (str "Unable to resolve " keyword-fn " to a fn") {})))))
 
+(defn- inactive?
+  [shortcut]
+  (let [inactive (:inactive shortcut)]
+    (if (fn? inactive)
+      (inactive)
+      inactive)))
+
 (defn build-category-map [ks]
   (->> (if (sequential? ks)
          ks (let [{:keys [ns includes excludes]} ks]
@@ -581,7 +592,7 @@
                                       (and includes (contains? (set includes) k)))
                                   (if (not (seq excludes)) true (not (contains? (set excludes) k)))))))))
        (select-keys all-built-in-keyboard-shortcuts)
-       (remove (comp :inactive val))
+       (remove (comp inactive? val))
     ;; Convert keyword fns to real fns
        (map (fn [[k v]]
               [k (if (keyword? (:fn v))
@@ -589,10 +600,9 @@
                    v)]))
        (into {})))
 
-;; This is the only var that should be publicly expose :fn functionality
-(defonce ^:large-vars/data-var *config
-  (atom
-   {:shortcut.handler/date-picker
+(defn ^:large-vars/data-var build-config
+  []
+  {:shortcut.handler/date-picker
     (build-category-map {:ns :date-picker})
 
     :shortcut.handler/pdf
@@ -753,9 +763,32 @@
           :ui/customize-appearance])
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
-    :shortcut.handler/misc
-     ;; always overrides the copy due to "mod+c mod+s"
-    {:misc/copy (:misc/copy all-built-in-keyboard-shortcuts)}}))
+   :shortcut.handler/misc
+   ;; always overrides the copy due to "mod+c mod+s"
+   {:misc/copy (:misc/copy all-built-in-keyboard-shortcuts)}})
+
+;; This is the only var that should be publicly expose :fn functionality
+(defonce *config
+  (atom (build-config)))
+
+(defonce *runtime-shortcuts
+  (atom {}))
+
+(defn- merge-runtime-shortcuts
+  [config handler-id shortcuts]
+  (update config handler-id
+          (fn [handler-shortcuts]
+            (if handler-shortcuts
+              (with-meta (merge handler-shortcuts shortcuts)
+                (meta handler-shortcuts))
+              shortcuts))))
+
+(defn rebuild-config!
+  []
+  (reset! *config
+          (reduce-kv merge-runtime-shortcuts
+                     (build-config)
+                     @*runtime-shortcuts)))
 
 ;; To add a new entry to this map, first add it here and then
 ;; a description for it in frontend.dicts.en/dicts
@@ -937,6 +970,7 @@
 (defn add-shortcut!
   ([handler-id id shortcut-map] (add-shortcut! handler-id id shortcut-map false))
   ([handler-id id shortcut-map config-only?]
+   (swap! *runtime-shortcuts assoc-in [handler-id id] shortcut-map)
    (swap! *config assoc-in [handler-id id] shortcut-map)
    (when-not config-only?
      (swap! *shortcut-cmds assoc id (:cmd shortcut-map))
@@ -949,6 +983,7 @@
 
 (defn remove-shortcut!
   [handler-id id]
+  (swap! *runtime-shortcuts medley/dissoc-in [handler-id id])
   (swap! *config medley/dissoc-in [handler-id id])
   (swap! *shortcut-cmds dissoc id)
   (doseq [category (keys @*category)]

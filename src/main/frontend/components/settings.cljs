@@ -12,6 +12,7 @@
             [frontend.db :as db]
             [frontend.dicts :as dicts]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.command-palette :as command-palette]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
@@ -21,6 +22,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
+            [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.spec.storage :as storage-spec]
             [frontend.state :as state]
@@ -548,7 +550,9 @@
           developer-mode?
           (fn []
             (let [mode (not developer-mode?)]
-              (state/set-developer-mode! mode)))
+              (state/set-developer-mode! mode)
+              (shortcut-config/rebuild-config!)
+              (command-palette/register-global-shortcut-commands)))
           [:div.text-sm.opacity-50 (t :settings.advanced/developer-mode-desc)]))
 
 (defn semantic-search-setting-supported?
