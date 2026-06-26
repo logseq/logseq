@@ -12,7 +12,7 @@ type event_subscription = { close : unit -> unit Cli_effect.t }
 
 let thread_api_method name = Edn_util.keyword_t ("thread-api/" ^ name)
 
-module T = Transit.Json
+module T = Transit_melange.Transit.Json
 module E = Melange_edn
 
 let starts_with ~prefix value =

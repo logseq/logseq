@@ -8,7 +8,7 @@
   logseq_cli_platform_spec
   humanize
   melange-fetch
-  melange-transit
+  melange-transit.melange
   melange-edn
   melange-edn.melange
   melange.js
