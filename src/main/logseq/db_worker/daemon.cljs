@@ -145,7 +145,7 @@
             {:timeout-ms timeout-ms
              :interval-ms 100}))
 
-(defn- stop-stale-process!
+(defn stop-process!
   [{:keys [pid]}]
   (cond
     (not (number? pid))
@@ -186,7 +186,7 @@
       (p/resolved nil))
 
     (not (valid-lock? lock))
-    (-> (stop-stale-process! lock)
+    (-> (stop-process! lock)
         (p/then (fn [_]
                   (remove-lock! path)
                   nil)))
