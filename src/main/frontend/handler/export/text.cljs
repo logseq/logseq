@@ -7,6 +7,7 @@
             [frontend.extensions.zip :as zip]
             [frontend.handler.export.common :as common]
             [frontend.state :as state]
+            [frontend.image :as image]
             [frontend.util :as util]
             [goog.dom :as gdom]
             [frontend.handler.export.common-impl :as common-impl]
@@ -79,7 +80,7 @@
             zip-file-name (str repo' "_markdown_" (quot (util/time-ms) 1000))]
         (p/let [zipfile (zip/make-zip zip-file-name files repo')]
           (when-let [anchor (gdom/getElement "export-as-markdown")]
-            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+            (.setAttribute anchor "href" (image/create-replacing-object-url! :download/markdown zipfile))
             (.setAttribute anchor "download" (.-name zipfile))
             (.click anchor)))))))
 

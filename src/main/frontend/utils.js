@@ -4,6 +4,37 @@ if (typeof window === 'undefined') {
   global.window = {}
 }
 
+const objectUrls = new Set()
+const keyedObjectUrls = new Map()
+
+const revokeObjectUrl = (url) => {
+  if (!url || typeof URL === 'undefined' || typeof URL.revokeObjectURL !== 'function') return
+  URL.revokeObjectURL(url)
+  objectUrls.delete(url)
+  for (const [key, value] of keyedObjectUrls.entries()) {
+    if (value === url) keyedObjectUrls.delete(key)
+  }
+}
+
+const createReplacingObjectUrl = (key, data) => {
+  revokeObjectUrl(keyedObjectUrls.get(key))
+  const url = URL.createObjectURL(data)
+  objectUrls.add(url)
+  keyedObjectUrls.set(key, url)
+  return url
+}
+
+export const clearObjectUrls = () => {
+  for (const url of Array.from(objectUrls)) revokeObjectUrl(url)
+  keyedObjectUrls.clear()
+}
+
+if (typeof window.addEventListener === 'function') {
+  window.addEventListener('pagehide', () => {
+    clearObjectUrls()
+  })
+}
+
 // js patches
 ;(function () {
   if (!window?.console) return
@@ -333,7 +364,7 @@ export const toPosixPath = (input) => {
 
 export const saveToFile = (data, fileName, format) => {
   if (!data) return
-  const url = URL.createObjectURL(data)
+  const url = createReplacingObjectUrl(`download:${format}`, data)
   const link = document.createElement('a')
   link.href = url
   link.download = `${fileName}.${format}`
