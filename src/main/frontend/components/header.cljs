@@ -16,6 +16,7 @@
             [frontend.components.server :as server]
             [frontend.components.settings :as settings]
             [frontend.components.svg :as svg]
+            [frontend.components.tabs :as tabs]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
@@ -31,7 +32,6 @@
             [frontend.util :as util]
             [frontend.version :refer [version]]
             [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
             [logseq.common.version :as build-version]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
@@ -50,7 +50,7 @@
                                            (state/set-left-sidebar-open! false))
                                          (route-handler/redirect-to-home!))})
    (t :nav/home)
-   {:trigger-props {:as-child true}}))
+   :trigger-props {:as-child true}))
 
 (defn current-local-uploadable-graph
   []
@@ -237,7 +237,7 @@
                                                    :content-props {:class "w-64"
                                                                    :align-offset -32}}))})
      (t :header/more)
-     {:trigger-props {:as-child true}})))
+     :trigger-props {:as-child true})))
 
 (hsx/defc back-and-forward
   []
@@ -367,7 +367,7 @@
 (hsx/defc block-breadcrumb
   [page-name]
   (let [db-restoring? (state/use-sub :db/restoring?)]
-    (when-let [page (when (and page-name (common-util/uuid-string? page-name))
+    (when-let [page (when (and page-name (util/uuid-string? page-name))
                       (db/entity [:block/uuid (uuid page-name)]))]
       ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
       (when (and (if config/publishing? (not db-restoring?) true)
@@ -419,30 +419,33 @@
                              (util/scroll-to-top true))))
       :style           {:fontSize 50}}
      [:div.l.flex.items-center.drag-region
-      left-menu
-      (if (mobile-util/native-platform?)
-        ;; back button for mobile
-        (when-not (or (state/home?) custom-home-page?)
-          (ui/with-shortcut :go/backward "bottom"
-            [:button.it.navigation.nav-left.button.icon.opacity-70
-             {:on-click #(js/window.history.back)}
-             (ui/icon "chevron-left" {:size 26})]
-            (t :header/go-back)))
-        ;; search button for non-mobile
-        (when current-repo
-          (ui/with-shortcut :go/search "right"
-            [:button.button.icon#search-button
-             {:data-keep-selection true
-              :on-click #(do (when (or (mobile-util/native-android?)
-                                       (mobile-util/native-iphone?))
-                               (state/set-left-sidebar-open! false))
-                             (state/pub-event! [:go/search]))}
-             (ui/icon "search" {:size ui/icon-size})]
-            (t :nav/search))))]
+      [left-menu
+       (if (mobile-util/native-platform?)
+         ;; back button for mobile
+         (when-not (or (state/home?) custom-home-page?)
+           (ui/with-shortcut :go/backward "bottom"
+             [:button.it.navigation.nav-left.button.icon.opacity-70
+              {:title (t :header/go-back) :on-click #(js/window.history.back)}
+              (ui/icon "chevron-left" {:size 26})]))
+         ;; search button for non-mobile
+         (when current-repo
+           (ui/with-shortcut :go/search "right"
+             [:button.button.icon#search-button
+              {:data-keep-selection true
+               :title (t :header/search)
+               :on-click #(do (when (or (mobile-util/native-android?)
+                                        (mobile-util/native-iphone?))
+                                (state/set-left-sidebar-open! false))
+                              (state/pub-event! [:go/search]))}
+              (ui/icon "search" {:size ui/icon-size})])))]]
 
-     [:div.r.flex.drag-region.justify-between.items-center.gap-2.overflow-x-hidden.w-full
-      [:div.flex.flex-1
-       (block-breadcrumb (state/get-current-page))]
+     ;; Tab bar between left menu and right controls (desktop/web only);
+     ;; on mobile, render a drag-region spacer to keep .r pushed right.
+     (if (mobile-util/native-platform?)
+       [:div.flex-1.drag-region]
+       (tabs/tab-bar))
+
+     [:div.r.flex.drag-region.items-center.gap-2
       [:div.flex.items-center
        (when (and current-repo
                   (ldb/get-graph-rtc-uuid (db/get-db))
