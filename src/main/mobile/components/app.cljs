@@ -302,6 +302,35 @@
      (when-not home?
        (other-page view tab route-match))]))
 
+(defn- visible-element?
+  [selector]
+  (when-let [^js element (js/document.querySelector selector)]
+    (let [^js style (.getComputedStyle js/window element)]
+      (and (not= "none" (.-display style))
+           (not= "hidden" (.-visibility style))
+           (pos? (.-offsetWidth element))
+           (pos? (.-offsetHeight element))))))
+
+(defn- tab-content-ready?
+  [tab]
+  (case tab
+    "home" (visible-element? "#app-main-home:not(.invisible)")
+    "flashcards" (visible-element? ".ls-mobile-flashcards")
+    true))
+
+(defn- mark-tab-content-ready-after-paint!
+  [tab]
+  (let [max-attempts 60]
+    (letfn [(step! [attempt]
+              (.requestAnimationFrame
+               js/window
+               (fn []
+                 (if (or (tab-content-ready? tab)
+                         (>= attempt max-attempts))
+                   (bottom-tabs/mark-tab-content-ready! tab)
+                   (step! (inc attempt))))))]
+      (step! 0))))
+
 (hsx/defc app
   [current-repo route-match]
   (let [[tab] (mobile-state/use-tab)
@@ -312,13 +341,7 @@
     (hooks/use-effect!
      (fn []
        (when (mobile-util/native-ios?)
-         (.requestAnimationFrame
-          js/window
-          (fn []
-            (.requestAnimationFrame
-             js/window
-             (fn []
-               (bottom-tabs/mark-tab-content-ready! tab))))))
+         (mark-tab-content-ready-after-paint! tab))
        nil)
      [tab route-match])
     (hooks/use-effect!
