@@ -3766,7 +3766,11 @@
         target-entity (when block-id (db/entity [:block/uuid block-id]))
         from-property (when block-id
                         (:logseq.property/created-from-property target-entity))
-        parents (db/get-block-parents repo block-id {:depth load-depth})
+        ;; Prefer parents loaded by the wrapper effect (authoritative worker
+        ;; chain, transacted before render). Fall back to a sync UI-db read for
+        ;; callers that don't supply them (e.g. the overflow dropdown).
+        parents (or (:parents opts)
+                    (db/get-block-parents repo block-id {:depth load-depth}))
         parents (remove nil? (concat parents [from-property]))
         segments (breadcrumb-segments target-entity parents)
         view (breadcrumb-model/build-breadcrumb-view segments (assoc vopts :show-page? show-page?))
@@ -3813,8 +3817,7 @@
 (hsx/defc breadcrumb
   [config repo block-id {:keys [_show-page? _indent? _end-separator? _navigating-block _disabled? variant header?]
                          :as opts}]
-  (let [[block set-block!] (hooks/use-state (when (uuid? block-id)
-                                              (db/entity [:block/uuid block-id])))
+  (let [[data set-data!] (hooks/use-state nil)
         effective-variant (or variant
                               (cond
                                 header? :app-header
@@ -3829,17 +3832,24 @@
                                             block-id
                                             {:children? false
                                              :skip-refresh? true})
-                 parents (when-let [id (:db/id block)]
-                           (db-async/<get-block-parents repo id load-depth))
+                 parents-data (when-let [id (:db/id block)]
+                                (db-async/<get-block-parents repo id load-depth))
+                 ;; The worker holds the complete graph and is authoritative for
+                 ;; the ancestor chain; resolve the returned ids to UI-db entities
+                 ;; now that the chain has been transacted locally.
+                 parents (mapv #(db/entity (:db/id %)) parents-data)
                  ;; Parent blocks can arrive before the UI DB has loaded page refs
                  ;; used in their titles. Hydrate only those refs before rendering.
                  _ (<hydrate-breadcrumb-ref-titles! repo (breadcrumb-segments block parents))]
-           (set-block! (or (when-let [uuid (:block/uuid block)]
-                             (db/entity [:block/uuid uuid]))
-                           block)))))
-     [])
-    (when block
-      (breadcrumb-aux config repo block-id opts))))
+           (set-data! {:block-id block-id :parents parents}))))
+     ;; Re-run on navigation (the instance is reused with a new block-id) so the
+     ;; new ancestor chain is loaded and re-hydrated.
+     [block-id load-depth])
+    ;; breadcrumb-aux is non-reactive and cannot self-heal when the parents are
+    ;; transacted, so pass the loaded chain in explicitly. Gate on block-id to
+    ;; avoid rendering a stale chain for the previous block mid-navigation.
+    (when (and data (= (:block-id data) block-id))
+      (breadcrumb-aux config repo block-id (assoc opts :parents (:parents data))))))
 
 (defn- block-drag-over
   [event uuid top? block-id *move-to']
