@@ -1,5 +1,5 @@
 pin-depends: [
-  ["melange-edn.0.5.0" "git+https://github.com/RCmerci/melange-edn.git#main"]
+  ["melange-edn.0.5.0" "git+https://github.com/RCmerci/melange-edn.git#f155433f66127f8f7903fb3989dbd5c75fef50ce"]
   ["melange-transit.0.1.0" "git+https://github.com/RCmerci/melange-transit.git#f8388857a1e2c8d53b00dc968ad7bb333be882c3"]
   ["humanize.dev" "git+https://github.com/rcmerci/humanize.git#main"]
 ]
