@@ -332,7 +332,7 @@ let invoke_args body =
       match
         Option.bind (Js.Dict.get object_ "argsTransit") Js.Json.decodeString
       with
-      | Some args -> Transit.Json.(of_string args |> to_edn)
+      | Some args -> Transit_melange.Transit.Json.(of_string args |> to_edn)
       | None ->
           fail_test ("missing invoke argsTransit: " ^ body);
           Edn_util.vector [])
