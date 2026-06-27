@@ -25,7 +25,9 @@
 
 (rule
  (alias bundle)
- (targets melange-js-api-node.js melange-js-api-browser.js)
+ (targets
+  melange-js-api-node.js
+  melange-js-api-browser.js)
  (deps
   (alias ./melange)
   (:node_entry ./js/lib/js_api/entry_node.js)

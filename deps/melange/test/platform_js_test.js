@@ -4,6 +4,7 @@ const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const transit = require("transit-js");
 const { WebSocketServer } = require("ws");
 
 const nodeJsApiModulePath = path.resolve(
@@ -16,6 +17,14 @@ const browserJsApiModulePath = path.resolve(
 );
 const { Platform: NodePlatform } = require(nodeJsApiModulePath);
 const { Platform: BrowserPlatform } = require(browserJsApiModulePath);
+
+const nodeShimMarkers = [
+  "shims/keytar-node.js",
+  "shims/node-sqlite.js",
+  "shims/ws-node.js",
+  "shims/zvec-node.js",
+  "__logseqNodeRequire",
+];
 
 function assertFunction(object, key) {
   assert.equal(typeof object[key], "function", `${key} should be a function`);
@@ -275,12 +284,22 @@ async function assertNodeStorage(storage, rootDir) {
   assert.deepEqual(await storage["list-graphs"](), ["graph-a"]);
   assert.equal(await storage["export-file"](pool, "/db.sqlite"), "sqlite-bytes");
 
+  const textPath = path.join(rootDir, "graphs", "notes", "a.txt");
+  const atomicTextPath = path.join(rootDir, "graphs", "notes", "b.txt");
   await storage["write-text!"]("notes/a.txt", "alpha");
+  assert.equal(fs.readFileSync(textPath, "utf8"), "alpha");
   assert.equal(await storage["read-text!"]("notes/a.txt"), "alpha");
   await storage["write-text-atomic!"]("notes/b.txt", "beta");
+  assert.equal(fs.readFileSync(atomicTextPath, "utf8"), "beta");
   assert.equal(await storage.readText("notes/b.txt"), "beta");
-  await storage["delete-file!"]("notes/a.txt");
   assert.equal(fs.existsSync(path.join(rootDir, "notes", "a.txt")), false);
+  await storage["delete-file!"]("notes/a.txt");
+  assert.equal(fs.existsSync(textPath), false);
+  let missingRead;
+  assert.doesNotThrow(() => {
+    missingRead = storage["read-text!"]("notes/a.txt");
+  });
+  await assert.rejects(missingRead, /ENOENT/);
 
   await storage["asset-write-bytes!"]("graph-a", "asset.bin", "asset-bytes");
   assert.equal(
@@ -307,6 +326,274 @@ async function assertNodeKv(kv) {
   assert.deepEqual(await kv.get("plain-js-kv"), { ok: true });
   await kv.set("plain-js-kv", null);
   assert.equal(await kv.get("plain-js-kv"), undefined);
+}
+
+async function assertNodeKvPreservesBinaryAcrossReload(rootDir) {
+  const key = "rtc-encrypted-aes-key###graph-1";
+  const payload = new Uint8Array([1, 2, 3, 255]);
+  const freshNodePlatform = () => {
+    delete require.cache[require.resolve(nodeJsApiModulePath)];
+    return require(nodeJsApiModulePath).Platform.node_platform({
+      "root-dir": rootDir,
+      "owner-source": "cli",
+    });
+  };
+
+  await freshNodePlatform().kv["set!"](key, payload);
+  const reloaded = await freshNodePlatform().kv.get(key);
+
+  assert.equal(reloaded instanceof Uint8Array, true);
+  assert.deepEqual(Array.from(reloaded), [1, 2, 3, 255]);
+}
+
+async function assertNodeKvIsScopedByRootDir(rootDir) {
+  const otherRootDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "logseq-js-api-kv-other-root-"),
+  );
+  try {
+    const rootNode = NodePlatform.node_platform({
+      "root-dir": rootDir,
+      "owner-source": "cli",
+    });
+    const otherNode = NodePlatform.node_platform({
+      "root-dir": otherRootDir,
+      "owner-source": "cli",
+    });
+
+    await rootNode.kv["set!"]("root-key", "root-value");
+    assert.equal(await otherNode.kv.get("root-key"), undefined);
+  } finally {
+    fs.rmSync(otherRootDir, { recursive: true, force: true });
+  }
+}
+
+async function assertNodeStorageIsScopedByRootDir(rootDir) {
+  const otherRootDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "logseq-js-api-storage-other-root-"),
+  );
+  try {
+    const rootNode = NodePlatform.node_platform({
+      "root-dir": rootDir,
+      "owner-source": "cli",
+    });
+    NodePlatform.node_platform({
+      "root-dir": otherRootDir,
+      "owner-source": "cli",
+    });
+
+    await rootNode.storage["write-text!"]("graph-a/pages/a.md", "root");
+
+    assert.equal(
+      fs.readFileSync(
+        path.join(rootDir, "graphs", "graph-a", "pages", "a.md"),
+        "utf8",
+      ),
+      "root",
+    );
+    assert.equal(
+      fs.existsSync(
+        path.join(otherRootDir, "graphs", "graph-a", "pages", "a.md"),
+      ),
+      false,
+    );
+  } finally {
+    fs.rmSync(otherRootDir, { recursive: true, force: true });
+  }
+}
+
+async function assertNodeBroadcastIsScopedByOptions(rootDir) {
+  const otherRootDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "logseq-js-api-broadcast-other-root-"),
+  );
+  const rootEvents = [];
+  const otherEvents = [];
+  try {
+    const rootNode = NodePlatform.node_platform({
+      "root-dir": rootDir,
+      "owner-source": "cli",
+      "event-fn": (type, payload) => rootEvents.push([type, payload]),
+    });
+    NodePlatform.node_platform({
+      "root-dir": otherRootDir,
+      "owner-source": "cli",
+      "event-fn": (type, payload) => otherEvents.push([type, payload]),
+    });
+
+    rootNode.broadcast["post-message!"]("root-event", { ok: true });
+
+    assert.deepEqual(rootEvents, [["root-event", { ok: true }]]);
+    assert.deepEqual(otherEvents, []);
+  } finally {
+    fs.rmSync(otherRootDir, { recursive: true, force: true });
+  }
+}
+
+async function assertNodeCryptoIsScopedByRootDir(rootDir) {
+  const otherRootDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "logseq-js-api-crypto-other-root-"),
+  );
+  const previousCliE2e = process.env.CLI_E2E_TEST;
+  process.env.CLI_E2E_TEST = "1";
+  try {
+    const rootNode = NodePlatform.node_platform({
+      "root-dir": rootDir,
+      "owner-source": "cli",
+    });
+    const otherNode = NodePlatform.node_platform({
+      "root-dir": otherRootDir,
+      "owner-source": "cli",
+    });
+
+    await rootNode.crypto["save-secret-text!"]("scoped-secret", "root-secret");
+
+    assert.equal(await rootNode.kv.get("scoped-secret"), "root-secret");
+    assert.equal(await otherNode.kv.get("scoped-secret"), undefined);
+  } finally {
+    if (previousCliE2e === undefined) {
+      delete process.env.CLI_E2E_TEST;
+    } else {
+      process.env.CLI_E2E_TEST = previousCliE2e;
+    }
+    fs.rmSync(otherRootDir, { recursive: true, force: true });
+  }
+}
+
+async function assertNodeSqliteIsScopedByOptions(rootDir) {
+  const otherRootDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "logseq-js-api-sqlite-other-root-"),
+  );
+  let rootGuardCalls = 0;
+  let otherGuardCalls = 0;
+  try {
+    const rootNode = NodePlatform.node_platform({
+      "root-dir": rootDir,
+      "owner-source": "cli",
+      "write-guard-fn": () => {
+        rootGuardCalls += 1;
+      },
+    });
+    NodePlatform.node_platform({
+      "root-dir": otherRootDir,
+      "owner-source": "cli",
+      "write-guard-fn": () => {
+        otherGuardCalls += 1;
+      },
+    });
+
+    const dbPath = path.join(rootDir, "sqlite-scope.sqlite");
+    const backupPath = path.join(rootDir, "backup", "sqlite-scope.sqlite");
+    const db = await rootNode.sqlite["open-db"]({ path: dbPath });
+    try {
+      rootNode.sqlite.exec(db, "create table kvs(addr text primary key, content text)");
+      await rootNode.sqlite["backup-db"](db, backupPath);
+    } finally {
+      rootNode.sqlite["close-db"](db);
+    }
+
+    assert.equal(rootGuardCalls, 1);
+    assert.equal(otherGuardCalls, 0);
+    assert.equal(fs.existsSync(backupPath), true);
+  } finally {
+    fs.rmSync(otherRootDir, { recursive: true, force: true });
+  }
+}
+
+async function assertNodeEmbeddingIsScopedByOptions(rootDir) {
+  const rootServer = await startEmbeddingServer();
+  const otherServer = await startEmbeddingServer();
+  const otherRootDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "logseq-js-api-embedding-other-root-"),
+  );
+  try {
+    const rootNode = NodePlatform.node_platform({
+      "root-dir": rootDir,
+      "owner-source": "cli",
+      "embedding-endpoint": rootServer.url,
+      "embedding-model-id": "BAAI/bge-m3",
+    });
+    NodePlatform.node_platform({
+      "root-dir": otherRootDir,
+      "owner-source": "cli",
+      "embedding-endpoint": otherServer.url,
+      "embedding-model-id": "Qwen/Qwen3-Embedding-4B",
+    });
+
+    const embeddings = await rootNode.embedding["embed-texts"](["root"]);
+
+    assert.equal(rootServer.requests.length, 1);
+    assert.equal(otherServer.requests.length, 0);
+    assert.deepEqual(rootServer.requests[0].payload, {
+      model: "BAAI/bge-m3",
+      input: ["root"],
+    });
+    assert.equal(rootNode.embedding["model-id"], "BAAI/bge-m3");
+    assert.equal(rootNode.embedding.dimension, 1024);
+    assert.equal(embeddings[0].length, 1024);
+  } finally {
+    await rootServer.close();
+    await otherServer.close();
+    fs.rmSync(otherRootDir, { recursive: true, force: true });
+  }
+}
+
+async function assertNodeVectorIsScopedByOptions(rootDir) {
+  const otherRootDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "logseq-js-api-vector-other-root-"),
+  );
+  let rootOpenCalls = 0;
+  let otherOpenCalls = 0;
+  try {
+    const rootNode = NodePlatform.node_platform({
+      "root-dir": rootDir,
+      "owner-source": "cli",
+      "open-vector-index-fn": (opts) => {
+        rootOpenCalls += 1;
+        return Promise.resolve({
+          query: () => [{ id: "root-doc", page: opts.path, vectorScore: 1 }],
+          "upsert!": () => {},
+          "delete!": () => {},
+          "truncate!": () => {},
+          metadata: () => ({ owner: "root" }),
+          "set-metadata!": () => {},
+          "close!": () => {},
+        });
+      },
+    });
+    NodePlatform.node_platform({
+      "root-dir": otherRootDir,
+      "owner-source": "cli",
+      "open-vector-index-fn": () => {
+        otherOpenCalls += 1;
+        return Promise.resolve({
+          query: () => [{ id: "other-doc", vectorScore: 1 }],
+          "upsert!": () => {},
+          "delete!": () => {},
+          "truncate!": () => {},
+          metadata: () => ({ owner: "other" }),
+          "set-metadata!": () => {},
+          "close!": () => {},
+        });
+      },
+    });
+
+    const index = await rootNode.vector["open-index"]({
+      path: path.join(rootDir, "root-vector"),
+      dimension: 1024,
+    });
+
+    assert.equal(rootOpenCalls, 1);
+    assert.equal(otherOpenCalls, 0);
+    assert.deepEqual(index.metadata(), { owner: "root" });
+    assert.deepEqual(index.query([1], 1, "page"), [
+      {
+        id: "root-doc",
+        page: path.join(rootDir, "root-vector"),
+        vectorScore: 1,
+      },
+    ]);
+  } finally {
+    fs.rmSync(otherRootDir, { recursive: true, force: true });
+  }
 }
 
 async function assertNodeCrypto(crypto) {
@@ -399,6 +686,18 @@ async function assertNodeEmbedding(embedding, requests) {
   assert.equal(embeddings[0][0], 0);
   assert.equal(embeddings[1][0], 1);
 }
+
+test("Node JS API bundle does not depend on local runtime shims", () => {
+  const bundleSource = fs.readFileSync(nodeJsApiModulePath, "utf8");
+
+  for (const marker of nodeShimMarkers) {
+    assert.equal(
+      bundleSource.includes(marker),
+      false,
+      `node bundle should not contain ${marker}`,
+    );
+  }
+});
 
 test("Platform Js_api can be called from plain JavaScript", async () => {
   assertFunction(BrowserPlatform, "browser_platform");
@@ -514,8 +813,16 @@ test("Platform Js_api can be called from plain JavaScript", async () => {
 
     await assertNodeSqlite(node.sqlite, rootDir);
     await assertNodeStorage(node.storage, rootDir);
+    await assertNodeStorageIsScopedByRootDir(rootDir);
     await assertNodeKv(node.kv);
+    await assertNodeKvIsScopedByRootDir(rootDir);
+    await assertNodeKvPreservesBinaryAcrossReload(rootDir);
+    await assertNodeBroadcastIsScopedByOptions(rootDir);
+    await assertNodeCryptoIsScopedByRootDir(rootDir);
     await assertNodeCrypto(node.crypto);
+    await assertNodeSqliteIsScopedByOptions(rootDir);
+    await assertNodeEmbeddingIsScopedByOptions(rootDir);
+    await assertNodeVectorIsScopedByOptions(rootDir);
     await assertNodeTimers(node.timers);
     await assertNodeWebsocket(node.websocket);
 
@@ -525,6 +832,69 @@ test("Platform Js_api can be called from plain JavaScript", async () => {
     if (embeddingServer !== undefined) {
       await embeddingServer.close();
     }
+    fs.rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("Browser post-message uses Logseq transit payload semantics", () => {
+  const originalPostMessage = globalThis.postMessage;
+  const messages = [];
+
+  try {
+    globalThis.postMessage = (...args) => messages.push(args);
+
+    const browser = BrowserPlatform.browser_platform();
+    const payload = { ok: true };
+    browser.broadcast["post-message!"]("event", payload);
+
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].length, 1);
+    assert.equal(typeof messages[0][0], "string");
+
+    const decoded = transit.reader("json").read(messages[0][0]);
+    assert.equal(decoded[0], "event");
+    assert.equal(decoded[1].get("ok"), true);
+  } finally {
+    if (originalPostMessage === undefined) {
+      delete globalThis.postMessage;
+    } else {
+      globalThis.postMessage = originalPostMessage;
+    }
+  }
+});
+
+test("Node sqlite write guard accepts the synchronous db-worker lock check", async () => {
+  const rootDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "logseq-js-api-sync-write-guard-"),
+  );
+  let guardCalled = false;
+
+  try {
+    const node = NodePlatform.node_platform({
+      "root-dir": rootDir,
+      "owner-source": "electron",
+      "write-guard-fn": () => {
+        guardCalled = true;
+      },
+    });
+
+    const dbPath = path.join(rootDir, "sqlite-sync-guard.sqlite");
+    const backupPath = path.join(rootDir, "backup", "copy.sqlite");
+    const db = await node.sqlite["open-db"]({ path: dbPath });
+    try {
+      await node.sqlite.exec(db, "create table kvs(addr text primary key, content text)");
+      await node.sqlite.exec(db, {
+        sql: "insert into kvs values (?, ?)",
+        bind: ["a", "b"],
+      });
+      await node.sqlite["backup-db"](db, backupPath);
+    } finally {
+      node.sqlite["close-db"](db);
+    }
+
+    assert.equal(guardCalled, true);
+    assert.equal(fs.existsSync(backupPath), true);
+  } finally {
     fs.rmSync(rootDir, { recursive: true, force: true });
   }
 });

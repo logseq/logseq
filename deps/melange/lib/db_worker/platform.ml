@@ -1,3 +1,5 @@
+module Transit = Transit_melange.Transit
+
 module type S = sig
   type value
   type binary
@@ -483,7 +485,15 @@ module Browser = struct
   end
 
   module Broadcast = struct
-    external post_message : string -> value -> unit = "postMessage"
+    external post_message_string : string -> unit = "postMessage"
+
+    let post_message type_ payload =
+      Transit.Json.Array
+        [
+          Transit.Json.String type_;
+          payload |> Melange_edn_melange.of_json |> Transit.Json.of_edn;
+        ]
+      |> Transit.Json.to_string |> post_message_string
   end
 
   module Websocket = struct
@@ -789,9 +799,9 @@ module Node = struct
       String.sub path 1 (String.length path - 1)
     else path
 
-  let path_under_root path =
+  let path_under_data_dir path =
     if Node.Path.isAbsolute path then path
-    else Node.Path.join [| root_dir (); path |]
+    else Node.Path.join [| data_dir (); path |]
 
   module Storage = struct
     type asset_stat = {
@@ -839,12 +849,15 @@ module Node = struct
       Js.Promise.resolve ()
 
     let read_text path =
-      Js.Promise.resolve (Node.Fs.readFileAsUtf8Sync (path_under_root path))
+      Js.Promise.resolve ()
+      |> Js.Promise.then_ (fun () ->
+          Js.Promise.resolve
+            (Node.Fs.readFileAsUtf8Sync (path_under_data_dir path)))
 
     let write_text path text =
       write_guard ()
       |> Js.Promise.then_ (fun () ->
-          let full_path = path_under_root path in
+          let full_path = path_under_data_dir path in
           ensure_dir (Node.Path.dirname full_path);
           Node.Fs.writeFileAsUtf8Sync full_path text;
           Js.Promise.resolve ())
@@ -854,7 +867,7 @@ module Node = struct
         (fun path text ->
           write_guard ()
           |> Js.Promise.then_ (fun () ->
-              let full_path = path_under_root path in
+              let full_path = path_under_data_dir path in
               let tmp_path = full_path ^ ".tmp" in
               ensure_dir (Node.Path.dirname full_path);
               Node.Fs.writeFileAsUtf8Sync tmp_path text;
@@ -866,7 +879,7 @@ module Node = struct
         (fun path ->
           write_guard ()
           |> Js.Promise.then_ (fun () ->
-              Fs.rm_sync (path_under_root path)
+              Fs.rm_sync (path_under_data_dir path)
                 (Fs.rm_options ~recursive:false ~force:true ());
               Js.Promise.resolve ()))
 
@@ -914,33 +927,105 @@ module Node = struct
   end
 
   module Kv = struct
-    let state : value Js.Dict.t option ref = ref None
+    let state : (string * value Js.Dict.t) option ref = ref None
     let kv_path () = Node.Path.join [| root_dir (); "kv-store.json" |]
+
+    external is_binary_view : value -> bool = "isView" [@@mel.scope "ArrayBuffer"]
+    external array_from_binary : value -> int array = "from" [@@mel.scope "Array"]
+    external uint8_array : int array -> value = "Uint8Array" [@@mel.new]
+
+    let binary_to_string value =
+      value |> array_from_binary |> Array.to_list
+      |> List.map Char.chr |> List.to_seq |> String.of_seq
+
+    let string_to_binary text =
+      Array.init (String.length text) (fun index -> Char.code text.[index])
+      |> uint8_array
+
+    let rec value_to_transit value =
+      if is_binary_view value then Transit.Json.Binary (binary_to_string value)
+      else
+        match Js.Json.classify value with
+        | JSONNull -> Transit.Json.Null
+        | JSONFalse -> Bool false
+        | JSONTrue -> Bool true
+        | JSONString text -> String text
+        | JSONNumber number -> Float number
+        | JSONArray values ->
+            Array (values |> Array.to_list |> List.map value_to_transit)
+        | JSONObject object_ ->
+            Map
+              (object_ |> Js.Dict.entries |> Array.to_list
+              |> List.map (fun (key, value) ->
+                     (Transit.Json.String key, value_to_transit value)))
+
+    let rec transit_to_value = function
+      | Transit.Json.Null -> Js.Json.null
+      | Bool value -> Js.Json.boolean value
+      | String text -> Js.Json.string text
+      | Int value -> Js.Json.number (float_of_int value)
+      | Int64 value -> Js.Json.number (Int64.to_float value)
+      | Float value -> Js.Json.number value
+      | Binary text -> string_to_binary text
+      | Keyword text -> Js.Json.string (":" ^ text)
+      | Symbol text | Big_decimal text | Big_int text | Uuid text | Uri text ->
+          Js.Json.string text
+      | Date milliseconds -> Js.Json.number (Int64.to_float milliseconds)
+      | Array values | Set values | List values ->
+          Js.Json.array (Array.of_list (List.map transit_to_value values))
+      | Map entries ->
+          let object_ = Js.Dict.empty () in
+          List.iter
+            (fun (key, value) ->
+              let key =
+                match key with
+                | Transit.Json.String text -> text
+                | Keyword text -> ":" ^ text
+                | key -> Transit.Json.to_string key
+              in
+              Js.Dict.set object_ key (transit_to_value value))
+            entries;
+          Js.Json.object_ object_
+      | Tagged (tag, value) ->
+          let object_ = Js.Dict.empty () in
+          Js.Dict.set object_ "tag" (Js.Json.string tag);
+          Js.Dict.set object_ "rep" (transit_to_value value);
+          Js.Json.object_ object_
+
+    let state_to_transit state =
+      state |> Js.Json.object_ |> value_to_transit |> Transit.Json.to_string
 
     let parse_state payload =
       try
-        match Js.Json.decodeObject (Js.Json.parseExn payload) with
+        match payload |> Transit.Json.of_string |> transit_to_value |> Js.Json.decodeObject with
         | Some object_ -> object_
         | None -> Js.Dict.empty ()
       with _ -> Js.Dict.empty ()
 
     let load () =
+      let path = kv_path () in
       match !state with
-      | Some state -> state
+      | Some (loaded_path, state) when loaded_path = path -> state
       | None ->
           let loaded =
-            let path = kv_path () in
             if Node.Fs.existsSync path then
               parse_state (Node.Fs.readFileAsUtf8Sync path)
             else Js.Dict.empty ()
           in
-          state := Some loaded;
+          state := Some (path, loaded);
+          loaded
+      | Some _ ->
+          let loaded =
+            if Node.Fs.existsSync path then
+              parse_state (Node.Fs.readFileAsUtf8Sync path)
+            else Js.Dict.empty ()
+          in
+          state := Some (path, loaded);
           loaded
 
     let persist state =
       ensure_dir (Node.Path.dirname (kv_path ()));
-      Node.Fs.writeFileAsUtf8Sync (kv_path ())
-        (Js.Json.stringify (Js.Json.object_ state))
+      Node.Fs.writeFileAsUtf8Sync (kv_path ()) (state_to_transit state)
 
     let get key =
       let state = load () in
@@ -1129,19 +1214,36 @@ module Node = struct
   end
 
   module Crypto = struct
+    type keytar_module
+
+    external require_keytar : string -> keytar_module = "require"
+
     external keytar_set_password :
-      string -> string -> string -> unit Js.Promise.t = "setPassword"
-    [@@mel.module "keytar"]
+      keytar_module -> string -> string -> string -> unit Js.Promise.t
+      = "setPassword"
+    [@@mel.send]
 
     external keytar_get_password :
-      string -> string -> string Js.Nullable.t Js.Promise.t = "getPassword"
-    [@@mel.module "keytar"]
+      keytar_module -> string -> string -> string Js.Nullable.t Js.Promise.t
+      = "getPassword"
+    [@@mel.send]
 
-    external keytar_delete_password : string -> string -> bool Js.Promise.t
+    external keytar_delete_password :
+      keytar_module -> string -> string -> bool Js.Promise.t
       = "deletePassword"
-    [@@mel.module "keytar"]
+    [@@mel.send]
 
     let keychain_service = "Logseq E2EE"
+    let keytar_ref : keytar_module option ref = ref None
+
+    let keytar_module () =
+      match !keytar_ref with
+      | Some module_ -> module_
+      | None ->
+          let module_ = require_keytar "keytar" in
+          keytar_ref := Some module_;
+          module_
+
     let kv_save_secret_text key text = Kv.set key (Some (Js.Json.string text))
 
     let kv_read_secret_text key =
@@ -1166,13 +1268,13 @@ module Node = struct
 
     let save_secret_text key text =
       if use_keychain_for_owner () then
-        keytar_set_password keychain_service key text
+        keytar_set_password (keytar_module ()) keychain_service key text
         |> Js.Promise.catch (fun _ -> kv_save_secret_text key text)
       else kv_save_secret_text key text
 
     let read_secret_text key =
       if use_keychain_for_owner () then
-        keytar_get_password keychain_service key
+        keytar_get_password (keytar_module ()) keychain_service key
         |> Js.Promise.then_ (fun secret ->
             Js.Promise.resolve (Js.Nullable.toOption secret))
         |> Js.Promise.catch (fun _ -> kv_read_secret_text key)
@@ -1180,7 +1282,7 @@ module Node = struct
 
     let delete_secret_text key =
       if use_keychain_for_owner () then
-        keytar_delete_password keychain_service key
+        keytar_delete_password (keytar_module ()) keychain_service key
         |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
         |> Js.Promise.catch (fun _ -> kv_delete_secret_text key)
       else kv_delete_secret_text key

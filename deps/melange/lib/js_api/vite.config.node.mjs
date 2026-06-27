@@ -3,13 +3,29 @@ import { resolve } from "node:path";
 import { defineConfig } from "vite";
 
 const entry = resolve(process.cwd(), "js/lib/js_api/entry_node.js");
+const emptyShim = resolve(process.cwd(), "shims/empty.js");
 
 const nodeBuiltins = [
   ...builtinModules,
   ...builtinModules.map((moduleName) => `node:${moduleName}`),
 ];
 
+const nodeRuntimeDeps = [
+  "@zvec/zvec",
+  "keytar",
+  "ws",
+];
+
 export default defineConfig({
+  resolve: {
+    alias: [
+      { find: "@sqlite.org/sqlite-wasm", replacement: emptyShim },
+      { find: "comlink", replacement: emptyShim },
+    ],
+  },
+  ssr: {
+    noExternal: ["transit-js"],
+  },
   build: {
     ssr: entry,
     emptyOutDir: false,
@@ -19,11 +35,7 @@ export default defineConfig({
     rollupOptions: {
       external: [
         ...nodeBuiltins,
-        "@sqlite.org/sqlite-wasm",
-        "@zvec/zvec",
-        "comlink",
-        "keytar",
-        "ws",
+        ...nodeRuntimeDeps,
       ],
       output: {
         entryFileNames: "melange-js-api-node.js",
@@ -33,7 +45,7 @@ export default defineConfig({
       },
     },
     commonjsOptions: {
-      include: [/\/js\//],
+      include: [/\/js\//, /node_modules\/transit-js/],
     },
   },
 });
