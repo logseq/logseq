@@ -1,0 +1,5 @@
+(library
+ (name melange_js_api_spec)
+ (modes melange)
+ (libraries melange.js)
+ (virtual_modules Entry_node Entry_browser))

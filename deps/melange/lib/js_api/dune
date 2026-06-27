@@ -1,0 +1,54 @@
+(library
+ (name melange_js_api)
+ (modes melange)
+ (implements melange_js_api_spec)
+ (modules Entry_common Entry_node Entry_browser)
+ (private_modules Entry_common)
+ (libraries melange_db_worker melange.node)
+ (preprocess
+  (pps melange.ppx)))
+
+(rule
+ (target bundle_emit.ml)
+ (action
+  (with-stdout-to
+   %{target}
+   (echo ""))))
+
+(melange.emit
+ (target js)
+ (modules bundle_emit)
+ (module_systems commonjs)
+ (libraries melange_js_api melange.node)
+ (preprocess
+  (pps melange.ppx)))
+
+(rule
+ (alias bundle)
+ (targets
+  melange-js-api-node.js
+  melange-js-api-browser.js)
+ (deps
+  (alias ./melange)
+  (:node_entry ./js/lib/js_api/entry_node.js)
+  (:browser_entry ./js/lib/js_api/entry_browser.js)
+  (glob_files_rec ./js/**)
+  vite.config.node.mjs
+  vite.config.browser.mjs
+  shims/empty.js
+  shims/process.js)
+ (action
+  (progn
+   (run
+    sh
+    -c
+    "exec \"$DUNE_SOURCEROOT/../../node_modules/.bin/vite\" build --config %{dep:vite.config.node.mjs} --outDir .vite-node --emptyOutDir true")
+   (run cp .vite-node/melange-js-api-node.js melange-js-api-node.js)
+   (run
+    sh
+    -c
+    "exec \"$DUNE_SOURCEROOT/../../node_modules/.bin/vite\" build --config %{dep:vite.config.browser.mjs} --outDir .vite-browser --emptyOutDir true")
+   (run
+    cp
+    .vite-browser/melange-js-api-browser.js
+    melange-js-api-browser.js))))
