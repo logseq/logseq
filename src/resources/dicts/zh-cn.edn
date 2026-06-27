@@ -1958,4 +1958,22 @@
  :zotero/imported-file-warning "这是一个从 Zotero 导入的文件，设置 Zotero 数据目录 后即可在 Logseq 中打开该文件。"
  :zotero/linked-file-warning "这是一个 Zotero 链接文件，设置 Zotero 链接附件基础目录 后即可在 Logseq 中打开该文件。"
  :zotero/notes "笔记"
+
+ :block/retry-plugin-renderer "重试插件渲染器"
+ :block/switch-to-outline-view "切换到大纲视图"
+ :block/switch-to-plugin-renderer "切换到插件渲染器"
+ :graph/node-count (fn [n] (str n " 个节点"))
+ :plugin/logs-clear "清除"
+ :plugin/logs-copied "日志已复制到剪贴板。"
+ :plugin/logs-copy "复制全部"
+ :plugin/logs-empty "暂无日志。"
+ :plugin/logs-filter-placeholder "筛选日志..."
+ :plugin/logs-level-all "所有级别"
+ :plugin/logs-title "插件日志"
+ :settings-page/publish-server-url "发布服务器 URL"
+ :settings-page/publish-server-url-cleared "发布服务器 URL 已清除。将使用官方的 Logseq Publish。"
+ :settings-page/publish-server-url-default "Logseq Publish"
+ :settings-page/publish-server-url-desc "为自托管单页发布设置自定义的 HTTPS 发布服务器 URL。您的 Logseq 身份验证令牌将被发送到该服务器，因此请务必使用受信任的 URL。留空则使用官方的 Logseq Publish 服务。"
+ :settings-page/publish-server-url-reset "重置为默认值"
+ :settings-page/publish-server-url-saved "发布服务器 URL 已保存。"
 }
