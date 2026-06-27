@@ -22,48 +22,27 @@ let char_width code =
   else if is_wide code then 2
   else 1
 
-let utf8_code_at text index =
-  let len = String.length text in
-  let byte = Char.code text.[index] in
-  if byte land 0x80 = 0 then (byte, index + 1)
-  else if byte land 0xe0 = 0xc0 && index + 1 < len then
-    let b1 = Char.code text.[index + 1] in
-    (((byte land 0x1f) lsl 6) lor (b1 land 0x3f), index + 2)
-  else if byte land 0xf0 = 0xe0 && index + 2 < len then
-    let b1 = Char.code text.[index + 1] in
-    let b2 = Char.code text.[index + 2] in
-    ( ((byte land 0x0f) lsl 12) lor ((b1 land 0x3f) lsl 6) lor (b2 land 0x3f),
-      index + 3 )
-  else if byte land 0xf8 = 0xf0 && index + 3 < len then
-    let b1 = Char.code text.[index + 1] in
-    let b2 = Char.code text.[index + 2] in
-    let b3 = Char.code text.[index + 3] in
-    ( ((byte land 0x07) lsl 18)
-      lor ((b1 land 0x3f) lsl 12)
-      lor ((b2 land 0x3f) lsl 6)
-      lor (b3 land 0x3f),
-      index + 4 )
-  else (byte, index + 1)
+external chars_of_string : string -> string array = "from" [@@mel.scope "Array"]
+
+let unicode_chars text = Ustring.(of_string text |> to_string) |> chars_of_string
+
+let code_point ch =
+  match Js.String.codePointAt ~index:0 ch with Some code -> code | None -> 0
 
 let width text =
-  let rec loop index acc =
-    if index >= String.length text then acc
-    else
-      let code, next = utf8_code_at text index in
-      loop next (acc + char_width code)
-  in
-  loop 0 0
+  unicode_chars text
+  |> Array.fold_left (fun acc ch -> acc + char_width (code_point ch)) 0
 
 let take text max_width =
-  let rec loop index acc_width =
-    if index >= String.length text then text
+  let rec loop chars index acc_width acc =
+    if index >= Array.length chars then String.concat "" (List.rev acc)
     else
-      let code, next = utf8_code_at text index in
-      let next_width = acc_width + char_width code in
-      if next_width > max_width then String.sub text 0 index
-      else loop next next_width
+      let ch = chars.(index) in
+      let next_width = acc_width + char_width (code_point ch) in
+      if next_width > max_width then String.concat "" (List.rev acc)
+      else loop chars (index + 1) next_width (ch :: acc)
   in
-  if max_width <= 0 then "" else loop 0 0
+  if max_width <= 0 then "" else loop (unicode_chars text) 0 0 []
 
 let ellipsis = Cli_platform.Symbols.ellipsis
 

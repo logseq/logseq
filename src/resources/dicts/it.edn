@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Plugin danneggiato \"{1}\" rimosso."
 
  :plugin.proxy/direct "Diretto"
+ :plugin.proxy/host-port-required "Host e porta sono richiesti"
  :plugin.proxy/system "Sistema"
  :plugin.proxy/test-url "URL di test"
  :plugin.proxy/testing "Test in corso"
@@ -1245,7 +1246,6 @@
  :property/drag-to-reorder "Trascina per riordinare"
  :property/existing-values "Valori esistenti"
  :property/go-to-this-property "Vai alla pagina della proprietà"
- :property/hidden-properties "Proprietà nascoste"
  :property/hide-by-default "Nascondi per impostazione predefinita"
  :property/hide-choice-for-tag "Nascondi opzione per tag"
  :property/hide-empty-value "Nascondi valori vuoti"

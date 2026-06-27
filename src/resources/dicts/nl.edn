@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Beschadigde plugin \"{1}\" verwijderd."
 
  :plugin.proxy/direct "Direct"
+ :plugin.proxy/host-port-required "Host en poort zijn vereist"
  :plugin.proxy/system "Systeem"
  :plugin.proxy/test-url "Test-URL"
  :plugin.proxy/testing "Testen"
@@ -1245,7 +1246,6 @@
  :property/drag-to-reorder "Sleep om te herordenen"
  :property/existing-values "Bestaande waarden"
  :property/go-to-this-property "Ga naar eigenschapspagina"
- :property/hidden-properties "Verborgen eigenschappen"
  :property/hide-by-default "Standaard verbergen"
  :property/hide-choice-for-tag "Keuze verbergen voor tag"
  :property/hide-empty-value "Lege waarden verbergen"

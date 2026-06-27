@@ -461,9 +461,8 @@
 (hsx/defc audio-cp
   ([src] (audio-cp src nil))
   ([src ext]
-   ;; Change protocol to allow media fragment uris to play
    (when src
-     (let [src (string/replace-first src common-config/asset-protocol "file://")
+     (let [src (assets-handler/asset-protocol-url->media-url src)
            opts {:controls true
                  :on-touch-start #(util/stop %)}]
        (case ext
@@ -2246,13 +2245,15 @@
         order-list? (boolean own-number-list?)
         order-list-idx (:own-order-list-index config)
         page-title? (:page-title? config)
+        collapsable-page-title? (or page-title? (:collapsable-page-title? config))
         collapsable? (editor-handler/collapsable? uuid {:semantic? true
                                                         :ignore-children? page-title?
-                                                        :page-title? page-title?})
+                                                        :page-title? collapsable-page-title?})
         link? (boolean (:original-block config))
         icon-size (if collapsed? 12 14)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
         with-icon? (and (some? icon)
+                        (not (:hide-block-icon? config))
                         (or (and (db/page? block)
                                  (not (:library? config)))
                             (:logseq.property/icon block)
@@ -2828,37 +2829,278 @@
                               :tag? true
                               :disable-preview? true
                               :disable-click? true) tag)])
-           [:div.text-sm.opacity-50.ml-1
+          [:div.text-sm.opacity-50.ml-1
             (str "+" (- tags-count 2))]])))))
+
+(defn- bottom-row-focus-elements
+  [^js row]
+  (->> (array-seq (.querySelectorAll row "[data-bottom-row-nav='true']"))
+       vec))
+
+(defn- focus-bottom-row-item!
+  [^js row index]
+  (when-let [el (nth (bottom-row-focus-elements row) index nil)]
+    (.focus el)
+    true))
+
+(defn- move-bottom-row-focus!
+  [^js el direction]
+  (when-let [^js row (.closest el ".bottom-properties-row")]
+    (let [items (bottom-row-focus-elements row)
+          current-index (or (first (keep-indexed (fn [idx item]
+                                                   (when (identical? item el) idx))
+                                                 items))
+                            0)
+          last-index (max 0 (dec (count items)))
+          next-index (case direction
+                       :prev (max 0 (dec current-index))
+                       :next (min last-index (inc current-index))
+                       current-index)]
+      (focus-bottom-row-item! row next-index))))
+
+(defn- trigger-bottom-pill-edit!
+  [^js pill]
+  (when-let [trigger (some-> pill
+                             (.querySelector ".bottom-property-content .jtrigger"))]
+    (if (some-> pill (.querySelector ".bottom-property-content [data-popup-active]"))
+      (shui/popup-hide!)
+      (.click trigger))
+    true))
+
+(defn- focus-block-editor-from-bottom-row!
+  [^js row]
+  (when-let [^js current-block (.closest row ".ls-block")]
+    (.blur row)
+    (when-let [block-id (some-> (dom/attr current-block "blockid") uuid)]
+      (let [container-id (some-> (dom/attr current-block "containerid") js/parseInt)]
+        (editor-handler/edit-block! {:block/uuid block-id}
+                                    :max
+                                    {:container-id container-id})))))
+
+(defn- handle-bottom-row-vertical-nav!
+  [^js row key]
+  (case key
+    "ArrowUp"
+    (focus-block-editor-from-bottom-row! row)
+
+    "ArrowDown"
+    (editor-handler/move-cross-boundary-up-down :down {:exclude-property? true})
+
+    nil))
+
+(defn- handle-bottom-properties-row-key-down!
+  [e]
+  (let [key (util/ekey e)
+        ^js row (.-currentTarget e)
+        ^js active-el (.-activeElement js/document)]
+    (cond
+      (= "ArrowUp" key)
+      (do
+        (util/stop e)
+        (handle-bottom-row-vertical-nav! row key))
+
+      (= "ArrowDown" key)
+      (do
+        (util/stop e)
+        (handle-bottom-row-vertical-nav! row key))
+
+      (contains? #{"ArrowLeft" "ArrowRight"} key)
+      (do
+        (util/stop e)
+        (if (and active-el
+                 (= "true" (.getAttribute active-el "data-bottom-row-nav")))
+          (move-bottom-row-focus! active-el (if (= key "ArrowLeft") :prev :next))
+          (let [items (bottom-row-focus-elements row)]
+            (when (seq items)
+              (.focus (first items))))))
+
+      :else
+      nil)))
+
+(defn- handle-bottom-pill-key-down!
+  [e]
+  (let [key (util/ekey e)
+        ^js pill (.-currentTarget e)]
+    (cond
+      (contains? #{"ArrowUp" "ArrowDown"} key)
+      (do
+        (util/stop e)
+        (some-> pill
+                (.closest ".bottom-properties-row")
+                (handle-bottom-row-vertical-nav! key)))
+
+      (contains? #{" " "Enter"} key)
+      (do
+        (util/stop e)
+        (trigger-bottom-pill-edit! pill))
+
+      :else
+      nil)))
+
+(defn- bottom-property-pill-cp
+  [block property opts]
+  (let [many-node? (and (= :node (:logseq.property/type property))
+                        (= :db.cardinality/many (:db/cardinality property)))
+        property-value (get block (:db/ident property))
+        empty-placeholder? (= :logseq.property/empty-placeholder (:db/ident property-value))
+        has-value? (and (some? property-value) (not empty-placeholder?))]
+    [:div.bottom-property-pill.bottom-property-pill-focusable
+     {:key (str (:db/id block) "-" (:db/id property))
+      :class (util/classnames [{:bottom-property-pill-wrap many-node?}])
+      :data-bottom-pill-focusable true
+      :data-bottom-row-nav true
+      :tab-index -1
+      :on-key-down handle-bottom-pill-key-down!}
+   [:div.flex.flex-row.items-center
+    (property-component/property-key-cp block property opts)
+    [:div.select-none ":"]]
+   [:div {:class (util/classnames
+                  ["bottom-property-content property-value-container"
+                   {:bottom-property-content-wrap many-node?}])
+          :style {:min-height 20}}
+    (pv/property-value block property opts)
+    (when (and has-value?
+               (contains? #{:date :datetime} (:logseq.property/type property)))
+      [:button.bottom-property-edit-icon.select-none
+       {:type "button"
+        :on-click (fn [e]
+                    (util/stop e)
+                    (some-> (.-currentTarget e)
+                            (.closest ".bottom-property-pill")
+                            trigger-bottom-pill-edit!))}
+       (ui/icon "edit" {:size 15})])]]))
+
+(defn- bottom-property-pill-items
+  [block properties opts]
+  (mapv (fn [property]
+          (bottom-property-pill-cp block property opts))
+        properties))
+
+(defn- measure-bottom-pills-overflow!
+  [^js el *overflow?]
+  (when el
+    (let [overflow? (> (.-scrollWidth el) (inc (.-clientWidth el)))]
+      (when (not= overflow? @*overflow?)
+        (reset! *overflow? overflow?)))))
+
+(hsx/defc bottom-properties-expand-button
+  [expanded? set-expanded!]
+  (let [label (t (if expanded?
+                   :property/collapse-bottom-pills
+                   :property/expand-bottom-pills))]
+    (shui/button
+     {:variant :secondary
+      :size :sm
+      :class "bottom-property-control-btn bottom-property-expand-btn"
+      :tab-index 0
+      :data-bottom-row-nav true
+      :aria-label label
+      :aria-expanded (str expanded?)
+      :on-click (fn [e]
+                  (util/stop e)
+                  (set-expanded! (not expanded?)))}
+     (ui/icon (if expanded? "chevron-up" "chevron-down")
+              {:size 16 :class "bottom-property-action-icon"})
+     label)))
+
+(defn- block-below-positioned-properties-cp
+  [block properties opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
+  (let [*pills-el (hooks/use-ref nil)
+        *overflow? (hooks/use-memo #(atom false) [(:block/uuid block) (count properties)])
+        [overflow?] (hooks/use-atom *overflow?)
+        [expanded? set-expanded!] (hooks/use-state false)]
+    (hooks/use-effect!
+     (fn []
+       (let [^js el (.-current *pills-el)
+             measure! #(measure-bottom-pills-overflow! el *overflow?)
+             observer (when (and el (exists? js/ResizeObserver))
+                        (js/ResizeObserver. measure!))]
+         (measure!)
+         (when observer
+           (.observe observer el))
+         (.addEventListener js/window "resize" measure!)
+         (fn []
+           (when observer
+             (.disconnect observer))
+           (.removeEventListener js/window "resize" measure!))))
+     [(:block/uuid block) properties show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
+    [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden.w-full.min-w-0
+     [:div
+      {:class (util/classnames
+               ["bottom-properties-row flex flex-row gap-2 items-center w-full min-w-0"
+                (if expanded?
+                  "flex-wrap overflow-x-hidden"
+                  "flex-nowrap overflow-x-hidden")])
+       :data-expanded (str expanded?)
+       :data-bottom-properties-row (:block/uuid block)
+       :tab-index -1
+       :on-key-down handle-bottom-properties-row-key-down!}
+      [:div.bottom-properties-pills-strip.flex.flex-row.gap-2.items-center.min-w-0.flex-1.basis-0
+       {:class (util/classnames [(if expanded?
+                                   "flex-wrap overflow-x-hidden"
+                                   "flex-nowrap overflow-x-hidden")])
+        :ref #(set! (.-current *pills-el) %)}
+       (bottom-property-pill-items block properties (assoc opts :expanded? expanded?))
+       (when show-hidden-properties-pill-toggle?
+         (property-component/hidden-properties-toggle-button block {:bottom-pill? true
+                                                                    :bottom-row-nav? true
+                                                                    :tab-index -1}))]
+      (when (or overflow? expanded?)
+        (bottom-properties-expand-button expanded? set-expanded!))
+      (when show-hidden-properties-control?
+        (property-component/hidden-properties-toggle-button block {:icon-only? true
+                                                                   :bottom-row-nav? true
+                                                                   :tab-index 0}))
+      (when show-add-property-button?
+        (property-component/new-property block (assoc opts
+                                                      :property-position :block-below
+                                                      :bottom-row-nav? true
+                                                      :icon-only? true
+                                                      :tab-index 0)))]]))
 
 (hsx/defc block-positioned-properties
   [config block position]
-  (let [properties (outliner-property/get-block-positioned-properties (db/get-db) (:db/id block) position)
+  (let [properties (cond->> (outliner-property/get-block-positioned-properties (db/get-db) (:db/id block) position)
+                     (= position :block-below)
+                     (remove (fn [property]
+                               (= (:db/ident property) :logseq.property/icon))))
+        has-viewable-properties? (seq properties)
         opts (merge config
                     {:icon? true
                      :page-cp page-cp
                      :block-cp blocks-container
                      :inline-text inline-text
                      :other-position? true
-                     :property-position position})]
-    (when (seq properties)
-      (case position
+                     :property-position position})
+        has-hidden-properties? (and has-viewable-properties?
+                                    (not config/publishing?)
+                                    (property-component/has-hidden-properties? block config))
+        page? (ldb/page? block)
+        show-hidden-properties-pill-toggle? (and has-hidden-properties?
+                                                 (not page?))
+        show-hidden-properties-control? (and has-hidden-properties?
+                                             page?)
+        show-page-add-property? (and (ldb/page? block)
+                                     (not (ldb/class? block))
+                                     (not config/publishing?))
+        show-add-property-button? (and has-viewable-properties?
+                                       show-page-add-property?)]
+    (case position
         :block-below
-        [:div.positioned-properties.block-below.flex.flex-row.gap-2.item-center.flex-wrap.text-sm.overflow-x-hidden
-         (for [property properties]
-           [:div.flex.flex-row.items-center.gap-1
-            {:key (str (:db/id block) "-" (:db/id property))}
-            [:div.flex.flex-row.items-center
-             (property-component/property-key-cp block property opts)
-             [:div.select-none ":"]]
-            [:div.ls-block.property-value-container
-             {:style {:min-height 20}}
-             (pv/property-value block property opts)]])]
-        [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6.self-start
-         {:class (name position)}
-         (for [property properties]
-           ^{:key (str (:db/id block) "-" (:db/id property))}
-           [:<> (pv/property-value block property (assoc opts :show-tooltip? true))])]))))
+        (when has-viewable-properties?
+          (block-below-positioned-properties-cp block
+                                                properties
+                                                opts
+                                                show-hidden-properties-pill-toggle?
+                                                show-hidden-properties-control?
+                                                show-add-property-button?))
+
+        (when (seq properties)
+          [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6.self-start
+           {:class (name position)}
+           (for [property properties]
+             ^{:key (str (:db/id block) "-" (:db/id property))}
+             [:<> (pv/property-value block property (assoc opts :show-tooltip? true))])]))))
 
 (hsx/defc block-reactions
   [block]
@@ -3298,10 +3540,10 @@
             [:div.opacity-70.hover:opacity-100
              (block-positioned-properties config block :block-right)])
 
-          (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
-                        (:property? config))
-            (when (seq (:block/tags block))
-              (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))])]]]))
+	          (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
+	                        (:property? config) (:hide-block-tags? config))
+	            (when (seq (:block/tags block))
+	              (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))])]]]))
 
 (defn non-dragging?
   [e]
@@ -3967,7 +4209,7 @@
             :hide-block-refs-count? hide-block-refs-count?
             :*show-query? *show-query?})))]]
 
-   (when (and (not collapsed?) (not (or table? property?)))
+   (when (and (not collapsed?) (not (or table? property?)) (not (:page-title? config)))
      (block-positioned-properties config block :block-below))
 
    (when-not (or (:table? config) (:property? config))
@@ -4328,12 +4570,13 @@
           :inline? true})])
 
      (when (and (not (:library? config))
-             (or (:tag-dialog? config)
-               (and
-                 (not collapsed?)
-                 (not (or table? property?)))))
+                (or (:tag-dialog? config)
+                    (and
+                     (not collapsed?)
+                     (not (or table? property?)))))
        [:div (when-not (:page-title? config) {:class "ls-block-content-indent"})
-        (db-properties-cp config block {:in-block-container? true})])
+        (db-properties-cp config block {:in-block-container? true
+                                        :skip-bidirectional-properties? (:page-title? config)})])
 
      (when (and show-query? (not (:table? config)))
        (let [query? (ldb/class-instance? (entity-plus/entity-memoized (db/get-db) :logseq.class/Query) block)
@@ -5108,10 +5351,9 @@
            *navigating-block (hooks/use-memo #(atom (:block/uuid initial-block)) [])
            [navigating-block] (hooks/use-atom *navigating-block)
         navigating-block-entity (db/entity [:block/uuid navigating-block])
-        navigated? (and
-                    navigating-block
-                    (not= (:db/id (:block/parent initial-block))
-                          (:db/id (:block/parent navigating-block-entity))))
+        navigated? (breadcrumb-model/navigated-between-parents? initial-block
+                                                                navigating-block
+                                                                navigating-block-entity)
         navigating-block-reactive (model/sub-block (:db/id navigating-block-entity))
         blocks (if navigated?
                  [navigating-block-reactive]

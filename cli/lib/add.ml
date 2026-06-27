@@ -267,7 +267,7 @@ let parse_blocks_edn ~label text =
       | None ->
           Error
             (Error.make
-               (Edn_util.keyword_t "invalid-blocks")
+               (Error.Invalid_blocks)
                "blocks must be a vector")))
 
 let read_file path = Cli_unix.read_text_file path
@@ -285,7 +285,7 @@ let read_blocks (opts : opts) args =
   | _ ->
       Error
         (Error.make
-           (Edn_util.keyword_t "missing-content")
+           (Error.Missing_content)
            "content is required")
 
 let build_add_block_action (opts : opts) args repo =
@@ -320,7 +320,14 @@ let build_add_block_action (opts : opts) args repo =
                         })))
 
 let page_selector =
-  vector [ kw "db/id"; kw "block/uuid"; kw "block/name"; kw "block/title" ]
+  vector
+    [
+      kw "db/id";
+      kw "block/uuid";
+      kw "block/name";
+      kw "block/title";
+      kw "logseq.property/deleted-at";
+    ]
 
 let tag_selector =
   vector
@@ -398,6 +405,15 @@ let id_of_entity value = Edn_util.get_int64 value "db/id"
 let ident_of_entity value =
   Option.bind (Edn_util.get value "db/ident") Edn_util.as_keyword_t
 
+let recycled_entity value =
+  Option.is_some (Edn_util.get value "logseq.property/deleted-at")
+
+let page_not_found () =
+  Error.make (Error.Page_not_found) "page not found"
+
+let recycled_page_error () =
+  Error.make (Error.Recycled_page) "page is recycled"
+
 let pull_entity config repo selector lookup =
   Transport.thread_api_pull config ~repo
     ~selector:(Edn_util.expect_vector_t "add pull selector" selector)
@@ -462,20 +478,20 @@ let pull_created_page config repo name create_result =
 let ensure_page config repo page_name =
   let open Cli_effect in
   bind (pull_pages_by_name config repo page_name page_selector) (fun result ->
-      match Option.bind (first_entity result) uuid_of_entity with
-      | Some uuid -> pure (Ok uuid)
+      match first_entity result with
+      | Some entity when recycled_entity entity ->
+          pure (Error (recycled_page_error ()))
+      | Some entity -> (
+          match uuid_of_entity entity with
+          | Some uuid -> pure (Ok uuid)
+          | None -> pure (Error (page_not_found ())))
       | None ->
           bind (create_page config repo page_name) (fun create_result ->
               bind (pull_created_page config repo page_name create_result)
                 (fun page ->
                   match uuid_of_entity page with
                   | Some uuid -> pure (Ok uuid)
-                  | None ->
-                      pure
-                        (Error
-                           (Error.make
-                              (Edn_util.keyword_t "page-not-found")
-                              "page not found")))))
+                  | None -> pure (Error (page_not_found ())))))
 
 let resolve_add_target config (action : action) =
   let open Cli_effect in
@@ -492,7 +508,7 @@ let resolve_add_target config (action : action) =
               pure
                 (Error
                    (Error.make
-                      (Edn_util.keyword_t "target-not-found")
+                      (Error.Target_not_found)
                       "target block not found")))
   | None, Some uuid, _ ->
       bind
@@ -506,14 +522,14 @@ let resolve_add_target config (action : action) =
               pure
                 (Error
                    (Error.make
-                      (Edn_util.keyword_t "target-not-found")
+                      (Error.Target_not_found)
                       "target block not found")))
   | None, None, Some page_name -> ensure_page config action.repo page_name
   | None, None, None ->
       pure
         (Error
            (Error.make
-              (Edn_util.keyword_t "missing-target")
+              (Error.Missing_target)
               "target page or block is required"))
 
 let flatten_blocks blocks =
@@ -707,7 +723,7 @@ let resolve_created_ids config repo blocks insert_result =
                 pure
                   (Error
                      (Error.make
-                        (Edn_util.keyword_t "add-id-resolution-failed")
+                        (Error.Add_id_resolution_failed)
                         "unable to resolve created ids")))
   in
   loop [] uuids

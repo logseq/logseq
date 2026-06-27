@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "S'ha eliminat el connector trencat \"{1}\"."
 
  :plugin.proxy/direct "Directe"
+ :plugin.proxy/host-port-required "L'amfitrió i el port són necessaris"
  :plugin.proxy/system "Sistema"
  :plugin.proxy/test-url "URL de prova"
  :plugin.proxy/testing "Provant"
@@ -1245,7 +1246,6 @@
  :property/drag-to-reorder "Arrossegueu per reordenar"
  :property/existing-values "Valors existents"
  :property/go-to-this-property "Anar a la pàgina de la propietat"
- :property/hidden-properties "Propietats ocultes"
  :property/hide-by-default "Amagar per defecte"
  :property/hide-choice-for-tag "Amagar opció per etiqueta"
  :property/hide-empty-value "Amagar valors buits"

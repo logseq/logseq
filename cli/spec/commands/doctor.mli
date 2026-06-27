@@ -6,7 +6,7 @@ type check_status = Ok | Warning | Error
 type check = {
   id : Cli_primitive.keyword;
   status : check_status;
-  code : Cli_primitive.keyword option;
+  code : Error.code option;
   message : string;
   path : Cli_primitive.path option;
   servers : Melange_edn.any list;

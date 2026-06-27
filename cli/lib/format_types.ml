@@ -44,7 +44,7 @@ let rec json_of_value value =
           Js.Dict.set object_ key (json_of_value v))
         xs;
       Js.Json.object_ object_
-  | _ -> Melange_edn.to_json value
+  | _ -> Melange_edn_melange.to_json value
 
 let data_to_value = function
   | Cli_result.Message s ->
@@ -110,15 +110,8 @@ let candidate_to_value (candidate : Error.candidate) =
 
 let error_to_value ?(edn = false) (error : Error.t) =
   let code_value =
-    if edn then Edn_util.any error.code
-    else
-      let code = Edn_util.keyword_to_string error.code in
-      let code =
-        if String.length code > 0 && code.[0] = ':' then
-          String.sub code 1 (String.length code - 1)
-        else code
-      in
-      Edn_util.string code
+    if edn then Edn_util.any (Error.code_to_keyword error.code)
+    else Edn_util.string (Error.code_to_string error.code)
   in
   let fields =
     [
@@ -228,34 +221,23 @@ let query_result_human value =
       | None -> value_text result)
   | None -> value_text value
 
-let has_suffix ~suffix value =
-  let suffix_len = String.length suffix in
-  let value_len = String.length value in
-  value_len >= suffix_len
-  && String.sub value (value_len - suffix_len) suffix_len = suffix
+let is_keyword_namespace_char = function
+  | 'a' .. 'z' | '0' .. '9' | '.' | '-' | '_' -> true
+  | _ -> false
 
-let normalized_label label = String.lowercase_ascii label
+let is_keyword_namespace value =
+  value <> "" && String.for_all is_keyword_namespace_char value
 
-let is_created_at_field label =
-  has_suffix ~suffix:"created-at" (normalized_label label)
-
-let is_updated_at_field label =
-  has_suffix ~suffix:"updated-at" (normalized_label label)
-
-let is_datetime_field label =
-  is_created_at_field label || is_updated_at_field label
-
-let move_datetime_columns_last columns =
-  let non_datetime, datetime =
-    List.partition (fun label -> not (is_datetime_field label)) columns
-  in
-  let created_at = List.filter is_created_at_field datetime in
-  let updated_at = List.filter is_updated_at_field datetime in
-  non_datetime @ created_at @ updated_at
+let human_header_label label =
+  let label = strip_leading_colon label in
+  match String.split_on_char '/' label with
+  | [ namespace; name ] when is_keyword_namespace namespace && name <> "" ->
+      name
+  | _ -> label
 
 let add_column acc label = if List.mem label acc then acc else acc @ [ label ]
 
-let table_columns items =
+let discovered_table_columns items =
   items
   |> List.fold_left
        (fun acc fields ->
@@ -263,7 +245,22 @@ let table_columns items =
          |> List.map (fun (key, _) -> field_label key)
          |> List.fold_left add_column acc)
        []
-  |> move_datetime_columns_last
+
+let order_table_columns header_order columns =
+  let ordered =
+    header_order
+    |> List.filter_map (fun expected ->
+        List.find_opt
+          (fun label ->
+            label = expected || human_header_label label = expected)
+          columns)
+  in
+  let ordered =
+    List.fold_left
+      (fun acc label -> if List.mem label acc then acc else acc @ [ label ])
+      [] ordered
+  in
+  ordered
 
 let field_by_label label fields =
   fields
@@ -281,9 +278,8 @@ let title_max_display_width config =
   else (Cli_config.defaults ()).list_title_max_display_width
 
 let truncate_title_cell max_width value =
-  value |> String.split_on_char '\n'
-  |> List.map (fun line -> Display_width.truncate line max_width)
-  |> String.concat "\n"
+  let first_line = value |> String.split_on_char '\n' |> List.hd in
+  Display_width.truncate first_line max_width
 
 let is_list_command = function
   | Command_id.List_page | List_tag | List_property | List_task | List_node
@@ -298,53 +294,26 @@ let is_search_command = function
 let is_list_or_search_command command =
   is_list_command command || is_search_command command
 
-let search_columns columns =
-  let is_label expected label =
-    String.equal (String.lowercase_ascii label) expected
-  in
-  let db_id, rest = List.partition (is_label "db/id") columns in
-  let title, rest = List.partition (is_label "block/title") rest in
-  db_id @ rest @ title
-
-let asset_column_role label =
-  match String.lowercase_ascii label with
-  | "id" | "db/id" -> Some "id"
-  | "title" | "block/title" -> Some "title"
-  | "size" | "logseq.property.asset/size" -> Some "size"
-  | "type" | "asset-type" | "logseq.property.asset/type" -> Some "type"
-  | _ -> None
-
-let columns_by_role roles columns =
-  roles
-  |> List.filter_map (fun role ->
-      List.find_opt
-        (fun label ->
-          Option.equal String.equal (asset_column_role label) (Some role))
-        columns)
-
-let asset_columns columns =
-  let prefix_roles = [ "id"; "title"; "size"; "type" ] in
-  let prefix = columns_by_role prefix_roles columns in
-  let prefix_or_datetime label =
-    Option.is_some (asset_column_role label) || is_datetime_field label
-  in
-  let middle =
-    List.filter (fun label -> not (prefix_or_datetime label)) columns
-  in
-  let created_at = List.filter is_created_at_field columns in
-  let updated_at = List.filter is_updated_at_field columns in
-  prefix @ middle @ created_at @ updated_at
-
-let columns_for_command command items =
-  let columns = table_columns items in
-  match command with
-  | Command_id.List_asset -> asset_columns columns
-  | _ -> if is_search_command command then search_columns columns else columns
+let table_columns ~human_table_headers_order items =
+  discovered_table_columns items
+  |> order_table_columns human_table_headers_order
 
 let should_truncate_title command label =
   is_list_command command && is_title_label label
 
-let list_search_human command value config =
+let is_task_keyword_value_label label =
+  match human_header_label label with "status" | "priority" -> true | _ -> false
+
+let list_cell_value_text command label value =
+  let value = unquote_transit_value value in
+  match command with
+  | Command_id.List_task when is_task_keyword_value_label label -> (
+      match Edn_util.as_keyword value with
+      | Some keyword -> human_header_label keyword
+      | None -> value_text value)
+  | _ -> value_text value
+
+let list_search_human ?(human_table_headers_order = []) command value config =
   match Option.bind (Edn_util.get value "items") Edn_util.as_seq with
   | None -> None
   | Some items ->
@@ -352,7 +321,9 @@ let list_search_human command value config =
       if List.length mapped <> List.length items then None
       else
         let title_width = title_max_display_width config in
-        let columns = columns_for_command command mapped in
+        let columns =
+          table_columns ~human_table_headers_order mapped
+        in
         let headers = columns in
         let rows =
           mapped
@@ -360,7 +331,8 @@ let list_search_human command value config =
               columns
               |> List.map (fun label ->
                   let value =
-                    fields |> field_by_label label |> Option.map value_text
+                    fields |> field_by_label label
+                    |> Option.map (list_cell_value_text command label)
                     |> Option.value ~default:""
                   in
                   if should_truncate_title command label then
@@ -415,7 +387,11 @@ let graph_list_human value config =
       | None -> "")
   | None -> ""
 
-let to_human result config =
+let to_human ?human_table_headers_order result config =
+  let human_table_headers_order =
+    Option.value human_table_headers_order
+      ~default:result.Cli_result.human_table_headers_order
+  in
   let output = result.Cli_result.output Output.Mode.Human in
   match (result.Cli_result.command, result.data, output) with
   | Some Command_id.Graph_list, Some (Cli_result.Raw value), Output.Human _ ->
@@ -425,7 +401,9 @@ let to_human result config =
       query_result_human value
   | Some command, Some (Cli_result.Raw value), Output.Human _
     when is_list_or_search_command command -> (
-      match list_search_human command value config with
+      match
+        list_search_human ~human_table_headers_order command value config
+      with
       | Some output -> output
       | None -> (
           match output with
@@ -435,9 +413,9 @@ let to_human result config =
   | _, _, (Output.Json _ | Output.Edn _) -> ""
 
 let format_error err _ =
-  "Error (" ^ Edn_util.keyword_to_string err.Error.code ^ "): " ^ err.message
+  "Error (" ^ Error.code_to_string err.Error.code ^ "): " ^ err.message
 
-let format_result result config =
+let format_result ?human_table_headers_order result config =
   match (result.Cli_result.command, result.data) with
   | Some Command_id.Skill_show, Some (Cli_result.Message message) -> message
   | _ -> (
@@ -446,7 +424,7 @@ let format_result result config =
       | Some (Output.Mode.Packed Output.Mode.Edn) -> to_edn result
       | Some (Output.Mode.Packed Output.Mode.Human) | None -> (
           match result.Cli_result.status with
-          | Ok -> to_human result config
+          | Ok -> to_human ?human_table_headers_order result config
           | Error -> (
               match result.error with
               | Some err -> format_error err result.command

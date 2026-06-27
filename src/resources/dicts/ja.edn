@@ -1217,6 +1217,7 @@
  :plugin.package-config/remove-installed-success "破損したプラグイン「{1}」を削除しました。"
 
  :plugin.proxy/direct "直接接続"
+ :plugin.proxy/host-port-required "ホストとポートは必須です"
  :plugin.proxy/system "システム"
  :plugin.proxy/test-url "URLをテスト"
  :plugin.proxy/testing "テスト中"
@@ -1258,7 +1259,6 @@
  :property/drag-to-reorder "ドラッグで並び替え"
  :property/existing-values "既存の値"
  :property/go-to-this-property "このプロパティのページへ"
- :property/hidden-properties "非表示のプロパティ"
  :property/hide-by-default "デフォルトで非表示"
  :property/hide-choice-for-tag "タグの選択肢を非表示"
  :property/hide-empty-value "空の値を非表示"

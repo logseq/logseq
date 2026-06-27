@@ -1217,6 +1217,7 @@
  :plugin.package-config/remove-installed-success "已移除損壞的外掛「{1}」。"
 
  :plugin.proxy/direct "直接連線"
+ :plugin.proxy/host-port-required "主機和連接埠不能為空"
  :plugin.proxy/system "系統"
  :plugin.proxy/test-url "測試 URL"
  :plugin.proxy/testing "測試中"
@@ -1258,7 +1259,6 @@
  :property/drag-to-reorder "拖曳以重新排序"
  :property/existing-values "現有值："
  :property/go-to-this-property "跳至此屬性"
- :property/hidden-properties "隱藏的屬性"
  :property/hide-by-default "預設隱藏"
  :property/hide-choice-for-tag "對此標籤隱藏選項"
  :property/hide-empty-value "隱藏空值"

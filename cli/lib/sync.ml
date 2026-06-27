@@ -457,11 +457,10 @@ let worker_error_message ~default_message value =
   message
 
 let worker_error ~code ~default_message value =
-  Error.make ~context:value (Edn_util.keyword_t code)
-    (worker_error_message ~default_message value)
+  Error.make ~context:value code (worker_error_message ~default_message value)
 
 let remote_graphs_worker_error value =
-  worker_error ~code:"sync-remote-graphs-failed"
+  worker_error ~code:Error.Sync_remote_graphs_failed
     ~default_message:"sync remote graphs failed" value
 
 let sync_upload_worker_error value =
@@ -477,13 +476,13 @@ let sync_upload_worker_error value =
     || message = "remote graph already exists; delete it before uploading again"
   then
     Error.make ~context:value
-      (Edn_util.keyword_t "graph-already-exists")
+      (Error.Graph_already_exists)
       message
   else
-    Error.make ~context:value (Edn_util.keyword_t "sync-upload-failed") message
+    Error.make ~context:value (Error.Sync_upload_failed) message
 
 let e2ee_password_worker_error value =
-  worker_error ~code:"e2ee-password-failed"
+  worker_error ~code:Error.E2ee_password_failed
     ~default_message:"e2ee password failed" value
 
 let value_string value = Option.map trim_keyword (Edn_util.as_string_like value)
@@ -513,7 +512,7 @@ let find_remote_graph graph graphs =
 let remote_graph_not_found graph =
   Error.make
     ~context:(Edn_util.map [ (kw "graph", Edn_util.string graph) ])
-    (Edn_util.keyword_t "remote-graph-not-found")
+    (Error.Remote_graph_not_found)
     ("remote graph not found: " ^ graph)
 
 let graph_db_not_empty repo count =
@@ -524,7 +523,7 @@ let graph_db_not_empty repo count =
            (kw "repo", Edn_util.string (repo_string repo));
            (kw "non-empty-entity-count", Edn_util.int count);
          ])
-    (Edn_util.keyword_t "graph-db-not-empty")
+    (Error.Graph_db_not_empty)
     "graph db is not empty"
 
 let download_progress_enabled config ~progress ~progress_explicit =
@@ -565,7 +564,7 @@ let asset_download_error code message repo graph =
            (kw "repo", Edn_util.string (repo_string repo));
            (kw "graph", Edn_util.string (graph_string graph));
          ])
-    (Edn_util.keyword_t code) message
+    code message
 
 let asset_lookup_ref ~id ~uuid =
   match (id, uuid) with
@@ -690,7 +689,7 @@ let e2ee_password_not_found repo =
            (kw "repo", Edn_util.string (repo_string repo));
            (kw "action", kw "sync-start");
          ])
-    (Edn_util.keyword_t "e2ee-password-not-found")
+    (Error.E2ee_password_not_found)
     "e2ee-password not found"
 
 let missing_refresh_token_error config =
@@ -698,7 +697,7 @@ let missing_refresh_token_error config =
     ~context:
       (Edn_util.map
          [ (kw "auth-path", Edn_util.string (Auth_state.auth_path config)) ])
-    (Edn_util.keyword_t "missing-auth")
+    (Error.Missing_auth)
     "missing refresh token"
 
 let refresh_token_required config =
@@ -774,7 +773,7 @@ let runtime_error repo status last_error =
            (kw "status", status);
            (kw "last-error", last_error);
          ])
-    (Edn_util.keyword_t "sync-start-runtime-error")
+    (Error.Sync_start_runtime_error)
     "sync start reached open websocket but runtime sync error is present"
 
 let sync_start_timeout_error repo status =
@@ -787,7 +786,7 @@ let sync_start_timeout_error repo status =
          [
            (kw "repo", Edn_util.string (repo_string repo)); (kw "status", status);
          ])
-    (Edn_util.keyword_t "sync-start-timeout")
+    (Error.Sync_start_timeout)
     "sync start timed out before websocket reached open state"
 
 let wait_sync_start_ready config invoke_config repo =
@@ -1117,42 +1116,42 @@ let validate_asset repo graph asset =
   | Some _ ->
       if not (List.exists asset_tag (asset_tags asset)) then
         Error
-          (asset_download_error "not-asset" "selected entity is not an asset"
+          (asset_download_error Error.Not_asset "selected entity is not an asset"
              repo graph)
       else if Option.is_none (non_empty_string_field asset "block/uuid") then
         Error
-          (asset_download_error "asset-uuid-missing" "asset uuid is missing"
+          (asset_download_error Error.Asset_uuid_missing "asset uuid is missing"
              repo graph)
       else if
         Option.is_none
           (non_empty_string_field asset "logseq.property.asset/type")
       then
         Error
-          (asset_download_error "asset-type-missing" "asset type is missing"
+          (asset_download_error Error.Asset_type_missing "asset type is missing"
              repo graph)
       else if
         Option.is_none
           (non_empty_string_field asset "logseq.property.asset/checksum")
       then
         Error
-          (asset_download_error "asset-checksum-missing"
+          (asset_download_error Error.Asset_checksum_missing
              "asset checksum is missing" repo graph)
       else if not (field_present asset "logseq.property.asset/remote-metadata")
       then
         Error
-          (asset_download_error "asset-not-remote"
+          (asset_download_error Error.Asset_not_remote
              "asset remote metadata is missing" repo graph)
       else if
         Option.is_some
           (non_empty_string_field asset "logseq.property.asset/external-url")
       then
         Error
-          (asset_download_error "external-asset"
+          (asset_download_error Error.External_asset
              "external URL assets cannot be downloaded through sync" repo graph)
       else Ok asset
   | _ ->
       Error
-        (asset_download_error "asset-not-found" "asset not found" repo graph)
+        (asset_download_error Error.Asset_not_found "asset not found" repo graph)
 
 let request_asset_download mode _config invoke_config repo asset checksum_status
     extra =
@@ -1170,7 +1169,7 @@ let request_asset_download mode _config invoke_config repo asset checksum_status
       Cli_effect.pure
         (Cli_result.error ~command:Command_id.Sync_asset_download mode
            (Error.make
-              (Edn_util.keyword_t "asset-uuid-missing")
+              (Error.Asset_uuid_missing)
               "asset uuid is missing"))
 
 let execute_asset_download_request mode config invoke_config repo graph asset =
@@ -1210,7 +1209,7 @@ let execute_asset_download_request mode config invoke_config repo graph asset =
                      (kw "graph", Edn_util.string (graph_string graph));
                      (kw "status", status);
                    ])
-              (Edn_util.keyword_t "sync-not-started")
+              (Error.Sync_not_started)
               "sync is not started for this graph"))
 
 let execute_asset_download mode config repo graph id uuid =
@@ -1269,6 +1268,7 @@ let meta ?(examples = []) id doc =
     requires_graph = Command_id.requires_graph id;
     requires_auth = Command_id.requires_auth id;
     write_command = Command_id.is_write id;
+    human_table_headers_order = [];
   }
 
 let metadata () =

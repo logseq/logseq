@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Plugin rusak \"{1}\" telah dihapus."
 
  :plugin.proxy/direct "Langsung"
+ :plugin.proxy/host-port-required "Host dan port diperlukan"
  :plugin.proxy/system "Sistem"
  :plugin.proxy/test-url "Uji URL"
  :plugin.proxy/testing "Menguji"
@@ -1245,7 +1246,6 @@
  :property/drag-to-reorder "Seret untuk mengurutkan"
  :property/existing-values "Nilai yang ada"
  :property/go-to-this-property "Buka halaman properti"
- :property/hidden-properties "Properti tersembunyi"
  :property/hide-by-default "Sembunyikan secara default"
  :property/hide-choice-for-tag "Sembunyikan pilihan untuk tag"
  :property/hide-empty-value "Sembunyikan nilai kosong"

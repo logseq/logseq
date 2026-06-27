@@ -199,12 +199,12 @@ let value_rank value =
   match value with
   | Melange_edn.Any Melange_edn.Nil -> 0
   | Any (Bool _) -> 1
-  | Any (Int _ | Bigint _ | Float _ | Decimal _) -> 2
+  | Any (Int _ | Bigint _ | Float _ | Decimal _ | Ratio _) -> 2
   | Any (String _ | Symbol _ | Keyword _ | Tagged ("uuid", _)) -> 3
   | Any (Tagged ("transit/bytes", _)) -> 4
   | Any (List _ | Vector _ | Set _) -> 5
   | Any (Map _) -> 6
-  | Any (Char _ | Tagged _) -> 7
+  | Any (Char _ | Regex _ | Tagged _) -> 7
 
 let compare_value a b =
   let number value =
@@ -462,8 +462,8 @@ let tag_id_of_result result =
       | Some id -> Ok id
       | None ->
           Error
-            (Error.make (Edn_util.keyword_t "tag-not-found") "tag not found"))
-  | _ -> Error (Error.make (Edn_util.keyword_t "tag-not-found") "tag not found")
+            (Error.make (Error.Tag_not_found) "tag not found"))
+  | _ -> Error (Error.make (Error.Tag_not_found) "tag not found")
 
 let property_entity value =
   Option.is_some (Edn_util.get value "logseq.property/type")
@@ -480,12 +480,12 @@ let property_ident_of_entity entity =
     | None ->
         Error
           (Error.make
-             (Edn_util.keyword_t "property-not-found")
+             (Error.Property_not_found)
              "property not found")
   else
     Error
       (Error.make
-         (Edn_util.keyword_t "property-not-found")
+         (Error.Property_not_found)
          "property not found")
 
 let property_ident_of_query result =
@@ -494,7 +494,7 @@ let property_ident_of_query result =
   | None ->
       Error
         (Error.make
-           (Edn_util.keyword_t "property-not-found")
+           (Error.Property_not_found)
            "property not found")
 
 let keyword_label ident =
@@ -699,7 +699,7 @@ let normalize_asset_options invoke_config repo options =
           pure
             (Error
                (Error.make
-                  (Edn_util.keyword_t "asset-tag-not-found")
+                  (Error.Asset_tag_not_found)
                   "asset tag not found")))
 
 let prepare_tag_item options item =
@@ -925,6 +925,7 @@ let meta ?(examples = []) id doc =
     requires_graph = Command_id.requires_graph id;
     requires_auth = Command_id.requires_auth id;
     write_command = Command_id.is_write id;
+    human_table_headers_order = [];
   }
 
 let metadata () =

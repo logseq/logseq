@@ -845,6 +845,63 @@ should be done through this fn in order to get global config and config defaults
       :else      (swap! state update path f)))
   nil)
 
+(defn- edit-block-fn-entry
+  [value]
+  (cond
+    (fn? value)
+    {:f value}
+
+    (and (map? value) (fn? (:f value)))
+    value
+
+    :else
+    nil))
+
+(defn- edit-block-fn-queue
+  [value]
+  (cond
+    (vector? value) (into [] (keep edit-block-fn-entry) value)
+    :else (if-let [entry (edit-block-fn-entry value)]
+            [entry]
+            [])))
+
+(defn- take-edit-block-fn-entry
+  [queue pred]
+  (let [[before [entry & after]] (split-with (complement pred) queue)]
+    (when entry
+      [entry (vec (concat before after))])))
+
+(defn queue-edit-block-fn!
+  ([f]
+   (queue-edit-block-fn! nil f))
+  ([tx-id f]
+   (when (fn? f)
+     (update-state! :editor/edit-block-fn #(conj (edit-block-fn-queue %)
+                                                 {:tx-id tx-id
+                                                  :f f})))))
+
+(defn remove-edit-block-fn!
+  [tx-id]
+  (when tx-id
+    (update-state! :editor/edit-block-fn
+                   #(->> (edit-block-fn-queue %)
+                         (remove (fn [entry] (= tx-id (:tx-id entry))))
+                         vec))))
+
+(defn take-edit-block-fn!
+  ([]
+   (let [queue (edit-block-fn-queue @(:editor/edit-block-fn @state))]
+     (when-let [[entry more] (take-edit-block-fn-entry queue #(nil? (:tx-id %)))]
+       (set-state! :editor/edit-block-fn more)
+       (:f entry))))
+  ([tx-id]
+   (let [queue (edit-block-fn-queue @(:editor/edit-block-fn @state))
+         match (and tx-id
+                    (take-edit-block-fn-entry queue #(= tx-id (:tx-id %))))]
+     (when-let [[entry more] match]
+       (set-state! :editor/edit-block-fn more)
+       (:f entry)))))
+
 ;; State getters and setters
 ;; =========================
 ;; These fns handle any key except :config.
@@ -1143,11 +1200,18 @@ should be done through this fn in order to get global config and config defaults
         selected-ids (set (get-selected-block-ids selected-blocks))
         _ (set-state! :selection/blocks blocks)
         new-ids (set (get-selection-block-ids))
-        removed (set/difference selected-ids new-ids)]
+        removed (set/difference selected-ids new-ids)
+        next-blocks (set (remove nil? blocks))
+        removed-nodes-without-blockid (->> selected-blocks
+                                           (remove nil?)
+                                           (remove #(contains? next-blocks %))
+                                           (remove #(dom/attr % "blockid")))]
     (mark-dom-blocks-as-selected blocks)
     (doseq [id removed]
       (doseq [node (dom/sel (util/format "[blockid='%s']" id))]
-        (unselect-node node)))))
+        (unselect-node node)))
+    (doseq [node removed-nodes-without-blockid]
+      (unselect-node node))))
 
 (defn set-selection-blocks!
   ([blocks]
@@ -2053,10 +2117,12 @@ should be done through this fn in order to get global config and config defaults
   (:auth/refresh-token @state))
 
 (defn http-proxy-enabled-or-val? []
-  (when-let [{:keys [type protocol host port] :as agent-opts} (get-state [:electron/user-cfgs :settings/agent])]
-    (when (and  (not (contains? #{"system"} type))
-                (every? not-empty (vals agent-opts)))
-      (str protocol "://" host ":" port))))
+  (when-let [{:keys [type protocol host port]} (get-state [:electron/user-cfgs :settings/agent])]
+    ;; Older saved proxy settings may only have :protocol.
+    (let [proxy-type (or type protocol)]
+      (when (and (contains? #{"http" "socks5"} proxy-type)
+                 (every? not-empty [proxy-type host port]))
+        (str proxy-type "://" host ":" port)))))
 
 (defn get-current-pdf
   []

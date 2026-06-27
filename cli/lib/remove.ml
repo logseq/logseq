@@ -82,7 +82,7 @@ let build_block repo graph (opts : block_opts) =
   match (opts.id_raw, opts.uuid) with
   | None, None ->
       Error
-        (Error.make (Edn_util.keyword_t "missing-target") "block is required")
+        (Error.make (Error.Missing_target) "block is required")
   | Some id_raw, None -> (
       match Id_parse.parse_id_string id_raw with
       | Ok ids ->
@@ -120,7 +120,7 @@ let build_page repo graph (opts : page_opts) =
   | None, None ->
       Error
         (Error.make
-           (Edn_util.keyword_t "missing-page-name")
+           (Error.Missing_page_name)
            "page name or id is required")
   | Some id, None -> Ok (Remove_page { repo; graph; id = Some id; page = None })
   | None, Some page when page <> "" ->
@@ -134,7 +134,7 @@ let build_named make repo graph (opts : named_entity_opts) =
   | None, None ->
       Error
         (Error.make
-           (Edn_util.keyword_t "missing-target")
+           (Error.Missing_target)
            "name or id is required")
   | Some id, None -> Ok (make repo graph (Some id) None)
   | None, Some name when name <> "" -> Ok (make repo graph None (Some name))
@@ -355,49 +355,49 @@ let property_entity value =
 
 let validate_tag_target entity =
   if not (has_id entity) then
-    Error (Error.make (Edn_util.keyword_t "tag-not-found") "tag not found")
+    Error (Error.make (Error.Tag_not_found) "tag not found")
   else if not (tag_entity entity) then
     Error
       (Error.make
-         (Edn_util.keyword_t "invalid-tag-target")
+         (Error.Invalid_tag_target)
          "target is not a tag")
   else if Edn_util.get_bool entity "logseq.property/built-in?" = Some true then
     Error
       (Error.make
-         (Edn_util.keyword_t "tag-built-in")
+         (Error.Tag_built_in)
          "built-in tag cannot be removed")
   else if Edn_util.get_bool entity "logseq.property/public?" = Some false then
     Error
       (Error.make
-         (Edn_util.keyword_t "tag-hidden")
+         (Error.Tag_hidden)
          "hidden tag cannot be removed")
   else
     match uuid_of_entity entity with
     | Some _ -> Ok entity
     | None ->
         Error
-          (Error.make (Edn_util.keyword_t "tag-not-found") "tag uuid not found")
+          (Error.make (Error.Tag_not_found) "tag uuid not found")
 
 let validate_property_target entity =
   if not (has_id entity) then
     Error
       (Error.make
-         (Edn_util.keyword_t "property-not-found")
+         (Error.Property_not_found)
          "property not found")
   else if not (property_entity entity) then
     Error
       (Error.make
-         (Edn_util.keyword_t "invalid-property-target")
+         (Error.Invalid_property_target)
          "target is not a property")
   else if Edn_util.get_bool entity "logseq.property/built-in?" = Some true then
     Error
       (Error.make
-         (Edn_util.keyword_t "property-built-in")
+         (Error.Property_built_in)
          "built-in property cannot be removed")
   else if Edn_util.get_bool entity "logseq.property/public?" = Some false then
     Error
       (Error.make
-         (Edn_util.keyword_t "property-hidden")
+         (Error.Property_hidden)
          "hidden property cannot be removed")
   else
     match uuid_of_entity entity with
@@ -405,7 +405,7 @@ let validate_property_target entity =
     | None ->
         Error
           (Error.make
-             (Edn_util.keyword_t "property-not-found")
+             (Error.Property_not_found)
              "property uuid not found")
 
 let target_name label action_name entity =
@@ -418,12 +418,12 @@ let delete_resolved_block mode invoke_config repo entity =
   if not (has_id entity) then
     pure
       (Cli_result.error ~command:Command_id.Remove_block mode
-         (Error.make (Edn_util.keyword_t "block-not-found") "block not found"))
+         (Error.make (Error.Block_not_found) "block not found"))
   else if has_name entity then
     pure
       (Cli_result.error ~command:Command_id.Remove_block mode
          (Error.make
-            (Edn_util.keyword_t "invalid-target")
+            (Error.Invalid_target)
             "target is not a block, use 'remove page' instead"))
   else
     match uuid_of_entity entity with
@@ -431,7 +431,7 @@ let delete_resolved_block mode invoke_config repo entity =
         pure
           (Cli_result.error ~command:Command_id.Remove_block mode
              (Error.make
-                (Edn_util.keyword_t "block-not-found")
+                (Error.Block_not_found)
                 "block uuid not found"))
     | Some uuid ->
         bind (delete_block_uuids invoke_config repo [ uuid ]) (fun result ->
@@ -490,7 +490,7 @@ let execute_remove_block_ids mode invoke_config repo ids =
         pure
           (Cli_result.error ~command:Command_id.Remove_block mode
              (Error.make
-                (Edn_util.keyword_t "invalid-target")
+                (Error.Invalid_target)
                 "target is not a block, use 'remove page' instead"))
       else
         let delete_effect =
@@ -512,14 +512,14 @@ let execute_remove_page_id mode invoke_config repo id =
       if not (has_id entity) then
         pure
           (Cli_result.error ~command:Command_id.Remove_page mode
-             (Error.make (Edn_util.keyword_t "page-not-found") "page not found"))
+             (Error.make (Error.Page_not_found) "page not found"))
       else
         match uuid_of_entity entity with
         | None ->
             pure
               (Cli_result.error ~command:Command_id.Remove_page mode
                  (Error.make
-                    (Edn_util.keyword_t "page-not-found")
+                    (Error.Page_not_found)
                     "page not found"))
         | Some uuid ->
             bind (delete_page_uuid invoke_config repo uuid) (fun result ->
@@ -538,13 +538,13 @@ let execute_remove_page_name mode invoke_config repo name =
           pure
             (Cli_result.error ~command:Command_id.Remove_page mode
                (Error.make
-                  (Edn_util.keyword_t "page-not-found")
+                  (Error.Page_not_found)
                   "page not found"))
       | _ :: _ :: _ ->
           pure
             (Cli_result.error ~command:Command_id.Remove_page mode
                (ambiguous_error
-                  (Edn_util.keyword_t "ambiguous-page-name")
+                  (Error.Ambiguous_page_name)
                   "page" name matches))
       | [ page ] -> (
           match uuid_of_entity page with
@@ -552,7 +552,7 @@ let execute_remove_page_name mode invoke_config repo name =
               pure
                 (Cli_result.error ~command:Command_id.Remove_page mode
                    (Error.make
-                      (Edn_util.keyword_t "page-not-found")
+                      (Error.Page_not_found)
                       "page not found"))
           | Some uuid ->
               bind (delete_page_uuid invoke_config repo uuid) (fun result ->
@@ -616,7 +616,7 @@ let execute_remove_entity mode invoke_config repo ~command ~list_method
       pure
         (Cli_result.error ~command mode
            (Error.make
-              (Edn_util.keyword_t "missing-target")
+              (Error.Missing_target)
               (label ^ " name or id is required")))
 
 let execute_with_mode action config mode =
@@ -646,7 +646,7 @@ let execute_with_mode action config mode =
       pure
         (Cli_result.error ~command:Command_id.Remove_block mode
            (Error.make
-              (Edn_util.keyword_t "missing-target")
+              (Error.Missing_target)
               "block is required"))
   | Remove_page { repo; id = Some id; _ } ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
@@ -665,7 +665,7 @@ let execute_with_mode action config mode =
       pure
         (Cli_result.error ~command:Command_id.Remove_page mode
            (Error.make
-              (Edn_util.keyword_t "missing-page-name")
+              (Error.Missing_page_name)
               "page name or id is required"))
   | Remove_tag { repo; id; name; _ } ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
@@ -676,8 +676,8 @@ let execute_with_mode action config mode =
             execute_remove_entity mode invoke_config repo
               ~command:Command_id.Remove_tag
               ~list_method:(Edn_util.keyword_t "thread-api/cli-list-tags")
-              ~not_found_code:(Edn_util.keyword_t "tag-not-found")
-              ~ambiguous_code:(Edn_util.keyword_t "ambiguous-tag-name")
+              ~not_found_code:(Error.Tag_not_found)
+              ~ambiguous_code:(Error.Ambiguous_tag_name)
               ~label:"tag" ~validate:validate_tag_target ~id ~name)
   | Remove_property { repo; id; name; _ } ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
@@ -688,8 +688,8 @@ let execute_with_mode action config mode =
             execute_remove_entity mode invoke_config repo
               ~command:Command_id.Remove_property
               ~list_method:(Edn_util.keyword_t "thread-api/cli-list-properties")
-              ~not_found_code:(Edn_util.keyword_t "property-not-found")
-              ~ambiguous_code:(Edn_util.keyword_t "ambiguous-property-name")
+              ~not_found_code:(Error.Property_not_found)
+              ~ambiguous_code:(Error.Ambiguous_property_name)
               ~label:"property" ~validate:validate_property_target ~id ~name)
 
 let meta ?(examples = []) id doc =
@@ -704,6 +704,7 @@ let meta ?(examples = []) id doc =
     requires_graph = Command_id.requires_graph id;
     requires_auth = Command_id.requires_auth id;
     write_command = Command_id.is_write id;
+    human_table_headers_order = [];
   }
 
 let metadata () =

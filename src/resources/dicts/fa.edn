@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "افزونهٔ خراب «{1}» حذف شد."
 
  :plugin.proxy/direct "مستقیم"
+ :plugin.proxy/host-port-required "میزبان و پورت الزامی است"
  :plugin.proxy/system "سیستم"
  :plugin.proxy/test-url "آزمون URL"
  :plugin.proxy/testing "در حال آزمایش"
@@ -1245,7 +1246,6 @@
  :property/drag-to-reorder "برای مرتب‌سازی بکشید"
  :property/existing-values "مقادیر موجود"
  :property/go-to-this-property "رفتن به صفحه ویژگی"
- :property/hidden-properties "ویژگی‌های پنهان"
  :property/hide-by-default "مخفی به‌طور پیش‌فرض"
  :property/hide-choice-for-tag "مخفی کردن گزینه برای برچسب"
  :property/hide-empty-value "مخفی کردن مقادیر خالی"

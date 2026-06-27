@@ -30,6 +30,7 @@
             [frontend.version :refer [version]]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [logseq.common.version :as build-version]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.popup.core :as shui-popup]
@@ -271,8 +272,10 @@
                       (state/set-state! :ui/help-open? false))}
          [:span.flex.items-center.pr-2.opacity-40 (ui/icon icon {:size 20})]
          [:strong.font-normal title]]))]
-   [:div.ft.pl-11.pb-3
-    [:span.opacity.text-xs.opacity-30 "Logseq " version]]])
+   [:div.ft.pl-11.pb-3.flex.flex-col.gap-1
+    [:span.opacity.text-xs.opacity-30 "Logseq " version]
+    (when-let [revision (not-empty (build-version/revision))]
+      [:span.opacity.text-xs.opacity-30 (t :help/revision revision)])]])
 
 (hsx/defc help-button
   []

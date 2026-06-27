@@ -48,7 +48,7 @@ let build ?registry:_ config _globals parsed =
           (Error.make
              ~hint:
                "Use: logseq search <block|page|property|tag> --content <query>"
-             (Edn_util.keyword_t "missing-query-text")
+             (Error.Missing_query_text)
              "query text is required")
       else
         Ok
@@ -227,6 +227,7 @@ let meta ?(examples = []) id doc =
     requires_graph = Command_id.requires_graph id;
     requires_auth = Command_id.requires_auth id;
     write_command = Command_id.is_write id;
+    human_table_headers_order = [];
   }
 
 let metadata () =

@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Poškozený plugin „{1}“ byl odstraněn."
 
  :plugin.proxy/direct "Přímé"
+ :plugin.proxy/host-port-required "Hostitel a port jsou povinné"
  :plugin.proxy/system "Systém"
  :plugin.proxy/test-url "Otestovat URL"
  :plugin.proxy/testing "Testování"
@@ -1245,7 +1246,6 @@
  :property/drag-to-reorder "Přetáhněte pro změnu pořadí"
  :property/existing-values "Existující hodnoty"
  :property/go-to-this-property "Přejít na stránku vlastnosti"
- :property/hidden-properties "Skryté vlastnosti"
  :property/hide-by-default "Skrýt ve výchozím nastavení"
  :property/hide-choice-for-tag "Skrýt volbu pro štítek"
  :property/hide-empty-value "Skrýt prázdné hodnoty"

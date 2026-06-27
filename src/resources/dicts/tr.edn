@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Bozuk eklenti \"{1}\" kaldırıldı."
 
  :plugin.proxy/direct "Doğrudan"
+ :plugin.proxy/host-port-required "Ana makine ve port gereklidir"
  :plugin.proxy/system "Sistem"
  :plugin.proxy/test-url "URL'yi test et"
  :plugin.proxy/testing "Test ediliyor"
@@ -1245,7 +1246,6 @@
  :property/drag-to-reorder "Sıralamak için sürükleyin"
  :property/existing-values "Mevcut değerler"
  :property/go-to-this-property "Özellik sayfasına git"
- :property/hidden-properties "Gizli özellikler"
  :property/hide-by-default "Varsayılan olarak gizle"
  :property/hide-choice-for-tag "Etiket için seçeneği gizle"
  :property/hide-empty-value "Boş değerleri gizle"

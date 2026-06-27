@@ -55,6 +55,10 @@ let cli_entrypoint_path () =
   let argv = Cli_platform.argv () in
   if Array.length argv > 1 then Some argv.(1) else None
 
+let parent_executable_path () =
+  let argv = Cli_platform.argv () in
+  if Array.length argv > 0 then argv.(0) else "node"
+
 let cli_dir_db_worker_script_paths () =
   match cli_entrypoint_path () with
   | Some entrypoint ->
@@ -206,13 +210,13 @@ let ensure_repo_dir config repo =
     if not (Cli_unix.is_directory path) then
       Stdlib.Error
         (Error.make
-           (Edn_util.keyword_t "root-dir-permission")
+           (Error.Root_dir_permission)
            ("graph-dir is not a directory: " ^ path))
     else Stdlib.Ok path
   with exn ->
     Stdlib.Error
       (Error.make
-         (Edn_util.keyword_t "root-dir-permission")
+         (Error.Root_dir_permission)
          ("graph-dir is not readable/writable: " ^ path ^ " ("
         ^ Printexc.to_string exn ^ ")"))
 
@@ -245,7 +249,7 @@ let resolve_script_path config =
            ~context:
              (Edn_util.vector
                 (List.map (fun path -> Edn_util.string path) candidates))
-           (Edn_util.keyword_t "server-script-missing")
+           (Error.Server_script_missing)
            ("db-worker script is missing. Checked paths: "
            ^ String.concat ", " candidates))
 
@@ -258,33 +262,55 @@ let env_with_node_runtime () =
   in
   Array.of_list ("ELECTRON_RUN_AS_NODE=1" :: without_key "ELECTRON_RUN_AS_NODE")
 
+let db_worker_spawn_args ~executable ~script ~root_dir ~repo ~owner_source
+    ~create_empty_db =
+  let repo = Cli_primitive.string_of_repo repo in
+  [
+    executable;
+    script;
+    "--repo";
+    repo;
+    "--root-dir";
+    root_dir;
+    "--owner-source";
+    owner_source;
+  ]
+  @ if create_empty_db then [ "--create-empty-db" ] else []
+
+let shell_quote value =
+  let rec needs_quote i =
+    i < String.length value
+    &&
+    match value.[i] with
+    | ' ' | '\t' | '\n' | '\'' | '"' | '\\' -> true
+    | _ -> needs_quote (i + 1)
+  in
+  if value <> "" && not (needs_quote 0) then value
+  else "'" ^ String.concat "'\\''" (String.split_on_char '\'' value) ^ "'"
+
+let db_worker_command_line ~script ~root_dir ~repo ~owner_source
+    ~create_empty_db =
+  let executable = parent_executable_path () in
+  "ELECTRON_RUN_AS_NODE=1"
+  :: db_worker_spawn_args ~executable ~script ~root_dir ~repo ~owner_source
+       ~create_empty_db
+  |> List.map shell_quote |> String.concat " "
+
 let spawn_server_process ~script ~root_dir ~repo ~owner_source ~create_empty_db
     =
   let devnull = Cli_unix.openfile "/dev/null" [ Cli_unix.O_RDWR ] 0 in
   Fun.protect
     ~finally:(fun () -> Cli_unix.close devnull)
     (fun () ->
-      let repo = Cli_primitive.string_of_repo repo in
-      let args =
-        [
-          "env";
-          "node";
-          script;
-          "--repo";
-          repo;
-          "--root-dir";
-          root_dir;
-          "--owner-source";
-          owner_source;
-        ]
-      in
+      let executable = parent_executable_path () in
       let argv =
         Array.of_list
-          (args @ if create_empty_db then [ "--create-empty-db" ] else [])
+          (db_worker_spawn_args ~executable ~script ~root_dir ~repo
+             ~owner_source ~create_empty_db)
       in
       ignore
-        (Cli_unix.create_process_env "/usr/bin/env" argv
-           (env_with_node_runtime ()) devnull devnull devnull))
+        (Cli_unix.create_process_env executable argv (env_with_node_runtime ())
+           devnull devnull devnull))
 
 let find_repo_server config repo =
   Cli_effect.map
@@ -368,9 +394,13 @@ let start_server_unprofiled config repo ~create_empty_db =
                               pure
                                 (Stdlib.Error
                                    (Error.make
-                                      (Edn_util.keyword_t
-                                         "server-start-timeout-orphan")
-                                      "db-worker-node failed to start"))
+                                      (Error.Server_start_timeout_orphan)
+                                      ("db-worker-node failed to start. \
+                                        Command: "
+                                      ^ db_worker_command_line ~script
+                                          ~root_dir:(resolve_root_dir config)
+                                          ~repo ~owner_source:"cli"
+                                          ~create_empty_db)))
                           | Some () ->
                               bind
                                 (time "server.wait-publish" (fun () ->
@@ -381,8 +411,7 @@ let start_server_unprofiled config repo ~create_empty_db =
                                       pure
                                         (Stdlib.Error
                                            (Error.make
-                                              (Edn_util.keyword_t
-                                                 "server-start-failed")
+                                              (Error.Server_start_failed)
                                               "db-worker-node failed to start"))
                                   | Some _ ->
                                       bind
@@ -398,15 +427,14 @@ let start_server_unprofiled config repo ~create_empty_db =
                                               pure
                                                 (Stdlib.Error
                                                    (Error.make
-                                                      (Edn_util.keyword_t
-                                                         "server-start-failed")
+                                                      (Error.Server_start_failed)
                                                       "db-worker-node failed \
                                                        to start"))))))
                 with exn ->
                   pure
                     (Stdlib.Error
                        (Error.make
-                          (Edn_util.keyword_t "server-start-failed")
+                          (Error.Server_start_failed)
                           ("failed to spawn db-worker-node: "
                          ^ Printexc.to_string exn)))))))
 
@@ -439,7 +467,7 @@ let ensure_server config repo ~create_empty_db =
                         pure
                           (Stdlib.Error
                              (Error.make
-                                (Edn_util.keyword_t "server-start-failed")
+                                (Error.Server_start_failed)
                                 "db-worker-node failed to publish health")))))
 
 let shutdown_server server =
@@ -462,14 +490,14 @@ let stop_server config repo =
         pure
           (Stdlib.Error
              (Error.make
-                (Edn_util.keyword_t "server-not-found")
+                (Error.Server_not_found)
                 "server is not running"))
     | Some server ->
         if not (owner_manageable server.owner_source) then
           pure
             (Stdlib.Error
                (Error.make
-                  (Edn_util.keyword_t "server-owned-by-other")
+                  (Error.Server_owned_by_other)
                   "server is owned by another process"))
         else
           let shutdown_timeout_span = Time.span_of_ms 5_000L in
@@ -502,13 +530,13 @@ let stop_server config repo =
                               pure
                                 (Stdlib.Error
                                    (Error.make
-                                      (Edn_util.keyword_t "server-stop-timeout")
+                                      (Error.Server_stop_timeout)
                                       "timed out stopping server"))))))
 
 let restart_server config repo =
   stop_server config repo >>= function
   | Stdlib.Ok _ -> start_server config repo ~create_empty_db:false
-  | Stdlib.Error err when err.code = Edn_util.keyword_t "server-not-found" ->
+  | Stdlib.Error err when err.code = Error.Server_not_found ->
       start_server config repo ~create_empty_db:false
   | Stdlib.Error err -> Cli_effect.pure (Stdlib.Error err)
 
@@ -651,7 +679,7 @@ let cleanup_revision_mismatched_servers config ~cli_revision =
                   stop_loop killed
                     (( server,
                        Error.make
-                         (Edn_util.keyword_t "server-cleanup-failed")
+                         (Error.Server_cleanup_failed)
                          "failed to stop revision-mismatched server" )
                     :: failed)
                     rest)

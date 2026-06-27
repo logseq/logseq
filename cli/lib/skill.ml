@@ -58,7 +58,7 @@ let resolve_install_target ~global ~cwd ~home_dir =
   | true, None ->
       Error
         (Error.make
-           (Edn_util.keyword_t "skill-home-dir-unavailable")
+           (Error.Skill_home_dir_unavailable)
            "home directory is unavailable; cannot resolve --global install \
             target")
   | _ ->
@@ -114,7 +114,7 @@ let resolve_source_path ?source_path config =
       Error
         (Error.make
            ~context:(Edn_util.vector [ Edn_util.string path ])
-           (Edn_util.keyword_t "skill-source-not-found")
+           (Error.Skill_source_not_found)
            ("skill source file not found: " ^ path))
   | None -> (
       let candidates = default_source_candidates config in
@@ -126,7 +126,7 @@ let resolve_source_path ?source_path config =
                ~context:
                  (Edn_util.vector
                     (List.map (fun path -> Edn_util.string path) candidates))
-               (Edn_util.keyword_t "skill-source-not-found")
+               (Error.Skill_source_not_found)
                ("skill source file not found. Checked paths: "
                ^ String.concat ", " candidates)))
 
@@ -176,7 +176,7 @@ let execute_show config mode source_path =
           Cli_effect.pure
             (Output_mode.error ~command mode
                (Error.make
-                  (Edn_util.keyword_t "skill-show-failed")
+                  (Error.Skill_show_failed)
                   ("failed to read skill source: " ^ Printexc.to_string exn))))
 
 let install_value ~source ~file =
@@ -210,7 +210,7 @@ let execute_install config mode ~global ~source_path ~destination_dir
             Cli_effect.pure
               (Output_mode.error ~command mode
                  (Error.make
-                    (Edn_util.keyword_t "skill-install-failed")
+                    (Error.Skill_install_failed)
                     ("failed to install skill: " ^ Printexc.to_string exn)))))
 
 let execute_with_mode action config mode =
@@ -232,6 +232,7 @@ let meta id doc =
     requires_graph = Command_id.requires_graph id;
     requires_auth = Command_id.requires_auth id;
     write_command = Command_id.is_write id;
+    human_table_headers_order = [];
   }
 
 let metadata () =

@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Defektes Plugin „{1}“ entfernt."
 
  :plugin.proxy/direct "Direkt"
+ :plugin.proxy/host-port-required "Host und Port sind erforderlich"
  :plugin.proxy/system "System"
  :plugin.proxy/test-url "Test-URL"
  :plugin.proxy/testing "Wird getestet"
@@ -1245,7 +1246,6 @@
  :property/drag-to-reorder "Ziehen zum Umordnen"
  :property/existing-values "Vorhandene Werte"
  :property/go-to-this-property "Zur Eigenschaftsseite"
- :property/hidden-properties "Versteckte Eigenschaften"
  :property/hide-by-default "Standardmäßig ausblenden"
  :property/hide-choice-for-tag "Auswahl für Tag ausblenden"
  :property/hide-empty-value "Leere Werte ausblenden"

@@ -12,7 +12,7 @@ type event_subscription = { close : unit -> unit Cli_effect.t }
 
 let thread_api_method name = Edn_util.keyword_t ("thread-api/" ^ name)
 
-module T = Transit.Json
+module T = Transit_melange.Transit.Json
 module E = Melange_edn
 
 let starts_with ~prefix value =
@@ -373,12 +373,12 @@ let bytes_of_output_data value =
 
 let unsupported_output_format format =
   Error.make
-    (Edn_util.keyword_t "unsupported-output-format")
+    (Error.Unsupported_output_format)
     ("unsupported output format: " ^ format)
 
 let unsupported_input_format format =
   Error.make
-    (Edn_util.keyword_t "unsupported-input-format")
+    (Error.Unsupported_input_format)
     ("unsupported input format: " ^ format)
 
 let write_output ~format ~path ~data =

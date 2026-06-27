@@ -28,8 +28,7 @@ let vector values = any (vector_t values)
 let set values = any (set_t values)
 let map fields = any (map_t fields)
 
-let iarray_to_list values =
-  List.init (Iarray.length values) (fun index -> Iarray.get values index)
+let array_to_list = Array.to_list
 
 let keyword_text value = Melange_edn.keyword_to_string value
 
@@ -85,29 +84,29 @@ let as_bytes = function
   | _ -> None
 
 let as_list = function
-  | Melange_edn.Any (Melange_edn.List values) -> Some (iarray_to_list values)
+  | Melange_edn.Any (Melange_edn.List values) -> Some (array_to_list values)
   | _ -> None
 
 let as_vector = function
-  | Melange_edn.Any (Melange_edn.Vector values) -> Some (iarray_to_list values)
+  | Melange_edn.Any (Melange_edn.Vector values) -> Some (array_to_list values)
   | _ -> None
 
 let as_vector_t = function
   | Melange_edn.Any (Melange_edn.Vector values) ->
-      Some (Melange_edn.vector (iarray_to_list values))
+      Some (Melange_edn.vector (array_to_list values))
   | _ -> None
 
 let as_set = function
-  | Melange_edn.Any (Melange_edn.Set values) -> Some (iarray_to_list values)
+  | Melange_edn.Any (Melange_edn.Set values) -> Some (array_to_list values)
   | _ -> None
 
 let as_map = function
-  | Melange_edn.Any (Melange_edn.Map fields) -> Some (iarray_to_list fields)
+  | Melange_edn.Any (Melange_edn.Map fields) -> Some (array_to_list fields)
   | _ -> None
 
 let as_map_t = function
   | Melange_edn.Any (Melange_edn.Map fields) ->
-      Some (Melange_edn.map (iarray_to_list fields))
+      Some (Melange_edn.map (array_to_list fields))
   | _ -> None
 
 let expect_vector_t label value =

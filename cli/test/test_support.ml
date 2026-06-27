@@ -466,9 +466,9 @@ let assert_created_at_column_aligned stdout =
   | [] -> fail_test "missing list page output"
   | header :: rows ->
       let created_index =
-        match Js.String.indexOf ~search:"block/created-at" header with
+        match Js.String.indexOf ~search:"created-at" header with
         | -1 ->
-            fail_test ("missing block/created-at header:\n" ^ stdout);
+            fail_test ("missing created-at header:\n" ^ stdout);
             0
         | index -> index
       in

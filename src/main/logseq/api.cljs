@@ -18,7 +18,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.sdk.assets :as sdk-assets]
             [logseq.sdk.core]
-            [logseq.sdk.experiments]
+            [logseq.sdk.experiments :as exper]
             [logseq.sdk.ui :as sdk-ui]
             [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]))
@@ -131,6 +131,7 @@
 (def ^:export remove_block api-editor/remove_block)
 (def ^:export remove_block_property api-editor/remove_block_property)
 (def ^:export rename_page api-editor/rename_page)
+(def ^:export restore_page api-editor/restore_page)
 (def ^:export restore_editing_cursor api-editor/restore_editing_cursor)
 (def ^:export save_focused_code_editor_content api-editor/save_focused_code_editor_content)
 (def ^:export select_block api-editor/select_block)
@@ -148,6 +149,7 @@
 (def ^:export make_asset_url sdk-assets/make_url)
 
 ;; experiments
+(def ^:export exper_register_fenced_code_renderer exper/register_fenced_code_renderer)
 (defn ^:export exper_load_scripts
   [pid & scripts]
   (when-let [^js _pl (plugin-handler/get-plugin-inst pid)]

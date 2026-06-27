@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "Пошкоджений плагін \"{1}\" видалено."
 
  :plugin.proxy/direct "Пряме з'єднання"
+ :plugin.proxy/host-port-required "Хост і порт обов'язкові"
  :plugin.proxy/system "Система"
  :plugin.proxy/test-url "Перевірити URL"
  :plugin.proxy/testing "Тестування"
@@ -1245,7 +1246,6 @@
  :property/drag-to-reorder "Перетащите для изменения порядка"
  :property/existing-values "Существующие значения"
  :property/go-to-this-property "Перейти к сторіноке властивості"
- :property/hidden-properties "Приховані властивості"
  :property/hide-by-default "Скрывать по умолчанию"
  :property/hide-choice-for-tag "Сховати вариант для тега"
  :property/hide-empty-value "Сховати пустые значения"

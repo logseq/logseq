@@ -102,7 +102,7 @@ let execute_with_mode (Debug_pull action) config mode =
               pure
                 (Output_mode.error ~command:Command_id.Debug_pull mode
                    (Error.make
-                      (Edn_util.keyword_t "entity-not-found")
+                      (Error.Entity_not_found)
                       "entity not found"))
             else
               pure
@@ -129,6 +129,7 @@ let metadata () =
       requires_graph = Command_id.requires_graph Command_id.Debug_pull;
       requires_auth = Command_id.requires_auth Command_id.Debug_pull;
       write_command = Command_id.is_write Command_id.Debug_pull;
+      human_table_headers_order = [];
     };
   ]
 

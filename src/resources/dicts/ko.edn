@@ -1204,6 +1204,7 @@
  :plugin.package-config/remove-installed-success "손상된 플러그인 \"{1}\"을 제거했습니다."
 
  :plugin.proxy/direct "직접 연결"
+ :plugin.proxy/host-port-required "호스트와 포트는 필수입니다"
  :plugin.proxy/system "시스템"
  :plugin.proxy/test-url "URL 테스트"
  :plugin.proxy/testing "테스트 중"
@@ -1245,7 +1246,6 @@
  :property/drag-to-reorder "드래그로 재정렬"
  :property/existing-values "기존 값"
  :property/go-to-this-property "이 속성의 페이지로"
- :property/hidden-properties "숨겨진 속성"
  :property/hide-by-default "기본적으로 숨기기"
  :property/hide-choice-for-tag "태그의 선택지 숨기기"
  :property/hide-empty-value "빈 값 숨기기"

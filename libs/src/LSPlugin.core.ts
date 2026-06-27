@@ -816,7 +816,7 @@ class PluginLocal extends EventEmitter<
     ${
         this.isWebPlugin
           ? `<script src="https://cdn.jsdelivr.net/npm/@logseq/libs/dist/lsplugin.user.min.js?v=${tag}"></script>`
-          : `<script src="${sdkPathRoot}/lsplugin.user.js?v=${tag}"></script>`
+          : `<script src="/external/${sdkPathRoot}/lsplugin.user.js?v=${tag}"></script>`
       }
 
   </head>

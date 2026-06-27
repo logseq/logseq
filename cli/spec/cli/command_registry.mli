@@ -28,6 +28,9 @@ type command_meta = {
   requires_graph : bool;
   requires_auth : bool;
   write_command : bool;
+
+  (* headers order when print table in human output *)
+  human_table_headers_order: string list;
 }
 
 type group_meta = {
