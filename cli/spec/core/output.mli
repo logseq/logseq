@@ -27,5 +27,5 @@ end
 
 type _ t =
   | Human : Human_output.t -> human t
-  | Edn : Melange_edn.any -> edn t
-  | Json : Melange_edn.any -> json t
+  | Edn : Melange_edn_melange.any -> edn t
+  | Json : Melange_edn_melange.any -> json t

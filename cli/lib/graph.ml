@@ -9,7 +9,7 @@ type backup_remove_opts = { src : string }
 type export_opts = {
   export_type : export_type;
   file : Cli_primitive.path option;
-  edn_options : Melange_edn.any option;
+  edn_options : Melange_edn_melange.any option;
   pretty_print : bool;
   include_timestamps : bool;
   exclude_built_in_pages : bool;
@@ -566,7 +566,7 @@ let graph_validate_result mode _config result =
            ("Graph invalid. Found "
            ^ format_count count "entity"
            ^ " with errors:\n"
-           ^ Melange_edn.to_edn_string (Edn_util.vector errors)))
+           ^ Melange_edn_melange.to_edn_string (Edn_util.vector errors)))
 
 let sym name = Edn_util.symbol name
 let vector_t values = Edn_util.vector_t values
@@ -595,7 +595,7 @@ let graph_info_key value =
       | None -> (
           match Edn_util.as_string value with
           | Some value -> value
-          | None -> Melange_edn.to_edn_string value))
+          | None -> Melange_edn_melange.to_edn_string value))
 
 let graph_info_kv rows =
   let row_fields row =
@@ -614,7 +614,7 @@ let graph_info_timestamp_seconds value =
   let timestamp =
     match Edn_util.as_int64 value with
     | Some value -> Some value
-    | None -> parse_positive_int64 (Melange_edn.to_edn_string value)
+    | None -> parse_positive_int64 (Melange_edn_melange.to_edn_string value)
   in
   timestamp
   |> Option.map (fun timestamp ->
@@ -623,7 +623,7 @@ let graph_info_timestamp_seconds value =
       else timestamp)
 
 let graph_info_datetime_value : type a.
-    a Output.Mode.t -> Melange_edn.any -> Melange_edn.any =
+    a Output.Mode.t -> Melange_edn_melange.any -> Melange_edn_melange.any =
  fun mode value ->
   match (mode, graph_info_timestamp_seconds value) with
   | Output.Mode.Human, Some then_seconds ->
@@ -668,7 +668,7 @@ let metadata_source backup_dir =
   match read_file_opt (backup_metadata_path backup_dir) with
   | Some text -> (
       try
-        let metadata = Melange_edn.of_edn_string text in
+        let metadata = Melange_edn_melange.of_edn_string text in
         Option.bind (Edn_util.get metadata "source") (fun value ->
             Edn_util.as_string_like value)
         |> Option.map strip_leading_colon
@@ -775,7 +775,7 @@ let write_backup_metadata dir ~backup_name ~repo ~db_path =
   let repo = Cli_primitive.string_of_repo repo in
   let created_at_ms = Time.time_to_epoch_ms (Time.now ()) in
   write_file (backup_metadata_path dir)
-    (Melange_edn.to_edn_string
+    (Melange_edn_melange.to_edn_string
        (Edn_util.map
           [
             (kw "schema-version", Edn_util.int 1);

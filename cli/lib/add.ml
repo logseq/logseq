@@ -32,8 +32,8 @@ let normalized_lookup_name value = String.lowercase_ascii (String.trim value)
 let query_value query = Edn_util.any (Cli_primitive.datascript_query_to_edn query)
 
 let edn_value_of_string ~label text =
-  try Ok (Melange_edn.of_edn_string text)
-  with Melange_edn.Parse_error _ ->
+  try Ok (Melange_edn_melange.of_edn_string text)
+  with Melange_edn_melange.Parse_error _ ->
     Error (Error.invalid_options ("invalid " ^ label ^ " edn"))
 
 let strip_tag_prefix value =
@@ -122,7 +122,7 @@ let parse_properties_option ?(allow_non_built_in = false) = function
                         Error
                           (Error.invalid_options
                              ("invalid property key: "
-                             ^ Melange_edn.to_edn_string key)))
+                             ^ Melange_edn_melange.to_edn_string key)))
               in
               loop [] fields
           | None -> Error (Error.invalid_options "properties must be a map"))
@@ -146,7 +146,7 @@ let parse_properties_vector_option ?(allow_non_built_in = false) = function
                         Error
                           (Error.invalid_options
                              ("invalid property key: "
-                             ^ Melange_edn.to_edn_string value)))
+                             ^ Melange_edn_melange.to_edn_string value)))
               in
               loop [] values
           | None -> Error (Error.invalid_options "properties must be a vector"))
@@ -356,7 +356,7 @@ let property_entity_selector =
 let page_query selector =
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [ Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "block/name"; sym "?name" ]) ]
     ()
@@ -364,7 +364,7 @@ let page_query selector =
 let tag_query selector =
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [
         Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "block/name"; sym "?name" ]);
@@ -377,7 +377,7 @@ let tag_query selector =
 let property_query selector =
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [
         Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "block/name"; sym "?name" ]);
