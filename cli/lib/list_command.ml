@@ -65,7 +65,7 @@ type action = {
   command : Command_id.t;
   repo : Cli_primitive.repo;
   graph : Cli_primitive.graph;
-  options : Melange_edn.any;
+  options : Melange_edn_melange.any;
 }
 
 type list_result = { items : Entity.t list }
@@ -197,7 +197,7 @@ let field_map_of_kind = function
 
 let value_rank value =
   match value with
-  | Melange_edn.Any Melange_edn.Nil -> 0
+  | Melange_edn_melange.Any Melange_edn_melange.Nil -> 0
   | Any (Bool _) -> 1
   | Any (Int _ | Bigint _ | Float _ | Decimal _ | Ratio _) -> 2
   | Any (String _ | Symbol _ | Keyword _ | Tagged ("uuid", _)) -> 3
@@ -236,8 +236,8 @@ let compare_value a b =
       if rank <> 0 then rank
       else
         String.compare
-          (Melange_edn.to_edn_string a)
-          (Melange_edn.to_edn_string b)
+          (Melange_edn_melange.to_edn_string a)
+          (Melange_edn_melange.to_edn_string b)
 
 let compare_item_by keyword a b =
   let value_of key item =
@@ -368,7 +368,7 @@ let property_selector =
 let class_query selector class_ident =
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [
         Cli_primitive.V

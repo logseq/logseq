@@ -12,7 +12,10 @@
  (module_systems commonjs)
  (preprocess
   (pps melange.ppx))
- (libraries logseq_cli_platform_node logseq_cli melange-edn melange-edn.melange))
+ (libraries
+  logseq_cli_platform_node
+  logseq_cli
+  melange-edn-melange))
 
 (install
  (section bin)

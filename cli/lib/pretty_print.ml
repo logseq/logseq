@@ -6,34 +6,34 @@ let margin = 80
 let spaces count = String.make (max 0 count) ' '
 let array_to_list = Array.to_list
 
-let rec flat_value (Melange_edn.Any value as any) =
+let rec flat_value (Melange_edn_melange.Any value as any) =
   match value with
-  | Melange_edn.Map fields ->
+  | Melange_edn_melange.Map fields ->
       array_to_list fields
       |> List.map (fun (key, value) -> flat_value key ^ " " ^ flat_value value)
       |> String.concat ", "
       |> fun content -> "{" ^ content ^ "}"
-  | Melange_edn.Vector values -> flat_seq "[" "]" (array_to_list values)
-  | Melange_edn.List values -> flat_seq "(" ")" (array_to_list values)
-  | Melange_edn.Set values -> flat_seq "#{" "}" (array_to_list values)
-  | Melange_edn.Tagged (tag, value) -> "#" ^ tag ^ " " ^ flat_value value
-  | _ -> Melange_edn.to_edn_string any
+  | Melange_edn_melange.Vector values -> flat_seq "[" "]" (array_to_list values)
+  | Melange_edn_melange.List values -> flat_seq "(" ")" (array_to_list values)
+  | Melange_edn_melange.Set values -> flat_seq "#{" "}" (array_to_list values)
+  | Melange_edn_melange.Tagged (tag, value) -> "#" ^ tag ^ " " ^ flat_value value
+  | _ -> Melange_edn_melange.to_edn_string any
 
 and flat_seq open_ close values =
   values |> List.map flat_value |> String.concat " " |> fun content ->
   open_ ^ content ^ close
 
-let rec format_value indent (Melange_edn.Any value as any) =
+let rec format_value indent (Melange_edn_melange.Any value as any) =
   let flat = flat_value any in
   if indent + String.length flat <= margin then flat
   else
     match value with
-    | Melange_edn.Map fields -> format_map indent (array_to_list fields)
-    | Melange_edn.Vector values ->
+    | Melange_edn_melange.Map fields -> format_map indent (array_to_list fields)
+    | Melange_edn_melange.Vector values ->
         format_seq indent "[" "]" 1 (array_to_list values)
-    | Melange_edn.List values ->
+    | Melange_edn_melange.List values ->
         format_seq indent "(" ")" 1 (array_to_list values)
-    | Melange_edn.Set values ->
+    | Melange_edn_melange.Set values ->
         format_seq indent "#{" "}" 2 (array_to_list values)
     | _ -> flat
 

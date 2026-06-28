@@ -211,7 +211,7 @@ let verbose_line config result =
   if not config.Cli_config.verbose then []
   else
     [
-      Melange_edn.to_edn_string
+      Melange_edn_melange.to_edn_string
         (Edn_util.map
            [
              (Edn_util.keyword "level", Edn_util.keyword "debug");
