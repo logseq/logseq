@@ -136,7 +136,7 @@ type t = {
   message : string;
   hint : string option;
   candidates : candidate list;
-  context : Melange_edn.any option;
+  context : Melange_edn_melange.any option;
 }
 
 type 'a build_result = ('a, t) result

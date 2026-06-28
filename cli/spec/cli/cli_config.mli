@@ -31,7 +31,7 @@ type t = {
   base_url : Cli_primitive.url option;
   owner_source : Cli_primitive.owner_source;
   project_dir : Cli_primitive.path option;
-  raw_file_config : Melange_edn.any option;
+  raw_file_config : Melange_edn_melange.any option;
   profile_session : Profile_types.session option;
 }
 
@@ -43,10 +43,10 @@ val default_config_path : Cli_primitive.path -> Cli_primitive.path
 val defaults : unit -> defaults
 
 val read_config_file :
-  Cli_primitive.path -> Melange_edn.any option Error.build_result
+  Cli_primitive.path -> Melange_edn_melange.any option Error.build_result
 
-val env_config : env -> Melange_edn.map Melange_edn.t
-val sanitize_file_config : Melange_edn.any -> Melange_edn.any
+val env_config : env -> Melange_edn_melange.map Melange_edn_melange.t
+val sanitize_file_config : Melange_edn_melange.any -> Melange_edn_melange.any
 
 val resolve :
   defaults:defaults ->
@@ -56,8 +56,8 @@ val resolve :
 
 val update_config :
   t ->
-  Melange_edn.any ->
-  Melange_edn.map Melange_edn.t Error.build_result Cli_effect.t
+  Melange_edn_melange.any ->
+  Melange_edn_melange.map Melange_edn_melange.t Error.build_result Cli_effect.t
 
 val graph_to_repo : Cli_primitive.graph -> Cli_primitive.repo
 val repo_to_graph : Cli_primitive.repo -> Cli_primitive.graph

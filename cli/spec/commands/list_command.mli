@@ -65,7 +65,7 @@ type action = {
   command : Command_id.t;
   repo : Cli_primitive.repo;
   graph : Cli_primitive.graph;
-  options : Melange_edn.any;
+  options : Melange_edn_melange.any;
 }
 
 type list_result = { items : Entity.t list }

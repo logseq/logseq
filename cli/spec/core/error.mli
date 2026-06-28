@@ -141,7 +141,7 @@ type t = {
   message : string;
   hint : string option;
   candidates : candidate list;
-  context : Melange_edn.any option;
+  context : Melange_edn_melange.any option;
 }
 
 type 'a build_result = ('a, t) result
@@ -161,7 +161,7 @@ type source =
 val make :
   ?hint:string ->
   ?candidates:candidate list ->
-  ?context:Melange_edn.any ->
+  ?context:Melange_edn_melange.any ->
   code ->
   string ->
   t
@@ -171,6 +171,6 @@ val missing_graph : unit -> t
 val missing_repo : string -> t
 val missing_target : string -> t
 val unknown_command : string -> t
-val exception_error : ?context:Melange_edn.any -> exn -> t
+val exception_error : ?context:Melange_edn_melange.any -> exn -> t
 val map : ('a -> 'b) -> 'a build_result -> 'b build_result
 val bind : 'a build_result -> ('a -> 'b build_result) -> 'b build_result
