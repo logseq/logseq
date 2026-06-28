@@ -9,5 +9,5 @@ type record = {
   exception_ : string option;
 }
 
-val truncate_preview : ?max_len:int -> Melange_edn.any -> preview
+val truncate_preview : ?max_len:int -> Melange_edn_melange.any -> preview
 val install_stderr_handler : unit -> unit

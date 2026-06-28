@@ -12,7 +12,7 @@ let () =
   test "json output renders transit quoted uuid as string" (fun () ->
       let uuid = "11111111-1111-4111-8111-111111111111" in
       let value =
-        Edn_util.any (Melange_edn.tagged "transit/quote" (Edn_util.uuid uuid))
+        Edn_util.any (Melange_edn_melange.tagged "transit/quote" (Edn_util.uuid uuid))
       in
       let output =
         Format_types.to_json

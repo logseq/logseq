@@ -79,14 +79,14 @@ type remote_graph = {
   graph_id : Cli_primitive.uuid;
   graph_name : Cli_primitive.graph;
   graph_e2ee : bool;
-  raw : Melange_edn.any;
+  raw : Melange_edn_melange.any;
 }
 
 type sync_status = {
   ws_state : Cli_primitive.keyword option;
   graph_id : Cli_primitive.uuid option;
-  last_error : Melange_edn.any option;
-  raw : Melange_edn.any;
+  last_error : Melange_edn_melange.any option;
+  raw : Melange_edn_melange.any;
 }
 
 let config_key_of_string = function
@@ -336,7 +336,7 @@ let prepare_worker_runtime invoke_config config =
       set_sync_config ()
 
 let unquote_transit_value = function
-  | Melange_edn.Any (Melange_edn.Tagged (("transit/quote" | "'"), value)) ->
+  | Melange_edn_melange.Any (Melange_edn_melange.Tagged (("transit/quote" | "'"), value)) ->
       value
   | value -> value
 
@@ -434,7 +434,7 @@ let graphs_value graphs =
 
 let tagged_error_value value =
   match unquote_transit_value value with
-  | Melange_edn.Any (Melange_edn.Tagged ("error", value)) -> Some value
+  | Melange_edn_melange.Any (Melange_edn_melange.Tagged ("error", value)) -> Some value
   | _ -> None
 
 let remote_graphs_error graphs =

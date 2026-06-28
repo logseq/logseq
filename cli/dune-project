@@ -21,7 +21,14 @@
  (name logseq-cli)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends ocaml melange melange-fetch melange-transit melange-edn melange-fest humanize)
+ (depends
+  ocaml
+  melange
+  melange-fetch
+  melange-transit-melange
+  melange-edn-melange
+  melange-fest
+  humanize)
  (tags
   ("add topics" "to describe" your project)))
 
