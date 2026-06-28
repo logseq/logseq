@@ -202,19 +202,19 @@ let expect_valid_json name text =
 
 let expect_valid_edn name text =
   try
-    ignore (Melange_edn.of_edn_string text);
+    ignore (Melange_edn_melange.of_edn_string text);
     pass
   with exn ->
     fail_test
       (Printf.sprintf "%s: expected valid EDN, got %s\n%s" name
          (Printexc.to_string exn) text)
 
-let edn_any value = Melange_edn.any value
-let edn_keyword value = edn_any (Melange_edn.keyword value)
-let edn_string value = edn_any (Melange_edn.string value)
+let edn_any value = Melange_edn_melange.any value
+let edn_keyword value = edn_any (Melange_edn_melange.keyword value)
+let edn_string value = edn_any (Melange_edn_melange.string value)
 
 let edn_map fields =
-  Melange_edn.map fields |> edn_any |> Melange_edn.to_edn_string
+  Melange_edn_melange.map fields |> edn_any |> Melange_edn_melange.to_edn_string
 
 let remove_tree path =
   rm_sync path

@@ -568,8 +568,8 @@ let tag_of_value value =
 let key_of_value = Property.parse_key
 
 let edn_value_of_string ~label text =
-  try Ok (Melange_edn.of_edn_string text)
-  with Melange_edn.Parse_error _ ->
+  try Ok (Melange_edn_melange.of_edn_string text)
+  with Melange_edn_melange.Parse_error _ ->
     Error (Error.invalid_options ("invalid " ^ label ^ " edn"))
 
 let parse_vector_edn ~label text =
@@ -1192,7 +1192,7 @@ let graph_assets_dir config repo =
 let class_query selector class_ident =
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [
         Cli_primitive.V
@@ -1210,7 +1210,7 @@ let property_query selector = class_query selector "logseq.class/Property"
 let page_query selector =
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [
         Cli_primitive.V
@@ -1685,7 +1685,7 @@ let rec resolve_property_value_refs invoke_config repo value =
         loop [] values
       in
       match value with
-      | Melange_edn.Any (Melange_edn.Vector values) ->
+      | Melange_edn_melange.Any (Melange_edn_melange.Vector values) ->
           resolve_values Edn_util.vector (Edn_util.array_to_list values)
       | Any (List values) ->
           resolve_values Edn_util.list (Edn_util.array_to_list values)
@@ -1758,7 +1758,7 @@ let inline_property_assignments block =
                   Error
                     (Error.invalid_options
                        ("invalid block property key: "
-                       ^ Melange_edn.to_edn_string key)))
+                       ^ Melange_edn_melange.to_edn_string key)))
       in
       loop [] fields
 

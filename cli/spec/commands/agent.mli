@@ -24,7 +24,7 @@ type bridge_result = {
   mode : Cli_primitive.keyword;
   graph : Cli_primitive.graph;
   agent_name : string;
-  routed : Melange_edn.any list;
+  routed : Melange_edn_melange.any list;
 }
 
 include Command_spec.S with type parsed := parsed and type action := action
