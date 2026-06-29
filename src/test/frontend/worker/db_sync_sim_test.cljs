@@ -383,7 +383,8 @@
                     (let [tx-data (:tx-data tx-entry)
                           {:keys [db-before db-after tx-data]}
                           (try
-                            (ldb/transact! conn tx-data {:op :apply-client-tx})
+                            (ldb/transact! conn tx-data {:op :apply-client-tx
+                                                         :skip-validate-db? true})
                             (catch :default error
                               (let [missing-entity-id (some-> (ex-data error) :entity-id)
                                     same-entity-txs
