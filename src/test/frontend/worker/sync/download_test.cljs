@@ -55,14 +55,16 @@
            (set! js/fetch
                  (fn [_url _opts]
                    (swap! calls conj :snapshot-stream)
-                   (js/Promise.resolve #js {:ok true})))
+                   (js/Promise.resolve
+                    (js/Response. nil #js {:status 200}))))
            (-> (p/with-redefs [sync-download/fetch-json (fn [_url _opts schema]
                                                           (case schema
                                                             :sync/pull
                                                             (p/resolved {:t 42})
 
                                                             :sync/snapshot-download
-                                                            (p/resolved {:url "https://sync.example.test/snapshot"})
+                                                            (p/resolved {:url "https://sync.example.test/snapshot"
+                                                                         :t 42})
 
                                                             (p/rejected (ex-info "unexpected schema" {:schema schema}))))
                                sync-crypt/<fetch-graph-aes-key-for-download (fn [_graph-id]
@@ -73,6 +75,45 @@
                  (sync-download/download-graph-by-id! "repo" "graph-1" true))
                (p/then (fn [_]
                          (is (= [:e2ee-preflight :snapshot-stream] @calls))))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally (fn []
+                            (set! js/fetch fetch-prev)
+                            (reset! worker-state/*db-sync-config config-prev)
+                            (done)))))))
+
+(deftest download-finalizes-with-preflight-pull-t-test
+  (async done
+         (let [config-prev @worker-state/*db-sync-config
+               fetch-prev js/fetch
+               finalized-remote-t* (atom nil)]
+           (reset! worker-state/*db-sync-config {:http-base "https://sync.example.test"})
+           (set! js/fetch
+                 (fn [_url _opts]
+                   (js/Promise.resolve
+                    (js/Response. nil #js {:status 200}))))
+           (-> (p/with-redefs [sync-download/fetch-json (fn [_url _opts schema]
+                                                          (case schema
+                                                            :sync/pull
+                                                            (p/resolved {:t 42})
+
+                                                            :sync/snapshot-download
+                                                            (p/resolved {:url "https://sync.example.test/snapshot"})
+
+                                                            (p/rejected (ex-info "unexpected schema" {:schema schema}))))
+                               sync-download/prepare-import! (fn [_repo _reset? _graph-id _graph-e2ee?]
+                                                               (p/resolved {:import-id "import-1"}))
+                               sync-download/import-rows-chunk! (fn [_rows _graph-id _import-id]
+                                                                  (p/resolved true))
+                               sync-download/finalize-import! (fn [_repo _graph-id remote-t _import-id]
+                                                                (reset! finalized-remote-t* remote-t)
+                                                                (p/resolved :done))
+                               sync-download/<stream-snapshot-row-batches! (fn [_resp _batch-size on-batch]
+                                                                             (p/let [_ (on-batch [[1 "content" nil]])]
+                                                                               (p/resolved {:chunk-count 1})))]
+                 (sync-download/download-graph-by-id! "repo" "graph-1" false))
+               (p/then (fn [_]
+                         (is (= 42 @finalized-remote-t*))))
                (p/catch (fn [error]
                           (is false (str error))))
                (p/finally (fn []
@@ -91,7 +132,8 @@
                                                             (p/resolved {:t 42})
 
                                                             :sync/snapshot-download
-                                                            (p/resolved {:url "https://sync.example.test/snapshot"})
+                                                            (p/resolved {:url "https://sync.example.test/snapshot"
+                                                                         :t 42})
 
                                                             (p/rejected (ex-info "unexpected schema" {:schema schema}))))
                                sync-crypt/<fetch-graph-aes-key-for-download (fn [_graph-id]
