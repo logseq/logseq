@@ -8,7 +8,7 @@ let strip_leading_colon value =
   else value
 
 let unquote_transit_value = function
-  | Melange_edn.Any (Melange_edn.Tagged (("transit/quote" | "'"), value)) ->
+  | Melange_edn_melange.Any (Melange_edn_melange.Tagged (("transit/quote" | "'"), value)) ->
       value
   | value -> value
 
@@ -39,12 +39,12 @@ let rec json_of_value value =
           let key =
             match Edn_util.as_string_like k with
             | Some s -> strip_leading_colon s
-            | None -> Melange_edn.to_edn_string k
+            | None -> Melange_edn_melange.to_edn_string k
           in
           Js.Dict.set object_ key (json_of_value v))
         xs;
       Js.Json.object_ object_
-  | _ -> Melange_edn.to_json value
+  | _ -> Melange_edn_melange.to_json value
 
 let data_to_value = function
   | Cli_result.Message s ->
@@ -110,15 +110,8 @@ let candidate_to_value (candidate : Error.candidate) =
 
 let error_to_value ?(edn = false) (error : Error.t) =
   let code_value =
-    if edn then Edn_util.any error.code
-    else
-      let code = Edn_util.keyword_to_string error.code in
-      let code =
-        if String.length code > 0 && code.[0] = ':' then
-          String.sub code 1 (String.length code - 1)
-        else code
-      in
-      Edn_util.string code
+    if edn then Edn_util.any (Error.code_to_keyword error.code)
+    else Edn_util.string (Error.code_to_string error.code)
   in
   let fields =
     [
@@ -192,7 +185,7 @@ let to_edn result =
         in
         (Edn_util.keyword "error", Edn_util.keyword "error", error)
   in
-  Melange_edn.to_edn_string
+  Melange_edn_melange.to_edn_string
     (Edn_util.map
        [ (Edn_util.keyword "status", status); (payload_key, payload) ])
 
@@ -201,7 +194,7 @@ let count_footer count = "Count: " ^ Humanize_types.format_count count
 
 let field_label key =
   key |> Edn_util.as_string_like
-  |> Option.value ~default:(Melange_edn.to_edn_string key)
+  |> Option.value ~default:(Melange_edn_melange.to_edn_string key)
   |> strip_leading_colon
 
 let value_text value =
@@ -218,7 +211,7 @@ let value_text value =
   | _, _, Some value, _, _ -> string_of_int value
   | _, _, _, Some value, _ -> string_of_bool value
   | _, _, _, _, Some value -> string_of_float value
-  | _ -> Melange_edn.to_edn_string value
+  | _ -> Melange_edn_melange.to_edn_string value
 
 let query_result_human value =
   match Edn_util.get value "result" with
@@ -375,7 +368,7 @@ let graph_list_human value config =
                   (fun graph ->
                     let graph =
                       Option.value (Edn_util.as_string graph)
-                        ~default:(Melange_edn.to_edn_string graph)
+                        ~default:(Melange_edn_melange.to_edn_string graph)
                     in
                     let prefix =
                       if Option.equal String.equal current_graph (Some graph)
@@ -420,7 +413,7 @@ let to_human ?human_table_headers_order result config =
   | _, _, (Output.Json _ | Output.Edn _) -> ""
 
 let format_error err _ =
-  "Error (" ^ Edn_util.keyword_to_string err.Error.code ^ "): " ^ err.message
+  "Error (" ^ Error.code_to_string err.Error.code ^ "): " ^ err.message
 
 let format_result ?human_table_headers_order result config =
   match (result.Cli_result.command, result.data) with

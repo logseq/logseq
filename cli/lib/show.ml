@@ -85,7 +85,7 @@ let normalize_stdin_id = function
           let tokens = split_ws text in
           if tokens <> [] && List.for_all is_integer_text tokens then
             Some
-              (Melange_edn.to_edn_string
+              (Melange_edn_melange.to_edn_string
                  (Edn_util.vector
                     (List.map
                        (fun token -> Edn_util.int64 (Int64.of_string token))
@@ -341,7 +341,7 @@ let recycled_page value =
   && Option.is_some (Edn_util.get value "logseq.property/deleted-at")
 
 let recycled_page_error () =
-  Error.make (Edn_util.keyword_t "recycled-page") "page is recycled"
+  Error.make (Error.Recycled_page) "page is recycled"
 
 let ident_value value =
   Option.map strip_keyword_prefix
@@ -377,22 +377,22 @@ let library_page value =
 
 let entity_error = function
   | By_page _ ->
-      Error.make (Edn_util.keyword_t "page-not-found") "page not found"
-  | _ -> Error.make (Edn_util.keyword_t "entity-not-found") "entity not found"
+      Error.make (Error.Page_not_found) "page not found"
+  | _ -> Error.make (Error.Entity_not_found) "entity not found"
 
 exception Show_error of Error.t
 
 let block_link_target_not_found () =
   Error.make
-    (Edn_util.keyword_t "block-link-target-not-found")
+    (Error.Block_link_target_not_found)
     "block link target not found"
 
 let block_link_cycle () =
-  Error.make (Edn_util.keyword_t "block-link-cycle") "block link cycle detected"
+  Error.make (Error.Block_link_cycle) "block link cycle detected"
 
 let page_hierarchy_parent_cycle () =
   Error.make
-    (Edn_util.keyword_t "page-hierarchy-parent-cycle")
+    (Error.Page_hierarchy_parent_cycle)
     "page hierarchy parent cycle detected"
 
 let fail_show_error err = Cli_effect.error (Show_error err)
@@ -404,8 +404,7 @@ let multi_id_error_value id err =
       ( kw "error",
         Edn_util.map
           [
-            ( kw "code",
-              Edn_util.string (Edn_util.keyword_to_string err.Error.code) );
+            (kw "code", Edn_util.string (Error.code_to_string err.Error.code));
             ( kw "message",
               Edn_util.string ("Entity " ^ Int64.to_string id ^ " not found") );
           ] );
@@ -464,7 +463,7 @@ let tree_block_selector =
 let page_blocks_query =
   Cli_primitive.make_datascript_query
     ~find:[ Edn_util.list [ sym "pull"; sym "?b"; tree_block_selector ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?page-id" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?page-id" ]
     ~where:
       [
         Cli_primitive.V
@@ -475,7 +474,7 @@ let page_blocks_query =
 let page_hierarchy_children_query =
   Cli_primitive.make_datascript_query
     ~find:[ Edn_util.list [ sym "pull"; sym "?child"; tree_block_selector ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?parent-id" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?parent-id" ]
     ~where:
       [
         Cli_primitive.V

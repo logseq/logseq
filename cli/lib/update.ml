@@ -127,8 +127,8 @@ let property_key_of_value value =
   | _ -> None
 
 let edn_value_of_string ~label text =
-  try Ok (Melange_edn.of_edn_string text)
-  with Melange_edn.Parse_error _ ->
+  try Ok (Melange_edn_melange.of_edn_string text)
+  with Melange_edn_melange.Parse_error _ ->
     Error (Error.invalid_options ("invalid " ^ label ^ " edn"))
 
 let parse_properties_edn value =
@@ -150,7 +150,7 @@ let parse_properties_edn value =
                         Error
                           (Error.invalid_options
                              ("invalid property key: "
-                             ^ Melange_edn.to_edn_string key)))
+                             ^ Melange_edn_melange.to_edn_string key)))
               in
               loop [] fields
           | None -> Error (Error.invalid_options "properties must be a map"))
@@ -175,7 +175,7 @@ let parse_property_keys_edn value =
                         Error
                           (Error.invalid_options
                              ("invalid property key: "
-                             ^ Melange_edn.to_edn_string value)))
+                             ^ Melange_edn_melange.to_edn_string value)))
               in
               loop [] values
           | None -> Error (Error.invalid_options "properties must be a vector"))
@@ -231,7 +231,7 @@ let build_action opts repo =
       then
         Error
           (Error.make
-             (Edn_util.keyword_t "missing-source")
+             (Error.Missing_source)
              "source block is required")
       else
         Error.bind (status_assignment opts.status) (fun status_properties ->
@@ -314,10 +314,10 @@ let recycled_entity value =
   Option.is_some (Edn_util.get value "logseq.property/deleted-at")
 
 let page_not_found () =
-  Error.make (Edn_util.keyword_t "page-not-found") "page not found"
+  Error.make (Error.Page_not_found) "page not found"
 
 let recycled_page_error () =
-  Error.make (Edn_util.keyword_t "recycled-page") "page is recycled"
+  Error.make (Error.Recycled_page) "page is recycled"
 
 let pull invoke_config repo selector lookup =
   Transport.thread_api_pull invoke_config ~repo
@@ -387,7 +387,7 @@ let class_query selector class_ident =
       [
         vector [ list [ variable "pull"; variable "?e"; selector ]; variable "..." ];
       ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [
         Cli_primitive.V
@@ -426,10 +426,10 @@ let pull_property_by_name invoke_config repo name =
          ])
 
 let source_not_found () =
-  Error.make (Edn_util.keyword_t "source-not-found") "source block not found"
+  Error.make (Error.Source_not_found) "source block not found"
 
 let target_not_found () =
-  Error.make (Edn_util.keyword_t "target-not-found") "target block not found"
+  Error.make (Error.Target_not_found) "target block not found"
 
 let ensure_non_page entity message code =
   if page_entity entity then Error (Error.make code message) else Ok entity
@@ -444,7 +444,7 @@ let resolve_source invoke_config repo action =
           | Some _ ->
               pure
                 (ensure_non_page entity "source must be a non-page block"
-                   (Edn_util.keyword_t "invalid-source")))
+                   (Error.Invalid_source)))
   | None, Some uuid ->
       bind (pull_by_uuid invoke_config repo block_selector uuid) (fun entity ->
           match id_of_entity entity with
@@ -452,12 +452,12 @@ let resolve_source invoke_config repo action =
           | Some _ ->
               pure
                 (ensure_non_page entity "source must be a non-page block"
-                   (Edn_util.keyword_t "invalid-source")))
+                   (Error.Invalid_source)))
   | None, None ->
       pure
         (Error
            (Error.make
-              (Edn_util.keyword_t "missing-source")
+              (Error.Missing_source)
               "source is required"))
 
 let resolve_target invoke_config repo action =
@@ -470,7 +470,7 @@ let resolve_target invoke_config repo action =
           | Some _ ->
               pure
                 (ensure_non_page entity "target must be a block"
-                   (Edn_util.keyword_t "invalid-target")))
+                   (Error.Invalid_target)))
   | None, Some uuid, _ ->
       bind (pull_by_uuid invoke_config repo block_selector uuid) (fun entity ->
           match id_of_entity entity with
@@ -478,7 +478,7 @@ let resolve_target invoke_config repo action =
           | Some _ ->
               pure
                 (ensure_non_page entity "target must be a block"
-                   (Edn_util.keyword_t "invalid-target")))
+                   (Error.Invalid_target)))
   | None, None, Some page ->
       bind
         (pull invoke_config repo page_selector
@@ -495,7 +495,7 @@ let resolve_target invoke_config repo action =
       pure
         (Error
            (Error.make
-              (Edn_util.keyword_t "missing-target")
+              (Error.Missing_target)
               "target is required"))
 
 let pos_opts = function
@@ -526,7 +526,7 @@ let resolve_tag_id invoke_config repo = function
               pure
                 (Error
                    (Error.make
-                      (Edn_util.keyword_t "tag-not-found")
+                      (Error.Tag_not_found)
                       "tag not found")))
   | (Tag_ident _ | Tag_uuid _) as tag ->
       let open Cli_effect in
@@ -539,7 +539,7 @@ let resolve_tag_id invoke_config repo = function
               pure
                 (Error
                    (Error.make
-                      (Edn_util.keyword_t "tag-not-found")
+                      (Error.Tag_not_found)
                       "tag not found")))
 
 let resolve_property_ident invoke_config repo = function
@@ -555,7 +555,7 @@ let resolve_property_ident invoke_config repo = function
               pure
                 (Error
                    (Error.make
-                      (Edn_util.keyword_t "property-not-found")
+                      (Error.Property_not_found)
                       "property not found")))
   | Key_name name ->
       let open Cli_effect in
@@ -574,7 +574,7 @@ let resolve_property_ident invoke_config repo = function
                     pure
                       (Error
                          (Error.make
-                            (Edn_util.keyword_t "property-not-found")
+                            (Error.Property_not_found)
                             "property not found"))))
 
 let rec resolve_tag_ids invoke_config repo = function
@@ -765,7 +765,7 @@ let resolve_optional_target_uuid invoke_config action =
               pure
                 (Error
                    (Error.make
-                      (Edn_util.keyword_t "target-not-found")
+                      (Error.Target_not_found)
                       "target block uuid not found"))))
   else pure (Ok None)
 
@@ -785,7 +785,7 @@ let execute action config mode =
                   pure
                     (Cli_result.error ~command:Command_id.Upsert_block mode
                        (Error.make
-                          (Edn_util.keyword_t "source-not-found")
+                          (Error.Source_not_found)
                           "source block uuid not found"))
               | Some source_uuid ->
                   bind (resolve_optional_target_uuid invoke_config action)

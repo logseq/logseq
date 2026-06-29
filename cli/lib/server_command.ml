@@ -94,8 +94,7 @@ let stop_result_value (result : Server_runtime.stop_result) =
 let error_value (err : Error.t) =
   Edn_util.map
     [
-      ( Edn_util.keyword "code",
-        Edn_util.string (Edn_util.keyword_to_string err.code) );
+      (Edn_util.keyword "code", Edn_util.string (Error.code_to_string err.code));
       (Edn_util.keyword "message", Edn_util.string err.message);
     ]
 

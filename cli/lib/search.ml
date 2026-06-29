@@ -48,7 +48,7 @@ let build ?registry:_ config _globals parsed =
           (Error.make
              ~hint:
                "Use: logseq search <block|page|property|tag> --content <query>"
-             (Edn_util.keyword_t "missing-query-text")
+             (Error.Missing_query_text)
              "query text is required")
       else
         Ok
@@ -125,7 +125,7 @@ let query_of_scope scope =
   in
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; entity; vector (pull_attrs scope) ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?query" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?query" ]
     ~where ()
 
 let search_result_keys = [ "db/id"; "db/ident"; "block/title" ]

@@ -26,7 +26,7 @@ type schema = {
   public : bool option;
 }
 
-type assignment = { key : key; value : Melange_edn.any }
+type assignment = { key : key; value : Melange_edn_melange.any }
 
 type update_plan = {
   update_tags : Selector.tag list;

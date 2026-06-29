@@ -845,23 +845,62 @@ should be done through this fn in order to get global config and config defaults
       :else      (swap! state update path f)))
   nil)
 
+(defn- edit-block-fn-entry
+  [value]
+  (cond
+    (fn? value)
+    {:f value}
+
+    (and (map? value) (fn? (:f value)))
+    value
+
+    :else
+    nil))
+
 (defn- edit-block-fn-queue
   [value]
   (cond
-    (vector? value) value
-    (fn? value) [value]
-    :else []))
+    (vector? value) (into [] (keep edit-block-fn-entry) value)
+    :else (if-let [entry (edit-block-fn-entry value)]
+            [entry]
+            [])))
+
+(defn- take-edit-block-fn-entry
+  [queue pred]
+  (let [[before [entry & after]] (split-with (complement pred) queue)]
+    (when entry
+      [entry (vec (concat before after))])))
 
 (defn queue-edit-block-fn!
-  [f]
-  (when (fn? f)
-    (update-state! :editor/edit-block-fn #(conj (edit-block-fn-queue %) f))))
+  ([f]
+   (queue-edit-block-fn! nil f))
+  ([tx-id f]
+   (when (fn? f)
+     (update-state! :editor/edit-block-fn #(conj (edit-block-fn-queue %)
+                                                 {:tx-id tx-id
+                                                  :f f})))))
+
+(defn remove-edit-block-fn!
+  [tx-id]
+  (when tx-id
+    (update-state! :editor/edit-block-fn
+                   #(->> (edit-block-fn-queue %)
+                         (remove (fn [entry] (= tx-id (:tx-id entry))))
+                         vec))))
 
 (defn take-edit-block-fn!
-  []
-  (when-let [[f & more] (seq (edit-block-fn-queue @(:editor/edit-block-fn @state)))]
-    (set-state! :editor/edit-block-fn (vec more))
-    f))
+  ([]
+   (let [queue (edit-block-fn-queue @(:editor/edit-block-fn @state))]
+     (when-let [[entry more] (take-edit-block-fn-entry queue #(nil? (:tx-id %)))]
+       (set-state! :editor/edit-block-fn more)
+       (:f entry))))
+  ([tx-id]
+   (let [queue (edit-block-fn-queue @(:editor/edit-block-fn @state))
+         match (and tx-id
+                    (take-edit-block-fn-entry queue #(= tx-id (:tx-id %))))]
+     (when-let [[entry more] match]
+       (set-state! :editor/edit-block-fn more)
+       (:f entry)))))
 
 ;; State getters and setters
 ;; =========================

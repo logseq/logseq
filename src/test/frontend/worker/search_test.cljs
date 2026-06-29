@@ -552,8 +552,8 @@
           (is (= "Local-first semantic search" (:title indexed)))
           (is (not (contains? indexed :embedding))))))))
 
-(deftest block-index-includes-bounded-vector-context
-  (testing "vector-only text includes local block context without changing the keyword title"
+(deftest block-index-includes-own-title-vector-title-when-enabled
+  (testing "vector-only text uses the same indexed block title without local block context"
     (let [page-id #uuid "00000000-0000-0000-0000-000000000240"
           block-id #uuid "00000000-0000-0000-0000-000000000241"
           page {:db/id 1
@@ -594,18 +594,28 @@
                     ldb/closed-value? (constantly false)
                     ldb/hidden? (constantly false)
                     ldb/get-title-with-parents (fn [entity] (:block/title entity))]
-        (let [indexed (search/block->index block)
-              vector-title (:vector-title indexed)]
+        (let [indexed (search/block->index block {:include-vector-title? true})]
           (is (= "Hybrid retrieval" (:title indexed)))
-          (is (string/includes? vector-title "Page: Search Design"))
-          (is (string/includes? vector-title "Path: Architecture > Vector index"))
-          (is (string/includes? vector-title "Previous: Keyword search"))
-          (is (string/includes? vector-title "Block: Hybrid retrieval"))
-          (is (string/includes? vector-title "Children: Cross block context"))
-          (is (string/includes? vector-title "Next: Ranking policy")))))))
+          (is (= "Hybrid retrieval" (:vector-title indexed))))))))
 
-(deftest build-blocks-indice-reuses-sorted-vector-context
-  (testing "large pages do not sort the same sibling set once per indexed block"
+(deftest block-index-skips-vector-title-when-disabled
+  (let [block-id #uuid "00000000-0000-0000-0000-000000000247"
+        page-id #uuid "00000000-0000-0000-0000-000000000248"
+        block {:db/id 1
+               :block/uuid block-id
+               :block/title "Hybrid retrieval"
+               :block/page {:block/uuid page-id}}]
+    (with-redefs [ldb/page? (constantly false)
+                  ldb/object? (constantly false)
+                  ldb/journal? (constantly false)
+                  ldb/closed-value? (constantly false)
+                  ldb/get-title-with-parents (fn [entity] (:block/title entity))]
+      (let [indexed (search/block->index block)]
+        (is (= "Hybrid retrieval" (:title indexed)))
+        (is (not (contains? indexed :vector-title)))))))
+
+(deftest build-blocks-indice-uses-block-index
+  (testing "large pages do not sort siblings for vector title context"
     (let [page-id #uuid "00000000-0000-0000-0000-000000000250"
           page {:db/id 1
                 :page? true
@@ -632,54 +642,13 @@
                     ldb/closed-value? (constantly false)
                     ldb/hidden? (constantly false)
                     ldb/get-title-with-parents (fn [entity] (:block/title entity))]
-        (is (= 40 (count (search/build-blocks-indice :db))))
-        (is (<= @sort-calls 2))))))
+        (let [indexed (search/build-blocks-indice :db {:include-vector-title? true})]
+          (is (= 40 (count indexed)))
+          (is (zero? @sort-calls))
+          (is (every? #(= (:title %) (:vector-title %)) indexed)))))))
 
-(deftest expand-vector-context-blocks-includes-neighbor-anchors
-  (testing "incremental vector updates refresh anchors whose context includes the changed block"
-    (let [page {:db/id 1
-                :page? true
-                :block/uuid #uuid "00000000-0000-0000-0000-000000000290"
-                :block/title "Search"}
-          parent {:db/id 2
-                  :block/uuid #uuid "00000000-0000-0000-0000-000000000291"
-                  :block/title "Parent"
-                  :block/page page}
-          prev {:db/id 3
-                :block/uuid #uuid "00000000-0000-0000-0000-000000000292"
-                :block/title "Previous"
-                :block/order 1
-                :block/page page}
-          current {:db/id 4
-                   :block/uuid #uuid "00000000-0000-0000-0000-000000000293"
-                   :block/title "Current"
-                   :block/order 2
-                   :block/page page}
-          next {:db/id 5
-                :block/uuid #uuid "00000000-0000-0000-0000-000000000294"
-                :block/title "Next"
-                :block/order 3
-                :block/page page}
-          child {:db/id 6
-                 :block/uuid #uuid "00000000-0000-0000-0000-000000000295"
-                 :block/title "Child"
-                 :block/order 1
-                 :block/page page}
-          parent (assoc parent :block/_parent [prev current next])
-          current (assoc current
-                         :block/parent parent
-                         :block/_parent [child])]
-      (with-redefs [ldb/sort-by-order (fn [children] (sort-by :block/order children))
-                    ldb/hidden? (constantly false)]
-        (is (= [(uuid "00000000-0000-0000-0000-000000000293")
-                (uuid "00000000-0000-0000-0000-000000000291")
-                (uuid "00000000-0000-0000-0000-000000000292")
-                (uuid "00000000-0000-0000-0000-000000000294")
-                (uuid "00000000-0000-0000-0000-000000000295")]
-               (mapv :block/uuid (search/expand-vector-context-blocks [current]))))))))
-
-(deftest sync-search-indice-refreshes-vector-context-on-structure-change
-  (testing "moving a block under a parent re-embeds the parent with child context"
+(deftest sync-search-indice-indexes-only-directly-affected-blocks
+  (testing "moving a block under a parent does not expand indexing to the parent"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks [{:page {:block/title "Teams"}
                                      :blocks [{:block/title "which team is Manu in?"}
@@ -687,13 +656,14 @@
           manu (db-test/find-block-by-content @conn "which team is Manu in?")
           spurs (db-test/find-block-by-content @conn "Spurs")
           tx-report (d/transact! conn [[:db/add (:db/id spurs) :block/parent (:db/id manu)]])
-          blocks-to-add (:blocks-to-add (search/sync-search-indice tx-report))
-          manu-index (some #(when (= "which team is Manu in?" (:title %)) %) blocks-to-add)]
-      (is (some? manu-index))
-      (is (true? (some-> (:vector-title manu-index)
-                         (string/includes? "Children: Spurs"))))))
+          blocks-to-add (:blocks-to-add (search/sync-search-indice tx-report {:include-vector-title? true}))
+          spurs-index (some #(when (= "Spurs" (:title %)) %) blocks-to-add)
+          titles (set (map :title blocks-to-add))]
+      (is (contains? titles "Spurs"))
+      (is (not (contains? titles "which team is Manu in?")))
+      (is (= "Spurs" (:vector-title spurs-index)))))
 
-  (testing "reordering a sibling re-embeds the previous block with next-sibling context"
+  (testing "reordering a sibling does not expand indexing to adjacent siblings"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks [{:page {:block/title "Teams"}
                                      :blocks [{:block/title "Spurs"
@@ -702,11 +672,166 @@
                                                :block/order "b"}]}]})
           spurs (db-test/find-block-by-content @conn "Spurs")
           tx-report (d/transact! conn [[:db/add (:db/id spurs) :block/order "c"]])
-          blocks-to-add (:blocks-to-add (search/sync-search-indice tx-report))
-          tony-index (some #(when (= "Which team is Tony in?" (:title %)) %) blocks-to-add)]
-      (is (some? tony-index))
-      (is (true? (some-> (:vector-title tony-index)
-                         (string/includes? "Next: Spurs")))))))
+          blocks-to-add (:blocks-to-add (search/sync-search-indice tx-report {:include-vector-title? true}))
+          spurs-index (some #(when (= "Spurs" (:title %)) %) blocks-to-add)
+          titles (set (map :title blocks-to-add))]
+      (is (contains? titles "Spurs"))
+      (is (not (contains? titles "Which team is Tony in?")))
+      (is (= "Spurs" (:vector-title spurs-index))))))
+
+(deftest sync-search-indice-reindexes-descendant-pages-when-page-parent-changes
+  (let [parent-a-uuid (random-uuid)
+        parent-b-uuid (random-uuid)
+        child-uuid (random-uuid)
+        grandchild-uuid (random-uuid)
+        conn (db-test/create-conn)
+        page-tag :logseq.class/Page]
+    (d/transact! conn [{:block/uuid parent-a-uuid
+                        :block/title "Parent A"
+                        :block/name "parent a"
+                        :block/tags [page-tag]}
+                       {:block/uuid parent-b-uuid
+                        :block/title "Parent B"
+                        :block/name "parent b"
+                        :block/tags [page-tag]}
+                       {:block/uuid child-uuid
+                        :block/title "Child Page"
+                        :block/name "child page"
+                        :block/tags [page-tag]
+                        :block/parent [:block/uuid parent-a-uuid]
+                        :block/order "a"}
+                       {:block/uuid grandchild-uuid
+                        :block/title "Grand Page"
+                        :block/name "grand page"
+                        :block/tags [page-tag]
+                        :block/parent [:block/uuid child-uuid]
+                        :block/order "a"}])
+    (let [tx-report (d/transact! conn [[:db/add [:block/uuid child-uuid]
+                                        :block/parent [:block/uuid parent-b-uuid]]])
+          blocks-to-add (:blocks-to-add (search/sync-search-indice tx-report {:include-vector-title? true}))
+          titles (set (map :title blocks-to-add))]
+      (is (contains? titles "Parent B/Child Page"))
+      (is (contains? titles "Parent B/Child Page/Grand Page"))
+      (is (every? #(= (:title %) (:vector-title %)) blocks-to-add)))))
+
+(deftest sync-search-indice-skips-vector-title-when-disabled
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "Teams"}
+                                   :blocks [{:block/title "Spurs"}]}]})
+        spurs (db-test/find-block-by-content @conn "Spurs")
+        tx-report (d/transact! conn [[:db/add (:db/id spurs) :block/title "San Antonio Spurs"]])
+        blocks-to-add (:blocks-to-add (search/sync-search-indice tx-report))
+        spurs-index (some #(when (= "San Antonio Spurs" (:title %)) %) blocks-to-add)]
+    (is (some? spurs-index))
+    (is (not (contains? spurs-index :vector-title)))))
+
+(def ^:private sync-search-indice-performance-block-count 300)
+(def ^:private sync-search-indice-performance-max-ms 1000)
+
+(defn- run-sync-search-indice-new-blocks-case
+  [include-vector-title?]
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "Bulk Insert"}}]})
+        page (db-test/find-page-by-title @conn "Bulk Insert")
+        now 1760000000000
+        tx-report (d/transact! conn
+                               (mapv (fn [idx]
+                                       {:block/uuid (random-uuid)
+                                        :block/title (str "Inserted " idx)
+                                        :block/page (:db/id page)
+                                        :block/parent (:db/id page)
+                                        :block/order (str "a" idx)
+                                        :block/created-at now
+                                        :block/updated-at now})
+                                     (range sync-search-indice-performance-block-count)))
+        started (.now js/performance)
+        blocks-to-add (:blocks-to-add
+                       (search/sync-search-indice
+                        tx-report
+                        {:include-vector-title? include-vector-title?}))
+        elapsed-ms (- (.now js/performance) started)]
+    {:blocks-to-add blocks-to-add
+     :elapsed-ms elapsed-ms}))
+
+(deftest sync-search-indice-300-new-blocks-performance-when-semantic-search-enabled
+  (let [{:keys [blocks-to-add elapsed-ms]} (run-sync-search-indice-new-blocks-case true)]
+    (println (str "sync-search-indice 300 new blocks with semantic search enabled took " elapsed-ms "ms"))
+    (is (= sync-search-indice-performance-block-count (count blocks-to-add)))
+    (is (< elapsed-ms sync-search-indice-performance-max-ms))
+    (is (every? :vector-title blocks-to-add))
+    (is (every? #(= (:title %) (:vector-title %)) blocks-to-add))))
+
+(deftest sync-search-indice-300-new-blocks-performance-when-semantic-search-disabled
+  (let [{:keys [blocks-to-add elapsed-ms]} (run-sync-search-indice-new-blocks-case false)]
+    (println (str "sync-search-indice 300 new blocks with semantic search disabled took " elapsed-ms "ms"))
+    (is (= sync-search-indice-performance-block-count (count blocks-to-add)))
+    (is (< elapsed-ms sync-search-indice-performance-max-ms))
+    (is (not-any? #(contains? % :vector-title) blocks-to-add))))
+
+(deftest sync-search-indice-300-new-blocks-does-not-check-page-descendants
+  (let [page-checks (atom 0)]
+    (with-redefs [ldb/page? (fn [_entity]
+                              (swap! page-checks inc)
+                              false)]
+      (let [{:keys [blocks-to-add]} (run-sync-search-indice-new-blocks-case true)]
+        (is (= sync-search-indice-performance-block-count (count blocks-to-add)))
+        (is (<= @page-checks (* 2 sync-search-indice-performance-block-count)))))))
+
+(deftest sync-search-indice-removes-page-descendants-when-page-is-deleted
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "Deleted page"}
+                                   :blocks [{:block/title "Parent"
+                                             :build/children [{:block/title "Child"}]}]}]})
+        page (db-test/find-page-by-title @conn "Deleted page")
+        parent (db-test/find-block-by-content @conn "Parent")
+        child (db-test/find-block-by-content @conn "Child")
+        tx-report (d/transact! conn [[:db/add (:db/id page) :logseq.property/deleted-at 1760000000000]])
+        blocks-to-remove-set (:blocks-to-remove-set (search/sync-search-indice tx-report))]
+    (is (contains? blocks-to-remove-set (str (:block/uuid page))))
+    (is (contains? blocks-to-remove-set (str (:block/uuid parent))))
+    (is (contains? blocks-to-remove-set (str (:block/uuid child))))))
+
+(deftest sync-search-indice-removes-block-descendants-when-parent-block-is-deleted
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "Deleted block"}
+                                   :blocks [{:block/title "Parent"
+                                             :build/children [{:block/title "Child"}]}]}]})
+        parent (db-test/find-block-by-content @conn "Parent")
+        child (db-test/find-block-by-content @conn "Child")
+        tx-report (d/transact! conn [[:db/add (:db/id parent) :logseq.property/deleted-at 1760000000000]])
+        blocks-to-remove-set (:blocks-to-remove-set (search/sync-search-indice tx-report))]
+    (is (contains? blocks-to-remove-set (str (:block/uuid parent))))
+    (is (contains? blocks-to-remove-set (str (:block/uuid child))))))
+
+(deftest sync-search-indice-removes-block-descendants-when-parent-becomes-hidden
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "Hidden move"}
+                                   :blocks [{:block/title "Hidden parent"
+                                             :logseq.property/hide? true}
+                                            {:block/title "Moved parent"
+                                             :build/children [{:block/title "Moved child"}]}]}]})
+        hidden-parent (db-test/find-block-by-content @conn "Hidden parent")
+        moved-parent (db-test/find-block-by-content @conn "Moved parent")
+        moved-child (db-test/find-block-by-content @conn "Moved child")
+        tx-report (d/transact! conn [[:db/add (:db/id moved-parent) :block/parent (:db/id hidden-parent)]])
+        blocks-to-remove-set (:blocks-to-remove-set (search/sync-search-indice tx-report))]
+    (is (contains? blocks-to-remove-set (str (:block/uuid moved-parent))))
+    (is (contains? blocks-to-remove-set (str (:block/uuid moved-child))))))
+
+(deftest sync-search-indice-adds-block-descendants-when-parent-becomes-visible
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "Visible move"}
+                                   :blocks [{:block/title "Hidden parent"
+                                             :logseq.property/hide? true
+                                             :build/children [{:block/title "Moved parent"
+                                                               :build/children [{:block/title "Moved child"}]}]}]}]})
+        page (db-test/find-page-by-title @conn "Visible move")
+        moved-parent (db-test/find-block-by-content @conn "Moved parent")
+        tx-report (d/transact! conn [[:db/add (:db/id moved-parent) :block/parent (:db/id page)]])
+        blocks-to-add (:blocks-to-add (search/sync-search-indice tx-report))
+        titles (set (map :title blocks-to-add))]
+    (is (contains? titles "Moved parent"))
+    (is (contains? titles "Moved child"))))
 
 (deftest search-blocks-includes-vector-only-results
   (testing "zvec vector hits are merged into desktop search even when SQLite has no keyword hit"

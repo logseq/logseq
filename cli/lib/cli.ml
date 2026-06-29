@@ -211,7 +211,7 @@ let verbose_line config result =
   if not config.Cli_config.verbose then []
   else
     [
-      Melange_edn.to_edn_string
+      Melange_edn_melange.to_edn_string
         (Edn_util.map
            [
              (Edn_util.keyword "level", Edn_util.keyword "debug");
@@ -298,7 +298,7 @@ let graph_exists_error graph =
   Error.make
     ~context:
       (Edn_util.map [ (Edn_util.keyword "graph", Edn_util.string graph_name) ])
-    (Edn_util.keyword_t "graph-exists")
+    (Error.Graph_exists)
     ("graph already exists: " ^ graph_name)
 
 let action_graph_exists config graph =

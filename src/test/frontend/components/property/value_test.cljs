@@ -1,5 +1,6 @@
 (ns frontend.components.property.value-test
   (:require [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
             [frontend.components.property.value :as property-value]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
@@ -98,6 +99,51 @@
   (is (= "100%" (:max-width property-value/asset-picker-grid-style)))
   (is (= "repeat(auto-fill, minmax(140px, 1fr))"
          (:grid-template-columns property-value/asset-picker-items-grid-style))))
+
+(defn- class-set
+  [class-str]
+  (set (string/split (or class-str "") #"\s+")))
+
+(deftest block-multiple-node-values-stay-in-one-row-test
+  (let [opts {:other-position? true
+              :show-popup! identity}]
+    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
+                   "min-w-0"))
+    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
+                   "flex-nowrap"))
+    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
+                   "multi-values-nowrap"))
+    (is (contains? (class-set (property-value/multiple-value-item-class opts))
+                   "shrink-0"))))
+
+(deftest expanded-multiple-node-values-can-wrap-test
+  (let [opts {:expanded? true
+              :other-position? true
+              :show-popup! identity}]
+    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
+                   "flex-wrap"))
+    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
+                   "multi-values-expanded"))
+    (is (not (contains? (class-set (property-value/multiple-values-trigger-class opts))
+                        "flex-nowrap")))
+    (is (not (contains? (class-set (property-value/multiple-value-item-class opts))
+                        "shrink-0")))))
+
+(deftest page-multiple-node-values-can-wrap-test
+  (let [opts {:page-property? true
+              :show-popup! identity}]
+    (is (contains? (class-set (property-value/multiple-values-trigger-class opts))
+                   "flex-wrap"))
+    (is (not (contains? (class-set (property-value/multiple-values-trigger-class opts))
+                        "flex-nowrap")))
+    (is (not (contains? (class-set (property-value/multiple-value-item-class opts))
+                        "shrink-0")))))
+
+(deftest non-positioned-multiple-node-values-can-wrap-test
+  (is (contains? (class-set (property-value/multiple-values-trigger-class {}))
+                 "flex-wrap"))
+  (is (not (contains? (class-set (property-value/multiple-values-trigger-class {}))
+                      "flex-nowrap"))))
 
 (deftest asset-selected-ids-test
   (let [property {:db/ident :asset}]

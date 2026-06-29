@@ -1,7 +1,7 @@
 type input_spec = {
   name : string;
   optional : bool;
-  default : Melange_edn.any option;
+  default : Melange_edn_melange.any option;
 }
 
 type source = Built_in | Custom
@@ -11,7 +11,7 @@ type query_entry = {
   source : source;
   doc : string option;
   inputs : input_spec list;
-  query : Melange_edn.any;
+  query : Melange_edn_melange.any;
 }
 
 type opts = {
@@ -26,15 +26,15 @@ type action =
   | Run of {
       repo : Cli_primitive.repo;
       graph : Cli_primitive.graph;
-      query : Melange_edn.any;
-      inputs : Melange_edn.any list;
+      query : Melange_edn_melange.any;
+      inputs : Melange_edn_melange.any list;
       name : string option;
     }
   | List
 
 let edn_value_of_string ~label text =
-  try Ok (Melange_edn.of_edn_string text)
-  with Melange_edn.Parse_error _ ->
+  try Ok (Melange_edn_melange.of_edn_string text)
+  with Melange_edn_melange.Parse_error _ ->
     Error (Error.invalid_options ("invalid " ^ label ^ " edn"))
 
 let normalize_query_name value =
@@ -51,7 +51,7 @@ let parsed_edn text =
 
 let kw value = Edn_util.keyword value
 let sym value = Edn_util.symbol value
-let in_sym value = Melange_edn.symbol value
+let in_sym value = Melange_edn_melange.symbol value
 let vector values = Edn_util.vector values
 let vector_t values = Edn_util.vector_t values
 let list values = Edn_util.list values
@@ -394,7 +394,7 @@ let strip_leading_colon value =
 let query_name_of_value value =
   match (Edn_util.as_string value, Edn_util.as_keyword value) with
   | Some value, _ | _, Some value -> trim_non_empty (strip_leading_colon value)
-  | _ -> trim_non_empty (Melange_edn.to_edn_string value |> strip_leading_colon)
+  | _ -> trim_non_empty (Melange_edn_melange.to_edn_string value |> strip_leading_colon)
 
 let custom_query_input value =
   match (Edn_util.as_string value, Edn_util.as_keyword value) with
@@ -493,7 +493,7 @@ let validate_query query =
       if List.exists contains_db_id_datom_clause (after_where values) then
         Error
           (Error.make
-             (Edn_util.keyword_t "invalid-query")
+             (Error.Invalid_query)
              "invalid query: :db/id cannot be used as a datom attribute in \
               :where clauses. Bind entity ids through :in and --inputs.")
       else Ok query
@@ -564,7 +564,7 @@ let command_id = function
 let validate_parsed _ = Ok ()
 
 let symbol_is name = function
-  | Melange_edn.Any (Melange_edn.Symbol value) -> value = name
+  | Melange_edn_melange.Any (Melange_edn_melange.Symbol value) -> value = name
   | _ -> false
 
 let query_in_ends_with_percent query =
@@ -606,7 +606,7 @@ let build ?registry:_ config _globals parsed =
           else if Option.is_none query_text && Option.is_none query_name then
             Error
               (Error.make
-                 (Edn_util.keyword_t "missing-query")
+                 (Error.Missing_query)
                  "query is required")
           else
             let query_result, entry =
@@ -618,13 +618,13 @@ let build ?registry:_ config _globals parsed =
                   | None ->
                       ( Error
                           (Error.make
-                             (Edn_util.keyword_t "unknown-query")
+                             (Error.Unknown_query)
                              ("unknown query: " ^ name)),
                         None ))
               | _ ->
                   ( Error
                       (Error.make
-                         (Edn_util.keyword_t "missing-query")
+                         (Error.Missing_query)
                          "query is required"),
                     None )
             in

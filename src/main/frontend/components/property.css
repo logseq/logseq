@@ -34,7 +34,7 @@
 }
 
 .ls-block .ls-properties-area.ls-block-properties {
-  margin-left: 8px;
+  margin-left: 7px;
 }
 
 .grid-auto-fit {
@@ -72,14 +72,6 @@
 
   .properties-panel-header {
     @apply px-3 py-2 text-xs font-medium text-muted-foreground border-b border-gray-04;
-  }
-
-  .hidden-properties-toggle-btn {
-    color: var(--ls-secondary-text-color);
-  }
-
-  .hidden-properties-toggle-btn:hover {
-    color: var(--ls-primary-text-color);
   }
 
   .property-pair.property-panel-row {
@@ -123,6 +115,29 @@
   .property-pair.property-panel-row[data-property-type=checkbox] .property-value-panel.ls-block.property-value-container,
   .property-pair.property-panel-row[data-property-type=checkbox] .property-value.property-value-panel-inner {
     @apply items-center;
+  }
+
+  .hidden-properties-toggle-row {
+    @apply pr-3;
+  }
+
+  .hidden-properties-toggle-key {
+    @apply w-full min-w-0 min-h-[28px] p-0 border-0 bg-transparent text-left cursor-pointer;
+    color: var(--ls-primary-text-color);
+    font: inherit;
+  }
+
+  .hidden-properties-toggle-key:hover {
+    color: var(--ls-primary-text-color);
+  }
+
+  .hidden-properties-toggle-key:focus,
+  .hidden-properties-toggle-key:focus-visible {
+    outline: none;
+  }
+
+  .hidden-properties-toggle-key .property-icon {
+    color: var(--ls-primary-text-color);
   }
 
   .property-panel-bullet {
@@ -338,6 +353,20 @@
     @apply flex items-center shrink whitespace-nowrap;
   }
 
+  .multi-values-nowrap .select-item {
+    @apply shrink-0;
+    width: max-content;
+    max-width: none;
+  }
+
+  .multi-values-expanded .select-item {
+    min-width: 0;
+    width: auto;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   &[data-type] {
     @apply flex items-center;
   }
@@ -347,26 +376,32 @@
   }
 }
 
-.positioned-properties.block-below .bottom-property-content .property-value-inner[data-type=node] .multi-values.jtrigger {
+.positioned-properties.block-below .bottom-properties-row[data-expanded="false"] .bottom-property-content .property-value-inner[data-type=node] .multi-values.jtrigger {
   min-width: 0;
-  max-width: 100%;
-  width: 100%;
+  max-width: none;
+  width: max-content;
   overflow: hidden;
   white-space: nowrap;
 }
 
-.positioned-properties.block-below .bottom-property-content .property-value-inner[data-type=node] .select-item,
-.positioned-properties.block-below .bottom-property-content .property-value-inner[data-type=node] .page-ref,
-.positioned-properties.block-below .bottom-property-content .property-value-inner[data-type=node] .block-title-wrap {
+.positioned-properties.block-below .bottom-properties-row[data-expanded="false"] .bottom-property-content .property-value-inner[data-type=node] .select-item,
+.positioned-properties.block-below .bottom-properties-row[data-expanded="false"] .bottom-property-content .property-value-inner[data-type=node] .page-ref,
+.positioned-properties.block-below .bottom-properties-row[data-expanded="false"] .bottom-property-content .property-value-inner[data-type=node] .block-title-wrap {
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   min-width: 0;
-  max-width: 100%;
+  max-width: none;
 }
 
-.positioned-properties.block-below .bottom-property-content .property-value-inner[data-type=node] .select-item {
+.positioned-properties.block-below .bottom-properties-row[data-expanded="false"] .bottom-property-content .property-value-inner[data-type=node] .select-item {
   display: inline-flex;
+}
+
+.positioned-properties.block-below .bottom-properties-row[data-expanded="true"] .bottom-property-content .property-value-inner[data-type=node] .multi-values.jtrigger,
+.positioned-properties.block-below .bottom-properties-row[data-expanded="true"] .bottom-property-content .property-value-inner[data-type=node] .select-item,
+.positioned-properties.block-below .bottom-properties-row[data-expanded="true"] .bottom-property-content .property-value-inner[data-type=node] .page-ref,
+.positioned-properties.block-below .bottom-properties-row[data-expanded="true"] .bottom-property-content .property-value-inner[data-type=node] .block-title-wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .block-main-container .ls-properties-area {
@@ -507,7 +542,11 @@ a.control-link {
 }
 
 .ls-page-title .ls-page-properties {
-  @apply flex flex-col gap-4 mt-4;
+  @apply flex flex-col gap-0 mt-4;
+}
+
+.ls-page-title .ls-page-properties > .ls-new-property {
+  @apply mt-2;
 }
 
 .ls-property-add {

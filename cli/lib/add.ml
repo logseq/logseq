@@ -32,8 +32,8 @@ let normalized_lookup_name value = String.lowercase_ascii (String.trim value)
 let query_value query = Edn_util.any (Cli_primitive.datascript_query_to_edn query)
 
 let edn_value_of_string ~label text =
-  try Ok (Melange_edn.of_edn_string text)
-  with Melange_edn.Parse_error _ ->
+  try Ok (Melange_edn_melange.of_edn_string text)
+  with Melange_edn_melange.Parse_error _ ->
     Error (Error.invalid_options ("invalid " ^ label ^ " edn"))
 
 let strip_tag_prefix value =
@@ -122,7 +122,7 @@ let parse_properties_option ?(allow_non_built_in = false) = function
                         Error
                           (Error.invalid_options
                              ("invalid property key: "
-                             ^ Melange_edn.to_edn_string key)))
+                             ^ Melange_edn_melange.to_edn_string key)))
               in
               loop [] fields
           | None -> Error (Error.invalid_options "properties must be a map"))
@@ -146,7 +146,7 @@ let parse_properties_vector_option ?(allow_non_built_in = false) = function
                         Error
                           (Error.invalid_options
                              ("invalid property key: "
-                             ^ Melange_edn.to_edn_string value)))
+                             ^ Melange_edn_melange.to_edn_string value)))
               in
               loop [] values
           | None -> Error (Error.invalid_options "properties must be a vector"))
@@ -267,7 +267,7 @@ let parse_blocks_edn ~label text =
       | None ->
           Error
             (Error.make
-               (Edn_util.keyword_t "invalid-blocks")
+               (Error.Invalid_blocks)
                "blocks must be a vector")))
 
 let read_file path = Cli_unix.read_text_file path
@@ -285,7 +285,7 @@ let read_blocks (opts : opts) args =
   | _ ->
       Error
         (Error.make
-           (Edn_util.keyword_t "missing-content")
+           (Error.Missing_content)
            "content is required")
 
 let build_add_block_action (opts : opts) args repo =
@@ -356,7 +356,7 @@ let property_entity_selector =
 let page_query selector =
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [ Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "block/name"; sym "?name" ]) ]
     ()
@@ -364,7 +364,7 @@ let page_query selector =
 let tag_query selector =
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [
         Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "block/name"; sym "?name" ]);
@@ -377,7 +377,7 @@ let tag_query selector =
 let property_query selector =
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [
         Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "block/name"; sym "?name" ]);
@@ -409,10 +409,10 @@ let recycled_entity value =
   Option.is_some (Edn_util.get value "logseq.property/deleted-at")
 
 let page_not_found () =
-  Error.make (Edn_util.keyword_t "page-not-found") "page not found"
+  Error.make (Error.Page_not_found) "page not found"
 
 let recycled_page_error () =
-  Error.make (Edn_util.keyword_t "recycled-page") "page is recycled"
+  Error.make (Error.Recycled_page) "page is recycled"
 
 let pull_entity config repo selector lookup =
   Transport.thread_api_pull config ~repo
@@ -508,7 +508,7 @@ let resolve_add_target config (action : action) =
               pure
                 (Error
                    (Error.make
-                      (Edn_util.keyword_t "target-not-found")
+                      (Error.Target_not_found)
                       "target block not found")))
   | None, Some uuid, _ ->
       bind
@@ -522,14 +522,14 @@ let resolve_add_target config (action : action) =
               pure
                 (Error
                    (Error.make
-                      (Edn_util.keyword_t "target-not-found")
+                      (Error.Target_not_found)
                       "target block not found")))
   | None, None, Some page_name -> ensure_page config action.repo page_name
   | None, None, None ->
       pure
         (Error
            (Error.make
-              (Edn_util.keyword_t "missing-target")
+              (Error.Missing_target)
               "target page or block is required"))
 
 let flatten_blocks blocks =
@@ -723,7 +723,7 @@ let resolve_created_ids config repo blocks insert_result =
                 pure
                   (Error
                      (Error.make
-                        (Edn_util.keyword_t "add-id-resolution-failed")
+                        (Error.Add_id_resolution_failed)
                         "unable to resolve created ids")))
   in
   loop [] uuids

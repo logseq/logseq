@@ -3004,7 +3004,7 @@
      label)))
 
 (defn- block-below-positioned-properties-cp
-  [block properties opts show-hidden-properties-toggle? show-add-property-button?]
+  [block properties opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
   (let [*pills-el (hooks/use-ref nil)
         *overflow? (hooks/use-memo #(atom false) [(:block/uuid block) (count properties)])
         [overflow?] (hooks/use-atom *overflow?)
@@ -3023,7 +3023,7 @@
            (when observer
              (.disconnect observer))
            (.removeEventListener js/window "resize" measure!))))
-     [(:block/uuid block) properties show-hidden-properties-toggle? show-add-property-button? expanded?])
+     [(:block/uuid block) properties show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
     [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden.w-full.min-w-0
      [:div
       {:class (util/classnames
@@ -3031,7 +3031,7 @@
                 (if expanded?
                   "flex-wrap overflow-x-hidden"
                   "flex-nowrap overflow-x-hidden")])
-       :data-expanded (boolean expanded?)
+       :data-expanded (str expanded?)
        :data-bottom-properties-row (:block/uuid block)
        :tab-index -1
        :on-key-down handle-bottom-properties-row-key-down!}
@@ -3040,10 +3040,14 @@
                                    "flex-wrap overflow-x-hidden"
                                    "flex-nowrap overflow-x-hidden")])
         :ref #(set! (.-current *pills-el) %)}
-       (bottom-property-pill-items block properties opts)]
+       (bottom-property-pill-items block properties (assoc opts :expanded? expanded?))
+       (when show-hidden-properties-pill-toggle?
+         (property-component/hidden-properties-toggle-button block {:bottom-pill? true
+                                                                    :bottom-row-nav? true
+                                                                    :tab-index -1}))]
       (when (or overflow? expanded?)
         (bottom-properties-expand-button expanded? set-expanded!))
-      (when show-hidden-properties-toggle?
+      (when show-hidden-properties-control?
         (property-component/hidden-properties-toggle-button block {:icon-only? true
                                                                    :bottom-row-nav? true
                                                                    :tab-index 0}))
@@ -3068,11 +3072,14 @@
                      :inline-text inline-text
                      :other-position? true
                      :property-position position})
-        show-page-hidden-properties-toggle? (and (ldb/page? block)
-                                                 (not config/publishing?))
-        show-hidden-properties-toggle? (and has-viewable-properties?
-                                            show-page-hidden-properties-toggle?
-                                            (property-component/has-hidden-properties? block config))
+        has-hidden-properties? (and has-viewable-properties?
+                                    (not config/publishing?)
+                                    (property-component/has-hidden-properties? block config))
+        page? (ldb/page? block)
+        show-hidden-properties-pill-toggle? (and has-hidden-properties?
+                                                 (not page?))
+        show-hidden-properties-control? (and has-hidden-properties?
+                                             page?)
         show-page-add-property? (and (ldb/page? block)
                                      (not (ldb/class? block))
                                      (not config/publishing?))
@@ -3084,7 +3091,8 @@
           (block-below-positioned-properties-cp block
                                                 properties
                                                 opts
-                                                show-hidden-properties-toggle?
+                                                show-hidden-properties-pill-toggle?
+                                                show-hidden-properties-control?
                                                 show-add-property-button?))
 
         (when (seq properties)
@@ -5343,10 +5351,9 @@
            *navigating-block (hooks/use-memo #(atom (:block/uuid initial-block)) [])
            [navigating-block] (hooks/use-atom *navigating-block)
         navigating-block-entity (db/entity [:block/uuid navigating-block])
-        navigated? (and
-                    navigating-block
-                    (not= (:db/id (:block/parent initial-block))
-                          (:db/id (:block/parent navigating-block-entity))))
+        navigated? (breadcrumb-model/navigated-between-parents? initial-block
+                                                                navigating-block
+                                                                navigating-block-entity)
         navigating-block-reactive (model/sub-block (:db/id navigating-block-entity))
         blocks (if navigated?
                  [navigating-block-reactive]

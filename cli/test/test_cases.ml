@@ -12,7 +12,7 @@ let () =
   test "json output renders transit quoted uuid as string" (fun () ->
       let uuid = "11111111-1111-4111-8111-111111111111" in
       let value =
-        Edn_util.any (Melange_edn.tagged "transit/quote" (Edn_util.uuid uuid))
+        Edn_util.any (Melange_edn_melange.tagged "transit/quote" (Edn_util.uuid uuid))
       in
       let output =
         Format_types.to_json
@@ -25,12 +25,13 @@ let () =
   test "json error output includes hint" (fun () ->
       let err =
         Error.make ~hint:"Run logseq sync start --graph demo."
-          (Edn_util.keyword_t "sync-not-started")
-          "sync is not started for this graph"
+          Error.Sync_not_started "sync is not started for this graph"
       in
       let output =
         Format_types.to_json (Cli_result.error Output.Mode.Json err)
       in
+      expect_named_contains "json error code" output
+        "\"code\":\"sync-not-started\"";
       expect_named_contains "json error hint" output
         "\"hint\":\"Run logseq sync start --graph demo.\"")
 

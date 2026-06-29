@@ -11,7 +11,7 @@ type t = {
   created_at : Js.Date.t option;
   updated_at : Js.Date.t option;
   deleted_at : Js.Date.t option;
-  raw : Melange_edn.any;
+  raw : Melange_edn_melange.any;
 }
 
 let of_value raw =

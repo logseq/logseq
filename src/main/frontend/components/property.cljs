@@ -921,9 +921,12 @@
         full-properties (-> (concat block-own-properties'
                                     (remove property-hide-f class-property-pairs))
                             (remove-built-in-or-other-position-properties false))
-        hidden-properties (-> (concat block-hidden-properties
-                                      (filter property-hide-f class-property-pairs))
-                              (remove-built-in-or-other-position-properties true))]
+        hidden-properties (remove (fn [[property-id _]]
+                                    (= property-id :logseq.property/query))
+                                  (remove-built-in-or-other-position-properties
+                                   (concat block-hidden-properties
+                                           (filter property-hide-f class-property-pairs))
+                                   true))]
     {:full-properties full-properties
      :hidden-properties hidden-properties}))
 
@@ -940,29 +943,52 @@
     (boolean (seq hidden-properties))))
 
 (hsx/defc hidden-properties-toggle-button
-  [block {:keys [icon-only? tab-index bottom-row-nav?] :as _opts}]
+  [block {:keys [icon-only? tab-index bottom-row-nav? bottom-pill?] :as _opts}]
   (let [block-uuid (:block/uuid block)
         show-hidden-properties? (use-hidden-properties-visible block-uuid)
         label (hidden-properties-toggle-label show-hidden-properties?)]
     (when block-uuid
-      (let [button
-            (shui/button
-             {:variant :secondary
-              :size :sm
-              :class (str "bottom-property-control-btn"
-                          " hidden-properties-toggle-btn"
-                          (when icon-only? " bottom-property-add-btn"))
+      (if bottom-pill?
+        [:button.bottom-property-pill.bottom-property-pill-focusable.bottom-property-hidden-toggle-btn
+         {:type "button"
+          :data-bottom-pill-focusable true
+          :data-bottom-row-nav (when bottom-row-nav? true)
+          :tab-index (or tab-index -1)
+          :aria-label label
+          :on-click (fn [e]
+                      (util/stop e)
+                      (toggle-hidden-properties-visibility! block-uuid))}
+         (ui/icon (if show-hidden-properties? "chevron-up" "chevron-down")
+                  {:size 16 :class "bottom-property-action-icon"})
+         label]
+        (if icon-only?
+          [:div.ls-new-property
+           (shui/button
+            {:variant :secondary
+             :size :sm
+             :class "jtrigger flex bottom-property-add-btn"
+             :tab-index (or tab-index 0)
+             :data-bottom-row-nav (when bottom-row-nav? true)
+             :aria-label label
+             :on-click (fn [e]
+                         (util/stop e)
+                         (toggle-hidden-properties-visibility! block-uuid))}
+            (ui/icon (if show-hidden-properties? "chevron-up" "chevron-down")
+                     {:size 16 :class "bottom-property-action-icon"}))]
+          [:div.property-pair.property-panel-row.hidden-properties-toggle-row
+           [:div.property-key-panel
+            [:button.property-key-inner.jtrigger-view.hidden-properties-toggle-key
+             {:type "button"
               :tab-index (or tab-index 0)
-              :data-bottom-row-nav (when bottom-row-nav? true)
               :aria-label label
               :on-click (fn [e]
                           (util/stop e)
                           (toggle-hidden-properties-visibility! block-uuid))}
-             (ui/icon (if show-hidden-properties? "chevron-up" "chevron-down")
-                      {:size 16 :class "bottom-property-action-icon"})
-             (when-not icon-only?
-               label))]
-        (ui/tooltip button [:span label])))))
+             [:span.property-icon
+              (ui/icon (if show-hidden-properties? "chevron-up" "chevron-down")
+                       {:size 16})]
+             [:span.property-k label]]]
+           [:div.property-value-panel.ls-block.property-value-container]])))))
 
 (hsx/defc hidden-properties-cp
   [block hidden-properties {:keys [show-hidden-properties?] :as opts}]
@@ -1037,10 +1063,15 @@
                                 (remove (fn [[k _v]] (= k :logseq.property.class/properties))))
                show-properties-panel? (seq properties')
                page? (entity-util/page? block)
+               page-properties-area? (and page?
+                                          (or (:page-title? opts)
+                                              sidebar-properties?
+                                              tag-dialog?))
+               opts' (assoc opts :page-property? page-properties-area?)
                plugin-properties (->> (concat full-properties hidden-properties)
                                       (remove (fn [[k _v]] (= k :logseq.property.class/properties)))
                                       (into {}))
-               props-for-plugin (when (enable-block-properties-renderers? opts class?)
+               props-for-plugin (when (enable-block-properties-renderers? opts' class?)
                                   (clj->js {:blockId (str (:block/uuid block))
                                             :properties (into {} (map (fn [[k v]]
                                                                         [(subs (str k) 1)
@@ -1086,21 +1117,20 @@
                     [:> (:render replace-renderer) props-for-plugin])
                   (when show-properties-panel?
                     [:div.properties-panel
-                     (properties-section block properties' opts)]))
+                     (properties-section block properties' opts')]))
 
                 (when-not class?
                   [:<>
                    (when show-hidden-properties-toggle-button?
-                     [:div.mb-1
-                      (hidden-properties-toggle-button block {})])
+                     (hidden-properties-toggle-button block {}))
                    (when (and show-hidden-properties? (seq hidden-properties))
                      [:div.properties-panel
                       (hidden-properties-cp block hidden-properties
-                                            (assoc opts :show-hidden-properties? true))])])
+                                            (assoc opts' :show-hidden-properties? true))])])
 
                 (when (and page? (not class?))
                   ^{:key (str id "-add-property")}
-                  [new-property block opts])
+                  [new-property block opts'])
 
                 (mapv (fn [r]
                         (when (fn? (:render r))
