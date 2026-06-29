@@ -77,14 +77,14 @@ type remote_graph = {
   graph_id : Cli_primitive.uuid;
   graph_name : Cli_primitive.graph;
   graph_e2ee : bool;
-  raw : Melange_edn.any;
+  raw : Melange_edn_melange.any;
 }
 
 type sync_status = {
   ws_state : Cli_primitive.keyword option;
   graph_id : Cli_primitive.uuid option;
-  last_error : Melange_edn.any option;
-  raw : Melange_edn.any;
+  last_error : Melange_edn_melange.any option;
+  raw : Melange_edn_melange.any;
 }
 
 val config_key_of_string : string -> config_key option

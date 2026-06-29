@@ -5,8 +5,8 @@
  (libraries
   logseq_cli_platform_node
   logseq_cli
-  melange-transit.melange
-  melange-edn
+  melange-transit-melange
+  melange-edn-melange
   melange-fest
   melange-fetch
   melange.node)

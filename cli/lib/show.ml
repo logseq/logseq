@@ -85,7 +85,7 @@ let normalize_stdin_id = function
           let tokens = split_ws text in
           if tokens <> [] && List.for_all is_integer_text tokens then
             Some
-              (Melange_edn.to_edn_string
+              (Melange_edn_melange.to_edn_string
                  (Edn_util.vector
                     (List.map
                        (fun token -> Edn_util.int64 (Int64.of_string token))
@@ -463,7 +463,7 @@ let tree_block_selector =
 let page_blocks_query =
   Cli_primitive.make_datascript_query
     ~find:[ Edn_util.list [ sym "pull"; sym "?b"; tree_block_selector ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?page-id" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?page-id" ]
     ~where:
       [
         Cli_primitive.V
@@ -474,7 +474,7 @@ let page_blocks_query =
 let page_hierarchy_children_query =
   Cli_primitive.make_datascript_query
     ~find:[ Edn_util.list [ sym "pull"; sym "?child"; tree_block_selector ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?parent-id" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?parent-id" ]
     ~where:
       [
         Cli_primitive.V

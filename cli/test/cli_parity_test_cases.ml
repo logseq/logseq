@@ -67,7 +67,7 @@ let expect_parse_error_code name expected argv =
   expect_error_code name expected (Cli_parse.parse argv)
 
 let keyword_text value = Edn_util.keyword_to_string value
-let edn_of_string text = Melange_edn.of_edn_string text
+let edn_of_string text = Melange_edn_melange.of_edn_string text
 let repo_text repo = Cli_primitive.string_of_repo repo
 let graph_text graph = Cli_primitive.string_of_graph graph
 
@@ -3722,7 +3722,7 @@ let () =
       in
       expect_int "metadata ops count" 3 (List.length ops);
       let output =
-        String.concat "\n" (List.map Melange_edn.to_edn_string ops)
+        String.concat "\n" (List.map Melange_edn_melange.to_edn_string ops)
       in
       expect_named_contains "status op" output ":logseq.property/status.todo";
       expect_named_contains "tag op" output ":block/tags 901";
@@ -4230,7 +4230,7 @@ let () =
           ]
       in
       let edn query =
-        Melange_edn.to_edn_string
+        Melange_edn_melange.to_edn_string
           (Edn_util.any (Cli_primitive.datascript_query_to_edn query))
       in
       let without_inputs =
@@ -4241,7 +4241,7 @@ let () =
         "[:find ?b :where [?b :block/title ?title]]" (edn without_inputs);
       let with_inputs =
         Cli_primitive.make_datascript_query ~find:[ Edn_util.symbol "?b" ]
-          ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?title" ]
+          ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?title" ]
           ~where:[ Cli_primitive.V title_clause ] ()
       in
       expect_equal "datascript query with inputs"
@@ -4569,7 +4569,7 @@ let () =
              queries)
       in
       expect_int "list-status inputs" 0 (List.length list_status.inputs);
-      let status_query = Melange_edn.to_edn_string list_status.query in
+      let status_query = Melange_edn_melange.to_edn_string list_status.query in
       expect_named_contains "list-status query status keyword" status_query
         ":logseq.property/status";
       let list_priority =
@@ -4580,7 +4580,7 @@ let () =
       in
       expect_int "list-priority inputs" 0 (List.length list_priority.inputs);
       expect_named_contains "list-priority query priority keyword"
-        (Melange_edn.to_edn_string list_priority.query)
+        (Melange_edn_melange.to_edn_string list_priority.query)
         ":logseq.property/priority");
 
   test "CLI parity debug selector requires exactly one id uuid or ident"
@@ -4620,7 +4620,7 @@ let () =
           | Debug.By_id 42L -> pass
           | _ -> fail_test "expected debug id lookup");
           expect_equal "debug selector" "[*]"
-            (Melange_edn.to_edn_string selector));
+            (Melange_edn_melange.to_edn_string selector));
       let ident =
         expect_ok "debug ident option"
           (Debug.parse_ident_option ":logseq.class/Tag")
@@ -6577,7 +6577,7 @@ let () =
           (Bytes.to_string
              (expect_some "sqlite bytes" (Edn_util.as_bytes sqlite_value)));
         expect_named_contains "read sqlite uses transit bytes tag"
-          (Melange_edn.to_edn_string sqlite_value)
+          (Melange_edn_melange.to_edn_string sqlite_value)
           "#transit/bytes";
         ignore
           (expect_ok "write db"
@@ -6595,7 +6595,7 @@ let () =
           (Bytes.to_string
              (expect_some "db bytes" (Edn_util.as_bytes db_value)));
         expect_named_contains "read db uses transit bytes tag"
-          (Melange_edn.to_edn_string db_value)
+          (Melange_edn_melange.to_edn_string db_value)
           "#transit/bytes";
         expect_error_code "bad write format" ":unsupported-output-format"
           (effect_result "bad write format"
@@ -6634,11 +6634,11 @@ let () =
               (expect_some "invoke large int value"
                  (Edn_util.as_int64 (List.nth query 5)));
             (match List.nth query 6 with
-            | Melange_edn.Any (Melange_edn.Bigint value) ->
+            | Melange_edn_melange.Any (Melange_edn_melange.Bigint value) ->
                 expect_equal "invoke bigint" "900719925474099312345" value
             | _ -> fail_test "invoke bigint: expected Bigint");
             (match List.nth query 7 with
-            | Melange_edn.Any (Melange_edn.Decimal value) ->
+            | Melange_edn_melange.Any (Melange_edn_melange.Decimal value) ->
                 expect_equal "invoke decimal" "1234567890.123456789" value
             | _ -> fail_test "invoke decimal: expected Decimal");
             "\"ok\"")
@@ -6670,9 +6670,9 @@ let () =
                         Edn_util.keyword "created-at";
                         Edn_util.int64 large_int;
                         Edn_util.any
-                          (Melange_edn.bigint "900719925474099312345");
+                          (Melange_edn_melange.bigint "900719925474099312345");
                         Edn_util.any
-                          (Melange_edn.decimal "1234567890.123456789");
+                          (Melange_edn_melange.decimal "1234567890.123456789");
                       ]))
           in
           expect_equal "decoded invoke result" "ok"
@@ -6787,7 +6787,7 @@ let () =
             effect_to_promise
               (Transport.connect_events invoke_config (fun event_type payload ->
                    received :=
-                     (event_type, Melange_edn.to_edn_string payload)
+                     (event_type, Melange_edn_melange.to_edn_string payload)
                      :: !received;
                    Cli_effect.pure ()))
           in
