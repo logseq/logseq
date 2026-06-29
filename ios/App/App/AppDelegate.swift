@@ -426,12 +426,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                 return
             }
 
-            // Fast-path: leave SwiftUI search for the Home tab. During this
-            // transition SwiftUI is already moving the shared nav controller
-            // back into the Home tab, so rebuilding it here causes UIKit
-            // transition conflicts.
+            // Fast-path: leave SwiftUI search for the Home tab while Search is
+            // still at its root. During this transition SwiftUI is already
+            // moving the shared nav controller back into the Home tab, so
+            // rebuilding it here causes UIKit transition conflicts. If Search
+            // is showing a result detail, use the normal stack switch below so
+            // Home gets a visible web view again.
             if previousStackId == "search",
-               stackId == "home" {
+               stackId == "home",
+               self.pathStack == [self.rootPath(for: "search")] {
 
                 self.setPaths(["/__stack__/search"], for: "search")
                 self.activeStackId = "home"
