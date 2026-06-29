@@ -18,6 +18,10 @@
   [schema-key body]
   ((get db-sync-schema/http-request-coercers schema-key) body))
 
+(defn- coerce-response
+  [schema-key body]
+  ((get db-sync-schema/http-response-coercers schema-key) body))
+
 (deftest http-request-client-revision-is-optional-test
   (doseq [[schema-key body] request-samples]
     (testing schema-key
@@ -33,3 +37,10 @@
                (coerce-request :sync/tx-batch
                                (assoc (:sync/tx-batch request-samples)
                                       :client-revision 42)))))
+
+(deftest snapshot-download-response-accepts-stream-response-without-t-test
+  (let [body {:ok true
+              :key "stream/graph.snapshot"
+              :url "https://sync.example.test/sync/graph/snapshot/stream"
+              :content-encoding "gzip"}]
+    (is (= body (coerce-response :sync/snapshot-download body)))))
