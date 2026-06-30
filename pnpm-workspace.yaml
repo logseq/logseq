@@ -1,0 +1,13 @@
+# pnpm 11 reads non-auth settings from pnpm-workspace.yaml instead of .npmrc.
+# Keep this in sync with .npmrc while pnpm 10 is still supported.
+shamefullyHoist: true
+
+allowBuilds:
+  '@zvec/zvec': true
+  better-sqlite3: true
+  electron: true
+  keytar: true
+  canvas: false
+  core-js: false
+  protobufjs: false
+  sharp: false
