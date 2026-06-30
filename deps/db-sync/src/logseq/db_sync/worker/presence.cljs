@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker.presence
-  (:require [clojure.string :as string]
+  (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [logseq.db-sync.worker.ws :as ws]))
 
 (defn claims->user
@@ -19,20 +20,17 @@
 
 (defn attachment->user
   [attachment]
-  (let [m (js->clj attachment :keywordize-keys true)]
-    (or (:presence/user m)
-        m)))
+  (:presence/user (bean/->clj attachment)))
 
 (defn attachment->sync-context
   [attachment]
-  (let [m (js->clj attachment :keywordize-keys true)]
-    (:sync/context m)))
+  (:sync/context (bean/->clj attachment)))
 
 (defn- serialize-attachment!
   [^js ws user sync-context]
-  (.serializeAttachment ws (clj->js (cond-> {:presence/user user}
-                                      (seq sync-context)
-                                      (assoc :sync/context sync-context)))))
+  (.serializeAttachment ws (bean/->js (cond-> {:presence/user user}
+                                        (seq sync-context)
+                                        (assoc :sync/context sync-context)))))
 
 (defn presence*
   [^js self]
