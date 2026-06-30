@@ -929,7 +929,10 @@
 (defn load-unpacked-plugin
   []
   (when (util/electron?)
-    (p/let [path (ipc/ipc "openDialog")]
+    (p/let [last-path (storage/get :lsp-last-unpacked-plugin-path)
+            path (ipc/ipc "openDialog" last-path)]
+      (when (and (string? path) (not (string/blank? path)))
+        (storage/set :lsp-last-unpacked-plugin-path path))
       (when-not (:plugin/selected-unpacked-pkg @state/state)
         (state/set-state! :plugin/selected-unpacked-pkg path)))))
 
