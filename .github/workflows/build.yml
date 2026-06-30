@@ -276,7 +276,7 @@ jobs:
           pnpm db-worker-node:release:bundle
           pnpm --dir deps/db-sync build:node-adapter
           node scripts/prepare-cli-package.mjs
-          pnpm --dir dist/cli-package install --prod
+          pnpm --dir dist/cli-package install --prod --ignore-workspace
           pnpm --dir dist/cli-package pack --pack-destination ../
 
       - name: Smoke test packaged CLI
