@@ -305,6 +305,18 @@
             row (first rows)]
       (graph-ready-for-use-sql->bool (some-> row (aget "graph_ready_for_use"))))))
 
+(defn <graph-log-info
+  [db graph-id]
+  (when (string? graph-id)
+    (p/let [result (common/<d1-all db
+                                   "select graph_id, graph_name from graphs where graph_id = ?"
+                                   graph-id)
+            rows (common/get-sql-rows result)
+            row (first rows)]
+      (when row
+        {:graph-id (aget row "graph_id")
+         :graph-name (aget row "graph_name")}))))
+
 (defn <graph-ready-for-use-set!
   [db graph-id graph-ready-for-use?]
   (when (string? graph-id)
