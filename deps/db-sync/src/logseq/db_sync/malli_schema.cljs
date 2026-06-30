@@ -54,7 +54,6 @@
    [:failed-tx-id {:optional true} :uuid]
    [:missing-block-uuids {:optional true} [:sequential :uuid]]
    [:error-detail {:optional true} :string]
-   [:checksum {:optional true} :string]
    [:data {:optional true} :string]])
 
 (def user-presence-schema

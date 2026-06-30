@@ -223,8 +223,8 @@
     (swap! (:atom conn) merge opts)
     conn))
 
-(defn transient-conn-from-db
-  "Create an isolated in-memory conn from `db` without invoking `d/store`."
+(defn- conn-from-db
+  "Forked conn-from-db to not invoke `d/store`, it's unsafe to store during nested batch tx."
   [db]
   (if-some [_storage (storage/storage db)]
     (make-conn
@@ -238,7 +238,7 @@
   to `conn` with a single final `transact!`.
 
   Semantics:
-  - Uses `transient-conn-from-db` so batch work runs on an isolated in-memory conn.
+  - Uses `d/conn-from-db` so batch work runs on an isolated in-memory conn.
   - Temp conn can still read from storage-backed db state, but cannot write to disk
     (`:skip-store? true`).
   - Defers db validation during inner batch ops (`:skip-validate-db? true`), then
@@ -250,7 +250,7 @@
   - `listen-db` (if provided) receives each intermediate tx-report from temp conn.
   - Do not rely on returned tx-report shape for undo/redo behavior."
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
-  (let [temp-conn (transient-conn-from-db @conn)
+  (let [temp-conn (conn-from-db @conn)
         *batch-tx-data (volatile! [])
         *complete? (volatile! false)]
     ;; can read from disk, write is disallowed
