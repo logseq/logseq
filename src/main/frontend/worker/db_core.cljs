@@ -729,9 +729,19 @@
   [repo]
   (db-sync/status repo))
 
+(defn- db-sync-dbs-open?
+  [repo]
+  (and (some? (worker-state/get-datascript-conn repo))
+       (some? (worker-state/get-client-ops-conn repo))))
+
+(declare start-db!)
 (def-thread-api :thread-api/db-sync-start
   [repo]
-  (db-sync/start! repo))
+  (if (db-sync-dbs-open? repo)
+    (db-sync/start! repo)
+    (p/do!
+     (start-db! repo {:close-other-db? false})
+     (db-sync/start! repo))))
 
 (def-thread-api :thread-api/db-sync-stop
   []
