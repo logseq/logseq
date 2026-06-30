@@ -123,7 +123,7 @@ assert.match(
 );
 assert.match(
   desktopReleaseWorkflow,
-  /pnpm --dir cli install --frozen-lockfile/,
+  /pnpm --dir cli install --frozen-lockfile --ignore-workspace/,
   "desktop release workflow should install cli/ pnpm deps",
 );
 assert.match(
