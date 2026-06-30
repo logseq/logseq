@@ -333,7 +333,9 @@
                                   :owner-source lock-owner
                                   :owned? (owner-manageable? requester-owner lock-owner)))))))))
 
-(declare stop-version-mismatched-server!)
+(declare stop-version-mismatched-server!
+         cleanup-additional-revision-mismatched-servers!
+         list-servers)
 
 (defn- ensure-server-started!
   [config repo]
@@ -365,7 +367,7 @@
                                  :stop-error (:error stop-result)))))
         (p/let [server' (ensure-server-started-once! config repo)]
           (if-not (revision-mismatch? expected (:revision server'))
-            server'
+            (cleanup-additional-revision-mismatched-servers! config repo expected server')
             (let [error-data (assoc (server-revision-mismatch-error
                                      :server-revision-mismatch-after-restart
                                      repo
@@ -423,20 +425,17 @@
                      :data {:repo repo}})
                   (p/catch
                    (fn [_]
-                     (when (and (= :alive (pid-status (:pid server)))
-                                (not= (:pid server) (.-pid js/process)))
-                       (try
-                         (.kill js/process (:pid server) "SIGTERM")
-                         (catch :default e
-                           (log/warn :cli-server-stop-sigterm-failed e))))
-                     (when (= :not-found (pid-status (:pid server)))
-                       (remove-lock! path))
-                     (if (fs/existsSync path)
-                       {:ok? false
-                        :error {:code :server-stop-timeout
-                                :message "timed out stopping server"}}
-                       {:ok? true
-                        :data {:repo repo}})))))))))))
+                     (p/let [_ (when (and (= :alive (pid-status (:pid server)))
+                                          (not= (:pid server) (.-pid js/process)))
+                                (daemon/stop-process! server))]
+                       (when (= :not-found (pid-status (:pid server)))
+                         (remove-lock! path))
+                       (if (fs/existsSync path)
+                         {:ok? false
+                          :error {:code :server-stop-timeout
+                                  :message "timed out stopping server"}}
+                         {:ok? true
+                          :data {:repo repo}}))))))))))))
 
 (defn stop-server!
   [config repo]
@@ -501,6 +500,82 @@
    :pid pid
    :owner-source owner-source
    :revision revision})
+
+(defn- process-stopped?
+  [pid]
+  (not (contains? #{:alive :no-permission} (pid-status pid))))
+
+(defn- server-entry-key
+  [{:keys [pid port]}]
+  [pid port])
+
+(defn- same-server-entry?
+  [a b]
+  (= (server-entry-key a) (server-entry-key b)))
+
+(defn- remove-lock-if-owned-by-server!
+  [config repo {:keys [pid]}]
+  (let [path (lock-path (resolve-root-dir config) repo)
+        lock (read-lock path)]
+    (when (= pid (:pid lock))
+      (remove-lock! path))))
+
+(defn- cleanup-stopped-server-entry!
+  [config repo server]
+  (server-list/remove-entry! (server-list-path config) server)
+  (remove-lock-if-owned-by-server! config repo server)
+  nil)
+
+(defn- stop-discovered-server!
+  [config repo {:keys [pid] :as server}]
+  (let [target (cleanup-target server)
+        repo' (or (:repo server) repo)]
+    (-> (p/let [_ (-> (shutdown! server)
+                      (p/catch (fn [e]
+                                 (log/warn :cli-server-shutdown-discovered-failed
+                                           {:target target :error e})
+                                 (p/resolved false))))
+                _ (-> (wait-for (fn [] (p/resolved (process-stopped? pid)))
+                                {:timeout-ms 3000
+                                 :interval-ms 100})
+                      (p/catch (fn [_]
+                                 (daemon/stop-process! server))))
+                stopped? (process-stopped? pid)]
+          (if stopped?
+            (do
+              (cleanup-stopped-server-entry! config repo' server)
+              {:ok? true
+               :target target})
+            {:ok? false
+             :target target
+             :error {:code :server-stop-timeout
+                     :message "timed out stopping server"}}))
+        (p/catch (fn [e]
+                   {:ok? false
+                    :target target
+                    :error (or (ex-data e)
+                               {:code :server-stop-failed
+                                :message (.-message e)})})))))
+
+(defn- cleanup-additional-revision-mismatched-servers!
+  [config repo expected active-server]
+  (p/let [servers (list-servers config)
+          targets (->> servers
+                       (filter (fn [server]
+                                 (and (graph-dir/same-repo? repo (:repo server))
+                                      (not (same-server-entry? active-server server))
+                                      (revision-mismatch? expected (:revision server)))))
+                       vec)
+          results (p/all
+                   (for [server targets]
+                     (stop-discovered-server! config repo server)))
+          failed (filterv (comp not :ok?) results)]
+    (when (seq failed)
+      (throw (ex-info "failed to stop outdated db-worker-node servers"
+                      {:code :server-outdated-cleanup-failed
+                       :repo repo
+                       :failed failed})))
+    active-server))
 
 (defn cleanup-revision-mismatched-servers!
   [config cli-revision]

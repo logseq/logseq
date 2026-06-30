@@ -130,6 +130,116 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest ensure-server-stops-outdated-additional-server-for-same-repo
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-revision-cleanup-repo")
+               repo (str "logseq_db_revision_cleanup_repo_" (subs (str (random-uuid)) 0 8))
+               _lock-file (write-test-lock! root-dir repo :electron)
+               current-server (assoc (revision-test-server {:repo repo
+                                                            :port 9430
+                                                            :owner-source :electron
+                                                            :revision "expected-revision"
+                                                            :root-dir root-dir})
+                                     :pid 91030)
+               outdated-server (assoc (revision-test-server {:repo repo
+                                                             :port 9431
+                                                             :owner-source :electron
+                                                             :revision "old-revision"
+                                                             :root-dir root-dir})
+                                      :pid 91031)
+               other-repo-server (assoc (revision-test-server {:repo "logseq_db_other_revision_cleanup_repo"
+                                                               :port 9432
+                                                               :owner-source :electron
+                                                               :revision "old-revision"
+                                                               :root-dir root-dir})
+                                        :pid 91032)
+               shutdown-ports (atom #{})
+               shutdown-calls (atom [])]
+           (-> (p/with-redefs [daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               cli-server/discover-servers (fn [_]
+                                                            (p/resolved [current-server
+                                                                         outdated-server
+                                                                         other-repo-server]))
+                               daemon/http-request (fn [{:keys [path port]}]
+                                                     (when (= "/v1/shutdown" path)
+                                                       (swap! shutdown-calls conj port)
+                                                       (swap! shutdown-ports conj port))
+                                                     (p/resolved {:status 200 :body ""}))
+                               daemon/pid-status (fn [pid]
+                                                   (cond
+                                                     (= pid (:pid outdated-server))
+                                                     (if (contains? @shutdown-ports (:port outdated-server))
+                                                       :not-found
+                                                       :alive)
+
+                                                     (= pid (:pid other-repo-server))
+                                                     :alive
+
+                                                     :else
+                                                     :alive))
+                               daemon/wait-for (fn [pred-fn _opts]
+                                                 (p/let [matched? (pred-fn)]
+                                                   (if matched?
+                                                     true
+                                                     (throw (ex-info "timed out" {:code :timeout})))))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:root-dir root-dir
+                                             :owner-source :electron
+                                             :expected-revision "expected-revision"}
+                                            repo))
+               (p/then (fn [config]
+                         (is (= "http://127.0.0.1:9430" (:base-url config)))
+                         (is (= [9431] @shutdown-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest ensure-server-uses-daemon-stop-for-outdated-server-when-shutdown-hangs
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-revision-cleanup-stop-fallback")
+               repo (str "logseq_db_revision_cleanup_stop_fallback_" (subs (str (random-uuid)) 0 8))
+               _lock-file (write-test-lock! root-dir repo :electron)
+               current-server (assoc (revision-test-server {:repo repo
+                                                            :port 9433
+                                                            :owner-source :electron
+                                                            :revision "expected-revision"
+                                                            :root-dir root-dir})
+                                     :pid 91033)
+               outdated-server (assoc (revision-test-server {:repo repo
+                                                             :port 9434
+                                                             :owner-source :electron
+                                                             :revision "old-revision"
+                                                             :root-dir root-dir})
+                                      :pid 91034)
+               stopped-pids (atom #{})
+               stop-calls (atom [])]
+           (-> (p/with-redefs [daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               cli-server/discover-servers (fn [_]
+                                                            (p/resolved [current-server outdated-server]))
+                               daemon/http-request (fn [_]
+                                                     (p/resolved {:status 200 :body ""}))
+                               daemon/pid-status (fn [pid]
+                                                   (if (contains? @stopped-pids pid)
+                                                     :not-found
+                                                     :alive))
+                               daemon/wait-for (fn [_ _]
+                                                 (p/rejected (ex-info "timed out" {:code :timeout})))
+                               daemon/stop-process! (fn [{:keys [pid]}]
+                                                      (swap! stop-calls conj pid)
+                                                      (swap! stopped-pids conj pid)
+                                                      (p/resolved nil))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:root-dir root-dir
+                                             :owner-source :electron
+                                             :expected-revision "expected-revision"}
+                                            repo))
+               (p/then (fn [config]
+                         (is (= "http://127.0.0.1:9433" (:base-url config)))
+                         (is (= [91034] @stop-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest ensure-server-reuses-prefix-free-discovered-server
   (async done
          (let [root-dir (node-helper/create-tmp-dir "cli-server-prefix-free-reuse")
