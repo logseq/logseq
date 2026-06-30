@@ -51,7 +51,6 @@
 
 (declare enqueue-asset-task!
          fix-tx!
-         remote-preflight-db
          resolve-temp-id)
 
 (defn- current-client [repo]
@@ -291,18 +290,6 @@
              (nil? (d/entity db v)))
     (second v)))
 
-(defn- ref-typed-attr?
-  [db attr]
-  (= :db.type/ref (:db/valueType (d/entity db attr))))
-
-(defn- missing-ref-value-uuid-string
-  [db attr v]
-  (when (and (ref-typed-attr? db attr)
-             (string? v)
-             (common-util/uuid-string? v)
-             (nil? (d/entity db [:block/uuid (uuid v)])))
-    (uuid v)))
-
 (defn- tx-item-block-uuid
   [db v]
   (cond
@@ -318,25 +305,13 @@
     :else
     nil))
 
-(defn- tx-item-value-block-uuid
-  [db attr v]
-  (or (tx-item-block-uuid db v)
-      (when (and (ref-typed-attr? db attr)
-                 (string? v)
-                 (common-util/uuid-string? v))
-        (uuid v))))
-
 (defn- missing-block-uuids-in-tx-data
   [db tx-data]
   (->> tx-data
        (mapcat (fn [item]
                  (when (vector? item)
-                   (let [attr (nth item 2 nil)
-                         value (nth item 3 nil)]
-                     (keep identity
-                           [(block-uuid-lookup-ref db (second item))
-                            (block-uuid-lookup-ref db value)
-                            (missing-ref-value-uuid-string db attr value)])))))
+                   (keep (partial block-uuid-lookup-ref db)
+                         [(second item) (nth item 3 nil)]))))
        distinct
        vec))
 
@@ -346,136 +321,9 @@
        (keep (fn [item]
                (when (vector? item)
                  (or (tx-item-block-uuid db (second item))
-                     (tx-item-value-block-uuid db
-                                               (nth item 2 nil)
-                                               (nth item 3 nil))))))
+                     (tx-item-block-uuid db (nth item 3 nil))))))
        distinct
        vec))
-
-(defn- repaired-block-uuids-in-tx-data
-  [tx-data]
-  (->> tx-data
-       (keep (fn [item]
-               (cond
-                 (map? item) (:block/uuid item)
-
-                 (and (vector? item)
-                      (= :db/add (first item))
-                      (= :block/uuid (nth item 2 nil))
-                      (uuid? (nth item 3 nil)))
-                 (nth item 3)
-
-                 :else nil)))
-       distinct
-       vec))
-
-(defn- block-uuid-ref
-  [v]
-  (cond
-    (uuid? v) v
-
-    (and (vector? v)
-         (= :block/uuid (first v))
-         (uuid? (second v)))
-    (second v)
-
-    :else nil))
-
-(defn- remote-txs-deleted-block-uuids
-  [remote-txs]
-  (->> remote-txs
-       (mapcat :tx-data)
-       (keep (fn [item]
-               (when (and (vector? item)
-                          (contains? #{:db/retractEntity :db.fn/retractEntity}
-                                     (first item)))
-                 (block-uuid-ref (second item)))))
-       distinct
-       vec))
-
-(defn- unrepaired-deleted-block-uuids
-  [missing-block-uuids repair-tx-data remote-txs]
-  (let [repaired-block-uuids (set (repaired-block-uuids-in-tx-data repair-tx-data))
-        deleted-block-uuids (set (remote-txs-deleted-block-uuids remote-txs))]
-    (->> missing-block-uuids
-         (remove repaired-block-uuids)
-         (filter deleted-block-uuids)
-         distinct
-         vec)))
-
-(defn- remote-tx-temp-id->block-uuid
-  [remote-txs]
-  (->> remote-txs
-       (mapcat :tx-data)
-       (keep (fn [item]
-               (when (and (vector? item)
-                          (= :db/add (first item))
-                          (= :block/uuid (nth item 2 nil))
-                          (uuid? (nth item 3 nil)))
-                 [(second item) (nth item 3)])))
-       (into {})))
-
-(defn- tx-item-block-uuid-refs-in-item
-  [db temp-id->block-uuid item]
-  (when (vector? item)
-    (let [e (second item)
-          attr (nth item 2 nil)
-          value (nth item 3 nil)]
-      (keep identity
-            [(or (block-uuid-ref e)
-                 (get temp-id->block-uuid e))
-             (or (block-uuid-ref value)
-                 (get temp-id->block-uuid value)
-                 (when (and (ref-typed-attr? db attr)
-                            (string? value)
-                            (common-util/uuid-string? value))
-                   (uuid value)))]))))
-
-(defn- drop-tx-items-by-block-uuid-refs
-  [db remote-txs block-uuids block-uuid-refs-f]
-  (let [block-uuids' (set block-uuids)
-        temp-id->block-uuid (remote-tx-temp-id->block-uuid remote-txs)]
-    (if (seq block-uuids')
-      (mapv (fn [remote-tx]
-              (update remote-tx :tx-data
-                      (fn [tx-data]
-                        (->> tx-data
-                             (remove (fn [item]
-                                       (some block-uuids'
-                                             (block-uuid-refs-f db temp-id->block-uuid item))))
-                             vec))))
-            remote-txs)
-      remote-txs)))
-
-(defn- drop-tx-items-for-block-uuids
-  [db remote-txs block-uuids]
-  (drop-tx-items-by-block-uuid-refs db remote-txs block-uuids
-                                    tx-item-block-uuid-refs-in-item))
-
-(defn- tx-item-value-block-uuid-refs-in-item
-  [db temp-id->block-uuid item]
-  (when (vector? item)
-    (let [attr (nth item 2 nil)
-          value (nth item 3 nil)]
-      (when-not (= :block/uuid attr)
-        (keep identity
-              [(block-uuid-ref value)
-               (get temp-id->block-uuid value)
-               (when (and (ref-typed-attr? db attr)
-                          (string? value)
-                          (common-util/uuid-string? value))
-                 (uuid value))])))))
-
-(defn- drop-tx-value-items-for-block-uuids
-  [db remote-txs block-uuids]
-  (drop-tx-items-by-block-uuid-refs db remote-txs block-uuids
-                                    tx-item-value-block-uuid-refs-in-item))
-
-(defn- remote-txs-after-missing-block-repair
-  [db missing-block-uuids repair-tx-data remote-txs]
-  (let [unrepaired-deleted-block-uuids' (unrepaired-deleted-block-uuids
-                                         missing-block-uuids repair-tx-data remote-txs)]
-    (drop-tx-items-for-block-uuids db remote-txs unrepaired-deleted-block-uuids')))
 
 (defn enqueue-upload-repair!
   [repo block-uuids]
@@ -567,37 +415,6 @@
        distinct
        vec))
 
-(defn- tx-item-block-uuid-refs
-  [item]
-  (when (vector? item)
-    (keep block-uuid-ref [(second item) (nth item 3 nil)])))
-
-(defn- remote-txs-delete-only-block-uuid?
-  [remote-txs block-uuid]
-  (let [items (->> remote-txs
-                   (mapcat :tx-data)
-                   (filter (fn [item]
-                             (some #{block-uuid}
-                                   (tx-item-block-uuid-refs item))))
-                   vec)]
-    (and (seq items)
-         (every? (fn [item]
-                   (and (vector? item)
-                        (contains? #{:db/retractEntity :db.fn/retractEntity}
-                                   (first item))
-                        (= block-uuid (block-uuid-ref (second item)))))
-                 items))))
-
-(defn- locally-reversed-delete-only-block-uuids
-  [current-db base-db remote-txs missing-block-uuids]
-  (->> missing-block-uuids
-       (filter (fn [block-uuid]
-                 (and (nil? (d/entity current-db [:block/uuid block-uuid]))
-                      (some? (d/entity base-db [:block/uuid block-uuid]))
-                      (remote-txs-delete-only-block-uuid? remote-txs block-uuid))))
-       distinct
-       vec))
-
 (defn- remote-txs-invalid-repair-block-uuids
   [db remote-txs]
   (->> remote-txs
@@ -616,96 +433,13 @@
        distinct
        vec))
 
-(defn- upload-no-op-deleted-block-uuids
-  [current-db base-db tx-entries]
-  (->> (remote-txs-deleted-block-uuids tx-entries)
-       (filter (fn [block-uuid]
-                 (and (nil? (d/entity current-db [:block/uuid block-uuid]))
-                      (nil? (d/entity base-db [:block/uuid block-uuid])))))
-       distinct
-       vec))
-
-(defn- current-absent-deleted-block-uuids
-  [current-db tx-entries]
-  (->> (remote-txs-deleted-block-uuids tx-entries)
-       (filter (fn [block-uuid]
-                 (nil? (d/entity current-db [:block/uuid block-uuid]))))
-       distinct
-       vec))
-
-(defn- uuid-string-temp-id-block-uuid-datoms
-  [tx-data]
-  (let [existing-block-uuid-temp-ids (->> tx-data
-                                          (keep (fn [item]
-                                                  (when (and (vector? item)
-                                                             (= :db/add (first item))
-                                                             (string? (second item))
-                                                             (= :block/uuid (nth item 2 nil)))
-                                                    (second item))))
-                                          set)]
-    (->> tx-data
-         (keep (fn [item]
-                 (let [e (when (vector? item) (second item))]
-                   (when (and (string? e)
-                              (common-util/uuid-string? e)
-                              (not (contains? existing-block-uuid-temp-ids e)))
-                     [:db/add e :block/uuid (uuid e)]))))
-         distinct
-         vec)))
-
-(defn- ensure-uuid-string-temp-id-block-uuid-datoms
-  [tx-entry]
-  (update tx-entry :tx-data
-          (fn [tx-data]
-            (let [block-uuid-datoms (uuid-string-temp-id-block-uuid-datoms tx-data)]
-              (if (seq block-uuid-datoms)
-                (vec (concat block-uuid-datoms tx-data))
-                tx-data)))))
-
-(defn- drop-lone-parent-retracts
-  [tx-entry]
-  (update tx-entry :tx-data
-          (fn [tx-data]
-            (let [parent-add-entities (->> tx-data
-                                           (keep (fn [item]
-                                                   (when (and (vector? item)
-                                                              (= :db/add (first item))
-                                                              (= :block/parent (nth item 2 nil)))
-                                                     (second item))))
-                                           set)]
-              (->> tx-data
-                   (remove (fn [item]
-                             (and (vector? item)
-                                  (= :db/retract (first item))
-                                  (= :block/parent (nth item 2 nil))
-                                  (not (contains? parent-add-entities (second item))))))
-                   vec)))))
-
-(defn- prune-upload-no-op-deleted-blocks
-  [conn pending tx-entries]
-  (let [deleted-block-uuids (remote-txs-deleted-block-uuids tx-entries)]
-    (if (seq deleted-block-uuids)
-      (let [current-db @conn
-            base-db (remote-preflight-db conn pending)
-            current-absent-deleted-block-uuids' (current-absent-deleted-block-uuids
-                                                 current-db tx-entries)
-            tx-entries' (drop-tx-value-items-for-block-uuids
-                         current-db tx-entries current-absent-deleted-block-uuids')
-            no-op-deleted-block-uuids (upload-no-op-deleted-block-uuids
-                                       current-db base-db tx-entries')]
-        (drop-tx-items-for-block-uuids current-db tx-entries' no-op-deleted-block-uuids))
-      tx-entries)))
-
 (defn prepare-upload-tx-entries
-  [conn pending]
-  (let [entries (->> pending
-                     (mapv (fn [{:keys [tx-id tx outliner-op]}]
-                             {:tx-id tx-id
-                              :outliner-op outliner-op
-                              :tx-data (vec tx)}))
-                     (mapv ensure-uuid-string-temp-id-block-uuid-datoms)
-                     (mapv drop-lone-parent-retracts)
-                     (prune-upload-no-op-deleted-blocks conn pending))
+  [_conn pending]
+  (let [entries (mapv (fn [{:keys [tx-id tx outliner-op]}]
+                        {:tx-id tx-id
+                         :outliner-op outliner-op
+                         :tx-data (vec tx)})
+                      pending)
         empty-tx-ids (->> entries
                           (filter (comp empty? :tx-data))
                           (mapv :tx-id))
@@ -1022,7 +756,7 @@
          results []]
     (let [db @conn]
       (if-let [remote-tx (first remaining)]
-        (let [tx-data (some->> (:tx-data (drop-lone-parent-retracts remote-tx))
+        (let [tx-data (some->> (:tx-data remote-tx)
                                (map (partial resolve-temp-id db))
                                (tx-sanitize/sanitize-tx db)
                                seq)
@@ -1033,7 +767,9 @@
               repair-block-uuids (when invalid-retry?
                                    (repair-block-uuids-in-tx-data db tx-data))
               report (ldb/transact! conn tx-data
-                                     (assoc tx-meta :skip-validate-db? true))
+                                     (cond-> tx-meta
+                                       invalid-retry?
+                                       (assoc :skip-validate-db? true)))
               results' (cond-> results
                          tx-data
                          (conj {:tx-data tx-data
@@ -1060,25 +796,6 @@
                (throw e)))))
         (keep identity)
         vec)))
-
-(defn rollback-local-txs!
-  [repo tx-ids]
-  (when (seq tx-ids)
-    (when-let [conn (worker-state/get-datascript-conn repo)]
-      (let [local-txs (->> tx-ids
-                           (keep #(client-op/get-local-tx-entry repo %))
-                           (filter (comp seq :reversed-tx))
-                           vec)]
-        (when (seq local-txs)
-          (reverse-local-txs! conn local-txs))))))
-
-(defn- remote-preflight-db
-  [conn local-txs]
-  (if (seq local-txs)
-    (let [temp-conn (ldb/transient-conn-from-db @conn)]
-      (reverse-local-txs! temp-conn local-txs)
-      @temp-conn)
-    @conn))
 
 (defn- invalid-rebase-op!
   [op data]
@@ -1580,20 +1297,13 @@
     (let [local-txs (pending-txs repo)
           has-local-changes? (boolean (seq local-txs))
           remote-tx-data* (mapcat :tx-data remote-txs)
+          temp-tx-meta {:rtc-tx? true
+                        :gen-undo-ops? false}
           apply-context {:repo repo
                          :conn conn
                          :local-txs local-txs
-                         :remote-txs remote-txs}
-          current-db @conn
-          base-db (when has-local-changes?
-                    (remote-preflight-db conn local-txs))
-          missing-block-uuids* (remote-txs-missing-block-uuids current-db remote-txs)
-          delete-only-local-missing-block-uuids (when has-local-changes?
-                                                  (locally-reversed-delete-only-block-uuids
-                                                   current-db
-                                                   base-db
-                                                   remote-txs
-                                                   missing-block-uuids*))
+                         :remote-txs remote-txs
+                         :temp-tx-meta temp-tx-meta}
           apply-args {:repo repo
                       :client client
                       :has-local-changes? has-local-changes?
@@ -1601,33 +1311,22 @@
                       :local-txs local-txs
                       :apply-context apply-context
                       :remote-tx-data remote-tx-data*}
-          missing-block-uuids (remove (set delete-only-local-missing-block-uuids)
-                                      missing-block-uuids*)
+          missing-block-uuids (remote-txs-missing-block-uuids @conn remote-txs)
           invalid-repair-block-uuids (when has-local-changes?
-                                       (remote-txs-invalid-repair-block-uuids current-db remote-txs))]
+                                       (remote-txs-invalid-repair-block-uuids @conn remote-txs))]
       (if has-local-changes?
         (if (or (seq missing-block-uuids)
                 (seq invalid-repair-block-uuids))
           (let [pre-repair-tx-data (<server-repair-blocks-tx-data repo client missing-block-uuids)
                 post-repair-tx-data (<server-repair-blocks-tx-data repo client invalid-repair-block-uuids)
                 apply-with-repair (fn [pre-repair-tx-data* post-repair-tx-data*]
-                                    (let [remote-txs' (remote-txs-after-missing-block-repair
-                                                       current-db
-                                                       missing-block-uuids
-                                                       pre-repair-tx-data*
-                                                       remote-txs)
-                                          remote-tx-data' (mapcat :tx-data remote-txs')]
-                                      (apply-remote-txs-after-server-repair!
-                                       (-> apply-args
-                                           (assoc :remote-txs remote-txs'
-                                                  :remote-tx-data remote-tx-data')
-                                           (update :apply-context assoc
-                                                   :remote-txs remote-txs'
-                                                   :pre-repair-tx-data pre-repair-tx-data*
-                                                   :post-repair-tx-data post-repair-tx-data*
-                                                   :prefetched-repair-block-uuids
-                                                   (distinct (concat missing-block-uuids
-                                                                     invalid-repair-block-uuids)))))))]
+                                    (apply-remote-txs-after-server-repair!
+                                     (update apply-args :apply-context assoc
+                                             :pre-repair-tx-data pre-repair-tx-data*
+                                             :post-repair-tx-data post-repair-tx-data*
+                                             :prefetched-repair-block-uuids
+                                             (distinct (concat missing-block-uuids
+                                                               invalid-repair-block-uuids)))))]
             (if (or (p/promise? pre-repair-tx-data)
                     (p/promise? post-repair-tx-data))
               (p/let [pre-repair-tx-data* pre-repair-tx-data
@@ -1636,26 +1335,9 @@
               (apply-with-repair pre-repair-tx-data post-repair-tx-data)))
           (apply-remote-txs-after-server-repair! apply-args))
         (if (seq missing-block-uuids)
-          (let [pre-repair-tx-data (<server-repair-blocks-tx-data repo client missing-block-uuids)
-                apply-with-repair (fn [pre-repair-tx-data*]
-                                    (let [remote-txs' (remote-txs-after-missing-block-repair
-                                                       current-db
-                                                       missing-block-uuids
-                                                       pre-repair-tx-data*
-                                                       remote-txs)
-                                          remote-tx-data' (mapcat :tx-data remote-txs')
-                                          apply-args' (-> apply-args
-                                                          (assoc :remote-txs remote-txs'
-                                                                 :remote-tx-data remote-tx-data')
-                                                          (update :apply-context assoc
-                                                                  :remote-txs remote-txs'))]
-                                      (after-repair-result
-                                       (maybe-apply-repair-tx-data! conn pre-repair-tx-data*)
-                                       #(apply-remote-txs-after-server-repair! apply-args'))))]
-            (if (p/promise? pre-repair-tx-data)
-              (p/let [pre-repair-tx-data* pre-repair-tx-data]
-                (apply-with-repair pre-repair-tx-data*))
-              (apply-with-repair pre-repair-tx-data)))
+          (after-repair-result
+           (<apply-server-repair-blocks! repo client conn missing-block-uuids)
+           #(apply-remote-txs-after-server-repair! apply-args))
           (apply-remote-txs-after-server-repair! apply-args))))
     (fail-fast :db-sync/missing-db {:repo repo :op :apply-remote-txs})))
 

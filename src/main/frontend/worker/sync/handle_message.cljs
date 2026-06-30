@@ -170,7 +170,7 @@
             (log/warn :db-sync/checksum-mismatch mismatch-data)))))))
 
 (defn- handle-tx-reject!
-  [repo client message local-tx remote-checksum]
+  [repo client message local-tx]
   (let [reason (:reason message)
         remote-tx (:t message)
         success-tx-ids (:success-tx-ids message)
@@ -209,9 +209,6 @@
                                    :type "tx/reject"
                                    :reason reason
                                    :field :data}))
-            accepted-remote-tx? (and (number? remote-tx)
-                                     (> remote-tx local-tx)
-                                     (seq successful-tx-ids))
             rejected-data (cond-> {:type :db-sync/tx-rejected
                                    :repo repo
                                    :message-type "tx/reject"
@@ -224,21 +221,14 @@
         (if (or (contains? message :success-tx-ids)
                 (contains? message :failed-tx-id))
           (do
-            (when (and (not recoverable-missing?) failed-tx-id)
-              (sync-apply/rollback-local-txs! repo [failed-tx-id]))
             (sync-apply/mark-pending-txs-false! repo successful-tx-ids)
             (if recoverable-missing?
               (sync-apply/enqueue-upload-repair! repo missing-block-uuids)
               (when failed-tx-id
                 (sync-apply/mark-failed-txs! repo [failed-tx-id]))))
           ;; Backward compatibility for older servers without per-tx reject metadata.
-          (do
-            (sync-apply/rollback-local-txs! repo inflight)
-            (sync-apply/mark-failed-txs! repo inflight)))
+          (sync-apply/mark-failed-txs! repo inflight))
         (reset! (:inflight client) [])
-        (when accepted-remote-tx?
-          (client-op/update-local-tx repo remote-tx)
-          (verify-sync-checksum! repo client remote-tx remote-tx remote-checksum {:type "tx/reject"}))
         (broadcast-rtc-state! client)
         (sync-log-state/rtc-log :rtc.log/tx-rejected rejected-data)
         (when recoverable-missing?
@@ -351,7 +341,7 @@
         "tx/batch/ok" (handle-tx-batch-ok! repo client remote-tx remote-checksum)
         "pull/ok" (handle-pull-ok! repo client local-tx remote-tx remote-checksum message)
         "changed" (handle-changed! repo client local-tx remote-tx)
-        "tx/reject" (handle-tx-reject! repo client message local-tx remote-checksum)
+        "tx/reject" (handle-tx-reject! repo client message local-tx)
         "pong" nil
         (fail-fast :db-sync/invalid-field
                    {:repo repo :type (:type message)})))))

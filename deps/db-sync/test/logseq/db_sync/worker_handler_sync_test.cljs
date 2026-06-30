@@ -389,7 +389,6 @@
                  (is (= true (:ok body)))
                  (is (= "stream/graph-1.snapshot" (:key body)))
                  (is (= expected-url (:url body)))
-                 (is (integer? (:t body)))
                  (is (= "gzip" (:content-encoding body))))
                (p/then (fn []
                          (restore!)
@@ -416,7 +415,6 @@
                        body (js->clj (js/JSON.parse text) :keywordize-keys true)]
                  (is (= 200 (.-status resp)))
                  (is (= true (:ok body)))
-                 (is (integer? (:t body)))
                  (is (not (contains? body :content-encoding)))
                  (done))
                (p/then (fn []
@@ -447,7 +445,6 @@
                  (p/let [resp (sync-handler/handle-http self request)
                        encoding (.get (.-headers resp) "content-encoding")
                        content-type (.get (.-headers resp) "content-type")
-                       snapshot-t (.get (.-headers resp) "x-snapshot-t")
                        buf (.arrayBuffer resp)
                        payload (js/Uint8Array. buf)
                        rows (snapshot/finalize-framed-buffer payload)
@@ -455,7 +452,6 @@
                  (is (= 200 (.-status resp)))
                  (is (= "gzip" encoding))
                  (is (= "application/transit+json" content-type))
-                 (is (not (js/isNaN (js/parseInt snapshot-t 10))))
                  (is (= 2 (count rows)))
                  (is (= (sort addrs) addrs))
                  (is (every? (fn [[addr content _addresses]]
@@ -490,7 +486,6 @@
                  (p/let [resp (sync-handler/handle-http self request)
                          encoding (.get (.-headers resp) "content-encoding")
                          content-type (.get (.-headers resp) "content-type")
-                         snapshot-t (.get (.-headers resp) "x-snapshot-t")
                          buf (.arrayBuffer resp)
                          payload (js/Uint8Array. buf)
                          rows (snapshot/finalize-framed-buffer payload)
@@ -498,7 +493,6 @@
                    (is (= 200 (.-status resp)))
                    (is (nil? encoding))
                    (is (= "application/transit+json" content-type))
-                   (is (not (js/isNaN (js/parseInt snapshot-t 10))))
                    (is (= 2 (count rows)))
                    (is (= (sort addrs) addrs))
                    (is (= [[1 "row-1" nil]
@@ -945,7 +939,6 @@
       (is (= 1 (:t response)))
       (is (= [success-tx-id] (:success-tx-ids response)))
       (is (= failed-tx-id (:failed-tx-id response)))
-      (is (= (storage/get-checksum sql) (:checksum response)))
       (is (= [{:type "changed" :t 1}] @changed-messages))
       (is (some? (d/entity @conn [:block/uuid success-block-uuid])))
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))))))
