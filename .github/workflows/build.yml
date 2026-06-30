@@ -253,7 +253,7 @@ jobs:
         run: opam install . --deps-only --with-test --yes
 
       - name: Fetch scripts pnpm deps
-        run: cd scripts && pnpm install --frozen-lockfile
+        run: pnpm --dir scripts install --frozen-lockfile --ignore-workspace
 
       - name: Fetch root pnpm deps
         run: pnpm install --frozen-lockfile
@@ -268,7 +268,7 @@ jobs:
         run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./cli-root/graphs/schema-graph
 
       - name: Fetch deps/db pnpm deps
-        run: cd deps/db && pnpm install --frozen-lockfile
+        run: pnpm --dir deps/db install --frozen-lockfile --ignore-workspace
 
       - name: Build logseq CLI runtime
         run: |
