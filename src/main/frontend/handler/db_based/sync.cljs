@@ -148,9 +148,10 @@
   (if (not= false server-rsa-keys-exists?)
     (p/resolved nil)
     (if @state/*db-worker
-      (-> (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys
-                                    {:ensure-server? true
-                                     :server-rsa-keys-exists? false})
+      (-> (p/let [_ (<sync-auth-state-to-db-worker!)]
+            (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys
+                                     {:ensure-server? true
+                                      :server-rsa-keys-exists? false}))
           (p/catch (fn [error]
                      (log/error :db-sync/ensure-user-rsa-keys-failed
                                 {:error error
@@ -420,7 +421,8 @@
     (reject-graph-operation-in-progress :upload operation)
     (do
       (state/set-state! :rtc/uploading? true)
-      (-> (p/let [_ (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
+      (-> (p/let [_ (<sync-auth-state-to-db-worker!)
+                  _ (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
                   _ (<get-remote-graphs)
                   _ (state/set-state! :rtc/uploading? false)
                   _ (<rtc-start! repo)]
