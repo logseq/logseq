@@ -1,11 +1,40 @@
-import { SettingSchemaDesc, StyleString, UIOptions } from './LSPlugin'
-import { PluginLocal } from './LSPlugin.core'
 import * as nodePath from 'path'
 import DOMPurify from 'dompurify'
 import merge from 'deepmerge'
 import { snakeCase } from 'change-case'
 import * as callables from './callable.apis'
 import EventEmitter from 'eventemitter3'
+
+type PluginLocal = {
+  id: string
+  debugTag: string
+  caller?: {
+    callUserModel(type: string, payload: any): any
+  }
+  _setupResizableContainer(el: HTMLElement, key?: string): any
+  _setupDraggableContainer(
+    el: HTMLElement,
+    opts: { key?: string; close: () => void; title?: string }
+  ): () => void
+}
+
+type SettingSchemaDesc = {
+  key: string
+  default?: any
+}
+
+type StyleString = string
+
+type UIOptions = {
+  key?: string
+  template: string | null
+  style?: Record<string, any>
+  attrs?: Record<string, string>
+  close?: 'outside' | string
+  reset?: boolean
+  slot?: string
+  path?: string
+}
 
 declare global {
   interface Window {
@@ -302,8 +331,8 @@ export function invokeHostExportedApi(method: string, ...args: Array<any>) {
   method = method?.startsWith('_call') ? method : method?.replace(/^[_$]+/, '')
   let method1 = safeSnakeCase(method)
 
-  // @ts-ignore
-  const nsSDK = window.logseq?.sdk
+  const hostLogseq = (window as any).logseq
+  const nsSDK = hostLogseq?.sdk
   const supportedNS = nsSDK && Object.keys(nsSDK)
   let nsTarget = {}
   const ns0 = method1?.split('_')?.[0]
@@ -314,9 +343,10 @@ export function invokeHostExportedApi(method: string, ...args: Array<any>) {
   }
 
   const logseqHostExportedApi = Object.assign(
-    // @ts-ignore
-    {}, window.logseq?.api,
-    nsTarget, callables
+    {},
+    hostLogseq?.api,
+    nsTarget,
+    callables
   )
 
   const fn =
