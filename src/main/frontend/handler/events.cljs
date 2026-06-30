@@ -35,6 +35,7 @@
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.shell :as shell-handler]
+            [frontend.handler.tabs :as tabs-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.posthog :as posthog]
@@ -97,6 +98,8 @@
   (react/clear-query-state!)
   (state/set-current-repo! graph)
   (page-handler/init-commands!)
+  ;; Reset tabs when switching graphs
+  (tabs-handler/close-all-tabs!)
   ;; load config
   (repo-config-handler/restore-repo-config! graph)
   (route-handler/redirect-to-home!)
