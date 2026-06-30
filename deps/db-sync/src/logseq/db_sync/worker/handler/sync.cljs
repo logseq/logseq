@@ -424,7 +424,6 @@
               (string? checksum) (assoc :checksum checksum)))
           (catch :default e
             (let [new-t (t-now self)
-                  checksum (current-checksum self)
                   {:keys [successful-tx-ids failed-tx-id missing-block-uuids]}
                   (ex-data e)]
               (log/error :db-sync/transact-failed e)
@@ -437,8 +436,7 @@
                        :t new-t}
                 (seq successful-tx-ids) (assoc :success-tx-ids successful-tx-ids)
                 failed-tx-id (assoc :failed-tx-id failed-tx-id)
-                (seq missing-block-uuids) (assoc :missing-block-uuids missing-block-uuids)
-                (string? checksum) (assoc :checksum checksum)))))
+                (seq missing-block-uuids) (assoc :missing-block-uuids missing-block-uuids)))))
         {:type "tx/reject"
          :reason "empty tx data"}))))
 
@@ -505,16 +503,13 @@
   (let [graph-id (graph-id-from-request request)]
     (if (not (seq graph-id))
       (http/bad-request "missing graph id")
-      (let [t (t-now self)
-            gzip? (and (snapshot-stream-gzip-enabled? self)
+      (let [gzip? (and (snapshot-stream-gzip-enabled? self)
                        (exists? js/CompressionStream))
             stream (cond-> (snapshot-export-stream self)
                      gzip?
                      (maybe-compress-stream))
             row-count (snapshot-row-count (.-sql self))
             headers (cond-> {"content-type" snapshot-content-type}
-                      t
-                      (assoc "x-snapshot-t" (str t))
                       gzip?
                       (assoc "content-encoding" snapshot-content-encoding))]
         (js/Response. stream
@@ -537,15 +532,13 @@
           (http/error-response "graph not ready" 409)
           (let [key (str "stream/" graph-id ".snapshot")
                 url (snapshot-stream-url request graph-id)
-                t (t-now self)
                 content-encoding (when (and (snapshot-stream-gzip-enabled? self)
                                             (exists? js/CompressionStream))
                                    snapshot-content-encoding)]
             (http/json-response :sync/snapshot-download
                                 (cond-> {:ok true
                                          :key key
-                                         :url url
-                                         :t t}
+                                         :url url}
                                   content-encoding
                                   (assoc :content-encoding content-encoding)))))))))
 

@@ -429,16 +429,12 @@
                                         (swap! rows-db-closed* inc))}]
               (reset! worker-state/*db-sync-config {:http-base "https://sync.example.test"})
               (set! js/fetch (fn [_url _opts]
-                               (p/resolved
-                                (js/Response. nil
-                                              #js {:status 200
-                                                   :headers #js {"x-snapshot-t" "77"}}))))
+                               (p/resolved #js {:ok true})))
               (-> (p/with-redefs [rtc-log-and-state/rtc-log (fn [& _] nil)
                                   sync-download/fetch-json (fn [_url _opts schema]
                                                              (case schema
                                                                :sync/pull (p/resolved {:t 77})
-                                                               :sync/snapshot-download (p/resolved {:url "https://snapshot.example.test"
-                                                                                                    :t 77})
+                                                               :sync/snapshot-download (p/resolved {:url "https://snapshot.example.test"})
                                                                (p/rejected (ex-info "unexpected schema" {:schema schema}))))
                                   sync-download/prepare-import! (fn [repo _reset? gid _graph-e2ee? & _]
                                                                   (reset! @#'sync-download/*import-state
