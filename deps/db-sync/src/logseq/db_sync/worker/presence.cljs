@@ -17,6 +17,23 @@
           (string? username) (assoc :username username)
           (string? name) (assoc :name name))))))
 
+(defn attachment->user
+  [attachment]
+  (let [m (js->clj attachment :keywordize-keys true)]
+    (or (:presence/user m)
+        m)))
+
+(defn attachment->sync-context
+  [attachment]
+  (let [m (js->clj attachment :keywordize-keys true)]
+    (:sync/context m)))
+
+(defn- serialize-attachment!
+  [^js ws user sync-context]
+  (.serializeAttachment ws (clj->js (cond-> {:presence/user user}
+                                      (seq sync-context)
+                                      (assoc :sync/context sync-context)))))
+
 (defn presence*
   [^js self]
   (or (.-presence self)
@@ -31,9 +48,11 @@
   (ws/broadcast! self nil {:type "online-users" :online-users (online-users self)}))
 
 (defn add-presence!
-  [^js self ^js ws user]
-  (swap! (presence* self) assoc ws user)
-  (.serializeAttachment ws (clj->js user)))
+  ([^js self ^js ws user]
+   (add-presence! self ws user nil))
+  ([^js self ^js ws user sync-context]
+   (swap! (presence* self) assoc ws user)
+   (serialize-attachment! ws user sync-context)))
 
 (defn update-presence!
   [^js self ^js ws {:keys [editing-block-uuid] :as updates}]
@@ -45,8 +64,11 @@
                                     (not (string/blank? editing-block-uuid)))
                              (assoc user :editing-block-uuid editing-block-uuid)
                              (dissoc user :editing-block-uuid))
-                           user)]
-               (.serializeAttachment ws (clj->js user'))
+                           user)
+                   sync-context (some-> ws
+                                        .deserializeAttachment
+                                        attachment->sync-context)]
+               (serialize-attachment! ws user' sync-context)
                (assoc presence ws user'))
              presence))))
 

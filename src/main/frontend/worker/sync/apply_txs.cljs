@@ -19,6 +19,7 @@
    [frontend.worker.undo-redo :as worker-undo-redo]
    [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
+   [logseq.common.version :as build-version]
    [logseq.db :as ldb]
    [logseq.db.frontend.validate :as db-validate]
    [logseq.db-sync.order :as sync-order]
@@ -611,6 +612,7 @@
                       (when (seq tx-entries)
                         (reset! (:inflight client) tx-ids)
                         (send! ws {:type "tx/batch"
+                                   :client-revision (build-version/revision)
                                    :t-before local-tx
                                    :txs payload})))
                     (p/catch (fn [error]
