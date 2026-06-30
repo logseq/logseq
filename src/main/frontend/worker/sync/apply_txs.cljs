@@ -1232,7 +1232,7 @@
     (platform/post-message!
      (platform/current)
      :capture-error
-     (cond-> {:error error
+     (cond-> {:error (js/Error. "Sync apply remote txs failed")
               :payload {:source "db-sync"
                         :operation "apply-remote-txs"
                         :has-local-changes? has-local-changes?
