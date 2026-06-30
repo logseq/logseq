@@ -156,7 +156,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Fetch CLI pnpm deps
-        run: pnpm --dir cli install --frozen-lockfile
+        run: pnpm --dir cli install --frozen-lockfile --ignore-workspace
 
       - name: Run CLI E2E tests
         run: opam exec -- bb dev:cli-e2e --jobs 1 --verbose
@@ -259,7 +259,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Fetch CLI pnpm deps
-        run: pnpm --dir cli install --frozen-lockfile
+        run: pnpm --dir cli install --frozen-lockfile --ignore-workspace
 
       - name: Create DB graph with properties
         run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ./cli-root/graphs/properties-graph
