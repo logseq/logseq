@@ -2069,6 +2069,97 @@
             (is (= "reverse-restored" (:block/title restored)))
             (is (= "a0" (:block/order restored)))))))))
 
+(deftest reverse-local-txs-resolves-existing-uuid-string-temp-id-test
+  (testing "reverse should resolve uuid-string temp ids to existing entities"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          tx-id (random-uuid)
+          child-uuid (:block/uuid child1)
+          child-temp-id (str child-uuid)
+          local-tx {:tx-id tx-id
+                    :outliner-op :delete-blocks
+                    :reversed-tx [[:db/add child-temp-id :block/uuid child-uuid 536880744]
+                                  [:db/add child-temp-id :block/title "reverse existing" 536880744]]}]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (let [reports (#'sync-apply/reverse-local-txs! conn [local-tx])
+                child' (d/entity @conn [:block/uuid child-uuid])]
+            (is (= 1 (count reports)))
+            (is (= (:db/id child1) (:db/id child')))
+            (is (= "reverse existing" (:block/title child')))))))))
+
+(deftest reverse-local-txs-drops-stale-duplicate-block-uuid-reverse-test
+  (testing "stale reverse tx-data should not abort when a block uuid is already owned"
+    (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+          tx-id (random-uuid)
+          stale-uuid (:block/uuid child1)
+          duplicate-uuid (:block/uuid child2)
+          local-tx {:tx-id tx-id
+                    :outliner-op :insert-blocks
+                    :forward-outliner-ops [[:insert-blocks [[{:block/uuid stale-uuid
+                                                               :block/title "stale forward"}]
+                                                             duplicate-uuid
+                                                             {:keep-uuid? true}]]]
+                    :inverse-outliner-ops []
+                    :reversed-tx [[:db/add [:block/uuid stale-uuid]
+                                   :block/uuid
+                                   duplicate-uuid]]}]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (with-silenced-console-error
+            (fn []
+              (let [reports (#'sync-apply/reverse-local-txs! conn [local-tx])]
+                (is (= [{:tx-id tx-id :status :failed}] reports))
+                (is (= stale-uuid
+                       (:block/uuid (d/entity @conn (:db/id child1)))))
+                (is (= duplicate-uuid
+                       (:block/uuid (d/entity @conn (:db/id child2)))))))))))))
+
+(deftest reverse-local-txs-skips-validation-for-rebase-intermediate-state-test
+  (testing "reverse tx application should not validate the temporary pre-rebase state"
+    (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
+          tx-id (random-uuid)
+          child-id (:db/id child1)]
+      (d/transact! conn [[:db/add child-id :logseq.property/created-by-ref (:db/id parent)]])
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (with-silenced-console-error
+            (fn []
+              (let [reports (#'sync-apply/reverse-local-txs!
+                             conn
+                             [{:tx-id tx-id
+                               :outliner-op :insert-blocks
+                               :reversed-tx [[:db/retract child-id
+                                              :block/title
+                                              "child 1"]]}])]
+                (is (= 1 (count reports)))
+                (is (nil? (:block/title (d/entity @conn child-id))))))))))))
+
+(deftest apply-remote-txs-drops-stale-save-block-reverse-test
+  (testing "stale pending save-block reverse should not abort remote apply"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          tx-id (random-uuid)
+          missing-uuid (random-uuid)
+          parent-uuid (:block/uuid parent)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (seed-client-op-txs!
+           test-repo
+           [{:db-sync/tx-id tx-id
+             :db-sync/outliner-op :save-block
+             :db-sync/forward-outliner-ops [[:save-block [{:block/uuid missing-uuid
+                                                            :block/title "stale forward"} {}]]]
+             :db-sync/inverse-outliner-ops [[:save-block [{:block/uuid missing-uuid
+                                                            :block/title "stale reverse"} {}]]]
+             :db-sync/normalized-tx-data [[:db/add [:block/uuid missing-uuid] :block/title "stale forward"]]
+             :db-sync/reversed-tx-data [[:db/add [:block/uuid missing-uuid] :block/title "stale reverse"]]}])
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           nil
+           [[:db/add [:block/uuid parent-uuid] :block/title "remote parent"]])
+          (let [row (client-op-tx-row client-ops-conn tx-id)]
+            (is (= "remote parent" (:block/title (d/entity @conn [:block/uuid parent-uuid]))))
+            (is (= 0 (aget row "pending")))))))))
+
 (deftest enqueue-local-tx-keeps-mixed-semantic-forward-outliner-ops-test
   (testing "mixed semantic outliner ops stay semantic and preserve op ordering"
     (let [{:keys [conn client-ops-conn child2]} (setup-parent-child)
@@ -3395,6 +3486,99 @@
             (is (= "121" (:block/title block-after)))
             (is (= parent-uuid (-> block-after :block/parent :block/uuid)))
             (is (= (:block/uuid page-1) (-> block-after :block/page :block/uuid)))))))))
+
+(deftest rebase-keeps-local-insert-and-save-when-sibling-target-deleted-test
+  (testing "local insert followed by save should survive when remote deletes only the sibling insert target"
+    (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
+          remote-delete-sibling-tx (:tx-data (outliner-core/delete-blocks @conn [child1] {}))
+          block-uuid (random-uuid)]
+      (with-redefs [db-sync/enqueue-local-tx!
+                    (let [orig db-sync/enqueue-local-tx!]
+                      (fn [repo tx-report]
+                        (when-not (:rtc-tx? (:tx-meta tx-report))
+                          (orig repo tx-report))))]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (outliner-core/insert-blocks! conn
+                                          [{:block/uuid block-uuid
+                                            :block/title ""}]
+                                          child1
+                                          {:sibling? true
+                                           :keep-uuid? true})
+            (outliner-core/save-block! conn
+                                       (assoc (d/entity @conn [:block/uuid block-uuid])
+                                              :block/title "local unsynced text")
+                                       {})
+            (let [pending-before (#'sync-apply/pending-txs test-repo)]
+              (is (<= 2 (count pending-before)))
+              (#'sync-apply/apply-remote-tx! test-repo nil remote-delete-sibling-tx)
+              (let [block-after (d/entity @conn [:block/uuid block-uuid])
+                    parent-after (d/entity @conn [:block/uuid (:block/uuid parent)])]
+                (is (some? block-after))
+                (is (= "local unsynced text" (:block/title block-after)))
+                (is (= (:block/uuid parent-after)
+                       (-> block-after :block/parent :block/uuid)))))))))))
+
+(deftest rebase-replays-pending-insert-before-save-when-local-db-missed-pending-block-test
+  (testing "stale local DB plus durable pending insert/save should recover the unsynced block during rebase"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          parent-uuid (:block/uuid parent)
+          page-uuid (:block/uuid (:block/page parent))
+          block-uuid (random-uuid)
+          insert-tx-id (random-uuid)
+          save-tx-id (random-uuid)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (seed-client-op-txs!
+           test-repo
+           [{:db-sync/tx-id insert-tx-id
+             :db-sync/created-at 1
+             :db-sync/outliner-op :insert-blocks
+             :db-sync/forward-outliner-ops [[:insert-blocks [[{:block/uuid block-uuid
+                                                                :block/title ""}]
+                                                              parent-uuid
+                                                              {:sibling? false
+                                                               :keep-uuid? true}]]]
+             :db-sync/inverse-outliner-ops [[:delete-blocks [[block-uuid] {}]]]
+             :db-sync/normalized-tx-data [[:db/add (str block-uuid) :block/uuid block-uuid]
+                                          [:db/add (str block-uuid) :block/title ""]
+                                          [:db/add (str block-uuid) :block/parent [:block/uuid parent-uuid]]
+                                          [:db/add (str block-uuid) :block/page [:block/uuid page-uuid]]
+                                          [:db/add (str block-uuid) :block/order "a0"]]
+             :db-sync/reversed-tx-data [[:db/retractEntity [:block/uuid block-uuid]]]}
+            {:db-sync/tx-id save-tx-id
+             :db-sync/created-at 2
+             :db-sync/outliner-op :save-block
+             :db-sync/forward-outliner-ops [[:save-block [{:block/uuid block-uuid
+                                                            :block/title "local unsynced text"
+                                                            :block/parent [:block/uuid parent-uuid]
+                                                            :block/page [:block/uuid page-uuid]
+                                                            :block/order "a0"}
+                                                           {}]]]
+             :db-sync/inverse-outliner-ops [[:save-block [{:block/uuid block-uuid
+                                                            :block/title ""
+                                                            :block/parent [:block/uuid parent-uuid]
+                                                            :block/page [:block/uuid page-uuid]
+                                                            :block/order "a0"}
+                                                           {}]]]
+             :db-sync/normalized-tx-data [[:db/add [:block/uuid block-uuid]
+                                           :block/title
+                                           "local unsynced text"]]
+             :db-sync/reversed-tx-data [[:db/retract [:block/uuid block-uuid]
+                                         :block/title
+                                         "local unsynced text"]
+                                        [:db/add [:block/uuid block-uuid]
+                                         :block/title
+                                         ""]]}])
+          (is (nil? (d/entity @conn [:block/uuid block-uuid])))
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           nil
+           [[:db/add [:block/uuid parent-uuid] :block/title "remote parent title"]])
+          (let [block-after (d/entity @conn [:block/uuid block-uuid])]
+            (is (some? block-after))
+            (is (= "local unsynced text" (:block/title block-after)))
+            (is (= parent-uuid (-> block-after :block/parent :block/uuid)))))))))
 
 (deftest reaction-remove-enqueues-pending-sync-tx-test
   (testing "removing a reaction should enqueue tx for db-sync"
