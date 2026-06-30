@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker-handler-ws-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require [cljs-bean.core :as bean]
+            [cljs.test :refer [async deftest is]]
             [datascript.core :as d]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.storage :as storage]
@@ -81,6 +82,37 @@
       (is (= "tx/reject" (:type message)))
       (is (= [(str success-tx-id)] (:success-tx-ids message)))
       (is (= (str failed-tx-id) (:failed-tx-id message))))))
+
+(deftest online-users-broadcast-restored-attachment-user-test
+  (let [attachment* (atom nil)
+        ws #js {:readyState 1
+                :serializeAttachment (fn [attachment]
+                                       (reset! attachment* attachment))
+                :deserializeAttachment (fn []
+                                         @attachment*)}
+        self #js {}
+        restored-self #js {}
+        user {:user-id "user-1"
+              :email "user@example.com"
+              :username "alice"}
+        context {:username "alice"}
+        sent (atom nil)]
+    (presence/add-presence! self ws user context)
+    (is (= {:presence/user user
+            :sync/context context}
+           (bean/->clj (.deserializeAttachment ws))))
+    (is (= context
+           (presence/attachment->sync-context (.deserializeAttachment ws))))
+    (swap! (presence/presence* restored-self)
+           assoc
+           ws
+           (presence/attachment->user (.deserializeAttachment ws)))
+    (with-redefs [ws/broadcast! (fn [_self _sender message]
+                                  (reset! sent message))]
+      (presence/broadcast-online-users! restored-self))
+    (is (= {:type "online-users"
+            :online-users [user]}
+           @sent))))
 
 (deftest websocket-connection-is-rejected-while-snapshot-upload-is-in-progress-test
   (async done
