@@ -1,5 +1,3 @@
-import { LSPluginUser } from '../LSPlugin.user'
-
 export type NetMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD'
 
 export type NetResponseType =
@@ -69,6 +67,18 @@ type CacheEntry<T = any> = {
 type HostResponseType = 'json' | 'text' | 'base64' | 'arraybuffer'
 
 type HostRequestID = string | number
+
+type LSPluginNetContext = {
+  baseInfo: {
+    id: string
+    webMode?: unknown
+  }
+  caller: {
+    on(type: string, listener: (payload: any) => void): any
+  }
+  _execCallableAPI(method: any, ...args: Array<any>): void
+  _execCallableAPIAsync(method: any, ...args: Array<any>): Promise<any>
+}
 
 const DEFAULT_CACHE_TTL = 5 * 60 * 1000
 const DEFAULT_CACHE_MAX_ENTRIES = 100
@@ -283,7 +293,7 @@ export class LSPluginNet {
   private _cache = new Map<string, CacheEntry>()
   private _events = new EventTarget()
 
-  constructor(private _ctx: LSPluginUser) {
+  constructor(private _ctx: LSPluginNetContext) {
     this._ctx.caller.on(CLIENT_MSG_CALLBACK, (e: any) => {
       const reqId = e?.requestId
       if (!reqId) return
@@ -662,9 +672,8 @@ export class LSPluginNet {
     }
   }
 
-  get ctx(): LSPluginUser {
+  get ctx(): LSPluginNetContext {
     return this._ctx
   }
 }
-
 
