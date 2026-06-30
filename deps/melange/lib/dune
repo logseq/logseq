@@ -1,0 +1,2 @@
+(library
+ (name melange_deps))

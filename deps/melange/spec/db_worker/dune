@@ -1,0 +1,5 @@
+(library
+ (name melange_db_worker_spec)
+ (modes melange)
+ (libraries melange.js)
+ (virtual_modules Platform))
