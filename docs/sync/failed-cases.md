@@ -27,14 +27,26 @@
 - Graphs:
   - `cli-sync-stress-assert-20260701-1`
   - `cli-sync-stress-5000-20260701-13`
+  - `cli-sync-stress-5000-20260701-15`
+  - `cli-sync-stress-5000-20260701-snapshot-last-error-1`
 - Commands:
   - Assertion run: `DB_SYNC_CHECKSUM_ASSERT=true LOGSEQ_BIN=/Users/tiensonqin/Codes/projects/logseq/static/logseq-cli.js node scripts/cli-concurrent-edit-stress.mjs --graph cli-sync-stress-assert-20260701-1 --config tmp/cli-sync-stress-assert-20260701-1/cli.edn --root-dir tmp/cli-sync-stress-assert-20260701-1/root --log-file tmp/cli-sync-stress-assert-20260701-1/events.jsonl --clients 3 --concurrency 8 --max-ops 5000 --sync --offline --no-e2ee --timeout-ms 20000 --settle-attempts 60 --settle-ms 1000`
   - Normal run: `LOGSEQ_BIN=/Users/tiensonqin/Codes/projects/logseq/static/logseq-cli.js node scripts/cli-concurrent-edit-stress.mjs --graph cli-sync-stress-5000-20260701-13 --config tmp/cli-sync-stress-multi-5000-20260701-13/cli.edn --root-dir tmp/cli-sync-stress-multi-5000-20260701-13/root --log-file tmp/cli-sync-stress-multi-5000-20260701-13/events.jsonl --clients 3 --concurrency 8 --max-ops 5000 --sync --offline --no-e2ee --timeout-ms 20000 --settle-attempts 60 --settle-ms 1000`
+  - Reject rollback run: `LOGSEQ_BIN=/Users/tiensonqin/Codes/projects/logseq/static/logseq-cli.js node scripts/cli-concurrent-edit-stress.mjs --graph cli-sync-stress-5000-20260701-15 --config tmp/cli-sync-stress-multi-5000-20260701-15/cli.edn --root-dir tmp/cli-sync-stress-multi-5000-20260701-15/root --log-file tmp/cli-sync-stress-multi-5000-20260701-15/events.jsonl --clients 3 --concurrency 8 --max-ops 5000 --sync --offline --no-e2ee --timeout-ms 20000 --settle-attempts 60 --settle-ms 1000`
+  - Snapshot-last-error run: `LOGSEQ_BIN=/Users/tiensonqin/Codes/projects/logseq/static/logseq-cli.js node scripts/cli-concurrent-edit-stress.mjs --graph cli-sync-stress-5000-20260701-snapshot-last-error-1 --config tmp/cli-sync-stress-snapshot-last-error-5000-1/cli.edn --root-dir tmp/cli-sync-stress-snapshot-last-error-5000-1/root --log-file tmp/cli-sync-stress-snapshot-last-error-5000-1/events.jsonl --clients 3 --concurrency 8 --max-ops 5000 --sync --offline --no-e2ee --timeout-ms 20000 --settle-attempts 60 --settle-ms 1000`
 - Result:
   - `cli-sync-stress-assert-20260701-1` completed `5001` started ops, all clients settled at tx `6074`, final recomputed/local/remote checksum was `75663df27432e5c6`, and final `graph validate` passed on all three clients.
   - `cli-sync-stress-5000-20260701-13` completed `5001` started ops, final recomputed/local/remote checksum was `f3b46db99d7293d1` on all three clients, and final `graph validate` passed on all three clients.
+  - `cli-sync-stress-5000-20260701-15` completed `5001` started ops after the rejected-local-tx rollback fix, final recomputed/local/remote checksum was `7c746bd7fb4ba9b3` on all three clients, and final `graph validate` passed on all three clients.
+  - `cli-sync-stress-5000-20260701-snapshot-last-error-1` completed `5001` started ops after the snapshot-last-error fix and bundle rebuild, final recomputed/local/remote checksum was `5790fdbc975a6b36` on all three clients, and final `graph validate` passed on all three clients.
+  - `cli-sync-stress-5000-20260701-20` completed `5001` started ops after the property-batch stale target fix and bundle rebuild, final recomputed/local/remote checksum was `fc3492f6c370efe4` on all three clients, and final `graph validate` passed on all three clients.
+  - The snapshot-last-error run's event log had no `sync-start-runtime-error`, `pending-tx-snapshot-changed`, `apply-remote-txs-failed`, fatal event, error-level event, checksum mismatch marker, or `prev-checksum-not-match` entry.
   - The db-sync server log for the normal run had no `:before-checksum-error`, `server checksum doesn't match`, `prev-checksum-not-match`, `last-error`, or exception entries.
-- Status: two fresh 5000-op runs passed after rebuilding `static/db-worker-node.js`.
+- Non-fatal anomalies:
+  - `cli-sync-stress-5000-20260701-15` had one recovered `:db-sync/apply-remote-txs-failed` worker log on client 3. The run later converged and validated; the transient failure is tracked in the open recovered remote-apply case below.
+  - `cli-sync-stress-5000-20260701-18` completed `5001` started ops, final recomputed/local/remote checksum `3cce9543989a7855` on all three clients, and final `graph validate` passed on all three clients. It still logged a recovered severe `:db-sync/apply-remote-txs-failed` after exhausting the immediate snapshot-drift retry budget; that is tracked in the delayed snapshot retry case below and this run is not counted as final verification for that later fix.
+  - `cli-sync-stress-5000-20260701-20` had three local `http-set-block-property` operations classified as `race-conflict` because their target blocks were deleted concurrently. Those HTTP handler exceptions are documented below and are not remote apply, checksum, or validation failures.
+- Status: five fresh 5000-op runs passed after rebuilding `static/db-worker-node.js`; the latest run also verified the property-batch stale target fix at event/final-state and worker-log remote-apply level.
 
 ### Fresh 10000-op stress verification after sync fixes
 
@@ -68,13 +80,26 @@
 
 - Date: 2026-07-01
 - Commands and results:
-  - `rtk node --test scripts/cli-concurrent-edit-stress.test.mjs scripts/cli-sync-stress-workflow.test.mjs`: 29 tests, 0 failures.
+  - `rtk node --test scripts/cli-concurrent-edit-stress.test.mjs scripts/cli-sync-stress-workflow.test.mjs`: 30 tests, 0 failures.
+  - `rtk bb dev:test -v frontend.worker.db-sync-test/validated-transact-retries-when-live-conn-changes-before-commit-test -v frontend.worker.db-sync-test/prepare-upload-tx-entries-drops-empty-txs-test -v frontend.worker.db-sync-test/apply-remote-txs-reverses-parent-insert-with-existing-child-without-orphaning-test -v frontend.worker.db-sync-test/sync-counts-refreshes-idle-stale-local-checksum-test -v frontend.worker.db-sync-test/apply-remote-txs-rechecks-local-txs-when-local-delete-races-temp-snapshot-test -v frontend.worker.db-sync-test/apply-remote-txs-rechecks-local-txs-when-local-delete-races-temp-commit-test -v frontend.worker.db-sync-test/apply-remote-txs-delays-retry-when-local-txs-keep-changing-test -v frontend.worker.db-sync-test/apply-remote-txs-retries-snapshot-drift-even-if-pending-list-stabilizes-test -v frontend.worker.db-sync-test/apply-remote-txs-local-delete-parent-remote-move-then-delete-parent-test -v frontend.worker.db-sync-test/apply-remote-txs-overlap-out-of-order-parent-delete-then-move-repairs-test`: 10 tests, 48 assertions, 0 failures.
   - `rtk bb dev:test -v frontend.worker.db-sync-test/temp-conn-batch-preserves-cardinality-one-schema-test -v frontend.worker.db-sync-test/rebase-local-insert-then-save-keeps-cardinality-one-values-test -v frontend.worker.db-sync-test/apply-remote-txs-skips-stale-move-before-later-delete-test -v frontend.worker.db-sync-test/apply-remote-txs-skips-stale-move-to-target-before-later-target-delete-test -v frontend.worker.db-sync-test/apply-remote-txs-with-local-changes-rejects-invalid-final-rebase-test -v frontend.worker.db-sync-test/receive-queue-failure-updates-last-sync-error-test -v frontend.worker.db-sync-test/sync-counts-refreshes-idle-stale-local-checksum-test`: 7 tests, 21 assertions, 0 failures.
   - `rtk bb dev:test -v frontend.worker.db-sync-test/apply-remote-txs-repairs-missing-block-lookup-ref-test -v frontend.worker.db-sync-test/apply-remote-txs-repairs-missing-block-retract-lookup-ref-test -v frontend.worker.db-sync-test/apply-remote-txs-with-local-changes-repairs-missing-block-lookup-ref-test -v frontend.worker.db-sync-test/apply-remote-txs-with-local-changes-repairs-missing-block-datoms-test`: 4 tests, 16 assertions, 0 failures.
   - `rtk pnpm --dir deps/db test-v logseq.db-test/batch-transact-with-temp-conn-preserves-cardinality-one-schema-test logseq.db-test/batch-transact-with-temp-conn-preserves-retracts-test`: completed the deps/db suite, 114 tests, 418 assertions, 0 failures.
+  - `rtk pnpm --dir deps/db test-v logseq.db-test/batch-transact-with-temp-conn-before-commit-can-abort-live-commit-test logseq.db-test/batch-transact-with-temp-conn-preserves-cardinality-one-schema-test logseq.db-test/batch-transact-with-temp-conn-preserves-retracts-test logseq.db-test/transact-sync-retries-when-live-conn-changes-before-commit-test`: the targeted assertions printed as passing, but the full deps/db runner later stopped producing output in `gc-kvs-table-test` and was interrupted, so this invocation is not counted as a completed pass.
   - `rtk bb dev:test -v frontend.worker.pipeline-test/recycle-ops-return-apply-result-test`: 1 test, 4 assertions, 0 failures.
   - `rtk pnpm --dir cli test`: full CLI parity suite passed.
-- Status: passed.
+- Status: completed commands passed; the latest deps/db retry was interrupted after target assertions printed as passing and is not counted as a completed pass.
+
+### Volatile property delete became ambiguous during 10000-op retry
+
+- Date: 2026-07-01
+- Graph: `cli-sync-stress-10000-20260701-2`
+- Command: `LOGSEQ_BIN=/Users/tiensonqin/Codes/projects/logseq/static/logseq-cli.js node scripts/cli-concurrent-edit-stress.mjs --graph cli-sync-stress-10000-20260701-2 --config tmp/cli-sync-stress-multi-10000-20260701-2/cli.edn --root-dir tmp/cli-sync-stress-multi-10000-20260701-2/root --log-file tmp/cli-sync-stress-multi-10000-20260701-2/events.jsonl --clients 3 --concurrency 8 --max-ops 10000 --sync --offline --no-e2ee --timeout-ms 20000 --settle-attempts 90 --settle-ms 1000`
+- Symptom: the retry was interrupted after `1588` started ops because `property-delete-recreate` delete returned `ambiguous-property-name` for `cli-stress-volatile-prop`; the CLI reported two matching candidate property ids.
+- Root cause: the stress harness intentionally uses one shared volatile property name while multiple workers concurrently delete and recreate it. Under that race, more than one property entity with the same display name can exist, and `remove property --name` is correctly ambiguous. This is the same volatile-resource race class as `property-not-found`, not evidence of sync divergence by itself.
+- Fix: classify `ambiguous-property-name` during `property-delete-recreate` delete as an expected race conflict so the harness keeps stressing sync convergence instead of failing on an invalid name selector.
+- Regression test: `scripts/cli-concurrent-edit-stress.test.mjs` covers both `property-not-found` and `ambiguous-property-name` for concurrent volatile property delete.
+- Status: fixed in the stress harness; the interrupted run is not counted as final stress verification.
 
 ### Local sync server was not started for `--sync`
 
@@ -214,18 +239,23 @@
 ### Idle sync status exposed stale cached local checksum
 
 - Date: 2026-07-01
-- Graph: `cli-sync-stress-5000-20260701-11`
-- Command: `LOGSEQ_BIN=/Users/tiensonqin/Codes/projects/logseq/static/logseq-cli.js node scripts/cli-concurrent-edit-stress.mjs --graph cli-sync-stress-5000-20260701-11 --config tmp/cli-sync-stress-multi-5000-20260701-11/cli.edn --root-dir tmp/cli-sync-stress-multi-5000-20260701-11/root --log-file tmp/cli-sync-stress-multi-5000-20260701-11/events.jsonl --clients 3 --concurrency 8 --max-ops 5000 --sync --offline --no-e2ee --timeout-ms 20000 --settle-attempts 60 --settle-ms 1000`
-- Symptom: the run completed `5001` started ops, but final settle failed on client 2. `sync status` reported `last-error nil`, `ws-state "open"`, `local-tx 6035`, `remote-tx 6035`, all pending queues at `0`, local checksum `759e50784194968c`, and remote checksum `a661d1ec5864f400`.
+- Graphs:
+  - `cli-sync-stress-5000-20260701-11`
+  - `cli-sync-stress-1000-20260701-snapshot-race-1`
+- Commands:
+  - `LOGSEQ_BIN=/Users/tiensonqin/Codes/projects/logseq/static/logseq-cli.js node scripts/cli-concurrent-edit-stress.mjs --graph cli-sync-stress-5000-20260701-11 --config tmp/cli-sync-stress-multi-5000-20260701-11/cli.edn --root-dir tmp/cli-sync-stress-multi-5000-20260701-11/root --log-file tmp/cli-sync-stress-multi-5000-20260701-11/events.jsonl --clients 3 --concurrency 8 --max-ops 5000 --sync --offline --no-e2ee --timeout-ms 20000 --settle-attempts 60 --settle-ms 1000`
+  - `LOGSEQ_BIN=/Users/tiensonqin/Codes/projects/logseq/static/logseq-cli.js node scripts/cli-concurrent-edit-stress.mjs --graph cli-sync-stress-1000-20260701-snapshot-race-1 --config tmp/cli-sync-stress-snapshot-race-1000-1/cli.edn --root-dir tmp/cli-sync-stress-snapshot-race-1000-1/root --log-file tmp/cli-sync-stress-snapshot-race-1000-1/events.jsonl --clients 3 --concurrency 8 --max-ops 1000 --sync --offline --no-e2ee --timeout-ms 20000 --settle-attempts 60 --settle-ms 1000`
+- Symptom: the 5000-op run completed `5001` started ops, but final settle failed on client 2. `sync status` reported `last-error nil`, `ws-state "open"`, `local-tx 6035`, `remote-tx 6035`, all pending queues at `0`, local checksum `759e50784194968c`, and remote checksum `a661d1ec5864f400`. The later 1000-op regression run hit the same idle synced shape with `local-tx 1098`, `remote-tx 1098`, all pending queues at `0`, remote checksum `d4ce1df5e969232b`, but `local-checksum nil`.
 - Evidence:
   - Client 1 and client 3 already matched the remote checksum `a661d1ec5864f400`.
   - Client 2 `graph validate` passed with no invalid entities.
   - Calling `thread-api/recompute-checksum-diagnostics` on client 2 immediately returned recomputed/local/remote checksum `a661d1ec5864f400`, and the following `sync status` also reported the matching checksum.
-- Root cause: sync status and RTC presence read the cached local checksum from client-ops metadata directly. Under this stress run, that cache was stale even though the Datascript graph itself recomputed to the remote checksum and there were no pending local/server queues. Because no later tx arrived, the stale cache stayed visible and final settle treated the graph as divergent.
-- Fix: `frontend.worker.sync.presence/sync-counts` now detects the idle mismatch state (`pending-local`, `pending-asset`, and `pending-server` are zero; `local-tx == remote-tx`; cached local checksum differs from remote checksum), recomputes the checksum from the live Datascript DB, updates the cached local checksum, and returns the recomputed value. A real DB divergence still remains visible because the recomputed checksum will continue to differ from the remote checksum.
-- Regression test: `frontend.worker.db-sync-test/sync-counts-refreshes-idle-stale-local-checksum-test`.
-- Post-fix stress verification: `cli-sync-stress-5000-20260701-13`, `cli-sync-stress-10000-20260701-1`, and `cli-sync-stress-1000-20260701-final` all ended with `local-tx == remote-tx`, all pending queues at `0`, and matching local/remote/recomputed checksums.
-- Status: fixed and verified in fresh stress runs.
+  - In `cli-sync-stress-1000-20260701-snapshot-race-1`, client 1 recomputed and validated with checksum `d4ce1df5e969232b`; client 2 also passed `graph validate`, but final settle checked `sync status` before recompute diagnostics and saw `local-checksum nil` for all 60 attempts.
+- Root cause: sync status and RTC presence read the cached local checksum from client-ops metadata directly. Under these stress runs, that cache was stale or missing even though the Datascript graph itself could recompute to the remote checksum and there were no pending local/server queues. The first fix only refreshed when the cached local checksum was a string, so it handled stale string values but skipped a nil cache. Because no later tx arrived, the stale or nil cache stayed visible and final settle treated the graph as divergent.
+- Fix: `frontend.worker.sync.presence/sync-counts` now detects the idle mismatch state (`pending-local`, `pending-asset`, and `pending-server` are zero; `local-tx == remote-tx`; cached local checksum is nil or differs from remote checksum), recomputes the checksum from the live Datascript DB, updates the cached local checksum, and returns the recomputed value. A real DB divergence still remains visible because the recomputed checksum will continue to differ from the remote checksum.
+- Regression test: `frontend.worker.db-sync-test/sync-counts-refreshes-idle-stale-local-checksum-test` covers both stale string and nil cached local checksums.
+- Post-fix stress verification: `cli-sync-stress-5000-20260701-13`, `cli-sync-stress-10000-20260701-1`, `cli-sync-stress-1000-20260701-final`, and `cli-sync-stress-5000-20260701-snapshot-last-error-1` all ended with `local-tx == remote-tx`, all pending queues at `0`, and matching local/remote/recomputed checksums. The latest fresh 5000-op run used the rebuilt worker bundle and did not reproduce stale or nil checksum status.
+- Status: fixed by targeted test and fresh stress verification.
 
 ### Open: sync start timed out with RTC closed and pending local changes
 
@@ -237,6 +267,8 @@
   - One failure reported `local-tx 3319`, `remote-tx 3319`, `pending-local 89`, `local-checksum "1a69e8c09ac59ca6"`, and `remote-checksum "f6b91e5ab46a8394"`.
   - A manual status check while the run was still active reported `ws-state "closed"`, `local-tx 3287`, `remote-tx 3287`, `pending-local 208`, `pending-server 0`, `local-checksum "2c50d29e2e5a8fde"`, and `remote-checksum "f0bc605965fec2f1"`.
   - This matches the user-reported stuck-yellow shape: local changes are pending, the RTC state is closed, and a restart or refresh is needed before syncing resumes.
+  - The fresh rollback verification run `cli-sync-stress-5000-20260701-15` reproduced the same transient shape. Examples: line `15748` had `ws-state "closed"`, `local-tx 5392`, `remote-tx 5392`, `pending-local 76`, local checksum `7525b61b47be8cd3`, and remote checksum `bcba6bfda0e2af3f`; line `15863` had `ws-state "closed"`, `local-tx 5458`, `remote-tx 5458`, `pending-local 64`, local checksum `43bf131651448414`, and remote checksum `d2c8e8cc0ddf768a`.
+  - In `cli-sync-stress-5000-20260701-15`, final settle eventually recovered without manual restart: all three clients ended with recomputed/local/remote checksum `7c746bd7fb4ba9b3`, and final `graph validate` passed. This keeps the case open as a reconnect/retry issue, not a final convergence failure in that run.
 - Root cause: pending. The next diagnostic step is to determine whether `sync start` is racing an explicit stop/offline transition, reusing a closed client without scheduling reconnect, or leaving inflight state uncleared.
 - Fix: pending.
 - Regression test or stress verification: pending.
@@ -275,7 +307,7 @@
 - Fix: `tx/reject` handling now rolls back rejected pending txs before marking them failed. The rollback reverses the rejected tx and any later pending local txs in a temporary connection, commits only a successful result to the live DB, and rebases later non-rejected pending txs so unrelated local edits remain queued.
 - Regression test: `frontend.worker.db-sync-test/tx-reject-db-transact-failed-rolls-back-rejected-local-delete-test`.
 - Adjacent verification: the focused `tx/reject` suite passed, including `tx-reject-db-transact-failed-surfaces-rejected-tx-test`, `tx-reject-db-transact-failed-marks-inflight-op-failed-test`, `tx-reject-db-transact-failed-rolls-back-rejected-local-delete-test`, `tx-reject-db-transact-failed-selectively-updates-inflight-ops-test`, `tx-reject-missing-blocks-keeps-failed-tx-pending-and-retries-with-repair-test`, and `tx-reject-stale-keeps-inflight-op-pending-test`.
-- Post-fix stress verification: after rebuilding `static/db-worker-node.js`, `cli-sync-stress-5000-20260701-13` completed `5001` started ops with final checksum `f3b46db99d7293d1` on all three clients, `cli-sync-stress-10000-20260701-1` completed `10001` started ops with final checksum `6a1402088d63be44` on all three clients, and `cli-sync-stress-1000-20260701-final` completed `1001` started ops with final checksum `628f67429199e958`.
+- Post-fix stress verification: after rebuilding `static/db-worker-node.js`, `cli-sync-stress-5000-20260701-15` completed `5001` started ops with final checksum `7c746bd7fb4ba9b3` on all three clients and final `graph validate` passing on all three clients. Earlier fresh stress runs `cli-sync-stress-5000-20260701-13`, `cli-sync-stress-10000-20260701-1`, and `cli-sync-stress-1000-20260701-final` also converged and validated.
 - Status: fixed and verified in fresh 5000-op, 10000-op, and 1000-op stress runs.
 
 ### Remote apply failed on a missing block UUID after offline journal races
@@ -296,7 +328,141 @@
 - Post-fix stress verification: `cli-sync-stress-5000-20260701-13`, `cli-sync-stress-10000-20260701-1`, and `cli-sync-stress-1000-20260701-final` all completed without `apply remote tx fail`, missing block UUID runtime errors, or final checksum divergence.
 - Status: fixed and verified in fresh stress runs.
 
-### Open: `http-delete-restore-page` can return HTTP 200 with `resultTransit false`
+### Reversing queued parent insert orphaned existing children during sync rebase
+
+- Date: 2026-07-01
+- Source: user report from `2.0.1-alpha+nightly.20260629`; reproduced by targeted DB worker test on current branch before the fix.
+- Symptom: after a stale websocket gap and reconnect, sync replay/rebase reversed an earlier `insert-blocks` transaction that deleted a parent block while children still referenced it. DB validation rejected the write with `DB write failed with invalid data`; the validation error included `:block/parent` missing required key, and sync could freeze with queued server txs still pending.
+- Reproduction: `frontend.worker.db-sync-test/apply-remote-txs-reverses-parent-insert-with-existing-child-without-orphaning-test` seeds a local graph with a queued inserted parent and an existing child under it, then leaves only the parent insert reverse in the pending queue. Before the fix, remote apply failed with `DB write failed with invalid data`; the tx data retracted the parent entity while the child still referenced the old parent entity id.
+- Root cause: raw reverse tx-data for `:insert-blocks` can be narrower than the current local subtree. During remote apply with local changes, `reverse-local-txs!` applies reverse tx-data with validation skipped because intermediate rebase states may be temporarily invalid. If an `insert-blocks` reverse contains `[:db/retractEntity parent]` but the current DB has children under that parent which are not also reversed, the final batch can leave those children pointing at a retracted parent. Rebase may then create a new parent entity with the same UUID, but the existing children still point at the old empty entity id, so final validation fails.
+- Fix: `reverse-history-action!` now expands `:insert-blocks` reverse `:db/retractEntity` operations to include current descendant blocks before retracting the parent. This keeps the reverse phase subtree-consistent even if later child txs were dropped or are missing from the current pending slice.
+- Regression test: `frontend.worker.db-sync-test/apply-remote-txs-reverses-parent-insert-with-existing-child-without-orphaning-test` failed before the fix and passes after the fix.
+- Follow-up: add a reason to `:db-sync/drop-tx-ids` logs so empty tx-data drops can be distinguished from other queue changes.
+- Stress verification: after rebuilding `static/db-worker-node.js`, `cli-sync-stress-5000-20260701-snapshot-last-error-1` completed `5001` started ops, reached matching final checksum `5790fdbc975a6b36` on all three clients, passed final `graph validate` on all three clients, and had no event-log `DB write failed with invalid data` or `:block/parent` validation failure.
+- Status: fixed by targeted test and fresh 5000-op stress verification.
+
+### Recovered remote apply failure after local tx snapshot drift
+
+- Date: 2026-07-01
+- Graph: `cli-sync-stress-5000-20260701-15`
+- Command: `LOGSEQ_BIN=/Users/tiensonqin/Codes/projects/logseq/static/logseq-cli.js node scripts/cli-concurrent-edit-stress.mjs --graph cli-sync-stress-5000-20260701-15 --config tmp/cli-sync-stress-multi-5000-20260701-15/cli.edn --root-dir tmp/cli-sync-stress-multi-5000-20260701-15/root --log-file tmp/cli-sync-stress-multi-5000-20260701-15/events.jsonl --clients 3 --concurrency 8 --max-ops 5000 --sync --offline --no-e2ee --timeout-ms 20000 --settle-attempts 60 --settle-ms 1000`
+- Log path: `tmp/cli-sync-stress-multi-5000-20260701-15/clients/client-3/root/graphs/cli-sync-stress-5000-20260701-15/db-worker-node-20260701.log`
+- Symptom: client 3 logged a transient severe `:db-sync/apply-remote-txs-failed` while applying remote txs with local changes. The failing tx was remote `t=818`, `:outliner-op :rebase`, which tried to update the order of block UUID `f0754dfd-6c36-4657-857a-181551579fdd`; Datascript reported `Nothing found for entity id [:block/uuid #uuid "f0754dfd-6c36-4657-857a-181551579fdd"]`.
+- Evidence:
+  - Worker log line `568` has the failed tx data: retract `:block/order "b0mzz"` and add `:block/order "b0yV"` for `f0754dfd-6c36-4657-857a-181551579fdd`.
+  - Worker log line `591` records `:db-sync/apply-remote-txs-failed` with `:has-local-changes? true`, `:remote-tx-count 36`, and `:local-tx-count 16`.
+  - Event log line `1643` shows the same UUID was selected as the target of an earlier successful HTTP `insert-blocks` operation, so the remote tx referenced a block that should have existed or been repaired before applying the order update.
+  - Client 3 `client_ops` showed the block create tx at row `397`, a child insert at row `412`, and a later local delete at row `633`.
+  - The failed worker log's `local-txs` list contained rows `617` through `632`, but did not include row `633`.
+  - Unlike `cli-sync-stress-5000-20260701-12`, this run recovered: final recomputed/local/remote checksum was `7c746bd7fb4ba9b3` on all three clients, and final `graph validate` passed on all three clients.
+- Root cause: remote apply used an inconsistent pair of snapshots. It read `pending-txs` first and built repair/rebase context from that list, then later `batch-transact-with-temp-conn!` copied the live Datascript DB. A local delete of `f0754dfd-6c36-4657-857a-181551579fdd` was applied and persisted as a pending tx after the `pending-txs` snapshot but before the temp DB snapshot. The temp DB therefore no longer had the block, but the apply attempt did not reverse that new delete because it was not in `local-txs`. Remote tx `t=818` then tried to update `:block/order` for the missing block and failed. This is different from the earlier missing-block-after-local-reversal repair case: the repair preflight was not simply incomplete; it was based on a stale pending queue snapshot.
+- Fix: when remote apply fails and the current pending tx id list differs from the list captured for that apply attempt, the worker discards the stale attempt and restarts `apply-remote-txs!` from fresh pending txs and the current DB. Snapshot-drift retries are treated as a retryable race; unrelated remote apply failures still surface normally.
+- Regression tests:
+  - `frontend.worker.db-sync-test/apply-remote-txs-rechecks-local-txs-when-local-delete-races-temp-snapshot-test`: failed before the fix with `Nothing found for entity id [:block/uuid ...]`; passes after the fix.
+  - `frontend.worker.db-sync-test/apply-remote-txs-delays-retry-when-local-txs-keep-changing-test`: forces more snapshot drifts than the immediate retry budget and verifies remote apply delays, retries from a fresh pending-tx snapshot, and does not report a remote apply failure.
+  - Adjacent verification passed: `apply-remote-txs-local-delete-parent-remote-move-then-delete-parent-test`, `apply-remote-txs-overlap-out-of-order-parent-delete-then-move-repairs-test`, `apply-remote-txs-repairs-order-only-block-made-missing-by-local-reversal-test`, and `apply-remote-txs-delete-parent-with-child-without-local-changes-test`.
+- Stress verification: after rebuilding `static/db-worker-node.js`, `cli-sync-stress-5000-20260701-snapshot-last-error-1` completed `5001` started ops, reached matching final checksum `5790fdbc975a6b36` on all three clients, and passed final `graph validate` on all three clients. Its event log had no `apply-remote-txs-failed`, `sync-start-runtime-error`, or error-level entries; the run did not produce db-worker log files, so worker-log-level severe entries are not separately asserted for this run.
+- Status: root cause fixed by targeted worker tests and verified by fresh 5000-op stress at event/final-state level.
+
+### Remote apply exhausted immediate retries while local txs kept changing
+
+- Date: 2026-07-01
+- Graph: `cli-sync-stress-5000-20260701-18`
+- Command: `LOGSEQ_BIN=/Users/tiensonqin/Codes/projects/logseq/static/logseq-cli.js node scripts/cli-concurrent-edit-stress.mjs --graph cli-sync-stress-5000-20260701-18 --config tmp/cli-sync-stress-multi-5000-20260701-18/cli.edn --root-dir tmp/cli-sync-stress-multi-5000-20260701-18/root --log-file tmp/cli-sync-stress-multi-5000-20260701-18/events.jsonl --clients 3 --concurrency 8 --max-ops 5000 --sync --offline --no-e2ee --timeout-ms 20000 --settle-attempts 60 --settle-ms 1000`
+- Symptom: the run completed and converged, but the primary worker log had a recovered severe `:db-sync/apply-remote-txs-failed` at line `131`. The error was `pending local tx snapshot changed during remote apply`; the attempt had `:remote-tx-count 5` and `:local-tx-count 23`.
+- Evidence:
+  - Lines `95`, `107`, and `119` in `tmp/cli-sync-stress-multi-5000-20260701-18/root/graphs/cli-sync-stress-5000-20260701-18/db-worker-node-20260701.log` show three immediate `:db-sync/retry-remote-apply-after-local-tx-snapshot-drift` warnings. Each retry observed additional pending local tx ids.
+  - Line `131` then logged severe `:db-sync/apply-remote-txs-failed` because the fourth consecutive drift exceeded `max-remote-apply-snapshot-retries`.
+  - The event log later showed final recomputed/local/remote checksum `3cce9543989a7855` on all three clients and final `graph validate` passed on all three clients. This proves the failure was recoverable, but still produced a false severe apply failure during normal concurrent editing.
+- Root cause: the first snapshot-drift fix only retried immediately and capped the in-call retry count at three. Under continuous CLI writes, remote apply could see a valid snapshot drift four times in a row. That is not a corrupt remote tx or invalid DB state; it just means local edits are still arriving while remote apply is trying to take a consistent pending-tx and DB snapshot.
+- Fix: snapshot drift now remains a retryable path after the immediate retry budget. When the budget is exhausted, remote apply logs `:db-sync/delay-remote-apply-after-local-tx-snapshot-drift`, yields briefly, and restarts from a fresh pending-tx snapshot instead of reporting `:db-sync/apply-remote-txs-failed`. Actual apply errors without pending snapshot drift still go through the severe failure/reporting path.
+- Regression test: `frontend.worker.db-sync-test/apply-remote-txs-delays-retry-when-local-txs-keep-changing-test`.
+- Test evidence: `rtk bb dev:test -v frontend.worker.db-sync-test/apply-remote-txs-delays-retry-when-local-txs-keep-changing-test -v frontend.worker.db-sync-test/apply-remote-txs-rechecks-local-txs-when-local-delete-races-temp-snapshot-test -v frontend.worker.db-sync-test/apply-remote-txs-rechecks-local-txs-when-local-delete-races-temp-commit-test -v frontend.worker.db-sync-test/apply-remote-txs-repairs-order-only-block-made-missing-by-local-reversal-test -v frontend.worker.db-sync-test/apply-remote-txs-local-delete-parent-remote-move-then-delete-parent-test -v frontend.worker.db-sync-test/apply-remote-txs-overlap-out-of-order-parent-delete-then-move-repairs-test`: 6 tests, 29 assertions, 0 failures.
+- Stress verification: after rebuilding `static/db-worker-node.js`, `cli-sync-stress-5000-20260701-snapshot-last-error-1` completed `5001` started ops, reached matching final checksum `5790fdbc975a6b36` on all three clients, and passed final `graph validate` on all three clients. Its event log had no `pending-tx-snapshot-changed`, `sync-start-runtime-error`, `apply-remote-txs-failed`, or error-level entries.
+- Status: fixed by targeted test and fresh 5000-op stress verification.
+
+### Property batch remote apply referenced blocks already missing on another client
+
+- Date: 2026-07-01
+- Graph: `cli-sync-stress-5000-20260701-19`
+- Command: `LOGSEQ_BIN=/Users/tiensonqin/Codes/projects/logseq/static/logseq-cli.js node scripts/cli-concurrent-edit-stress.mjs --graph cli-sync-stress-5000-20260701-19 --config tmp/cli-sync-stress-multi-5000-20260701-19/cli.edn --root-dir tmp/cli-sync-stress-multi-5000-20260701-19/root --log-file tmp/cli-sync-stress-multi-5000-20260701-19/events.jsonl --clients 3 --concurrency 8 --max-ops 5000 --sync --offline --no-e2ee --timeout-ms 20000 --settle-attempts 60 --settle-ms 1000`
+- Symptom: the run completed `5001` started ops, all three clients converged to checksum `b82c6db876ec2c36`, and final `graph validate` passed, but client 3 logged a severe recovered `:db-sync/apply-remote-txs-failed`.
+- Evidence:
+  - Event log line `3488` shows worker 8 seq 168 applying `http-batch-set-property` to ids `[1453,1398,1368]`.
+  - `tmp/cli-sync-stress-multi-5000-20260701-19/clients/client-3/root/graphs/cli-sync-stress-5000-20260701-19/db-worker-node-20260701.log`, line `76`, shows the remote tx `t=1557` failing with `Nothing found for entity id [:block/uuid #uuid "6b495b02-2a45-4bcc-82d6-ef3684e7053c"]`.
+  - The same log line shows the failing tx adds `:block/refs`, `:user.property/cli-http-prop`, and a property value child whose `:block/parent` is the same missing UUID. Line `99` records `:has-local-changes? false`, `:remote-tx-count 41`, and `:local-tx-count 0`, so this is not the pending snapshot drift retry path.
+  - Client 2 also logged a stale reverse failure for a later `http-batch-set-property` pending tx, where reversing the batch tried to retract property value blocks and parent property refs for target blocks that no longer existed.
+- Root cause: property batch txs can include side-effect datoms for several target blocks. Under concurrent delete/rebase, one client may receive a remote property batch after a target block has already been removed locally and is also absent from the server repair endpoint. Existing repair handles missing block lookup refs when the server can still return the block. Existing stale-drop logic handles missing refs only when the same remote batch later contains `:db/retractEntity` for that block. This case had neither condition: repair returned no block, and the tx still tried to add refs/properties and a property value child under the missing target, so Datascript aborted the whole remote batch before unrelated txs could apply.
+- Fix: remote tx application now carries the repair-requested missing block UUIDs into `transact-remote-txs!`. After repair has had a chance to populate those blocks, any still-missing repair target that is not created by the current remaining remote batch is treated as stale. The sanitizer drops datoms directly targeting that stale block and drops newly-created side-effect blocks whose datoms point at the stale block, while preserving unrelated txs in the same remote batch.
+- Regression test: `frontend.worker.db-sync-test/apply-remote-txs-drops-stale-property-batch-side-effects-for-unrepaired-missing-target-test`.
+- Test evidence: `rtk bb dev:test -v frontend.worker.db-sync-test/apply-remote-txs-drops-stale-property-batch-side-effects-for-unrepaired-missing-target-test -v frontend.worker.db-sync-test/apply-remote-txs-repairs-missing-block-lookup-ref-test -v frontend.worker.db-sync-test/apply-remote-txs-repairs-missing-block-ref-value-test -v frontend.worker.db-sync-test/apply-remote-txs-with-local-changes-repairs-missing-block-lookup-ref-test`: 4 tests, 16 assertions, 0 failures.
+- Stress verification: after rebuilding `static/db-worker-node.js`, `cli-sync-stress-5000-20260701-20` completed `5001` started ops, reached matching final checksum `fc3492f6c370efe4` on all three clients, and passed final `graph validate` on all three clients. Its event log had no `apply-remote-txs-failed`, no error-level entries, no failed/no-op events, and no fatal event. Worker logs had no `:db-sync/apply-remote-txs-failed`; the only severe entries were expected local HTTP stale-target exceptions for `http-set-block-property`, documented below.
+- Status: fixed by targeted test and fresh 5000-op stress verification at event/final-state and worker-log remote-apply level.
+
+### Local HTTP set-block-property raced with deleted targets
+
+- Date: 2026-07-01
+- Graph: `cli-sync-stress-5000-20260701-20`
+- Command: `LOGSEQ_BIN=/Users/tiensonqin/Codes/projects/logseq/static/logseq-cli.js node scripts/cli-concurrent-edit-stress.mjs --graph cli-sync-stress-5000-20260701-20 --config tmp/cli-sync-stress-multi-5000-20260701-20/cli.edn --root-dir tmp/cli-sync-stress-multi-5000-20260701-20/root --log-file tmp/cli-sync-stress-multi-5000-20260701-20/events.jsonl --clients 3 --concurrency 8 --max-ops 5000 --sync --offline --no-e2ee --timeout-ms 20000 --settle-attempts 60 --settle-ms 1000`
+- Symptom: the stress event log completed successfully, but client worker logs contained severe `:db-worker-node-invoke-failed` entries for local HTTP `thread-api/apply-outliner-ops` requests. The HTTP response was `Set block property failed: block or property doesn't exist`.
+- Evidence:
+  - Event log lines `920`, `2627`, and `11809` classify the corresponding `http-set-block-property` calls as `outcome:"race-conflict"`, `level:"info"`, status `500`.
+  - The three target block UUIDs were `9a7111f9-0c4f-4876-ab46-e779117b459f`, `9136b835-8f30-4557-a24a-8ef94f8a1abf`, and `6a451423-a7ac-4b79-9a20-ba87efb04d81`.
+  - Final settle on all clients returned recomputed/local/remote checksum `fc3492f6c370efe4`, and final `graph validate` passed on all clients.
+  - The event log had no `level:"error"`, no `outcome:"failed"`, no `outcome:"no-op"`, and no fatal event. Worker logs had no `:db-sync/apply-remote-txs-failed`.
+- Root cause: the stress harness intentionally chooses IDs from a shared live block pool while concurrent workers delete and recycle blocks. A block can be selected for local `set-block-property`, then deleted before the HTTP outliner op reaches the worker. In that case the local mutation is correctly rejected because its target no longer exists. This does not indicate remote tx corruption or sync divergence.
+- Fix: no product sync fix is required for this case. The harness already classifies the response as an expected `race-conflict`, keeps the run alive, and validates final convergence. Worker-log review for stress runs must distinguish local HTTP handler exceptions for expected stale-target operations from sync worker remote-apply failures.
+- Regression test or stress verification: `cli-sync-stress-5000-20260701-20` completed `5001` started ops with matching checksums and graph validation passing on all three clients despite these expected local race conflicts.
+- Status: documented expected race signal; not counted as a failed sync case unless it is accompanied by final checksum mismatch, graph validation failure, fatal event, failed/no-op event, or `:db-sync/apply-remote-txs-failed`.
+
+### Retryable pending snapshot drift polluted `last-error`
+
+- Date: 2026-07-01
+- Graph: `cli-sync-stress-5000-20260701-cas-rebase-1`
+- Command: `LOGSEQ_BIN=/Users/tiensonqin/Codes/projects/logseq/static/logseq-cli.js node scripts/cli-concurrent-edit-stress.mjs --graph cli-sync-stress-5000-20260701-cas-rebase-1 --config tmp/cli-sync-stress-cas-rebase-5000-1/cli.edn --root-dir tmp/cli-sync-stress-cas-rebase-5000-1/root --log-file tmp/cli-sync-stress-cas-rebase-5000-1/events.jsonl --clients 3 --concurrency 8 --max-ops 5000 --sync --offline --no-e2ee --timeout-ms 20000 --settle-attempts 60 --settle-ms 1000`
+- Symptom: the run completed `5001` started ops and final validation passed on all three clients, but during `multi-client-offline-rebase`, `sync start` on client 3 failed with `sync-start-runtime-error` because `sync status` contained `last-error` code `pending-tx-snapshot-changed`.
+- Evidence:
+  - Event log around `2026-07-01T12:32:47Z` shows `sync start reached open websocket but runtime sync error is present`.
+  - The `last-error` payload had `:code :pending-tx-snapshot-changed`, a captured `local-tx-ids` list, and a `current-local-tx-ids` list with one extra pending tx id.
+  - Final settle later succeeded: all clients recomputed local/remote checksum `e3da05c1ead3bf6b`, and final `graph validate` passed on all three clients.
+- Root cause: `:pending-tx-snapshot-changed` is an internal retry/control signal, not a durable sync error. The previous retry condition re-read the mutable pending queue in the catch path. That handled ordinary missing-entity errors while the queue still differed, but it could expose the control exception as a real error if the queue changed again before the catch path or if `sync start` inspected `last-error` before the retry cleared it.
+- Fix: remote apply now treats `:pending-tx-snapshot-changed` itself as retryable, regardless of what a second pending-queue read returns. It still also retries non-control apply errors when the pending tx snapshot is currently different, preserving the original missing-entity retry path.
+- Regression tests:
+  - `frontend.worker.db-sync-test/apply-remote-txs-retries-snapshot-drift-even-if-pending-list-stabilizes-test` failed before the fix by surfacing `pending local tx snapshot changed during remote apply`; it passes after the fix.
+  - Adjacent retry tests passed: `apply-remote-txs-rechecks-local-txs-when-local-delete-races-temp-snapshot-test`, `apply-remote-txs-rechecks-local-txs-when-local-delete-races-temp-commit-test`, and `apply-remote-txs-delays-retry-when-local-txs-keep-changing-test`.
+- Stress verification: after rebuilding `static/db-worker-node.js`, `cli-sync-stress-5000-20260701-snapshot-last-error-1` completed `5001` started ops, reached matching final checksum `5790fdbc975a6b36` on all three clients, passed final `graph validate` on all three clients, and had no event-log `pending-tx-snapshot-changed` or `sync-start-runtime-error` entries.
+- Status: fixed by targeted tests and fresh 5000-op stress verification.
+
+### Remote apply committed over a local page delete before permanent recycle delete
+
+- Date: 2026-07-01
+- Graph: `cli-sync-stress-5000-20260701-17`
+- Command: `LOGSEQ_BIN=/Users/tiensonqin/Codes/projects/logseq/static/logseq-cli.js node scripts/cli-concurrent-edit-stress.mjs --graph cli-sync-stress-5000-20260701-17 --config tmp/cli-sync-stress-multi-5000-20260701-17/cli.edn --root-dir tmp/cli-sync-stress-multi-5000-20260701-17/root --log-file tmp/cli-sync-stress-multi-5000-20260701-17/events.jsonl --clients 3 --concurrency 8 --max-ops 5000 --sync --offline --no-e2ee --timeout-ms 20000 --settle-attempts 60 --settle-ms 1000`
+- Symptom: the run was interrupted after `1498` started ops because `http-recycle-delete-page` phase `permanent-delete` returned HTTP 200 with `{"ok":true,"resultTransit":"[\"~#'\",null]"}` for page UUID `6a450134-0e3d-4025-ae1f-b802dab67185`.
+- Evidence:
+  - Event log line `3463` created page `CLI HTTP Recycle stress-1782906831598 177`.
+  - Line `3495` applied raw `delete-page` to UUID `6a450134-0e3d-4025-ae1f-b802dab67185` and returned ok.
+  - Line `3500` applied raw `recycle-delete-permanently` to the same UUID and got `resultTransit null`.
+  - A post-stop query of the same client graph found the page still present with no `:logseq.property/deleted-at`, so the soft delete had been lost before permanent delete ran.
+  - The worker log shows sync reconnect/remote-apply activity in the same window, including `pending-txs-count 15` at `2026-07-01T11:59:48.677Z`.
+  - The same run also showed a harness weakness: `http-recycle-delete-page` generated page titles from `runId + seq` only, and different workers produced duplicate titles for sequences `68`, `85`, and `110`.
+- Root cause: remote apply with local changes protected only the exception path from pending-local snapshot drift. It captured pending local txs, ran remote apply/rebase in a temp conn, and could then commit that temp result to the live conn even if a new local tx was added after the snapshot and before the final commit. In this case a local `delete-page` tx was applied after the remote-apply snapshot, then a successful temp remote apply committed an older DB view over it. `recycle-delete-permanently` correctly returned nil because the page was no longer recycled. Separately, sequence-only stress page titles made raw page operations vulnerable to name lookup ambiguity under concurrent workers.
+- Fix:
+  - `logseq.db/batch-transact-with-temp-conn!` now accepts a `:before-commit` hook that runs after temp work and before live conn commit.
+  - `frontend.worker.sync.apply-txs/apply-remote-tx-with-local-changes!` uses that hook to abort and retry remote apply when the pending local tx id list changed since the snapshot, before the temp result can overwrite the live conn.
+  - The stress harness now uses operation-owned unique page titles for raw create-page, delete/restore-page, and recycle/delete-page operations.
+- Regression tests:
+  - `frontend.worker.db-sync-test/apply-remote-txs-rechecks-local-txs-when-local-delete-races-temp-commit-test`.
+  - `logseq.db-test/batch-transact-with-temp-conn-before-commit-can-abort-live-commit-test`.
+  - JavaScript harness test `raw page delete/restore uses unique operation-owned page titles` covers uniqueness for repeated worker/sequence inputs.
+- Test evidence:
+  - `rtk bb dev:test -v frontend.worker.db-sync-test/apply-remote-txs-delays-retry-when-local-txs-keep-changing-test -v frontend.worker.db-sync-test/apply-remote-txs-rechecks-local-txs-when-local-delete-races-temp-snapshot-test -v frontend.worker.db-sync-test/apply-remote-txs-rechecks-local-txs-when-local-delete-races-temp-commit-test -v frontend.worker.db-sync-test/apply-remote-txs-repairs-order-only-block-made-missing-by-local-reversal-test -v frontend.worker.db-sync-test/apply-remote-txs-local-delete-parent-remote-move-then-delete-parent-test -v frontend.worker.db-sync-test/apply-remote-txs-overlap-out-of-order-parent-delete-then-move-repairs-test`: 6 tests, 29 assertions, 0 failures.
+  - `rtk pnpm --dir deps/db test-v logseq.db-test/batch-transact-with-temp-conn-before-commit-can-abort-live-commit-test logseq.db-test/batch-transact-with-temp-conn-preserves-cardinality-one-schema-test logseq.db-test/batch-transact-with-temp-conn-preserves-retracts-test`: deps/db suite completed, 115 tests, 420 assertions, 0 failures.
+  - `rtk node --test scripts/cli-concurrent-edit-stress.test.mjs scripts/cli-sync-stress-workflow.test.mjs`: 30 tests, 0 failures.
+- Stress verification: after rebuilding `static/db-worker-node.js`, `cli-sync-stress-5000-20260701-snapshot-last-error-1` completed `5001` started ops, reached matching final checksum `5790fdbc975a6b36` on all three clients, passed final `graph validate` on all three clients, and had no event-log `http-recycle-delete-page` nil/false failure, `sync-start-runtime-error`, or `pending-tx-snapshot-changed` entry.
+- Status: root cause fixed by targeted tests and fresh 5000-op stress verification.
+
+### `http-delete-restore-page` reused mutable shared page targets
 
 - Date: 2026-07-01
 - Graphs:
@@ -306,6 +472,8 @@
   - `cli-sync-stress-assert-20260701-1`
   - `cli-sync-stress-5000-20260701-13`
   - `cli-sync-stress-10000-20260701-1`
+  - `cli-sync-stress-5000-20260701-15`
+  - `cli-sync-stress-5000-20260701-16`
 - Log examples:
   - `tmp/cli-sync-stress-multi-1000-20260701-2/events.jsonl`, line `859`
   - `tmp/cli-sync-stress-multi-5000-20260701-1/events.jsonl`, line `991`
@@ -313,11 +481,17 @@
   - `tmp/cli-sync-stress-assert-20260701-1/events.jsonl`, examples around `2026-07-01T09:14:19Z`, `2026-07-01T09:14:33Z`, `2026-07-01T09:16:02Z`, and `2026-07-01T09:17:24Z`
   - `tmp/cli-sync-stress-multi-5000-20260701-13/events.jsonl`, lines `3388`, `5869`, `8289`, and `11521`
   - `tmp/cli-sync-stress-multi-10000-20260701-1/events.jsonl`, lines `3680`, `5095`, `5741`, and `6407`
+  - `tmp/cli-sync-stress-multi-5000-20260701-15/events.jsonl`, lines `1312`, `3090`, `4340`, and `15852`
+  - `tmp/cli-sync-stress-multi-5000-20260701-16/events.jsonl`, line `7213`
 - Symptom: `thread-api/apply-outliner-ops` returns HTTP 200 with `{"ok":true,"resultTransit":"[\"~#'\",false]"}` for `http-delete-restore-page` phase `delete`.
-- Current evidence: the 1000-op run, assertion 5000-op run, normal 5000-op run, and normal 10000-op run completed with matching checksums and final graph validation, so this has not reproduced sync divergence. In `cli-sync-stress-5000-20260701-13` and `cli-sync-stress-10000-20260701-1`, the false result repeated for the same page UUIDs later in each run, which points toward the harness selecting an already-deleted or already-recycled page target, but this is not confirmed.
-- Root cause: not confirmed yet. The likely areas are concurrent page target selection in the stress harness, an already-recycled page at apply time, or an outliner delete branch that reports false for a legitimate no-op.
-- Fix: pending. Do not mark this fixed until the exact branch returning false is identified and covered by a targeted test or the harness is tightened to avoid invalid page targets.
-- Status: open.
+- Current evidence:
+  - Earlier 1000-op, 5000-op, assertion 5000-op, and 10000-op runs completed with matching checksums and final graph validation, so this no-op alone has not reproduced sync divergence.
+  - In `cli-sync-stress-5000-20260701-16`, the run failed fast on the no-op because the stress harness started requiring truthy raw apply results. The same page `CLI Concurrent Stress page 2` was repeatedly selected as a mutable shared page target. Line `7059` deleted it through CLI `page-delete-restore`, line `7071` restored it, line `7114` hit a concurrent `recycled-page` race while creating blocks on it, and line `7213` then got the raw HTTP `delete-page` result `false` for page UUID `6a44fc1f-ef7f-4085-8449-1adfbf325b1b`.
+- Root cause: the stress harness used `mutablePage(state)` for raw `http-delete-restore-page`. That let multiple workers delete/restore the same stable page concurrently while other workers were also creating or moving blocks on the same page. `delete-page` can correctly return false when the selected page is already recycled or otherwise not a valid deletion target at apply time, so the harness was not isolating the raw outliner op it was trying to verify.
+- Fix: `http-delete-restore-page` now creates a unique operation-owned page through raw `create-page`, resolves that page UUID, and then applies raw `delete-page` and `restore-recycled` to that UUID. The operation still exercises create/delete/restore sync traffic, but a false `delete-page` result is no longer hidden by shared-page target races.
+- Regression test: `scripts/cli-concurrent-edit-stress.test.mjs` covers `uniqueOperationPageTitle`, including repeated calls with the same worker and sequence. The full JavaScript harness test command now passes with 30 tests.
+- Stress verification: `cli-sync-stress-5000-20260701-18` completed `5001` started ops with no `http-delete-restore-page` false/no-op events, final recomputed/local/remote checksum `3cce9543989a7855` on all three clients, and final `graph validate` passed on all three clients. A separate remote-apply retry-budget issue was found in the same run and is tracked above.
+- Status: fixed in the stress harness and verified by fresh 5000-op stress for this operation class; 10000-op stress still pending.
 
 ### Stress retry reused an already-invalid graph root
 

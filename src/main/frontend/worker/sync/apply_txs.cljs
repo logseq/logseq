@@ -41,6 +41,9 @@
 ;; still pull/rebase remote txs, but skip local tx batch uploads.
 (defonce *repo->upload-stopped? (atom {}))
 
+(def ^:private max-remote-apply-snapshot-retries 3)
+(def ^:private remote-apply-snapshot-retry-delay-ms 50)
+
 (defn set-upload-stopped!
   [repo stopped?]
   (swap! *repo->upload-stopped? assoc repo (boolean stopped?))
@@ -51,8 +54,10 @@
   (true? (get @*repo->upload-stopped? repo)))
 
 (declare enqueue-asset-task!
+         apply-remote-txs!
          fix-tx!
          resolve-temp-id
+         tx-temp-id->uuid
          reverse-local-txs!
          rebase-local-txs!
          repair-applied-txs!
@@ -354,21 +359,55 @@
         (tx-item-ref-block-uuids item)))
 
 (defn- tx-item-entity-block-uuid
-  [db item]
-  (when (vector? item)
-    (tx-item-block-uuid db (second item))))
+  ([db item]
+   (tx-item-entity-block-uuid db {} item))
+  ([db temp-id->uuid item]
+   (when (vector? item)
+     (or (get temp-id->uuid (second item))
+         (tx-item-block-uuid db (second item))))))
 
 (defn- drop-stale-deleted-block-ref-ops
   [db deleted-block-uuids tx-data]
-  (let [stale-entity-block-uuids (->> tx-data
+  (let [temp-id->uuid (tx-temp-id->uuid tx-data)
+        stale-entity-block-uuids (->> tx-data
                                       (keep (fn [item]
                                               (when (tx-item-missing-deleted-block-ref?
                                                      db deleted-block-uuids item)
-                                                (tx-item-entity-block-uuid db item))))
+                                                (tx-item-entity-block-uuid db temp-id->uuid item))))
                                       set)]
     (remove (fn [item]
               (contains? stale-entity-block-uuids
-                         (tx-item-entity-block-uuid db item)))
+                         (tx-item-entity-block-uuid db temp-id->uuid item)))
+            tx-data)))
+
+(defn- remote-txs-created-block-uuids
+  [remote-txs]
+  (->> remote-txs
+       (mapcat :tx-data)
+       tx-temp-id->uuid
+       vals
+       set))
+
+(defn- tx-item-missing-stale-block-ref?
+  [db stale-block-uuids item]
+  (some (fn [block-uuid]
+          (and (contains? stale-block-uuids block-uuid)
+               (nil? (d/entity db [:block/uuid block-uuid]))))
+        (tx-item-ref-block-uuids item)))
+
+(defn- drop-stale-missing-block-ref-ops
+  [db stale-block-uuids tx-data]
+  (let [temp-id->uuid (tx-temp-id->uuid tx-data)
+        stale-entity-block-uuids (->> tx-data
+                                      (keep (fn [item]
+                                              (when (tx-item-missing-stale-block-ref?
+                                                     db stale-block-uuids item)
+                                                (tx-item-entity-block-uuid db temp-id->uuid item))))
+                                      set)]
+    (remove (fn [item]
+              (or (tx-item-missing-stale-block-ref? db stale-block-uuids item)
+                  (contains? stale-entity-block-uuids
+                             (tx-item-entity-block-uuid db temp-id->uuid item))))
             tx-data)))
 
 (defn- repair-block-uuids-in-tx-data
@@ -499,9 +538,16 @@
         empty-tx-ids (->> entries
                           (filter (comp empty? :tx-data))
                           (mapv :tx-id))
+        drop-txs (->> entries
+                      (filter (comp empty? :tx-data))
+                      (mapv (fn [{:keys [tx-id outliner-op]}]
+                              {:tx-id tx-id
+                               :outliner-op outliner-op
+                               :reason :empty-tx-data})))
         tx-entries (filterv (comp seq :tx-data) entries)]
     {:tx-entries tx-entries
-     :drop-tx-ids empty-tx-ids}))
+     :drop-tx-ids empty-tx-ids
+     :drop-txs drop-txs}))
 
 (defn pending-txs
   [repo & {:keys [limit]}]
@@ -696,9 +742,10 @@
         (when (and (ws-open? ws) (worker-state/online?) (not (upload-stopped? repo)))
           (let [batch (pending-txs repo {:limit 50})]
             (when (seq batch)
-              (let [{:keys [tx-entries drop-tx-ids]} (prepare-upload-tx-entries conn batch)]
+              (let [{:keys [tx-entries drop-tx-ids drop-txs]} (prepare-upload-tx-entries conn batch)]
                 (when (seq drop-tx-ids)
-                  (log/info :db-sync/drop-tx-ids {:tx-ids drop-tx-ids})
+                  (log/info :db-sync/drop-tx-ids {:tx-ids drop-tx-ids
+                                                  :drops drop-txs})
                   (mark-pending-txs-false! repo drop-tx-ids))
                 (-> (p/let [aes-key (when (and (seq tx-entries) (sync-crypt/graph-e2ee? repo))
                                       (sync-crypt/<ensure-graph-aes-key repo (:graph-id client)))
@@ -751,13 +798,64 @@
                                         :error error}))))))
     (flush-pending! repo client)))
 
+(defn- block-ref?
+  [v]
+  (or (number? v)
+      (and (vector? v)
+           (= :block/uuid (first v))
+           (uuid? (second v)))))
+
+(defn- block-entity
+  [db ref]
+  (when (block-ref? ref)
+    (d/entity db ref)))
+
+(defn- block-entity-ref
+  [entity]
+  (if-let [block-uuid (:block/uuid entity)]
+    [:block/uuid block-uuid]
+    (:db/id entity)))
+
+(defn- block-descendants
+  [entity]
+  (letfn [(collect [block]
+            (mapcat (fn [child]
+                      (cons child (collect child)))
+                    (sort-by :block/order (:block/_parent block))))]
+    (collect entity)))
+
+(defn- expand-insert-blocks-reverse-retracts
+  [db tx-data]
+  (let [explicit-retracts (->> tx-data
+                               (keep (fn [item]
+                                       (when (and (vector? item)
+                                                  (= :db/retractEntity (first item))
+                                                  (block-ref? (second item)))
+                                         (:db/id (block-entity db (second item))))))
+                               set)]
+    (mapcat
+     (fn [item]
+       (if (and (vector? item)
+                (= :db/retractEntity (first item))
+                (block-ref? (second item)))
+         (let [root (block-entity db (second item))
+               descendant-retracts (->> (block-descendants root)
+                                        (remove #(contains? explicit-retracts (:db/id %)))
+                                        (map (fn [entity]
+                                               [:db/retractEntity (block-entity-ref entity)])))]
+           (concat descendant-retracts [item]))
+         [item]))
+     tx-data)))
+
 (defn- reverse-history-action!
   [conn local-tx]
   (if-let [tx-data (seq (:reversed-tx local-tx))]
     (let [db @conn
-          tx-data' (some->> tx-data
-                            (map (partial resolve-temp-id db))
-                            normalize-tx-data-for-rebase)]
+          tx-data' (cond->> (some->> tx-data
+                                      (map (partial resolve-temp-id db))
+                                      normalize-tx-data-for-rebase)
+                     (= :insert-blocks (:outliner-op local-tx))
+                     (expand-insert-blocks-reverse-retracts db))]
       (ldb/transact! conn
                      tx-data'
                      {:outliner-op (:outliner-op local-tx)
@@ -825,7 +923,8 @@
                (when (and (vector? item)
                           (= :db/add (first item))
                           (= :block/uuid (nth item 2 nil))
-                          (number? (second item))
+                          (or (number? (second item))
+                              (string? (second item)))
                           (uuid? (nth item 3 nil)))
                  [(second item) (nth item 3)])))
        (into {})))
@@ -871,7 +970,7 @@
       :conflicts (client-op/get-sync-conflicts repo block-uuid)})))
 
 (defn- transact-remote-txs!
-  [conn remote-txs & {:keys [allow-invalid-repair?]
+  [conn remote-txs & {:keys [allow-invalid-repair? stale-repair-block-uuids]
                       :or {allow-invalid-repair? true}}]
   (loop [remaining remote-txs
          index 0
@@ -879,10 +978,13 @@
     (let [db @conn]
       (if-let [remote-tx (first remaining)]
         (let [deleted-block-uuids (remote-txs-retract-entity-block-uuids remaining)
+              stale-block-uuids (set/difference (set stale-repair-block-uuids)
+                                                (remote-txs-created-block-uuids remaining))
               tx-data (some->> (:tx-data remote-tx)
                                (map (partial resolve-temp-id db))
                                (tx-sanitize/sanitize-tx db)
                                (drop-stale-deleted-block-ref-ops db deleted-block-uuids)
+                               (drop-stale-missing-block-ref-ops db stale-block-uuids)
                                seq)
               tx-meta (apply-tx-meta remote-tx)
               invalid-retry? (and allow-invalid-repair?
@@ -1292,8 +1394,26 @@
   (when (seq (:tx-data tx-report))
     (fix-tx! conn tx-report (sync-repair/sync-fix-tx-meta))))
 
+(defn- pending-tx-ids
+  [local-txs]
+  (mapv :tx-id local-txs))
+
+(defn- pending-tx-snapshot-changed?
+  [repo local-txs]
+  (not= (pending-tx-ids local-txs)
+        (pending-tx-ids (pending-txs repo))))
+
+(defn- fail-if-pending-tx-snapshot-changed!
+  [repo local-txs]
+  (when (pending-tx-snapshot-changed? repo local-txs)
+    (throw (ex-info "pending local tx snapshot changed during remote apply"
+                    {:code :pending-tx-snapshot-changed
+                     :repo repo
+                           :local-tx-ids (pending-tx-ids local-txs)
+                           :current-local-tx-ids (pending-tx-ids (pending-txs repo))}))))
+
 (defn- apply-remote-tx-with-local-changes!
-  [{:keys [repo conn local-txs remote-txs pre-repair-tx-data post-repair-tx-data
+  [{:keys [repo conn local-txs remote-txs pre-repair-tx-data post-repair-tx-data stale-repair-block-uuids
            prefetched-repair-block-uuids]}]
   (let [tx-meta {:rtc-tx? true
                  :with-local-changes? true}
@@ -1316,7 +1436,8 @@
                            (maybe-apply-repair-tx-data! conn pre-repair-tx-data))
 
                          (reset! *remote-tx-results
-                                 (transact-remote-txs! conn remote-txs))
+                                 (transact-remote-txs! conn remote-txs
+                                                       :stale-repair-block-uuids stale-repair-block-uuids))
 
                          (when (seq post-repair-tx-data)
                            (maybe-apply-repair-tx-data! conn post-repair-tx-data))
@@ -1328,7 +1449,8 @@
                                      (when (and (= :rebase (:outliner-op tx-meta))
                                                 (:db-sync/rebased-local? tx-meta)
                                                 (seq tx-data))
-                                       (swap! *rebase-tx-reports conj tx-report)))})]
+                                       (swap! *rebase-tx-reports conj tx-report)))
+                        :before-commit #(fail-if-pending-tx-snapshot-changed! repo local-txs)})]
         (doseq [tx-report @*rebase-tx-reports]
           (handle-local-tx! repo tx-report))
 
@@ -1358,7 +1480,7 @@
         (worker-undo-redo/clear-history! repo)))))
 
 (defn- apply-remote-tx-without-local-changes!
-  [{:keys [conn remote-txs]}]
+  [{:keys [conn remote-txs stale-repair-block-uuids]}]
   (let [remote-tx-results (atom [])
         tx-report (ldb/batch-transact!
                    conn
@@ -1366,7 +1488,8 @@
                     :without-local-changes? true}
                    (fn [conn]
                      (reset! remote-tx-results
-                             (transact-remote-txs! conn remote-txs))))]
+                             (transact-remote-txs! conn remote-txs
+                                                   :stale-repair-block-uuids stale-repair-block-uuids))))]
     (repair-applied-txs! conn tx-report)
     {:repair-block-uuids (->> @remote-tx-results
                               (mapcat :repair-block-uuids)
@@ -1411,88 +1534,120 @@
     (f)))
 
 (defn- apply-remote-txs-after-server-repair!
-  [{:keys [repo client has-local-changes? remote-txs local-txs apply-context remote-tx-data]}]
+  [{:keys [repo client has-local-changes? remote-txs local-txs apply-context remote-tx-data
+           snapshot-retry-count]}]
   (let [apply-result (try
                        (if has-local-changes?
                          (apply-remote-tx-with-local-changes! apply-context)
                          (apply-remote-tx-without-local-changes! apply-context))
                        (catch :default error
-                         (log/error :db-sync/apply-remote-txs-failed
-                                    {:repo repo
-                                     :has-local-changes? has-local-changes?
-                                     :remote-tx-count (count remote-txs)
-                                     :local-tx-count (count local-txs)
-                                     :remote-txs remote-txs
-                                     :local-txs local-txs
-                                     :error error})
-                         (report-apply-remote-txs-error!
-                          error
-                          {:has-local-changes? has-local-changes?
-                           :remote-txs remote-txs
-                           :local-txs local-txs})
-                         (throw error)))
-        repair-block-uuids (:repair-block-uuids apply-result)]
-    (if (seq repair-block-uuids)
-      (let [repair-result (<apply-server-repair-blocks!
-                           repo client (:conn apply-context) repair-block-uuids)]
-        (after-repair-result
-         repair-result
-         #(finish-apply-remote-txs! repo client remote-tx-data)))
-      (finish-apply-remote-txs! repo client remote-tx-data))))
+                         (if (or (= :pending-tx-snapshot-changed (:code (ex-data error)))
+                                 (pending-tx-snapshot-changed? repo local-txs))
+                           (let [retry-payload {:repo repo
+                                                :snapshot-retry-count snapshot-retry-count
+                                                :remote-tx-count (count remote-txs)
+                                                :local-tx-ids (pending-tx-ids local-txs)
+                                                :current-local-tx-ids (pending-tx-ids (pending-txs repo))
+                                                :error error}]
+                             (if (< snapshot-retry-count max-remote-apply-snapshot-retries)
+                               (do
+                                 (log/warn :db-sync/retry-remote-apply-after-local-tx-snapshot-drift
+                                           retry-payload)
+                                 {::retry-result
+                                  (apply-remote-txs! repo client remote-txs (inc snapshot-retry-count))})
+                               (do
+                                 (log/warn :db-sync/delay-remote-apply-after-local-tx-snapshot-drift
+                                           retry-payload)
+                                 {::retry-result
+                                  (p/let [_ (p/delay remote-apply-snapshot-retry-delay-ms)]
+                                    (apply-remote-txs! repo client remote-txs 0))})))
+                           (do
+                             (log/error :db-sync/apply-remote-txs-failed
+                                        {:repo repo
+                                         :has-local-changes? has-local-changes?
+                                         :remote-tx-count (count remote-txs)
+                                         :local-tx-count (count local-txs)
+                                         :remote-txs remote-txs
+                                         :local-txs local-txs
+                                         :error error})
+                             (report-apply-remote-txs-error!
+                              error
+                              {:has-local-changes? has-local-changes?
+                               :remote-txs remote-txs
+                               :local-txs local-txs})
+                             (throw error)))))
+        finish-apply-result (fn [apply-result*]
+                              (let [repair-block-uuids (:repair-block-uuids apply-result*)]
+                                (if (seq repair-block-uuids)
+                                  (let [repair-result (<apply-server-repair-blocks!
+                                                       repo client (:conn apply-context) repair-block-uuids)]
+                                    (after-repair-result
+                                     repair-result
+                                     #(finish-apply-remote-txs! repo client remote-tx-data)))
+                                  (finish-apply-remote-txs! repo client remote-tx-data))))]
+    (if (contains? apply-result ::retry-result)
+      (::retry-result apply-result)
+      (finish-apply-result apply-result))))
 
 (defn apply-remote-txs!
-  [repo client remote-txs]
-  (if-let [conn (worker-state/get-datascript-conn repo)]
-    (let [local-txs (pending-txs repo)
-          has-local-changes? (boolean (seq local-txs))
-          remote-tx-data* (mapcat :tx-data remote-txs)
-          temp-tx-meta {:rtc-tx? true
-                        :gen-undo-ops? false}
-          apply-context {:repo repo
-                         :conn conn
-                         :local-txs local-txs
-                         :remote-txs remote-txs
-                         :temp-tx-meta temp-tx-meta}
-          apply-args {:repo repo
-                      :client client
-                      :has-local-changes? has-local-changes?
-                      :remote-txs remote-txs
-                      :local-txs local-txs
-                      :apply-context apply-context
-                      :remote-tx-data remote-tx-data*}
-          missing-block-uuids (distinct
-                               (concat
-                                (remote-txs-missing-block-uuids @conn remote-txs)
-                                (remote-txs-missing-block-uuids-after-local-reversal
-                                 conn local-txs remote-txs)))
-          invalid-repair-block-uuids (when has-local-changes?
-                                       (remote-txs-invalid-repair-block-uuids @conn remote-txs))]
-      (if has-local-changes?
-        (if (or (seq missing-block-uuids)
-                (seq invalid-repair-block-uuids))
-          (let [pre-repair-tx-data (<server-repair-blocks-tx-data repo client missing-block-uuids)
-                post-repair-tx-data (<server-repair-blocks-tx-data repo client invalid-repair-block-uuids)
-                apply-with-repair (fn [pre-repair-tx-data* post-repair-tx-data*]
-                                    (apply-remote-txs-after-server-repair!
-                                     (update apply-args :apply-context assoc
-                                             :pre-repair-tx-data pre-repair-tx-data*
-                                             :post-repair-tx-data post-repair-tx-data*
-                                             :prefetched-repair-block-uuids
-                                             (distinct (concat missing-block-uuids
-                                                               invalid-repair-block-uuids)))))]
-            (if (or (p/promise? pre-repair-tx-data)
-                    (p/promise? post-repair-tx-data))
-              (p/let [pre-repair-tx-data* pre-repair-tx-data
-                      post-repair-tx-data* post-repair-tx-data]
-                (apply-with-repair pre-repair-tx-data* post-repair-tx-data*))
-              (apply-with-repair pre-repair-tx-data post-repair-tx-data)))
-          (apply-remote-txs-after-server-repair! apply-args))
-        (if (seq missing-block-uuids)
-          (after-repair-result
-           (<apply-server-repair-blocks! repo client conn missing-block-uuids)
-           #(apply-remote-txs-after-server-repair! apply-args))
-          (apply-remote-txs-after-server-repair! apply-args))))
-    (fail-fast :db-sync/missing-db {:repo repo :op :apply-remote-txs})))
+  ([repo client remote-txs]
+   (apply-remote-txs! repo client remote-txs 0))
+  ([repo client remote-txs snapshot-retry-count]
+   (if-let [conn (worker-state/get-datascript-conn repo)]
+     (let [local-txs (pending-txs repo)
+           has-local-changes? (boolean (seq local-txs))
+           remote-tx-data* (mapcat :tx-data remote-txs)
+           temp-tx-meta {:rtc-tx? true
+                         :gen-undo-ops? false}
+           apply-context {:repo repo
+                          :conn conn
+                          :local-txs local-txs
+                          :remote-txs remote-txs
+                          :temp-tx-meta temp-tx-meta}
+           apply-args {:repo repo
+                       :client client
+                       :has-local-changes? has-local-changes?
+                       :remote-txs remote-txs
+                       :local-txs local-txs
+                       :apply-context apply-context
+                       :remote-tx-data remote-tx-data*
+                       :snapshot-retry-count snapshot-retry-count}
+           missing-block-uuids (distinct
+                                (concat
+                                 (remote-txs-missing-block-uuids @conn remote-txs)
+                                 (remote-txs-missing-block-uuids-after-local-reversal
+                                  conn local-txs remote-txs)))
+           invalid-repair-block-uuids (when has-local-changes?
+                                        (remote-txs-invalid-repair-block-uuids @conn remote-txs))]
+       (if has-local-changes?
+         (if (or (seq missing-block-uuids)
+                 (seq invalid-repair-block-uuids))
+           (let [pre-repair-tx-data (<server-repair-blocks-tx-data repo client missing-block-uuids)
+                 post-repair-tx-data (<server-repair-blocks-tx-data repo client invalid-repair-block-uuids)
+                 apply-with-repair (fn [pre-repair-tx-data* post-repair-tx-data*]
+                                     (apply-remote-txs-after-server-repair!
+                                      (update apply-args :apply-context assoc
+                                              :pre-repair-tx-data pre-repair-tx-data*
+                                              :post-repair-tx-data post-repair-tx-data*
+                                              :stale-repair-block-uuids missing-block-uuids
+                                              :prefetched-repair-block-uuids
+                                              (distinct (concat missing-block-uuids
+                                                                invalid-repair-block-uuids)))))]
+             (if (or (p/promise? pre-repair-tx-data)
+                     (p/promise? post-repair-tx-data))
+               (p/let [pre-repair-tx-data* pre-repair-tx-data
+                       post-repair-tx-data* post-repair-tx-data]
+                 (apply-with-repair pre-repair-tx-data* post-repair-tx-data*))
+               (apply-with-repair pre-repair-tx-data post-repair-tx-data)))
+           (apply-remote-txs-after-server-repair! apply-args))
+         (if (seq missing-block-uuids)
+           (after-repair-result
+            (<apply-server-repair-blocks! repo client conn missing-block-uuids)
+            #(apply-remote-txs-after-server-repair!
+              (update apply-args :apply-context assoc
+                      :stale-repair-block-uuids missing-block-uuids)))
+           (apply-remote-txs-after-server-repair! apply-args))))
+     (fail-fast :db-sync/missing-db {:repo repo :op :apply-remote-txs}))))
 
 (defn apply-remote-tx!
   [repo client tx-data]
