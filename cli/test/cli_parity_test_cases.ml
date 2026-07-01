@@ -3729,6 +3729,65 @@ let () =
       expect_named_contains "property op" output
         ":user.property/root-answer \"root\"");
 
+  test_promise
+    "CLI parity add reports target-not-found when concurrent delete removes \
+     insert target" (fun () ->
+      let pull_count = ref 0 in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then (
+              incr pull_count;
+              match !pull_count with
+              | 1 ->
+                  "[\"^ \
+                   \",\"~:db/id\",627,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000627\"]"
+              | _ -> "null")
+            else if
+              Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then "null"
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            expect_ok "add action"
+              (Add.build_add_block_action
+                 {
+                   Add.target_id = Some 627L;
+                   target_uuid = None;
+                   target_page_name = None;
+                   pos = Some Block.First_child;
+                   status = None;
+                   tags_edn = None;
+                   properties_edn = None;
+                   content = Some "Child";
+                   blocks_edn = None;
+                   blocks_file = None;
+                 }
+                 []
+                 (Cli_primitive.create_repo "demo"))
+          in
+          let* result =
+            effect_to_promise
+              (Add.execute_add_block action
+                 (config_with_output cfg Output.Mode.Human)
+                 Output.Mode.Human)
+          in
+          expect_bool "add result is error" true (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "add concurrent target delete code"
+                "target-not-found"
+                (Error.code_to_string err.Error.code)
+          | None -> fail_test "expected add error");
+          expect_int "target was rechecked" 3 !pull_count;
+          Js.Promise.resolve pass));
+
   test "CLI parity update build action validates property and tag edn"
     (fun () ->
       let base_opts =
@@ -3797,6 +3856,13 @@ let () =
       expect_int "update properties include status" 2
         (List.length action.update_properties);
       expect_int "remove properties" 1 (List.length action.remove_properties));
+
+  test "CLI parity update tag query uses datascript find syntax" (fun () ->
+      let query =
+        Melange_edn_melange.to_edn_string (Update.tag_query Update.tag_selector)
+      in
+      expect_named_contains "find" query ":find";
+      expect_named_contains "tag class" query "logseq.class/Tag");
 
   test "CLI parity sync config key parser accepts ws-url and http-base only"
     (fun () ->
