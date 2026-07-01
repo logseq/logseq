@@ -672,8 +672,7 @@ export class LSPluginNet {
     }
   }
 
-  get ctx(): LSPluginNetContext {
+  get ctx(): any {
     return this._ctx
   }
 }
-
