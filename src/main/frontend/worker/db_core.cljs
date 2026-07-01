@@ -1647,9 +1647,9 @@
 
 ;; API server specific fns start with 'api-'
 (def-thread-api :thread-api/api-get-page-data
-  [repo page-title]
+  [repo page-title opts]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (api-tools/get-page-data @conn page-title)))
+    (api-tools/get-page-data @conn page-title opts)))
 
 (def-thread-api :thread-api/api-list-properties
   [repo options]

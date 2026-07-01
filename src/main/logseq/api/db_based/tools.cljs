@@ -59,15 +59,6 @@
                 {:block/title (:block/title e)
                  :block/uuid (str (:block/uuid e))})))))
 
-(defn- get-page-blocks
-  [db page-id]
-  (let [datoms (d/datoms db :avet :block/page page-id)
-        block-eids (mapv :e datoms)
-        block-ents (map #(d/entity db %) block-eids)
-        blocks (map #(assoc % :block/title (db-content/recur-replace-uuid-in-block-title %)) block-ents)]
-    (->> (otree/blocks->vec-tree db blocks page-id)
-         (map #(update % :block/uuid str)))))
-
 (defn ^:api remove-hidden-properties
   "Given an entity map, remove properties that shouldn't be returned in api calls"
   [m]
@@ -76,18 +67,55 @@
                      (contains? #{:block/tx-id} k))) m)
        (into {})))
 
+(defn ^:api normalize-block-tree
+  "Recursively normalize a block tree: strip hidden properties, stringify UUIDs,
+   and enforce depth cap (default 50, max 100). Nodes past the depth limit get
+   :block/children [{:truncated true}] (a one-element vector, so :block/children
+   stays a collection — matching blocks->vec-tree's invariant)."
+  [blocks opts current-level]
+  (let [depth (min (or (:depth opts) 50) 100)]
+    (mapv (fn [block]
+            (let [block (-> block
+                            remove-hidden-properties
+                            (update :block/uuid str))
+                  children (:block/children block)]
+              (cond
+                (and (>= current-level depth) (seq children))
+                (assoc block :block/children [{:truncated true}])
+
+                (seq children)
+                (assoc block :block/children
+                       (normalize-block-tree children opts (inc current-level)))
+
+                :else
+                block)))
+          blocks)))
+
+(defn- get-page-blocks
+  [db page-id opts]
+  (let [datoms (d/datoms db :avet :block/page page-id)
+        block-eids (mapv :e datoms)
+        block-ents (map #(d/entity db %) block-eids)
+        blocks (map #(assoc % :block/title (db-content/recur-replace-uuid-in-block-title %)) block-ents)
+        tree (otree/blocks->vec-tree db blocks page-id)]
+    (if (:includeChildren opts)
+      (normalize-block-tree tree opts 1)
+      (map #(update % :block/uuid str) tree))))
+
 (defn get-page-data
   "Get page data for GetPage tool including the page's entity and its blocks"
-  [db page-name-or-uuid]
+  [db page-name-or-uuid opts]
   (when-let [page (ldb/get-page db page-name-or-uuid)]
     {:entity (-> (remove-hidden-properties page)
                  (dissoc :block/tags :block/refs)
                  (update :block/uuid str))
-     :blocks (map #(-> %
-                       remove-hidden-properties
-                       ;; remove unused and untranslated attrs
-                       (dissoc :block/children :block/page))
-                  (get-page-blocks db (:db/id page)))}))
+     :blocks (let [blocks (get-page-blocks db (:db/id page) opts)]
+               (if (:includeChildren opts)
+                 blocks
+                 (map #(-> %
+                           remove-hidden-properties
+                           (dissoc :block/children :block/page))
+                      blocks)))}))
 
 (defn list-pages
   "Main fn for ListPages tool"
