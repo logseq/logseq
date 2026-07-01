@@ -8,12 +8,17 @@ import {
   bootstrapStressPageNames,
   classifyHttpResult,
   classifyCliResult,
+  clientRuntimeOptions,
+  checksumDiagnosticsMatch,
   graphValidateArgs,
+  isIdleSyncStatus,
+  isSettledSyncStatus,
   mutableStressPageNames,
   operationNames,
   operationWeights,
   stressPageNames,
   stressConfigText,
+  syncDownloadArgs,
   syncEnsureKeysArgs,
   syncNeedsEnsureKeys,
   syncServerStartArgs,
@@ -195,6 +200,150 @@ test("builds final graph validation command", () => {
   assert.deepEqual(graphValidateArgs({ graph: "pi-memory" }), ["graph", "validate", "--graph", "pi-memory"]);
 });
 
+test("builds isolated runtime options for additional sync clients", () => {
+  const seed = clientRuntimeOptions(
+    {
+      graph: "pi-memory",
+      config: "/tmp/stress/cli.edn",
+      logFile: "/tmp/stress/events.jsonl",
+      rootDir: "/tmp/stress/root",
+      homeDir: "/tmp/stress/home",
+      timeoutMs: 60000,
+    },
+    0,
+  );
+  const replica = clientRuntimeOptions(seed, 1);
+
+  assert.equal(seed.graph, "pi-memory");
+  assert.equal(replica.graph, "pi-memory");
+  assert.equal(seed.config, "/tmp/stress/cli.edn");
+  assert.equal(replica.config, "/tmp/stress/clients/client-2/cli.edn");
+  assert.equal(seed.env.LOGSEQ_CLI_ROOT_DIR, "/tmp/stress/root");
+  assert.equal(replica.env.LOGSEQ_CLI_ROOT_DIR, "/tmp/stress/clients/client-2/root");
+  assert.equal(replica.env.HOME, "/tmp/stress/clients/client-2/home");
+});
+
+test("builds sync download command for replica clients", () => {
+  assert.deepEqual(syncDownloadArgs({ graph: "pi-memory", graphE2ee: false }), [
+    "sync",
+    "download",
+    "--graph",
+    "pi-memory",
+  ]);
+  assert.deepEqual(syncDownloadArgs({ graph: "pi-memory", graphE2ee: true, e2eePassword: "11111" }), [
+    "sync",
+    "download",
+    "--graph",
+    "pi-memory",
+    "--e2ee-password",
+    "11111",
+  ]);
+});
+
+test("detects final sync convergence from status checks", () => {
+  assert.equal(
+    isSettledSyncStatus({
+      ok: true,
+      parsed: {
+        data: {
+          "pending-local": 0,
+          "pending-server": 0,
+          "local-checksum": "abc",
+          "remote-checksum": "abc",
+        },
+      },
+    }),
+    true,
+  );
+
+  assert.equal(
+    isSettledSyncStatus({
+      ok: true,
+      parsed: {
+        data: {
+          "pending-local": 1,
+          "pending-server": 0,
+          "local-checksum": "abc",
+          "remote-checksum": "abc",
+        },
+      },
+    }),
+    false,
+  );
+
+  assert.equal(
+    isSettledSyncStatus({
+      ok: true,
+      parsed: {
+        data: {
+          "pending-local": 0,
+          "pending-server": 0,
+          "local-checksum": "abc",
+          "remote-checksum": "def",
+        },
+      },
+    }),
+    false,
+  );
+});
+
+test("detects idle sync status separately from cached checksums", () => {
+  assert.equal(
+    isIdleSyncStatus({
+      ok: true,
+      parsed: {
+        data: {
+          "last-error": null,
+          "pending-local": 0,
+          "pending-server": 0,
+          "local-tx": 40,
+          "remote-tx": 40,
+          "local-checksum": "old",
+          "remote-checksum": "new",
+        },
+      },
+    }),
+    true,
+  );
+
+  assert.equal(
+    isIdleSyncStatus({
+      ok: true,
+      parsed: {
+        data: {
+          "last-error": null,
+          "pending-local": 0,
+          "pending-server": 1,
+          "local-tx": 40,
+          "remote-tx": 40,
+        },
+      },
+    }),
+    false,
+  );
+});
+
+test("matches recomputed checksum diagnostics against remote checksum", () => {
+  assert.equal(
+    checksumDiagnosticsMatch(
+      new Map([
+        ["recomputed-checksum", "abc"],
+        ["remote-checksum", "abc"],
+      ]),
+    ),
+    true,
+  );
+  assert.equal(
+    checksumDiagnosticsMatch(
+      new Map([
+        ["recomputed-checksum", "abc"],
+        ["remote-checksum", "def"],
+      ]),
+    ),
+    false,
+  );
+});
+
 test("does not re-upload when linked graph has no remote tx before websocket start", () => {
   assert.equal(
     syncStatusUninitialized({
@@ -337,6 +486,14 @@ test("offline operation is available only when sync offline simulation is enable
     new Map(operationWeights({ sync: true, offline: true })).get("offline-today-journal-race") >= 8,
     "offline today journal race should run often enough to catch page creation conflicts",
   );
+});
+
+test("multi-client offline operations require sync, offline mode, and more than one client", () => {
+  assert.equal(operationNames({ sync: true, offline: true, clients: 3 }).includes("multi-client-offline-rebase"), true);
+  assert.equal(operationNames({ sync: true, offline: true, clients: 3 }).includes("multi-client-today-journal-race"), true);
+  assert.equal(operationNames({ sync: true, offline: true, clients: 1 }).includes("multi-client-offline-rebase"), false);
+  assert.equal(operationNames({ sync: true, offline: false, clients: 3 }).includes("multi-client-offline-rebase"), false);
+  assert.equal(operationNames({ sync: false, offline: true, clients: 3 }).includes("multi-client-offline-rebase"), false);
 });
 
 test("critical outliner mutations dominate the stress distribution", () => {

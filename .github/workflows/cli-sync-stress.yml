@@ -183,6 +183,7 @@ jobs:
             --graph "$GRAPH" \
             --config "$GITHUB_WORKSPACE/tmp/cli-sync-stress/cli.edn" \
             --auth-path "$GITHUB_WORKSPACE/tmp/cli-sync-stress/home/logseq/auth.json" \
+            --clients 3 \
             --concurrency 8 \
             --sync \
             --offline \
