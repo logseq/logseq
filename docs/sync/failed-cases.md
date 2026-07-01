@@ -90,6 +90,56 @@
   - `rtk pnpm --dir cli test`: full CLI parity suite passed.
 - Status: completed commands passed; the latest deps/db retry was interrupted after target assertions printed as passing and is not counted as a completed pass.
 
+### Latest PR 12842 verification
+
+- Date: 2026-07-01
+- Commands and results:
+  - `rtk pnpm cljs:run-test -n frontend.worker.db-sync-test -e fix-me`: 206 tests, 750 assertions, 0 failures.
+  - `rtk clojure -M:clj-kondo --parallel --lint src/main/frontend/worker/sync/apply_txs.cljs src/test/frontend/worker/db_sync_test.cljs`: 0 errors, 0 warnings.
+  - `rtk node --test scripts/cli-concurrent-edit-stress.test.mjs scripts/cli-sync-stress-workflow.test.mjs`: 32 tests, 0 failures.
+  - `rtk bb dev:lint-and-test`: 1090 tests, 4730 assertions, 0 failures, with lint and translation checks passing.
+- CLI stress verification:
+  - `cli-sync-stress-10000-20260701-6` completed `10001` started ops with 3 clients, offline windows, offline today-journal races, HTTP outliner ops, undo/redo, recycle/delete, and multi-client offline rebase operations. Final recomputed/local/remote checksum was `43da786afaaf37a8` on all three clients, and final `graph validate` passed on all three clients.
+  - `cli-sync-stress-1000-20260701-230737` completed `1001` started ops with 3 clients and offline simulation. Final recomputed/local/remote checksum was `dc4de34b2c9d2d8d` on all three clients, final `graph validate` passed on all three clients, and the event log had no hard `error`, `fatal`, `failed`, or `no-op` entries. Expected stale-id races were classified as `race-conflict`.
+- Status: passed.
+
+### Duplicate local and remote `create-page` rebase could remove remote children
+
+- Date: 2026-07-01
+- Graph: reproduced by worker tests while investigating multi-client offline today-page creation.
+- Symptom: when one client had a pending local `create-page` and remote txs contained the same page plus new child blocks, rebasing the local `create-page` could treat the page as absent or create a duplicate path instead of preserving the remote page entity and its children.
+- Root cause: `rebase-local-op!` only looked up an existing page by the local page UUID from the outliner op options. If the same title had already arrived from remote, the rebase path could miss it and run `outliner-page/create!` again instead of turning the local create into an idempotent page resolution.
+- Fix: `:create-page` rebase now resolves an existing active page by UUID first and then by title. If it finds one, it returns the existing page title and UUID instead of creating another page.
+- Regression tests:
+  - `frontend.worker.db-sync-test/rebase-create-page-keeps-page-uuid-test`
+  - `frontend.worker.db-sync-test/rebase-duplicate-create-page-keeps-remote-children-test`
+  - `frontend.worker.db-sync-test/apply-remote-txs-rebases-create-delete-page-as-recycled-test`
+- Status: fixed and covered by the latest 1000-op and 10000-op multi-client offline stress runs.
+
+### Remote recreate in the same batch was misclassified as a missing block repair
+
+- Date: 2026-07-01
+- Graph: reproduced by worker test from a local-delete and remote-recreate race.
+- Symptom: if remote txs deleted a block and recreated the same `:block/uuid` in the same batch while the client had a local delete pending, the apply path could ask server repair for that UUID as if it were missing before applying the remote recreate tx.
+- Root cause: missing-block preflight looked for absent lookup refs in the current DB and after local reversal, but it did not exclude block UUIDs that the incoming remote batch itself creates. Vector tx data was handled, but Datascript Datom tx data from remote apply was not part of the temp-id to UUID extraction path.
+- Fix: remote apply now extracts created block UUIDs from both vector tx items and Datascript Datoms, subtracts UUIDs that are also retracted in the same batch, and excludes those remote-created UUIDs from missing-block repair preflight.
+- Regression test: `frontend.worker.db-sync-test/apply-remote-tx-local-delete-remote-recreate-does-not-leave-local-only-delete-test`.
+- Status: fixed and covered by latest stress verification.
+
+### Delayed snapshot retry returned an inconsistently awaitable result
+
+- Date: 2026-07-01
+- Graph: reproduced by `frontend.worker.db-sync-test` full namespace run after adding snapshot-drift retry tests.
+- Symptom: full namespace execution could see a delayed remote-apply retry continue after fixture cleanup, producing `missing-db` from `apply-remote-txs!`. Focused tests were easier to pass because the async cleanup race was narrower.
+- Root cause: the snapshot-drift retry path returned nested or mixed native/Promesa promise values. The delayed retry branch could be observed as complete before the recursive retry finished, so callers and tests could clean up the repo connection while retry work was still scheduled.
+- Fix: retry construction now uses one explicit Promesa chain via `<retry-apply-remote-txs!` and `p/then` for delayed retry. The tests' Datascript fixture cleanup also treats any thenable through `js/Promise.resolve(...).finally(...)` so native and Promesa promise values share one lifecycle.
+- Regression tests:
+  - `frontend.worker.db-sync-test/apply-remote-txs-rechecks-local-txs-when-local-delete-races-temp-snapshot-test`
+  - `frontend.worker.db-sync-test/apply-remote-txs-rechecks-local-txs-when-local-delete-races-temp-commit-test`
+  - `frontend.worker.db-sync-test/apply-remote-txs-delays-retry-when-local-txs-keep-changing-test`
+  - `frontend.worker.db-sync-test/apply-remote-txs-retries-snapshot-drift-even-if-pending-list-stabilizes-test`
+- Status: fixed; `frontend.worker.db-sync-test` full namespace passes.
+
 ### Volatile property delete became ambiguous during 10000-op retry
 
 - Date: 2026-07-01
