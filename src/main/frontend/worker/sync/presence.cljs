@@ -20,7 +20,8 @@
        (zero? (or pending-server 0))
        (number? local-tx)
        (= local-tx remote-tx)
-       (string? local-checksum)
+       (or (nil? local-checksum)
+           (string? local-checksum))
        (string? remote-checksum)
        (not= local-checksum remote-checksum)))
 

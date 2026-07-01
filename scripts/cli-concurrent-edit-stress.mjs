@@ -101,6 +101,15 @@ export function parseArgs(argv) {
       case "--log-file":
         opts.logFile = resolve(next());
         break;
+      case "--sync-server-pid-file":
+        opts.syncServerPidFile = resolve(next());
+        break;
+      case "--sync-server-log-file":
+        opts.syncServerLogFile = resolve(next());
+        break;
+      case "--sync-server-data-dir":
+        opts.syncServerDataDir = resolve(next());
+        break;
       case "--sync":
         opts.sync = true;
         break;
@@ -204,6 +213,12 @@ Options:
   --settle-attempts N   Final sync status polling attempts. Default: 30
   --settle-ms N         Delay between sync status polls. Default: 1000
   --log-file PATH       JSONL event log path
+  --sync-server-pid-file PATH
+                        Local db-sync server pid file
+  --sync-server-log-file PATH
+                        Local db-sync server log file
+  --sync-server-data-dir PATH
+                        Local db-sync server data dir
   --fail-fast           Exit on first CLI error
 `);
 }
@@ -289,7 +304,7 @@ function expectedCliRace(parsed, context = {}) {
     expectedRaceErrorCodes.has(parsed?.error?.code) ||
     (context.op === "property-delete-recreate" &&
       context.phase === "delete" &&
-      parsed?.error?.code === "property-not-found") ||
+      (parsed?.error?.code === "property-not-found" || parsed?.error?.code === "ambiguous-property-name")) ||
     (context.op === "tag-delete-recreate" && context.phase === "delete" && parsed?.error?.code === "tag-not-found")
   );
 }
@@ -1022,6 +1037,16 @@ export function operationNames(opts = {}) {
   return operationWeights(opts).map(([name]) => name);
 }
 
+export function uniqueOperationPageTitle(prefix, state, context = {}) {
+  const workerId = context.workerId ?? "unknown-worker";
+  const seq = context.seq ?? "unknown-seq";
+  return `${prefix} ${state.runId} worker-${workerId} seq-${seq} ${crypto.randomUUID()}`;
+}
+
+export function offlineTodayJournalClientCount(opts = {}) {
+  return Math.max(2, opts.clients ?? 1);
+}
+
 function liveBlocksQuery(page) {
   return `[:find [(pull ?b [:db/id :block/uuid]) ...] :where [?p :block/name ${ednString(page.toLowerCase())}] [?b :block/page ?p] (not [?b :block/name])]`;
 }
@@ -1422,8 +1447,15 @@ async function applyRawRenamePage(opts, state, context, title) {
   );
 }
 
-async function applyRawDeleteRestorePage(opts, state, context) {
-  const page = mutablePage(state);
+async function applyRawDeleteRestorePage(opts, state, context, title) {
+  const page = title || uniqueOperationPageTitle("CLI HTTP Delete Restore", state, context);
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("create-page"), [page, tmap()]]],
+    tmap(),
+    { ...context, page, phase: "create", requireTruthyResult: true },
+  );
   const pageUuid = await findPageUuid(opts, page, context);
   if (!pageUuid) {
     return;
@@ -1658,7 +1690,7 @@ async function offlineTodayJournalRace(opts, state, context) {
     state.pageNames.push(page);
   }
 
-  const clientCount = Math.max(2, opts.concurrency);
+  const clientCount = offlineTodayJournalClientCount(opts);
   try {
     await runCli(opts, ["sync", "stop", "--graph", opts.graph], { ...context, phase: "stop", page });
     logEvent(opts, {
@@ -2281,7 +2313,12 @@ async function runOperation(opts, state, workerId, seq, forcedOp = null) {
       return;
 
     case "http-create-page":
-      await applyRawCreatePage(opts, state, { workerId, seq, op }, `CLI HTTP Page ${state.runId} ${seq}`);
+      await applyRawCreatePage(
+        opts,
+        state,
+        { workerId, seq, op },
+        uniqueOperationPageTitle("CLI HTTP Page", state, { workerId, seq, op }),
+      );
       return;
 
     case "http-rename-page":
@@ -2293,7 +2330,12 @@ async function runOperation(opts, state, workerId, seq, forcedOp = null) {
       return;
 
     case "http-recycle-delete-page":
-      await applyRawRecycleDeletePage(opts, state, { workerId, seq, op }, `CLI HTTP Recycle ${state.runId} ${seq}`);
+      await applyRawRecycleDeletePage(
+        opts,
+        state,
+        { workerId, seq, op },
+        uniqueOperationPageTitle("CLI HTTP Recycle", state, { workerId, seq, op }),
+      );
       return;
 
     case "http-upsert-property":

@@ -15,6 +15,7 @@ import {
   isIdleSyncStatus,
   isSettledSyncStatus,
   mutableStressPageNames,
+  offlineTodayJournalClientCount,
   operationNames,
   operationWeights,
   parseArgs,
@@ -28,6 +29,7 @@ import {
   syncUploadArgs,
   staleIdsFromContext,
   todayJournalPageName,
+  uniqueOperationPageTitle,
 } from "./cli-concurrent-edit-stress.mjs";
 
 test("classifies stale block conflicts as race outcomes", () => {
@@ -64,17 +66,19 @@ test("classifies stale task and recycled page conflicts as race outcomes", () =>
 });
 
 test("classifies concurrent volatile property delete as a race outcome", () => {
-  assert.equal(
-    classifyCliResult(
-      { code: 1 },
-      {
-        status: "error",
-        error: { code: "property-not-found", message: "property not found" },
-      },
-      { op: "property-delete-recreate", phase: "delete" },
-    ).outcome,
-    "race-conflict",
-  );
+  for (const code of ["property-not-found", "ambiguous-property-name"]) {
+    assert.equal(
+      classifyCliResult(
+        { code: 1 },
+        {
+          status: "error",
+          error: { code, message: "volatile property race" },
+        },
+        { op: "property-delete-recreate", phase: "delete" },
+      ).outcome,
+      "race-conflict",
+    );
+  }
 });
 
 test("classifies concurrent volatile tag delete as a race outcome", () => {
@@ -470,6 +474,17 @@ test("today journal page name uses the local calendar date", () => {
   assert.equal(todayJournalPageName({ todayDate: "2026-07-02" }), "Jul 2nd, 2026");
 });
 
+test("raw page delete/restore uses unique operation-owned page titles", () => {
+  const state = { runId: "stress-1" };
+  const first = uniqueOperationPageTitle("CLI HTTP Delete Restore", state, { workerId: 3, seq: 305 });
+  const second = uniqueOperationPageTitle("CLI HTTP Delete Restore", state, { workerId: 3, seq: 305 });
+  const third = uniqueOperationPageTitle("CLI HTTP Delete Restore", state, { workerId: 4, seq: 305 });
+
+  assert.match(first, /^CLI HTTP Delete Restore stress-1 worker-3 seq-305 /);
+  assert.notEqual(first, second);
+  assert.notEqual(first, third);
+});
+
 test("operation set covers broad outliner and metadata mutations", () => {
   const names = operationNames({ sync: true, offline: true });
 
@@ -535,6 +550,11 @@ test("offline operation is available only when sync offline simulation is enable
     new Map(operationWeights({ sync: true, offline: true })).get("offline-today-journal-race") >= 8,
     "offline today journal race should run often enough to catch page creation conflicts",
   );
+});
+
+test("offline today journal race uses actual sync clients instead of worker concurrency", () => {
+  assert.equal(offlineTodayJournalClientCount({ clients: 3, concurrency: 8 }), 3);
+  assert.equal(offlineTodayJournalClientCount({ clients: 1, concurrency: 8 }), 2);
 });
 
 test("multi-client offline operations require sync, offline mode, and more than one client", () => {
