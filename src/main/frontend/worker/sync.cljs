@@ -378,6 +378,7 @@
           (active-client-for? current repo graph-id)
           (do
             (broadcast-rtc-state! current)
+            (sync-apply/enqueue-flush-pending! repo current)
             (p/resolved nil))
 
           :else

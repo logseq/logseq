@@ -1098,6 +1098,50 @@
       (is (empty? (storage/fetch-tx-since sql t-before)))
       (is (empty? @changed-messages)))))
 
+(deftest tx-batch-rejects-unapplied-stale-rebase-with-tx-id-test
+  (testing "a client tx id should not be acknowledged when its stale rebase was not applied"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          tx-id (random-uuid)
+          page-uuid (random-uuid)
+          parent-uuid (random-uuid)
+          missing-block-uuid (random-uuid)
+          _ (d/transact! conn [{:block/uuid page-uuid
+                                :block/name "rebase-stale-page-with-tx-id"
+                                :block/title "rebase-stale-page-with-tx-id"}
+                               {:block/uuid parent-uuid
+                                :block/title "existing-parent"
+                                :block/order "a0"
+                                :block/parent [:block/uuid page-uuid]
+                                :block/page [:block/uuid page-uuid]}])
+          t-before (storage/get-t sql)
+          checksum-before (storage/get-checksum sql)
+          tx-entry {:tx-id tx-id
+                    :tx (protocol/tx->transit
+                         [[:db/retract [:block/uuid missing-block-uuid]
+                           :block/parent
+                           [:block/uuid page-uuid]
+                           536882158]
+                          [:db/add [:block/uuid missing-block-uuid]
+                           :block/parent
+                           [:block/uuid parent-uuid]
+                           536882158]])
+                    :outliner-op :rebase}
+          changed-messages (atom [])
+          response (with-redefs [ws/broadcast! (fn [_self _sender payload]
+                                                 (swap! changed-messages conj payload))]
+                     (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
+      (is (= "tx/reject" (:type response)))
+      (is (= "db transact failed" (:reason response)))
+      (is (= t-before (:t response)))
+      (is (= tx-id (:failed-tx-id response)))
+      (is (= checksum-before (storage/get-checksum sql)))
+      (is (empty? (storage/fetch-tx-since sql t-before)))
+      (is (empty? @changed-messages)))))
+
 (deftest tx-batch-ignores-stale-fix-with-missing-lookup-entity-test
   (testing "stale fix lookup refs to missing entities are treated as no-op"
     (let [sql (test-sql/make-sql)
