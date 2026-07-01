@@ -145,12 +145,11 @@
   (let [api-fn (fn api-fn [meth args]
                  (if-let [meth' (resolve-real-api-method meth)]
                    (invoke-logseq-api! meth' args)
-                   #js {:error (str "No method found for " (pr-str meth))}))
-        mcp-server (desktop-mcp-server/create-mcp-api-server api-fn)]
+                   #js {:error (str "No method found for " (pr-str meth))}))]
     (logger/debug "[server] MCP routes initialized")
     (.post server "/mcp"
-           #(desktop-mcp-server/handle-post-request mcp-server {:port (get-port)
-                                                                :host (get-host)} %1 %2))
+           #(desktop-mcp-server/handle-post-request api-fn {:port (get-port)
+                                                            :host (get-host)} %1 %2))
     (.get server "/mcp" desktop-mcp-server/handle-get-request)
     (.delete server "/mcp" desktop-mcp-server/handle-delete-request)))
 
