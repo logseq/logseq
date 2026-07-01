@@ -13,6 +13,32 @@
   [get-client-ops-conn repo]
   (get-client-ops-conn repo))
 
+(defn- idle-checksum-mismatch?
+  [{:keys [pending-local pending-asset pending-server local-tx remote-tx local-checksum remote-checksum]}]
+  (and (zero? (or pending-local 0))
+       (zero? (or pending-asset 0))
+       (zero? (or pending-server 0))
+       (number? local-tx)
+       (= local-tx remote-tx)
+       (or (nil? local-checksum)
+           (string? local-checksum))
+       (string? remote-checksum)
+       (not= local-checksum remote-checksum)))
+
+(defn- refresh-idle-local-checksum
+  [{:keys [recompute-local-checksum update-local-checksum]} repo state]
+  (if (and recompute-local-checksum
+           (idle-checksum-mismatch? state))
+    (let [recomputed-checksum (recompute-local-checksum repo)]
+      (when (and update-local-checksum
+                 (string? recomputed-checksum)
+                 (not= recomputed-checksum (:local-checksum state)))
+        (update-local-checksum repo recomputed-checksum))
+      (cond-> state
+        (string? recomputed-checksum)
+        (assoc :local-checksum recomputed-checksum)))
+    state))
+
 (defn sync-counts
   [{:keys [get-datascript-conn
            get-pending-local-tx-count
@@ -20,6 +46,8 @@
            get-local-tx
            get-local-checksum
            get-graph-uuid
+           recompute-local-checksum
+           update-local-checksum
            latest-remote-tx
            latest-remote-checksum]}
    repo]
@@ -41,17 +69,21 @@
           ws-state (or (some-> client :ws-state deref)
                        (if (seq ws-url) :stopped :inactive))
           last-error (some-> client :last-sync-error deref)]
-      {:repo repo
-       :graph-id graph-uuid
-       :pending-local pending-local
-       :pending-asset pending-asset
-       :pending-server pending-server
-       :local-tx local-tx
-       :remote-tx remote-tx
-       :local-checksum local-checksum
-       :remote-checksum remote-checksum
-       :ws-state ws-state
-       :last-error last-error})))
+      (refresh-idle-local-checksum
+       {:recompute-local-checksum recompute-local-checksum
+        :update-local-checksum update-local-checksum}
+       repo
+       {:repo repo
+        :graph-id graph-uuid
+        :pending-local pending-local
+        :pending-asset pending-asset
+        :pending-server pending-server
+        :local-tx local-tx
+        :remote-tx remote-tx
+        :local-checksum local-checksum
+        :remote-checksum remote-checksum
+        :ws-state ws-state
+        :last-error last-error}))))
 
 (defn normalize-online-users
   [users]
