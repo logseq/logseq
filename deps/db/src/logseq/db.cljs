@@ -216,10 +216,10 @@
          (transact-fn repo-or-conn tx-data tx-meta)
          (transact-sync repo-or-conn tx-data tx-meta))))))
 
-(defn- make-conn [opts]
+(defn- make-conn [db opts]
   ;; `datascript.conn/->Conn` is not exposed in nbb runtime.
   ;; Start from a fresh conn and merge the desired internal state.
-  (let [conn (d/create-conn)]
+  (let [conn (d/create-conn (:schema db))]
     (swap! (:atom conn) merge opts)
     conn))
 
@@ -228,10 +228,19 @@
   [db]
   (if-some [_storage (storage/storage db)]
     (make-conn
+     db
      {:db db
       :tx-tail []
       :db-last-stored db})
-    (make-conn {:db db})))
+    (make-conn db {:db db})))
+
+(defn temp-conn-from-db
+  "Create an isolated in-memory conn from `db` that can read storage-backed data without storing writes."
+  [db]
+  (doto (conn-from-db db)
+    (swap! assoc
+           :skip-store? true
+           :skip-validate-db? true)))
 
 (defn batch-transact-with-temp-conn!
   "Run batched tx work against a temporary conn, then apply all collected tx-data
@@ -250,12 +259,11 @@
   - `listen-db` (if provided) receives each intermediate tx-report from temp conn.
   - Do not rely on returned tx-report shape for undo/redo behavior."
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
-  (let [temp-conn (conn-from-db @conn)
+  (let [temp-conn (temp-conn-from-db @conn)
         *batch-tx-data (volatile! [])
         *complete? (volatile! false)]
     ;; can read from disk, write is disallowed
     (swap! temp-conn assoc
-           :skip-store? true
            :batch-tx? true
            :skip-validate-db? true)
     (d/listen! temp-conn ::temp-conn-batch-tx
