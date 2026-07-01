@@ -663,6 +663,88 @@
             (is (= 0 @send-calls)))
           (#'sync-apply/set-upload-stopped! test-repo false))))))
 
+(deftest start-active-client-flushes-pending-local-txs-test
+  (async done
+         (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+               repo (str test-repo "-active-client-" (random-uuid))
+               tx-id (random-uuid)
+               sent (atom [])
+               broadcasts (atom 0)
+               latest-prev @db-sync/*repo->latest-remote-tx
+               get-datascript-conn worker-state/get-datascript-conn
+               get-client-ops-conn worker-state/get-client-ops-conn
+               client {:repo repo
+                       :graph-id "graph-1"
+                       :ws (doto (js-obj)
+                             (aset "readyState" 1)
+                             (aset "send" (fn [raw]
+                                            (swap! sent conj
+                                                   (js->clj (js/JSON.parse raw)
+                                                            :keywordize-keys true)))))
+                       :ws-state (atom :open)
+                       :inflight (atom [])
+                       :send-queue (atom (p/resolved nil))
+                       :receive-queue (atom (p/resolved nil))
+                       :asset-queue (atom (p/resolved nil))
+                       :pending-pull-since (atom nil)
+                       :online-users (atom [])
+                       :reconnect (atom {:attempt 0 :timer nil})
+                       :stale-kill-timer (atom nil)
+                       :last-ws-message-ts (atom (common-util/time-ms))
+                       :last-sync-error (atom nil)}
+               client-atom (atom client)
+               config-atom (atom {:ws-url "wss://sync.example.test/sync/%s"})]
+           (swap! client-op/*repo->pending-local-tx-count dissoc repo)
+           (undo-redo/clear-history! repo)
+           (swap! db-sync/*repo->latest-remote-tx assoc repo 0)
+           (-> (p/with-redefs [worker-state/*db-sync-client client-atom
+                                worker-state/*db-sync-config config-atom
+                                worker-state/get-datascript-conn
+                                (fn [repo']
+                                  (if (= repo repo')
+                                    conn
+                                    (get-datascript-conn repo')))
+                                worker-state/get-client-ops-conn
+                                (fn [repo']
+                                  (if (= repo repo')
+                                    client-ops-conn
+                                    (get-client-ops-conn repo')))
+                                sync-util/get-graph-id (fn [_repo] "graph-1")
+                                sync-crypt/graph-e2ee? (constantly false)
+                                worker-state/online? (constantly true)
+                                shared-service/broadcast-to-clients! (fn [& _]
+                                                                       (swap! broadcasts inc))]
+                 (client-op/update-local-tx repo 0)
+                 (seed-client-op-txs!
+                  repo
+                  [{:db-sync/tx-id tx-id
+                    :db-sync/pending? true
+                    :db-sync/created-at 1
+                    :db-sync/outliner-op :save-block
+                    :db-sync/normalized-tx-data
+                    [[:db/add [:block/uuid (:block/uuid child1)]
+                      :block/title
+                      "pending active client flush"]]}])
+                 (p/let [_ (db-sync/start! repo)
+                         _ @(:send-queue client)]
+                   (is (= 1 @broadcasts))
+                   (is (= 0 (client-op/get-local-tx repo)))
+                   (is (= 0 (get @db-sync/*repo->latest-remote-tx repo)))
+                   (is (= [tx-id]
+                          (mapv :tx-id (#'sync-apply/pending-txs repo))))
+                   (is (nil? @(:last-sync-error client)))
+                   (is (= "tx/batch" (:type (first @sent))))
+                   (is (= [(str tx-id)]
+                          (mapv :tx-id (:txs (first @sent)))))
+                   (is (= [tx-id] @(:inflight client)))))
+               (p/catch (fn [error]
+                          (is nil (str error))))
+               (p/finally (fn []
+                            (undo-redo/clear-history! repo)
+                            (swap! client-op/*repo->pending-local-tx-count dissoc repo)
+                            (reset! db-sync/*repo->latest-remote-tx latest-prev)
+                            (done)))))))
+
 (deftest prepare-upload-tx-entries-drops-empty-txs-test
   (testing "empty tx rows should be dropped from upload batch"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
@@ -1465,7 +1547,7 @@
                                                      vec))
                                            :outliner-op outliner-op})))]
               (doseq [tx-entry tx-entries]
-                (#'sync-handler/apply-tx-entry! server-conn tx-entry))
+                (#'sync-handler/apply-tx-entry! server-conn {} tx-entry))
               (is (= (sync-checksum/recompute-checksum @conn)
                      (sync-checksum/recompute-checksum @server-conn))))))))))
 
@@ -1494,7 +1576,7 @@
                                                    vec))
                                          :outliner-op outliner-op})))]
             (doseq [tx-entry tx-entries]
-              (#'sync-handler/apply-tx-entry! server-conn tx-entry))
+              (#'sync-handler/apply-tx-entry! server-conn {} tx-entry))
             (is (= (sync-checksum/recompute-checksum @conn)
                    (sync-checksum/recompute-checksum @server-conn)))))))))
 

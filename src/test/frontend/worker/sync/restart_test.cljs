@@ -4,6 +4,7 @@
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as sync]
+            [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.util :as sync-util]
             [promesa.core :as p]))
 
@@ -40,7 +41,15 @@
              :crypto {}
              :timers {}
              :sqlite {}})
-           (-> (p/with-redefs [sync-util/get-graph-id (fn [_repo] graph-id)
+           (-> (p/with-redefs [worker-state/get-client-ops-conn (fn [_repo] true)
+                               client-op/get-local-tx (fn [_repo] 0)
+                               client-op/get-pending-local-tx-count (fn [_repo] 0)
+                               client-op/get-unpushed-asset-ops-count (fn [_repo] 0)
+                               client-op/get-all-asset-ops (fn [_repo] [])
+                               client-op/get-local-checksum (fn [_repo] nil)
+                               client-op/get-graph-uuid (fn [_repo] graph-id)
+                               client-op/update-graph-uuid (fn [_repo _graph-id] nil)
+                               sync-util/get-graph-id (fn [_repo] graph-id)
                                sync/<resolve-ws-token (fn [] (p/resolved "token"))
                                shared-service/broadcast-to-clients! (fn [& _] nil)]
                  (sync/start! repo))
@@ -48,6 +57,51 @@
                 (fn [_]
                   (is (= 1 @connect-calls)
                       "start! should reconnect when the cached websocket is already closed")))
+               (p/catch
+                (fn [error]
+                  (is false (str "unexpected error: " error))))
+               (p/finally
+                (fn []
+                  (reset! worker-state/*db-sync-client prev-client)
+                  (reset! worker-state/*db-sync-config prev-config)
+                  (when prev-platform
+                    (platform/set-platform! prev-platform))
+                  (done)))))))
+
+(deftest start-skips-when-client-op-local-tx-is-missing-test
+  (async done
+         (let [repo "missing-local-tx-repo"
+               graph-id "graph-1"
+               prev-client @worker-state/*db-sync-client
+               prev-config @worker-state/*db-sync-config
+               prev-platform (try
+                               (platform/current)
+                               (catch :default _ nil))
+               connect-calls (atom 0)]
+           (reset! worker-state/*db-sync-config {:ws-url "wss://sync.example.test/sync/%s"})
+           (reset! worker-state/*db-sync-client nil)
+           (platform/set-platform!
+            {:env {:runtime :node}
+             :storage {}
+             :kv {}
+             :broadcast {}
+             :websocket {:connect (fn [_url]
+                                    (swap! connect-calls inc)
+                                    #js {:readyState 0
+                                         :close (fn [] nil)})}
+             :crypto {}
+             :timers {}
+             :sqlite {}})
+           (-> (p/with-redefs [worker-state/get-client-ops-conn (fn [_repo] true)
+                               client-op/get-local-tx (fn [_repo] nil)
+                               client-op/update-local-tx (fn [_repo _tx]
+                                                           (throw (js/Error. "must not initialize missing local-tx to 0")))
+                               sync-util/get-graph-id (fn [_repo] graph-id)]
+                 (sync/start! repo))
+               (p/then
+                (fn [_]
+                  (is (zero? @connect-calls)
+                      "start! should wait for valid client-op local-tx instead of syncing from 0")))
                (p/catch
                 (fn [error]
                   (is false (str "unexpected error: " error))))

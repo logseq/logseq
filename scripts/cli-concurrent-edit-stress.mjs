@@ -1,16 +1,25 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { mkdirSync, writeFileSync, appendFileSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 const repoRoot = resolve(new URL("..", import.meta.url).pathname);
+const require = createRequire(import.meta.url);
+const transit = require(require.resolve("transit-js", { paths: [resolve(repoRoot, "cli")] }));
+const transitWriter = transit.writer("json");
+const transitReader = transit.reader("json");
 
 function parseArgs(argv) {
   const opts = {
     graph: "pi-memory",
     page: "CLI Concurrent Stress",
+    extraPages: 2,
+    journalPages: 2,
+    journalStart: new Date().toISOString().slice(0, 10),
+    todayDate: null,
     config: resolve(repoRoot, "tmp", "cli-concurrent-edit-stress", "cli.edn"),
     syncBase: "http://127.0.0.1:18080",
     concurrency: 8,
@@ -18,8 +27,11 @@ function parseArgs(argv) {
     timeoutMs: 20000,
     logFile: resolve(repoRoot, "tmp", "cli-concurrent-edit-stress", "events.jsonl"),
     sync: false,
+    offline: false,
+    offlineMs: 2500,
     failFast: false,
     startSyncServer: true,
+    graphE2ee: true,
     e2eePassword: "11111",
     authPath: "/Users/tiensonqin/logseq/auth.json",
     syncServerPidFile: resolve(repoRoot, "tmp", "cli-concurrent-edit-stress", "db-sync-server.pid"),
@@ -44,6 +56,18 @@ function parseArgs(argv) {
       case "--page":
         opts.page = next();
         break;
+      case "--extra-pages":
+        opts.extraPages = Number.parseInt(next(), 10);
+        break;
+      case "--journal-pages":
+        opts.journalPages = Number.parseInt(next(), 10);
+        break;
+      case "--journal-start":
+        opts.journalStart = next();
+        break;
+      case "--today-date":
+        opts.todayDate = next();
+        break;
       case "--config":
         opts.config = resolve(next());
         break;
@@ -65,8 +89,17 @@ function parseArgs(argv) {
       case "--sync":
         opts.sync = true;
         break;
+      case "--offline":
+        opts.offline = true;
+        break;
+      case "--offline-ms":
+        opts.offlineMs = Number.parseInt(next(), 10);
+        break;
       case "--no-start-sync-server":
         opts.startSyncServer = false;
+        break;
+      case "--no-e2ee":
+        opts.graphE2ee = false;
         break;
       case "--auth-path":
         opts.authPath = resolve(next());
@@ -96,6 +129,18 @@ function parseArgs(argv) {
   if (!Number.isInteger(opts.timeoutMs) || opts.timeoutMs < 1000) {
     throw new Error("--timeout-ms must be at least 1000");
   }
+  if (!Number.isInteger(opts.extraPages) || opts.extraPages < 0) {
+    throw new Error("--extra-pages must be 0 or a positive integer");
+  }
+  if (!Number.isInteger(opts.journalPages) || opts.journalPages < 0) {
+    throw new Error("--journal-pages must be 0 or a positive integer");
+  }
+  if (!Number.isInteger(opts.offlineMs) || opts.offlineMs < 100) {
+    throw new Error("--offline-ms must be at least 100");
+  }
+  if (opts.todayDate && Number.isNaN(new Date(`${opts.todayDate}T00:00:00.000Z`).getTime())) {
+    throw new Error("--today-date must be a valid YYYY-MM-DD date");
+  }
 
   opts.wsUrl = `${opts.syncBase.replace(/^http/, "ws").replace(/\/$/, "")}/sync/%s`;
   opts.httpBase = opts.syncBase.replace(/\/$/, "");
@@ -110,11 +155,18 @@ Runs parallel Logseq CLI writes against a dedicated stress page.
 Options:
   --graph NAME          Graph to mutate. Default: pi-memory
   --page NAME           Stress page. Default: CLI Concurrent Stress
+  --extra-pages N       Additional normal pages to mutate. Default: 2
+  --journal-pages N     Auto-created journal-style pages to mutate. Default: 2
+  --journal-start DATE  First journal date, YYYY-MM-DD. Default: today
+  --today-date DATE     Override today's journal date, YYYY-MM-DD
   --config PATH         Dedicated CLI config path under tmp/
   --sync-base URL       Local db-sync base URL. Default: http://127.0.0.1:18080
   --sync                Start db-sync client after verifying local /health
+  --offline             Simulate offline windows by stopping sync during writes
+  --offline-ms N        Duration of each offline window. Default: 2500
   --no-start-sync-server
                         Do not auto-start local db-sync when --sync is used
+  --no-e2ee            Initialize the stress graph as non-E2EE for local sync
   --auth-path PATH      Auth JSON for local db-sync. Default: /Users/tiensonqin/logseq/auth.json
   --e2ee-password TEXT  Password used for local sync upload initialization. Default: 11111
   --concurrency N       Parallel workers. Default: 8
@@ -186,11 +238,47 @@ function logEvent(opts, event) {
   }
 }
 
-const expectedRaceErrorCodes = new Set(["block-not-found", "source-not-found", "target-not-found"]);
+const expectedRaceErrorCodes = new Set([
+  "block-not-found",
+  "page-not-found",
+  "recycled-page",
+  "source-not-found",
+  "target-not-found",
+  "upsert-id-not-found",
+]);
 
-export function classifyCliResult(result, parsed) {
+function expectedCliRace(parsed, context = {}) {
+  return (
+    expectedRaceErrorCodes.has(parsed?.error?.code) ||
+    (context.op === "property-delete-recreate" &&
+      context.phase === "delete" &&
+      parsed?.error?.code === "property-not-found")
+  );
+}
+
+export function classifyCliResult(result, parsed, context = {}) {
   const ok = result.code === 0 && (!parsed || parsed.status === "ok");
-  const expectedRace = !ok && expectedRaceErrorCodes.has(parsed?.error?.code);
+  const expectedRace = !ok && expectedCliRace(parsed, context);
+  return {
+    ok,
+    level: ok || expectedRace ? "info" : "error",
+    outcome: ok ? "ok" : expectedRace ? "race-conflict" : "failed",
+    expectedRace,
+  };
+}
+
+function expectedHttpRace(parsed, context = {}) {
+  const message = parsed?.error?.message || "";
+  return (
+    Number.isInteger(context.id) &&
+    parsed?.error?.code === "exception" &&
+    message === "Set block property failed: block or property doesn't exist"
+  );
+}
+
+export function classifyHttpResult(result, parsed, context = {}) {
+  const ok = result.ok;
+  const expectedRace = !ok && expectedHttpRace(parsed, context);
   return {
     ok,
     level: ok || expectedRace ? "info" : "error",
@@ -294,6 +382,77 @@ async function runCli(opts, args, context = {}) {
   return { ...classification, parsed, result };
 }
 
+async function invokeThreadApi(opts, state, method, args, context = {}) {
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs + 3000);
+  let response = null;
+  let text = "";
+  let parsed = null;
+  let error = null;
+  try {
+    response = await fetch(`${state.workerBaseUrl}/v1/invoke`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        method,
+        argsTransit: transitWriter.write(args),
+      }),
+      signal: controller.signal,
+    });
+    text = await response.text();
+    if (text) {
+      parsed = JSON.parse(text);
+    }
+    if (parsed?.resultTransit) {
+      parsed.result = transitReader.read(parsed.resultTransit);
+    }
+  } catch (caught) {
+    error = caught;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const classification = classifyHttpResult({ ok: !error && response?.ok, status: response?.status }, parsed, context);
+  if (classification.expectedRace) {
+    for (const id of staleIdsFromContext(context)) {
+      state.activeIds.delete(id);
+      state.activeBlockUuids.delete(id);
+      state.taskIds.delete(id);
+    }
+  }
+  logEvent(opts, {
+    event: "http",
+    level: classification.level,
+    outcome: classification.outcome,
+    context,
+    method,
+    elapsedMs: Date.now() - startedAt,
+    status: response?.status,
+    error: error ? { message: error instanceof Error ? error.message : String(error) } : parsed?.error,
+    stdout: classification.ok ? undefined : text,
+  });
+
+  if (!classification.ok && !classification.expectedRace && opts.failFast) {
+    throw new Error(`HTTP invoke failed: ${method}`);
+  }
+
+  return { ...classification, parsed, text, error };
+}
+
+async function applyOutlinerOps(opts, state, ops, options, context = {}) {
+  return invokeThreadApi(
+    opts,
+    state,
+    "thread-api/apply-outliner-ops",
+    [state.repo, ops, options || transit.map()],
+    context,
+  );
+}
+
 function resultIds(response) {
   const result = response.parsed?.data?.result;
   if (Array.isArray(result)) {
@@ -345,12 +504,28 @@ export function syncServerStartArgs(opts) {
 }
 
 export function syncUploadArgs(opts) {
-  return ["sync", "upload", "--graph", opts.graph, "--e2ee-password", opts.e2eePassword];
+  const args = ["sync", "upload", "--graph", opts.graph];
+  if (opts.graphE2ee !== false) {
+    args.push("--e2ee-password", opts.e2eePassword);
+  }
+  return args;
 }
 
-function syncStatusUninitialized(response) {
+export function syncEnsureKeysArgs(opts) {
+  return ["sync", "ensure-keys", "--upload-keys", "--e2ee-password", opts.e2eePassword];
+}
+
+export function syncNeedsEnsureKeys(opts) {
+  return opts.graphE2ee !== false;
+}
+
+export function graphValidateArgs(opts) {
+  return ["graph", "validate", "--graph", opts.graph];
+}
+
+export function syncStatusUninitialized(response) {
   const status = response.parsed?.data;
-  return response.ok && status && (status["local-tx"] == null || status["remote-tx"] == null);
+  return response.ok && status && status["graph-id"] == null;
 }
 
 async function ensureLocalSyncServer(opts) {
@@ -398,6 +573,42 @@ async function ensureLocalSyncServer(opts) {
   });
 }
 
+function graphServerRepo(opts, graphServer) {
+  return graphServer.repo || `logseq_db_${opts.graph}`;
+}
+
+async function setLocalGraphE2ee(opts, graphServer, graphE2ee) {
+  const state = {
+    workerBaseUrl: graphServer["base-url"],
+    repo: graphServerRepo(opts, graphServer),
+    activeIds: new Set(),
+    activeBlockUuids: new Map(),
+    taskIds: new Set(),
+  };
+  const response = await invokeThreadApi(
+    opts,
+    state,
+    "thread-api/transact",
+    [
+      state.repo,
+      [
+        tmap([
+          kw("db/ident"),
+          kw("logseq.kv/graph-rtc-e2ee?"),
+          kw("kv/value"),
+          graphE2ee,
+        ]),
+      ],
+      tmap([kw("outliner-op"), kw("set-kvs")]),
+      null,
+    ],
+    { op: "set-local-graph-e2ee", graphE2ee },
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to set local graph E2EE metadata for ${opts.graph}`);
+  }
+}
+
 async function ensureLocalServers(opts) {
   await runCli(opts, ["server", "start", "--graph", opts.graph], { op: "server-start" });
   const serverList = await runCli(opts, ["server", "list"], { op: "server-list" });
@@ -412,6 +623,15 @@ async function ensureLocalServers(opts) {
     await ensureLocalSyncServer(opts);
     const status = await runCli(opts, ["sync", "status", "--graph", opts.graph], { op: "sync-status-before-start" });
     if (syncStatusUninitialized(status)) {
+      if (opts.graphE2ee === false) {
+        await setLocalGraphE2ee(opts, graphServer, false);
+      }
+      if (syncNeedsEnsureKeys(opts)) {
+        const keys = await runCli(opts, syncEnsureKeysArgs(opts), { op: "sync-ensure-keys" });
+        if (!keys.ok) {
+          throw new Error(`Failed to initialize local sync keys for ${opts.graph}`);
+        }
+      }
       const upload = await runCli(opts, syncUploadArgs(opts), { op: "sync-upload-initialize" });
       if (!upload.ok) {
         throw new Error(`Failed to initialize local sync upload for ${opts.graph}`);
@@ -422,11 +642,19 @@ async function ensureLocalServers(opts) {
       throw new Error(`Failed to start local sync for ${opts.graph}`);
     }
   }
+  return graphServer;
 }
 
 function choose(set) {
   const values = Array.from(set);
   if (values.length === 0) {
+    return null;
+  }
+  return values[Math.floor(Math.random() * values.length)];
+}
+
+function chooseArray(values) {
+  if (!Array.isArray(values) || values.length === 0) {
     return null;
   }
   return values[Math.floor(Math.random() * values.length)];
@@ -442,26 +670,196 @@ function ednString(value) {
   return JSON.stringify(String(value));
 }
 
-function liveBlocksQuery(page) {
-  return `[:find [(pull ?b [:db/id]) ...] :where [?p :block/name ${ednString(page.toLowerCase())}] [?b :block/page ?p] (not [?b :block/name])]`;
+function ordinalDay(day) {
+  if (day % 100 >= 11 && day % 100 <= 13) {
+    return `${day}th`;
+  }
+  switch (day % 10) {
+    case 1:
+      return `${day}st`;
+    case 2:
+      return `${day}nd`;
+    case 3:
+      return `${day}rd`;
+    default:
+      return `${day}th`;
+  }
 }
 
-function liveIdsFromQueryResult(response) {
+function journalPageName(date) {
+  return `${date.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} ${ordinalDay(date.getUTCDate())}, ${date.getUTCFullYear()}`;
+}
+
+function journalPageNameForYmd(ymd) {
+  const date = new Date(`${ymd}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`Invalid journal date: ${ymd}`);
+  }
+  return journalPageName(date);
+}
+
+function localYmd(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function todayJournalPageName(opts = {}, now = new Date()) {
+  return journalPageNameForYmd(opts.todayDate || localYmd(now));
+}
+
+export function stressPageNames(opts) {
+  const pages = [opts.page];
+  for (let index = 0; index < opts.extraPages; index += 1) {
+    pages.push(`${opts.page} page ${index + 2}`);
+  }
+
+  const start = new Date(`${opts.journalStart}T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime())) {
+    throw new Error(`Invalid --journal-start date: ${opts.journalStart}`);
+  }
+  for (let index = 0; index < opts.journalPages; index += 1) {
+    const date = new Date(start.getTime() + index * 24 * 60 * 60 * 1000);
+    pages.push(journalPageName(date));
+  }
+  return pages;
+}
+
+export function bootstrapStressPageNames(opts) {
+  const pages = [opts.page];
+  for (let index = 0; index < opts.extraPages; index += 1) {
+    pages.push(`${opts.page} page ${index + 2}`);
+  }
+  return pages;
+}
+
+export function mutableStressPageNames(opts) {
+  const pages = [];
+  for (let index = 0; index < opts.extraPages; index += 1) {
+    pages.push(`${opts.page} page ${index + 2}`);
+  }
+  return pages.length > 0 ? pages : [opts.page];
+}
+
+export function operationWeights(opts = {}) {
+  const operations = [
+    ["create-root", 18],
+    ["create-child", 18],
+    ["create-tree", 10],
+    ["update", 8],
+    ["move-child", 14],
+    ["move-page", 12],
+    ["move-sibling", 12],
+    ["block-tags-add", 3],
+    ["block-tags-remove", 2],
+    ["block-properties-add", 3],
+    ["block-properties-remove", 2],
+    ["task-create", 3],
+    ["task-update", 2],
+    ["page-upsert", 2],
+    ["page-properties-add", 1],
+    ["page-properties-remove", 1],
+    ["page-delete-restore", 6],
+    ["tag-upsert", 1],
+    ["tag-delete-recreate", 1],
+    ["property-upsert", 1],
+    ["property-delete-recreate", 1],
+    ["http-insert-blocks", 12],
+    ["http-delete-blocks", 12],
+    ["http-move-blocks", 12],
+    ["http-save-block", 4],
+    ["http-move-up-down", 8],
+    ["http-indent-outdent", 8],
+    ["http-apply-template", 1],
+    ["http-create-page", 1],
+    ["http-rename-page", 1],
+    ["http-delete-restore-page", 8],
+    ["http-recycle-delete-page", 4],
+    ["http-upsert-property", 1],
+    ["http-set-block-property", 2],
+    ["http-remove-block-property", 1],
+    ["http-batch-set-property", 2],
+    ["http-batch-remove-property", 1],
+    ["http-batch-delete-property-value", 1],
+    ["http-toggle-reaction", 1],
+    ["http-insert-undo-redo", 12],
+    ["delete-single", 18],
+    ["delete-batch", 12],
+    ["delete-update-race", 8],
+  ];
+  if (opts.sync && opts.offline) {
+    operations.push(["offline-window", 2]);
+    operations.push(["offline-today-journal-race", 8]);
+  }
+  return operations;
+}
+
+export function operationNames(opts = {}) {
+  return operationWeights(opts).map(([name]) => name);
+}
+
+function liveBlocksQuery(page) {
+  return `[:find [(pull ?b [:db/id :block/uuid]) ...] :where [?p :block/name ${ednString(page.toLowerCase())}] [?b :block/page ?p] (not [?b :block/name])]`;
+}
+
+function pageByNameQuery(page) {
+  return `[:find (pull ?p [:db/id :block/uuid :block/name :block/title]) . :where [?p :block/name ${ednString(page.toLowerCase())}]]`;
+}
+
+function normalizedUuidString(value) {
+  if (typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+    return value;
+  }
+  if (value && typeof value === "object" && typeof value.value === "string") {
+    return normalizedUuidString(value.value);
+  }
+  return null;
+}
+
+function pageUuidFromQueryResult(response) {
+  return normalizedUuidString(response.parsed?.data?.result?.["block/uuid"]);
+}
+
+function liveBlocksFromQueryResult(response) {
   const rows = response.parsed?.data?.result;
   if (!Array.isArray(rows)) {
     return [];
   }
-  return rows.map((row) => row?.["db/id"]).filter((id) => Number.isInteger(id));
+  return rows
+    .map((row) => {
+      const id = row?.["db/id"];
+      const uuid = normalizedUuidString(row?.["block/uuid"]);
+      return Number.isInteger(id) && uuid ? { id, uuid } : null;
+    })
+    .filter(Boolean);
+}
+
+async function findPageUuid(opts, page, context = {}) {
+  const response = await runCli(
+    opts,
+    ["query", "--graph", opts.graph, "--query", pageByNameQuery(page)],
+    { op: "find-page-uuid", page, ...context },
+  );
+  return pageUuidFromQueryResult(response);
 }
 
 async function refreshLiveIds(opts, state, reason) {
-  const response = await runCli(
-    opts,
-    ["query", "--graph", opts.graph, "--query", liveBlocksQuery(opts.page)],
-    { op: "refresh-live-ids", reason },
-  );
-  const ids = liveIdsFromQueryResult(response);
-  state.activeIds = new Set(ids);
+  const ids = new Set();
+  const blockUuids = new Map();
+  for (const page of state.pageNames) {
+    const response = await runCli(
+      opts,
+      ["query", "--graph", opts.graph, "--query", liveBlocksQuery(page)],
+      { op: "refresh-live-ids", reason, page },
+    );
+    for (const block of liveBlocksFromQueryResult(response)) {
+      ids.add(block.id);
+      blockUuids.set(block.id, block.uuid);
+    }
+  }
+  state.activeIds = ids;
+  state.activeBlockUuids = blockUuids;
   state.lastRefreshSeq = state.nextSeq;
   logEvent(opts, {
     event: "refresh-live-ids",
@@ -495,17 +893,8 @@ function pruneStaleIds(state, response, context) {
   }
 }
 
-function weightedOperation() {
-  const operations = [
-    ["create-root", 18],
-    ["create-child", 18],
-    ["update", 18],
-    ["page-upsert", 10],
-    ["move", 8],
-    ["delete-single", 16],
-    ["delete-batch", 8],
-    ["delete-update-race", 4],
-  ];
+function weightedOperation(opts) {
+  const operations = operationWeights(opts);
   const total = operations.reduce((sum, [, weight]) => sum + weight, 0);
   let cursor = Math.random() * total;
   for (const [name, weight] of operations) {
@@ -529,13 +918,577 @@ async function createBlock(opts, state, content, targetArgs, context) {
   }
 }
 
+function randomPage(state) {
+  return chooseArray(state.pageNames) || state.pageNames[0];
+}
+
+function mutablePage(state) {
+  return chooseArray(state.mutablePageNames) || state.pageNames[0];
+}
+
+function stressTag(state) {
+  return chooseArray(state.stableTags);
+}
+
+function stressProperty(state) {
+  return chooseArray(state.stableProperties);
+}
+
+function stressTagId(state) {
+  return chooseArray(Array.from(state.stableTagIds.values()));
+}
+
+function rawPropertyIdent(state) {
+  return state.rawPropertyIdent || "user.property/cli-http-prop";
+}
+
+function propertyMap(name, value) {
+  return `{${ednString(name)} ${ednString(value)}}`;
+}
+
+function propertyVector(name) {
+  return `[${ednString(name)}]`;
+}
+
+function kw(name) {
+  return transit.keyword(name);
+}
+
+function uuid(value) {
+  return transit.uuid(value);
+}
+
+function tmap(entries = []) {
+  return transit.map(entries);
+}
+
+function blockMap(entries) {
+  return tmap(entries.flatMap(([key, value]) => [kw(key), value]));
+}
+
+function chooseActiveUuid(state) {
+  const id = choose(state.activeIds);
+  if (!id) {
+    return null;
+  }
+  const uuidValue = state.activeBlockUuids.get(id);
+  return uuidValue ? { id, uuid: uuidValue } : null;
+}
+
+function chooseDistinctActiveUuids(state) {
+  const first = chooseActiveUuid(state);
+  if (!first) {
+    return null;
+  }
+  const candidates = Array.from(state.activeBlockUuids.entries())
+    .filter(([id]) => id !== first.id)
+    .map(([id, uuidValue]) => ({ id, uuid: uuidValue }));
+  const second = chooseArray(candidates);
+  return second ? [first, second] : null;
+}
+
+async function ensureStressMetadata(opts, state) {
+  for (const page of state.bootstrapPageNames) {
+    await runCli(opts, ["upsert", "page", "--graph", opts.graph, "--page", page], {
+      op: "bootstrap-page",
+      page,
+    });
+  }
+  for (const name of [...state.stableTags, state.volatileTag]) {
+    await runCli(opts, ["upsert", "tag", "--graph", opts.graph, "--name", name], {
+      op: "bootstrap-tag",
+      name,
+    });
+  }
+  for (const name of [...state.stableProperties, state.volatileProperty]) {
+    await runCli(opts, ["upsert", "property", "--graph", opts.graph, "--name", name, "--type", "default", "--cardinality", "one", "--public", "true"], {
+      op: "bootstrap-property",
+      name,
+    });
+  }
+  await refreshStressTagIds(opts, state, "bootstrap");
+  await applyRawUpsertProperty(opts, state, { op: "bootstrap-http-upsert-property" });
+}
+
+async function refreshStressTagIds(opts, state, reason) {
+  const response = await runCli(opts, ["list", "tag", "--graph", opts.graph], {
+    op: "refresh-stress-tags",
+    reason,
+  });
+  const items = response.parsed?.data?.items || [];
+  state.stableTagIds = new Map();
+  for (const name of state.stableTags) {
+    const item = items.find((candidate) => candidate?.["block/title"] === name);
+    const id = item?.["db/id"];
+    if (Number.isInteger(id)) {
+      state.stableTagIds.set(name, id);
+    }
+  }
+}
+
+async function applyRawSaveBlock(opts, state, context, title) {
+  const block = chooseActiveUuid(state);
+  if (!block) {
+    return;
+  }
+  const response = await applyOutlinerOps(
+    opts,
+    state,
+    [
+      [
+        kw("save-block"),
+        [
+          blockMap([
+            ["block/uuid", uuid(block.uuid)],
+            ["block/title", title],
+          ]),
+          tmap(),
+        ],
+      ],
+    ],
+    tmap(),
+    { ...context, id: block.id, uuid: block.uuid },
+  );
+  if (!response.ok) {
+    state.activeIds.delete(block.id);
+    state.activeBlockUuids.delete(block.id);
+  }
+}
+
+async function applyRawInsertBlocks(opts, state, context, title) {
+  const target = chooseActiveUuid(state);
+  if (!target) {
+    return;
+  }
+  const newUuid = crypto.randomUUID();
+  const block = blockMap([
+    ["block/uuid", uuid(newUuid)],
+    ["block/title", title],
+  ]);
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("insert-blocks"), [[block], uuid(target.uuid), tmap([kw("sibling?"), false, kw("keep-uuid?"), true])]]],
+    tmap(),
+    { ...context, targetId: target.id, targetUuid: target.uuid, uuid: newUuid },
+  );
+  await refreshLiveIds(opts, state, "http-insert-blocks");
+}
+
+async function applyRawDeleteBlocks(opts, state, context) {
+  const block = chooseActiveUuid(state);
+  if (!block) {
+    return;
+  }
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("delete-blocks"), [[uuid(block.uuid)], tmap()]]],
+    tmap(),
+    { ...context, id: block.id, uuid: block.uuid },
+  );
+  state.activeIds.delete(block.id);
+  state.activeBlockUuids.delete(block.id);
+}
+
+async function applyRawMoveBlocks(opts, state, context) {
+  const pair = chooseDistinctActiveUuids(state);
+  if (!pair) {
+    return;
+  }
+  const [block, target] = pair;
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("move-blocks"), [[uuid(block.uuid)], uuid(target.uuid), tmap([kw("sibling?"), Math.random() < 0.5])]]],
+    tmap(),
+    { ...context, id: block.id, uuid: block.uuid, targetId: target.id, targetUuid: target.uuid },
+  );
+}
+
+async function applyRawMoveUpDown(opts, state, context, up) {
+  const block = chooseActiveUuid(state);
+  if (!block) {
+    return;
+  }
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("move-blocks-up-down"), [[uuid(block.uuid)], up]]],
+    tmap(),
+    { ...context, id: block.id, uuid: block.uuid, up },
+  );
+}
+
+async function applyRawIndentOutdent(opts, state, context, indent) {
+  const block = chooseActiveUuid(state);
+  if (!block) {
+    return;
+  }
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("indent-outdent-blocks"), [[uuid(block.uuid)], indent, tmap()]]],
+    tmap(),
+    { ...context, id: block.id, uuid: block.uuid, indent },
+  );
+}
+
+async function applyRawApplyTemplate(opts, state, context, title) {
+  const target = chooseActiveUuid(state);
+  if (!target) {
+    return;
+  }
+  const templateUuid = crypto.randomUUID();
+  const insertedUuid = crypto.randomUUID();
+  const templateBlock = blockMap([
+    ["block/uuid", uuid(insertedUuid)],
+    ["block/title", title],
+  ]);
+  await applyOutlinerOps(
+    opts,
+    state,
+    [
+      [
+        kw("apply-template"),
+        [
+          uuid(templateUuid),
+          uuid(target.uuid),
+          tmap([kw("template-blocks"), [templateBlock], kw("sibling?"), false]),
+        ],
+      ],
+    ],
+    tmap(),
+    { ...context, targetId: target.id, targetUuid: target.uuid, templateUuid, uuid: insertedUuid },
+  );
+  await refreshLiveIds(opts, state, "http-apply-template");
+}
+
+async function applyRawCreatePage(opts, state, context, title) {
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("create-page"), [title, tmap()]]],
+    tmap(),
+    { ...context, page: title },
+  );
+  state.pageNames.push(title);
+  state.mutablePageNames.push(title);
+}
+
+async function applyRawRenamePage(opts, state, context, title) {
+  const page = mutablePage(state);
+  const pageUuid = await findPageUuid(opts, page, context);
+  if (!pageUuid) {
+    return;
+  }
+  const temporaryTitle = `${title} ${Date.now()}`;
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("rename-page"), [uuid(pageUuid), temporaryTitle]]],
+    tmap(),
+    { ...context, page, pageUuid, phase: "rename-away", temporaryTitle },
+  );
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("rename-page"), [uuid(pageUuid), page]]],
+    tmap(),
+    { ...context, page, pageUuid, phase: "rename-back", temporaryTitle },
+  );
+}
+
+async function applyRawDeleteRestorePage(opts, state, context) {
+  const page = mutablePage(state);
+  const pageUuid = await findPageUuid(opts, page, context);
+  if (!pageUuid) {
+    return;
+  }
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("delete-page"), [uuid(pageUuid), tmap()]]],
+    tmap(),
+    { ...context, page, pageUuid, phase: "delete" },
+  );
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("restore-recycled"), [uuid(pageUuid)]]],
+    tmap(),
+    { ...context, page, pageUuid, phase: "restore" },
+  );
+  await refreshLiveIds(opts, state, "http-delete-restore-page");
+}
+
+async function applyRawRecycleDeletePage(opts, state, context, title) {
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("create-page"), [title, tmap()]]],
+    tmap(),
+    { ...context, page: title, phase: "create" },
+  );
+  const pageUuid = await findPageUuid(opts, title, context);
+  if (!pageUuid) {
+    return;
+  }
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("delete-page"), [uuid(pageUuid), tmap()]]],
+    tmap(),
+    { ...context, page: title, pageUuid, phase: "delete" },
+  );
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("recycle-delete-permanently"), [uuid(pageUuid)]]],
+    tmap(),
+    { ...context, page: title, pageUuid, phase: "permanent-delete" },
+  );
+}
+
+async function applyRawUpsertProperty(opts, state, context) {
+  await applyOutlinerOps(
+    opts,
+    state,
+    [
+      [
+        kw("upsert-property"),
+        [
+          kw(rawPropertyIdent(state)),
+          tmap([kw("logseq.property/type"), kw("default"), kw("db/cardinality"), kw("db.cardinality/one")]),
+          tmap([kw("property-name"), state.rawPropertyName || "cli-http-prop"]),
+        ],
+      ],
+    ],
+    tmap(),
+    context,
+  );
+}
+
+async function applyRawSetBlockProperty(opts, state, context, value) {
+  const block = chooseActiveUuid(state);
+  if (!block) {
+    return;
+  }
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("set-block-property"), [uuid(block.uuid), kw(rawPropertyIdent(state)), value]]],
+    tmap(),
+    { ...context, id: block.id, uuid: block.uuid },
+  );
+}
+
+async function applyRawRemoveBlockProperty(opts, state, context) {
+  const block = chooseActiveUuid(state);
+  if (!block) {
+    return;
+  }
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("remove-block-property"), [uuid(block.uuid), kw(rawPropertyIdent(state))]]],
+    tmap(),
+    { ...context, id: block.id, uuid: block.uuid },
+  );
+}
+
+async function applyRawBatchSetProperty(opts, state, context, value) {
+  const blocks = chooseMany(state.activeIds, 3)
+    .map((id) => ({ id, uuid: state.activeBlockUuids.get(id) }))
+    .filter((block) => block.uuid);
+  if (blocks.length === 0) {
+    return;
+  }
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("batch-set-property"), [blocks.map((block) => uuid(block.uuid)), kw(rawPropertyIdent(state)), value, tmap()]]],
+    tmap(),
+    { ...context, ids: blocks.map((block) => block.id) },
+  );
+}
+
+async function applyRawBatchRemoveProperty(opts, state, context) {
+  const blocks = chooseMany(state.activeIds, 3)
+    .map((id) => ({ id, uuid: state.activeBlockUuids.get(id) }))
+    .filter((block) => block.uuid);
+  if (blocks.length === 0) {
+    return;
+  }
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("batch-remove-property"), [blocks.map((block) => uuid(block.uuid)), kw(rawPropertyIdent(state))]]],
+    tmap(),
+    { ...context, ids: blocks.map((block) => block.id) },
+  );
+}
+
+async function applyRawBatchDeletePropertyValue(opts, state, context) {
+  const block = chooseActiveUuid(state);
+  const tagId = stressTagId(state);
+  if (!block || !tagId) {
+    return;
+  }
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("batch-set-property"), [[uuid(block.uuid)], kw("block/tags"), tagId, tmap()]]],
+    tmap(),
+    { ...context, id: block.id, uuid: block.uuid, tagId, phase: "set-tag" },
+  );
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("batch-delete-property-value"), [[uuid(block.uuid)], kw("block/tags"), tagId]]],
+    tmap(),
+    { ...context, id: block.id, uuid: block.uuid, tagId, phase: "delete-tag-value" },
+  );
+}
+
+async function applyRawToggleReaction(opts, state, context) {
+  const block = chooseActiveUuid(state);
+  if (!block) {
+    return;
+  }
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("toggle-reaction"), [uuid(block.uuid), "thumbs-up", null]]],
+    tmap(),
+    { ...context, id: block.id, uuid: block.uuid },
+  );
+}
+
+async function applyRawInsertUndoRedo(opts, state, context, title) {
+  const target = chooseActiveUuid(state);
+  if (!target) {
+    return;
+  }
+  const newUuid = crypto.randomUUID();
+  const block = blockMap([
+    ["block/uuid", uuid(newUuid)],
+    ["block/title", title],
+  ]);
+  const forward = [[kw("insert-blocks"), [[block], uuid(target.uuid), tmap([kw("sibling?"), false, kw("keep-uuid?"), true])]]];
+  const inverse = [[kw("delete-blocks"), [[uuid(newUuid)], tmap()]]];
+  await applyOutlinerOps(opts, state, forward, tmap(), {
+    ...context,
+    phase: "redo-initial",
+    targetId: target.id,
+    targetUuid: target.uuid,
+    uuid: newUuid,
+  });
+  await applyOutlinerOps(opts, state, inverse, tmap(), {
+    ...context,
+    phase: "undo",
+    targetId: target.id,
+    targetUuid: target.uuid,
+    uuid: newUuid,
+  });
+  await applyOutlinerOps(opts, state, forward, tmap(), {
+    ...context,
+    phase: "redo",
+    targetId: target.id,
+    targetUuid: target.uuid,
+    uuid: newUuid,
+  });
+  await refreshLiveIds(opts, state, "http-insert-undo-redo");
+}
+
+async function offlineWindow(opts, state, context) {
+  if (state.offlineRunning) {
+    return;
+  }
+  state.offlineRunning = true;
+  try {
+    await runCli(opts, ["sync", "stop", "--graph", opts.graph], { ...context, phase: "stop" });
+    logEvent(opts, {
+      event: "offline-window",
+      level: "warn",
+      status: "offline",
+      context,
+      durationMs: opts.offlineMs,
+    });
+    await delay(opts.offlineMs);
+    const start = await runCli(opts, ["sync", "start", "--graph", opts.graph], { ...context, phase: "start" });
+    if (!start.ok && opts.failFast) {
+      throw new Error(`Failed to restart sync after offline window for ${opts.graph}`);
+    }
+  } finally {
+    state.offlineRunning = false;
+  }
+}
+
+async function offlineTodayJournalRace(opts, state, context) {
+  if (state.offlineRunning) {
+    return;
+  }
+  state.offlineRunning = true;
+  const page = todayJournalPageName(opts);
+  if (!state.pageNames.includes(page)) {
+    state.pageNames.push(page);
+  }
+
+  const clientCount = Math.max(2, opts.concurrency);
+  try {
+    await runCli(opts, ["sync", "stop", "--graph", opts.graph], { ...context, phase: "stop", page });
+    logEvent(opts, {
+      event: "offline-today-journal-race",
+      level: "warn",
+      status: "offline",
+      context: { ...context, page, clientCount },
+      durationMs: opts.offlineMs,
+    });
+
+    const responses = await Promise.all(
+      Array.from({ length: clientCount }, (_, index) => {
+        const clientId = index + 1;
+        return runCli(
+          opts,
+          [
+            "upsert",
+            "block",
+            "--graph",
+            opts.graph,
+            "--target-page",
+            page,
+            "--content",
+            `offline today journal ${state.runId} client=${clientId} seq=${context.seq}`,
+          ],
+          { ...context, phase: "write", page, clientId, clientCount },
+        );
+      }),
+    );
+    for (const response of responses) {
+      for (const id of resultIds(response)) {
+        state.activeIds.add(id);
+      }
+    }
+
+    await delay(opts.offlineMs);
+    const start = await runCli(opts, ["sync", "start", "--graph", opts.graph], { ...context, phase: "start", page });
+    if (!start.ok && opts.failFast) {
+      throw new Error(`Failed to restart sync after offline today journal race for ${opts.graph}`);
+    }
+    await refreshLiveIds(opts, state, "offline-today-journal-race");
+  } finally {
+    state.offlineRunning = false;
+  }
+}
+
 async function runOperation(opts, state, workerId, seq) {
-  const op = weightedOperation();
+  const op = weightedOperation(opts);
   const stamp = `${state.runId} worker=${workerId} seq=${seq} op=${op}`;
   await refreshLiveIdsIfNeeded(opts, state, "operation");
 
-  if (state.activeIds.size < opts.concurrency && op !== "create-root") {
-    await createBlock(opts, state, `seed ${stamp}`, ["--target-page", opts.page], {
+  if (state.activeIds.size < opts.concurrency && !["create-root", "offline-window", "offline-today-journal-race"].includes(op)) {
+    await createBlock(opts, state, `seed ${stamp}`, ["--target-page", randomPage(state)], {
       workerId,
       seq,
       op: "seed",
@@ -545,17 +1498,40 @@ async function runOperation(opts, state, workerId, seq) {
 
   switch (op) {
     case "create-root":
-      await createBlock(opts, state, `root ${stamp}`, ["--target-page", opts.page], { workerId, seq, op });
+      await createBlock(opts, state, `root ${stamp}`, ["--target-page", randomPage(state)], { workerId, seq, op });
       return;
 
     case "create-child": {
       const parentId = choose(state.activeIds);
-      await createBlock(opts, state, `child ${stamp} parent=${parentId}`, ["--target-id", String(parentId), "--pos", "last-child"], {
-        workerId,
-        seq,
-        op,
-        parentId,
-      });
+      await createBlock(
+        opts,
+        state,
+        `child ${stamp} parent=${parentId}`,
+        ["--target-id", String(parentId), "--pos", Math.random() < 0.5 ? "first-child" : "last-child"],
+        {
+          workerId,
+          seq,
+          op,
+          parentId,
+        },
+      );
+      return;
+    }
+
+    case "create-tree": {
+      const page = randomPage(state);
+      const blocks = `[
+        {:block/title ${ednString(`tree root ${stamp}`)}
+         :block/children [{:block/title ${ednString(`tree child ${stamp}`)}}]}
+        {:block/title ${ednString(`tree sibling ${stamp}`)}}]`;
+      const response = await runCli(
+        opts,
+        ["upsert", "block", "--graph", opts.graph, "--target-page", page, "--blocks", blocks],
+        { workerId, seq, op, page },
+      );
+      for (const id of resultIds(response)) {
+        state.activeIds.add(id);
+      }
       return;
     }
 
@@ -571,16 +1547,7 @@ async function runOperation(opts, state, workerId, seq) {
       return;
     }
 
-    case "page-upsert": {
-      await runCli(opts, ["upsert", "page", "--graph", opts.graph, "--page", opts.page], {
-        workerId,
-        seq,
-        op,
-      });
-      return;
-    }
-
-    case "move": {
+    case "move-child": {
       const id = choose(state.activeIds);
       const targetId = choose(state.activeIds);
       if (!id || !targetId || id === targetId) {
@@ -595,6 +1562,336 @@ async function runOperation(opts, state, workerId, seq) {
       pruneStaleIds(state, response, context);
       return;
     }
+
+    case "move-page": {
+      const id = choose(state.activeIds);
+      const page = randomPage(state);
+      if (!id) {
+        return;
+      }
+      const context = { workerId, seq, op, id, page };
+      const response = await runCli(
+        opts,
+        ["upsert", "block", "--graph", opts.graph, "--id", String(id), "--target-page", page],
+        context,
+      );
+      pruneStaleIds(state, response, context);
+      return;
+    }
+
+    case "move-sibling": {
+      const id = choose(state.activeIds);
+      const targetId = choose(state.activeIds);
+      if (!id || !targetId || id === targetId) {
+        return;
+      }
+      const context = { workerId, seq, op, id, targetId };
+      const response = await runCli(
+        opts,
+        ["upsert", "block", "--graph", opts.graph, "--id", String(id), "--target-id", String(targetId), "--pos", "sibling"],
+        context,
+      );
+      pruneStaleIds(state, response, context);
+      return;
+    }
+
+    case "block-tags-add": {
+      const id = choose(state.activeIds);
+      const tag = stressTag(state);
+      if (!id || !tag) {
+        return;
+      }
+      const context = { workerId, seq, op, id, tag };
+      const response = await runCli(
+        opts,
+        ["upsert", "block", "--graph", opts.graph, "--id", String(id), "--update-tags", `[${ednString(tag)}]`],
+        context,
+      );
+      pruneStaleIds(state, response, context);
+      return;
+    }
+
+    case "block-tags-remove": {
+      const id = choose(state.activeIds);
+      const tag = stressTag(state);
+      if (!id || !tag) {
+        return;
+      }
+      const context = { workerId, seq, op, id, tag };
+      const response = await runCli(
+        opts,
+        ["upsert", "block", "--graph", opts.graph, "--id", String(id), "--remove-tags", `[${ednString(tag)}]`],
+        context,
+      );
+      pruneStaleIds(state, response, context);
+      return;
+    }
+
+    case "block-properties-add": {
+      const id = choose(state.activeIds);
+      const property = stressProperty(state);
+      if (!id || !property) {
+        return;
+      }
+      const context = { workerId, seq, op, id, property };
+      const response = await runCli(
+        opts,
+        ["upsert", "block", "--graph", opts.graph, "--id", String(id), "--update-properties", propertyMap(property, `value ${stamp}`)],
+        context,
+      );
+      pruneStaleIds(state, response, context);
+      return;
+    }
+
+    case "block-properties-remove": {
+      const id = choose(state.activeIds);
+      const property = stressProperty(state);
+      if (!id || !property) {
+        return;
+      }
+      const context = { workerId, seq, op, id, property };
+      const response = await runCli(
+        opts,
+        ["upsert", "block", "--graph", opts.graph, "--id", String(id), "--remove-properties", propertyVector(property)],
+        context,
+      );
+      pruneStaleIds(state, response, context);
+      return;
+    }
+
+    case "task-create": {
+      const page = randomPage(state);
+      const response = await runCli(
+        opts,
+        [
+          "upsert",
+          "task",
+          "--graph",
+          opts.graph,
+          "--target-page",
+          page,
+          "--content",
+          `task ${stamp}`,
+          "--status",
+          "todo",
+          "--priority",
+          "high",
+        ],
+        { workerId, seq, op, page },
+      );
+      for (const id of resultIds(response)) {
+        state.activeIds.add(id);
+        state.taskIds.add(id);
+      }
+      return;
+    }
+
+    case "task-update": {
+      const id = choose(state.taskIds.size > 0 ? state.taskIds : state.activeIds);
+      if (!id) {
+        return;
+      }
+      const context = { workerId, seq, op, id };
+      const response = await runCli(
+        opts,
+        ["upsert", "task", "--graph", opts.graph, "--id", String(id), "--status", "doing", "--priority", "low"],
+        context,
+      );
+      pruneStaleIds(state, response, context);
+      return;
+    }
+
+    case "page-upsert": {
+      await runCli(opts, ["upsert", "page", "--graph", opts.graph, "--page", randomPage(state)], {
+        workerId,
+        seq,
+        op,
+      });
+      return;
+    }
+
+    case "page-properties-add": {
+      const page = randomPage(state);
+      const property = stressProperty(state);
+      await runCli(
+        opts,
+        ["upsert", "page", "--graph", opts.graph, "--page", page, "--update-properties", propertyMap(property, `page ${stamp}`)],
+        { workerId, seq, op, page, property },
+      );
+      return;
+    }
+
+    case "page-properties-remove": {
+      const page = randomPage(state);
+      const property = stressProperty(state);
+      await runCli(
+        opts,
+        ["upsert", "page", "--graph", opts.graph, "--page", page, "--remove-properties", propertyVector(property)],
+        { workerId, seq, op, page, property },
+      );
+      return;
+    }
+
+    case "page-delete-restore": {
+      const page = mutablePage(state);
+      await runCli(opts, ["remove", "page", "--graph", opts.graph, "--page", page], {
+        workerId,
+        seq,
+        op,
+        page,
+        phase: "delete",
+      });
+      await runCli(opts, ["upsert", "page", "--graph", opts.graph, "--page", page, "--restore"], {
+        workerId,
+        seq,
+        op,
+        page,
+        phase: "restore",
+      });
+      await refreshLiveIds(opts, state, "page-delete-restore");
+      return;
+    }
+
+    case "tag-upsert": {
+      const tag = chooseArray([...state.stableTags, state.volatileTag]);
+      await runCli(opts, ["upsert", "tag", "--graph", opts.graph, "--name", tag], {
+        workerId,
+        seq,
+        op,
+        tag,
+      });
+      return;
+    }
+
+    case "tag-delete-recreate": {
+      const tag = state.volatileTag;
+      await runCli(opts, ["remove", "tag", "--graph", opts.graph, "--name", tag], {
+        workerId,
+        seq,
+        op,
+        tag,
+        phase: "delete",
+      });
+      await runCli(opts, ["upsert", "tag", "--graph", opts.graph, "--name", tag], {
+        workerId,
+        seq,
+        op,
+        tag,
+        phase: "recreate",
+      });
+      return;
+    }
+
+    case "property-upsert": {
+      const property = chooseArray([...state.stableProperties, state.volatileProperty]);
+      await runCli(
+        opts,
+        ["upsert", "property", "--graph", opts.graph, "--name", property, "--type", "default", "--cardinality", "one", "--public", "true"],
+        { workerId, seq, op, property },
+      );
+      return;
+    }
+
+    case "property-delete-recreate": {
+      const property = state.volatileProperty;
+      await runCli(opts, ["remove", "property", "--graph", opts.graph, "--name", property], {
+        workerId,
+        seq,
+        op,
+        property,
+        phase: "delete",
+      });
+      await runCli(
+        opts,
+        ["upsert", "property", "--graph", opts.graph, "--name", property, "--type", "default", "--cardinality", "one", "--public", "true"],
+        { workerId, seq, op, property, phase: "recreate" },
+      );
+      return;
+    }
+
+    case "http-insert-blocks":
+      await applyRawInsertBlocks(opts, state, { workerId, seq, op }, `http insert ${stamp}`);
+      return;
+
+    case "http-delete-blocks":
+      await applyRawDeleteBlocks(opts, state, { workerId, seq, op });
+      return;
+
+    case "http-move-blocks":
+      await applyRawMoveBlocks(opts, state, { workerId, seq, op });
+      return;
+
+    case "http-save-block":
+      await applyRawSaveBlock(opts, state, { workerId, seq, op }, `http save ${stamp}`);
+      return;
+
+    case "http-move-up-down":
+      await applyRawMoveUpDown(opts, state, { workerId, seq, op }, Math.random() < 0.5);
+      return;
+
+    case "http-indent-outdent":
+      await applyRawIndentOutdent(opts, state, { workerId, seq, op }, Math.random() < 0.5);
+      return;
+
+    case "http-apply-template":
+      await applyRawApplyTemplate(opts, state, { workerId, seq, op }, `http template ${stamp}`);
+      return;
+
+    case "http-create-page":
+      await applyRawCreatePage(opts, state, { workerId, seq, op }, `CLI HTTP Page ${state.runId} ${seq}`);
+      return;
+
+    case "http-rename-page":
+      await applyRawRenamePage(opts, state, { workerId, seq, op }, `CLI HTTP Rename ${state.runId} ${seq}`);
+      return;
+
+    case "http-delete-restore-page":
+      await applyRawDeleteRestorePage(opts, state, { workerId, seq, op });
+      return;
+
+    case "http-recycle-delete-page":
+      await applyRawRecycleDeletePage(opts, state, { workerId, seq, op }, `CLI HTTP Recycle ${state.runId} ${seq}`);
+      return;
+
+    case "http-upsert-property":
+      await applyRawUpsertProperty(opts, state, { workerId, seq, op });
+      return;
+
+    case "http-set-block-property":
+      await applyRawSetBlockProperty(opts, state, { workerId, seq, op }, `http property ${stamp}`);
+      return;
+
+    case "http-remove-block-property":
+      await applyRawRemoveBlockProperty(opts, state, { workerId, seq, op });
+      return;
+
+    case "http-batch-set-property":
+      await applyRawBatchSetProperty(opts, state, { workerId, seq, op }, `http batch ${stamp}`);
+      return;
+
+    case "http-batch-remove-property":
+      await applyRawBatchRemoveProperty(opts, state, { workerId, seq, op });
+      return;
+
+    case "http-batch-delete-property-value":
+      await applyRawBatchDeletePropertyValue(opts, state, { workerId, seq, op });
+      return;
+
+    case "http-toggle-reaction":
+      await applyRawToggleReaction(opts, state, { workerId, seq, op });
+      return;
+
+    case "http-insert-undo-redo":
+      await applyRawInsertUndoRedo(opts, state, { workerId, seq, op }, `http undo redo ${stamp}`);
+      return;
+
+    case "offline-window":
+      await offlineWindow(opts, state, { workerId, seq, op });
+      return;
+
+    case "offline-today-journal-race":
+      await offlineTodayJournalRace(opts, state, { workerId, seq, op });
+      return;
 
     case "delete-single": {
       const id = choose(state.activeIds);
@@ -707,12 +2004,26 @@ async function main() {
 
   const state = {
     runId: `stress-${Date.now()}`,
+    pageNames: stressPageNames(opts),
+    bootstrapPageNames: bootstrapStressPageNames(opts),
+    mutablePageNames: [],
+    stableTags: ["cli-stress-tag-a", "cli-stress-tag-b"],
+    stableTagIds: new Map(),
+    stableProperties: ["cli-stress-prop-a", "cli-stress-prop-b"],
+    volatileTag: "cli-stress-volatile-tag",
+    volatileProperty: "cli-stress-volatile-prop",
+    rawPropertyIdent: "user.property/cli-http-prop",
+    rawPropertyName: "cli-http-prop",
     activeIds: new Set(),
+    activeBlockUuids: new Map(),
+    taskIds: new Set(),
     nextSeq: 0,
     lastRefreshSeq: -Infinity,
     refreshing: false,
+    offlineRunning: false,
     stop: false,
   };
+  state.mutablePageNames = mutableStressPageNames(opts);
 
   logEvent(opts, {
     event: "start",
@@ -724,15 +2035,29 @@ async function main() {
     concurrency: opts.concurrency,
     maxOps: opts.maxOps,
     sync: opts.sync,
+    offline: opts.offline,
+    graphE2ee: opts.graphE2ee,
+    pageNames: state.pageNames,
   });
 
-  await ensureLocalServers(opts);
-  await runCli(opts, ["upsert", "page", "--graph", opts.graph, "--page", opts.page], {
-    op: "upsert-stress-page",
-  });
+  const graphServer = await ensureLocalServers(opts);
+  state.workerBaseUrl = graphServer["base-url"];
+  state.repo = graphServerRepo(opts, graphServer);
+
+  const preflightValidation = await runCli(opts, graphValidateArgs(opts), { op: "preflight-graph-validate" });
+  if (!preflightValidation.ok) {
+    throw new Error(`Preflight graph validation failed for ${opts.graph}`);
+  }
+
+  await ensureStressMetadata(opts, state);
   await refreshLiveIds(opts, state, "startup");
 
   await Promise.all(Array.from({ length: opts.concurrency }, (_, index) => worker(opts, state, index + 1)));
+
+  const validation = await runCli(opts, graphValidateArgs(opts), { op: "final-graph-validate" });
+  if (!validation.ok) {
+    throw new Error(`Final graph validation failed for ${opts.graph}`);
+  }
 
   logEvent(opts, {
     event: "stop",
