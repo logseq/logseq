@@ -270,7 +270,8 @@
       :else
       (do
         (sync-util/require-auth-token! {:repo repo :field :auth-token})
-        (p/let [_ (sync-crypt/ensure-user-rsa-keys! {:ensure-server? true})
+        (p/let [_ (when graph-e2ee?
+                    (sync-crypt/ensure-user-rsa-keys! {:ensure-server? true}))
                 body (coerce-http-request :graphs/create
                                           {:graph-name graph-name
                                            :schema-version schema-version
