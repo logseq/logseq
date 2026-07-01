@@ -737,7 +737,10 @@
            request-asset "asset-1"
            request-email "user@example.com"
            request-opts {:force? true}]
-       (with-redefs [db-sync/status (fn [repo]
+       (with-redefs [db-worker/db-sync-dbs-open? (fn [repo]
+                                                   (swap! calls conj [:db-sync-dbs-open? repo])
+                                                   true)
+                     db-sync/status (fn [repo]
                                       (swap! calls conj [:status repo])
                                       status-result)
                      db-sync/start! (fn [repo]

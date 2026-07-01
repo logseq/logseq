@@ -426,6 +426,11 @@
                                                        (seq missing-block-uuids)
                                                        (assoc :missing-block-uuids missing-block-uuids))
                                                      e)))))
+                _ (when (and tx-id (not applied-entry?))
+                    (throw (ex-info "tx entry was not applied"
+                                    {:type :db-sync/tx-entry-not-applied
+                                     :successful-tx-ids successful-tx-ids
+                                     :failed-tx-id tx-id})))
                 next-successful-tx-ids (cond-> successful-tx-ids
                                          tx-id (conj tx-id))]
             (recur (next remaining)
