@@ -1,6 +1,7 @@
 (ns frontend.worker.sync.upload-test
   (:require [cljs.test :refer [async deftest is]]
             [frontend.worker.sync.crypt :as sync-crypt]
+            [frontend.worker.sync.util :as sync-util]
             [frontend.worker.sync.upload :as sync-upload]
             [promesa.core :as p]
             [clojure.string :as string]))
@@ -115,6 +116,49 @@
                                  [:preflight true]
                                  [:create-aux "repo-1" {:graph-e2ee? true
                                                         :graph-ready-for-use? false}]]
+                                @calls*))))
+               (p/catch (fn [error]
+                          (is false (str "unexpected error: " error))))
+               (p/finally done)))))
+
+(deftest create-remote-graph-aux-skips-rsa-keys-for-non-e2ee-graph-test
+  (async done
+         (let [calls* (atom [])]
+           (-> (p/with-redefs [sync-crypt/<preflight-upload-e2ee! (fn [_repo graph-e2ee?]
+                                                                    (swap! calls* conj [:preflight graph-e2ee?])
+                                                                    (p/resolved nil))
+                               sync-upload/list-remote-graphs! (fn []
+                                                                  (swap! calls* conj [:list-remote-graphs])
+                                                                  (p/resolved []))
+                               sync-upload/http-base-url (fn [] "https://sync.example.test")
+                               sync-util/require-auth-token! (fn [context]
+                                                               (swap! calls* conj [:require-auth context]))
+                               sync-crypt/ensure-user-rsa-keys! (fn [opts]
+                                                                  (swap! calls* conj [:ensure-rsa opts])
+                                                                  (p/resolved nil))
+                               sync-util/fetch-json (fn [url request _opts]
+                                                      (swap! calls* conj [:fetch url request])
+                                                      (p/resolved {:graph-id "new-graph-id"
+                                                                   :graph-e2ee? false}))
+                               sync-upload/persist-upload-graph-identity! (fn [repo graph-id graph-e2ee?]
+                                                                            (swap! calls* conj [:persist repo graph-id graph-e2ee?])
+                                                                            {:graph-id graph-id
+                                                                             :graph-e2ee? graph-e2ee?})]
+                 (sync-upload/create-remote-graph! "repo-1" {:graph-e2ee? false
+                                                              :graph-ready-for-use? false}))
+               (p/then (fn [identity]
+                         (is (= {:graph-id "new-graph-id"
+                                 :graph-e2ee? false}
+                                identity))
+                         (is (not-any? #(= :ensure-rsa (first %)) @calls*))
+                         (is (= [[:list-remote-graphs]
+                                 [:preflight false]
+                                 [:require-auth {:repo "repo-1" :field :auth-token}]
+                                 [:fetch "https://sync.example.test/graphs"
+                                  {:method "POST"
+                                   :headers {"content-type" "application/json"}
+                                   :body "{\"graph-name\":\"repo-1\",\"schema-version\":null,\"graph-e2ee?\":false,\"graph-ready-for-use?\":false}"}]
+                                 [:persist "repo-1" "new-graph-id" false]]
                                 @calls*))))
                (p/catch (fn [error]
                           (is false (str "unexpected error: " error))))
