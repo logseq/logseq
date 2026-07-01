@@ -445,6 +445,26 @@ let pull_tag_by_name config repo name selector =
       (Edn_util.vector_t
          [ query_value (tag_query selector); Edn_util.string (normalized_lookup_name name) ])
 
+let list_tags config repo =
+  Transport.thread_api_cli_list_tags config ~repo ~options:(Edn_util.map_t [])
+
+let tag_name_matches name entity =
+  let expected = normalized_lookup_name name in
+  let matches value = String.equal (normalized_lookup_name value) expected in
+  match
+    (Edn_util.get_string entity "block/title", Edn_util.get_string entity "block/name")
+  with
+  | Some title, _ when matches title -> true
+  | _, Some name when matches name -> true
+  | _ -> false
+
+let find_tag_by_name config repo name =
+  let open Cli_effect in
+  bind (list_tags config repo) (fun value ->
+      match Edn_util.as_seq value with
+      | Some tags -> pure (List.find_opt (tag_name_matches name) tags)
+      | None -> pure None)
+
 let pull_property_by_name config repo name selector =
   Transport.thread_api_q config ~repo
     ~query:
@@ -631,19 +651,21 @@ let tag_entity value =
 
 let resolve_tag_entity invoke_config repo tag =
   let open Cli_effect in
-  let pulled =
-    match tag with
-    | Selector.Tag_name name ->
-        pull_tag_by_name invoke_config repo name tag_selector
-    | _ -> pull_entity invoke_config repo tag_selector (lookup_of_tag tag)
-  in
-  bind pulled (fun entity ->
-      match first_entity entity with
-      | Some entity
-        when Option.is_some (id_of_entity entity) && tag_entity entity ->
-          pure (Entity.of_value entity)
-      | Some _ -> failwith "tag not found"
-      | None -> failwith "tag not found")
+  match tag with
+  | Selector.Tag_name name ->
+      bind (find_tag_by_name invoke_config repo name) (function
+        | Some entity when Option.is_some (id_of_entity entity) ->
+            pure (Entity.of_value entity)
+        | _ -> failwith "tag not found")
+  | _ ->
+      bind (pull_entity invoke_config repo tag_selector (lookup_of_tag tag))
+        (fun entity ->
+          match first_entity entity with
+          | Some entity
+            when Option.is_some (id_of_entity entity) && tag_entity entity ->
+              pure (Entity.of_value entity)
+          | Some _ -> failwith "tag not found"
+          | None -> failwith "tag not found")
 
 let resolve_tags config repo tags =
   match tags with
@@ -727,6 +749,24 @@ let resolve_created_ids config repo blocks insert_result =
                         "unable to resolve created ids")))
   in
   loop [] uuids
+
+let target_not_found_error () =
+  Error.make (Error.Target_not_found) "target block not found"
+
+let resolve_created_ids_or_target_error config repo target_uuid blocks
+    insert_result =
+  let open Cli_effect in
+  bind (resolve_created_ids config repo blocks insert_result) (function
+    | Ok ids -> pure (Ok ids)
+    | Error err when err.Error.code = Error.Add_id_resolution_failed ->
+        bind
+          (pull_entity config repo
+             (vector [ kw "db/id"; kw "block/uuid" ])
+             (vector [ kw "block/uuid"; Edn_util.uuid target_uuid ]))
+          (fun target ->
+            if Option.is_some (id_of_entity target) then pure (Error err)
+            else pure (Error (target_not_found_error ())))
+    | Error err -> pure (Error err))
 
 let property_key_to_value = function
   | Property.Key_ident ident -> Edn_util.any ident
@@ -873,7 +913,8 @@ let execute_add_block action config mode =
                                  metadata_ops)
                             (fun _metadata_result ->
                               bind
-                                (resolve_created_ids invoke_config action.repo
+                                (resolve_created_ids_or_target_error
+                                   invoke_config action.repo target_uuid
                                    all_blocks insert_result) (function
                                 | Error err ->
                                     pure
