@@ -161,7 +161,7 @@ test("builds local db-sync server start command from sync base", () => {
     "cli-e2e/scripts/db_sync_server.py",
     "start",
     "--repo-root",
-    "/Users/tiensonqin/Codes/projects/logseq",
+    process.cwd(),
     "--pid-file",
     "/tmp/stress/server.pid",
     "--log-file",
@@ -177,6 +177,21 @@ test("builds local db-sync server start command from sync base", () => {
     "--auth-path",
     "/tmp/auth.json",
   ]);
+});
+
+test("parses isolated local db-sync server paths", () => {
+  const opts = parseArgs([
+    "--sync-server-pid-file",
+    "tmp/stress/server.pid",
+    "--sync-server-log-file",
+    "tmp/stress/server.log",
+    "--sync-server-data-dir",
+    "tmp/stress/server-data",
+  ]);
+
+  assert.equal(opts.syncServerPidFile.endsWith("/tmp/stress/server.pid"), true);
+  assert.equal(opts.syncServerLogFile.endsWith("/tmp/stress/server.log"), true);
+  assert.equal(opts.syncServerDataDir.endsWith("/tmp/stress/server-data"), true);
 });
 
 test("stress config includes runtime auth to avoid refresh during sync start", () => {

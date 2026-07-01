@@ -916,17 +916,26 @@
 
     :else (some-> (d/entity db e) :block/uuid)))
 
+(defn- tx-item-created-block-uuid-entry
+  [item]
+  (let [vector-add? (and (vector? item)
+                         (= :db/add (first item)))
+        datom-add? (and (not (vector? item))
+                        (:added item))]
+    (when (or vector-add? datom-add?)
+      (let [e (if vector-add? (second item) (:e item))
+            a (if vector-add? (nth item 2 nil) (:a item))
+            v (if vector-add? (nth item 3 nil) (:v item))]
+        (when (and (= :block/uuid a)
+                   (or (number? e)
+                       (string? e))
+                   (uuid? v))
+          [e v])))))
+
 (defn- tx-temp-id->uuid
   [tx-data]
   (->> tx-data
-       (keep (fn [item]
-               (when (and (vector? item)
-                          (= :db/add (first item))
-                          (= :block/uuid (nth item 2 nil))
-                          (or (number? (second item))
-                              (string? (second item)))
-                          (uuid? (nth item 3 nil)))
-                 [(second item) (nth item 3)])))
+       (keep tx-item-created-block-uuid-entry)
        (into {})))
 
 (defn- local-conflict-block-uuids
@@ -1277,10 +1286,12 @@
     :create-page
     (let [[title opts] args
           page-uuid (:uuid opts)
-          existing-page (when (uuid? page-uuid)
-                          (d/entity @conn [:block/uuid page-uuid]))]
-      (when-not (and existing-page
-                     (not (ldb/recycled? existing-page)))
+          existing-page (or (when (uuid? page-uuid)
+                              (d/entity @conn [:block/uuid page-uuid]))
+                            (ldb/get-page @conn title))]
+      (if (and existing-page
+               (not (ldb/recycled? existing-page)))
+        [(:block/title existing-page) (:block/uuid existing-page)]
         (outliner-page/create! conn title opts)))
 
     :delete-page
@@ -1335,8 +1346,6 @@
     (let [[tx-data tx-meta] args]
       (when-let [tx-data (seq tx-data)]
         (ldb/transact! conn tx-data tx-meta)))))
-
-(declare handle-local-tx!)
 
 (defn- rebase-local-op!
   [_repo conn local-tx rebase-db-before]
@@ -1533,6 +1542,12 @@
       (f))
     (f)))
 
+(defn- <retry-apply-remote-txs!
+  [repo client remote-txs snapshot-retry-count]
+  (p/then (p/resolved nil)
+          (fn [_]
+            (apply-remote-txs! repo client remote-txs snapshot-retry-count))))
+
 (defn- apply-remote-txs-after-server-repair!
   [{:keys [repo client has-local-changes? remote-txs local-txs apply-context remote-tx-data
            snapshot-retry-count]}]
@@ -1554,13 +1569,14 @@
                                  (log/warn :db-sync/retry-remote-apply-after-local-tx-snapshot-drift
                                            retry-payload)
                                  {::retry-result
-                                  (apply-remote-txs! repo client remote-txs (inc snapshot-retry-count))})
+                                  (<retry-apply-remote-txs! repo client remote-txs (inc snapshot-retry-count))})
                                (do
                                  (log/warn :db-sync/delay-remote-apply-after-local-tx-snapshot-drift
                                            retry-payload)
                                  {::retry-result
-                                  (p/let [_ (p/delay remote-apply-snapshot-retry-delay-ms)]
-                                    (apply-remote-txs! repo client remote-txs 0))})))
+                                  (p/then (p/delay remote-apply-snapshot-retry-delay-ms)
+                                          (fn [_]
+                                            (apply-remote-txs! repo client remote-txs 0)))})))
                            (do
                              (log/error :db-sync/apply-remote-txs-failed
                                         {:repo repo
@@ -1594,11 +1610,14 @@
    (apply-remote-txs! repo client remote-txs 0))
   ([repo client remote-txs snapshot-retry-count]
    (if-let [conn (worker-state/get-datascript-conn repo)]
-     (let [local-txs (pending-txs repo)
-           has-local-changes? (boolean (seq local-txs))
-           remote-tx-data* (mapcat :tx-data remote-txs)
-           temp-tx-meta {:rtc-tx? true
-                         :gen-undo-ops? false}
+          (let [local-txs (pending-txs repo)
+                has-local-changes? (boolean (seq local-txs))
+                remote-tx-data* (mapcat :tx-data remote-txs)
+                remote-deleted-block-uuids (remote-txs-retract-entity-block-uuids remote-txs)
+                remote-created-block-uuids (set/difference (remote-txs-created-block-uuids remote-txs)
+                                                           remote-deleted-block-uuids)
+                temp-tx-meta {:rtc-tx? true
+                              :gen-undo-ops? false}
            apply-context {:repo repo
                           :conn conn
                           :local-txs local-txs
@@ -1612,13 +1631,15 @@
                        :apply-context apply-context
                        :remote-tx-data remote-tx-data*
                        :snapshot-retry-count snapshot-retry-count}
-           missing-block-uuids (distinct
-                                (concat
-                                 (remote-txs-missing-block-uuids @conn remote-txs)
-                                 (remote-txs-missing-block-uuids-after-local-reversal
-                                  conn local-txs remote-txs)))
-           invalid-repair-block-uuids (when has-local-changes?
-                                        (remote-txs-invalid-repair-block-uuids @conn remote-txs))]
+                missing-block-uuids (->> (concat
+                                           (remote-txs-missing-block-uuids @conn remote-txs)
+                                           (remote-txs-missing-block-uuids-after-local-reversal
+                                            conn local-txs remote-txs))
+                                         (remove (set remote-created-block-uuids))
+                                         distinct
+                                         vec)
+                invalid-repair-block-uuids (when has-local-changes?
+                                             (remote-txs-invalid-repair-block-uuids @conn remote-txs))]
        (if has-local-changes?
          (if (or (seq missing-block-uuids)
                  (seq invalid-repair-block-uuids))
