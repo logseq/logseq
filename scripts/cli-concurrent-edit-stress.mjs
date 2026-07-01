@@ -12,7 +12,7 @@ const transit = require(require.resolve("transit-js", { paths: [resolve(repoRoot
 const transitWriter = transit.writer("json");
 const transitReader = transit.reader("json");
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const opts = {
     graph: "pi-memory",
     page: "CLI Concurrent Stress",
@@ -73,6 +73,9 @@ function parseArgs(argv) {
         break;
       case "--config":
         opts.config = resolve(next());
+        break;
+      case "--root-dir":
+        opts.rootDir = resolve(next());
         break;
       case "--sync-base":
         opts.syncBase = next();
@@ -184,6 +187,7 @@ Options:
   --journal-start DATE  First journal date, YYYY-MM-DD. Default: today
   --today-date DATE     Override today's journal date, YYYY-MM-DD
   --config PATH         Dedicated CLI config path under tmp/
+  --root-dir PATH       Dedicated root dir for the seed CLI client
   --sync-base URL       Local db-sync base URL. Default: http://127.0.0.1:18080
   --sync                Start db-sync client after verifying local /health
   --clients N           Independent local clients synced to one remote graph. Default: 1
@@ -285,7 +289,8 @@ function expectedCliRace(parsed, context = {}) {
     expectedRaceErrorCodes.has(parsed?.error?.code) ||
     (context.op === "property-delete-recreate" &&
       context.phase === "delete" &&
-      parsed?.error?.code === "property-not-found")
+      parsed?.error?.code === "property-not-found") ||
+    (context.op === "tag-delete-recreate" && context.phase === "delete" && parsed?.error?.code === "tag-not-found")
   );
 }
 
@@ -310,12 +315,13 @@ function expectedHttpRace(parsed, context = {}) {
 }
 
 export function classifyHttpResult(result, parsed, context = {}) {
-  const ok = result.ok;
-  const expectedRace = !ok && expectedHttpRace(parsed, context);
+  const noOp = result.ok && context.requireTruthyResult && !parsed?.result;
+  const ok = result.ok && !noOp;
+  const expectedRace = !ok && !noOp && expectedHttpRace(parsed, context);
   return {
     ok,
     level: ok || expectedRace ? "info" : "error",
-    outcome: ok ? "ok" : expectedRace ? "race-conflict" : "failed",
+    outcome: ok ? "ok" : expectedRace ? "race-conflict" : noOp ? "no-op" : "failed",
     expectedRace,
   };
 }
@@ -382,7 +388,8 @@ function runProcess(command, args, opts) {
 }
 
 async function runCli(opts, args, context = {}) {
-  const result = await runProcess(process.env.LOGSEQ_BIN || "logseq", args, opts);
+  const command = cliCommand(process.env.LOGSEQ_BIN);
+  const result = await runProcess(command.command, [...command.args, ...args], opts);
   let parsed = null;
   if (result.stdout) {
     try {
@@ -414,6 +421,14 @@ async function runCli(opts, args, context = {}) {
   }
 
   return { ...classification, parsed, result };
+}
+
+export function cliCommand(bin = null) {
+  const command = bin || "logseq";
+  if (command.endsWith(".js")) {
+    return { command: process.execPath, args: [command] };
+  }
+  return { command, args: [] };
 }
 
 function cliFetchFailed(response) {
@@ -1418,14 +1433,14 @@ async function applyRawDeleteRestorePage(opts, state, context) {
     state,
     [[kw("delete-page"), [uuid(pageUuid), tmap()]]],
     tmap(),
-    { ...context, page, pageUuid, phase: "delete" },
+    { ...context, page, pageUuid, phase: "delete", requireTruthyResult: true },
   );
   await applyOutlinerOps(
     opts,
     state,
     [[kw("restore-recycled"), [uuid(pageUuid)]]],
     tmap(),
-    { ...context, page, pageUuid, phase: "restore" },
+    { ...context, page, pageUuid, phase: "restore", requireTruthyResult: true },
   );
   await refreshLiveIds(opts, state, "http-delete-restore-page");
 }
@@ -1436,7 +1451,7 @@ async function applyRawRecycleDeletePage(opts, state, context, title) {
     state,
     [[kw("create-page"), [title, tmap()]]],
     tmap(),
-    { ...context, page: title, phase: "create" },
+    { ...context, page: title, phase: "create", requireTruthyResult: true },
   );
   const pageUuid = await findPageUuid(opts, title, context);
   if (!pageUuid) {
@@ -1447,14 +1462,14 @@ async function applyRawRecycleDeletePage(opts, state, context, title) {
     state,
     [[kw("delete-page"), [uuid(pageUuid), tmap()]]],
     tmap(),
-    { ...context, page: title, pageUuid, phase: "delete" },
+    { ...context, page: title, pageUuid, phase: "delete", requireTruthyResult: true },
   );
   await applyOutlinerOps(
     opts,
     state,
     [[kw("recycle-delete-permanently"), [uuid(pageUuid)]]],
     tmap(),
-    { ...context, page: title, pageUuid, phase: "permanent-delete" },
+    { ...context, page: title, pageUuid, phase: "permanent-delete", requireTruthyResult: true },
   );
 }
 
@@ -1703,7 +1718,8 @@ async function waitForSyncSettled(opts, context = {}, required = false) {
       client: opts.clientName,
     });
     last = status;
-    if (isIdleSyncStatus(status)) {
+    const settled = required ? isSettledSyncStatus(status) : isIdleSyncStatus(status);
+    if (settled) {
       return true;
     }
     await delay(opts.settleMs);

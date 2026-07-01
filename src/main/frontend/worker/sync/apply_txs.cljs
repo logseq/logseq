@@ -52,7 +52,11 @@
 
 (declare enqueue-asset-task!
          fix-tx!
-         resolve-temp-id)
+         resolve-temp-id
+         reverse-local-txs!
+         rebase-local-txs!
+         repair-applied-txs!
+         handle-local-tx!)
 
 (defn- current-client [repo]
   (sync-presence/current-client worker-state/*db-sync-client repo))
@@ -316,6 +320,57 @@
        distinct
        vec))
 
+(defn- block-uuid-lookup-ref-value
+  [v]
+  (when (and (vector? v)
+             (= :block/uuid (first v))
+             (uuid? (second v)))
+    (second v)))
+
+(defn- tx-item-ref-block-uuids
+  [item]
+  (when (vector? item)
+    (keep block-uuid-lookup-ref-value
+          [(second item) (nth item 3 nil)])))
+
+(defn- tx-item-retract-entity-block-uuid
+  [item]
+  (when (and (vector? item)
+             (contains? #{:db/retractEntity :db.fn/retractEntity} (first item)))
+    (block-uuid-lookup-ref-value (second item))))
+
+(defn- remote-txs-retract-entity-block-uuids
+  [remote-txs]
+  (->> remote-txs
+       (mapcat :tx-data)
+       (keep tx-item-retract-entity-block-uuid)
+       set))
+
+(defn- tx-item-missing-deleted-block-ref?
+  [db deleted-block-uuids item]
+  (some (fn [block-uuid]
+          (and (contains? deleted-block-uuids block-uuid)
+               (nil? (d/entity db [:block/uuid block-uuid]))))
+        (tx-item-ref-block-uuids item)))
+
+(defn- tx-item-entity-block-uuid
+  [db item]
+  (when (vector? item)
+    (tx-item-block-uuid db (second item))))
+
+(defn- drop-stale-deleted-block-ref-ops
+  [db deleted-block-uuids tx-data]
+  (let [stale-entity-block-uuids (->> tx-data
+                                      (keep (fn [item]
+                                              (when (tx-item-missing-deleted-block-ref?
+                                                     db deleted-block-uuids item)
+                                                (tx-item-entity-block-uuid db item))))
+                                      set)]
+    (remove (fn [item]
+              (contains? stale-entity-block-uuids
+                         (tx-item-entity-block-uuid db item)))
+            tx-data)))
+
 (defn- repair-block-uuids-in-tx-data
   [db tx-data]
   (->> tx-data
@@ -473,6 +528,65 @@
         (client-op/adjust-pending-local-tx-count! repo (- pending-to-remove)))
       (when-let [client (current-client repo)]
         (broadcast-rtc-state! client)))))
+
+(defn- local-tx-has-replay-data?
+  [local-tx]
+  (or (seq (:tx local-tx))
+      (seq (:reversed-tx local-tx))
+      (seq (:forward-outliner-ops local-tx))
+      (seq (:inverse-outliner-ops local-tx))))
+
+(defn rollback-and-mark-failed-txs!
+  [repo tx-ids]
+  (let [rejected-tx-ids (->> tx-ids (filter uuid?) set)]
+    (when (seq rejected-tx-ids)
+      (when-let [conn (worker-state/get-datascript-conn repo)]
+        (let [pending (pending-txs repo)
+              rejected-and-after (->> pending
+                                      (drop-while #(not (contains? rejected-tx-ids (:tx-id %))))
+                                      vec)]
+          (when (seq rejected-and-after)
+            (let [rebase-db-before @conn
+                  rebase-txs (->> rejected-and-after
+                                  (remove #(contains? rejected-tx-ids (:tx-id %)))
+                                  vec)
+                  *rebase-tx-reports (atom [])
+                  *rebase-results (atom [])]
+              (try
+                (let [tx-report (ldb/batch-transact-with-temp-conn!
+                                 conn
+                                 {:rtc-tx? true
+                                  :tx-reject-rollback? true}
+                                 (fn [conn]
+                                   (reverse-local-txs! conn rejected-and-after)
+                                   (reset! *rebase-results
+                                           (rebase-local-txs! repo conn rebase-txs rebase-db-before)))
+                                 {:listen-db
+                                  (fn [{:keys [tx-meta tx-data] :as tx-report}]
+                                    (when (and (= :rebase (:outliner-op tx-meta))
+                                               (:db-sync/rebased-local? tx-meta)
+                                               (seq tx-data))
+                                      (swap! *rebase-tx-reports conj tx-report)))})]
+                  (doseq [tx-report @*rebase-tx-reports]
+                    (handle-local-tx! repo tx-report))
+                  (repair-applied-txs! conn tx-report)
+                  (let [replay-tx-ids (->> rebase-txs
+                                           (filter local-tx-has-replay-data?)
+                                           (map :tx-id)
+                                           set)
+                        stale-tx-ids (->> @*rebase-results
+                                          (filter (fn [{:keys [status]}]
+                                                    (contains? #{:failed :no-op} status)))
+                                          (keep :tx-id)
+                                          (filter replay-tx-ids)
+                                          distinct
+                                          vec)]
+                    (mark-pending-txs-false! repo stale-tx-ids)))
+                (finally
+                  (reset! *rebase-tx-reports nil)
+                  (reset! *rebase-results nil)
+                  (worker-undo-redo/clear-history! repo)))))))
+      (mark-failed-txs! repo tx-ids))))
 
 (defn clear-pending-txs!
   [repo]
@@ -764,9 +878,11 @@
          results []]
     (let [db @conn]
       (if-let [remote-tx (first remaining)]
-        (let [tx-data (some->> (:tx-data remote-tx)
+        (let [deleted-block-uuids (remote-txs-retract-entity-block-uuids remaining)
+              tx-data (some->> (:tx-data remote-tx)
                                (map (partial resolve-temp-id db))
                                (tx-sanitize/sanitize-tx db)
+                               (drop-stale-deleted-block-ref-ops db deleted-block-uuids)
                                seq)
               tx-meta (apply-tx-meta remote-tx)
               invalid-retry? (and allow-invalid-repair?
@@ -814,6 +930,18 @@
                    (throw e)))))))
         (keep identity)
         vec)))
+
+(defn- remote-txs-missing-block-uuids-after-local-reversal
+  [conn local-txs remote-txs]
+  (when (seq local-txs)
+    (let [deleted-block-uuids (remote-txs-retract-entity-block-uuids remote-txs)
+          temp-conn (ldb/temp-conn-from-db @conn)]
+      (try
+        (reverse-local-txs! temp-conn local-txs)
+        (remove deleted-block-uuids
+                (remote-txs-missing-block-uuids @temp-conn remote-txs))
+        (finally
+          (reset! temp-conn nil))))))
 
 (defn- invalid-rebase-op!
   [op data]
@@ -1178,7 +1306,7 @@
       (when (seq conflicts)
         (client-op/add-sync-conflicts! repo conflicts)
         (broadcast-sync-conflicts! repo conflicts))
-      (let [tx-report (ldb/batch-transact!
+      (let [tx-report (ldb/batch-transact-with-temp-conn!
                        conn
                        tx-meta
                        (fn [conn]
@@ -1332,7 +1460,11 @@
                       :local-txs local-txs
                       :apply-context apply-context
                       :remote-tx-data remote-tx-data*}
-          missing-block-uuids (remote-txs-missing-block-uuids @conn remote-txs)
+          missing-block-uuids (distinct
+                               (concat
+                                (remote-txs-missing-block-uuids @conn remote-txs)
+                                (remote-txs-missing-block-uuids-after-local-reversal
+                                 conn local-txs remote-txs)))
           invalid-repair-block-uuids (when has-local-changes?
                                        (remote-txs-invalid-repair-block-uuids @conn remote-txs))]
       (if has-local-changes?

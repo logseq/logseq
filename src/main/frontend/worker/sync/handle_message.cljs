@@ -31,6 +31,10 @@
     :get-local-tx client-op/get-local-tx
     :get-local-checksum client-op/get-local-checksum
     :get-graph-uuid client-op/get-graph-uuid
+    :recompute-local-checksum (fn [repo]
+                                (when-let [conn (worker-state/get-datascript-conn repo)]
+                                  (sync-checksum/recompute-checksum @conn)))
+    :update-local-checksum client-op/update-local-checksum
     :latest-remote-tx @sync-apply/*repo->latest-remote-tx
     :latest-remote-checksum @sync-apply/*repo->latest-remote-checksum}
    repo))
@@ -225,9 +229,9 @@
             (if recoverable-missing?
               (sync-apply/enqueue-upload-repair! repo missing-block-uuids)
               (when failed-tx-id
-                (sync-apply/mark-failed-txs! repo [failed-tx-id]))))
+                (sync-apply/rollback-and-mark-failed-txs! repo [failed-tx-id]))))
           ;; Backward compatibility for older servers without per-tx reject metadata.
-          (sync-apply/mark-failed-txs! repo inflight))
+          (sync-apply/rollback-and-mark-failed-txs! repo inflight))
         (reset! (:inflight client) [])
         (broadcast-rtc-state! client)
         (sync-log-state/rtc-log :rtc.log/tx-rejected rejected-data)

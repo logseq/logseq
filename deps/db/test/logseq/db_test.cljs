@@ -134,6 +134,36 @@
                                     :block/tags :logseq.class/Property}])
          (ldb/transact! temp-conn [[:db/retract :logseq.class/Task :block/tags :logseq.class/Property]]))))))
 
+(deftest batch-transact-with-temp-conn-preserves-retracts-test
+  (testing "temp conn batch replays retractions instead of treating every datom as an add"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "page 1"}
+                                     :blocks [{:block/title "old"}]}]})
+          block (db-test/find-block-by-content @conn "old")
+          block-id (:db/id block)]
+      (ldb/batch-transact-with-temp-conn!
+       conn
+       {}
+       (fn [temp-conn]
+         (ldb/transact! temp-conn [[:db/retract [:block/uuid (:block/uuid block)] :block/title "old"]])
+         (ldb/transact! temp-conn [[:db/add [:block/uuid (:block/uuid block)] :block/title "new"]])))
+      (is (= "new" (:block/title (d/entity @conn block-id)))))))
+
+(deftest batch-transact-with-temp-conn-preserves-cardinality-one-schema-test
+  (testing "temp conn emits replacement retractions for cardinality-one attrs"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "page 1"}
+                                     :blocks [{:block/title "old"}]}]})
+          block (db-test/find-block-by-content @conn "old")
+          block-id (:db/id block)]
+      (ldb/transact! conn [[:db/add block-id :block/order "a0"]])
+      (ldb/batch-transact-with-temp-conn!
+       conn
+       {}
+       (fn [temp-conn]
+         (ldb/transact! temp-conn [[:db/add [:block/uuid (:block/uuid block)] :block/order "a1"]])))
+      (is (= "a1" (:block/order (d/entity @conn block-id)))))))
+
 (deftest test-batch-transact-clears-stale-tx-tail-before-next-store-tail
   (let [block-uuid #uuid "00000001-2026-0421-0000-000000000000"
         schema  {:block/uuid {:db/unique :db.unique/identity}}

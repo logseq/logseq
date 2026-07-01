@@ -10,12 +10,14 @@ import {
   classifyCliResult,
   clientRuntimeOptions,
   checksumDiagnosticsMatch,
+  cliCommand,
   graphValidateArgs,
   isIdleSyncStatus,
   isSettledSyncStatus,
   mutableStressPageNames,
   operationNames,
   operationWeights,
+  parseArgs,
   stressPageNames,
   stressConfigText,
   syncDownloadArgs,
@@ -75,6 +77,20 @@ test("classifies concurrent volatile property delete as a race outcome", () => {
   );
 });
 
+test("classifies concurrent volatile tag delete as a race outcome", () => {
+  assert.equal(
+    classifyCliResult(
+      { code: 1 },
+      {
+        status: "error",
+        error: { code: "tag-not-found", message: "tag not found" },
+      },
+      { op: "tag-delete-recreate", phase: "delete" },
+    ).outcome,
+    "race-conflict",
+  );
+});
+
 test("classifies stale raw outliner block property failures as race outcomes", () => {
   assert.equal(
     classifyHttpResult(
@@ -88,6 +104,22 @@ test("classifies stale raw outliner block property failures as race outcomes", (
       { id: 525, op: "http-set-block-property" },
     ).outcome,
     "race-conflict",
+  );
+});
+
+test("classifies required outliner no-op results as failures", () => {
+  assert.deepEqual(
+    classifyHttpResult(
+      { ok: true, status: 200 },
+      { result: null },
+      { op: "http-recycle-delete-page", phase: "permanent-delete", requireTruthyResult: true },
+    ),
+    {
+      ok: false,
+      level: "error",
+      outcome: "no-op",
+      expectedRace: false,
+    },
   );
 });
 
@@ -221,6 +253,23 @@ test("builds isolated runtime options for additional sync clients", () => {
   assert.equal(seed.env.LOGSEQ_CLI_ROOT_DIR, "/tmp/stress/root");
   assert.equal(replica.env.LOGSEQ_CLI_ROOT_DIR, "/tmp/stress/clients/client-2/root");
   assert.equal(replica.env.HOME, "/tmp/stress/clients/client-2/home");
+});
+
+test("parses isolated root dir for the seed client", () => {
+  const opts = parseArgs(["--root-dir", "/tmp/stress/root"]);
+
+  assert.equal(opts.rootDir, "/tmp/stress/root");
+});
+
+test("runs staged JavaScript CLI bundles through node", () => {
+  assert.deepEqual(cliCommand("/tmp/logseq-cli.js"), {
+    command: process.execPath,
+    args: ["/tmp/logseq-cli.js"],
+  });
+  assert.deepEqual(cliCommand("/usr/local/bin/logseq"), {
+    command: "/usr/local/bin/logseq",
+    args: [],
+  });
 });
 
 test("builds sync download command for replica clients", () => {

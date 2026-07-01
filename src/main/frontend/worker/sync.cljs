@@ -45,6 +45,10 @@
     :get-local-tx client-op/get-local-tx
     :get-local-checksum client-op/get-local-checksum
     :get-graph-uuid client-op/get-graph-uuid
+    :recompute-local-checksum (fn [repo]
+                                (when-let [conn (worker-state/get-datascript-conn repo)]
+                                  (sync-checksum/recompute-checksum @conn)))
+    :update-local-checksum client-op/update-local-checksum
     :latest-remote-tx @*repo->latest-remote-tx
     :latest-remote-checksum @*repo->latest-remote-checksum}
    repo))
@@ -162,6 +166,7 @@
                  (p/catch (fn [_] nil))
                  (p/then (fn [_] (task)))
                  (p/catch (fn [error]
+                            (sync-util/set-last-sync-error! client error)
                             (log/error :db-sync/ws-handle-message-failed
                                        {:repo (:repo client)
                                         :error error}))))))
