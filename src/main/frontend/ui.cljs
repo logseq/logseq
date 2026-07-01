@@ -16,6 +16,7 @@
             [frontend.date :as date]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
@@ -517,6 +518,15 @@
       (handler)
       #(.removeEventListener js/window.visualViewport "resize" handler))))
 
+(defn- plain-tab-key?
+  [e]
+  (and (or (= "Tab" (gobj/get e "key"))
+           (= 9 (gobj/get e "keyCode")))
+       (not (gobj/get e "shiftKey"))
+       (not (gobj/get e "ctrlKey"))
+       (not (gobj/get e "metaKey"))
+       (not (gobj/get e "altKey"))))
+
 (hsx/defc auto-complete
   [matched
    {:keys [on-chosen
@@ -534,6 +544,15 @@
                         :opts opts
                         ::current-idx *current-idx}
         _ (shortcut/use-shortcut-handler! :shortcut.handler/auto-complete shortcut-state)
+        _ (hooks/use-effect!
+           (fn []
+             (let [handler (fn [e]
+                             (when (and (:complete-on-tab? opts)
+                                        (plain-tab-key? e))
+                               (ui-handler/auto-complete-complete shortcut-state e)))]
+               (.addEventListener js/window "keydown" handler true)
+               #(.removeEventListener js/window "keydown" handler true)))
+           [opts matched current-idx])
         *groups (atom #{})
         render-f (fn [matched]
                    (for [[idx item] matched]
