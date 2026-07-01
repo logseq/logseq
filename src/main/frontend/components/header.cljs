@@ -63,6 +63,23 @@
               graph))
           (state/get-repos))))
 
+(defn- current-remote-rtc-graph
+  [current-repo rtc-graphs]
+  (some #(when (= current-repo (:url %)) %) rtc-graphs))
+
+(defn- rtc-indicator-visible?
+  [{:keys [current-repo rtc-graphs db-rtc-uuid rtc-state logged-in? rtc-group?]}]
+  (let [remote-graph (current-remote-rtc-graph current-repo rtc-graphs)
+        remote-graph-uuid (some-> (:GraphUUID remote-graph) str)
+        state-graph-uuid (some-> (:graph-uuid rtc-state) str)]
+    (and current-repo
+         logged-in?
+         rtc-group?
+         remote-graph
+         (or db-rtc-uuid
+             (and (seq state-graph-uuid)
+                  (= state-graph-uuid remote-graph-uuid))))))
+
 (defn local-graph-sync-button
   [graph]
   (ui/tooltip
@@ -397,6 +414,8 @@
   [{:keys [current-repo default-home new-block-mode]}]
   (let [electron-mac? (and util/mac? (util/electron?))
         rtc-graphs (state/use-sub :rtc/graphs)
+        rtc-state (state/use-sub :rtc/state)
+        db-rtc-uuid (ldb/get-graph-rtc-uuid (db/get-db))
         default-home-page (state/use-sub-default-home-page)
         left-menu (left-menu-button {:on-click (fn []
                                                  (state/set-left-sidebar-open!
@@ -444,11 +463,13 @@
       [:div.flex.flex-1
        (block-breadcrumb (state/get-current-page))]
       [:div.flex.items-center
-       (when (and current-repo
-                  (ldb/get-graph-rtc-uuid (db/get-db))
-                  (user-handler/logged-in?)
-                  (user-handler/rtc-group?)
-                  (some #(= current-repo (:url %)) rtc-graphs))
+       (when (rtc-indicator-visible?
+              {:current-repo current-repo
+               :rtc-graphs rtc-graphs
+               :db-rtc-uuid db-rtc-uuid
+               :rtc-state rtc-state
+               :logged-in? (user-handler/logged-in?)
+               :rtc-group? (user-handler/rtc-group?)})
          [:<>
           (recent-slider)
           ^{:key (str "collab-" current-repo)}

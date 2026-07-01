@@ -114,7 +114,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Fetch CLI pnpm deps
-        run: pnpm --dir cli install --frozen-lockfile
+        run: pnpm --dir cli install --frozen-lockfile --ignore-workspace
 
       - name: Run logseq CLI tests
         run: opam exec -- pnpm --dir cli test
@@ -178,7 +178,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Fetch CLI pnpm deps
-        run: pnpm --dir cli install --frozen-lockfile
+        run: pnpm --dir cli install --frozen-lockfile --ignore-workspace
 
       - name: Build logseq CLI
         run: |
