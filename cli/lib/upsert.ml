@@ -568,8 +568,8 @@ let tag_of_value value =
 let key_of_value = Property.parse_key
 
 let edn_value_of_string ~label text =
-  try Ok (Melange_edn.of_edn_string text)
-  with Melange_edn.Parse_error _ ->
+  try Ok (Melange_edn_melange.of_edn_string text)
+  with Melange_edn_melange.Parse_error _ ->
     Error (Error.invalid_options ("invalid " ^ label ^ " edn"))
 
 let parse_vector_edn ~label text =
@@ -1192,7 +1192,7 @@ let graph_assets_dir config repo =
 let class_query selector class_ident =
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [
         Cli_primitive.V
@@ -1210,7 +1210,7 @@ let property_query selector = class_query selector "logseq.class/Property"
 let page_query selector =
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [
         Cli_primitive.V
@@ -1235,6 +1235,26 @@ let pull_tag_by_name config repo name selector =
            query_value (tag_query selector);
            Edn_util.string (normalized_lookup_name name);
          ])
+
+let list_tags config repo =
+  Transport.thread_api_cli_list_tags config ~repo ~options:(Edn_util.map_t [])
+
+let tag_name_matches name entity =
+  let expected = normalized_lookup_name name in
+  let matches value = String.equal (normalized_lookup_name value) expected in
+  match
+    (Edn_util.get_string entity "block/title", Edn_util.get_string entity "block/name")
+  with
+  | Some title, _ when matches title -> true
+  | _, Some name when matches name -> true
+  | _ -> false
+
+let find_tag_by_name config repo name =
+  let open Cli_effect in
+  bind (list_tags config repo) (fun value ->
+      match Edn_util.as_seq value with
+      | Some tags -> pure (List.find_opt (tag_name_matches name) tags)
+      | None -> pure None)
 
 let pull_property_by_name config repo name selector =
   Transport.thread_api_q config ~repo
@@ -1470,16 +1490,13 @@ let resolve_tag_id invoke_config repo tag =
   match tag with
   | Selector.Tag_id id -> pure (Ok id)
   | Tag_name name ->
-      bind (pull_tag_by_name invoke_config repo name tag_selector)
-        (fun result ->
-          match Option.bind (first_entity result) id_of_entity with
+      bind (find_tag_by_name invoke_config repo name) (fun result ->
+          match Option.bind result id_of_entity with
           | Some id -> pure (Ok id)
           | None ->
               pure
                 (Error
-                   (Error.make
-                      (Error.Tag_not_found)
-                      "tag not found")))
+                   (Error.make (Error.Tag_not_found) "tag not found")))
   | Tag_ident _ | Tag_uuid _ ->
       bind
         (pull_entity_by_lookup invoke_config repo tag_selector
@@ -1685,7 +1702,7 @@ let rec resolve_property_value_refs invoke_config repo value =
         loop [] values
       in
       match value with
-      | Melange_edn.Any (Melange_edn.Vector values) ->
+      | Melange_edn_melange.Any (Melange_edn_melange.Vector values) ->
           resolve_values Edn_util.vector (Edn_util.array_to_list values)
       | Any (List values) ->
           resolve_values Edn_util.list (Edn_util.array_to_list values)
@@ -1758,7 +1775,7 @@ let inline_property_assignments block =
                   Error
                     (Error.invalid_options
                        ("invalid block property key: "
-                       ^ Melange_edn.to_edn_string key)))
+                       ^ Melange_edn_melange.to_edn_string key)))
       in
       loop [] fields
 

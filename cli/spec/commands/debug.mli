@@ -16,7 +16,7 @@ type action =
       repo : Cli_primitive.repo;
       graph : Cli_primitive.graph;
       lookup : selector;
-      selector : Melange_edn.any;
+      selector : Melange_edn_melange.any;
     }
 
 val parse_ident_option : string -> Cli_primitive.keyword Error.build_result

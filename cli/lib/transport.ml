@@ -7,13 +7,13 @@ type invoke_config = {
 }
 
 type event_type = Cli_primitive.keyword
-type event_payload = Melange_edn.any
+type event_payload = Melange_edn_melange.any
 type event_subscription = { close : unit -> unit Cli_effect.t }
 
 let thread_api_method name = Edn_util.keyword_t ("thread-api/" ^ name)
 
-module T = Transit.Json
-module E = Melange_edn
+module T = Transit_melange.Transit.Json
+module E = Melange_edn_melange
 
 let starts_with ~prefix value =
   let prefix_len = String.length prefix in
@@ -118,8 +118,8 @@ let invoke config method_ args =
 let repo_value repo = Edn_util.string (Cli_primitive.string_of_repo repo)
 
 let thread_api_apply_outliner_ops config ~(repo : Cli_primitive.repo)
-    ~(ops : Melange_edn.vector Melange_edn.t)
-    ~(options : Melange_edn.map Melange_edn.t) =
+    ~(ops : Melange_edn_melange.vector Melange_edn_melange.t)
+    ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "apply-outliner-ops")
     [ repo_value repo; Edn_util.any ops; Edn_util.any options ]
@@ -130,37 +130,37 @@ let thread_api_backup_db_sqlite config ~(repo : Cli_primitive.repo) ~path =
     [ repo_value repo; Edn_util.string path ]
 
 let thread_api_cli_list_nodes config ~(repo : Cli_primitive.repo)
-    ~(options : Melange_edn.map Melange_edn.t) =
+    ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "cli-list-nodes")
     [ repo_value repo; Edn_util.any options ]
 
 let thread_api_cli_list_pages config ~(repo : Cli_primitive.repo)
-    ~(options : Melange_edn.map Melange_edn.t) =
+    ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "cli-list-pages")
     [ repo_value repo; Edn_util.any options ]
 
 let thread_api_cli_list_properties config ~(repo : Cli_primitive.repo)
-    ~(options : Melange_edn.map Melange_edn.t) =
+    ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "cli-list-properties")
     [ repo_value repo; Edn_util.any options ]
 
 let thread_api_cli_list_tags config ~(repo : Cli_primitive.repo)
-    ~(options : Melange_edn.map Melange_edn.t) =
+    ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "cli-list-tags")
     [ repo_value repo; Edn_util.any options ]
 
 let thread_api_cli_list_tasks config ~(repo : Cli_primitive.repo)
-    ~(options : Melange_edn.map Melange_edn.t) =
+    ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "cli-list-tasks")
     [ repo_value repo; Edn_util.any options ]
 
 let thread_api_create_or_open_db config ~(repo : Cli_primitive.repo)
-    ~(options : Melange_edn.map Melange_edn.t) =
+    ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "create-or-open-db")
     [ repo_value repo; Edn_util.any options ]
@@ -205,7 +205,7 @@ let thread_api_db_sync_upload_graph config ~(repo : Cli_primitive.repo) =
   invoke config (thread_api_method "db-sync-upload-graph") [ repo_value repo ]
 
 let thread_api_export_edn config ~(repo : Cli_primitive.repo)
-    ~(options : Melange_edn.map Melange_edn.t) =
+    ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "export-edn")
     [ repo_value repo; Edn_util.any options ]
@@ -232,12 +232,12 @@ let thread_api_import_edn config ~(repo : Cli_primitive.repo) ~data =
   invoke config (thread_api_method "import-edn") [ repo_value repo; data ]
 
 let thread_api_pull config ~(repo : Cli_primitive.repo)
-    ~(selector : Melange_edn.vector Melange_edn.t) ~lookup =
+    ~(selector : Melange_edn_melange.vector Melange_edn_melange.t) ~lookup =
   invoke config (thread_api_method "pull")
     [ repo_value repo; Edn_util.any selector; lookup ]
 
 let thread_api_q config ~(repo : Cli_primitive.repo)
-    ~(query : Melange_edn.vector Melange_edn.t) =
+    ~(query : Melange_edn_melange.vector Melange_edn_melange.t) =
   invoke config (thread_api_method "q") [ repo_value repo; Edn_util.any query ]
 
 let thread_api_set_db_sync_config config ~config:sync_config =
@@ -246,11 +246,11 @@ let thread_api_set_db_sync_config config ~config:sync_config =
     [ Edn_util.any sync_config ]
 
 let thread_api_sync_app_state config
-    ~(auth_state : Melange_edn.map Melange_edn.t) =
+    ~(auth_state : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config (thread_api_method "sync-app-state") [ Edn_util.any auth_state ]
 
 let thread_api_validate_db config ~(repo : Cli_primitive.repo)
-    ~(options : Melange_edn.map Melange_edn.t) =
+    ~(options : Melange_edn_melange.map Melange_edn_melange.t) =
   invoke config
     (thread_api_method "validate-db")
     [ repo_value repo; Edn_util.any options ]
@@ -369,7 +369,7 @@ let bytes_of_output_data value =
   match (Edn_util.as_bytes value, Edn_util.as_string value) with
   | Some bytes, _ -> Bytes.to_string bytes
   | _, Some value -> value
-  | _ -> Melange_edn.to_edn_string value
+  | _ -> Melange_edn_melange.to_edn_string value
 
 let unsupported_output_format format =
   Error.make

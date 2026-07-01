@@ -19,6 +19,7 @@
    [frontend.worker.undo-redo :as worker-undo-redo]
    [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
+   [logseq.common.version :as build-version]
    [logseq.db :as ldb]
    [logseq.db.frontend.validate :as db-validate]
    [logseq.db-sync.order :as sync-order]
@@ -477,7 +478,8 @@
   [repo]
   (mark-pending-txs-false! repo (mapv :tx-id (pending-txs repo))))
 
-(declare history-action-error-reason)
+(declare expected-stale-rebase-error?
+         history-action-error-reason)
 
 (defn- expected-history-action-error-reason?
   [reason]
@@ -611,6 +613,7 @@
                       (when (seq tx-entries)
                         (reset! (:inflight client) tx-ids)
                         (send! ws {:type "tx/batch"
+                                   :client-revision (build-version/revision)
                                    :t-before local-tx
                                    :txs payload})))
                     (p/catch (fn [error]
@@ -637,10 +640,15 @@
 (defn- reverse-history-action!
   [conn local-tx]
   (if-let [tx-data (seq (:reversed-tx local-tx))]
-    (ldb/transact! conn
-                   (normalize-tx-data-for-rebase tx-data)
-                   {:outliner-op (:outliner-op local-tx)
-                    :reverse? true})
+    (let [db @conn
+          tx-data' (some->> tx-data
+                            (map (partial resolve-temp-id db))
+                            normalize-tx-data-for-rebase)]
+      (ldb/transact! conn
+                     tx-data'
+                     {:outliner-op (:outliner-op local-tx)
+                      :reverse? true
+                      :skip-validate-db? true}))
     ;; Built-in sync repair :fix rows are idempotent and can be queued without
     ;; reverse data; normal user edits must still carry reverse tx-data.
     (when-not (= :fix (:outliner-op local-tx))
@@ -789,11 +797,21 @@
            (try
              (reverse-history-action! conn local-tx)
              (catch :default e
-               (log/error ::reverse-local-tx-error
-                          {:index index
-                           :local-tx local-tx
-                           :local-txs local-txs})
-               (throw e)))))
+               (if (expected-stale-rebase-error? e)
+                 (do
+                   (log/debug :db-sync/skip-stale-reverse-local-tx
+                              {:index index
+                               :tx-id (:tx-id local-tx)
+                               :outliner-op (:outliner-op local-tx)
+                               :error e})
+                   {:tx-id (:tx-id local-tx)
+                    :status :failed})
+                 (do
+                   (log/error ::reverse-local-tx-error
+                              {:index index
+                               :local-tx local-tx
+                               :local-txs local-txs})
+                   (throw e)))))))
         (keep identity)
         vec)))
 
@@ -803,8 +821,11 @@
 
 (defn- expected-stale-rebase-error?
   [error]
-  (or (= "invalid rebase op" (ex-message error))
-      (= :entity-id/missing (:error (ex-data error)))))
+  (let [data (ex-data error)]
+    (or (= "invalid rebase op" (ex-message error))
+        (= :entity-id/missing (:error data))
+        (and (= :transact/unique (:error data))
+             (= :block/uuid (:attribute data))))))
 
 (defn- history-action-error-reason
   [error]
@@ -1230,7 +1251,7 @@
     (platform/post-message!
      (platform/current)
      :capture-error
-     (cond-> {:error error
+     (cond-> {:error (js/Error. "Sync apply remote txs failed")
               :payload {:source "db-sync"
                         :operation "apply-remote-txs"
                         :has-local-changes? has-local-changes?

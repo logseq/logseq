@@ -67,7 +67,7 @@ let expect_parse_error_code name expected argv =
   expect_error_code name expected (Cli_parse.parse argv)
 
 let keyword_text value = Edn_util.keyword_to_string value
-let edn_of_string text = Melange_edn.of_edn_string text
+let edn_of_string text = Melange_edn_melange.of_edn_string text
 let repo_text repo = Cli_primitive.string_of_repo repo
 let graph_text graph = Cli_primitive.string_of_graph graph
 
@@ -332,7 +332,7 @@ let invoke_args body =
       match
         Option.bind (Js.Dict.get object_ "argsTransit") Js.Json.decodeString
       with
-      | Some args -> Transit.Json.(of_string args |> to_edn)
+      | Some args -> Transit_melange.Transit.Json.(of_string args |> to_edn)
       | None ->
           fail_test ("missing invoke argsTransit: " ^ body);
           Edn_util.vector [])
@@ -3722,12 +3722,71 @@ let () =
       in
       expect_int "metadata ops count" 3 (List.length ops);
       let output =
-        String.concat "\n" (List.map Melange_edn.to_edn_string ops)
+        String.concat "\n" (List.map Melange_edn_melange.to_edn_string ops)
       in
       expect_named_contains "status op" output ":logseq.property/status.todo";
       expect_named_contains "tag op" output ":block/tags 901";
       expect_named_contains "property op" output
         ":user.property/root-answer \"root\"");
+
+  test_promise
+    "CLI parity add reports target-not-found when concurrent delete removes \
+     insert target" (fun () ->
+      let pull_count = ref 0 in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then (
+              incr pull_count;
+              match !pull_count with
+              | 1 ->
+                  "[\"^ \
+                   \",\"~:db/id\",627,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000627\"]"
+              | _ -> "null")
+            else if
+              Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then "null"
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            expect_ok "add action"
+              (Add.build_add_block_action
+                 {
+                   Add.target_id = Some 627L;
+                   target_uuid = None;
+                   target_page_name = None;
+                   pos = Some Block.First_child;
+                   status = None;
+                   tags_edn = None;
+                   properties_edn = None;
+                   content = Some "Child";
+                   blocks_edn = None;
+                   blocks_file = None;
+                 }
+                 []
+                 (Cli_primitive.create_repo "demo"))
+          in
+          let* result =
+            effect_to_promise
+              (Add.execute_add_block action
+                 (config_with_output cfg Output.Mode.Human)
+                 Output.Mode.Human)
+          in
+          expect_bool "add result is error" true (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "add concurrent target delete code"
+                "target-not-found"
+                (Error.code_to_string err.Error.code)
+          | None -> fail_test "expected add error");
+          expect_int "target was rechecked" 3 !pull_count;
+          Js.Promise.resolve pass));
 
   test "CLI parity update build action validates property and tag edn"
     (fun () ->
@@ -3797,6 +3856,13 @@ let () =
       expect_int "update properties include status" 2
         (List.length action.update_properties);
       expect_int "remove properties" 1 (List.length action.remove_properties));
+
+  test "CLI parity update tag query uses datascript find syntax" (fun () ->
+      let query =
+        Melange_edn_melange.to_edn_string (Update.tag_query Update.tag_selector)
+      in
+      expect_named_contains "find" query ":find";
+      expect_named_contains "tag class" query "logseq.class/Tag");
 
   test "CLI parity sync config key parser accepts ws-url and http-base only"
     (fun () ->
@@ -4230,7 +4296,7 @@ let () =
           ]
       in
       let edn query =
-        Melange_edn.to_edn_string
+        Melange_edn_melange.to_edn_string
           (Edn_util.any (Cli_primitive.datascript_query_to_edn query))
       in
       let without_inputs =
@@ -4241,7 +4307,7 @@ let () =
         "[:find ?b :where [?b :block/title ?title]]" (edn without_inputs);
       let with_inputs =
         Cli_primitive.make_datascript_query ~find:[ Edn_util.symbol "?b" ]
-          ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?title" ]
+          ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?title" ]
           ~where:[ Cli_primitive.V title_clause ] ()
       in
       expect_equal "datascript query with inputs"
@@ -4569,7 +4635,7 @@ let () =
              queries)
       in
       expect_int "list-status inputs" 0 (List.length list_status.inputs);
-      let status_query = Melange_edn.to_edn_string list_status.query in
+      let status_query = Melange_edn_melange.to_edn_string list_status.query in
       expect_named_contains "list-status query status keyword" status_query
         ":logseq.property/status";
       let list_priority =
@@ -4580,7 +4646,7 @@ let () =
       in
       expect_int "list-priority inputs" 0 (List.length list_priority.inputs);
       expect_named_contains "list-priority query priority keyword"
-        (Melange_edn.to_edn_string list_priority.query)
+        (Melange_edn_melange.to_edn_string list_priority.query)
         ":logseq.property/priority");
 
   test "CLI parity debug selector requires exactly one id uuid or ident"
@@ -4620,7 +4686,7 @@ let () =
           | Debug.By_id 42L -> pass
           | _ -> fail_test "expected debug id lookup");
           expect_equal "debug selector" "[*]"
-            (Melange_edn.to_edn_string selector));
+            (Melange_edn_melange.to_edn_string selector));
       let ident =
         expect_ok "debug ident option"
           (Debug.parse_ident_option ":logseq.class/Tag")
@@ -6577,7 +6643,7 @@ let () =
           (Bytes.to_string
              (expect_some "sqlite bytes" (Edn_util.as_bytes sqlite_value)));
         expect_named_contains "read sqlite uses transit bytes tag"
-          (Melange_edn.to_edn_string sqlite_value)
+          (Melange_edn_melange.to_edn_string sqlite_value)
           "#transit/bytes";
         ignore
           (expect_ok "write db"
@@ -6595,7 +6661,7 @@ let () =
           (Bytes.to_string
              (expect_some "db bytes" (Edn_util.as_bytes db_value)));
         expect_named_contains "read db uses transit bytes tag"
-          (Melange_edn.to_edn_string db_value)
+          (Melange_edn_melange.to_edn_string db_value)
           "#transit/bytes";
         expect_error_code "bad write format" ":unsupported-output-format"
           (effect_result "bad write format"
@@ -6634,11 +6700,11 @@ let () =
               (expect_some "invoke large int value"
                  (Edn_util.as_int64 (List.nth query 5)));
             (match List.nth query 6 with
-            | Melange_edn.Any (Melange_edn.Bigint value) ->
+            | Melange_edn_melange.Any (Melange_edn_melange.Bigint value) ->
                 expect_equal "invoke bigint" "900719925474099312345" value
             | _ -> fail_test "invoke bigint: expected Bigint");
             (match List.nth query 7 with
-            | Melange_edn.Any (Melange_edn.Decimal value) ->
+            | Melange_edn_melange.Any (Melange_edn_melange.Decimal value) ->
                 expect_equal "invoke decimal" "1234567890.123456789" value
             | _ -> fail_test "invoke decimal: expected Decimal");
             "\"ok\"")
@@ -6670,9 +6736,9 @@ let () =
                         Edn_util.keyword "created-at";
                         Edn_util.int64 large_int;
                         Edn_util.any
-                          (Melange_edn.bigint "900719925474099312345");
+                          (Melange_edn_melange.bigint "900719925474099312345");
                         Edn_util.any
-                          (Melange_edn.decimal "1234567890.123456789");
+                          (Melange_edn_melange.decimal "1234567890.123456789");
                       ]))
           in
           expect_equal "decoded invoke result" "ok"
@@ -6787,7 +6853,7 @@ let () =
             effect_to_promise
               (Transport.connect_events invoke_config (fun event_type payload ->
                    received :=
-                     (event_type, Melange_edn.to_edn_string payload)
+                     (event_type, Melange_edn_melange.to_edn_string payload)
                      :: !received;
                    Cli_effect.pure ()))
           in

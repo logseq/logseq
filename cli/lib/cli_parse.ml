@@ -385,14 +385,14 @@ let parse_graph_export_edn_options options =
   | None -> Ok None
   | Some text -> (
       try
-        let value = Melange_edn.of_edn_string text in
+        let value = Melange_edn_melange.of_edn_string text in
         match Edn_util.as_map value with
         | Some _ -> Ok (Some value)
         | None ->
             Error
               (Error.invalid_options
                  "graph export --edn-options must be an EDN map")
-      with Melange_edn.Parse_error _ ->
+      with Melange_edn_melange.Parse_error _ ->
         Error
           (Error.invalid_options "graph export --edn-options must be an EDN map")
       )

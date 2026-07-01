@@ -127,8 +127,8 @@ let property_key_of_value value =
   | _ -> None
 
 let edn_value_of_string ~label text =
-  try Ok (Melange_edn.of_edn_string text)
-  with Melange_edn.Parse_error _ ->
+  try Ok (Melange_edn_melange.of_edn_string text)
+  with Melange_edn_melange.Parse_error _ ->
     Error (Error.invalid_options ("invalid " ^ label ^ " edn"))
 
 let parse_properties_edn value =
@@ -150,7 +150,7 @@ let parse_properties_edn value =
                         Error
                           (Error.invalid_options
                              ("invalid property key: "
-                             ^ Melange_edn.to_edn_string key)))
+                             ^ Melange_edn_melange.to_edn_string key)))
               in
               loop [] fields
           | None -> Error (Error.invalid_options "properties must be a map"))
@@ -175,7 +175,7 @@ let parse_property_keys_edn value =
                         Error
                           (Error.invalid_options
                              ("invalid property key: "
-                             ^ Melange_edn.to_edn_string value)))
+                             ^ Melange_edn_melange.to_edn_string value)))
               in
               loop [] values
           | None -> Error (Error.invalid_options "properties must be a vector"))
@@ -336,58 +336,13 @@ let variable value = Edn_util.symbol value
 let list values = Edn_util.list values
 let query_value query = Edn_util.any (Cli_primitive.datascript_query_to_edn query)
 
-let tag_query selector =
-  vector
-    [
-      Edn_util.map [ (kw "title", variable "?title") ];
-      kw "where";
-      vector [ variable "?tag"; kw "block/title"; variable "?title" ];
-      vector [ variable "?tag"; kw "block/tags"; kw "logseq.class/Tag" ];
-      list
-        [
-          Edn_util.symbol "clojure.string/includes?";
-          variable "?title";
-          variable "?query";
-        ];
-      kw "in";
-      variable "$";
-      variable "?query";
-      kw "result-transform";
-      list
-        [
-          Edn_util.symbol "fn";
-          vector [ variable "result" ];
-          list
-            [
-              Edn_util.symbol "map";
-              list
-                [
-                  Edn_util.symbol "fn";
-                  vector
-                    [
-                      Edn_util.map [ (kw "keys", vector [ variable "title" ]) ];
-                    ];
-                  list
-                    [
-                      Edn_util.symbol "d/entity";
-                      variable "$";
-                      vector [ kw "block/name"; variable "title" ];
-                    ];
-                ];
-              variable "result";
-            ];
-        ];
-      kw "view";
-      selector;
-    ]
-
 let class_query selector class_ident =
   Cli_primitive.make_datascript_query
     ~find:
       [
         vector [ list [ variable "pull"; variable "?e"; selector ]; variable "..." ];
       ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [
         Cli_primitive.V
@@ -400,6 +355,7 @@ let class_query selector class_ident =
       ]
     ()
 
+let tag_query selector = query_value (class_query selector "logseq.class/Tag")
 let property_query selector = class_query selector "logseq.class/Property"
 
 let first_entity value =
@@ -415,6 +371,26 @@ let pull_tag_by_name invoke_config repo name =
     ~query:
       (Edn_util.vector_t
          [ tag_query tag_selector; Edn_util.string (normalized_page_name name) ])
+
+let list_tags invoke_config repo =
+  Transport.thread_api_cli_list_tags invoke_config ~repo ~options:(Edn_util.map_t [])
+
+let tag_name_matches name entity =
+  let expected = normalized_page_name name in
+  let matches value = String.equal (normalized_page_name value) expected in
+  match
+    (Edn_util.get_string entity "block/title", Edn_util.get_string entity "block/name")
+  with
+  | Some title, _ when matches title -> true
+  | _, Some name when matches name -> true
+  | _ -> false
+
+let find_tag_by_name invoke_config repo name =
+  let open Cli_effect in
+  bind (list_tags invoke_config repo) (fun value ->
+      match Edn_util.as_seq value with
+      | Some tags -> pure (List.find_opt (tag_name_matches name) tags)
+      | None -> pure None)
 
 let pull_property_by_name invoke_config repo name =
   Transport.thread_api_q invoke_config ~repo
@@ -519,15 +495,13 @@ let resolve_tag_id invoke_config repo = function
   | Selector.Tag_id id -> Cli_effect.pure (Ok id)
   | Tag_name name ->
       let open Cli_effect in
-      bind (pull_tag_by_name invoke_config repo name) (fun result ->
-          match Option.bind (first_entity result) id_of_entity with
+      bind (find_tag_by_name invoke_config repo name) (fun result ->
+          match Option.bind result id_of_entity with
           | Some id -> pure (Ok id)
           | None ->
               pure
                 (Error
-                   (Error.make
-                      (Error.Tag_not_found)
-                      "tag not found")))
+                   (Error.make (Error.Tag_not_found) "tag not found")))
   | (Tag_ident _ | Tag_uuid _) as tag ->
       let open Cli_effect in
       bind
