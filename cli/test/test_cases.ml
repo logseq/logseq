@@ -1435,6 +1435,64 @@ let () =
             fail_promise
               (Printf.sprintf "expected five invoke requests, got %d" !step)));
 
+  test_promise "upsert block update resolves tag names from tag list"
+    (fun () ->
+      let step = ref 0 in
+      let captured_apply_body = ref None in
+      let server =
+        invoke_server (fun body ->
+            incr step;
+            match !step with
+            | 1
+              when Js.String.includes ~search:"thread-api/pull" body
+                   && Js.String.includes ~search:"233" body ->
+                "[\"^ \
+                 \",\"~:db/id\",233,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000233\"]"
+            | 2
+              when Js.String.includes ~search:"thread-api/cli-list-tags" body ->
+                "[[\"^ \",\"~:db/id\",200,\"~:block/title\",\"Tag A\"]]"
+            | 3
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                captured_apply_body := Some body;
+                "[]"
+            | _ ->
+                fail_test
+                  (Printf.sprintf "unexpected request at step %d: %s" !step body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "block";
+                "--id";
+                "233";
+                "--update-tags";
+                "[\"Tag A\"]";
+              ]
+          in
+          ignore (expect_cli_exit_zero "upsert block tag name" output);
+          let body =
+            match !captured_apply_body with
+            | Some body -> body
+            | None ->
+                fail_test "missing captured apply body";
+                failwith "missing captured apply body"
+          in
+          expect_named_contains "batch tag set op" body "batch-set-property";
+          expect_named_contains "resolved tag id" body "200";
+          if !step = 3 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected three invoke requests, got %d" !step)));
+
   test_promise "upsert block create resolves inline block uuid property refs"
     (fun () ->
       let step = ref 0 in
