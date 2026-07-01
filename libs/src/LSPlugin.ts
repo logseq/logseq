@@ -1,4 +1,4 @@
-import * as CSS from 'csstype'
+import type * as CSS from 'csstype'
 
 import EventEmitter from 'eventemitter3'
 import { LSPluginCaller } from './LSPlugin.caller'

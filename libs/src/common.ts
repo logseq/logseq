@@ -333,7 +333,7 @@ export function invokeHostExportedApi(method: string, ...args: Array<any>) {
 
   const hostLogseq = (window as any).logseq
   const nsSDK = hostLogseq?.sdk
-  const supportedNS = nsSDK && Object.keys(nsSDK)
+  const supportedNS = nsSDK ? Object.keys(nsSDK) : []
   let nsTarget = {}
   const ns0 = method1?.split('_')?.[0]
 
