@@ -103,6 +103,11 @@
   (when (seq graph-id)
     (client-op/update-graph-uuid repo graph-id)))
 
+(defn- client-op-ready?
+  [repo]
+  (and (some? (worker-state/get-client-ops-conn repo))
+       (integer? (client-op/get-local-tx repo))))
+
 (defn- reconnect-delay-ms
   [attempt]
   (sync-transport/reconnect-delay-ms
@@ -362,12 +367,18 @@
             (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base})
             (p/resolved nil))
 
+          (not (client-op-ready? repo))
+          (do
+            (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base :reason :client-op-not-ready})
+            (p/resolved nil))
+
           (= start-target inflight-target)
           (p/resolved nil)
 
           (active-client-for? current repo graph-id)
           (do
             (broadcast-rtc-state! current)
+            (sync-apply/enqueue-flush-pending! repo current)
             (p/resolved nil))
 
           :else

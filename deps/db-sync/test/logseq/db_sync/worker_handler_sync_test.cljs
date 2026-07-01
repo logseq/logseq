@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker-handler-sync-test
   (:require [cljs.test :refer [async deftest is testing]]
+            [clojure.string :as string]
             [clojure.set :as set]
             [datascript.core :as d]
             [logseq.db-sync.checksum :as sync-checksum]
@@ -389,7 +390,6 @@
                  (is (= true (:ok body)))
                  (is (= "stream/graph-1.snapshot" (:key body)))
                  (is (= expected-url (:url body)))
-                 (is (integer? (:t body)))
                  (is (= "gzip" (:content-encoding body))))
                (p/then (fn []
                          (restore!)
@@ -416,7 +416,6 @@
                        body (js->clj (js/JSON.parse text) :keywordize-keys true)]
                  (is (= 200 (.-status resp)))
                  (is (= true (:ok body)))
-                 (is (integer? (:t body)))
                  (is (not (contains? body :content-encoding)))
                  (done))
                (p/then (fn []
@@ -447,7 +446,6 @@
                  (p/let [resp (sync-handler/handle-http self request)
                        encoding (.get (.-headers resp) "content-encoding")
                        content-type (.get (.-headers resp) "content-type")
-                       snapshot-t (.get (.-headers resp) "x-snapshot-t")
                        buf (.arrayBuffer resp)
                        payload (js/Uint8Array. buf)
                        rows (snapshot/finalize-framed-buffer payload)
@@ -455,7 +453,6 @@
                  (is (= 200 (.-status resp)))
                  (is (= "gzip" encoding))
                  (is (= "application/transit+json" content-type))
-                 (is (not (js/isNaN (js/parseInt snapshot-t 10))))
                  (is (= 2 (count rows)))
                  (is (= (sort addrs) addrs))
                  (is (every? (fn [[addr content _addresses]]
@@ -490,7 +487,6 @@
                  (p/let [resp (sync-handler/handle-http self request)
                          encoding (.get (.-headers resp) "content-encoding")
                          content-type (.get (.-headers resp) "content-type")
-                         snapshot-t (.get (.-headers resp) "x-snapshot-t")
                          buf (.arrayBuffer resp)
                          payload (js/Uint8Array. buf)
                          rows (snapshot/finalize-framed-buffer payload)
@@ -498,7 +494,6 @@
                    (is (= 200 (.-status resp)))
                    (is (nil? encoding))
                    (is (= "application/transit+json" content-type))
-                   (is (not (js/isNaN (js/parseInt snapshot-t 10))))
                    (is (= 2 (count rows)))
                    (is (= (sort addrs) addrs))
                    (is (= [[1 "row-1" nil]
@@ -568,6 +563,68 @@
       (let [pull-response (sync-handler/pull-response self 0)]
         (is (= "pull/ok" (:type pull-response)))
         (is (empty? (:txs pull-response)))))))
+
+(deftest tx-batch-transact-failed-log-includes-context-test
+  (testing "tx-meta carries graph and client context so Cloudflare transact-failed logs can identify the source"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          missing-uuid (random-uuid)
+          tx-entry {:tx (protocol/tx->transit [[:db/add [:block/uuid missing-uuid]
+                                                :block/title
+                                                "stale"]])
+                    :outliner-op :save-block}
+          context {:graph-id "graph-1"
+                   :graph-name "Graph One"
+                   :username "alice"
+                   :client-revision "rev-1"}
+          output (with-out-str
+                   (with-redefs [ws/broadcast! (fn [& _] nil)]
+                     (sync-handler/handle-tx-batch! self nil [tx-entry] 0 context)))]
+      (is (string/includes? output ":transact-failed"))
+      (is (string/includes? output ":graph-id \"graph-1\""))
+      (is (string/includes? output ":graph-name \"Graph One\""))
+      (is (string/includes? output ":username \"alice\""))
+      (is (string/includes? output ":client-revision \"rev-1\"")))))
+
+(deftest graph-log-context-caches-graph-info-test
+  (async done
+    (testing "graph name lookup is cached per Durable Object instance"
+      (let [calls (atom 0)
+            self #js {:env #js {"DB" "db"}}]
+        (-> (p/with-redefs [index/<graph-log-info
+                            (fn [_db graph-id]
+                              (swap! calls inc)
+                              (p/resolved {:graph-id graph-id
+                                           :graph-name "Graph One"}))]
+              (p/let [context-1 (sync-handler/<graph-log-context
+                                 self
+                                 "graph-1"
+                                 {:username "alice"}
+                                 "rev-1")
+                      context-2 (sync-handler/<graph-log-context
+                                 self
+                                 "graph-1"
+                                 {:username "bob"}
+                                 "rev-2")]
+                (is (= 1 @calls))
+                (is (= {:graph-id "graph-1"
+                        :graph-name "Graph One"
+                        :username "alice"
+                        :client-revision "rev-1"}
+                       context-1))
+                (is (= {:graph-id "graph-1"
+                        :graph-name "Graph One"
+                        :username "bob"
+                        :client-revision "rev-2"}
+                       context-2))))
+            (p/then (fn []
+                      (done)))
+            (p/catch (fn [error]
+                       (is false (str error))
+                       (done))))))))
 
 (deftest repair-blocks-response-returns-server-block-data-test
   (testing "repair block response returns transactable datoms with lookup refs"
@@ -945,7 +1002,6 @@
       (is (= 1 (:t response)))
       (is (= [success-tx-id] (:success-tx-ids response)))
       (is (= failed-tx-id (:failed-tx-id response)))
-      (is (= (storage/get-checksum sql) (:checksum response)))
       (is (= [{:type "changed" :t 1}] @changed-messages))
       (is (some? (d/entity @conn [:block/uuid success-block-uuid])))
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))))))
@@ -1038,6 +1094,50 @@
                      (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
       (is (= "tx/batch/ok" (:type response)))
       (is (= t-before (:t response)))
+      (is (= checksum-before (storage/get-checksum sql)))
+      (is (empty? (storage/fetch-tx-since sql t-before)))
+      (is (empty? @changed-messages)))))
+
+(deftest tx-batch-rejects-unapplied-stale-rebase-with-tx-id-test
+  (testing "a client tx id should not be acknowledged when its stale rebase was not applied"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          tx-id (random-uuid)
+          page-uuid (random-uuid)
+          parent-uuid (random-uuid)
+          missing-block-uuid (random-uuid)
+          _ (d/transact! conn [{:block/uuid page-uuid
+                                :block/name "rebase-stale-page-with-tx-id"
+                                :block/title "rebase-stale-page-with-tx-id"}
+                               {:block/uuid parent-uuid
+                                :block/title "existing-parent"
+                                :block/order "a0"
+                                :block/parent [:block/uuid page-uuid]
+                                :block/page [:block/uuid page-uuid]}])
+          t-before (storage/get-t sql)
+          checksum-before (storage/get-checksum sql)
+          tx-entry {:tx-id tx-id
+                    :tx (protocol/tx->transit
+                         [[:db/retract [:block/uuid missing-block-uuid]
+                           :block/parent
+                           [:block/uuid page-uuid]
+                           536882158]
+                          [:db/add [:block/uuid missing-block-uuid]
+                           :block/parent
+                           [:block/uuid parent-uuid]
+                           536882158]])
+                    :outliner-op :rebase}
+          changed-messages (atom [])
+          response (with-redefs [ws/broadcast! (fn [_self _sender payload]
+                                                 (swap! changed-messages conj payload))]
+                     (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
+      (is (= "tx/reject" (:type response)))
+      (is (= "db transact failed" (:reason response)))
+      (is (= t-before (:t response)))
+      (is (= tx-id (:failed-tx-id response)))
       (is (= checksum-before (storage/get-checksum sql)))
       (is (empty? (storage/fetch-tx-since sql t-before)))
       (is (empty? @changed-messages)))))

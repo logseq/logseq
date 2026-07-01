@@ -429,16 +429,12 @@
                                         (swap! rows-db-closed* inc))}]
               (reset! worker-state/*db-sync-config {:http-base "https://sync.example.test"})
               (set! js/fetch (fn [_url _opts]
-                               (p/resolved
-                                (js/Response. nil
-                                              #js {:status 200
-                                                   :headers #js {"x-snapshot-t" "77"}}))))
+                               (p/resolved #js {:ok true})))
               (-> (p/with-redefs [rtc-log-and-state/rtc-log (fn [& _] nil)
                                   sync-download/fetch-json (fn [_url _opts schema]
                                                              (case schema
                                                                :sync/pull (p/resolved {:t 77})
-                                                               :sync/snapshot-download (p/resolved {:url "https://snapshot.example.test"
-                                                                                                    :t 77})
+                                                               :sync/snapshot-download (p/resolved {:url "https://snapshot.example.test"})
                                                                (p/rejected (ex-info "unexpected schema" {:schema schema}))))
                                   sync-download/prepare-import! (fn [repo _reset? gid _graph-e2ee? & _]
                                                                   (reset! @#'sync-download/*import-state
@@ -741,7 +737,10 @@
            request-asset "asset-1"
            request-email "user@example.com"
            request-opts {:force? true}]
-       (with-redefs [db-sync/status (fn [repo]
+       (with-redefs [db-worker/db-sync-dbs-open? (fn [repo]
+                                                   (swap! calls conj [:db-sync-dbs-open? repo])
+                                                   true)
+                     db-sync/status (fn [repo]
                                       (swap! calls conj [:status repo])
                                       status-result)
                      db-sync/start! (fn [repo]
