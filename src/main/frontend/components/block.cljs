@@ -1089,10 +1089,31 @@
                (assets-handler/maybe-request-remote-asset-download! repo block file-ready?))
       (reset! requested? true))))
 
+(defn- retry-missing-asset-upload!
+  [repo block file-exists?*]
+  (let [asset-rpath (block-asset/asset-relative-path block)]
+    (p/let [exists? (fs/file-exists? (config/get-repo-dir repo) asset-rpath)]
+      (reset! file-exists?* exists?)
+      (when exists?
+        (state/<invoke-db-worker :thread-api/db-sync-retry-asset-upload repo)))))
+
+(hsx/defc missing-asset-file
+  [block on-reload]
+  (let [asset-rpath (block-asset/asset-relative-path block)]
+    [:div.asset-missing-file.warning.flex.items-center.gap-2.text-sm
+     (ui/icon "alert-triangle" {:size 16})
+     [:span.flex-1 (t :asset/missing-file asset-rpath)]
+     (shui/button
+      {:variant :outline
+       :size :sm
+       :on-click on-reload}
+      (ui/icon "refresh" {:size 14})
+      (t :asset/reload-file))]))
+
 (hsx/defc asset-cp
   [config block]
   (let [asset-type (:logseq.property.asset/type block)
-        file (str (:block/uuid block) "." asset-type)
+        file (block-asset/asset-file-name block)
         file-exists?* (hooks/use-memo #(atom nil) [(:block/uuid block) asset-type])
         requested?* (hooks/use-memo #(atom false) [(:block/uuid block)])
         [file-exists?] (hooks/use-atom file-exists?*)
@@ -1159,7 +1180,12 @@
                               href
                               img-metadata
                               nil)
-                  (and image? (not gallery-image?) (false? file-exists?))
+                  (and (not gallery-image?)
+                       (block-asset/show-missing-file-warning? block file-exists?))
+                  (missing-asset-file
+                   block
+                   #(retry-missing-asset-upload! repo block file-exists?*))
+                  (block-asset/show-image-placeholder? block file-ready? gallery-image?)
                   img-placeholder)]
     (if progress-view
       [:div.asset-transfer-shell
