@@ -861,9 +861,11 @@
 
 (deftest-async import-linked-file-pdf-annotations
   (let [annotation-id #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        area-annotation-id #uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"
         dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-graph-parser-test-"))
         external-pdf-path (node-path/join dir "external/Linked Paper.pdf")
         graph-dir (node-path/join dir "graph")
+        area-image-stamp "area-stamp"
         encoded-pdf-uri (str "file://" (string/replace external-pdf-path " " "%20"))]
     (fs/mkdirSync (node-path/dirname external-pdf-path) #js {:recursive true})
     (fs/writeFileSync external-pdf-path "pdf")
@@ -871,6 +873,85 @@
             {"logseq/config.edn" "{}"
              "pages/source.md" (str "- ![Linked Paper.pdf](" encoded-pdf-uri ")\n")
              "pages/hls__Linked Paper.md" (str "file:: [Linked Paper.pdf](" encoded-pdf-uri ")\n"
+                                               "file-path:: " encoded-pdf-uri "\n\n"
+                                               "- External highlight from linked pdf\n"
+                                               "  ls-type:: annotation\n"
+                                               "  hl-page:: 3\n"
+                                               "  hl-color:: yellow\n"
+                                               "  id:: " annotation-id "\n"
+                                               "- External area highlight from linked pdf\n"
+                                               "  ls-type:: annotation\n"
+                                               "  hl-page:: 4\n"
+                                               "  hl-color:: yellow\n"
+                                               "  id:: " area-annotation-id "\n")
+             "assets/Linked Paper.edn" (str "{:highlights [{:id #uuid \"" annotation-id "\","
+                                            " :page 3,"
+                                            " :position {:bounding {:x1 1 :y1 2 :x2 3 :y2 4 :width 10 :height 20},"
+                                            "            :rects (),"
+                                            "            :page 3},"
+                                            " :content {:text \"External highlight from linked pdf\"},"
+                                            " :properties {:color \"yellow\"}}"
+                                            " {:id #uuid \"" area-annotation-id "\","
+                                            " :page 4,"
+                                            " :position {:bounding {:x1 11 :y1 12 :x2 13 :y2 14 :width 10 :height 20},"
+                                            "            :rects (),"
+                                            "            :page 4},"
+                                            " :content {:image \"" area-image-stamp "\"},"
+                                            " :properties {:color \"yellow\"}}]}")
+             (str "assets/Linked Paper/4_" area-annotation-id "_" area-image-stamp ".png") "png"}]
+      (let [file-path (node-path/join graph-dir relative-path)]
+        (fs/mkdirSync (node-path/dirname file-path) #js {:recursive true})
+        (fs/writeFileSync file-path content)))
+    (p/let [conn (db-test/create-conn)
+            assets (atom [])
+            {:keys [import-state]} (import-file-graph-to-db graph-dir conn {:assets assets})
+            asset (db-test/find-block-by-content @conn "Linked Paper")
+            annotation (db-test/find-block-by-content @conn "External highlight from linked pdf")
+            area-annotation (db-test/find-block-by-content @conn "External area highlight from linked pdf")]
+      (is (some? asset)
+          "Linked file PDF imports as an external Asset")
+      (is (= {:block/tags [:logseq.class/Asset]
+              :logseq.property.asset/type "pdf"
+              :logseq.property.asset/external-url encoded-pdf-uri}
+             (select-keys (db-test/readable-properties asset)
+                          [:block/tags
+                           :logseq.property.asset/type
+                           :logseq.property.asset/external-url]))
+          "Linked file PDF keeps the file URI as external asset metadata")
+      (is (= {:block/tags [:logseq.class/Pdf-annotation]
+              :logseq.property/asset "Linked Paper"
+              :logseq.property.pdf/hl-page 3}
+             (select-keys (db-test/readable-properties annotation)
+                          [:block/tags
+                           :logseq.property/asset
+                           :logseq.property.pdf/hl-page]))
+          "Linked file PDF annotations import and point at the external Asset")
+      (is (= {:block/tags [:logseq.class/Pdf-annotation]
+              :logseq.property/asset "Linked Paper"
+              :logseq.property.pdf/hl-page 4
+              :logseq.property.pdf/hl-image "pdf area highlight"
+              :logseq.property.pdf/hl-type :area}
+             (select-keys (db-test/readable-properties area-annotation)
+                          [:block/tags
+                           :logseq.property/asset
+                           :logseq.property.pdf/hl-page
+                           :logseq.property.pdf/hl-image
+                           :logseq.property.pdf/hl-type]))
+          "Linked file PDF area highlights import their image assets")
+      (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets"))))
+
+(deftest-async import-linked-file-pdf-annotations-with-uppercase-extension
+  (let [annotation-id #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-graph-parser-test-"))
+        external-pdf-path (node-path/join dir "external/Linked Paper.PDF")
+        graph-dir (node-path/join dir "graph")
+        encoded-pdf-uri (str "file://" (string/replace external-pdf-path " " "%20"))]
+    (fs/mkdirSync (node-path/dirname external-pdf-path) #js {:recursive true})
+    (fs/writeFileSync external-pdf-path "pdf")
+    (doseq [[relative-path content]
+            {"logseq/config.edn" "{}"
+             "pages/source.md" (str "- ![Linked Paper.PDF](" encoded-pdf-uri ")\n")
+             "pages/hls__Linked Paper.md" (str "file:: [Linked Paper.PDF](" encoded-pdf-uri ")\n"
                                                "file-path:: " encoded-pdf-uri "\n\n"
                                                "- External highlight from linked pdf\n"
                                                "  ls-type:: annotation\n"
@@ -909,7 +990,7 @@
                           [:block/tags
                            :logseq.property/asset
                            :logseq.property.pdf/hl-page]))
-          "Linked file PDF annotations import and point at the external Asset")
+          "Linked file PDF annotations import and keep highlight positions from the EDN file")
       (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets"))))
 
 (deftest-async ^:integration import-large-flat-file-without-stack-overflow

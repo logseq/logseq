@@ -1412,6 +1412,10 @@
     (:block/name (:block/parent block))
     (assoc :block/parent {:block/uuid (get-page-uuid page-names-to-uuids (:block/name (:block/parent block)) {:block block :block/parent (:block/parent block)})})))
 
+(defn- pdf-file?
+  [path]
+  (= "pdf" (some-> path path/file-ext string/lower-case)))
+
 (defn asset-path->name
   "Given an asset's relative or full path, create a unique name for identifying an asset.
    Must handle to paths as ../assets/*, assets/* and with subdirectories"
@@ -1419,7 +1423,7 @@
   (when (string? path)
     (or (re-find #"assets/.*$" path)
         ;; pdf outside logseq graphs
-        (when (string/ends-with? path ".pdf")
+        (when (pdf-file? path)
           path))))
 
 (defn- update-asset-links-in-block-title [block-title asset-name-to-uuids ignored-assets]
@@ -1536,9 +1540,9 @@
 (defn- build-annotation-images
   "Builds tx for annotation images and provides a map for mapping image asset names
    to their new uuids"
-  [parent-asset-path assets {:keys [notify-user]}]
-  (let [image-dir (string/replace-first parent-asset-path #"(?i)\.pdf$" "")
-        image-paths (filter #(= image-dir (node-path/dirname %)) (keys @assets))
+  [parent-asset-paths assets {:keys [notify-user]}]
+  (let [image-dirs (set (map #(string/replace-first % #"(?i)\.pdf$" "") parent-asset-paths))
+        image-paths (filter #(contains? image-dirs (node-path/dirname %)) (keys @assets))
         txs (keep #(let [asset-id (get-asset-block-id assets %)]
                      (if-not asset-id
                        (notify-user {:msg (str "Skipped creating asset " (pr-str %) " because it has no asset id")
@@ -1563,19 +1567,34 @@
   [s]
   (sanitizeFilename' (str s)))
 
+(defn- pdf-annotation-edn-path
+  [parent-asset-path]
+  (path/path-join
+   common-config/local-assets-dir
+   (safe-sanitize-file-name
+    (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".edn")))))
+
+(defn- pdf-annotation-md-name
+  [parent-asset-path]
+  (str "hls__" (safe-sanitize-file-name
+                (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".md")))))
+
 (defn- build-pdf-annotations-tx
   "Builds tx for pdf annotations when a pdf has an annotations EDN file under assets/"
-  [parent-asset-path assets parent-asset pdf-annotation-pages opts]
-  (let [asset-edn-path (path/path-join
-                        common-config/local-assets-dir
-                        (safe-sanitize-file-name
-                         (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".edn"))))
-        asset-md-name (str "hls__" (safe-sanitize-file-name
-                                    (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".md"))))]
-    (when-let [asset-edn-map (get @assets asset-edn-path)]
-      (let [{:keys [txs image-asset-name-to-uuids]} (build-annotation-images parent-asset-path assets opts)]
+  [parent-asset-paths assets parent-asset pdf-annotation-pages opts]
+  (let [parent-asset-paths (if (sequential? parent-asset-paths)
+                             (distinct parent-asset-paths)
+                             [parent-asset-paths])
+        asset-edn-entry (some (fn [parent-asset-path]
+                                (let [asset-edn-path (pdf-annotation-edn-path parent-asset-path)]
+                                  (when-let [asset-edn-map (get @assets asset-edn-path)]
+                                    {:asset-edn-map asset-edn-map
+                                     :asset-md-name (pdf-annotation-md-name parent-asset-path)})))
+                              parent-asset-paths)]
+    (when-let [asset-edn-map (:asset-edn-map asset-edn-entry)]
+      (let [{:keys [txs image-asset-name-to-uuids]} (build-annotation-images parent-asset-paths assets opts)]
         (concat txs
-                (build-pdf-annotations-tx* asset-edn-map (get @pdf-annotation-pages asset-md-name) parent-asset image-asset-name-to-uuids opts))))))
+                (build-pdf-annotations-tx* asset-edn-map (get @pdf-annotation-pages (:asset-md-name asset-edn-entry)) parent-asset image-asset-name-to-uuids opts))))))
 
 (defn- resolve-asset-data
   [asset-link user-config linked-files linked-base-dir zotero-imported-files]
@@ -1627,7 +1646,7 @@
   [assets asset-link-or-name path asset-path <get-file-stat]
   (when (and asset-link-or-name
              (not (get @assets asset-link-or-name))
-             (string/ends-with? path ".pdf")
+             (pdf-file? path)
              (fn? <get-file-stat))
     (-> (p/let [stat (<get-file-stat path)]
           (swap! assets assoc asset-link-or-name
@@ -1651,12 +1670,13 @@
                            {:logseq.property.asset/resize-metadata metadata}))
         external-file-asset? (and (string? asset-name)
                                   (not= asset-name asset-link-or-name))
-        pdf-annotations-path (if (and (or zotero-asset? external-file-asset?)
-                                      (string? asset-name))
-                               (path/path-join common-config/local-assets-dir asset-name)
-                               (or asset-name asset-link-or-name))
-        pdf-annotations-tx (when (= "pdf" (path/file-ext pdf-annotations-path))
-                             (build-pdf-annotations-tx pdf-annotations-path assets new-asset pdf-annotation-pages opts))
+        pdf-annotations-paths (if (and (or zotero-asset? external-file-asset?)
+                                       (string? asset-name))
+                                [(path/path-join common-config/local-assets-dir (node-path/basename asset-name))
+                                 (path/path-join common-config/local-assets-dir asset-name)]
+                                [(or asset-name asset-link-or-name)])
+        pdf-annotations-tx (when (some pdf-file? pdf-annotations-paths)
+                             (build-pdf-annotations-tx pdf-annotations-paths assets new-asset pdf-annotation-pages opts))
         asset-tx (concat [new-asset] pdf-annotations-tx)]
     ;; (prn :asset-added! (node-path/basename asset-name))
     ;; (cljs.pprint/pprint asset-link)

@@ -41,6 +41,7 @@
     :get-client-ops-conn worker-state/get-client-ops-conn
     :get-pending-local-tx-count client-op/get-pending-local-tx-count
     :get-unpushed-asset-ops-count client-op/get-unpushed-asset-ops-count
+    :get-missing-asset-upload-files sync-assets/get-missing-asset-upload-files
     :get-local-tx client-op/get-local-tx
     :get-local-checksum client-op/get-local-checksum
     :get-graph-uuid client-op/get-graph-uuid
@@ -410,6 +411,17 @@
 (defn request-asset-download!
   [repo asset-uuid]
   (sync-apply/request-asset-download! repo asset-uuid))
+
+(defn retry-asset-upload!
+  [repo]
+  (when-let [client (current-client repo)]
+    (sync-assets/enqueue-asset-sync!
+     repo client
+     {:enqueue-asset-task-f enqueue-asset-task!
+      :current-client-f current-client
+      :broadcast-rtc-state!-f broadcast-rtc-state!
+      :fail-fast-f fail-fast}))
+  (p/resolved nil))
 
 (defn rehydrate-large-titles-from-db!
   [repo graph-id]

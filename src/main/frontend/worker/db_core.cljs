@@ -755,6 +755,10 @@
   [repo asset-uuid]
   (db-sync/request-asset-download! repo asset-uuid))
 
+(def-thread-api :thread-api/db-sync-retry-asset-upload
+  [repo]
+  (db-sync/retry-asset-upload! repo))
+
 (def-thread-api :thread-api/db-sync-grant-graph-access
   [repo graph-id target-email]
   (sync-crypt/<grant-graph-access! repo graph-id target-email))
