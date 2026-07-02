@@ -1459,6 +1459,115 @@
                                              :where [?e :block/title "remote-migration-only"]]
                                         @conn))))))))))
 
+(defn- remote-asset-tx-data
+  [asset-uuid page-uuid title]
+  [[:db/add -1 :block/uuid asset-uuid]
+   [:db/add -1 :block/title title]
+   [:db/add -1 :block/parent [:block/uuid page-uuid]]
+   [:db/add -1 :block/page [:block/uuid page-uuid]]
+   [:db/add -1 :block/order "a0"]
+   [:db/add -1 :block/created-at 1760000000000]
+   [:db/add -1 :block/updated-at 1760000000000]
+   [:db/add -1 :block/tags :logseq.class/Asset]
+   [:db/add -1 :logseq.property.asset/type "png"]
+   [:db/add -1 :logseq.property.asset/size 42]
+   [:db/add -1 :logseq.property.asset/checksum "remote-checksum"]
+   [:db/add -1 :logseq.property.asset/remote-metadata {:checksum "remote-checksum"
+                                                       :type "png"}]])
+
+(defn- minimal-platform
+  [owner-source]
+  {:env {:runtime (if (= :browser owner-source) :browser :node)
+         :owner-source owner-source}
+   :storage {}
+   :kv {}
+   :broadcast {}
+   :websocket {}
+   :crypto {}
+   :timers {}
+   :sqlite {}})
+
+(defn- apply-remote-asset-tx-with-owner-source
+  [owner-source calls]
+  (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+        page-uuid (:block/uuid (:block/page parent))
+        asset-uuid (random-uuid)
+        title (str "remote-" (name owner-source) "-asset.png")
+        client (test-sync-client)]
+    (platform/set-platform! (minimal-platform owner-source))
+    (with-datascript-conns
+      conn
+      client-ops-conn
+      (fn []
+        (p/with-redefs [sync-assets/download-missing-remote-assets!
+                        (fn [& _args]
+                          (throw (ex-info "incremental sync should not scan all assets" {})))
+                        sync-assets/download-remote-assets-if-missing!
+                        (fn [repo graph-id candidates]
+                          (swap! calls conj [owner-source repo graph-id (mapv :asset-type candidates)])
+                          (p/resolved {:total 1
+                                       :downloaded 1
+                                       :skipped-existing 0}))]
+          (p/let [_ (#'sync-apply/apply-remote-txs!
+                     test-repo client [{:tx-data (remote-asset-tx-data asset-uuid page-uuid title)}])]
+            (is (= title (:block/title (d/entity @conn [:block/uuid asset-uuid]))))))))))
+
+(deftest apply-remote-txs-downloads-missing-assets-for-cli-and-desktop-test
+  (async done
+         (let [platform-prev (try
+                               (platform/current)
+                               (catch :default _ nil))
+               calls (atom [])]
+           (-> (p/let [_ (apply-remote-asset-tx-with-owner-source :cli calls)
+                       _ (apply-remote-asset-tx-with-owner-source :electron calls)]
+                 (is (some #{[:cli test-repo "graph-1" ["png"]]} @calls))
+                 (is (some #{[:electron test-repo "graph-1" ["png"]]} @calls)))
+               (p/catch (fn [error]
+                          (is false (str "unexpected error: " error))))
+               (p/finally
+                (fn []
+                  (when platform-prev
+                    (platform/set-platform! platform-prev))
+                  (done)))))))
+
+(deftest apply-remote-txs-keeps-browser-assets-lazy-test
+  (async done
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          page-uuid (:block/uuid (:block/page parent))
+          asset-uuid (random-uuid)
+          title "remote-browser-asset.png"
+          client (test-sync-client)
+          calls (atom [])
+          platform-prev (try
+                          (platform/current)
+                          (catch :default _ nil))]
+      (platform/set-platform! (minimal-platform :browser))
+      (-> (with-datascript-conns
+            conn
+            client-ops-conn
+            (fn []
+              (p/with-redefs [sync-assets/download-missing-remote-assets!
+                              (fn [& _args]
+                                (throw (ex-info "browser sync should not eagerly download assets" {})))
+                              sync-assets/download-remote-assets-if-missing!
+                              (fn [repo graph-id candidates]
+                                (swap! calls conj [repo graph-id candidates])
+                                (p/resolved {:total 1
+                                             :downloaded 1
+                                             :skipped-existing 0}))]
+                (p/let [_ (#'sync-apply/apply-remote-txs!
+                           test-repo client [{:tx-data (remote-asset-tx-data asset-uuid page-uuid title)}])]
+                  (is (= title (:block/title (d/entity @conn [:block/uuid asset-uuid]))))))))
+          (p/then (fn [_]
+                    (is (= [] @calls))))
+          (p/catch (fn [error]
+                     (is false (str "unexpected error: " error))))
+          (p/finally
+            (fn []
+              (when platform-prev
+                (platform/set-platform! platform-prev))
+              (done)))))))
+
 (deftest apply-repair-tx-data-uses-maintenance-tx-meta-test
   (testing "server repair txs should not be treated as local user ops"
     (let [tx-metas (atom [])]
