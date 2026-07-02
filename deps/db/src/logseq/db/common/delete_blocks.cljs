@@ -60,6 +60,32 @@
                  (d/entity db (second tx)))))
        (common-util/distinct-by :db/id)))
 
+(def ^:private property-history-ref-attrs
+  #{:logseq.property.history/block
+    :logseq.property.history/property
+    :logseq.property.history/ref-value})
+
+(defn- property-history-entity?
+  [entity]
+  (boolean
+   (and entity
+        (or (:logseq.property.history/block entity)
+            (:logseq.property.history/property entity)
+            (:logseq.property.history/ref-value entity)
+            (contains? entity :logseq.property.history/scalar-value)))))
+
+(defn- property-history-ref-retracted-entities
+  [db txs]
+  (->> txs
+       (keep (fn [tx]
+               (when (and (vector? tx)
+                          (= :db/retract (first tx))
+                          (contains? property-history-ref-attrs (nth tx 2 nil)))
+                 (let [entity (d/entity db (second tx))]
+                   (when (property-history-entity? entity)
+                     entity)))))
+       (common-util/distinct-by :db/id)))
+
 (defn- block-subtree-entities
   [root]
   (loop [pending [root]
@@ -88,6 +114,9 @@
 (defn- direct-cleanup-tx
   [entities]
   (let [retracted-blocks (filter block-entity? entities)
+        retracted-history-self-tx (->> entities
+                                       (filter property-history-entity?)
+                                       (map (fn [history] [:db/retractEntity (:db/id history)])))
         reaction-entities (->> entities
                                (mapcat :logseq.property.reaction/_target)
                                (common-util/distinct-by :db/id))
@@ -105,11 +134,12 @@
         delete-views (->> entities
                           (mapcat :logseq.property/_view-for)
                           (map (fn [view] [:db/retractEntity (:db/id view)])))]
-    (vec (concat retracted-tx delete-views retract-history-tx retract-reactions-tx))))
+    (vec (concat retracted-tx delete-views retracted-history-self-tx retract-history-tx retract-reactions-tx))))
 
 (defn- build-cleanup-tx
   [db txs]
-  (loop [pending-entities (retracted-entities db txs)
+  (loop [pending-entities (concat (retracted-entities db txs)
+                                  (property-history-ref-retracted-entities db txs))
          seen-ids #{}
          cleanup-tx []]
     (if-let [entities (seq (remove #(contains? seen-ids (:db/id %))
