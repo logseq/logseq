@@ -6,6 +6,7 @@
    [datascript.core :as d]
    [frontend.common.crypt :as crypt]
    [frontend.test.noise :as test-noise]
+   [frontend.worker.db-listener :as db-listener]
    [frontend.worker-common.util :as worker-util]
    [frontend.worker.handler.page :as worker-page]
    [frontend.worker.pipeline :as worker-pipeline]
@@ -1662,6 +1663,18 @@
             (db-sync/update-local-sync-checksum! test-repo tx-report)
             (is (= (client-op/get-local-checksum test-repo)
                    (sync-checksum/recompute-checksum (:db-after tx-report))))))))))
+
+(deftest local-checksum-listener-updates-in-release-mode-test
+  (testing "db-worker-node release keeps the stored checksum aligned incrementally"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (with-redefs [worker-util/dev-or-test? false]
+            (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
+            (d/transact! conn [[:db/add (:db/id parent) :block/title "Release checksum block"]])
+            (is (= (sync-checksum/recompute-checksum @conn)
+                   (client-op/get-local-checksum test-repo)))))))))
 
 (deftest first-local-block-after-upload-keeps-server-checksum-in-sync-test
   (testing "the first local block tx after upload keeps server and client checksums equal"

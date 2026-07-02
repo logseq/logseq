@@ -13,7 +13,6 @@
    [frontend.worker.sync.transport :as sync-transport]
    [frontend.worker.sync.upload :as sync-upload]
    [frontend.worker.sync.util :as sync-util]
-   [frontend.worker-common.util :as worker-util]
    [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
    [logseq.db-sync.checksum :as sync-checksum]
@@ -51,8 +50,7 @@
 
 (defn update-local-sync-checksum!
   [repo tx-report]
-  (when (and worker-util/dev-or-test?
-             (worker-state/get-client-ops-conn repo))
+  (when (worker-state/get-client-ops-conn repo)
     (let [current-checksum (client-op/get-local-checksum repo)
           new-checksum (sync-checksum/update-checksum current-checksum tx-report)]
       ;; (let [full-checksum (sync-checksum/recompute-checksum (:db-after tx-report))]
