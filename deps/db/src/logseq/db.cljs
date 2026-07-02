@@ -144,27 +144,32 @@
 (defn- transact-sync
   [conn tx-data tx-meta]
   (try
-    (let [db @conn
-          validate? (should-validate-tx? conn db tx-meta)]
-      (if validate?
-        (let [tx-report* (d/with db tx-data tx-meta)
-              pipeline-f @*transact-pipeline-fn
-              tx-report (if pipeline-f (pipeline-f tx-report*) tx-report*)
-              _ (throw-if-page-has-block-parent! (:db-after tx-report) (:tx-data tx-report))
-              [validate-result errors] (db-validate/validate-tx-report tx-report nil)]
-          (cond
-            validate-result
-            (when (and tx-report
-                       (seq (:tx-data tx-report)))
-              ;; perf enhancement: avoid repeated call on `d/with`
-              (reset! conn (:db-after tx-report))
-              (dc/store-after-transact! conn tx-report)
-              (dc/run-callbacks conn tx-report))
+    (loop []
+      (let [db @conn
+            validate? (should-validate-tx? conn db tx-meta)]
+        (if validate?
+          (let [tx-report* (d/with db tx-data tx-meta)
+                pipeline-f @*transact-pipeline-fn
+                tx-report (if pipeline-f (pipeline-f tx-report*) tx-report*)
+                _ (throw-if-page-has-block-parent! (:db-after tx-report) (:tx-data tx-report))
+                [validate-result errors] (db-validate/validate-tx-report tx-report nil)]
+            (cond
+              (not validate-result)
+              (if (identical? db @conn)
+                (throw-invalid-tx! tx-meta tx-data errors tx-report)
+                (recur))
 
-            :else
-            (throw-invalid-tx! tx-meta tx-data errors tx-report))
-          tx-report)
-        (d/transact! conn tx-data tx-meta)))
+              (and tx-report (seq (:tx-data tx-report)))
+              (if (compare-and-set! conn db (:db-after tx-report))
+                (do
+                  (dc/store-after-transact! conn tx-report)
+                  (dc/run-callbacks conn tx-report)
+                  tx-report)
+                (recur))
+
+              :else
+              tx-report))
+          (d/transact! conn tx-data tx-meta))))
     (catch :default e
       (when-not (and (:db-sync/suppress-stale-rebase-transact-failed-log? tx-meta)
                      (= :entity-id/missing (:error (ex-data e))))
@@ -216,10 +221,10 @@
          (transact-fn repo-or-conn tx-data tx-meta)
          (transact-sync repo-or-conn tx-data tx-meta))))))
 
-(defn- make-conn [opts]
+(defn- make-conn [db opts]
   ;; `datascript.conn/->Conn` is not exposed in nbb runtime.
   ;; Start from a fresh conn and merge the desired internal state.
-  (let [conn (d/create-conn)]
+  (let [conn (d/create-conn (:schema db))]
     (swap! (:atom conn) merge opts)
     conn))
 
@@ -228,10 +233,19 @@
   [db]
   (if-some [_storage (storage/storage db)]
     (make-conn
+     db
      {:db db
       :tx-tail []
       :db-last-stored db})
-    (make-conn {:db db})))
+    (make-conn db {:db db})))
+
+(defn temp-conn-from-db
+  "Create an isolated in-memory conn from `db` that can read storage-backed data without storing writes."
+  [db]
+  (doto (conn-from-db db)
+    (swap! assoc
+           :skip-store? true
+           :skip-validate-db? true)))
 
 (defn batch-transact-with-temp-conn!
   "Run batched tx work against a temporary conn, then apply all collected tx-data
@@ -249,13 +263,12 @@
   - `batch-tx-fn` is called as `(batch-tx-fn temp-conn *batch-tx-data)`.
   - `listen-db` (if provided) receives each intermediate tx-report from temp conn.
   - Do not rely on returned tx-report shape for undo/redo behavior."
-  [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
-  (let [temp-conn (conn-from-db @conn)
+  [conn tx-meta batch-tx-fn & {:keys [listen-db before-commit]}]
+  (let [temp-conn (temp-conn-from-db @conn)
         *batch-tx-data (volatile! [])
         *complete? (volatile! false)]
     ;; can read from disk, write is disallowed
     (swap! temp-conn assoc
-           :skip-store? true
            :batch-tx? true
            :skip-validate-db? true)
     (d/listen! temp-conn ::temp-conn-batch-tx
@@ -265,6 +278,8 @@
                    (listen-db tx-report))))
     (try
       (batch-tx-fn temp-conn *batch-tx-data)
+      (when (fn? before-commit)
+        (before-commit))
       (vreset! *complete? true)
       (let [tx-data @*batch-tx-data]
         (when (and @*complete? (seq tx-data))
