@@ -880,11 +880,10 @@
                         test-repo)]
             (is (= 1 (:pending-local counts)))))))))
 
-(deftest sync-counts-refreshes-idle-stale-local-checksum-test
-  (testing "idle sync status should not report a stale cached local checksum"
+(deftest sync-counts-reports-stored-local-checksum-test
+  (testing "sync status reports stored local checksum without recomputing from client db"
     (doseq [cached-checksum ["stale" nil]]
-      (let [updates (atom [])
-            counts (sync-presence/sync-counts
+      (let [counts (sync-presence/sync-counts
                     {:get-datascript-conn (constantly :conn)
                      :get-pending-local-tx-count (constantly 0)
                      :get-unpushed-asset-ops-count (constantly 0)
@@ -892,13 +891,9 @@
                      :get-local-checksum (constantly cached-checksum)
                      :get-graph-uuid (constantly "graph-1")
                      :latest-remote-tx {test-repo 42}
-                     :latest-remote-checksum {test-repo "fresh"}
-                     :recompute-local-checksum (constantly "fresh")
-                     :update-local-checksum (fn [repo checksum]
-                                              (swap! updates conj [repo checksum]))}
+                     :latest-remote-checksum {test-repo "fresh"}}
                     test-repo)]
-        (is (= "fresh" (:local-checksum counts)))
-        (is (= [[test-repo "fresh"]] @updates))))))
+        (is (= cached-checksum (:local-checksum counts)))))))
 
 (deftest pull-ok-with-older-remote-tx-is-ignored-test
   (testing "pull/ok with remote tx behind local tx does not apply stale tx data"
@@ -1691,7 +1686,7 @@
                                                      vec))
                                            :outliner-op outliner-op})))]
               (doseq [tx-entry tx-entries]
-                (#'sync-handler/apply-tx-entry! server-conn {} tx-entry))
+                (#'sync-handler/apply-tx-entry! server-conn tx-entry))
               (is (= (sync-checksum/recompute-checksum @conn)
                      (sync-checksum/recompute-checksum @server-conn))))))))))
 
@@ -1720,7 +1715,7 @@
                                                    vec))
                                          :outliner-op outliner-op})))]
             (doseq [tx-entry tx-entries]
-              (#'sync-handler/apply-tx-entry! server-conn {} tx-entry))
+              (#'sync-handler/apply-tx-entry! server-conn tx-entry))
             (is (= (sync-checksum/recompute-checksum @conn)
                    (sync-checksum/recompute-checksum @server-conn)))))))))
 

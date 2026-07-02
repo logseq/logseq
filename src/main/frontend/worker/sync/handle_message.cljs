@@ -12,7 +12,6 @@
             [frontend.worker.sync.transport :as sync-transport]
             [frontend.worker.sync.util :as sync-util]
             [lambdaisland.glogi :as log]
-            [logseq.db-sync.checksum :as sync-checksum]
             [promesa.core :as p]
             [frontend.worker-common.util :as worker-util]))
 
@@ -31,10 +30,6 @@
     :get-local-tx client-op/get-local-tx
     :get-local-checksum client-op/get-local-checksum
     :get-graph-uuid client-op/get-graph-uuid
-    :recompute-local-checksum (fn [repo]
-                                (when-let [conn (worker-state/get-datascript-conn repo)]
-                                  (sync-checksum/recompute-checksum @conn)))
-    :update-local-checksum client-op/update-local-checksum
     :latest-remote-tx @sync-apply/*repo->latest-remote-tx
     :latest-remote-checksum @sync-apply/*repo->latest-remote-checksum}
    repo))
@@ -142,25 +137,16 @@
 (defn- checksum-compare-ready?
   [repo client local-t remote-t]
   (and (= local-t remote-t)
+       (string? (client-op/get-local-checksum repo))
        (not (pending-local-tx? repo))
        (empty? @(:inflight client))))
-
-(defn- local-sync-checksum
-  [repo]
-  (if-let [checksum (client-op/get-local-checksum repo)]
-    checksum
-    (if-let [conn (worker-state/get-datascript-conn repo)]
-      (let [checksum (sync-checksum/recompute-checksum @conn)]
-        (client-op/update-local-checksum repo checksum)
-        checksum)
-      (fail-fast :db-sync/missing-db {:repo repo :op :checksum}))))
 
 (defn- verify-sync-checksum!
   [repo client local-tx remote-tx remote-checksum context]
   (when worker-util/dev-or-test?
     (when (and (string? remote-checksum)
                (checksum-compare-ready? repo client local-tx remote-tx))
-      (let [local-checksum (local-sync-checksum repo)]
+      (let [local-checksum (client-op/get-local-checksum repo)]
         (when-not (= local-checksum remote-checksum)
           (let [mismatch-data (merge context
                                      {:type :db-sync/checksum-mismatch

@@ -45,10 +45,6 @@
     :get-local-tx client-op/get-local-tx
     :get-local-checksum client-op/get-local-checksum
     :get-graph-uuid client-op/get-graph-uuid
-    :recompute-local-checksum (fn [repo]
-                                (when-let [conn (worker-state/get-datascript-conn repo)]
-                                  (sync-checksum/recompute-checksum @conn)))
-    :update-local-checksum client-op/update-local-checksum
     :latest-remote-tx @*repo->latest-remote-tx
     :latest-remote-checksum @*repo->latest-remote-checksum}
    repo))
