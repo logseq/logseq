@@ -163,6 +163,28 @@
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
 
+(deftest recycle-ops-return-apply-result-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}}])
+        page (ldb/get-page @conn "page1")
+        page-uuid (:block/uuid page)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (outliner-page/delete! conn page-uuid {})
+      (is (true? (outliner-op/apply-ops!
+                  conn
+                  [[:restore-recycled [page-uuid]]]
+                  {})))
+      (is (false? (ldb/recycled? (d/entity @conn [:block/uuid page-uuid]))))
+      (outliner-page/delete! conn page-uuid {})
+      (is (true? (outliner-op/apply-ops!
+                  conn
+                  [[:recycle-delete-permanently [page-uuid]]]
+                  {})))
+      (is (nil? (d/entity @conn [:block/uuid page-uuid])))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
 (deftest permanent-delete-recycled-page-removes-blocks-parented-by-page-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}}

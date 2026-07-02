@@ -373,11 +373,11 @@
 
     :restore-recycled
     (let [[root-uuid] args]
-      (outliner-recycle/restore! conn root-uuid))
+      (reset! *result (outliner-recycle/restore! conn root-uuid)))
 
     :recycle-delete-permanently
     (let [[root-uuid] args]
-      (outliner-recycle/permanently-delete! conn root-uuid))
+      (reset! *result (outliner-recycle/permanently-delete! conn root-uuid)))
 
     :toggle-reaction
     (reset! *result (apply toggle-reaction! conn args))

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const workflowPath = new URL("../.github/workflows/cli-sync-stress.yml", import.meta.url);
+const nodeAdapterPath = new URL("../deps/db-sync/worker/dist/node-adapter.js", import.meta.url);
 
 test("CLI sync stress workflow runs local sync/offline stress and validates the graph", () => {
   const workflow = readFileSync(workflowPath, "utf8");
@@ -25,4 +26,10 @@ test("CLI sync stress workflow runs local sync/offline stress and validates the 
   assert.match(workflow, /--no-e2ee/);
   assert.match(workflow, /--max-ops 1000/);
   assert.match(workflow, /graph validate --graph "\$GRAPH" --output json/);
+});
+
+test("db-sync node adapter does not require Sentry during startup", () => {
+  const adapter = readFileSync(nodeAdapterPath, "utf8");
+
+  assert.doesNotMatch(adapter, /SHADOW_IMPORT\("shadow\.js\.shim\.module\$\$sentry\$node\.js"\)/);
 });

@@ -5,6 +5,10 @@
             [clojure.test :refer [deftest is testing]]
             [logseq.cli.e2e.sync-fixture :as sync-fixture]))
 
+(defn- free-port []
+  (with-open [socket (java.net.ServerSocket. 0)]
+    (.getLocalPort socket)))
+
 (deftest prepare-sync-config-writes-oauth-token-endpoint
   (let [tmp-dir (fs/create-temp-dir {:prefix "logseq-cli-sync-config-test-"})
         auth-path (fs/path tmp-dir "auth.json")
@@ -136,3 +140,45 @@
       (is (string/includes? (:cmd (last @calls)) "db_sync_server.py"))
       (is (string/includes? (:cmd (last @calls)) " stop "))
       (is (false? (:throw? (last @calls)))))))
+
+(deftest db-sync-server-start-adds-db-sync-node-modules-to-node-path
+  (let [tmp-dir (fs/create-temp-dir {:prefix "logseq-cli-db-sync-server-test-"})
+        repo-root (fs/path tmp-dir "repo")
+        entry (fs/path repo-root "deps" "db-sync" "worker" "dist" "node-adapter.js")
+        node-modules (fs/path repo-root "deps" "db-sync" "node_modules")
+        pid-file (fs/path tmp-dir "server.pid")
+        log-file (fs/path tmp-dir "server.log")
+        data-dir (fs/path tmp-dir "server-data")
+        node-path-file (fs/path tmp-dir "node-path.txt")
+        script (fs/path "cli-e2e" "scripts" "db_sync_server.py")
+        port (free-port)]
+    (try
+      (fs/create-dirs (fs/parent entry))
+      (fs/create-dirs node-modules)
+      (spit (str entry)
+            (str "const fs = require('node:fs');\n"
+                 "const http = require('node:http');\n"
+                 "fs.writeFileSync(" (pr-str (str node-path-file)) ", process.env.NODE_PATH || '', 'utf8');\n"
+                 "http.createServer((req, res) => {\n"
+                 "  if (req.url === '/health') { res.writeHead(200); res.end('ok'); return; }\n"
+                 "  res.writeHead(404); res.end('not found');\n"
+                 "}).listen(process.env.DB_SYNC_PORT, '127.0.0.1');\n"))
+      (let [start (shell/sh "python3" (str script)
+                            "start"
+                            "--repo-root" (str repo-root)
+                            "--pid-file" (str pid-file)
+                            "--log-file" (str log-file)
+                            "--data-dir" (str data-dir)
+                            "--port" (str port)
+                            "--startup-timeout-s" "5"
+                            "--auth-path" "")]
+        (try
+          (is (= 0 (:exit start)) (:err start))
+          (is (string/includes? (slurp (str node-path-file)) (str node-modules)))
+          (finally
+            (shell/sh "python3" (str script)
+                      "stop"
+                      "--pid-file" (str pid-file)
+                      "--shutdown-timeout-s" "2"))))
+      (finally
+        (fs/delete-tree tmp-dir)))))

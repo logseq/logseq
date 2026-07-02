@@ -41,14 +41,9 @@
 
         "tx/batch"
         (let [txs (:txs message)
-              t-before (sync-handler/parse-int (:t-before message))
-              context (some-> (.deserializeAttachment ws)
-                              presence/attachment->sync-context)
-              context (cond-> (or context {})
-                        (string? (:client-revision message))
-                        (assoc :client-revision (:client-revision message)))]
+              t-before (sync-handler/parse-int (:t-before message))]
           (if (sequential? txs)
-            (ws/send! ws (sync-handler/handle-tx-batch! self ws txs t-before context))
+            (ws/send! ws (sync-handler/handle-tx-batch! self ws txs t-before))
             (ws/send! ws {:type "tx/reject" :reason "invalid tx"})))
 
         (ws/send! ws {:type "error" :message "unknown type"})))))
@@ -66,8 +61,7 @@
           (let [token (auth/token-from-request request)
                 claims (auth/unsafe-jwt-claims token)
                 user (presence/claims->user claims)]
-            (p/let [context (sync-handler/<graph-log-context self graph-id user nil)]
-              (when user
-                (presence/add-presence! self server user context))
-              (presence/broadcast-online-users! self)
-              (js/Response. nil #js {:status 101 :webSocket client}))))))))
+            (when user
+              (presence/add-presence! self server user))
+            (presence/broadcast-online-users! self)
+            (js/Response. nil #js {:status 101 :webSocket client})))))))

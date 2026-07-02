@@ -148,27 +148,28 @@
   [sql {:keys [db-after db-before tx-data tx-meta] :as tx-report}]
   (let [prev-checksum (get-checksum sql)
         checksum (sync-checksum/update-checksum prev-checksum tx-report)]
-    ;; (let [full-checksum (sync-checksum/recompute-checksum db-after)
-    ;;       prev-full-checksum (sync-checksum/recompute-checksum db-before)]
-    ;;   (when (and prev-checksum
-    ;;              (not= checksum full-checksum))
-    ;;     (prn :debug :before-checksum-error {:prev-tx (get-t sql)
-    ;;                                         :prev-checksum prev-checksum
-    ;;                                         :prev-full-checksum prev-full-checksum
-    ;;                                         :new-checksum checksum
-    ;;                                         :recomputed-after-checksum full-checksum
-    ;;                                         :tx-meta tx-meta
-    ;;                                         :db-before (ldb/write-transit-str db-before)
-    ;;                                         :tx-data (ldb/write-transit-str tx-data)})
-    ;;     (when (not= prev-checksum prev-full-checksum)
-    ;;       (prn :debug :prev-checksum-not-match {:prev-checksum prev-checksum
-    ;;                                             :prev-full-checksum prev-full-checksum}))
-    ;;     (throw (ex-info "server checksum doesn't match"
-    ;;                     {:prev-checksum prev-checksum
-    ;;                      :recomputed-after-checksum full-checksum
-    ;;                      :tx-meta tx-meta
-    ;;                      :tx-data tx-data
-    ;;                      :prev-tx (get-t sql)}))))
+    ;; (when (= "true" (some-> js/process .-env .-DB_SYNC_CHECKSUM_ASSERT))
+    ;;   (let [full-checksum (sync-checksum/recompute-checksum db-after)
+    ;;         prev-full-checksum (sync-checksum/recompute-checksum db-before)]
+    ;;     (when (and prev-checksum
+    ;;                (not= checksum full-checksum))
+    ;;       (prn :debug :before-checksum-error {:prev-tx (get-t sql)
+    ;;                                           :prev-checksum prev-checksum
+    ;;                                           :prev-full-checksum prev-full-checksum
+    ;;                                           :new-checksum checksum
+    ;;                                           :recomputed-after-checksum full-checksum
+    ;;                                           :tx-meta tx-meta
+    ;;                                           :db-before (ldb/write-transit-str db-before)
+    ;;                                           :tx-data (ldb/write-transit-str tx-data)})
+    ;;       (when (not= prev-checksum prev-full-checksum)
+    ;;         (prn :debug :prev-checksum-not-match {:prev-checksum prev-checksum
+    ;;                                               :prev-full-checksum prev-full-checksum}))
+    ;;       (throw (ex-info "server checksum doesn't match"
+    ;;                       {:prev-checksum prev-checksum
+    ;;                        :recomputed-after-checksum full-checksum
+    ;;                        :tx-meta tx-meta
+    ;;                        :tx-data tx-data
+    ;;                        :prev-tx (get-t sql)})))))
 
     (set-checksum! sql checksum)
     (when-not (empty? tx-data)
