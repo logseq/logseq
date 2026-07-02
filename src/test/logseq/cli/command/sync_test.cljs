@@ -1199,7 +1199,7 @@
                                                            {:base-url "http://example"
                                                             :root-dir "/tmp"
                                                             :timeout-ms 10000})
-                         [sync-app-state-before set-config-before list-remote-graphs sync-app-state-after set-config-after check-empty-db download]
+                         [sync-app-state-before set-config-before list-remote-graphs sync-app-state-after set-config-after check-empty-db download download-assets]
                          @invoke-calls]
                    (is (= :ok (:status result)))
                    (is (= :thread-api/sync-app-state (:method sync-app-state-before)))
@@ -1209,13 +1209,15 @@
                    (is (= :thread-api/set-db-sync-config (:method set-config-after)))
                    (is (= :thread-api/q (:method check-empty-db)))
                    (is (= :thread-api/db-sync-download-graph-by-id (:method download)))
+                   (is (= :thread-api/db-sync-download-missing-assets (:method download-assets)))
                    (is (= 10000 (:timeout-ms sync-app-state-before)))
                    (is (= 10000 (:timeout-ms set-config-before)))
                    (is (= 10000 (:timeout-ms list-remote-graphs)))
                    (is (= 10000 (:timeout-ms sync-app-state-after)))
                    (is (= 10000 (:timeout-ms set-config-after)))
                    (is (= 10000 (:timeout-ms check-empty-db)))
-                   (is (= 1800000 (:timeout-ms download)))))
+                   (is (= 1800000 (:timeout-ms download)))
+                   (is (= 10000 (:timeout-ms download-assets)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))

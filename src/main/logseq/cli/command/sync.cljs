@@ -897,7 +897,7 @@
                                  (p/finally (fn []
                                               (when-let [close! (:close! events-sub)]
                                                 (close!)))))
-                      assets-result (transport/invoke download-cfg :thread-api/db-sync-download-missing-assets
+                      assets-result (transport/invoke cfg :thread-api/db-sync-download-missing-assets
                                                       [(:repo action) graph-id])]
                 {:status :ok
                  :data (if (map? result)
