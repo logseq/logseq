@@ -233,9 +233,8 @@
                 (p/catch (fn [e]
                            (case (:type (ex-data e))
                              :rtc.exception/read-asset-failed
-                             (do
-                               (when-let [client (current-client-f repo)]
-                                 (broadcast-rtc-state!-f client)))
+                             (when-let [client (current-client-f repo)]
+                               (broadcast-rtc-state!-f client))
 
                              :rtc.exception/upload-asset-failed
                              nil
