@@ -98,6 +98,16 @@
                    created-at
                    (outliner-op->sql outliner-op)))
 
+(defn- with-sql-transaction!
+  [sql f]
+  (if-let [db (aget sql "_db")]
+    (let [transaction (.-transaction db)]
+      (if (fn? transaction)
+        (let [tx-fn (.call transaction db f)]
+          (tx-fn))
+        (f)))
+    (f)))
+
 (defn fetch-tx-since [sql since-t]
   (let [rows (common/get-sql-rows
               (common/sql-exec sql
@@ -171,7 +181,6 @@
     ;;                        :tx-data tx-data
     ;;                        :prev-tx (get-t sql)})))))
 
-    (set-checksum! sql checksum)
     (when-not (empty? tx-data)
       (let [created-at (common/now-ms)
             normalized-data (->> tx-data
@@ -179,8 +188,13 @@
             ;; _ (prn :debug :tx-data tx-data)
             ;; _ (prn :debug :normalized-data normalized-data)
             tx-str (common/write-transit normalized-data)
-            new-t (next-t! sql)]
-        (append-tx! sql new-t tx-str created-at (:outliner-op tx-meta))))))
+            new-t (inc (get-t sql))]
+        (with-sql-transaction!
+          sql
+          (fn []
+            (append-tx! sql new-t tx-str created-at (:outliner-op tx-meta))
+            (set-t! sql new-t)
+            (set-checksum! sql checksum)))))))
 
 (defn- listen-db-updates!
   [sql conn]

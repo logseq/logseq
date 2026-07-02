@@ -135,12 +135,22 @@
   [repo]
   (pos? (or (client-op/get-pending-local-tx-count repo) 0)))
 
-(defn- checksum-compare-ready?
+(defn- synced-checksum-ready?
   [repo client local-t remote-t]
   (and (= local-t remote-t)
-       (string? (client-op/get-local-checksum repo))
        (not (pending-local-tx? repo))
        (empty? @(:inflight client))))
+
+(defn- checksum-compare-ready?
+  [repo client local-t remote-t]
+  (and (synced-checksum-ready? repo client local-t remote-t)
+       (string? (client-op/get-local-checksum repo))))
+
+(defn- maybe-anchor-local-checksum!
+  [repo client local-t remote-t remote-checksum]
+  (when (and (string? remote-checksum)
+             (synced-checksum-ready? repo client local-t remote-t))
+    (client-op/update-local-checksum repo remote-checksum)))
 
 (defn- verify-sync-checksum!
   [repo client local-tx remote-tx remote-checksum context]
@@ -272,6 +282,7 @@
     (broadcast-rtc-state! client)
     (sync-apply/mark-pending-txs-false! repo @(:inflight client))
     (reset! (:inflight client) [])
+    (maybe-anchor-local-checksum! repo client next-local-tx remote-tx remote-checksum)
     (verify-sync-checksum! repo client next-local-tx remote-tx remote-checksum {:type "tx/batch/ok"})
     (sync-apply/enqueue-flush-pending! repo client)))
 
@@ -368,6 +379,7 @@
                          (throw e)))]
              (client-op/update-local-tx repo remote-tx)
              (broadcast-rtc-state! client)
+             (maybe-anchor-local-checksum! repo client remote-tx remote-tx remote-checksum)
              (verify-sync-checksum! repo client remote-tx remote-tx remote-checksum {:type "pull/ok"})
              (sync-apply/enqueue-flush-pending! repo client))
            (p/then (fn [_]
