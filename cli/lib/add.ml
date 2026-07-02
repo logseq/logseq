@@ -212,6 +212,16 @@ end
 
 let generate_uuid = Node_crypto.random_uuid
 
+let unique = Uuid_refs_types.unique_preserve_order
+
+let extract_page_refs title =
+  title |> Uuid_refs_types.extract_wiki_refs
+  |> List.filter_map (fun ref_title ->
+         let ref_title = String.trim ref_title in
+         if ref_title = "" || Cli_primitive.is_uuid_string ref_title then None
+         else Some ref_title)
+  |> unique
+
 let rec block_of_value raw =
   match Edn_util.as_map raw with
   | Some fields ->
@@ -479,39 +489,42 @@ let pull_created_page config repo name create_result =
   | Some (_ :: uuid_value :: _), _ | _, Some (_ :: uuid_value :: _) -> (
       match Edn_util.as_string_like uuid_value with
       | Some uuid ->
-          pull_entity config repo
-            (vector [ kw "db/id"; kw "block/uuid" ])
+          pull_entity config repo page_selector
             (vector [ kw "block/uuid"; Edn_util.uuid uuid ])
       | _ ->
-          pull_entity config repo
-            (vector [ kw "db/id"; kw "block/uuid" ])
+          pull_entity config repo page_selector
             (vector
                [
                  kw "block/name"; Edn_util.string (normalized_lookup_name name);
                ]))
   | _ ->
-      pull_entity config repo
-        (vector [ kw "db/id"; kw "block/uuid" ])
+      pull_entity config repo page_selector
         (vector
            [ kw "block/name"; Edn_util.string (normalized_lookup_name name) ])
 
-let ensure_page config repo page_name =
+let ensure_page_entity config repo page_name =
   let open Cli_effect in
   bind (pull_pages_by_name config repo page_name page_selector) (fun result ->
       match first_entity result with
       | Some entity when recycled_entity entity ->
           pure (Error (recycled_page_error ()))
-      | Some entity -> (
-          match uuid_of_entity entity with
-          | Some uuid -> pure (Ok uuid)
-          | None -> pure (Error (page_not_found ())))
+      | Some entity -> pure (Ok entity)
       | None ->
           bind (create_page config repo page_name) (fun create_result ->
               bind (pull_created_page config repo page_name create_result)
                 (fun page ->
                   match uuid_of_entity page with
-                  | Some uuid -> pure (Ok uuid)
+                  | Some _ -> pure (Ok page)
                   | None -> pure (Error (page_not_found ())))))
+
+let ensure_page config repo page_name =
+  let open Cli_effect in
+  bind (ensure_page_entity config repo page_name) (function
+    | Ok entity -> (
+        match uuid_of_entity entity with
+        | Some uuid -> pure (Ok uuid)
+        | None -> pure (Error (page_not_found ())))
+    | Error err -> pure (Error err))
 
 let resolve_add_target config (action : action) =
   let open Cli_effect in
@@ -611,18 +624,10 @@ let collect_uuids_from_value value =
   in
   List.rev (loop [] value)
 
-let unique values =
-  let rec loop seen = function
-    | [] -> List.rev seen
-    | value :: rest when List.mem value seen -> loop seen rest
-    | value :: rest -> loop (value :: seen) rest
-  in
-  loop [] values
-
 let collect_action_block_uuids blocks =
   blocks |> flatten_blocks
   |> List.filter_map (fun block -> block.Block.uuid)
-  |> unique
+  |> Uuid_refs_types.unique_preserve_order
 
 let result_ids ids =
   Edn_util.map
@@ -729,7 +734,7 @@ let resolve_created_ids config repo blocks insert_result =
   let uuids =
     match collect_uuids_from_value insert_result with
     | [] -> collect_action_block_uuids blocks
-    | uuids -> unique uuids
+    | uuids -> Uuid_refs_types.unique_preserve_order uuids
   in
   let rec loop acc = function
     | [] -> pure (Ok (List.rev acc))
@@ -798,7 +803,7 @@ let metadata_ops block_uuids status tags properties =
   let tag_ops =
     tags
     |> List.filter_map (fun tag -> tag.Entity.id)
-    |> unique
+    |> Uuid_refs_types.unique_preserve_order
     |> List.map (fun tag_id ->
         Edn_util.vector
           [
@@ -830,6 +835,82 @@ let metadata_ops block_uuids status tags properties =
   in
   if block_uuids = [] then [] else status_ops @ tag_ops @ property_ops
 
+let page_ref_value entity fallback_title =
+  match uuid_of_entity entity with
+  | None -> None
+  | Some uuid ->
+      let fields =
+        [
+          (kw "block/uuid", Edn_util.uuid uuid);
+          ( kw "block/title",
+            Edn_util.string
+              (Option.value
+                 (Edn_util.get_string entity "block/title")
+                 ~default:fallback_title) );
+        ]
+      in
+      let fields =
+        match Edn_util.get_string entity "block/name" with
+        | Some name -> (kw "block/name", Edn_util.string name) :: fields
+        | None -> fields
+      in
+      Some (Edn_util.map fields)
+
+let resolve_title_page_refs invoke_config repo title =
+  let open Cli_effect in
+  let page_names = extract_page_refs title in
+  let rec loop acc = function
+    | [] -> pure (Ok (List.rev acc))
+    | page_name :: rest ->
+        bind (ensure_page_entity invoke_config repo page_name) (function
+          | Error err -> pure (Error err)
+          | Ok entity -> (
+              match page_ref_value entity page_name with
+              | Some ref_value -> loop (ref_value :: acc) rest
+              | None -> pure (Error (page_not_found ()))))
+  in
+  loop [] page_names
+
+let rec resolve_block_title_page_refs invoke_config repo block =
+  let open Cli_effect in
+  let title_refs =
+    match block.Block.title with
+    | Some title -> resolve_title_page_refs invoke_config repo title
+    | None -> pure (Ok [])
+  in
+  bind title_refs (function
+    | Error err -> pure (Error err)
+    | Ok refs ->
+        let rec resolve_children acc = function
+          | [] -> pure (Ok (List.rev acc))
+          | child :: rest ->
+              bind (resolve_block_title_page_refs invoke_config repo child)
+                (function
+                | Error err -> pure (Error err)
+                | Ok child_refs ->
+                    resolve_children (List.rev_append child_refs acc) rest)
+        in
+        bind (resolve_children [] block.Block.children) (function
+          | Error err -> pure (Error err)
+          | Ok child_refs ->
+              let own_refs =
+                match (block.Block.uuid, refs) with
+                | Some uuid, _ :: _ -> [ (uuid, refs) ]
+                | _ -> []
+              in
+              pure (Ok (own_refs @ child_refs))))
+
+let resolve_blocks_title_page_refs invoke_config repo blocks =
+  let open Cli_effect in
+  let rec loop acc = function
+    | [] -> pure (Ok (List.rev acc))
+    | block :: rest ->
+        bind (resolve_block_title_page_refs invoke_config repo block) (function
+          | Error err -> pure (Error err)
+          | Ok refs -> loop (List.rev_append refs acc) rest)
+  in
+  loop [] blocks
+
 let execute_add_block action config mode =
   let open Cli_effect in
   bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
@@ -844,15 +925,38 @@ let execute_add_block action config mode =
               bind (resolve_tags config action.repo action.tags) (fun tags ->
                   bind (resolve_properties config action.repo action.properties)
                     (fun properties ->
+                      bind
+                        (resolve_blocks_title_page_refs invoke_config action.repo
+                           action.blocks)
+                        (function
+                        | Error err ->
+                            pure
+                              (Cli_result.error
+                                 ~command:Command_id.Upsert_block mode err)
+                        | Ok refs_by_uuid ->
                       let all_blocks = Block.flatten action.blocks in
                       let block_uuids =
                         List.filter_map
                           (fun block -> block.Block.uuid)
                           all_blocks
-                        |> unique
+                        |> Uuid_refs_types.unique_preserve_order
                       in
                       let block_for_insert block =
                         { block with Block.parent = None; children = [] }
+                      in
+                      let block_value_for_insert block =
+                        let value =
+                          Edn_util.any (Block.to_value (block_for_insert block))
+                        in
+                        match block.Block.uuid with
+                        | Some uuid -> (
+                            match List.assoc_opt uuid refs_by_uuid with
+                            | Some refs ->
+                                Edn_util.assoc "block/refs"
+                                  (Edn_util.vector refs)
+                                  value
+                            | None -> value)
+                        | None -> value
                       in
                       let insert_blocks target_uuid pos blocks =
                         let insert_op =
@@ -864,9 +968,7 @@ let execute_add_block action config mode =
                                   Edn_util.vector
                                     (List.map
                                        (fun block ->
-                                         Edn_util.any
-                                           (Block.to_value
-                                              (block_for_insert block)))
+                                         block_value_for_insert block)
                                        blocks);
                                   Edn_util.uuid target_uuid;
                                   insert_opts pos;
@@ -925,4 +1027,4 @@ let execute_add_block action config mode =
                                     pure
                                       (Cli_result.ok
                                          ~command:Command_id.Upsert_block mode
-                                         (Raw (result_ids ids))))))))))
+                                         (Raw (result_ids ids)))))))))))

@@ -1435,6 +1435,70 @@ let () =
             fail_promise
               (Printf.sprintf "expected five invoke requests, got %d" !step)));
 
+  test_promise "upsert block create sends page refs from block title"
+    (fun () ->
+      let step = ref 0 in
+      let ref_uuid = "22222222-2222-4222-8222-222222222222" in
+      let captured_apply_body = ref None in
+      let server =
+        invoke_server (fun body ->
+            incr step;
+            match !step with
+            | 1
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"home" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",42,\"~:block/uuid\",\"11111111-1111-1111-1111-111111111111\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\"]]"
+            | 2
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"bar_page" body ->
+                "[[\"^ \",\"~:db/id\",88,\"~:block/uuid\",\"" ^ ref_uuid
+                ^ "\",\"~:block/name\",\"bar_page\",\"~:block/title\",\"bar_page\"]]"
+            | 3
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                captured_apply_body := Some body;
+                "[]"
+            | 4 when Js.String.includes ~search:"thread-api/pull" body ->
+                "[\"^ \",\"~:db/id\",10]"
+            | _ ->
+                fail_test
+                  (Printf.sprintf "unexpected request at step %d: %s" !step body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "block";
+                "--target-page";
+                "Home";
+                "--content";
+                "Foo links to [[bar_page]]";
+              ]
+          in
+          ignore (expect_cli_exit_zero "upsert block title page refs" output);
+          let body =
+            match !captured_apply_body with
+            | Some body -> body
+            | None ->
+                fail_test "missing captured apply body";
+                failwith "missing captured apply body"
+          in
+          expect_named_contains "block refs attr" body "block/refs";
+          expect_named_contains "resolved page ref uuid" body ref_uuid;
+          expect_named_contains "resolved page ref title" body "bar_page";
+          if !step = 4 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected four invoke requests, got %d" !step)));
+
   test_promise "upsert block update resolves tag names from tag list"
     (fun () ->
       let step = ref 0 in
