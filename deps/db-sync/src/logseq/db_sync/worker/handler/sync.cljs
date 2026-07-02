@@ -11,9 +11,7 @@
             [logseq.db-sync.snapshot :as snapshot]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.tx-sanitize :as tx-sanitize]
-            [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.http :as http]
-            [logseq.db-sync.worker.presence :as presence]
             [logseq.db-sync.worker.routes.sync :as sync-routes]
             [logseq.db-sync.worker.ws :as ws]
             [promesa.core :as p]))
@@ -125,45 +123,6 @@
         param-id (.get (.-searchParams url) "graph-id")]
     (when (seq (or header-id param-id))
       (or header-id param-id))))
-
-(defn- env-db
-  [^js self]
-  (some-> self .-env (aget "DB")))
-
-(defn request-user
-  [request]
-  (some-> request
-          auth/token-from-request
-          auth/unsafe-jwt-claims
-          presence/claims->user))
-
-(defn- log-context
-  [graph-id graph-info user client-revision]
-  (cond-> {}
-    (string? graph-id)
-    (assoc :graph-id graph-id)
-    (string? (:graph-name graph-info))
-    (assoc :graph-name (:graph-name graph-info))
-    (string? (:username user))
-    (assoc :username (:username user))
-    (string? client-revision)
-    (assoc :client-revision client-revision)))
-
-(defn- <cached-graph-log-info
-  [^js self graph-id]
-  (let [cached (.-graph-log-info self)]
-    (if (= graph-id (:graph-id cached))
-      (p/resolved cached)
-      (if-let [db (env-db self)]
-        (p/let [graph-info (index/<graph-log-info db graph-id)]
-          (set! (.-graph-log-info self) graph-info)
-          graph-info)
-        (p/resolved nil)))))
-
-(defn <graph-log-context
-  [^js self graph-id user client-revision]
-  (p/let [graph-info (<cached-graph-log-info self graph-id)]
-    (log-context graph-id graph-info user client-revision)))
 
 ;; (defn- snapshot-key [graph-id snapshot-id]
 ;;   (str graph-id "/" snapshot-id ".snapshot"))
@@ -376,14 +335,13 @@
     (import-snapshot-rows! sql "kvs" rows)))
 
 (defn- apply-tx-entry!
-  [conn log-context {:keys [tx outliner-op]}]
+  [conn {:keys [tx outliner-op]}]
   (let [tx-data (tx-sanitize/sanitize-tx @conn
                                          (protocol/transit->tx tx)
                                          {:drop-missing-retract-ops? (= outliner-op :fix)})]
     (if (seq tx-data)
       (try
-        (ldb/transact! conn tx-data (cond-> (merge {:op :apply-client-tx}
-                                                    log-context)
+        (ldb/transact! conn tx-data (cond-> {:op :apply-client-tx}
                                       outliner-op
                                       (assoc :outliner-op outliner-op)
                                       (= outliner-op :db-migrate)
@@ -405,7 +363,7 @@
             (throw e))))
       false)))
 
-(defn- apply-tx! [^js self tx-entries log-context]
+(defn- apply-tx! [^js self tx-entries]
   (let [sql (.-sql self)]
     (ensure-conn! self)
     (let [conn (.-conn self)]
@@ -415,7 +373,7 @@
         (if-let [tx-entry (first remaining)]
           (let [tx-id (:tx-id tx-entry)
                 applied-entry? (try
-                                 (boolean (apply-tx-entry! conn log-context tx-entry))
+                                 (boolean (apply-tx-entry! conn tx-entry))
                                  (catch :default e
                                    (log/error :db-sync/transact-failed e)
                                    (let [missing-block-uuids (missing-block-uuids-from-error e)]
@@ -442,15 +400,13 @@
              :successful-tx-ids successful-tx-ids}))))))
 
 (defn handle-tx-batch!
-  ([^js self sender txs t-before]
-   (handle-tx-batch! self sender txs t-before nil))
-  ([^js self sender txs t-before log-context]
-   (let [current-t (t-now self)]
-     (cond
-       (not (snapshot-upload-finished? self))
-       {:type "tx/reject"
-        :reason "snapshot upload in progress"
-        :t current-t}
+  [^js self sender txs t-before]
+  (let [current-t (t-now self)]
+    (cond
+      (not (snapshot-upload-finished? self))
+      {:type "tx/reject"
+       :reason "snapshot upload in progress"
+       :t current-t}
 
        (or (not (number? t-before)) (neg? t-before))
        {:type "tx/reject"
@@ -464,7 +420,7 @@
        :else
        (if (seq txs)
          (try
-           (let [{:keys [t applied?]} (apply-tx! self txs log-context)
+           (let [{:keys [t applied?]} (apply-tx! self txs)
                  checksum (current-checksum self)]
              (when applied?
                ;; Broadcast once per processed batch after tx-log/checksum settle.
@@ -490,7 +446,7 @@
                  (seq missing-block-uuids) (assoc :missing-block-uuids missing-block-uuids)
                  (string? checksum) (assoc :checksum checksum)))))
          {:type "tx/reject"
-          :reason "empty tx data"})))))
+          :reason "empty tx data"}))))
 
 (defn- handle-sync-pull
   [^js self ^js url]
@@ -629,18 +585,14 @@
                    graph-id (graph-id-from-request request)]
                (if (nil? body)
                  (http/bad-request "invalid tx")
-                 (let [{:keys [txs t-before client-revision]} body
+                 (let [{:keys [txs t-before]} body
                        t-before (parse-int t-before)]
                    (if (sequential? txs)
                      (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
                        (if-not ready-for-sync?
                          (http/error-response "graph not ready" 409)
-                         (p/let [context (<graph-log-context self
-                                                             graph-id
-                                                             (request-user request)
-                                                             client-revision)]
-                           (http/json-response :sync/tx-batch
-                                               (handle-tx-batch! self nil txs t-before context)))))
+                         (http/json-response :sync/tx-batch
+                                             (handle-tx-batch! self nil txs t-before))))
                      (http/bad-request "invalid tx")))))))))
 
 (defn- parse-reset-param

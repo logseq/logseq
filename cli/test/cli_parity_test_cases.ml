@@ -6952,6 +6952,159 @@ let () =
         server_close server (fun[@u] () -> ());
         fail_promise (Printexc.to_string exn));
 
+  test_promise "CLI parity server start reuses starting db-worker-node"
+    (fun () ->
+      let root = temp_dir "logseq-cli-server-starting-existing-" in
+      let worker_script = Node.Path.join [| root; "db-worker-node.js" |] in
+      let graphs_dir = Node.Path.join [| root; "graphs" |] in
+      let graph_dir = Node.Path.join [| graphs_dir; "demo" |] in
+      let lock_path = Node.Path.join [| graph_dir; "db-worker.lock" |] in
+      let server_list_path = Node.Path.join [| root; "server-list" |] in
+      let health_calls = ref 0 in
+      let server =
+        create_server (fun[@u] req res ->
+            if req_method req = "GET" && req_url req = "/healthz" then (
+              incr health_calls;
+              let status_code, status =
+                if !health_calls = 1 then (503, "starting") else (200, "ready")
+              in
+              write_json res status_code
+                (Printf.sprintf
+                   "{\"repo\":\"logseq_db_demo\",\"status\":%S,\"host\":\"127.0.0.1\",\"pid\":%d,\"owner-source\":\"cli\",\"root-dir\":%S,\"revision\":\"test-revision\"}"
+                   status (Cli_unix.getpid ()) root))
+            else write_json res 404 (error_response "not found"))
+      in
+      try
+        mkdir_p graph_dir;
+        write_file worker_script "console.log('db-worker');\n";
+        write_file lock_path
+          (Printf.sprintf
+             "{\"repo\":\"logseq_db_demo\",\"pid\":%d,\"lock-id\":\"test\",\"owner-source\":\"cli\"}"
+             (Cli_unix.getpid ()));
+        start_spawn_capture ();
+        set_env "LOGSEQ_DB_WORKER_NODE_SCRIPT" worker_script;
+        Js.Promise.make (fun ~resolve ~reject ->
+            server_listen server 0 "127.0.0.1" (fun[@u] () ->
+                let port = (server_address server)##port in
+                write_file server_list_path
+                  (string_of_int (Cli_unix.getpid ()) ^ " "
+                 ^ string_of_int port ^ "\n");
+                let config = config ~root_dir:root ~repo:"demo" () in
+                let finish_ok () =
+                  server_close server (fun[@u] () -> (resolve pass [@u]))
+                in
+                let finish_error message =
+                  server_close server (fun[@u] () ->
+                      (reject (Failure message) [@u]))
+                in
+                Cli_effect.on_any
+                  (Server_runtime.start_server config
+                     (Cli_primitive.create_repo "logseq_db_demo")
+                     ~create_empty_db:false)
+                  (fun result ->
+                    let calls = spawn_capture_calls () in
+                    stop_spawn_capture ();
+                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+                    remove_tree root;
+                    match result with
+                    | Error err ->
+                        finish_error ("server start failed: " ^ err.Error.message)
+                    | Ok _ -> (
+                        try
+                          expect_equal "spawn calls" "[]" calls;
+                          expect_bool "health calls include ready retry" true
+                            (!health_calls >= 2);
+                          finish_ok ()
+                        with exn -> finish_error (Printexc.to_string exn)))
+                  (fun exn ->
+                    stop_spawn_capture ();
+                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+                    remove_tree root;
+                    finish_error (Printexc.to_string exn))))
+      with exn ->
+        stop_spawn_capture ();
+        unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+        remove_tree root;
+        server_close server (fun[@u] () -> ());
+        fail_promise (Printexc.to_string exn));
+
+  test_promise "CLI parity ensure server retries final health discovery"
+    (fun () ->
+      let root = temp_dir "logseq-cli-ensure-final-health-" in
+      let worker_script = Node.Path.join [| root; "db-worker-node.js" |] in
+      let graphs_dir = Node.Path.join [| root; "graphs" |] in
+      let graph_dir = Node.Path.join [| graphs_dir; "demo" |] in
+      let lock_path = Node.Path.join [| graph_dir; "db-worker.lock" |] in
+      let server_list_path = Node.Path.join [| root; "server-list" |] in
+      let health_calls = ref 0 in
+      let server =
+        create_server (fun[@u] req res ->
+            if req_method req = "GET" && req_url req = "/healthz" then (
+              incr health_calls;
+              match !health_calls with
+              | 1 ->
+                  write_json res 503
+                    (Printf.sprintf
+                       "{\"repo\":\"logseq_db_demo\",\"status\":\"starting\",\"host\":\"127.0.0.1\",\"pid\":%d,\"owner-source\":\"cli\",\"root-dir\":%S,\"revision\":\"test-revision\"}"
+                       (Cli_unix.getpid ()) root)
+              | 3 -> write_json res 500 (error_response "busy")
+              | _ ->
+                  write_json res 200
+                    (Printf.sprintf
+                       "{\"repo\":\"logseq_db_demo\",\"status\":\"ready\",\"host\":\"127.0.0.1\",\"pid\":%d,\"owner-source\":\"cli\",\"root-dir\":%S,\"revision\":\"test-revision\"}"
+                       (Cli_unix.getpid ()) root))
+            else write_json res 404 (error_response "not found"))
+      in
+      try
+        mkdir_p graph_dir;
+        write_file worker_script "console.log('db-worker');\n";
+        start_spawn_capture ();
+        set_env "LOGSEQ_DB_WORKER_NODE_SCRIPT" worker_script;
+        Js.Promise.make (fun ~resolve ~reject ->
+            server_listen server 0 "127.0.0.1" (fun[@u] () ->
+                let port = (server_address server)##port in
+                set_spawn_capture_on_spawn ~lock_path ~server_list_path ~port;
+                let config = config ~root_dir:root ~repo:"demo" () in
+                let finish_ok () =
+                  server_close server (fun[@u] () -> (resolve pass [@u]))
+                in
+                let finish_error message =
+                  server_close server (fun[@u] () ->
+                      (reject (Failure message) [@u]))
+                in
+                Cli_effect.on_any
+                  (Server_runtime.ensure_server config
+                     (Cli_primitive.create_repo "logseq_db_demo")
+                     ~create_empty_db:false)
+                  (fun result ->
+                    let calls = spawn_capture_calls () in
+                    stop_spawn_capture ();
+                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+                    remove_tree root;
+                    match result with
+                    | Error err ->
+                        finish_error
+                          ("ensure server failed: " ^ err.Error.message)
+                    | Ok _ -> (
+                        try
+                          expect_named_contains "spawned worker" calls
+                            worker_script;
+                          expect_bool "final health retried" true
+                            (!health_calls >= 4);
+                          finish_ok ()
+                        with exn -> finish_error (Printexc.to_string exn)))
+                  (fun exn ->
+                    stop_spawn_capture ();
+                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+                    remove_tree root;
+                    finish_error (Printexc.to_string exn))))
+      with exn ->
+        stop_spawn_capture ();
+        unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+        remove_tree root;
+        server_close server (fun[@u] () -> ());
+        fail_promise (Printexc.to_string exn));
+
   test_promise
     "CLI parity server start orphan timeout reports db-worker-node command"
     (fun () ->

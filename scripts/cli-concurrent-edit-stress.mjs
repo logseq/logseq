@@ -3,7 +3,7 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { mkdirSync, writeFileSync, appendFileSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 const repoRoot = resolve(new URL("..", import.meta.url).pathname);
@@ -12,7 +12,7 @@ const transit = require(require.resolve("transit-js", { paths: [resolve(repoRoot
 const transitWriter = transit.writer("json");
 const transitReader = transit.reader("json");
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const opts = {
     graph: "pi-memory",
     page: "CLI Concurrent Stress",
@@ -22,9 +22,12 @@ function parseArgs(argv) {
     todayDate: null,
     config: resolve(repoRoot, "tmp", "cli-concurrent-edit-stress", "cli.edn"),
     syncBase: "http://127.0.0.1:18080",
+    clients: 1,
     concurrency: 8,
     maxOps: 0,
     timeoutMs: 20000,
+    settleAttempts: 30,
+    settleMs: 1000,
     logFile: resolve(repoRoot, "tmp", "cli-concurrent-edit-stress", "events.jsonl"),
     sync: false,
     offline: false,
@@ -71,8 +74,14 @@ function parseArgs(argv) {
       case "--config":
         opts.config = resolve(next());
         break;
+      case "--root-dir":
+        opts.rootDir = resolve(next());
+        break;
       case "--sync-base":
         opts.syncBase = next();
+        break;
+      case "--clients":
+        opts.clients = Number.parseInt(next(), 10);
         break;
       case "--concurrency":
         opts.concurrency = Number.parseInt(next(), 10);
@@ -83,8 +92,23 @@ function parseArgs(argv) {
       case "--timeout-ms":
         opts.timeoutMs = Number.parseInt(next(), 10);
         break;
+      case "--settle-attempts":
+        opts.settleAttempts = Number.parseInt(next(), 10);
+        break;
+      case "--settle-ms":
+        opts.settleMs = Number.parseInt(next(), 10);
+        break;
       case "--log-file":
         opts.logFile = resolve(next());
+        break;
+      case "--sync-server-pid-file":
+        opts.syncServerPidFile = resolve(next());
+        break;
+      case "--sync-server-log-file":
+        opts.syncServerLogFile = resolve(next());
+        break;
+      case "--sync-server-data-dir":
+        opts.syncServerDataDir = resolve(next());
         break;
       case "--sync":
         opts.sync = true;
@@ -123,11 +147,23 @@ function parseArgs(argv) {
   if (!Number.isInteger(opts.concurrency) || opts.concurrency < 1) {
     throw new Error("--concurrency must be a positive integer");
   }
+  if (!Number.isInteger(opts.clients) || opts.clients < 1) {
+    throw new Error("--clients must be a positive integer");
+  }
+  if (opts.clients > 1 && !opts.sync) {
+    throw new Error("--clients greater than 1 requires --sync");
+  }
   if (!Number.isInteger(opts.maxOps) || opts.maxOps < 0) {
     throw new Error("--max-ops must be 0 or a positive integer");
   }
   if (!Number.isInteger(opts.timeoutMs) || opts.timeoutMs < 1000) {
     throw new Error("--timeout-ms must be at least 1000");
+  }
+  if (!Number.isInteger(opts.settleAttempts) || opts.settleAttempts < 1) {
+    throw new Error("--settle-attempts must be a positive integer");
+  }
+  if (!Number.isInteger(opts.settleMs) || opts.settleMs < 100) {
+    throw new Error("--settle-ms must be at least 100");
   }
   if (!Number.isInteger(opts.extraPages) || opts.extraPages < 0) {
     throw new Error("--extra-pages must be 0 or a positive integer");
@@ -160,8 +196,10 @@ Options:
   --journal-start DATE  First journal date, YYYY-MM-DD. Default: today
   --today-date DATE     Override today's journal date, YYYY-MM-DD
   --config PATH         Dedicated CLI config path under tmp/
+  --root-dir PATH       Dedicated root dir for the seed CLI client
   --sync-base URL       Local db-sync base URL. Default: http://127.0.0.1:18080
   --sync                Start db-sync client after verifying local /health
+  --clients N           Independent local clients synced to one remote graph. Default: 1
   --offline             Simulate offline windows by stopping sync during writes
   --offline-ms N        Duration of each offline window. Default: 2500
   --no-start-sync-server
@@ -172,7 +210,15 @@ Options:
   --concurrency N       Parallel workers. Default: 8
   --max-ops N           Stop after N operations. Default: 0, run forever
   --timeout-ms N        Per-CLI-command timeout. Default: 20000
+  --settle-attempts N   Final sync status polling attempts. Default: 30
+  --settle-ms N         Delay between sync status polls. Default: 1000
   --log-file PATH       JSONL event log path
+  --sync-server-pid-file PATH
+                        Local db-sync server pid file
+  --sync-server-log-file PATH
+                        Local db-sync server log file
+  --sync-server-data-dir PATH
+                        Local db-sync server data dir
   --fail-fast           Exit on first CLI error
 `);
 }
@@ -221,6 +267,12 @@ export function stressConfigText(opts) {
 function ensureStressConfig(opts) {
   assertLocalUrl(opts.httpBase, "http-base");
   assertLocalUrl(opts.wsUrl, "ws-url");
+  if (opts.rootDir) {
+    mkdirSync(opts.rootDir, { recursive: true });
+  }
+  if (opts.homeDir) {
+    mkdirSync(opts.homeDir, { recursive: true });
+  }
   mkdirSync(dirname(opts.config), { recursive: true });
   writeFileSync(opts.config, stressConfigText(opts), "utf8");
 }
@@ -252,7 +304,8 @@ function expectedCliRace(parsed, context = {}) {
     expectedRaceErrorCodes.has(parsed?.error?.code) ||
     (context.op === "property-delete-recreate" &&
       context.phase === "delete" &&
-      parsed?.error?.code === "property-not-found")
+      (parsed?.error?.code === "property-not-found" || parsed?.error?.code === "ambiguous-property-name")) ||
+    (context.op === "tag-delete-recreate" && context.phase === "delete" && parsed?.error?.code === "tag-not-found")
   );
 }
 
@@ -277,12 +330,13 @@ function expectedHttpRace(parsed, context = {}) {
 }
 
 export function classifyHttpResult(result, parsed, context = {}) {
-  const ok = result.ok;
-  const expectedRace = !ok && expectedHttpRace(parsed, context);
+  const noOp = result.ok && context.requireTruthyResult && !parsed?.result;
+  const ok = result.ok && !noOp;
+  const expectedRace = !ok && !noOp && expectedHttpRace(parsed, context);
   return {
     ok,
     level: ok || expectedRace ? "info" : "error",
-    outcome: ok ? "ok" : expectedRace ? "race-conflict" : "failed",
+    outcome: ok ? "ok" : expectedRace ? "race-conflict" : noOp ? "no-op" : "failed",
     expectedRace,
   };
 }
@@ -311,6 +365,7 @@ function runProcess(command, args, opts) {
       cwd: repoRoot,
       env: {
         ...process.env,
+        ...(opts.env || {}),
         LOGSEQ_CLI_CONFIG: opts.config,
         LOGSEQ_CLI_GRAPH: opts.graph,
         LOGSEQ_CLI_TIMEOUT_MS: String(opts.timeoutMs),
@@ -348,7 +403,8 @@ function runProcess(command, args, opts) {
 }
 
 async function runCli(opts, args, context = {}) {
-  const result = await runProcess(process.env.LOGSEQ_BIN || "logseq", args, opts);
+  const command = cliCommand(process.env.LOGSEQ_BIN);
+  const result = await runProcess(command.command, [...command.args, ...args], opts);
   let parsed = null;
   if (result.stdout) {
     try {
@@ -382,38 +438,81 @@ async function runCli(opts, args, context = {}) {
   return { ...classification, parsed, result };
 }
 
+export function cliCommand(bin = null) {
+  const command = bin || "logseq";
+  if (command.endsWith(".js")) {
+    return { command: process.execPath, args: [command] };
+  }
+  return { command, args: [] };
+}
+
+function cliFetchFailed(response) {
+  return (
+    !response.ok &&
+    (String(response.result?.stderr || "").includes("fetch failed") ||
+      String(response.result?.stdout || "").includes("fetch failed") ||
+      response.parsed?.error?.message === "fetch failed")
+  );
+}
+
+async function runSyncStart(opts, context = {}) {
+  let response = await runCli(opts, ["sync", "start", "--graph", opts.graph], context);
+  if (cliFetchFailed(response)) {
+    await delay(500);
+    await runCli(opts, ["server", "list"], { ...context, op: "server-list-before-sync-start-retry" });
+    response = await runCli(opts, ["sync", "start", "--graph", opts.graph], {
+      ...context,
+      retry: "fetch-failed",
+    });
+  }
+  return response;
+}
+
 async function invokeThreadApi(opts, state, method, args, context = {}) {
   const startedAt = Date.now();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs + 3000);
   let response = null;
   let text = "";
   let parsed = null;
   let error = null;
-  try {
-    response = await fetch(`${state.workerBaseUrl}/v1/invoke`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        method,
-        argsTransit: transitWriter.write(args),
-      }),
-      signal: controller.signal,
-    });
-    text = await response.text();
-    if (text) {
-      parsed = JSON.parse(text);
+
+  const invokeOnce = async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), opts.timeoutMs + 3000);
+    try {
+      const nextResponse = await fetch(`${state.workerBaseUrl}/v1/invoke`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          method,
+          argsTransit: transitWriter.write(args),
+        }),
+        signal: controller.signal,
+      });
+      const nextText = await nextResponse.text();
+      let nextParsed = null;
+      if (nextText) {
+        nextParsed = JSON.parse(nextText);
+      }
+      if (nextParsed?.resultTransit) {
+        nextParsed.result = transitReader.read(nextParsed.resultTransit);
+      }
+      return { response: nextResponse, text: nextText, parsed: nextParsed, error: null };
+    } catch (caught) {
+      return { response: null, text: "", parsed: null, error: caught };
+    } finally {
+      clearTimeout(timer);
     }
-    if (parsed?.resultTransit) {
-      parsed.result = transitReader.read(parsed.resultTransit);
+  };
+
+  ({ response, text, parsed, error } = await invokeOnce());
+  if (error && String(error instanceof Error ? error.message : error).includes("fetch failed")) {
+    const refreshed = await refreshWorkerBaseUrl(opts, state, context);
+    if (refreshed) {
+      ({ response, text, parsed, error } = await invokeOnce());
     }
-  } catch (caught) {
-    error = caught;
-  } finally {
-    clearTimeout(timer);
   }
 
   const classification = classifyHttpResult({ ok: !error && response?.ok, status: response?.status }, parsed, context);
@@ -441,6 +540,36 @@ async function invokeThreadApi(opts, state, method, args, context = {}) {
   }
 
   return { ...classification, parsed, text, error };
+}
+
+async function refreshWorkerBaseUrl(opts, state, context = {}) {
+  const serverList = await runCli(opts, ["server", "list"], {
+    ...context,
+    op: "refresh-worker-base-url",
+    client: opts.clientName,
+  });
+  const servers = serverList.parsed?.data?.servers || [];
+  let graphServer = servers.find((server) => server.graph === opts.graph);
+  if (!graphServer) {
+    graphServer = await startDbWorkerNode(opts);
+  }
+  const baseUrl = graphServer?.["base-url"];
+  if (!baseUrl) {
+    return false;
+  }
+  if (baseUrl !== state.workerBaseUrl) {
+    logEvent(opts, {
+      event: "db-worker-node",
+      level: "warn",
+      status: "base-url-refreshed",
+      client: opts.clientName,
+      previousBaseUrl: state.workerBaseUrl,
+      baseUrl,
+    });
+  }
+  state.workerBaseUrl = baseUrl;
+  state.repo = graphServerRepo(opts, graphServer);
+  return true;
 }
 
 async function applyOutlinerOps(opts, state, ops, options, context = {}) {
@@ -511,6 +640,14 @@ export function syncUploadArgs(opts) {
   return args;
 }
 
+export function syncDownloadArgs(opts) {
+  const args = ["sync", "download", "--graph", opts.graph];
+  if (opts.graphE2ee !== false) {
+    args.push("--e2ee-password", opts.e2eePassword);
+  }
+  return args;
+}
+
 export function syncEnsureKeysArgs(opts) {
   return ["sync", "ensure-keys", "--upload-keys", "--e2ee-password", opts.e2eePassword];
 }
@@ -526,6 +663,81 @@ export function graphValidateArgs(opts) {
 export function syncStatusUninitialized(response) {
   const status = response.parsed?.data;
   return response.ok && status && status["graph-id"] == null;
+}
+
+function numberStatusValue(value) {
+  return Number.isInteger(value) ? value : Number.parseInt(String(value), 10);
+}
+
+export function isSettledSyncStatus(response) {
+  const status = response.parsed?.data;
+  if (!response.ok || !status) {
+    return false;
+  }
+  const pendingLocal = numberStatusValue(status["pending-local"]);
+  const pendingServer = numberStatusValue(status["pending-server"]);
+  const localChecksum = status["local-checksum"];
+  const remoteChecksum = status["remote-checksum"];
+  return (
+    pendingLocal === 0 &&
+    pendingServer === 0 &&
+    typeof localChecksum === "string" &&
+    localChecksum.length > 0 &&
+    localChecksum === remoteChecksum
+  );
+}
+
+export function isIdleSyncStatus(response) {
+  const status = response.parsed?.data;
+  if (!response.ok || !status || status["last-error"] != null) {
+    return false;
+  }
+  const pendingLocal = numberStatusValue(status["pending-local"]);
+  const pendingServer = numberStatusValue(status["pending-server"]);
+  const localTx = numberStatusValue(status["local-tx"]);
+  const remoteTx = numberStatusValue(status["remote-tx"]);
+  return pendingLocal === 0 && pendingServer === 0 && Number.isInteger(localTx) && localTx === remoteTx;
+}
+
+function transitValueGet(value, key) {
+  if (value && typeof value.get === "function") {
+    return value.get(key) ?? value.get(kw(key)) ?? value.get(`:${key}`);
+  }
+  if (value && typeof value === "object") {
+    return value[key] ?? value[`:${key}`];
+  }
+  return undefined;
+}
+
+export function checksumDiagnosticsMatch(result) {
+  const recomputed = transitValueGet(result, "recomputed-checksum");
+  const remote = transitValueGet(result, "remote-checksum");
+  return typeof recomputed === "string" && recomputed.length > 0 && recomputed === remote;
+}
+
+export function clientRuntimeOptions(opts, clientIndex) {
+  const clientNumber = clientIndex + 1;
+  const clientName = `client-${clientNumber}`;
+  const baseDir = resolve(dirname(opts.config), "clients", clientName);
+  const rootDir = clientIndex === 0 ? opts.rootDir || process.env.LOGSEQ_CLI_ROOT_DIR : join(baseDir, "root");
+  const homeDir = clientIndex === 0 ? opts.homeDir || process.env.HOME : join(baseDir, "home");
+  const config = clientIndex === 0 ? opts.config : join(baseDir, "cli.edn");
+  const env = { ...(opts.env || {}) };
+  if (rootDir) {
+    env.LOGSEQ_CLI_ROOT_DIR = rootDir;
+  }
+  if (homeDir) {
+    env.HOME = homeDir;
+  }
+  return {
+    ...opts,
+    clientIndex,
+    clientName,
+    config,
+    rootDir,
+    homeDir,
+    env,
+  };
 }
 
 async function ensureLocalSyncServer(opts) {
@@ -577,6 +789,18 @@ function graphServerRepo(opts, graphServer) {
   return graphServer.repo || `logseq_db_${opts.graph}`;
 }
 
+async function startDbWorkerNode(opts) {
+  await runCli(opts, ["server", "start", "--graph", opts.graph], { op: "server-start", client: opts.clientName });
+  const serverList = await runCli(opts, ["server", "list"], { op: "server-list", client: opts.clientName });
+  const servers = serverList.parsed?.data?.servers || [];
+  const graphServer = servers.find((server) => server.graph === opts.graph);
+  if (!graphServer || !String(graphServer["base-url"] || "").startsWith("http://127.0.0.1:")) {
+    throw new Error(`No local db-worker-node server found for graph ${opts.graph} on ${opts.clientName || "client-1"}`);
+  }
+  logEvent(opts, { event: "db-worker-node", level: "info", client: opts.clientName, server: graphServer });
+  return graphServer;
+}
+
 async function setLocalGraphE2ee(opts, graphServer, graphE2ee) {
   const state = {
     workerBaseUrl: graphServer["base-url"],
@@ -610,14 +834,7 @@ async function setLocalGraphE2ee(opts, graphServer, graphE2ee) {
 }
 
 async function ensureLocalServers(opts) {
-  await runCli(opts, ["server", "start", "--graph", opts.graph], { op: "server-start" });
-  const serverList = await runCli(opts, ["server", "list"], { op: "server-list" });
-  const servers = serverList.parsed?.data?.servers || [];
-  const graphServer = servers.find((server) => server.graph === opts.graph);
-  if (!graphServer || !String(graphServer["base-url"] || "").startsWith("http://127.0.0.1:")) {
-    throw new Error(`No local db-worker-node server found for graph ${opts.graph}`);
-  }
-  logEvent(opts, { event: "db-worker-node", level: "info", server: graphServer });
+  const graphServer = await startDbWorkerNode(opts);
 
   if (opts.sync) {
     await ensureLocalSyncServer(opts);
@@ -637,10 +854,27 @@ async function ensureLocalServers(opts) {
         throw new Error(`Failed to initialize local sync upload for ${opts.graph}`);
       }
     }
-    const start = await runCli(opts, ["sync", "start", "--graph", opts.graph], { op: "sync-start" });
+    const start = await runSyncStart(opts, { op: "sync-start" });
     if (!start.ok) {
       throw new Error(`Failed to start local sync for ${opts.graph}`);
     }
+  }
+  return graphServer;
+}
+
+async function ensureReplicaLocalServers(opts) {
+  await ensureLocalSyncServer(opts);
+  const download = await runCli(opts, syncDownloadArgs(opts), { op: "sync-download-replica", client: opts.clientName });
+  if (!download.ok) {
+    throw new Error(`Failed to download remote sync graph ${opts.graph} for ${opts.clientName}`);
+  }
+  const graphServer = await startDbWorkerNode(opts);
+  const start = await runSyncStart(opts, {
+    op: "sync-start",
+    client: opts.clientName,
+  });
+  if (!start.ok) {
+    throw new Error(`Failed to start local sync for ${opts.graph} on ${opts.clientName}`);
   }
   return graphServer;
 }
@@ -791,12 +1025,26 @@ export function operationWeights(opts = {}) {
   if (opts.sync && opts.offline) {
     operations.push(["offline-window", 2]);
     operations.push(["offline-today-journal-race", 8]);
+    if ((opts.clients || 1) > 1) {
+      operations.push(["multi-client-offline-rebase", 12]);
+      operations.push(["multi-client-today-journal-race", 10]);
+    }
   }
   return operations;
 }
 
 export function operationNames(opts = {}) {
   return operationWeights(opts).map(([name]) => name);
+}
+
+export function uniqueOperationPageTitle(prefix, state, context = {}) {
+  const workerId = context.workerId ?? "unknown-worker";
+  const seq = context.seq ?? "unknown-seq";
+  return `${prefix} ${state.runId} worker-${workerId} seq-${seq} ${crypto.randomUUID()}`;
+}
+
+export function offlineTodayJournalClientCount(opts = {}) {
+  return Math.max(2, opts.clients ?? 1);
 }
 
 function liveBlocksQuery(page) {
@@ -1199,8 +1447,15 @@ async function applyRawRenamePage(opts, state, context, title) {
   );
 }
 
-async function applyRawDeleteRestorePage(opts, state, context) {
-  const page = mutablePage(state);
+async function applyRawDeleteRestorePage(opts, state, context, title) {
+  const page = title || uniqueOperationPageTitle("CLI HTTP Delete Restore", state, context);
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("create-page"), [page, tmap()]]],
+    tmap(),
+    { ...context, page, phase: "create", requireTruthyResult: true },
+  );
   const pageUuid = await findPageUuid(opts, page, context);
   if (!pageUuid) {
     return;
@@ -1210,14 +1465,14 @@ async function applyRawDeleteRestorePage(opts, state, context) {
     state,
     [[kw("delete-page"), [uuid(pageUuid), tmap()]]],
     tmap(),
-    { ...context, page, pageUuid, phase: "delete" },
+    { ...context, page, pageUuid, phase: "delete", requireTruthyResult: true },
   );
   await applyOutlinerOps(
     opts,
     state,
     [[kw("restore-recycled"), [uuid(pageUuid)]]],
     tmap(),
-    { ...context, page, pageUuid, phase: "restore" },
+    { ...context, page, pageUuid, phase: "restore", requireTruthyResult: true },
   );
   await refreshLiveIds(opts, state, "http-delete-restore-page");
 }
@@ -1228,7 +1483,7 @@ async function applyRawRecycleDeletePage(opts, state, context, title) {
     state,
     [[kw("create-page"), [title, tmap()]]],
     tmap(),
-    { ...context, page: title, phase: "create" },
+    { ...context, page: title, phase: "create", requireTruthyResult: true },
   );
   const pageUuid = await findPageUuid(opts, title, context);
   if (!pageUuid) {
@@ -1239,14 +1494,14 @@ async function applyRawRecycleDeletePage(opts, state, context, title) {
     state,
     [[kw("delete-page"), [uuid(pageUuid), tmap()]]],
     tmap(),
-    { ...context, page: title, pageUuid, phase: "delete" },
+    { ...context, page: title, pageUuid, phase: "delete", requireTruthyResult: true },
   );
   await applyOutlinerOps(
     opts,
     state,
     [[kw("recycle-delete-permanently"), [uuid(pageUuid)]]],
     tmap(),
-    { ...context, page: title, pageUuid, phase: "permanent-delete" },
+    { ...context, page: title, pageUuid, phase: "permanent-delete", requireTruthyResult: true },
   );
 }
 
@@ -1416,7 +1671,7 @@ async function offlineWindow(opts, state, context) {
       durationMs: opts.offlineMs,
     });
     await delay(opts.offlineMs);
-    const start = await runCli(opts, ["sync", "start", "--graph", opts.graph], { ...context, phase: "start" });
+    const start = await runSyncStart(opts, { ...context, phase: "start" });
     if (!start.ok && opts.failFast) {
       throw new Error(`Failed to restart sync after offline window for ${opts.graph}`);
     }
@@ -1435,7 +1690,7 @@ async function offlineTodayJournalRace(opts, state, context) {
     state.pageNames.push(page);
   }
 
-  const clientCount = Math.max(2, opts.concurrency);
+  const clientCount = offlineTodayJournalClientCount(opts);
   try {
     await runCli(opts, ["sync", "stop", "--graph", opts.graph], { ...context, phase: "stop", page });
     logEvent(opts, {
@@ -1472,7 +1727,7 @@ async function offlineTodayJournalRace(opts, state, context) {
     }
 
     await delay(opts.offlineMs);
-    const start = await runCli(opts, ["sync", "start", "--graph", opts.graph], { ...context, phase: "start", page });
+    const start = await runSyncStart(opts, { ...context, phase: "start", page });
     if (!start.ok && opts.failFast) {
       throw new Error(`Failed to restart sync after offline today journal race for ${opts.graph}`);
     }
@@ -1482,8 +1737,228 @@ async function offlineTodayJournalRace(opts, state, context) {
   }
 }
 
-async function runOperation(opts, state, workerId, seq) {
-  const op = weightedOperation(opts);
+async function waitForSyncSettled(opts, context = {}, required = false) {
+  if (!opts.sync) {
+    return true;
+  }
+  let last = null;
+  for (let attempt = 1; attempt <= opts.settleAttempts; attempt += 1) {
+    const status = await runCli(opts, ["sync", "status", "--graph", opts.graph], {
+      ...context,
+      op: context.op || "sync-status-settle",
+      attempt,
+      client: opts.clientName,
+    });
+    last = status;
+    const settled = required ? isSettledSyncStatus(status) : isIdleSyncStatus(status);
+    if (settled) {
+      return true;
+    }
+    await delay(opts.settleMs);
+  }
+  logEvent(opts, {
+    event: "sync-settle",
+    level: required ? "error" : "warn",
+    context,
+    status: last?.parsed?.data,
+  });
+  if (required) {
+    throw new Error(`Sync did not settle for ${opts.graph} on ${opts.clientName || "client-1"}`);
+  }
+  return false;
+}
+
+async function validateClientChecksum(client) {
+  if (!client.opts.sync) {
+    return;
+  }
+  const response = await invokeThreadApi(
+    client.opts,
+    client.state,
+    "thread-api/recompute-checksum-diagnostics",
+    [client.state.repo],
+    { op: "final-recompute-checksum", client: client.opts.clientName },
+  );
+  const diagnostics = response.parsed?.result;
+  const ok = response.ok && checksumDiagnosticsMatch(diagnostics);
+  logEvent(client.opts, {
+    event: "checksum-diagnostics",
+    level: ok ? "info" : "error",
+    context: { op: "final-recompute-checksum", client: client.opts.clientName },
+    recomputedChecksum: transitValueGet(diagnostics, "recomputed-checksum"),
+    localChecksum: transitValueGet(diagnostics, "local-checksum"),
+    remoteChecksum: transitValueGet(diagnostics, "remote-checksum"),
+  });
+  if (!ok) {
+    throw new Error(`Final checksum validation failed for ${client.opts.graph} on ${client.opts.clientName}`);
+  }
+}
+
+const localRebaseOps = [
+  "create-root",
+  "create-child",
+  "update",
+  "move-child",
+  "move-sibling",
+  "delete-single",
+  "http-insert-blocks",
+  "http-delete-blocks",
+  "http-move-blocks",
+  "http-insert-undo-redo",
+];
+
+function chooseDistinctClients(clients) {
+  if (!Array.isArray(clients) || clients.length < 2) {
+    return null;
+  }
+  const first = chooseArray(clients);
+  const candidates = clients.filter((client) => client !== first);
+  return [first, chooseArray(candidates)];
+}
+
+async function multiClientOfflineRebase(opts, cluster, context) {
+  if (cluster.offlineRunning) {
+    return;
+  }
+  const pair = chooseDistinctClients(cluster.clients);
+  if (!pair) {
+    return;
+  }
+  const [offlineClient, onlineClient] = pair;
+  cluster.offlineRunning = true;
+  try {
+    await runCli(offlineClient.opts, ["sync", "stop", "--graph", offlineClient.opts.graph], {
+      ...context,
+      phase: "stop-offline-client",
+      client: offlineClient.opts.clientName,
+    });
+    logEvent(opts, {
+      event: "multi-client-offline-rebase",
+      level: "warn",
+      context: {
+        ...context,
+        offlineClient: offlineClient.opts.clientName,
+        onlineClient: onlineClient.opts.clientName,
+      },
+      durationMs: opts.offlineMs,
+    });
+
+    for (let index = 0; index < 3; index += 1) {
+      const op = chooseArray(localRebaseOps);
+      offlineClient.state.nextSeq += 1;
+      await runOperation(offlineClient.opts, offlineClient.state, context.workerId, context.seq * 10 + index, op);
+    }
+
+    for (let index = 0; index < 3; index += 1) {
+      const op = chooseArray(localRebaseOps);
+      onlineClient.state.nextSeq += 1;
+      await runOperation(onlineClient.opts, onlineClient.state, context.workerId, context.seq * 10 + index + 3, op);
+    }
+
+    await waitForSyncSettled(
+      onlineClient.opts,
+      { ...context, op: "multi-client-online-settle", onlineClient: onlineClient.opts.clientName },
+      false,
+    );
+    await delay(opts.offlineMs);
+    const start = await runSyncStart(offlineClient.opts, {
+      ...context,
+      phase: "start-offline-client",
+      client: offlineClient.opts.clientName,
+    });
+    if (!start.ok && opts.failFast) {
+      throw new Error(`Failed to restart sync for ${offlineClient.opts.clientName}`);
+    }
+    await waitForSyncSettled(
+      offlineClient.opts,
+      { ...context, op: "multi-client-offline-settle", offlineClient: offlineClient.opts.clientName },
+      false,
+    );
+    await Promise.all([
+      refreshLiveIds(offlineClient.opts, offlineClient.state, "multi-client-offline-rebase"),
+      refreshLiveIds(onlineClient.opts, onlineClient.state, "multi-client-offline-rebase"),
+    ]);
+  } finally {
+    cluster.offlineRunning = false;
+  }
+}
+
+async function multiClientTodayJournalRace(opts, cluster, context) {
+  if (cluster.offlineRunning) {
+    return;
+  }
+  const pair = chooseDistinctClients(cluster.clients);
+  if (!pair) {
+    return;
+  }
+  const [first, second] = pair;
+  const page = todayJournalPageName(opts);
+  cluster.offlineRunning = true;
+  try {
+    for (const client of [first, second]) {
+      if (!client.state.pageNames.includes(page)) {
+        client.state.pageNames.push(page);
+      }
+      await runCli(client.opts, ["sync", "stop", "--graph", client.opts.graph], {
+        ...context,
+        phase: "stop",
+        client: client.opts.clientName,
+        page,
+      });
+    }
+
+    await Promise.all(
+      [first, second].map((client, index) =>
+        runCli(
+          client.opts,
+          [
+            "upsert",
+            "block",
+            "--graph",
+            client.opts.graph,
+            "--target-page",
+            page,
+            "--content",
+            `multi-client offline today journal ${client.state.runId} client=${client.opts.clientName} seq=${context.seq}`,
+          ],
+          { ...context, phase: "offline-write", client: client.opts.clientName, page, index },
+        ),
+      ),
+    );
+
+    const firstStart = await runSyncStart(first.opts, {
+      ...context,
+      phase: "start-first",
+      client: first.opts.clientName,
+      page,
+    });
+    if (!firstStart.ok && opts.failFast) {
+      throw new Error(`Failed to start sync for ${first.opts.clientName}`);
+    }
+    await waitForSyncSettled(first.opts, { ...context, op: "multi-client-today-first-settle", page }, false);
+
+    await delay(opts.offlineMs);
+    const secondStart = await runSyncStart(second.opts, {
+      ...context,
+      phase: "start-second",
+      client: second.opts.clientName,
+      page,
+    });
+    if (!secondStart.ok && opts.failFast) {
+      throw new Error(`Failed to start sync for ${second.opts.clientName}`);
+    }
+    await waitForSyncSettled(second.opts, { ...context, op: "multi-client-today-second-settle", page }, false);
+    await Promise.all([
+      refreshLiveIds(first.opts, first.state, "multi-client-today-journal-race"),
+      refreshLiveIds(second.opts, second.state, "multi-client-today-journal-race"),
+    ]);
+  } finally {
+    cluster.offlineRunning = false;
+  }
+}
+
+async function runOperation(opts, state, workerId, seq, forcedOp = null) {
+  const op = forcedOp || weightedOperation(opts);
   const stamp = `${state.runId} worker=${workerId} seq=${seq} op=${op}`;
   await refreshLiveIdsIfNeeded(opts, state, "operation");
 
@@ -1838,7 +2313,12 @@ async function runOperation(opts, state, workerId, seq) {
       return;
 
     case "http-create-page":
-      await applyRawCreatePage(opts, state, { workerId, seq, op }, `CLI HTTP Page ${state.runId} ${seq}`);
+      await applyRawCreatePage(
+        opts,
+        state,
+        { workerId, seq, op },
+        uniqueOperationPageTitle("CLI HTTP Page", state, { workerId, seq, op }),
+      );
       return;
 
     case "http-rename-page":
@@ -1850,7 +2330,12 @@ async function runOperation(opts, state, workerId, seq) {
       return;
 
     case "http-recycle-delete-page":
-      await applyRawRecycleDeletePage(opts, state, { workerId, seq, op }, `CLI HTTP Recycle ${state.runId} ${seq}`);
+      await applyRawRecycleDeletePage(
+        opts,
+        state,
+        { workerId, seq, op },
+        uniqueOperationPageTitle("CLI HTTP Recycle", state, { workerId, seq, op }),
+      );
       return;
 
     case "http-upsert-property":
@@ -1997,13 +2482,61 @@ async function worker(opts, state, workerId) {
   }
 }
 
-async function main() {
-  const opts = parseArgs(process.argv.slice(2));
-  mkdirSync(dirname(opts.logFile), { recursive: true });
-  ensureStressConfig(opts);
+async function clusterWorker(opts, cluster, workerId) {
+  let localSeq = 0;
+  while (!cluster.stop) {
+    const seq = cluster.nextSeq;
+    cluster.nextSeq += 1;
+    if (opts.maxOps > 0 && seq >= opts.maxOps) {
+      cluster.stop = true;
+      break;
+    }
 
+    const op = weightedOperation(opts);
+    try {
+      if (op === "multi-client-offline-rebase") {
+        await multiClientOfflineRebase(opts, cluster, { workerId, seq, op });
+      } else if (op === "multi-client-today-journal-race") {
+        await multiClientTodayJournalRace(opts, cluster, { workerId, seq, op });
+      } else {
+        const client = chooseArray(cluster.clients);
+        client.state.nextSeq += 1;
+        await runOperation(client.opts, client.state, workerId, localSeq, op);
+      }
+    } catch (error) {
+      logEvent(opts, {
+        event: "worker-error",
+        level: "error",
+        workerId,
+        seq: localSeq,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      if (opts.failFast) {
+        cluster.stop = true;
+        throw error;
+      }
+    }
+
+    localSeq += 1;
+    if (localSeq % 25 === 0) {
+      logEvent(opts, {
+        event: "summary",
+        level: "info",
+        workerId,
+        localSeq,
+        totalOpsStarted: cluster.nextSeq,
+        activeIds: cluster.clients.reduce((sum, client) => sum + client.state.activeIds.size, 0),
+        clients: cluster.clients.length,
+      });
+    }
+    await delay(Math.floor(Math.random() * 40));
+  }
+}
+
+function createStressState(opts, runId) {
   const state = {
-    runId: `stress-${Date.now()}`,
+    runId,
     pageNames: stressPageNames(opts),
     bootstrapPageNames: bootstrapStressPageNames(opts),
     mutablePageNames: [],
@@ -2024,47 +2557,106 @@ async function main() {
     stop: false,
   };
   state.mutablePageNames = mutableStressPageNames(opts);
+  return state;
+}
+
+async function validateClientGraph(client, phase) {
+  const validation = await runCli(client.opts, graphValidateArgs(client.opts), {
+    op: `${phase}-graph-validate`,
+    client: client.opts.clientName,
+  });
+  if (!validation.ok) {
+    throw new Error(`${phase} graph validation failed for ${client.opts.graph} on ${client.opts.clientName}`);
+  }
+}
+
+async function buildSeedClient(opts, runId) {
+  const clientOpts = clientRuntimeOptions(opts, 0);
+  ensureStressConfig(clientOpts);
+  const graphServer = await ensureLocalServers(clientOpts);
+  const state = createStressState(clientOpts, runId);
+  state.workerBaseUrl = graphServer["base-url"];
+  state.repo = graphServerRepo(clientOpts, graphServer);
+  await validateClientGraph({ opts: clientOpts }, "preflight");
+  await ensureStressMetadata(clientOpts, state);
+  await refreshLiveIds(clientOpts, state, "startup");
+  await waitForSyncSettled(clientOpts, { op: "seed-startup-settle", client: clientOpts.clientName }, false);
+  return { opts: clientOpts, state, graphServer };
+}
+
+async function buildReplicaClient(opts, clientIndex, runId) {
+  const clientOpts = clientRuntimeOptions(opts, clientIndex);
+  ensureStressConfig(clientOpts);
+  const graphServer = await ensureReplicaLocalServers(clientOpts);
+  const state = createStressState(clientOpts, runId);
+  state.workerBaseUrl = graphServer["base-url"];
+  state.repo = graphServerRepo(clientOpts, graphServer);
+  await validateClientGraph({ opts: clientOpts }, "preflight");
+  await waitForSyncSettled(clientOpts, { op: "replica-startup-settle", client: clientOpts.clientName }, false);
+  await refreshStressTagIds(clientOpts, state, "replica-startup");
+  await refreshLiveIds(clientOpts, state, "replica-startup");
+  return { opts: clientOpts, state, graphServer };
+}
+
+async function buildStressClients(opts, runId) {
+  const clients = [await buildSeedClient(opts, runId)];
+  for (let index = 1; index < opts.clients; index += 1) {
+    clients.push(await buildReplicaClient(opts, index, runId));
+  }
+  return clients;
+}
+
+async function main() {
+  const opts = parseArgs(process.argv.slice(2));
+  mkdirSync(dirname(opts.logFile), { recursive: true });
+  const runId = `stress-${Date.now()}`;
 
   logEvent(opts, {
     event: "start",
     level: "info",
-    runId: state.runId,
+    runId,
     config: opts.config,
     httpBase: opts.httpBase,
     wsUrl: opts.wsUrl,
+    clients: opts.clients,
     concurrency: opts.concurrency,
     maxOps: opts.maxOps,
     sync: opts.sync,
     offline: opts.offline,
     graphE2ee: opts.graphE2ee,
-    pageNames: state.pageNames,
+    pageNames: stressPageNames(opts),
   });
 
-  const graphServer = await ensureLocalServers(opts);
-  state.workerBaseUrl = graphServer["base-url"];
-  state.repo = graphServerRepo(opts, graphServer);
+  const clients = await buildStressClients(opts, runId);
+  let totalOpsStarted = clients[0]?.state.nextSeq || 0;
 
-  const preflightValidation = await runCli(opts, graphValidateArgs(opts), { op: "preflight-graph-validate" });
-  if (!preflightValidation.ok) {
-    throw new Error(`Preflight graph validation failed for ${opts.graph}`);
+  if (clients.length === 1) {
+    await Promise.all(Array.from({ length: opts.concurrency }, (_, index) => worker(clients[0].opts, clients[0].state, index + 1)));
+    totalOpsStarted = clients[0].state.nextSeq;
+  } else {
+    const cluster = {
+      clients,
+      nextSeq: 0,
+      stop: false,
+      offlineRunning: false,
+    };
+    await Promise.all(Array.from({ length: opts.concurrency }, (_, index) => clusterWorker(opts, cluster, index + 1)));
+    totalOpsStarted = cluster.nextSeq;
   }
 
-  await ensureStressMetadata(opts, state);
-  await refreshLiveIds(opts, state, "startup");
-
-  await Promise.all(Array.from({ length: opts.concurrency }, (_, index) => worker(opts, state, index + 1)));
-
-  const validation = await runCli(opts, graphValidateArgs(opts), { op: "final-graph-validate" });
-  if (!validation.ok) {
-    throw new Error(`Final graph validation failed for ${opts.graph}`);
+  for (const client of clients) {
+    await waitForSyncSettled(client.opts, { op: "final-sync-settle", client: client.opts.clientName }, true);
+    await validateClientChecksum(client);
+    await validateClientGraph(client, "final");
   }
 
   logEvent(opts, {
     event: "stop",
     level: "info",
-    runId: state.runId,
-    totalOpsStarted: state.nextSeq,
-    activeIds: state.activeIds.size,
+    runId,
+    totalOpsStarted,
+    activeIds: clients.reduce((sum, client) => sum + client.state.activeIds.size, 0),
+    clients: clients.length,
   });
 }
 

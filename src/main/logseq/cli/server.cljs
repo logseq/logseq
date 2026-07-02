@@ -231,6 +231,8 @@
   (first (filter #(graph-dir/same-repo? repo (:repo %))
                  (servers-for-config config servers))))
 
+(def ^:private server-discovery-timeout-ms 30000)
+
 (defn discover-servers
   [config]
   (let [path (server-list-path config)
@@ -267,7 +269,7 @@
                             server (repo-server config servers repo)]
                       (reset! server* server)
                       (some? server)))
-                  {:timeout-ms 8000
+                  {:timeout-ms server-discovery-timeout-ms
                    :interval-ms 50})
         (p/then (fn [_] @server*)))))
 
