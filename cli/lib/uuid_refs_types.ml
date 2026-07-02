@@ -26,7 +26,7 @@ let find_substring_from ~needle haystack start =
   in
   loop start
 
-let extract_uuid_refs value =
+let extract_wiki_refs value =
   let rec loop start acc =
     match find_substring_from ~needle:"[[" value start with
     | None -> List.rev acc |> unique_preserve_order
@@ -35,17 +35,17 @@ let extract_uuid_refs value =
         match find_substring_from ~needle:"]]" value content_start with
         | None -> List.rev acc |> unique_preserve_order
         | Some close_index ->
-            let candidate =
-              String.sub value content_start (close_index - content_start)
-            in
-            let acc =
-              if Cli_primitive.is_uuid_string candidate then
-                lower_uuid candidate :: acc
-              else acc
-            in
-            loop (close_index + 2) acc)
+          let candidate =
+            String.sub value content_start (close_index - content_start)
+          in
+          loop (close_index + 2) (candidate :: acc))
   in
   loop 0 []
+
+let extract_uuid_refs value =
+  value |> extract_wiki_refs
+  |> List.filter Cli_primitive.is_uuid_string
+  |> List.map lower_uuid |> unique_preserve_order
 
 let label_lookup labels uuid =
   let uuid = lower_uuid uuid in
