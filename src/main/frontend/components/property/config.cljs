@@ -437,10 +437,26 @@
                        :checked excluded?})
        (t :property/hide-for-tag tag-title)))))
 
+(defn- empty-choice-content?
+  [choice]
+  (let [content (db-property/closed-value-content choice)]
+    (or (nil? content)
+        (and (string? content)
+             (string/blank? content)))))
+
+(defn choice-deletable?
+  [{:keys [owner-class? global-choice? scoped-choice-from-other-tags? choice]}]
+  (and (not scoped-choice-from-other-tags?)
+       (or (not (and owner-class? global-choice?))
+           (and choice
+                (empty-choice-content? choice)))))
+
 (defn- choice-delete-menu-item
-  [owner-class? global-choice? scoped-choice-from-other-tags? delete-choice!]
-  (when (and (not scoped-choice-from-other-tags?)
-             (not (and owner-class? global-choice?)))
+  [owner-class? global-choice? scoped-choice-from-other-tags? choice delete-choice!]
+  (when (choice-deletable? {:owner-class? owner-class?
+                            :global-choice? global-choice?
+                            :scoped-choice-from-other-tags? scoped-choice-from-other-tags?
+                            :choice choice})
     (shui/dropdown-menu-item
      {:key "delete"
       :class "del"
@@ -514,7 +530,7 @@
            :on-click use-in-current-tag!}
           (t :property/use-choice-in-tag (:block/title owner-block'))))
 
-       (choice-delete-menu-item owner-class? global-choice? scoped-choice-from-other-tags? delete-choice!)))]))
+       (choice-delete-menu-item owner-class? global-choice? scoped-choice-from-other-tags? block delete-choice!)))]))
 
 (hsx/defc add-existing-values
   [property values {:keys [toggle-fn]}]

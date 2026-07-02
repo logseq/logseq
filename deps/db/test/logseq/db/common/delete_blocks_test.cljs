@@ -49,6 +49,112 @@
       (d/transact! conn (concat retracts extra))
       (is (nil? (d/entity @conn (:db/id history-entity)))))))
 
+(deftest property-history-block-updates-are-kept
+  (testing "history block updates do not delete the history entity"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "Target block"}
+                            {:block/title "Choice value"}]}]})
+          target-block (db-test/find-block-by-content @conn "Target block")
+          choice-value-block (db-test/find-block-by-content @conn "Choice value")
+          history-uuid (random-uuid)
+          now (common-util/time-ms)
+          _ (d/transact! conn [{:block/uuid history-uuid
+                                :block/title "History entry"
+                                :block/page (:db/id (:block/page target-block))
+                                :block/parent (:db/id (:block/page target-block))
+                                :block/order "a0"
+                                :block/created-at now
+                                :block/updated-at now
+                                :logseq.property.history/block (:db/id target-block)
+                                :logseq.property.history/property (:db/id (d/entity @conn :logseq.property/status))
+                                :logseq.property.history/ref-value (:db/id choice-value-block)}])
+          history-entity (d/entity @conn [:block/uuid history-uuid])
+          txs [[:db/retract (:db/id history-entity) :block/title "History entry"]
+               [:db/add (:db/id history-entity) :block/title "Updated history entry"]
+               [:db/retract (:db/id history-entity) :block/parent (:db/id (:block/page history-entity))]
+               [:db/add (:db/id history-entity) :block/parent (:db/id target-block)]
+               [:db/retract (:db/id history-entity) :block/order "a0"]
+               [:db/add (:db/id history-entity) :block/order "b0"]]
+          extra (delete-blocks/update-refs-history @conn txs {})]
+      (d/transact! conn (concat txs extra))
+      (let [updated-history (d/entity @conn (:db/id history-entity))]
+        (is (= {:block/title "Updated history entry"
+                :block/parent (:db/id target-block)
+                :block/order "b0"}
+               {:block/title (:block/title updated-history)
+                :block/parent (:db/id (:block/parent updated-history))
+                :block/order (:block/order updated-history)}))))))
+
+(deftest remote-delete-blocks-removes-history-when-owner-ref-retracted
+  (testing "remote delete-blocks datoms fully retract property history blocks"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "Target block"}
+                            {:block/title "Choice value"}]}]})
+          target-block (db-test/find-block-by-content @conn "Target block")
+          choice-value-block (db-test/find-block-by-content @conn "Choice value")
+          history-uuid (random-uuid)
+          now (common-util/time-ms)
+          _ (d/transact! conn [{:block/uuid history-uuid
+                                :block/created-at now
+                                :block/updated-at now
+                                :logseq.property.history/block (:db/id target-block)
+                                :logseq.property.history/property (:db/id (d/entity @conn :logseq.property/status))
+                                :logseq.property.history/ref-value (:db/id choice-value-block)}])
+          history-entity (d/entity @conn [:block/uuid history-uuid])
+          txs [[:db/retract (:db/id history-entity) :logseq.property.history/block (:db/id target-block)]]
+          extra (delete-blocks/update-refs-history @conn txs {:outliner-op :delete-blocks})]
+      (d/transact! conn (concat txs extra))
+      (is (nil? (d/entity @conn (:db/id history-entity)))))))
+
+(deftest delete-blocks-removes-new-history-for-deleted-block
+  (testing "history blocks created in the same tx as their deleted owner are retracted"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "Target block"}
+                            {:block/title "Choice value"}]}]})
+          target-block (db-test/find-block-by-content @conn "Target block")
+          choice-value-block (db-test/find-block-by-content @conn "Choice value")
+          history-uuid (random-uuid)
+          now (common-util/time-ms)
+          txs [{:block/uuid history-uuid
+                :block/created-at now
+                :block/updated-at now
+                :logseq.property.history/block (:db/id target-block)
+                :logseq.property.history/property (:db/id (d/entity @conn :logseq.property/status))
+                :logseq.property.history/ref-value (:db/id choice-value-block)}
+               [:db/retractEntity (:db/id target-block)]]
+          extra (delete-blocks/update-refs-history @conn txs {:outliner-op :delete-blocks})]
+      (d/transact! conn (concat txs extra))
+      (is (nil? (d/entity @conn [:block/uuid history-uuid]))))))
+
+(deftest remote-delete-blocks-removes-new-normalized-history-when-owner-ref-retracted
+  (testing "remote normalized delete-blocks datoms fully retract new property history blocks"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "Target block"}
+                            {:block/title "Choice value"}]}]})
+          target-block (db-test/find-block-by-content @conn "Target block")
+          choice-value-block (db-test/find-block-by-content @conn "Choice value")
+          history-uuid (random-uuid)
+          history-eid 1000000
+          now (common-util/time-ms)
+          txs [[:db/add history-eid :block/uuid history-uuid]
+               [:db/add history-eid :block/created-at now]
+               [:db/add history-eid :block/updated-at now]
+               [:db/add history-eid :logseq.property.history/block (:db/id target-block)]
+               [:db/add history-eid :logseq.property.history/property (:db/id (d/entity @conn :logseq.property/status))]
+               [:db/add history-eid :logseq.property.history/ref-value (:db/id choice-value-block)]
+               [:db/retract history-eid :logseq.property.history/block (:db/id target-block)]]
+          extra (delete-blocks/update-refs-history @conn txs {:outliner-op :delete-blocks})]
+      (d/transact! conn (concat txs extra))
+      (is (nil? (d/entity @conn [:block/uuid history-uuid]))))))
+
 (deftest delete-page-removes-history-with-ref-value
   (testing "deleting a page retracts property history entries that referenced that page"
     (let [conn (db-test/create-conn-with-blocks
