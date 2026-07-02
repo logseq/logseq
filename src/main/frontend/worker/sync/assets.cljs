@@ -21,6 +21,8 @@
 (defonce *repo->missing-asset-upload-files
   (atom {}))
 
+(def ^:private remote-asset-download-parallelism 10)
+
 (defn graph-aes-key
   [repo graph-id fail-fast-f]
   (if (sync-crypt/graph-e2ee? repo)
@@ -451,72 +453,49 @@
                                   (and asset-uuid (seq asset-type))))
                         distinct
                         (sort-by (juxt (comp str :asset-uuid) :asset-type)))
-        current-platform (platform/current)]
-    (reduce
-     (fn [result-promise {:keys [asset-uuid asset-type]}]
-       (p/let [result result-promise
-               asset-id (str asset-uuid)
-               meta (platform/asset-stat current-platform
-                                         repo
-                                         (asset-file-name asset-id asset-type))]
-         (if meta
-           (update result :skipped-existing inc)
-           (p/let [_ (download-remote-asset! repo graph-id asset-uuid asset-type)]
-             (update result :downloaded inc)))))
-     (p/resolved {:total (count candidates)
-                  :downloaded 0
-                  :skipped-existing 0})
-     candidates)))
-
-(defn- tx-item-components
-  [item]
-  (cond
-    (vector? item)
-    (when (#{:db/add :db/retract} (first item))
-      {:op (first item)
-       :e (second item)
-       :a (nth item 2 nil)
-       :v (nth item 3 nil)})
-
-    :else
-    (let [a (:a item)]
-      (when a
-        {:op (if (:added item) :db/add :db/retract)
-         :e (:e item)
-         :a a
-         :v (:v item)}))))
-
-(def ^:private remote-asset-candidate-attrs
-  #{:block/tags
-    :logseq.property.asset/type
-    :logseq.property.asset/remote-metadata
-    :logseq.property.asset/external-url})
-
-(defn- asset-entity?
-  [ent]
-  (some (fn [tag]
-          (= :logseq.class/Asset (:db/ident tag)))
-        (:block/tags ent)))
+        current-platform (platform/current)
+        queue (atom (vec candidates))
+        result (atom {:total (count candidates)
+                      :downloaded 0
+                      :skipped-existing 0})
+        pop-queue! (fn []
+                     (let [selected (atom nil)]
+                       (swap! queue
+                              (fn [q]
+                                (if (seq q)
+                                  (do
+                                    (reset! selected (first q))
+                                    (subvec q 1))
+                                  q)))
+                       @selected))
+        worker (fn worker []
+                 (if-let [{:keys [asset-uuid asset-type]} (pop-queue!)]
+                   (let [asset-id (str asset-uuid)]
+                     (p/let [meta (platform/asset-stat current-platform
+                                                       repo
+                                                       (asset-file-name asset-id asset-type))
+                             _ (if meta
+                                 (do
+                                   (swap! result update :skipped-existing inc)
+                                   nil)
+                                 (p/let [_ (download-remote-asset! repo graph-id asset-uuid asset-type)]
+                                   (swap! result update :downloaded inc)))]
+                       (worker)))
+                   (p/resolved nil)))]
+    (p/let [_ (p/all (mapv (fn [_] (worker))
+                           (range (min remote-asset-download-parallelism
+                                       (count candidates)))))]
+      @result)))
 
 (defn remote-asset-download-candidates-in-tx
   [db tx-data]
   (->> tx-data
-       (keep tx-item-components)
-       (keep (fn [{:keys [e a]}]
-               (when (contains? remote-asset-candidate-attrs a)
-                 e)))
-       distinct
-       (keep (fn [e]
-               (when-let [ent (d/entity db e)]
-                 (when (and (asset-entity? ent)
-                            (:logseq.property.asset/remote-metadata ent)
-                            (not (seq (some-> (:logseq.property.asset/external-url ent) str))))
-                   {:asset-uuid (:block/uuid ent)
-                    :asset-type (:logseq.property.asset/type ent)}))))
-       (filter (fn [{:keys [asset-uuid asset-type]}]
-                 (and asset-uuid (seq asset-type))))
-       distinct
-       (sort-by (juxt (comp str :asset-uuid) :asset-type))))
+       (keep (fn [d]
+               (when (and (= (:a d) :logseq.property.asset/remote-metadata) (:added d))
+                 (when-let [asset (d/entity db (:e d))]
+                   {:asset-uuid (:block/uuid asset)
+                    :asset-type (:logseq.property.asset/type asset)}))))
+       distinct))
 
 (defn download-missing-remote-assets!
   [repo graph-id]

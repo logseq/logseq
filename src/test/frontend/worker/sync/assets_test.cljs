@@ -298,3 +298,39 @@
                (p/catch (fn [error]
                           (is false (str "unexpected error: " error))))
                (p/finally done)))))
+
+(deftest download-remote-assets-if-missing-bounds-download-concurrency-test
+  (async done
+         (let [repo "asset-prefetch-repo"
+               graph-id "graph-1"
+               candidates (mapv (fn [_]
+                                   {:asset-uuid (random-uuid)
+                                    :asset-type "png"})
+                                 (range 12))
+               active-downloads (atom 0)
+               max-active-downloads (atom 0)
+               download-calls (atom [])]
+           (-> (p/with-redefs [platform/current (fn [] {})
+                               platform/asset-stat
+                               (fn [_platform _repo _file-name]
+                                 (p/resolved nil))
+                               sync-assets/download-remote-asset!
+                               (fn [repo' graph-id' asset-uuid asset-type]
+                                 (swap! download-calls conj [repo' graph-id' asset-uuid asset-type])
+                                 (let [active (swap! active-downloads inc)]
+                                   (swap! max-active-downloads max active))
+                                 (p/let [_ (p/delay 20)]
+                                   (swap! active-downloads dec)
+                                   nil))]
+                 (sync-assets/download-remote-assets-if-missing!
+                  repo graph-id candidates))
+               (p/then (fn [result]
+                         (is (= {:total 12
+                                 :downloaded 12
+                                 :skipped-existing 0}
+                                result))
+                         (is (= 12 (count @download-calls)))
+                         (is (= 10 @max-active-downloads))))
+               (p/catch (fn [error]
+                          (is false (str "unexpected error: " error))))
+               (p/finally done)))))
