@@ -78,7 +78,6 @@
  :asset/syncing "同步中"
  :asset/title-label "附件标题："
  :asset/transfer-placeholder "{1}资源..."
- :asset/upload-missing-file "找不到文件 {1}。附件未上传。"
  :asset/uploading "上传中"
 
  :block/click-to-fix-query "点击修复查询：{1}"
@@ -1811,6 +1810,8 @@
  :sync/invitation-sent "邀请已发送！"
  :sync/last-synced-time-label "上次同步时间：{1}"
  :sync/mark-conflicts-resolved "标记为已解决"
+ :sync/missing-asset-files "缺失的资源文件"
+ :sync/missing-asset-files-count "缺失的资源文件（{1}）"
  :sync/more-debug-info "更多调试信息"
  :sync/offline "离线"
  :sync/online "在线"

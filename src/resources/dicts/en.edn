@@ -78,7 +78,6 @@
  :asset/syncing "Syncing"
  :asset/title-label "Asset title:"
  :asset/transfer-placeholder "{1} asset..."
- :asset/upload-missing-file "Can't find file {1}. The asset was not uploaded."
  :asset/uploading "Uploading"
 
  :block/click-to-fix-query "Click to fix query: {1}"
@@ -1811,6 +1810,8 @@
  :sync/invitation-sent "Invitation sent!"
  :sync/last-synced-time-label "Last synced time: {1}"
  :sync/mark-conflicts-resolved "Mark resolved"
+ :sync/missing-asset-files "missing asset files"
+ :sync/missing-asset-files-count "Missing asset files ({1})"
  :sync/more-debug-info "More debug info"
  :sync/offline "Offline"
  :sync/online "Online"

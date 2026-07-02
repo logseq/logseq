@@ -47,6 +47,24 @@
            :logseq.property.asset/type "pdf"}
           nil)))))
 
+(deftest show-image-placeholder-test
+  (testing "shows an image placeholder for remote images that have not downloaded yet"
+    (is (true?
+         (block-asset/show-image-placeholder?
+          {:block/uuid (random-uuid)
+           :logseq.property.asset/type "png"
+           :logseq.property.asset/remote-metadata {:checksum "sha-256-value"
+                                                   :type "png"}}
+          false
+          false))))
+  (testing "does not show an image placeholder for gallery images"
+    (is (false?
+         (block-asset/show-image-placeholder?
+          {:block/uuid (random-uuid)
+           :logseq.property.asset/type "png"}
+          false
+          true)))))
+
 (deftest read-mode-title-attrs-test
   (testing "reserves the asset title row at the same height as a one-line editor"
     (let [attrs block-asset/read-mode-title-attrs]

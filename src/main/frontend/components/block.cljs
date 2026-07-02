@@ -1184,7 +1184,9 @@
                        (block-asset/show-missing-file-warning? block file-exists?))
                   (missing-asset-file
                    block
-                   #(retry-missing-asset-upload! repo block file-exists?*)))]
+                   #(retry-missing-asset-upload! repo block file-exists?*))
+                  (block-asset/show-image-placeholder? block file-ready? gallery-image?)
+                  img-placeholder)]
     (if progress-view
       [:div.asset-transfer-shell
        (or content

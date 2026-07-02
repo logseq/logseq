@@ -52,6 +52,13 @@
          (string/blank? external-url)
          (nil? remote-metadata))))
 
+(defn show-image-placeholder?
+  [asset-block file-ready? gallery-image?]
+  (let [asset-type (some-> (:logseq.property.asset/type asset-block) keyword)]
+    (and (not file-ready?)
+         (not gallery-image?)
+         (contains? (common-config/img-formats) asset-type))))
+
 (def read-mode-title-attrs
   {:class "asset-title-slot text-xs opacity-60 mt-1 cursor-text"
    :style {:min-height 24}})

@@ -183,7 +183,7 @@
                    (reset! worker-state/*db-sync-config db-sync-config)
                    (done)))))))
 
-(deftest upload-remote-asset-notifies-when-local-file-is-missing-test
+(deftest upload-remote-asset-records-missing-local-file-test
   (async done
          (let [repo "asset-upload-repo"
                graph-id "graph-1"
@@ -213,6 +213,7 @@
                                shared-service/broadcast-to-clients!
                                (fn [event payload]
                                  (swap! broadcasts conj [event payload]))]
+                 (sync-assets/clear-missing-asset-upload-files! repo)
                  (sync-assets/upload-remote-asset!
                   repo graph-id asset-uuid "pdf" checksum))
                (p/then
@@ -222,13 +223,14 @@
                 (fn [error]
                   (is (= :rtc.exception/read-asset-failed (:type (ex-data error))))
                   (is (false? @fetch-called?))
-                  (is (= [[:notification
-                           [nil :error false nil nil
-                            {:i18n-key :asset/upload-missing-file
-                             :i18n-args [missing-file]}]]]
-                         @broadcasts))))
+                  (is (= [] @broadcasts))
+                  (is (= [{:asset-id (str asset-uuid)
+                           :asset-type "pdf"
+                           :file missing-file}]
+                         (sync-assets/get-missing-asset-upload-files repo)))))
                (p/finally
                  (fn []
                    (set! js/fetch original-fetch)
                    (reset! worker-state/*db-sync-config db-sync-config)
+                   (sync-assets/clear-missing-asset-upload-files! repo)
                    (done)))))))

@@ -14,11 +14,14 @@
            "other" {:direction :other :loaded 0 :total 10}}))))
 
 (deftest asset-status-rows-shows-pending-upload-and-active-transfer-info
-  (is (= [{:count 3 :label-key :sync/pending-asset-uploads}
+  (is (= [{:count 2 :label-key :sync/missing-asset-files}
+          {:count 1 :label-key :sync/pending-asset-uploads}
           {:count 1 :label-key :sync/assets-uploading}
           {:count 2 :label-key :sync/assets-downloading}]
          (indicator/asset-status-rows
           {:pending-asset-ops 3
+           :missing-asset-upload-files [{:file "assets/missing-1.pdf"}
+                                        {:file "assets/missing-2.pdf"}]
            :asset-transfer-counts {:upload 1
                                    :download 2}}))))
 
@@ -26,5 +29,6 @@
   (is (= []
          (indicator/asset-status-rows
           {:pending-asset-ops 0
+           :missing-asset-upload-files []
            :asset-transfer-counts {:upload 0
                                    :download 0}}))))

@@ -18,6 +18,9 @@
 
 (def max-asset-size (* 100 1024 1024))
 
+(defonce *repo->missing-asset-upload-files
+  (atom {}))
+
 (defn graph-aes-key
   [repo graph-id fail-fast-f]
   (if (sync-crypt/graph-e2ee? repo)
@@ -77,14 +80,42 @@
                :loaded loaded
                :total total}}))
 
-(defn- notify-missing-asset-upload-file!
+(defn- missing-asset-upload-file
   [asset-id asset-type]
-  (let [asset-path (str common-config/local-assets-dir "/" (asset-file-name asset-id asset-type))]
-    (shared-service/broadcast-to-clients!
-     :notification
-     [nil :error false nil nil
-      {:i18n-key :asset/upload-missing-file
-       :i18n-args [asset-path]}])))
+  {:asset-id asset-id
+   :asset-type asset-type
+   :file (str common-config/local-assets-dir "/" (asset-file-name asset-id asset-type))})
+
+(defn- mark-missing-asset-upload-file!
+  [repo asset-id asset-type]
+  (swap! *repo->missing-asset-upload-files
+         update repo
+         (fn [files]
+           (assoc (or files {})
+                  asset-id
+                  (missing-asset-upload-file asset-id asset-type))))
+  nil)
+
+(defn- clear-missing-asset-upload-file!
+  [repo asset-id]
+  (swap! *repo->missing-asset-upload-files
+         (fn [repo->files]
+           (let [files (dissoc (get repo->files repo) asset-id)]
+             (if (seq files)
+               (assoc repo->files repo files)
+               (dissoc repo->files repo)))))
+  nil)
+
+(defn get-missing-asset-upload-files
+  [repo]
+  (->> (vals (get @*repo->missing-asset-upload-files repo))
+       (sort-by :file)
+       vec))
+
+(defn clear-missing-asset-upload-files!
+  [repo]
+  (swap! *repo->missing-asset-upload-files dissoc repo)
+  nil)
 
 (defn- mark-asset-write-finish!
   [repo asset-id]
@@ -123,10 +154,11 @@
                                (<read-asset-bytes repo asset-id asset-type)
                                (p/catch (fn [e]
                                           (log/error :read-asset-failed e)
-                                          (notify-missing-asset-upload-file! asset-id asset-type)
+                                          (mark-missing-asset-upload-file! repo asset-id asset-type)
                                           (throw (ex-info "read-asset failed"
                                                           {:type :rtc.exception/read-asset-failed}
                                                           e)))))
+                  _ (clear-missing-asset-upload-file! repo asset-id)
                   asset-bytes (if aes-key (->uint8 asset-bytes) asset-bytes)
                   payload (if (not aes-key)
                             asset-bytes
@@ -172,6 +204,7 @@
                    {:repo repo
                     :asset-uuid asset-uuid
                     :reason reason}))
+  (clear-missing-asset-upload-file! repo (str asset-uuid))
   (client-op/remove-asset-op repo asset-uuid)
   (when-let [client (current-client-f repo)]
     (broadcast-rtc-state!-f client))
@@ -213,6 +246,7 @@
               (log/info :db-sync/asset-too-large {:repo repo
                                                   :asset-uuid asset-uuid
                                                   :size size})
+              (clear-missing-asset-upload-file! repo (str asset-uuid))
               (client-op/remove-asset-op repo asset-uuid)
               (when-let [client (current-client-f repo)]
                 (broadcast-rtc-state!-f client))
@@ -232,7 +266,7 @@
                             (broadcast-rtc-state!-f client))))
                 (p/catch (fn [e]
                            (case (:type (ex-data e))
-                             :rtc.exception/read-asset-failed
+                            :rtc.exception/read-asset-failed
                              (when-let [client (current-client-f repo)]
                                (broadcast-rtc-state!-f client))
 
@@ -246,15 +280,17 @@
         (fail-fast-f :db-sync/missing-db {:repo repo :op :process-asset-op}))
 
       (contains? asset-op :remove-asset)
-      (-> (client-op/remove-asset-op repo asset-uuid)
-          (p/then (fn [_]
-                    (when-let [client (current-client-f repo)]
-                      (broadcast-rtc-state!-f client))))
-          (p/catch (fn [e]
-                     (log/error :db-sync/asset-delete-failed
-                                {:repo repo
-                                 :asset-uuid asset-uuid
-                                 :error e}))))
+      (do
+        (clear-missing-asset-upload-file! repo (str asset-uuid))
+        (-> (client-op/remove-asset-op repo asset-uuid)
+            (p/then (fn [_]
+                      (when-let [client (current-client-f repo)]
+                        (broadcast-rtc-state!-f client))))
+            (p/catch (fn [e]
+                       (log/error :db-sync/asset-delete-failed
+                                  {:repo repo
+                                   :asset-uuid asset-uuid
+                                   :error e})))))
 
       :else
       (p/resolved nil))))
