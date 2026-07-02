@@ -2075,13 +2075,16 @@
 (deftest process-asset-ops-retries-missing-file-without-blocking-later-ops-test
   (async done
          (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+               repo (str test-repo "-asset-retry")
                missing-asset-uuid (random-uuid)
                later-asset-uuid (random-uuid)
                read-error (ex-info "read-asset failed"
                                    {:type :rtc.exception/read-asset-failed})
                restored? (atom false)
                upload-calls (atom [])
-               broadcast-count (atom 0)]
+               broadcast-count (atom 0)
+               get-datascript-conn worker-state/get-datascript-conn
+               get-client-ops-conn worker-state/get-client-ops-conn]
            (d/transact! conn [{:block/uuid missing-asset-uuid
                                :block/title "missing.pdf"
                                :logseq.property.asset/type "pdf"
@@ -2092,54 +2095,60 @@
                                :logseq.property.asset/type "pdf"
                                :logseq.property.asset/checksum "later-sha-256"
                                :block/tags #{:logseq.class/Asset}}])
-           (with-datascript-conns
-             conn
-             client-ops-conn
-             (fn []
-               (client-op/add-asset-ops test-repo [[:update-asset 10 {:block-uuid missing-asset-uuid}]
-                                                   [:update-asset 11 {:block-uuid later-asset-uuid}]])
-               (letfn [(process-asset-ops! []
-                         (#'sync-assets/process-asset-ops!
-                          test-repo
-                          {:graph-id "graph-id"}
-                          {:current-client-f (constantly {:repo test-repo})
-                           :broadcast-rtc-state!-f (fn [_client] (swap! broadcast-count inc))
-                           :fail-fast-f (fn [tag data]
-                                          (throw (ex-info (name tag) data)))}))]
-                 (-> (p/with-redefs [sync-assets/upload-remote-asset!
-                                     (fn [_repo _graph-id asset-uuid _asset-type _checksum]
-                                       (swap! upload-calls conj asset-uuid)
-                                       (if (and (= missing-asset-uuid asset-uuid)
-                                                (not @restored?))
-                                         (p/rejected read-error)
-                                         (p/resolved nil)))
-                                     ldb/transact!
-                                     (fn [conn* tx-data _tx-meta]
-                                       (d/transact! conn* tx-data))]
-                       (p/let [_ (process-asset-ops!)
-                               pending-after-missing (client-op/get-unpushed-asset-ops-count test-repo)
-                               later-remote-metadata (:logseq.property.asset/remote-metadata
-                                                      (d/entity @conn [:block/uuid later-asset-uuid]))
-                               _ (reset! restored? true)
-                               _ (process-asset-ops!)
-                               pending-after-retry (client-op/get-unpushed-asset-ops-count test-repo)]
-                         {:pending-after-missing pending-after-missing
-                          :later-remote-metadata later-remote-metadata
-                          :pending-after-retry pending-after-retry}))
-                     (p/then
-                      (fn [{:keys [pending-after-missing later-remote-metadata pending-after-retry]}]
-                        (is (= [missing-asset-uuid later-asset-uuid missing-asset-uuid] @upload-calls))
-                        (is (= 1 pending-after-missing))
-                        (is (= {:checksum "later-sha-256" :type "pdf"} later-remote-metadata))
-                        (is (= 0 pending-after-retry))
-                        (is (= {:checksum "missing-sha-256" :type "pdf"}
-                               (:logseq.property.asset/remote-metadata
-                                (d/entity @conn [:block/uuid missing-asset-uuid]))))
-                        (is (= 3 @broadcast-count))))
-                     (p/catch
-                      (fn [error]
-                        (is false (str "unexpected error: " error))))
-                     (p/finally done))))))))
+           (letfn [(process-asset-ops! []
+                     (#'sync-assets/process-asset-ops!
+                      repo
+                      {:graph-id "graph-id"}
+                      {:current-client-f (constantly {:repo repo})
+                       :broadcast-rtc-state!-f (fn [_client] (swap! broadcast-count inc))
+                       :fail-fast-f (fn [tag data]
+                                      (throw (ex-info (name tag) data)))}))]
+             (-> (p/with-redefs [worker-state/get-datascript-conn
+                                 (fn [repo*]
+                                   (if (= repo repo*)
+                                     conn
+                                     (get-datascript-conn repo*)))
+                                 worker-state/get-client-ops-conn
+                                 (fn [repo*]
+                                   (if (= repo repo*)
+                                     client-ops-conn
+                                     (get-client-ops-conn repo*)))
+                                 sync-assets/upload-remote-asset!
+                                 (fn [_repo _graph-id asset-uuid _asset-type _checksum]
+                                   (swap! upload-calls conj asset-uuid)
+                                   (if (and (= missing-asset-uuid asset-uuid)
+                                            (not @restored?))
+                                     (p/rejected read-error)
+                                     (p/resolved nil)))
+                                 ldb/transact!
+                                 (fn [conn* tx-data _tx-meta]
+                                   (d/transact! conn* tx-data))]
+                   (client-op/add-asset-ops repo [[:update-asset 10 {:block-uuid missing-asset-uuid}]
+                                                  [:update-asset 11 {:block-uuid later-asset-uuid}]])
+                   (p/let [_ (process-asset-ops!)
+                           pending-after-missing (client-op/get-unpushed-asset-ops-count repo)
+                           later-remote-metadata (:logseq.property.asset/remote-metadata
+                                                  (d/entity @conn [:block/uuid later-asset-uuid]))
+                           _ (reset! restored? true)
+                           _ (process-asset-ops!)
+                           pending-after-retry (client-op/get-unpushed-asset-ops-count repo)]
+                     {:pending-after-missing pending-after-missing
+                      :later-remote-metadata later-remote-metadata
+                      :pending-after-retry pending-after-retry}))
+                 (p/then
+                  (fn [{:keys [pending-after-missing later-remote-metadata pending-after-retry]}]
+                    (is (= [missing-asset-uuid later-asset-uuid missing-asset-uuid] @upload-calls))
+                    (is (= 1 pending-after-missing))
+                    (is (= {:checksum "later-sha-256" :type "pdf"} later-remote-metadata))
+                    (is (= 0 pending-after-retry))
+                    (is (= {:checksum "missing-sha-256" :type "pdf"}
+                           (:logseq.property.asset/remote-metadata
+                            (d/entity @conn [:block/uuid missing-asset-uuid]))))
+                    (is (= 3 @broadcast-count))))
+                 (p/catch
+                  (fn [error]
+                    (is false (str "unexpected error: " error))))
+                 (p/finally done))))))
 
 (deftest apply-history-action-does-not-reuse-original-tx-id-test
   (testing "undo/redo history actions should not overwrite the original pending tx row"

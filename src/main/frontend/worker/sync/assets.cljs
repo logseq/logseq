@@ -313,18 +313,20 @@
                                       q)))
                            @selected))
             worker (fn worker []
-                     (when-let [asset-op (pop-queue!)]
-                       (-> (process-asset-op! repo graph-id asset-op
-                                              {:current-client-f current-client-f
-                                               :broadcast-rtc-state!-f broadcast-rtc-state!-f
-                                               :fail-fast-f fail-fast-f})
-                           (p/then (fn [_] (worker)))
+                     (if-let [asset-op (pop-queue!)]
+                       (-> (p/let [_ (process-asset-op! repo graph-id asset-op
+                                                        {:current-client-f current-client-f
+                                                         :broadcast-rtc-state!-f broadcast-rtc-state!-f
+                                                         :fail-fast-f fail-fast-f})]
+                             (worker))
                            (p/catch (fn [e]
                                       (log/error :db-sync/process-asset-op-loop-failed
                                                  {:repo repo
                                                   :asset-op asset-op
-                                                  :error e}))))))]
-        (p/all (repeat (min parallelism (count asset-ops)) (worker))))
+                                                  :error e}))))
+                       (p/resolved nil)))]
+        (p/all (mapv (fn [_] (worker))
+                     (range (min parallelism (count asset-ops))))))
       (p/resolved nil))))
 
 (defn enqueue-asset-sync!
