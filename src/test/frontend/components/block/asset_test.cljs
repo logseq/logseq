@@ -17,6 +17,36 @@
             {:block/title "test"}
             :pdf)))))
 
+(deftest asset-relative-path-test
+  (testing "builds the graph-relative asset file path from an asset block"
+    (let [asset-uuid (random-uuid)]
+      (is (= (str "assets/" asset-uuid ".pdf")
+             (block-asset/asset-relative-path
+              {:block/uuid asset-uuid
+               :logseq.property.asset/type "pdf"}))))))
+
+(deftest show-missing-file-warning-test
+  (testing "shows missing-file warning for local asset files that are absent"
+    (is (true?
+         (block-asset/show-missing-file-warning?
+          {:block/uuid (random-uuid)
+           :logseq.property.asset/type "pdf"}
+          false))))
+  (testing "does not show missing-file warning while a sync asset has not downloaded yet"
+    (is (false?
+         (block-asset/show-missing-file-warning?
+          {:block/uuid (random-uuid)
+           :logseq.property.asset/type "pdf"
+           :logseq.property.asset/remote-metadata {:checksum "sha-256-value"
+                                                   :type "pdf"}}
+          false))))
+  (testing "does not show missing-file warning before file existence is known"
+    (is (false?
+         (block-asset/show-missing-file-warning?
+          {:block/uuid (random-uuid)
+           :logseq.property.asset/type "pdf"}
+          nil)))))
+
 (deftest read-mode-title-attrs-test
   (testing "reserves the asset title row at the same height as a one-line editor"
     (let [attrs block-asset/read-mode-title-attrs]

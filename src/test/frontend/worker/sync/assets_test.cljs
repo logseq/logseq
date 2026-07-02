@@ -182,3 +182,53 @@
                    (set! js/fetch original-fetch)
                    (reset! worker-state/*db-sync-config db-sync-config)
                    (done)))))))
+
+(deftest upload-remote-asset-notifies-when-local-file-is-missing-test
+  (async done
+         (let [repo "asset-upload-repo"
+               graph-id "graph-1"
+               asset-uuid (random-uuid)
+               checksum "sha-256-value"
+               missing-file (str "assets/" asset-uuid ".pdf")
+               read-error (js/Error. "ENOENT: no such file or directory")
+               original-fetch js/fetch
+               db-sync-config @worker-state/*db-sync-config
+               fetch-called? (atom false)
+               broadcasts (atom [])]
+           (reset! worker-state/*db-sync-config
+                   {:http-base "https://sync.example.test"})
+           (set! js/fetch
+                 (fn [& _args]
+                   (reset! fetch-called? true)
+                   (p/resolved #js {:ok true
+                                     :status 200})))
+           (-> (p/with-redefs [sync-assets/graph-aes-key
+                               (fn [_repo _graph-id _fail-fast-f]
+                                 (p/resolved nil))
+                               platform/current
+                               (fn [] {})
+                               platform/asset-read-bytes!
+                               (fn [_platform _repo _file-name]
+                                 (p/rejected read-error))
+                               shared-service/broadcast-to-clients!
+                               (fn [event payload]
+                                 (swap! broadcasts conj [event payload]))]
+                 (sync-assets/upload-remote-asset!
+                  repo graph-id asset-uuid "pdf" checksum))
+               (p/then
+                (fn [_]
+                  (is false "expected missing local file to reject")))
+               (p/catch
+                (fn [error]
+                  (is (= :rtc.exception/read-asset-failed (:type (ex-data error))))
+                  (is (false? @fetch-called?))
+                  (is (= [[:notification
+                           [nil :error false nil nil
+                            {:i18n-key :asset/upload-missing-file
+                             :i18n-args [missing-file]}]]]
+                         @broadcasts))))
+               (p/finally
+                 (fn []
+                   (set! js/fetch original-fetch)
+                   (reset! worker-state/*db-sync-config db-sync-config)
+                   (done)))))))

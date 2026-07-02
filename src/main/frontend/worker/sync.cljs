@@ -411,6 +411,17 @@
   [repo asset-uuid]
   (sync-apply/request-asset-download! repo asset-uuid))
 
+(defn retry-asset-upload!
+  [repo]
+  (when-let [client (current-client repo)]
+    (sync-assets/enqueue-asset-sync!
+     repo client
+     {:enqueue-asset-task-f enqueue-asset-task!
+      :current-client-f current-client
+      :broadcast-rtc-state!-f broadcast-rtc-state!
+      :fail-fast-f fail-fast}))
+  (p/resolved nil))
+
 (defn rehydrate-large-titles-from-db!
   [repo graph-id]
   (sync-apply/rehydrate-large-titles-from-db! repo graph-id))

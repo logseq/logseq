@@ -60,6 +60,7 @@
  :asset/external-url-label "Asset external URL:"
  :asset/file-extension-placeholder "e.g. mp3"
  :asset/maximize "Maximize image"
+ :asset/missing-file "Can't find file {1}."
  :asset/open-in-browser "Open image in browser"
  :asset/physical-delete "Remove the file too (notice it can't be restored)"
  :asset/picker-empty "No assets found"
@@ -68,6 +69,7 @@
  :asset/picker-open "Choose asset"
  :asset/picker-set-failed "Failed to set asset property"
  :asset/ref-block "Asset ref block"
+ :asset/reload-file "Reload file"
  :asset/select-file "Select Asset File"
  :asset/select-from-disk "Select from disk"
  :asset/selected-directories "Selected directories:"
@@ -76,6 +78,7 @@
  :asset/syncing "Syncing"
  :asset/title-label "Asset title:"
  :asset/transfer-placeholder "{1} asset..."
+ :asset/upload-missing-file "Can't find file {1}. The asset was not uploaded."
  :asset/uploading "Uploading"
 
  :block/click-to-fix-query "Click to fix query: {1}"

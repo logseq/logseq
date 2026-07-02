@@ -11,6 +11,7 @@
    [frontend.worker.sync.crypt :as sync-crypt]
    [frontend.worker.sync.large-title :as sync-large-title]
    [lambdaisland.glogi :as log]
+   [logseq.common.config :as common-config]
    [logseq.common.util :as common-util]
    [logseq.db :as ldb]
    [promesa.core :as p]))
@@ -76,6 +77,15 @@
                :loaded loaded
                :total total}}))
 
+(defn- notify-missing-asset-upload-file!
+  [asset-id asset-type]
+  (let [asset-path (str common-config/local-assets-dir "/" (asset-file-name asset-id asset-type))]
+    (shared-service/broadcast-to-clients!
+     :notification
+     [nil :error false nil nil
+      {:i18n-key :asset/upload-missing-file
+       :i18n-args [asset-path]}])))
+
 (defn- mark-asset-write-finish!
   [repo asset-id]
   (shared-service/broadcast-to-clients!
@@ -113,6 +123,7 @@
                                (<read-asset-bytes repo asset-id asset-type)
                                (p/catch (fn [e]
                                           (log/error :read-asset-failed e)
+                                          (notify-missing-asset-upload-file! asset-id asset-type)
                                           (throw (ex-info "read-asset failed"
                                                           {:type :rtc.exception/read-asset-failed}
                                                           e)))))
@@ -223,7 +234,6 @@
                            (case (:type (ex-data e))
                              :rtc.exception/read-asset-failed
                              (do
-                               (client-op/remove-asset-op repo asset-uuid)
                                (when-let [client (current-client-f repo)]
                                  (broadcast-rtc-state!-f client)))
 
