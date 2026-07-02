@@ -74,11 +74,6 @@
 (defn set-t! [sql t]
   (set-meta! sql :t t))
 
-(defn next-t! [sql]
-  (let [t (inc (get-t sql))]
-    (set-t! sql t)
-    t))
-
 (defn- outliner-op->sql [outliner-op]
   (cond
     (keyword? outliner-op) (name outliner-op)

@@ -75,13 +75,14 @@
                    (:block/uuid ent)))))
        vec))
 
-(deftest t-counter-test
+(deftest t-meta-test
   (let [sql (test-sql/make-sql)]
     (storage/init-schema! sql)
     (is (= 0 (storage/get-t sql)))
-    (is (= 1 (storage/next-t! sql)))
+    (storage/set-t! sql 1)
     (is (= 1 (storage/get-t sql)))
-    (is (= 2 (storage/next-t! sql)))))
+    (storage/set-t! sql 2)
+    (is (= 2 (storage/get-t sql)))))
 
 (deftest tx-log-test
   (let [sql (test-sql/make-sql)]
