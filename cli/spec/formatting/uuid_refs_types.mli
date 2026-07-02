@@ -4,6 +4,8 @@ type uuid_label = {
   label : string option;
 }
 
+val unique_preserve_order : 'a list -> 'a list
+val extract_wiki_refs : string -> string list
 val extract_uuid_refs : string -> Cli_primitive.uuid list
 val replace_uuid_refs : string -> (Cli_primitive.uuid * string) list -> string
 val collect_uuid_refs_from_strings : string list -> Cli_primitive.uuid list
