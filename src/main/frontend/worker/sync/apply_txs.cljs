@@ -1479,7 +1479,8 @@
                                   (mapcat :repair-block-uuids)
                                   (remove (set prefetched-repair-block-uuids))
                                   distinct
-                                  vec)})
+                                  vec)
+         :remote-asset-tx-data (mapcat (comp :tx-data :report) @*remote-tx-results)})
 
       (catch :default e
         (js/console.error e)
@@ -1504,7 +1505,8 @@
     {:repair-block-uuids (->> @remote-tx-results
                               (mapcat :repair-block-uuids)
                               distinct
-                              vec)}))
+                              vec)
+     :remote-asset-tx-data (mapcat (comp :tx-data :report) @remote-tx-results)}))
 
 (defn- report-apply-remote-txs-error!
   [error {:keys [has-local-changes? remote-txs local-txs]}]
@@ -1524,17 +1526,37 @@
       (log/error :db-sync/report-apply-remote-txs-error-failed
                  {:error report-error}))))
 
-(defn- finish-apply-remote-txs!
+(defn- eager-remote-asset-download-owner?
+  []
+  (contains? #{:cli :electron}
+             (try
+               (platform/env-flag (platform/current) :owner-source)
+               (catch :default _
+                 nil))))
+
+(defn- download-missing-remote-assets-for-owner!
   [repo client remote-tx-data]
+  (when (and (:graph-id client)
+             (eager-remote-asset-download-owner?))
+    (let [candidates (some-> (worker-state/get-datascript-conn repo)
+                             deref
+                             (sync-assets/remote-asset-download-candidates-in-tx remote-tx-data))]
+      (when (seq candidates)
+        (sync-assets/download-remote-assets-if-missing! repo (:graph-id client) candidates)))))
+
+(defn- finish-apply-remote-txs!
+  [repo client remote-tx-data remote-asset-tx-data]
   (when-let [*inflight (:inflight client)]
     (reset! *inflight []))
 
-  (when-let [result (rehydrate-large-titles! repo {:tx-data remote-tx-data
-                                                   :graph-id (:graph-id client)})]
-    (p/catch result
-             (fn [error]
-               (log/error :db-sync/large-title-rehydrate-failed
-                          {:repo repo :error error})))))
+  (p/let [_ (when-let [result (rehydrate-large-titles! repo {:tx-data remote-tx-data
+                                                             :graph-id (:graph-id client)})]
+              (p/catch result
+                       (fn [error]
+                         (log/error :db-sync/large-title-rehydrate-failed
+                                    {:repo repo :error error}))))
+          _ (download-missing-remote-assets-for-owner! repo client remote-asset-tx-data)]
+    nil))
 
 (defn- after-repair-result
   [repair-result f]
@@ -1594,14 +1616,15 @@
                                :local-txs local-txs})
                              (throw error)))))
         finish-apply-result (fn [apply-result*]
-                              (let [repair-block-uuids (:repair-block-uuids apply-result*)]
+                              (let [repair-block-uuids (:repair-block-uuids apply-result*)
+                                    remote-asset-tx-data (:remote-asset-tx-data apply-result*)]
                                 (if (seq repair-block-uuids)
                                   (let [repair-result (<apply-server-repair-blocks!
                                                        repo client (:conn apply-context) repair-block-uuids)]
                                     (after-repair-result
                                      repair-result
-                                     #(finish-apply-remote-txs! repo client remote-tx-data)))
-                                  (finish-apply-remote-txs! repo client remote-tx-data))))]
+                                     #(finish-apply-remote-txs! repo client remote-tx-data remote-asset-tx-data)))
+                                  (finish-apply-remote-txs! repo client remote-tx-data remote-asset-tx-data))))]
     (if (contains? apply-result ::retry-result)
       (::retry-result apply-result)
       (finish-apply-result apply-result))))
