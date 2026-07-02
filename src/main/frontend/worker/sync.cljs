@@ -412,6 +412,10 @@
   [repo asset-uuid]
   (sync-apply/request-asset-download! repo asset-uuid))
 
+(defn download-missing-assets!
+  [repo graph-id]
+  (sync-assets/download-missing-remote-assets! repo graph-id))
+
 (defn retry-asset-upload!
   [repo]
   (when-let [client (current-client repo)]
