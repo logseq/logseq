@@ -234,3 +234,67 @@
                    (reset! worker-state/*db-sync-config db-sync-config)
                    (sync-assets/clear-missing-asset-upload-files! repo)
                    (done)))))))
+
+(deftest download-missing-remote-assets-downloads-only-missing-sync-assets-test
+  (async done
+         (let [repo "asset-prefetch-repo"
+               graph-id "graph-1"
+               missing-uuid (random-uuid)
+               existing-uuid (random-uuid)
+               local-uuid (random-uuid)
+               external-uuid (random-uuid)
+               conn (d/create-conn db-schema/schema)
+               stat-calls (atom [])
+               download-calls (atom [])]
+           (ldb/transact!
+            conn
+            [{:db/ident :logseq.class/Asset}
+             {:block/uuid missing-uuid
+              :block/tags #{:logseq.class/Asset}
+              :logseq.property.asset/type "png"
+              :logseq.property.asset/checksum "missing-checksum"
+              :logseq.property.asset/remote-metadata {:checksum "missing-checksum"
+                                                      :type "png"}}
+             {:block/uuid existing-uuid
+              :block/tags #{:logseq.class/Asset}
+              :logseq.property.asset/type "pdf"
+              :logseq.property.asset/checksum "existing-checksum"
+              :logseq.property.asset/remote-metadata {:checksum "existing-checksum"
+                                                      :type "pdf"}}
+             {:block/uuid local-uuid
+              :block/tags #{:logseq.class/Asset}
+              :logseq.property.asset/type "jpg"
+              :logseq.property.asset/checksum "local-checksum"}
+             {:block/uuid external-uuid
+              :block/tags #{:logseq.class/Asset}
+              :logseq.property.asset/type "gif"
+              :logseq.property.asset/checksum "external-checksum"
+              :logseq.property.asset/remote-metadata {:checksum "external-checksum"
+                                                      :type "gif"}
+              :logseq.property.asset/external-url "https://example.com/asset.gif"}])
+           (-> (p/with-redefs [worker-state/get-datascript-conn (fn [_repo]
+                                                                  conn)
+                               platform/current (fn [] {})
+                               platform/asset-stat
+                               (fn [_platform repo' file-name]
+                                 (swap! stat-calls conj [repo' file-name])
+                                 (p/resolved (when (= file-name (str existing-uuid ".pdf"))
+                                               {:size 10})))
+                               sync-assets/download-remote-asset!
+                               (fn [& args]
+                                 (swap! download-calls conj args)
+                                 (p/resolved nil))]
+                 (sync-assets/download-missing-remote-assets! repo graph-id))
+               (p/then (fn [result]
+                         (is (= {:total 2
+                                 :downloaded 1
+                                 :skipped-existing 1}
+                                result))
+                         (is (= #{[repo (str existing-uuid ".pdf")]
+                                  [repo (str missing-uuid ".png")]}
+                                (set @stat-calls)))
+                         (is (= [[repo graph-id missing-uuid "png"]]
+                                @download-calls))))
+               (p/catch (fn [error]
+                          (is false (str "unexpected error: " error))))
+               (p/finally done)))))

@@ -896,11 +896,14 @@
                                                    [(:repo action) graph-id (:graph-e2ee? remote-graph)])
                                  (p/finally (fn []
                                               (when-let [close! (:close! events-sub)]
-                                                (close!)))))]
+                                                (close!)))))
+                      assets-result (transport/invoke download-cfg :thread-api/db-sync-download-missing-assets
+                                                      [(:repo action) graph-id])]
                 {:status :ok
                  :data (if (map? result)
-                         result
-                         {:result result})})))
+                         (assoc result :assets assets-result)
+                         {:result result
+                          :assets assets-result})})))
           (p/then (fn [result]
                     (if (and (not graph-existed-before?)
                              (= :error (:status result)))

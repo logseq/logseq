@@ -426,3 +426,44 @@
                   (p/catch (fn [e]
                              (log-request-asset-download-failed! repo asset-uuid e)
                              (p/rejected e)))))))))))
+
+(defn- remote-asset-download-candidates
+  [db]
+  (->> (d/q '[:find ?e ?asset-uuid ?asset-type
+              :where
+              [?asset-class :db/ident :logseq.class/Asset]
+              [?e :block/tags ?asset-class]
+              [?e :block/uuid ?asset-uuid]
+              [?e :logseq.property.asset/type ?asset-type]
+              [?e :logseq.property.asset/remote-metadata]]
+            db)
+       (keep (fn [[e asset-uuid asset-type]]
+               (let [ent (d/entity db e)]
+                 (when-not (seq (some-> (:logseq.property.asset/external-url ent) str))
+                   {:asset-uuid asset-uuid
+                    :asset-type asset-type}))))
+       (sort-by (comp str :asset-uuid))))
+
+(defn download-missing-remote-assets!
+  [repo graph-id]
+  (if-let [conn (worker-state/get-datascript-conn repo)]
+    (let [candidates (remote-asset-download-candidates @conn)
+          current-platform (platform/current)]
+      (reduce
+       (fn [result-promise {:keys [asset-uuid asset-type]}]
+         (p/let [result result-promise
+                 asset-id (str asset-uuid)
+                 meta (platform/asset-stat current-platform
+                                           repo
+                                           (asset-file-name asset-id asset-type))]
+           (if meta
+             (update result :skipped-existing inc)
+             (p/let [_ (download-remote-asset! repo graph-id asset-uuid asset-type)]
+               (update result :downloaded inc)))))
+       (p/resolved {:total (count candidates)
+                    :downloaded 0
+                    :skipped-existing 0})
+       candidates))
+    (p/rejected (ex-info "datascript connection not found"
+                         {:repo repo
+                          :graph-id graph-id}))))

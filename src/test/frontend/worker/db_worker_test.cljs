@@ -31,7 +31,8 @@
         (concat
          [:thread-api/list-db :thread-api/init :thread-api/set-db-sync-config :thread-api/get-db-sync-config
           :thread-api/db-sync-status :thread-api/db-sync-start :thread-api/db-sync-stop :thread-api/db-sync-update-presence
-          :thread-api/db-sync-request-asset-download :thread-api/db-sync-grant-graph-access :thread-api/db-sync-ensure-user-rsa-keys
+          :thread-api/db-sync-request-asset-download :thread-api/db-sync-download-missing-assets
+          :thread-api/db-sync-grant-graph-access :thread-api/db-sync-ensure-user-rsa-keys
           :thread-api/db-sync-list-remote-graphs :thread-api/db-sync-upload-graph :thread-api/db-sync-create-remote-graph
           :thread-api/db-sync-stop-upload :thread-api/db-sync-resume-upload :thread-api/db-sync-upload-stopped?
           :thread-api/db-sync-get-block-conflicts :thread-api/db-sync-clear-block-conflicts :thread-api/db-sync-download-graph-by-id
@@ -735,6 +736,7 @@
            request-graph-id "remote-graph-id"
            request-block "block-1"
            request-asset "asset-1"
+           download-missing-assets-result {:total 2 :downloaded 2 :skipped-existing 0}
            request-email "user@example.com"
            request-opts {:force? true}]
        (with-redefs [db-worker/db-sync-dbs-open? (fn [repo]
@@ -755,6 +757,9 @@
                      db-sync/request-asset-download! (fn [repo asset-uuid]
                                                        (swap! calls conj [:request-asset-download repo asset-uuid])
                                                        :asset-requested)
+                     db-sync/download-missing-assets! (fn [repo graph-id]
+                                                        (swap! calls conj [:download-missing-assets repo graph-id])
+                                                        download-missing-assets-result)
                      sync-crypt/<grant-graph-access! (fn [repo graph-id target-email]
                                                        (swap! calls conj [:grant-graph-access repo graph-id target-email])
                                                        :granted)
@@ -793,6 +798,8 @@
          (is (= :stopped ((get-thread-api :thread-api/db-sync-stop))))
          (is (= :presence-updated ((get-thread-api :thread-api/db-sync-update-presence) request-block)))
          (is (= :asset-requested ((get-thread-api :thread-api/db-sync-request-asset-download) request-repo request-asset)))
+         (is (= download-missing-assets-result
+                ((get-thread-api :thread-api/db-sync-download-missing-assets) request-repo request-graph-id)))
          (is (= :granted ((get-thread-api :thread-api/db-sync-grant-graph-access) request-repo request-graph-id request-email)))
          (is (= ensure-keys-result ((get-thread-api :thread-api/db-sync-ensure-user-rsa-keys) request-opts)))
          (is (= ensure-keys-result ((get-thread-api :thread-api/db-sync-ensure-user-rsa-keys))))

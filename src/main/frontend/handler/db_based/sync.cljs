@@ -301,7 +301,10 @@
                        graph (str config/db-version-prefix graph-name)
                        _ (<ensure-download-runtime-bound! graph)
                        _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
-                                                  graph graph-uuid graph-e2ee?)]
+                                                  graph graph-uuid graph-e2ee?)
+                       _ (when (util/electron?)
+                           (state/<invoke-db-worker :thread-api/db-sync-download-missing-assets
+                                                    graph graph-uuid))]
                  true)
                (p/rejected (ex-info "db-sync missing graph info"
                                     {:type :db-sync/invalid-graph
