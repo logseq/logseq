@@ -60,10 +60,14 @@
                  (d/entity db (second tx)))))
        (common-util/distinct-by :db/id)))
 
-(def ^:private property-history-ref-attrs
+(def ^:private property-history-delete-attrs
   #{:logseq.property.history/block
     :logseq.property.history/property
-    :logseq.property.history/ref-value})
+    :logseq.property.history/ref-value
+    :block/title
+    :block/page
+    :block/parent
+    :block/order})
 
 (defn- property-history-entity?
   [entity]
@@ -74,13 +78,13 @@
             (:logseq.property.history/ref-value entity)
             (contains? entity :logseq.property.history/scalar-value)))))
 
-(defn- property-history-ref-retracted-entities
+(defn- property-history-attr-retracted-entities
   [db txs]
   (->> txs
        (keep (fn [tx]
                (when (and (vector? tx)
                           (= :db/retract (first tx))
-                          (contains? property-history-ref-attrs (nth tx 2 nil)))
+                          (contains? property-history-delete-attrs (nth tx 2 nil)))
                  (let [entity (d/entity db (second tx))]
                    (when (property-history-entity? entity)
                      entity)))))
@@ -139,7 +143,7 @@
 (defn- build-cleanup-tx
   [db txs]
   (loop [pending-entities (concat (retracted-entities db txs)
-                                  (property-history-ref-retracted-entities db txs))
+                                  (property-history-attr-retracted-entities db txs))
          seen-ids #{}
          cleanup-tx []]
     (if-let [entities (seq (remove #(contains? seen-ids (:db/id %))

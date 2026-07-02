@@ -49,6 +49,36 @@
       (d/transact! conn (concat retracts extra))
       (is (nil? (d/entity @conn (:db/id history-entity)))))))
 
+(deftest remote-delete-blocks-removes-retracted-history-blocks
+  (testing "remote delete-blocks datoms fully retract property history blocks"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "Target block"}
+                            {:block/title "Choice value"}]}]})
+          target-block (db-test/find-block-by-content @conn "Target block")
+          choice-value-block (db-test/find-block-by-content @conn "Choice value")
+          history-uuid (random-uuid)
+          now (common-util/time-ms)
+          _ (d/transact! conn [{:block/uuid history-uuid
+                                :block/title "History entry"
+                                :block/page (:db/id (:block/page target-block))
+                                :block/parent (:db/id (:block/page target-block))
+                                :block/order "a0"
+                                :block/created-at now
+                                :block/updated-at now
+                                :logseq.property.history/block (:db/id target-block)
+                                :logseq.property.history/property (:db/id (d/entity @conn :logseq.property/status))
+                                :logseq.property.history/ref-value (:db/id choice-value-block)}])
+          history-entity (d/entity @conn [:block/uuid history-uuid])
+          txs [[:db/retract (:db/id history-entity) :block/title "History entry"]
+               [:db/retract (:db/id history-entity) :block/page (:db/id (:block/page history-entity))]
+               [:db/retract (:db/id history-entity) :block/parent (:db/id (:block/parent history-entity))]
+               [:db/retract (:db/id history-entity) :block/order "a0"]]
+          extra (delete-blocks/update-refs-history @conn txs {:outliner-op :delete-blocks})]
+      (d/transact! conn (concat txs extra))
+      (is (nil? (d/entity @conn (:db/id history-entity)))))))
+
 (deftest delete-page-removes-history-with-ref-value
   (testing "deleting a page retracts property history entries that referenced that page"
     (let [conn (db-test/create-conn-with-blocks
