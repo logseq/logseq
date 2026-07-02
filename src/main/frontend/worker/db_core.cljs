@@ -755,6 +755,10 @@
   [repo asset-uuid]
   (db-sync/request-asset-download! repo asset-uuid))
 
+(def-thread-api :thread-api/db-sync-download-missing-assets
+  [repo graph-id]
+  (db-sync/download-missing-assets! repo graph-id))
+
 (def-thread-api :thread-api/db-sync-retry-asset-upload
   [repo]
   (db-sync/retry-asset-upload! repo))
