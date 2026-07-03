@@ -633,6 +633,34 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest rtc-download-graph-downloads-missing-assets-on-electron-test
+  (async done
+         (let [worker-calls (atom [])]
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                           (resolve true))
+                               util/electron? (fn [] true)
+                               persist-db/<fetch-init-data (fn [_repo _opts]
+                                                             (p/resolved {:schema {}
+                                                                          :initial-data []}))
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! worker-calls conj args)
+                                                         (p/resolved :ok))
+                               state/pub-event! (fn [& _] nil)
+                               state/set-state! (fn [& _] nil)]
+                 (db-sync/<rtc-download-graph! "db1" "graph-1" false))
+               (p/then (fn [_]
+                         (is (= [:thread-api/sync-app-state
+                                 :thread-api/db-sync-download-graph-by-id
+                                 :thread-api/db-sync-download-missing-assets]
+                                (mapv first @worker-calls)))
+                         (is (= ["logseq_db_db1" "graph-1"]
+                                (rest (nth @worker-calls 2))))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest rtc-download-graph-skips-runtime-rebind-outside-electron-test
   (async done
          (let [runtime-rebind-calls (atom [])

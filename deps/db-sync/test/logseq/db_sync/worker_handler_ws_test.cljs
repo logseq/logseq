@@ -95,14 +95,10 @@
         user {:user-id "user-1"
               :email "user@example.com"
               :username "alice"}
-        context {:username "alice"}
         sent (atom nil)]
-    (presence/add-presence! self ws user context)
-    (is (= {:presence/user user
-            :sync/context context}
+    (presence/add-presence! self ws user)
+    (is (= {:presence/user user}
            (bean/->clj (.deserializeAttachment ws))))
-    (is (= context
-           (presence/attachment->sync-context (.deserializeAttachment ws))))
     (swap! (presence/presence* restored-self)
            assoc
            ws

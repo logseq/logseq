@@ -410,6 +410,25 @@
      :show ["--page" "--level" "--linked-references"]}},
    :tags [:upsert :show :smoke],
    :extends :non-sync/graph-json-env}
+  {:id "block-upsert-page-link-appears-in-linked-references-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page bar_page >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page 'Jul 1st, 2026' --pos last-child --content 'Foo links to [[bar_page]]' >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json show --graph {{graph-arg}} --page bar_page --linked-references true --level 2"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths
+    {[:status] "ok",
+     [:data :linked-references :count] 1}},
+   :covers
+   {:commands ["upsert page" "upsert block" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--page" "--target-page" "--pos" "--content"],
+     :show ["--page" "--linked-references" "--level"]}},
+   :tags [:upsert :show],
+   :extends :non-sync/graph-json-env}
   {:id "show-page-default-content-json",
    :setup
    ["printf '%s' '{:pages-and-blocks [{:page {:block/title \"Foo\"} :blocks [{:block/title \"Foo normal content\"}]}]}' > {{export-path-arg}}"

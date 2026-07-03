@@ -140,6 +140,12 @@ def wait_health(base_url: str, timeout_s: float, interval_s: float) -> bool:
     return False
 
 
+def add_node_path(env: Dict[str, str], path: Path) -> None:
+    existing = env.get("NODE_PATH")
+    next_path = str(path)
+    env["NODE_PATH"] = next_path if not existing else next_path + os.pathsep + existing
+
+
 def start_server(args: argparse.Namespace) -> None:
     repo_root = Path(args.repo_root).expanduser().resolve()
     entry = repo_root / "deps" / "db-sync" / "worker" / "dist" / "node-adapter.js"
@@ -166,6 +172,7 @@ def start_server(args: argparse.Namespace) -> None:
     jwks_url = args.cognito_jwks_url or f"{issuer}/.well-known/jwks.json"
 
     env = os.environ.copy()
+    add_node_path(env, repo_root / "deps" / "db-sync" / "node_modules")
     env.update(
         {
             "DB_SYNC_PORT": str(args.port),
