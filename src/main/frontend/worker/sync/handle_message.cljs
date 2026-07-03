@@ -12,7 +12,6 @@
             [frontend.worker.sync.transport :as sync-transport]
             [frontend.worker.sync.util :as sync-util]
             [lambdaisland.glogi :as log]
-            [logseq.db-sync.checksum :as sync-checksum]
             [promesa.core :as p]
             [frontend.worker-common.util :as worker-util]))
 
@@ -28,6 +27,7 @@
     :get-client-ops-conn worker-state/get-client-ops-conn
     :get-pending-local-tx-count client-op/get-pending-local-tx-count
     :get-unpushed-asset-ops-count client-op/get-unpushed-asset-ops-count
+    :get-missing-asset-upload-files sync-assets/get-missing-asset-upload-files
     :get-local-tx client-op/get-local-tx
     :get-local-checksum client-op/get-local-checksum
     :get-graph-uuid client-op/get-graph-uuid
@@ -138,25 +138,16 @@
 (defn- checksum-compare-ready?
   [repo client local-t remote-t]
   (and (= local-t remote-t)
+       (string? (client-op/get-local-checksum repo))
        (not (pending-local-tx? repo))
        (empty? @(:inflight client))))
-
-(defn- local-sync-checksum
-  [repo]
-  (if-let [checksum (client-op/get-local-checksum repo)]
-    checksum
-    (if-let [conn (worker-state/get-datascript-conn repo)]
-      (let [checksum (sync-checksum/recompute-checksum @conn)]
-        (client-op/update-local-checksum repo checksum)
-        checksum)
-      (fail-fast :db-sync/missing-db {:repo repo :op :checksum}))))
 
 (defn- verify-sync-checksum!
   [repo client local-tx remote-tx remote-checksum context]
   (when worker-util/dev-or-test?
     (when (and (string? remote-checksum)
                (checksum-compare-ready? repo client local-tx remote-tx))
-      (let [local-checksum (local-sync-checksum repo)]
+      (let [local-checksum (client-op/get-local-checksum repo)]
         (when-not (= local-checksum remote-checksum)
           (let [mismatch-data (merge context
                                      {:type :db-sync/checksum-mismatch
@@ -225,9 +216,9 @@
             (if recoverable-missing?
               (sync-apply/enqueue-upload-repair! repo missing-block-uuids)
               (when failed-tx-id
-                (sync-apply/mark-failed-txs! repo [failed-tx-id]))))
+                (sync-apply/rollback-and-mark-failed-txs! repo [failed-tx-id]))))
           ;; Backward compatibility for older servers without per-tx reject metadata.
-          (sync-apply/mark-failed-txs! repo inflight))
+          (sync-apply/rollback-and-mark-failed-txs! repo inflight))
         (reset! (:inflight client) [])
         (broadcast-rtc-state! client)
         (sync-log-state/rtc-log :rtc.log/tx-rejected rejected-data)

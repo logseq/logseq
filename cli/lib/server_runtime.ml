@@ -106,6 +106,13 @@ let http_success response =
   let status = Fetch.Response.status response in
   status >= 200 && status < 300
 
+let http_health_response response =
+  let status = Fetch.Response.status response in
+  status = 200 || status = 503
+
+let server_publish_timeout_span = Time.span_of_ms 30_000L
+let server_ready_timeout_span = Time.span_of_ms 30_000L
+
 let parse_server_list_line line =
   match
     String.split_on_char ' ' (String.trim line) |> List.filter (( <> ) "")
@@ -176,7 +183,7 @@ let discover_server (_pid, port) =
   Cli_effect.catch
     (Cli_effect.map
        (fun (response, body) ->
-         if http_success response then
+         if http_health_response response then
            Some (server_of_health ~fallback_port:port body)
          else None)
        (http_request ~method_:Fetch.Get
@@ -346,11 +353,22 @@ let wait_for_lock path =
       Cli_effect.pure (if Cli_unix.file_exists path then Some () else None))
 
 let wait_for_ready config repo =
-  wait_until_effect (fun () ->
+  wait_until_effect ~timeout_span:server_ready_timeout_span (fun () ->
       Cli_effect.map
         (function
           | Some ({ status = Ready; _ } as server) -> Some server | _ -> None)
         (find_repo_server config repo))
+
+let read_lock_pid path =
+  if not (Cli_unix.file_exists path) then None
+  else
+    try
+      Cli_unix.read_text_file path |> Json_util.value_of_json_string
+      |> fun raw -> Edn_util.get_int raw "pid"
+    with _ -> None
+
+let live_lock path =
+  match read_lock_pid path with Some pid -> process_alive pid | None -> false
 
 let owner_manageable = function
   | Cli_primitive.Cli | Cli_primitive.Unknown -> true
@@ -359,13 +377,40 @@ let owner_manageable = function
 let start_result_of_server repo (server : server) =
   { repo; owner_source = server.owner_source; owned = server.owned }
 
+let wait_for_published_ready time config repo =
+  let open Cli_effect in
+  bind
+    (time "server.wait-publish" (fun () ->
+         wait_until_effect ~timeout_span:server_publish_timeout_span (fun () ->
+             find_repo_server config repo)))
+    (function
+      | None ->
+          pure
+            (Stdlib.Error
+               (Error.make
+                  (Error.Server_start_failed)
+                  "db-worker-node failed to publish health"))
+      | Some _ ->
+          bind
+            (time "server.wait-ready" (fun () -> wait_for_ready config repo))
+            (function
+              | Some server -> pure (Stdlib.Ok (start_result_of_server repo server))
+              | None ->
+                  pure
+                    (Stdlib.Error
+                       (Error.make
+                          (Error.Server_start_failed)
+                          "db-worker-node failed to start"))))
+
 let start_server_unprofiled config repo ~create_empty_db =
   let open Cli_effect in
   let time stage f =
     Profile_types.time config.Cli_config.profile_session stage f
   in
   bind (find_repo_server config repo) (function
-    | Some server -> pure (Stdlib.Ok (start_result_of_server repo server))
+    | Some ({ status = Ready; _ } as server) ->
+        pure (Stdlib.Ok (start_result_of_server repo server))
+    | Some _ -> wait_for_published_ready time config repo
     | None when Option.is_some config.Cli_config.base_url ->
         pure
           (Stdlib.Ok { repo; owner_source = config.owner_source; owned = false })
@@ -373,70 +418,44 @@ let start_server_unprofiled config repo ~create_empty_db =
         match ensure_repo_dir config repo with
         | Stdlib.Error err -> pure (Stdlib.Error err)
         | Stdlib.Ok _ -> (
-            match resolve_script_path config with
-            | Stdlib.Error err -> pure (Stdlib.Error err)
-            | Stdlib.Ok script -> (
-                try
-                  let lock =
-                    lock_path ~root_dir:(resolve_root_dir config) repo
-                  in
-                  bind
-                    (time "server.spawn-daemon" (fun () ->
-                         spawn_server_process ~script
-                           ~root_dir:(resolve_root_dir config) ~repo
-                           ~owner_source:"cli" ~create_empty_db;
-                         pure ()))
-                    (fun () ->
-                      bind
-                        (time "server.wait-lock" (fun () -> wait_for_lock lock))
-                        (function
-                          | None ->
-                              pure
-                                (Stdlib.Error
-                                   (Error.make
-                                      (Error.Server_start_timeout_orphan)
-                                      ("db-worker-node failed to start. \
-                                        Command: "
-                                      ^ db_worker_command_line ~script
-                                          ~root_dir:(resolve_root_dir config)
-                                          ~repo ~owner_source:"cli"
-                                          ~create_empty_db)))
-                          | Some () ->
-                              bind
-                                (time "server.wait-publish" (fun () ->
-                                     wait_until_effect (fun () ->
-                                         find_repo_server config repo)))
-                                (function
-                                  | None ->
-                                      pure
-                                        (Stdlib.Error
-                                           (Error.make
-                                              (Error.Server_start_failed)
-                                              "db-worker-node failed to start"))
-                                  | Some _ ->
-                                      bind
-                                        (time "server.wait-ready" (fun () ->
-                                             wait_for_ready config repo))
-                                        (function
-                                          | Some server ->
-                                              pure
-                                                (Stdlib.Ok
-                                                   (start_result_of_server repo
-                                                      server))
-                                          | None ->
-                                              pure
-                                                (Stdlib.Error
-                                                   (Error.make
-                                                      (Error.Server_start_failed)
-                                                      "db-worker-node failed \
-                                                       to start"))))))
-                with exn ->
-                  pure
-                    (Stdlib.Error
-                       (Error.make
-                          (Error.Server_start_failed)
-                          ("failed to spawn db-worker-node: "
-                         ^ Printexc.to_string exn)))))))
+            let lock = lock_path ~root_dir:(resolve_root_dir config) repo in
+            if live_lock lock then wait_for_published_ready time config repo
+            else
+              match resolve_script_path config with
+              | Stdlib.Error err -> pure (Stdlib.Error err)
+              | Stdlib.Ok script -> (
+                  try
+                    bind
+                      (time "server.spawn-daemon" (fun () ->
+                           spawn_server_process ~script
+                             ~root_dir:(resolve_root_dir config) ~repo
+                             ~owner_source:"cli" ~create_empty_db;
+                           pure ()))
+                      (fun () ->
+                        bind
+                          (time "server.wait-lock" (fun () ->
+                               wait_for_lock lock))
+                          (function
+                            | None ->
+                                pure
+                                  (Stdlib.Error
+                                     (Error.make
+                                        (Error.Server_start_timeout_orphan)
+                                        ("db-worker-node failed to start. \
+                                          Command: "
+                                        ^ db_worker_command_line ~script
+                                            ~root_dir:(resolve_root_dir config)
+                                            ~repo ~owner_source:"cli"
+                                            ~create_empty_db)))
+                            | Some () ->
+                                wait_for_published_ready time config repo))
+                  with exn ->
+                    pure
+                      (Stdlib.Error
+                         (Error.make
+                            (Error.Server_start_failed)
+                            ("failed to spawn db-worker-node: "
+                           ^ Printexc.to_string exn)))))))
 
 let start_server config repo ~create_empty_db =
   Profile_types.time config.Cli_config.profile_session "server.ensure-started"
@@ -455,12 +474,22 @@ let ensure_server config repo ~create_empty_db =
   | None ->
       let open Cli_effect in
       bind (find_repo_server config repo) (function
-        | Some server -> pure (Ok (invoke_config_of_server config server))
+        | Some ({ status = Ready; _ } as server) ->
+            pure (Ok (invoke_config_of_server config server))
+        | Some _ ->
+            bind (wait_for_ready config repo) (function
+              | Some server -> pure (Ok (invoke_config_of_server config server))
+              | None ->
+                  pure
+                    (Stdlib.Error
+                       (Error.make
+                          (Error.Server_start_failed)
+                          "db-worker-node failed to start")))
         | None ->
             bind (start_server config repo ~create_empty_db) (function
               | Stdlib.Error err -> pure (Stdlib.Error err)
               | Stdlib.Ok _ ->
-                  bind (find_repo_server config repo) (function
+                  bind (wait_for_ready config repo) (function
                     | Some server ->
                         pure (Ok (invoke_config_of_server config server))
                     | None ->

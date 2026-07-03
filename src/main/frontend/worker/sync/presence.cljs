@@ -17,6 +17,7 @@
   [{:keys [get-datascript-conn
            get-pending-local-tx-count
            get-unpushed-asset-ops-count
+           get-missing-asset-upload-files
            get-local-tx
            get-local-checksum
            get-graph-uuid
@@ -28,6 +29,9 @@
                           (get-pending-local-tx-count repo)
                           0)
           pending-asset (get-unpushed-asset-ops-count repo)
+          missing-asset-upload-files (if get-missing-asset-upload-files
+                                       (get-missing-asset-upload-files repo)
+                                       [])
           local-tx (get-local-tx repo)
           remote-tx (get latest-remote-tx repo)
           local-checksum (when get-local-checksum
@@ -45,6 +49,7 @@
        :graph-id graph-uuid
        :pending-local pending-local
        :pending-asset pending-asset
+       :missing-asset-upload-files missing-asset-upload-files
        :pending-server pending-server
        :local-tx local-tx
        :remote-tx remote-tx
@@ -70,7 +75,7 @@
   (let [repo (:repo client)
         ws-state @(:ws-state client)
         online-users @(:online-users client)
-        {:keys [pending-local pending-asset pending-server
+        {:keys [pending-local pending-asset missing-asset-upload-files pending-server
                 local-tx remote-tx local-checksum remote-checksum graph-uuid]}
         (sync-counts-f repo)]
     {:rtc-state {:ws-state ws-state}
@@ -78,6 +83,8 @@
      :online-users (or online-users [])
      :unpushed-block-update-count (or pending-local 0)
      :pending-asset-ops-count (or pending-asset 0)
+     :missing-asset-upload-files (or missing-asset-upload-files [])
+     :missing-asset-upload-files-count (count missing-asset-upload-files)
      :pending-server-ops-count (or pending-server 0)
      :local-tx local-tx
      :remote-tx remote-tx

@@ -13,7 +13,6 @@
    [frontend.worker.sync.transport :as sync-transport]
    [frontend.worker.sync.upload :as sync-upload]
    [frontend.worker.sync.util :as sync-util]
-   [frontend.worker-common.util :as worker-util]
    [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
    [logseq.db-sync.checksum :as sync-checksum]
@@ -42,6 +41,7 @@
     :get-client-ops-conn worker-state/get-client-ops-conn
     :get-pending-local-tx-count client-op/get-pending-local-tx-count
     :get-unpushed-asset-ops-count client-op/get-unpushed-asset-ops-count
+    :get-missing-asset-upload-files sync-assets/get-missing-asset-upload-files
     :get-local-tx client-op/get-local-tx
     :get-local-checksum client-op/get-local-checksum
     :get-graph-uuid client-op/get-graph-uuid
@@ -51,8 +51,7 @@
 
 (defn update-local-sync-checksum!
   [repo tx-report]
-  (when (and worker-util/dev-or-test?
-             (worker-state/get-client-ops-conn repo))
+  (when (worker-state/get-client-ops-conn repo)
     (let [current-checksum (client-op/get-local-checksum repo)
           new-checksum (sync-checksum/update-checksum current-checksum tx-report)]
       ;; (let [full-checksum (sync-checksum/recompute-checksum (:db-after tx-report))]
@@ -162,6 +161,7 @@
                  (p/catch (fn [_] nil))
                  (p/then (fn [_] (task)))
                  (p/catch (fn [error]
+                            (sync-util/set-last-sync-error! client error)
                             (log/error :db-sync/ws-handle-message-failed
                                        {:repo (:repo client)
                                         :error error}))))))
@@ -411,6 +411,21 @@
 (defn request-asset-download!
   [repo asset-uuid]
   (sync-apply/request-asset-download! repo asset-uuid))
+
+(defn download-missing-assets!
+  [repo graph-id]
+  (sync-assets/download-missing-remote-assets! repo graph-id))
+
+(defn retry-asset-upload!
+  [repo]
+  (when-let [client (current-client repo)]
+    (sync-assets/enqueue-asset-sync!
+     repo client
+     {:enqueue-asset-task-f enqueue-asset-task!
+      :current-client-f current-client
+      :broadcast-rtc-state!-f broadcast-rtc-state!
+      :fail-fast-f fail-fast}))
+  (p/resolved nil))
 
 (defn rehydrate-large-titles-from-db!
   [repo graph-id]
