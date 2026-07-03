@@ -27,6 +27,32 @@
 (def ^:private entity-op-kinds
   #{:db/add :db/retract :db/cas :db.fn/cas})
 
+(defn- entity-op?
+  [item]
+  (and (vector? item)
+       (<= 4 (count item))
+       (contains? entity-op-kinds (first item))))
+
+(defn- missing-entity-op?
+  [db item]
+  (and (entity-op? item)
+       (nil? (entity-ref->eid db (second item)))))
+
+(defn- drop-ops-targeting-retracted-entities
+  [db tx-data]
+  (let [retract-eids (->> tx-data
+                          (keep (fn [item]
+                                  (when (retract-entity-op? item)
+                                    (entity-ref->eid db (second item)))))
+                          set)]
+    (if (empty? retract-eids)
+      tx-data
+      (remove (fn [item]
+                (and (entity-op? item)
+                     (contains? retract-eids
+                                (entity-ref->eid db (second item)))))
+              tx-data))))
+
 (def ^:private migration-deleted-attrs
   #{:block/path-refs
     :block/pre-block?
@@ -38,7 +64,7 @@
   (keep (fn [item]
           (when-not (and (vector? item)
                          (<= 4 (count item))
-                         (contains? entity-op-kinds (first item))
+                         (entity-op? item)
                          (contains? migration-deleted-attrs (nth item 2)))
             item))
         tx-data))
@@ -97,13 +123,21 @@
 (defn sanitize-tx
   ([db tx-data]
    (sanitize-tx db tx-data nil))
-  ([db tx-data {:keys [drop-missing-retract-ops?]
-                :or {drop-missing-retract-ops? false}}]
+  ([db tx-data {:keys [drop-missing-retract-ops?
+                       drop-missing-entity-ops?
+                       drop-ops-targeting-retracted-entities?]
+                :or {drop-missing-retract-ops? false
+                     drop-missing-entity-ops? false
+                     drop-ops-targeting-retracted-entities? false}}]
    (let [tx-data* (cond->> (strip-migration-deleted-attrs tx-data)
                     drop-missing-retract-ops?
                     (remove (fn [item]
                               (and (retract-entity-op? item)
-                                   (nil? (entity-ref->eid db (second item)))))))
+                                   (nil? (entity-ref->eid db (second item))))))
+                    drop-missing-entity-ops?
+                    (remove (partial missing-entity-op? db))
+                    drop-ops-targeting-retracted-entities?
+                    (drop-ops-targeting-retracted-entities db))
          tx-data* (drop-conflicted-encrypted-retracts tx-data*)
          tx-data* (vec tx-data*)
          retract-eids (->> tx-data*

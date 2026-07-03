@@ -326,6 +326,24 @@
                  missing-uuid (conj missing-uuid))))
       (-> result distinct vec))))
 
+(def ^:private delete-outliner-ops
+  #{:delete-blocks
+    :delete-page})
+
+(def ^:private stale-target-noop-outliner-ops
+  #{:move-blocks
+    :move-blocks-up-down
+    :indent-outdent-blocks
+    :indent-blocks
+    :outdent-blocks})
+
+(defn- request-context->tx-meta
+  [{:keys [graph-id client-revision username]}]
+  (cond-> {}
+    graph-id (assoc :graph-id graph-id)
+    client-revision (assoc :client-revision client-revision)
+    username (assoc :username username)))
+
 (defn- import-snapshot! [^js self rows reset?]
   (let [sql (.-sql self)]
     (ensure-schema! self)
@@ -335,13 +353,19 @@
     (import-snapshot-rows! sql "kvs" rows)))
 
 (defn- apply-tx-entry!
-  [conn {:keys [tx outliner-op]}]
+  [conn {:keys [tx outliner-op]} request-context]
   (let [tx-data (tx-sanitize/sanitize-tx @conn
                                          (protocol/transit->tx tx)
-                                         {:drop-missing-retract-ops? (= outliner-op :fix)})]
+                                         {:drop-missing-retract-ops? (or (= outliner-op :fix)
+                                                                         (contains? delete-outliner-ops outliner-op))
+                                          :drop-missing-entity-ops? (contains? stale-target-noop-outliner-ops
+                                                                               outliner-op)
+                                          :drop-ops-targeting-retracted-entities? (contains? delete-outliner-ops
+                                                                                             outliner-op)})]
     (if (seq tx-data)
       (try
-        (ldb/transact! conn tx-data (cond-> {:op :apply-client-tx}
+        (ldb/transact! conn tx-data (cond-> (merge {:op :apply-client-tx}
+                                                   (request-context->tx-meta request-context))
                                       outliner-op
                                       (assoc :outliner-op outliner-op)
                                       (= outliner-op :db-migrate)
@@ -363,7 +387,7 @@
             (throw e))))
       false)))
 
-(defn- apply-tx! [^js self tx-entries]
+(defn- apply-tx! [^js self tx-entries request-context]
   (let [sql (.-sql self)]
     (ensure-conn! self)
     (let [conn (.-conn self)]
@@ -373,7 +397,7 @@
         (if-let [tx-entry (first remaining)]
           (let [tx-id (:tx-id tx-entry)
                 applied-entry? (try
-                                 (boolean (apply-tx-entry! conn tx-entry))
+                                 (boolean (apply-tx-entry! conn tx-entry request-context))
                                  (catch :default e
                                    (log/error :db-sync/transact-failed e)
                                    (let [missing-block-uuids (missing-block-uuids-from-error e)]
@@ -384,11 +408,6 @@
                                                        (seq missing-block-uuids)
                                                        (assoc :missing-block-uuids missing-block-uuids))
                                                      e)))))
-                _ (when (and tx-id (not applied-entry?))
-                    (throw (ex-info "tx entry was not applied"
-                                    {:type :db-sync/tx-entry-not-applied
-                                     :successful-tx-ids successful-tx-ids
-                                     :failed-tx-id tx-id})))
                 next-successful-tx-ids (cond-> successful-tx-ids
                                          tx-id (conj tx-id))]
             (recur (next remaining)
@@ -400,13 +419,15 @@
              :successful-tx-ids successful-tx-ids}))))))
 
 (defn handle-tx-batch!
-  [^js self sender txs t-before]
-  (let [current-t (t-now self)]
-    (cond
-      (not (snapshot-upload-finished? self))
-      {:type "tx/reject"
-       :reason "snapshot upload in progress"
-       :t current-t}
+  ([^js self sender txs t-before]
+   (handle-tx-batch! self sender txs t-before nil))
+  ([^js self sender txs t-before request-context]
+   (let [current-t (t-now self)]
+     (cond
+       (not (snapshot-upload-finished? self))
+       {:type "tx/reject"
+        :reason "snapshot upload in progress"
+        :t current-t}
 
        (or (not (number? t-before)) (neg? t-before))
        {:type "tx/reject"
@@ -420,7 +441,7 @@
        :else
        (if (seq txs)
          (try
-           (let [{:keys [t applied?]} (apply-tx! self txs)
+           (let [{:keys [t applied?]} (apply-tx! self txs request-context)
                  checksum (current-checksum self)]
              (when applied?
                ;; Broadcast once per processed batch after tx-log/checksum settle.
@@ -446,7 +467,7 @@
                  (seq missing-block-uuids) (assoc :missing-block-uuids missing-block-uuids)
                  (string? checksum) (assoc :checksum checksum)))))
          {:type "tx/reject"
-          :reason "empty tx data"}))))
+          :reason "empty tx data"})))))
 
 (defn- handle-sync-pull
   [^js self ^js url]
@@ -585,14 +606,16 @@
                    graph-id (graph-id-from-request request)]
                (if (nil? body)
                  (http/bad-request "invalid tx")
-                 (let [{:keys [txs t-before]} body
+                 (let [{:keys [client-revision txs t-before]} body
                        t-before (parse-int t-before)]
                    (if (sequential? txs)
                      (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
                        (if-not ready-for-sync?
                          (http/error-response "graph not ready" 409)
                          (http/json-response :sync/tx-batch
-                                             (handle-tx-batch! self nil txs t-before))))
+                                             (handle-tx-batch! self nil txs t-before
+                                                               {:graph-id graph-id
+                                                                :client-revision client-revision}))))
                      (http/bad-request "invalid tx")))))))))
 
 (defn- parse-reset-param
