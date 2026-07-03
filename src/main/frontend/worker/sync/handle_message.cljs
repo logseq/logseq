@@ -135,12 +135,16 @@
   [repo]
   (pos? (or (client-op/get-pending-local-tx-count repo) 0)))
 
-(defn- checksum-compare-ready?
+(defn- synced-checksum-ready?
   [repo client local-t remote-t]
   (and (= local-t remote-t)
-       (string? (client-op/get-local-checksum repo))
        (not (pending-local-tx? repo))
        (empty? @(:inflight client))))
+
+(defn- checksum-compare-ready?
+  [repo client local-t remote-t]
+  (and (synced-checksum-ready? repo client local-t remote-t)
+       (string? (client-op/get-local-checksum repo))))
 
 (defn- verify-sync-checksum!
   [repo client local-tx remote-tx remote-checksum context]
