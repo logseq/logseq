@@ -77,11 +77,10 @@
     (d/unlisten! conn ::listen-db-changes!)
     (d/listen! conn ::listen-db-changes!
                (fn listen-db-changes!-inner
-                 [{:keys [tx-data tx-meta] :as tx-report}]
+                 [{:keys [tx-data _tx-meta] :as tx-report}]
                  (when (seq tx-data)
-                   (when-not (:batch-final-tx-report? tx-meta)
-                     (db-sync/update-local-sync-checksum! repo tx-report))
                    (when-not (:batch-tx? @conn)
+                     (db-sync/update-local-sync-checksum! repo tx-report)
                      (let [tx-report' (if sync-db-to-main-thread?
                                         (sync-db-to-main-thread repo conn tx-report)
                                         tx-report)
