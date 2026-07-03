@@ -1876,6 +1876,43 @@
             (is (= (sync-checksum/recompute-checksum @conn)
                    (client-op/get-local-checksum test-repo)))))))))
 
+(deftest remote-batch-drops-follow-up-ops-for-stale-created-block-test
+  (testing "remote txs later in the same batch should not apply ops for an entity dropped as stale"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          page-id (:db/id (:block/page parent))
+          missing-parent-uuid (random-uuid)
+          stale-child-uuid (random-uuid)
+          now 1783110501711
+          client (test-sync-client)
+          remote-txs [{:t 1
+                       :outliner-op :insert-blocks
+                       :tx-data [[:db/add "stale-child" :block/uuid stale-child-uuid]
+                                 [:db/add "stale-child" :block/title "stale child"]
+                                 [:db/add "stale-child" :block/parent [:block/uuid missing-parent-uuid]]
+                                 [:db/add "stale-child" :block/page page-id]
+                                 [:db/add "stale-child" :block/order "a0"]
+                                 [:db/add "stale-child" :block/created-at now]
+                                 [:db/add "stale-child" :block/updated-at now]]}
+                      {:t 2
+                       :outliner-op :save-block
+                       :tx-data [[:db/add [:block/uuid stale-child-uuid]
+                                  :block/title
+                                  "stale child update"]]}]]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (with-silenced-console-error
+            (fn []
+              (is (= :ok
+                     (try
+                       (sync-apply/apply-remote-txs! test-repo client remote-txs)
+                       :ok
+                       (catch :default _error
+                         :thrown))))))
+          (is (nil? (d/entity @conn [:block/uuid stale-child-uuid])))
+          (is (= (sync-checksum/recompute-checksum @conn)
+                 (client-op/get-local-checksum test-repo))))))))
+
 (deftest first-local-block-after-upload-keeps-server-checksum-in-sync-test
   (testing "the first local block tx after upload keeps server and client checksums equal"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)

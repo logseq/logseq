@@ -330,13 +330,6 @@
   #{:delete-blocks
     :delete-page})
 
-(def ^:private stale-target-noop-outliner-ops
-  #{:move-blocks
-    :move-blocks-up-down
-    :indent-outdent-blocks
-    :indent-blocks
-    :outdent-blocks})
-
 (defn- request-context->tx-meta
   [{:keys [graph-id client-revision username]}]
   (cond-> {}
@@ -358,10 +351,9 @@
                                          (protocol/transit->tx tx)
                                          {:drop-missing-retract-ops? (or (= outliner-op :fix)
                                                                          (contains? delete-outliner-ops outliner-op))
-                                          :drop-missing-entity-ops? (contains? stale-target-noop-outliner-ops
-                                                                               outliner-op)
                                           :drop-ops-targeting-retracted-entities? (contains? delete-outliner-ops
-                                                                                             outliner-op)})]
+                                                                                             outliner-op)
+                                          :retract-touched-descendants? (contains? delete-outliner-ops outliner-op)})]
     (if (seq tx-data)
       (try
         (ldb/transact! conn tx-data (cond-> (merge {:op :apply-client-tx}

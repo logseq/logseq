@@ -595,8 +595,8 @@
                     (select-keys % [:op :outliner-op :graph-id :client-revision]))
                 @tx-metas)))))
 
-(deftest tx-batch-ignores-stale-move-target-updates-test
-  (testing "move-blocks against a block already deleted on the server is a no-op"
+(deftest tx-batch-rejects-move-blocks-when-target-is-missing-test
+  (testing "move-blocks against a block missing on the server should request client repair"
     (let [sql (test-sql/make-sql)
           conn (storage/open-conn sql)
           self #js {:sql sql
@@ -639,8 +639,11 @@
           response (with-redefs [ws/broadcast! (fn [_self _sender payload]
                                                  (swap! changed-messages conj payload))]
                      (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
-      (is (= "tx/batch/ok" (:type response)))
+      (is (= "tx/reject" (:type response)))
+      (is (= "db transact failed" (:reason response)))
       (is (= t-before (:t response)))
+      (is (= tx-id (:failed-tx-id response)))
+      (is (= [missing-block-uuid] (:missing-block-uuids response)))
       (is (= checksum-before (storage/get-checksum sql)))
       (is (empty? (storage/fetch-tx-since sql t-before)))
       (is (empty? @changed-messages)))))
@@ -690,6 +693,10 @@
                          [[:db/add [:block/uuid child-uuid]
                            :block/parent
                            [:block/uuid page-uuid]
+                           537866038]
+                          [:db/add [:block/uuid property-value-uuid]
+                           :block/updated-at
+                           (inc now)
                            537866038]
                           [:db/retractEntity [:block/uuid parent-uuid]]
                           [:db/retractEntity [:block/uuid child-uuid]]])

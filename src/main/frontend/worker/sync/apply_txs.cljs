@@ -396,7 +396,7 @@
                (nil? (d/entity db [:block/uuid block-uuid]))))
         (tx-item-ref-block-uuids item)))
 
-(defn- drop-stale-missing-block-ref-ops
+(defn- drop-stale-missing-block-ref-ops-result
   [db stale-block-uuids tx-data]
   (let [temp-id->uuid (tx-temp-id->uuid tx-data)
         stale-entity-block-uuids (->> tx-data
@@ -404,12 +404,14 @@
                                               (when (tx-item-missing-stale-block-ref?
                                                      db stale-block-uuids item)
                                                 (tx-item-entity-block-uuid db temp-id->uuid item))))
-                                      set)]
-    (remove (fn [item]
-              (or (tx-item-missing-stale-block-ref? db stale-block-uuids item)
-                  (contains? stale-entity-block-uuids
-                             (tx-item-entity-block-uuid db temp-id->uuid item))))
-            tx-data)))
+                                      set)
+        tx-data* (remove (fn [item]
+                           (or (tx-item-missing-stale-block-ref? db stale-block-uuids item)
+                               (contains? stale-entity-block-uuids
+                                          (tx-item-entity-block-uuid db temp-id->uuid item))))
+                         tx-data)]
+    {:tx-data tx-data*
+     :dropped-entity-block-uuids stale-entity-block-uuids}))
 
 (defn- repair-block-uuids-in-tx-data
   [db tx-data]
@@ -992,7 +994,8 @@
                       :or {allow-invalid-repair? true}}]
   (loop [remaining remote-txs
          index 0
-         results []]
+         results []
+         carried-stale-block-uuids #{}]
     (let [db @conn]
       (if-let [remote-tx (first remaining)]
         (let [deleted-block-uuids (remote-txs-retract-entity-block-uuids remaining)
@@ -1001,9 +1004,13 @@
               tx-data (some->> (:tx-data remote-tx)
                                (map (partial resolve-temp-id db))
                                (tx-sanitize/sanitize-tx db)
-                               (drop-stale-deleted-block-ref-ops db deleted-block-uuids)
-                               (drop-stale-missing-block-ref-ops db stale-block-uuids)
-                               seq)
+                               (drop-stale-deleted-block-ref-ops db deleted-block-uuids))
+              {:keys [tx-data dropped-entity-block-uuids]}
+              (drop-stale-missing-block-ref-ops-result
+               db
+               (set/union carried-stale-block-uuids stale-block-uuids)
+               tx-data)
+              tx-data (seq tx-data)
               tx-meta (apply-tx-meta remote-tx)
               invalid-retry? (and allow-invalid-repair?
                                   (missing-datom-repair-tx? tx-data)
@@ -1020,7 +1027,10 @@
                                 :report report
                                 :invalid-retry? invalid-retry?
                                 :repair-block-uuids repair-block-uuids}))]
-          (recur (next remaining) (inc index) results'))
+          (recur (next remaining)
+                 (inc index)
+                 results'
+                 (set/union carried-stale-block-uuids dropped-entity-block-uuids)))
         results))))
 
 (defn reverse-local-txs!
