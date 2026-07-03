@@ -8,12 +8,20 @@ import {
   bootstrapStressPageNames,
   classifyHttpResult,
   classifyCliResult,
+  clientRuntimeOptions,
+  checksumDiagnosticsMatch,
+  cliCommand,
   graphValidateArgs,
+  isIdleSyncStatus,
+  isSettledSyncStatus,
   mutableStressPageNames,
+  offlineTodayJournalClientCount,
   operationNames,
   operationWeights,
+  parseArgs,
   stressPageNames,
   stressConfigText,
+  syncDownloadArgs,
   syncEnsureKeysArgs,
   syncNeedsEnsureKeys,
   syncServerStartArgs,
@@ -21,6 +29,7 @@ import {
   syncUploadArgs,
   staleIdsFromContext,
   todayJournalPageName,
+  uniqueOperationPageTitle,
 } from "./cli-concurrent-edit-stress.mjs";
 
 test("classifies stale block conflicts as race outcomes", () => {
@@ -57,14 +66,30 @@ test("classifies stale task and recycled page conflicts as race outcomes", () =>
 });
 
 test("classifies concurrent volatile property delete as a race outcome", () => {
+  for (const code of ["property-not-found", "ambiguous-property-name"]) {
+    assert.equal(
+      classifyCliResult(
+        { code: 1 },
+        {
+          status: "error",
+          error: { code, message: "volatile property race" },
+        },
+        { op: "property-delete-recreate", phase: "delete" },
+      ).outcome,
+      "race-conflict",
+    );
+  }
+});
+
+test("classifies concurrent volatile tag delete as a race outcome", () => {
   assert.equal(
     classifyCliResult(
       { code: 1 },
       {
         status: "error",
-        error: { code: "property-not-found", message: "property not found" },
+        error: { code: "tag-not-found", message: "tag not found" },
       },
-      { op: "property-delete-recreate", phase: "delete" },
+      { op: "tag-delete-recreate", phase: "delete" },
     ).outcome,
     "race-conflict",
   );
@@ -83,6 +108,22 @@ test("classifies stale raw outliner block property failures as race outcomes", (
       { id: 525, op: "http-set-block-property" },
     ).outcome,
     "race-conflict",
+  );
+});
+
+test("classifies required outliner no-op results as failures", () => {
+  assert.deepEqual(
+    classifyHttpResult(
+      { ok: true, status: 200 },
+      { result: null },
+      { op: "http-recycle-delete-page", phase: "permanent-delete", requireTruthyResult: true },
+    ),
+    {
+      ok: false,
+      level: "error",
+      outcome: "no-op",
+      expectedRace: false,
+    },
   );
 });
 
@@ -120,7 +161,7 @@ test("builds local db-sync server start command from sync base", () => {
     "cli-e2e/scripts/db_sync_server.py",
     "start",
     "--repo-root",
-    "/Users/tiensonqin/Codes/projects/logseq",
+    process.cwd(),
     "--pid-file",
     "/tmp/stress/server.pid",
     "--log-file",
@@ -136,6 +177,21 @@ test("builds local db-sync server start command from sync base", () => {
     "--auth-path",
     "/tmp/auth.json",
   ]);
+});
+
+test("parses isolated local db-sync server paths", () => {
+  const opts = parseArgs([
+    "--sync-server-pid-file",
+    "tmp/stress/server.pid",
+    "--sync-server-log-file",
+    "tmp/stress/server.log",
+    "--sync-server-data-dir",
+    "tmp/stress/server-data",
+  ]);
+
+  assert.equal(opts.syncServerPidFile.endsWith("/tmp/stress/server.pid"), true);
+  assert.equal(opts.syncServerLogFile.endsWith("/tmp/stress/server.log"), true);
+  assert.equal(opts.syncServerDataDir.endsWith("/tmp/stress/server-data"), true);
 });
 
 test("stress config includes runtime auth to avoid refresh during sync start", () => {
@@ -193,6 +249,167 @@ test("builds sync upload initialization command with e2ee password", () => {
 
 test("builds final graph validation command", () => {
   assert.deepEqual(graphValidateArgs({ graph: "pi-memory" }), ["graph", "validate", "--graph", "pi-memory"]);
+});
+
+test("builds isolated runtime options for additional sync clients", () => {
+  const seed = clientRuntimeOptions(
+    {
+      graph: "pi-memory",
+      config: "/tmp/stress/cli.edn",
+      logFile: "/tmp/stress/events.jsonl",
+      rootDir: "/tmp/stress/root",
+      homeDir: "/tmp/stress/home",
+      timeoutMs: 60000,
+    },
+    0,
+  );
+  const replica = clientRuntimeOptions(seed, 1);
+
+  assert.equal(seed.graph, "pi-memory");
+  assert.equal(replica.graph, "pi-memory");
+  assert.equal(seed.config, "/tmp/stress/cli.edn");
+  assert.equal(replica.config, "/tmp/stress/clients/client-2/cli.edn");
+  assert.equal(seed.env.LOGSEQ_CLI_ROOT_DIR, "/tmp/stress/root");
+  assert.equal(replica.env.LOGSEQ_CLI_ROOT_DIR, "/tmp/stress/clients/client-2/root");
+  assert.equal(replica.env.HOME, "/tmp/stress/clients/client-2/home");
+});
+
+test("parses isolated root dir for the seed client", () => {
+  const opts = parseArgs(["--root-dir", "/tmp/stress/root"]);
+
+  assert.equal(opts.rootDir, "/tmp/stress/root");
+});
+
+test("runs staged JavaScript CLI bundles through node", () => {
+  assert.deepEqual(cliCommand("/tmp/logseq-cli.js"), {
+    command: process.execPath,
+    args: ["/tmp/logseq-cli.js"],
+  });
+  assert.deepEqual(cliCommand("/usr/local/bin/logseq"), {
+    command: "/usr/local/bin/logseq",
+    args: [],
+  });
+});
+
+test("builds sync download command for replica clients", () => {
+  assert.deepEqual(syncDownloadArgs({ graph: "pi-memory", graphE2ee: false }), [
+    "sync",
+    "download",
+    "--graph",
+    "pi-memory",
+  ]);
+  assert.deepEqual(syncDownloadArgs({ graph: "pi-memory", graphE2ee: true, e2eePassword: "11111" }), [
+    "sync",
+    "download",
+    "--graph",
+    "pi-memory",
+    "--e2ee-password",
+    "11111",
+  ]);
+});
+
+test("detects final sync convergence from status checks", () => {
+  assert.equal(
+    isSettledSyncStatus({
+      ok: true,
+      parsed: {
+        data: {
+          "pending-local": 0,
+          "pending-server": 0,
+          "local-checksum": "abc",
+          "remote-checksum": "abc",
+        },
+      },
+    }),
+    true,
+  );
+
+  assert.equal(
+    isSettledSyncStatus({
+      ok: true,
+      parsed: {
+        data: {
+          "pending-local": 1,
+          "pending-server": 0,
+          "local-checksum": "abc",
+          "remote-checksum": "abc",
+        },
+      },
+    }),
+    false,
+  );
+
+  assert.equal(
+    isSettledSyncStatus({
+      ok: true,
+      parsed: {
+        data: {
+          "pending-local": 0,
+          "pending-server": 0,
+          "local-checksum": "abc",
+          "remote-checksum": "def",
+        },
+      },
+    }),
+    false,
+  );
+});
+
+test("detects idle sync status separately from cached checksums", () => {
+  assert.equal(
+    isIdleSyncStatus({
+      ok: true,
+      parsed: {
+        data: {
+          "last-error": null,
+          "pending-local": 0,
+          "pending-server": 0,
+          "local-tx": 40,
+          "remote-tx": 40,
+          "local-checksum": "old",
+          "remote-checksum": "new",
+        },
+      },
+    }),
+    true,
+  );
+
+  assert.equal(
+    isIdleSyncStatus({
+      ok: true,
+      parsed: {
+        data: {
+          "last-error": null,
+          "pending-local": 0,
+          "pending-server": 1,
+          "local-tx": 40,
+          "remote-tx": 40,
+        },
+      },
+    }),
+    false,
+  );
+});
+
+test("matches recomputed checksum diagnostics against remote checksum", () => {
+  assert.equal(
+    checksumDiagnosticsMatch(
+      new Map([
+        ["recomputed-checksum", "abc"],
+        ["remote-checksum", "abc"],
+      ]),
+    ),
+    true,
+  );
+  assert.equal(
+    checksumDiagnosticsMatch(
+      new Map([
+        ["recomputed-checksum", "abc"],
+        ["remote-checksum", "def"],
+      ]),
+    ),
+    false,
+  );
 });
 
 test("does not re-upload when linked graph has no remote tx before websocket start", () => {
@@ -272,6 +489,17 @@ test("today journal page name uses the local calendar date", () => {
   assert.equal(todayJournalPageName({ todayDate: "2026-07-02" }), "Jul 2nd, 2026");
 });
 
+test("raw page delete/restore uses unique operation-owned page titles", () => {
+  const state = { runId: "stress-1" };
+  const first = uniqueOperationPageTitle("CLI HTTP Delete Restore", state, { workerId: 3, seq: 305 });
+  const second = uniqueOperationPageTitle("CLI HTTP Delete Restore", state, { workerId: 3, seq: 305 });
+  const third = uniqueOperationPageTitle("CLI HTTP Delete Restore", state, { workerId: 4, seq: 305 });
+
+  assert.match(first, /^CLI HTTP Delete Restore stress-1 worker-3 seq-305 /);
+  assert.notEqual(first, second);
+  assert.notEqual(first, third);
+});
+
 test("operation set covers broad outliner and metadata mutations", () => {
   const names = operationNames({ sync: true, offline: true });
 
@@ -337,6 +565,19 @@ test("offline operation is available only when sync offline simulation is enable
     new Map(operationWeights({ sync: true, offline: true })).get("offline-today-journal-race") >= 8,
     "offline today journal race should run often enough to catch page creation conflicts",
   );
+});
+
+test("offline today journal race uses actual sync clients instead of worker concurrency", () => {
+  assert.equal(offlineTodayJournalClientCount({ clients: 3, concurrency: 8 }), 3);
+  assert.equal(offlineTodayJournalClientCount({ clients: 1, concurrency: 8 }), 2);
+});
+
+test("multi-client offline operations require sync, offline mode, and more than one client", () => {
+  assert.equal(operationNames({ sync: true, offline: true, clients: 3 }).includes("multi-client-offline-rebase"), true);
+  assert.equal(operationNames({ sync: true, offline: true, clients: 3 }).includes("multi-client-today-journal-race"), true);
+  assert.equal(operationNames({ sync: true, offline: true, clients: 1 }).includes("multi-client-offline-rebase"), false);
+  assert.equal(operationNames({ sync: true, offline: false, clients: 3 }).includes("multi-client-offline-rebase"), false);
+  assert.equal(operationNames({ sync: false, offline: true, clients: 3 }).includes("multi-client-offline-rebase"), false);
 });
 
 test("critical outliner mutations dominate the stress distribution", () => {

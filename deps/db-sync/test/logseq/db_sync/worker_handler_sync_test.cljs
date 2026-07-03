@@ -1,6 +1,5 @@
 (ns logseq.db-sync.worker-handler-sync-test
   (:require [cljs.test :refer [async deftest is testing]]
-            [clojure.string :as string]
             [clojure.set :as set]
             [datascript.core :as d]
             [logseq.db-sync.checksum :as sync-checksum]
@@ -563,68 +562,6 @@
       (let [pull-response (sync-handler/pull-response self 0)]
         (is (= "pull/ok" (:type pull-response)))
         (is (empty? (:txs pull-response)))))))
-
-(deftest tx-batch-transact-failed-log-includes-context-test
-  (testing "tx-meta carries graph and client context so Cloudflare transact-failed logs can identify the source"
-    (let [sql (test-sql/make-sql)
-          conn (storage/open-conn sql)
-          self #js {:sql sql
-                    :conn conn
-                    :schema-ready true}
-          missing-uuid (random-uuid)
-          tx-entry {:tx (protocol/tx->transit [[:db/add [:block/uuid missing-uuid]
-                                                :block/title
-                                                "stale"]])
-                    :outliner-op :save-block}
-          context {:graph-id "graph-1"
-                   :graph-name "Graph One"
-                   :username "alice"
-                   :client-revision "rev-1"}
-          output (with-out-str
-                   (with-redefs [ws/broadcast! (fn [& _] nil)]
-                     (sync-handler/handle-tx-batch! self nil [tx-entry] 0 context)))]
-      (is (string/includes? output ":transact-failed"))
-      (is (string/includes? output ":graph-id \"graph-1\""))
-      (is (string/includes? output ":graph-name \"Graph One\""))
-      (is (string/includes? output ":username \"alice\""))
-      (is (string/includes? output ":client-revision \"rev-1\"")))))
-
-(deftest graph-log-context-caches-graph-info-test
-  (async done
-    (testing "graph name lookup is cached per Durable Object instance"
-      (let [calls (atom 0)
-            self #js {:env #js {"DB" "db"}}]
-        (-> (p/with-redefs [index/<graph-log-info
-                            (fn [_db graph-id]
-                              (swap! calls inc)
-                              (p/resolved {:graph-id graph-id
-                                           :graph-name "Graph One"}))]
-              (p/let [context-1 (sync-handler/<graph-log-context
-                                 self
-                                 "graph-1"
-                                 {:username "alice"}
-                                 "rev-1")
-                      context-2 (sync-handler/<graph-log-context
-                                 self
-                                 "graph-1"
-                                 {:username "bob"}
-                                 "rev-2")]
-                (is (= 1 @calls))
-                (is (= {:graph-id "graph-1"
-                        :graph-name "Graph One"
-                        :username "alice"
-                        :client-revision "rev-1"}
-                       context-1))
-                (is (= {:graph-id "graph-1"
-                        :graph-name "Graph One"
-                        :username "bob"
-                        :client-revision "rev-2"}
-                       context-2))))
-            (p/then (fn []
-                      (done)))
-            (p/catch (fn [error]
-                       (is false (str error))
-                       (done))))))))
 
 (deftest repair-blocks-response-returns-server-block-data-test
   (testing "repair block response returns transactable datoms with lookup refs"

@@ -36,6 +36,9 @@
 ## Commit & Pull Request Guidelines
 - Commit subjects are short and imperative; optional scope prefixes appear (e.g., `fix:` or `enhance(rtc):`).
 - PRs should describe the behavior change, link relevant issues, and note any test coverage added or skipped.
+- Never include the word "Codex" or any agent name in commit subjects, commit bodies, trailers, branch names, PR titles, or PR descriptions.
+- PR titles must describe the code change only.
+- Before creating or updating commits or PRs, verify that the generated metadata does not contain "Codex" or any agent name in any casing.
 
 ## Agent-Specific Notes
 - Use repo-local skills discovered under `.agents/skills/`; load the matching `SKILL.md` before editing files or proposing changes.
