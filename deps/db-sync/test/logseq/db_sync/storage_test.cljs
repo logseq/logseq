@@ -75,13 +75,14 @@
                    (:block/uuid ent)))))
        vec))
 
-(deftest t-counter-test
+(deftest t-meta-test
   (let [sql (test-sql/make-sql)]
     (storage/init-schema! sql)
     (is (= 0 (storage/get-t sql)))
-    (is (= 1 (storage/next-t! sql)))
+    (storage/set-t! sql 1)
     (is (= 1 (storage/get-t sql)))
-    (is (= 2 (storage/next-t! sql)))))
+    (storage/set-t! sql 2)
+    (is (= 2 (storage/get-t sql)))))
 
 (deftest tx-log-test
   (let [sql (test-sql/make-sql)]
@@ -136,6 +137,36 @@
             (let [restored-conn (storage/open-conn sql)]
               (is (= page-uuid
                      (:block/uuid (d/entity @restored-conn [:block/uuid page-uuid])))))))))))
+
+(deftest tx-log-append-failure-does-not-advance-checksum-test
+  (testing "server checksum and t should not advance when the tx log append fails"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              failed-block-uuid (random-uuid)]
+          (d/transact! conn [{:block/uuid page-uuid
+                              :block/name "tx-log-failure-repro"}])
+          (let [checksum-before (storage/get-checksum sql)
+                t-before (storage/get-t sql)
+                original-sql-exec common/sql-exec
+                result (with-redefs [common/sql-exec
+                                      (fn [sql sql-str & args]
+                                        (if (string/includes? sql-str "insert into tx_log")
+                                          (throw (js/Error. "tx log append failed"))
+                                          (apply original-sql-exec sql sql-str args)))]
+                         (try
+                           (d/transact! conn [{:block/uuid failed-block-uuid
+                                               :block/title "failed append"
+                                               :block/page [:block/uuid page-uuid]
+                                               :block/parent [:block/uuid page-uuid]}])
+                           :ok
+                           (catch :default error
+                             error)))]
+            (is (not= :ok result))
+            (is (= t-before (storage/get-t sql)))
+            (is (= checksum-before (storage/get-checksum sql)))))))))
 
 (deftest normalize-drop-can-hide-kvs-mutation-from-tx-log-test
   (testing "if normalize drops tx payload, tx_log can miss persisted kvs state changes"

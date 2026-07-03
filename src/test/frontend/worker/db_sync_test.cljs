@@ -785,26 +785,36 @@
 
 (deftest receive-queue-failure-updates-last-sync-error-test
   (async done
-         (let [client {:repo test-repo
+         (let [repo "receive-queue-last-sync-error-test"
+               client {:repo repo
+                       :graph-id "graph-1"
+                       :repair-blocks-tx-data-fn (fn [_] (p/resolved nil))
                        :receive-queue (atom (p/resolved nil))
                        :last-sync-error (atom nil)}
-               error (ex-info "tx-rejected"
-                              {:type :db-sync/tx-rejected
-                               :reason "db transact failed"})]
-           (-> (#'db-sync/enqueue-receive-message!
-                client
-                (fn []
-                  (throw error)))
+               captured-error (atom nil)
+               rejected-error (ex-info "tx-rejected"
+                                       {:type :db-sync/tx-rejected
+                                        :reason "db transact failed"})
+               set-last-sync-error! sync-util/set-last-sync-error!]
+           (-> (p/with-redefs [sync-util/set-last-sync-error!
+                               (fn [client' error']
+                                 (set-last-sync-error! client' error')
+                                 (when (identical? client client')
+                                   (reset! captured-error @(:last-sync-error client'))))]
+                 (#'db-sync/enqueue-receive-message!
+                  client
+                  (fn []
+                    (throw rejected-error))))
                (p/then (fn [_]
-                         (let [last-error @(:last-sync-error client)]
+                         (let [last-error @captured-error]
                            (is (= :tx-rejected (:code last-error)))
                            (is (= "tx-rejected" (:message last-error)))
                            (is (= :db-sync/tx-rejected
                                   (get-in last-error [:data :type])))
                            (is (= "db transact failed"
                                   (get-in last-error [:data :reason]))))))
-               (p/catch (fn [error]
-                          (is nil (str error))))
+               (p/catch (fn [caught-error]
+                          (is nil (str caught-error))))
                (p/finally done)))))
 
 (deftest temp-conn-batch-preserves-cardinality-one-schema-test
@@ -959,8 +969,57 @@
                        (is (= "remote-new-title" (:block/title parent')))
                        (is (= 2 (client-op/get-local-tx test-repo))))
                      (p/finally (fn []
-                                  (reset! db-sync/*repo->latest-remote-tx latest-prev)
-                                  (done))))))))))
+                                 (reset! db-sync/*repo->latest-remote-tx latest-prev)
+                                 (done))))))))))
+
+(deftest pull-ok-does-not-anchor-remote-checksum-before-verify-test
+  (testing "pull/ok compares the incrementally updated local checksum instead of anchoring the remote checksum"
+    (async done
+           (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+                 parent-id (:db/id parent)
+                 remote-tx-data [[:db/add parent-id :block/title "remote-checksum-anchor"]]
+                 local-checksum-after-remote (-> (d/with @conn remote-tx-data)
+                                                 :db-after
+                                                 sync-checksum/recompute-checksum)
+                 remote-checksum "bad-remote-checksum"
+                 raw-message (js/JSON.stringify
+                              (clj->js {:type "pull/ok"
+                                        :t 1
+                                        :checksum remote-checksum
+                                        :txs [{:t 1
+                                               :tx (sqlite-util/write-transit-str remote-tx-data)}]}))
+                 latest-prev @db-sync/*repo->latest-remote-tx
+                 client {:repo test-repo
+                         :graph-id "graph-1"
+                         :inflight (atom [])
+                         :online-users (atom [])
+                         :ws-state (atom :open)}
+                 *captured (atom nil)]
+             (with-datascript-conns conn client-ops-conn
+               (fn []
+                 (reset! db-sync/*repo->latest-remote-tx {})
+                 (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+                 (d/listen! conn ::pull-ok-checksum
+                            (fn [tx-report]
+                              (when (and (seq (:tx-data tx-report))
+                                         (not (:batch-tx? @conn)))
+                                (db-sync/update-local-sync-checksum! test-repo tx-report))))
+                 (p/with-redefs [sync-log-state/rtc-log (fn [type payload]
+                                                          (reset! *captured {:type type
+                                                                             :payload payload}))]
+                   (-> (p/let [_ (sync-handle-message/handle-message! test-repo client raw-message)
+                               parent' (d/entity @conn parent-id)]
+                         (is (= "remote-checksum-anchor" (:block/title parent')))
+                         (is (= 1 (client-op/get-local-tx test-repo)))
+                         (is (= local-checksum-after-remote (client-op/get-local-checksum test-repo)))
+                         (is (= :rtc.log/checksum-mismatch (:type @*captured)))
+                         (is (= local-checksum-after-remote
+                                (get-in @*captured [:payload :local-checksum])))
+                         (is (= remote-checksum (get-in @*captured [:payload :remote-checksum]))))
+                       (p/finally (fn []
+                                    (d/unlisten! conn ::pull-ok-checksum)
+                                    (reset! db-sync/*repo->latest-remote-tx latest-prev)
+                                    (done)))))))))))
 
 (deftest tx-reject-db-transact-failed-surfaces-rejected-tx-test
   (testing "tx/reject with db transact failed includes parsed rejected tx and emits rtc-log"
@@ -1782,6 +1841,38 @@
           (with-redefs [worker-util/dev-or-test? false]
             (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
             (d/transact! conn [[:db/add (:db/id parent) :block/title "Release checksum block"]])
+            (is (= (sync-checksum/recompute-checksum @conn)
+                   (client-op/get-local-checksum test-repo)))))))))
+
+(deftest local-checksum-ignores-aborted-batch-transact-test
+  (testing "an aborted batch transaction must not advance the stored checksum"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
+          (let [checksum-before (client-op/get-local-checksum test-repo)
+                title-before (:block/title parent)]
+            (is (thrown? js/Error
+                         (ldb/batch-transact!
+                          conn
+                          {:outliner-op :checksum-abort-test}
+                          (fn [conn]
+                            (ldb/transact! conn [[:db/add (:db/id parent)
+                                                  :block/title
+                                                  "aborted batch title"]])
+                            (throw (js/Error. "abort checksum batch"))))))
+            (is (= title-before (:block/title (d/entity @conn (:db/id parent)))))
+            (is (= (sync-checksum/recompute-checksum @conn)
+                   checksum-before
+                   (client-op/get-local-checksum test-repo)))
+            (ldb/batch-transact!
+             conn
+             {:outliner-op :checksum-commit-test}
+             (fn [conn]
+               (ldb/transact! conn [[:db/add (:db/id parent)
+                                     :block/title
+                                     "committed batch title"]])))
             (is (= (sync-checksum/recompute-checksum @conn)
                    (client-op/get-local-checksum test-repo)))))))))
 
@@ -4203,6 +4294,40 @@
             (is (= [unacked-tx-id]
                    (mapv :tx-id (#'sync-apply/pending-txs test-repo))))
             (is (= 1 (client-op/get-local-tx test-repo)))))))))
+
+(deftest tx-batch-ok-does-not-anchor-remote-checksum-after-acked-pending-txs-test
+  (testing "tx/batch/ok compares the existing local checksum instead of anchoring the remote checksum"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          remote-checksum "bad-remote-checksum"
+          *captured (atom nil)
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}
+          raw-message (js/JSON.stringify (clj->js {:type "tx/batch/ok"
+                                                   :t 1
+                                                   :checksum remote-checksum}))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (worker-page/create! conn "Ack Checksum Page" :uuid (random-uuid))
+          (let [pending-before (#'sync-apply/pending-txs test-repo)
+                tx-ids (mapv :tx-id pending-before)
+                local-checksum (sync-checksum/recompute-checksum @conn)]
+            (is (seq pending-before))
+            (client-op/update-local-checksum test-repo local-checksum)
+            (reset! (:inflight client) tx-ids)
+            (with-redefs [sync-log-state/rtc-log (fn [type payload]
+                                                   (reset! *captured {:type type
+                                                                      :payload payload}))]
+              (sync-handle-message/handle-message! test-repo client raw-message))
+            (is (= [] @(:inflight client)))
+            (is (empty? (#'sync-apply/pending-txs test-repo)))
+            (is (= 1 (client-op/get-local-tx test-repo)))
+            (is (= local-checksum (client-op/get-local-checksum test-repo)))
+            (is (= :rtc.log/checksum-mismatch (:type @*captured)))
+            (is (= local-checksum (get-in @*captured [:payload :local-checksum])))
+            (is (= remote-checksum (get-in @*captured [:payload :remote-checksum])))))))))
 
 (deftest apply-remote-tx-does-not-clear-pending-without-ack-test
   (testing "apply-remote-tx should not clear local pending txs before tx/batch/ok ack"
