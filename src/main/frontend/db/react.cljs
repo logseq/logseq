@@ -15,12 +15,22 @@
             [promesa.core :as p]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
-;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
 
 (defonce *query-state (atom {}))
 
 ;; [[repo q]]
 (defonce *collapsed-queries (atom {}))
+
+(def ^:private max-query-state-size 128)
+(defonce ^:private *query-last-access (volatile! {}))
+
+(defn- now-ms
+  []
+  (.now js/Date))
+
+(defn- entry-last-access
+  [[k _entry]]
+  (or (get @*query-last-access k) 0))
 
 (defn set-q-collapsed!
   [k collapsed?]
@@ -47,6 +57,36 @@
   (when result-atom
     (gobj/get result-atom query-key-prop)))
 
+(defn- remove-query-key-from-component-indexes!
+  [k]
+  (vswap! query-key->components dissoc k)
+  (vswap! component->query-key
+          (fn [m]
+            (reduce-kv
+             (fn [result component query-keys]
+               (let [query-keys' (disj query-keys k)]
+                 (if (seq query-keys')
+                   (assoc result component query-keys')
+                   result)))
+             {}
+             m))))
+
+(defn- evict-query-state!
+  []
+  (when (> (count @*query-state) max-query-state-size)
+    (let [drop-count (- (count @*query-state) max-query-state-size)
+          drop-keys (->> @*query-state
+                         (remove (fn [[k _cache]]
+                                   (seq (get @query-key->components k))))
+                         (sort-by entry-last-access)
+                         (take drop-count)
+                         (map key)
+                         vec)]
+      (when (seq drop-keys)
+        (swap! *query-state #(apply dissoc % drop-keys))
+        (doseq [k drop-keys]
+          (remove-query-key-from-component-indexes! k))))))
+
 (defn set-new-result!
   [k new-result]
   (when-let [result-atom (get-in @*query-state [k :result])]
@@ -55,7 +95,10 @@
 (defn clear-query-state!
   []
   (reset! *query-state {})
-  (reset! *collapsed-queries {}))
+  (reset! *collapsed-queries {})
+  (vreset! *query-last-access {})
+  (vreset! component->query-key {})
+  (vreset! query-key->components {}))
 
 (defn add-q!
   [k query inputs result-atom transform-fn query-fn inputs-fn]
@@ -65,12 +108,15 @@
                                :transform-fn transform-fn
                                :query-fn query-fn
                                :inputs-fn inputs-fn})
+  (vswap! *query-last-access assoc k (now-ms))
+  (evict-query-state!)
   result-atom)
 
 (defn remove-q!
   [k]
   (when-not (and (= (second k) :custom) (nth k 3))                   ; today query
-    (swap! *query-state dissoc k)))
+    (swap! *query-state dissoc k)
+    (vswap! *query-last-access dissoc k)))
 
 (defn add-query-component!
   [k component]
@@ -106,6 +152,7 @@
 (defn get-query-cached-result
   [k]
   (when-let [result (get @*query-state k)]
+    (vswap! *query-last-access assoc k (now-ms))
     (when (satisfies? IWithMeta @(:result result))
       (set! (.-state (:result result))
             @(:result result)))
