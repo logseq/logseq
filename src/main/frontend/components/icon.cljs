@@ -329,22 +329,62 @@
      [])
     [:span.absolute.hidden {:ref *el-ref}]))
 
+(def ^:private tailwind-color-palette
+  [{:label "Red" :base "#EF4444" :shades ["#fecaca" "#fca5a5" "#f87171" "#ef4444" "#dc2626" "#b91c1c" "#991b1b"]}
+   {:label "Orange" :base "#F97316" :shades ["#fed7aa" "#fdba74" "#fb923c" "#f97316" "#ea580c" "#c2410c" "#9a3412"]}
+   {:label "Amber" :base "#F59E0B" :shades ["#fde68a" "#fcd34d" "#fbbf24" "#f59e0b" "#d97706" "#b45309" "#92400e"]}
+   {:label "Yellow" :base "#EAB308" :shades ["#fef08a" "#fde047" "#facc15" "#eab308" "#ca8a04" "#a16207" "#854d0e"]}
+   {:label "Lime" :base "#84CC16" :shades ["#d9f99d" "#bef264" "#a3e635" "#84cc16" "#65a30d" "#4d7c0f" "#3f6212"]}
+   {:label "Green" :base "#22C55E" :shades ["#bbf7d0" "#86efac" "#4ade80" "#22c55e" "#16a34a" "#15803d" "#166534"]}
+   {:label "Emerald" :base "#10B981" :shades ["#a7f3d0" "#6ee7b7" "#34d399" "#10b981" "#059669" "#047857" "#065f46"]}
+   {:label "Teal" :base "#14B8A6" :shades ["#99f6e4" "#5eead4" "#2dd4bf" "#14b8a6" "#0d9488" "#0f766e" "#115e59"]}
+   {:label "Cyan" :base "#06B6D4" :shades ["#a5f3fc" "#67e8f9" "#22d3ee" "#06b6d4" "#0891b2" "#0e7490" "#155e75"]}
+   {:label "Sky" :base "#0EA5E9" :shades ["#bae6fd" "#7dd3fc" "#38bdf8" "#0ea5e9" "#0284c7" "#0369a1" "#075985"]}
+   {:label "Blue" :base "#3B82F6" :shades ["#bfdbfe" "#93c5fd" "#60a5fa" "#3b82f6" "#2563eb" "#1d4ed8" "#1e40af"]}
+   {:label "Indigo" :base "#6366F1" :shades ["#c7d2fe" "#a5b4fc" "#818cf8" "#6366f1" "#4f46e5" "#4338ca" "#3730a3"]}
+   {:label "Violet" :base "#8B5CF6" :shades ["#ddd6fe" "#c4b5fd" "#a78bfa" "#8b5cf6" "#7c3aed" "#6d28d9" "#5b21b6"]}
+   {:label "Purple" :base "#A855F7" :shades ["#e9d5ff" "#d8b4fe" "#c084fc" "#a855f7" "#9333ea" "#7e22ce" "#6b21a8"]}
+   {:label "Pink" :base "#EC4899" :shades ["#fbcfe8" "#f9a8d4" "#f472b6" "#ec4899" "#db2777" "#be185d" "#9d174d"]}])
+
+(hsx/defc icon-color-picker-content
+  [select-color!]
+  (let [[selected-color set-selected-color!] (hooks/use-state nil)]
+    [:div.color-picker-presets
+     [:div.color-picker-families
+      (for [{:keys [label base] :as color} tailwind-color-palette]
+        (shui/button
+         {:on-click #(set-selected-color! color)
+          :title label
+          :size :sm :variant :outline
+          :class (util/classnames ["it" {:active (= selected-color color)}])
+          :style {:background-color base}}
+         ""))
+      (shui/button
+       {:on-click #(select-color! nil)
+        :size :sm :variant :outline
+        :class "it"}
+       (shui/tabler-icon "minus" {:class "scale-75 opacity-70"}))]
+     (when selected-color
+       [:div.color-picker-shades
+        (for [[shade color] (map vector [200 300 400 500 600 700 800] (:shades selected-color))]
+          (shui/button
+           {:on-click #(select-color! color)
+            :title (str (:label selected-color) " " shade)
+            :size :sm :variant :outline
+            :class "it shade"
+            :style {:background-color color}}
+           ""))])]))
+
 (hsx/defc color-picker
   [*color on-select!]
   (let [[color, set-color!] (hooks/use-state @*color)
         *el (hooks/use-ref nil)
+        select-color! (fn [c]
+                        (set-color! c)
+                        (some-> on-select! (apply [c]))
+                        (shui/popup-hide!))
         content-fn (fn []
-                     (let [colors ["#6e7b8b" "#5e69d2" "#00b5ed" "#00b55b"
-                                   "#f2be00" "#e47a00" "#f38e81" "#fb434c" nil]]
-                       [:div.color-picker-presets
-                        (for [c colors]
-                          (shui/button
-                           {:on-click (fn [] (set-color! c)
-                                        (some-> on-select! (apply [c]))
-                                        (shui/popup-hide!))
-                            :size :sm :variant :outline
-                            :class "it" :style {:background-color c}}
-                           (if c "" (shui/tabler-icon "minus" {:class "scale-75 opacity-70"}))))]))]
+                     (icon-color-picker-content select-color!))]
     (hooks/use-effect!
      (fn []
        (when-let [^js picker (some-> (hooks/deref *el) (.closest ".cp__emoji-icon-picker"))]
