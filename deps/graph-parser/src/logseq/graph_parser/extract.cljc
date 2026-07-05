@@ -100,11 +100,13 @@
     (if (string/starts-with? file "pages/contents.")
       "Contents"
       (let [first-block (last (first (filter gp-block/heading-block? ast)))
-            property-name (when (contains? #{"Properties" "Property_Drawer"} (ffirst ast))
-                            (let [properties-ast (second (first ast))
-                                  properties (zipmap (map (comp keyword string/lower-case first) properties-ast)
-                                                     (map second properties-ast))]
-                              (:title properties)))
+            property-name (some (fn [ast-node]
+                                  (when (contains? #{"Properties" "Property_Drawer"} (first ast-node))
+                                    (let [properties-ast (second ast-node)
+                                          properties (zipmap (map (comp keyword string/lower-case first) properties-ast)
+                                                             (map second properties-ast))]
+                                      (:title properties))))
+                                ast)
             first-block-name (let [title (last (first (:title first-block)))]
                                (and first-block
                                     (string? title)
