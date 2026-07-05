@@ -107,15 +107,14 @@
                      user-name :user/name
                      user-uuid :user/uuid}]
                  (when user-name
-                   (rum/with-key
-                     (avatar/user-avatar
-                      {:class "w-5 h-5"
-                       :style {:app-region "no-drag"}
-                       :title user-email
-                       :name user-name
-                       :uuid user-uuid
-                       :fallback-props {:style {:font-size 11}}})
-                     (str user-uuid))))
+                   (avatar/user-avatar
+                    {:key (str user-uuid)
+                     :class "w-5 h-5"
+                     :style {:app-region "no-drag"}
+                     :title user-email
+                     :name user-name
+                     :uuid user-uuid
+                     :fallback-props {:style {:font-size 11}}})))
                online-users))])))
 
 (hsx/defc left-menu-button

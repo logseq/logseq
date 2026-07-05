@@ -471,24 +471,25 @@
                item-key (if hr
                           (str "separator-" idx)
                           (or key href' (str "item-" idx)))]
-           (rum/with-key
-             (if hr
-               (if (util/mobile?) [:hr.py-2] (shui/dropdown-menu-separator))
-               (menu-item
-                (assoc options
-                       :title hover-detail
-                       :on-click (fn [^js e]
-                                   (when on-click'
-                                     (when-not (false? (on-click' e))
-                                       (shui/popup-hide! contentid)))))
-                (or item
-                    (if href'
-                      [:a.flex.items-center.w-full
-                       {:href href' :on-click #(shui/popup-hide! contentid)
-                        :style {:color "inherit"}} title]
-                      [:span.flex.items-center.gap-1.w-full
-                       icon [:div title]]))))
-             item-key)))
+              (if hr
+                (if (util/mobile?)
+                  [:hr.py-2 {:key item-key}]
+                  (shui/dropdown-menu-separator {:key item-key}))
+                (menu-item
+                 (assoc options
+                        :key item-key
+                        :title hover-detail
+                        :on-click (fn [^js e]
+                                    (when on-click'
+                                      (when-not (false? (on-click' e))
+                                        (shui/popup-hide! contentid)))))
+                 (or item
+                     (if href'
+                       [:a.flex.items-center.w-full
+                        {:href href' :on-click #(shui/popup-hide! contentid)
+                         :style {:color "inherit"}} title]
+                       [:span.flex.items-center.gap-1.w-full
+                        icon [:div title]]))))))
        (items-fn))]
      (when footer?
        (repos-footer))]))
