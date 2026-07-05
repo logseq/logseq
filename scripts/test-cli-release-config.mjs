@@ -150,6 +150,13 @@ for (const [scriptName, command] of Object.entries(rootPackage.scripts ?? {})) {
   assertRootScriptDoesNotBuildShadowCli(scriptName, command);
 }
 
+const gulpfile = readText("gulpfile.js");
+assert.ok(
+  gulpfile.indexOf("pnpm cli:release") <
+    gulpfile.indexOf("pnpm desktop:prepare-runtime-js"),
+  "local electronMaker should stage the CLI before preparing desktop runtime scripts",
+);
+
 const stageScriptPath = path.join(repoRoot, "scripts", "stage-cli-runtime.mjs");
 assert.equal(
   fs.existsSync(stageScriptPath),
