@@ -150,6 +150,33 @@ for (const [scriptName, command] of Object.entries(rootPackage.scripts ?? {})) {
   assertRootScriptDoesNotBuildShadowCli(scriptName, command);
 }
 
+const gulpfile = readText("gulpfile.js");
+assert.match(
+  gulpfile,
+  /const staticInstallCommand = 'pnpm install --frozen-lockfile'/,
+  "local electronMaker should use the static package pnpm workspace config",
+);
+assertNotContains(
+  gulpfile,
+  "pnpm install --ignore-workspace --frozen-lockfile",
+  "local electronMaker static install command",
+);
+assert.ok(
+  gulpfile.indexOf("pnpm cli:release") <
+    gulpfile.indexOf("pnpm desktop:prepare-runtime-js"),
+  "local electronMaker should stage the CLI before preparing desktop runtime scripts",
+);
+assert.equal(
+  fs.existsSync(path.join(repoRoot, "resources", "pnpm-workspace.yaml")),
+  true,
+  "desktop static package should provide pnpm 11 workspace settings",
+);
+assert.match(
+  gulpfile,
+  /await common\.pruneDesktopPackageFiles\(\)\s+cp\.execSync\(staticInstallCommand,/,
+  "local electronMaker should refresh static node_modules after pruning package files",
+);
+
 const stageScriptPath = path.join(repoRoot, "scripts", "stage-cli-runtime.mjs");
 assert.equal(
   fs.existsSync(stageScriptPath),
