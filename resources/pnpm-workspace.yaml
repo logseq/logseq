@@ -1,0 +1,9 @@
+overrides:
+  '@electron/asar': 3.4.1
+  node-abi: 4.28.0
+
+allowBuilds:
+  '@zvec/zvec': true
+  electron: true
+  electron-winstaller: true
+  keytar: true

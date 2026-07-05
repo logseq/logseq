@@ -83,7 +83,7 @@ const staticCleanKeep = new Set([
   'package.json',
   'pnpm-lock.yaml',
 ])
-const staticInstallCommand = 'pnpm install --ignore-workspace --frozen-lockfile'
+const staticInstallCommand = 'pnpm install --frozen-lockfile'
 
 const css = {
   watchCSS () {
@@ -389,12 +389,10 @@ const prepareElectronMaker = async () => {
 
   await common.pruneDesktopPackageFiles()
 
-  if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
-    cp.execSync(staticInstallCommand, {
-      cwd: outputPath,
-      stdio: 'inherit',
-    })
-  }
+  cp.execSync(staticInstallCommand, {
+    cwd: outputPath,
+    stdio: 'inherit',
+  })
 }
 
 const runStaticScript = (script) => {
