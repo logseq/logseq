@@ -81,6 +81,9 @@ external stream_on_data : stream -> string -> ((string -> unit)[@u]) -> unit
 external child_on_exit : child -> string -> ((int -> unit)[@u]) -> unit = "on"
 [@@mel.send]
 
+external child_on_close : child -> string -> ((int -> unit)[@u]) -> unit = "on"
+[@@mel.send]
+
 external child_on_error : child -> string -> ((exn -> unit)[@u]) -> unit = "on"
 [@@mel.send]
 
@@ -316,7 +319,7 @@ let run_cli_p ?(env = [||]) args =
       stream_on_data child##stderr "data" (fun[@u] chunk ->
           stderr := !stderr ^ chunk);
       child_on_error child "error" (fun[@u] exn -> (reject exn [@u]));
-      child_on_exit child "exit" (fun[@u] code ->
+      child_on_close child "close" (fun[@u] code ->
           (resolve { code; stdout = !stdout; stderr = !stderr } [@u])))
 
 let invoke_server response_for_body =

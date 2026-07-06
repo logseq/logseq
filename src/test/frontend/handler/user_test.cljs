@@ -1,6 +1,6 @@
 (ns frontend.handler.user-test
   (:require [cljs.core.async :as a]
-            [cljs.test :refer [deftest is testing]]
+            [cljs.test :refer [async deftest is testing]]
             [electron.ipc :as ipc]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
@@ -93,25 +93,43 @@
         (reset! state/state old-state)))))
 
 (deftest restore-tokens-preserves-refresh-token-before-refreshing-expired-id-token-test
-  (let [old-state @state/state
-        expired-id-token (jwt {:exp 0})
-        refresh-token "refresh-token-from-local-storage"]
-    (reset! state/state (assoc old-state
-                               :auth/id-token nil
-                               :auth/access-token nil
-                               :auth/refresh-token nil))
-    (try
-      (with-mocked-local-storage
-        {"id-token" expired-id-token
-         "access-token" "access-token-from-local-storage"
-         "refresh-token" refresh-token}
-        (fn []
-          (with-redefs [user-handler/<refresh-id-token&access-token (fn [] (a/go nil))
-                        state/pub-event! (fn [& _] nil)]
+  (async done
+    (let [old-state @state/state
+          old-refresh user-handler/<refresh-id-token&access-token
+          old-pub-event! state/pub-event!
+          refresh-called (a/chan)
+          expired-id-token (jwt {:exp 0})
+          refresh-token "refresh-token-from-local-storage"
+          restore! (fn []
+                     (reset! state/state old-state)
+                     (set! user-handler/<refresh-id-token&access-token old-refresh)
+                     (set! state/pub-event! old-pub-event!))]
+      (reset! state/state (assoc old-state
+                                 :auth/id-token nil
+                                 :auth/access-token nil
+                                 :auth/refresh-token nil))
+      (set! user-handler/<refresh-id-token&access-token
+            (fn []
+              (a/put! refresh-called :called)
+              (a/go nil)))
+      (set! state/pub-event! (fn [& _] nil))
+      (try
+        (with-mocked-local-storage
+          {"id-token" expired-id-token
+           "access-token" "access-token-from-local-storage"
+           "refresh-token" refresh-token}
+          (fn []
             (user-handler/restore-tokens-from-localstorage)
-            (is (= refresh-token (state/get-auth-refresh-token))))))
-      (finally
-        (reset! state/state old-state)))))
+            (is (= refresh-token (state/get-auth-refresh-token)))))
+        (a/go
+          (let [[value] (a/alts! [refresh-called (a/timeout 1000)])]
+            (is (= :called value))
+            (restore!)
+            (done)))
+        (catch :default e
+          (is false (str "unexpected error: " e))
+          (restore!)
+          (done))))))
 
 (deftest logout-clears-e2ee-password-when-db-worker-ready-test
   (testing "logout should request db-worker to clear persisted e2ee password"
