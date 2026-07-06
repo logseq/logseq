@@ -451,6 +451,7 @@
            (shui/tabs-trigger
             {:key (str "bidirectional-tab-" value)
              :value value
+             :variant :line
              :class "px-0 py-1 text-base text-foreground"}
             [:span.inline-flex.items-center.gap-1.5
              (bidirectional-tab-icon class)
