@@ -174,7 +174,8 @@
   [^js event content & {:keys [id as-mask? as-dropdown? as-content?
                                focus-trigger? align root-props content-props
                                on-before-hide on-after-hide trigger-id] :as opts}]
-  (let [id (or id (gen-id))
+  (let [provided-id id
+        id (or provided-id (gen-id))
         ;; _ (prn :debug :show :id id)
         *target (volatile! nil)
         pointer-event? (or (instance? js/MouseEvent (or (.-nativeEvent event) event))
@@ -209,38 +210,41 @@
                       width (if as-mask? 1 height)])
                    (and (vector event) (= (count event) 2) (every? integer? event))
                    event
-                   :else [0 0])]
-    (let [target @*target
-          opened (some->> (get-popups) (filter #(= id (:id %))) (first))]
-      (if opened
-        (do
-          (consume-toggle-event! event)
-          (hide! (:id opened) 0 {:event event})
-          (:id opened))
-        (do
-          (when (element? target)
-            (d/set-attr! target "data-popup-active" (if (keyword? id) (name id) (str id))))
-          (let [on-before-hide (fn [^js e]
-                                 (when (and (not (false? focus-trigger?))
-                                            (some? target)
-                                            (= js/document (.-ownerDocument target))
-                                            (.-isConnected target)
-                                            (fn? (.-focus target)))
-                                   (js/setTimeout #(.focus target) 16))
-                                 (some-> on-before-hide (apply [e])))]
-            (upsert-popup!
-             (merge opts
-                    {:id id :target target
-                     :trigger-id trigger-id
-                     :open? true :content content :position position
-                     :as-dropdown? as-dropdown?
-                     :as-content? as-content?
-                     :root-props root-props
-                     :on-before-hide on-before-hide
-                     :on-after-hide on-after-hide
-                     :content-props (cond-> content-props
-                                      (not (nil? align))
-                                      (assoc :align (name align)))}))))))))
+                   :else [0 0])
+        target @*target
+        opened (or (some->> (get-popups) (filter #(= id (:id %))) (first))
+                   (when (and (nil? provided-id) target)
+                     (some #(when (same-popup-target? target (:target %)) %)
+                           (get-popups))))]
+    (if opened
+      (do
+        (consume-toggle-event! event)
+        (hide! (:id opened) 0 {:event event})
+        (:id opened))
+      (do
+        (when (element? target)
+          (d/set-attr! target "data-popup-active" (if (keyword? id) (name id) (str id))))
+        (let [on-before-hide (fn [^js e]
+                               (when (and (not (false? focus-trigger?))
+                                          (some? target)
+                                          (= js/document (.-ownerDocument target))
+                                          (.-isConnected target)
+                                          (fn? (.-focus target)))
+                                 (js/setTimeout #(.focus target) 16))
+                               (some-> on-before-hide (apply [e])))]
+          (upsert-popup!
+           (merge opts
+                  {:id id :target target
+                   :trigger-id trigger-id
+                   :open? true :content content :position position
+                   :as-dropdown? as-dropdown?
+                   :as-content? as-content?
+                   :root-props root-props
+                   :on-before-hide on-before-hide
+                   :on-after-hide on-after-hide
+                   :content-props (cond-> content-props
+                                    (not (nil? align))
+                                    (assoc :align (name align)))})))))))
 
 (defn hide!
   ([] (when-let [id (some-> (get-popups) (last) :id)] (hide! id 0)))
