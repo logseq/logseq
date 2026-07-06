@@ -913,21 +913,17 @@
          SelectPositionerPart positioner-props
          (react/createElement
           SelectPopupPart popup-props
-          (react/createElement SelectScrollUpArrowPart #js {:className "ui__select-up-button flex cursor-default items-center justify-center py-1"}
-                               (react/createElement IconChevronUp #js {:className "h-4 w-4"}))
           (react/createElement SelectListPart #js {:className "p-1"
                                                    :style #js {:flex "1 1 auto"
                                                                :minHeight 0
                                                                :maxHeight "100%"
                                                                :overflowY "auto"
                                                                :overflowX "hidden"}}
-                               children)
-          (react/createElement SelectScrollDownArrowPart #js {:className "ui__select-down-button flex cursor-default items-center justify-center py-1"}
-                               (react/createElement IconChevronDown #js {:className "h-4 w-4"})))))))))
+                               children))))))))
 (def SelectItem
   (react/forwardRef
    (fn [^js props ref]
-     (let [props' (with-class-props props "ui__select-item relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50" nil)
+     (let [props' (with-class-props props "ui__select-item flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50" nil)
            children (prop props "children")]
        (when ref (set-prop! props' "ref" ref))
        (clean-props! props' "children")
@@ -935,10 +931,10 @@
                   (fn [^js item-props ^js state]
                     (react/createElement
                      "div" item-props
-                     (when (.-selected state)
-                       (react/createElement
-                        "span"
-                        #js {:className "absolute left-2 top-1/2 flex h-3.5 w-3.5 -translate-y-1/2 items-center justify-center"}
+                     (react/createElement
+                      "span"
+                      #js {:className "flex h-4 w-4 shrink-0 items-center justify-center"}
+                      (when (.-selected state)
                         (react/createElement IconCheck #js {:className "h-4 w-4"})))
                      (react/createElement SelectItemTextPart nil
                                           (react/createElement "span" nil children)))))
