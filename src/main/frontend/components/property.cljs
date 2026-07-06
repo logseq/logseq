@@ -933,9 +933,7 @@
 
 (defn has-hidden-properties?
   [block opts]
-  (let [show-empty-and-hidden-state (some-> @state/state
-                                            (get :ui/show-empty-and-hidden-properties?)
-                                            deref)
+  (let [show-empty-and-hidden-state (state/get-state :ui/show-empty-and-hidden-properties?)
         {:keys [mode show? ids]} show-empty-and-hidden-state
         show-empty-and-hidden-properties? (and show?
                                              (or (= mode :global)
