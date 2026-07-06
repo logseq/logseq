@@ -1694,6 +1694,7 @@
  :settings.editor/preferred-pasting-file-hint "When enabled, pasting an image from the internet will download and insert the image. When disabled, it will paste the link to the image."
  :settings.editor/show-brackets "Show brackets"
  :settings.editor/show-full-blocks "Show all lines of a block reference"
+ :settings.editor/show-tags-in-tag-color "Show tags in tag color"
  :settings.editor/spell-checker "Spell checker"
  :settings.editor/wide-mode "Wide mode"
 

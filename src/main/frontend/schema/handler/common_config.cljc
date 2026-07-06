@@ -8,6 +8,7 @@
     [:meta/version :int]
     [:ui/enable-tooltip? :boolean]
     [:ui/show-brackets? :boolean]
+    [:ui/show-tags-in-tag-color? :boolean]
     [:feature/enable-search-remove-accents? :boolean]
     [:feature/enable-flashcards? :boolean]
     [:feature/disable-scheduled-and-deadline-query? :boolean]

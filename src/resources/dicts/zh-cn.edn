@@ -1694,6 +1694,7 @@
  :settings.editor/preferred-pasting-file-hint "启用后，从互联网粘贴图片将自动下载并保存到本地"
  :settings.editor/show-brackets "显示括号 [[]]"
  :settings.editor/show-full-blocks "显示块引用的所有行"
+ :settings.editor/show-tags-in-tag-color "以标签颜色显示标签"
  :settings.editor/spell-checker "单词拼写检查"
  :settings.editor/wide-mode "宽屏模式"
 

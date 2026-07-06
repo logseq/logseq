@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "Quando ativado, colar uma imagem da internet fará o download e inserirá a imagem. Quando desativado, ele colará o link da imagem."
  :settings.editor/show-brackets "Mostrar colchetes"
  :settings.editor/show-full-blocks "Mostrar todas as linhas de uma referência de bloco"
+ :settings.editor/show-tags-in-tag-color "Mostrar tags na cor da tag"
  :settings.editor/spell-checker "Verificador ortografo"
  :settings.editor/wide-mode "Modo amplo"
 

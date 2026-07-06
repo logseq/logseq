@@ -244,8 +244,14 @@
                 true)]]
    (when (not (or (util/mobile?) (mobile-util/native-platform?)))
      [:div {:style {:text-align "right"}}
-      (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets)
+     (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets)
                                    :shortcut-id :ui/toggle-brackets)])])
+
+(defn show-tags-in-tag-color-row [t show-tags-in-tag-color?]
+  (toggle "show_tags_in_tag_color"
+          (t :settings.editor/show-tags-in-tag-color)
+          show-tags-in-tag-color?
+          config-handler/toggle-ui-show-tags-in-tag-color!))
 
 (defn toggle-wide-mode-row [t wide-mode?]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
@@ -874,11 +880,13 @@
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (state/use-sub :ui/shortcut-tooltip?)
         show-brackets? (state/show-brackets?)
+        show-tags-in-tag-color? (state/show-tags-in-tag-color?)
         wide-mode? (state/use-sub :ui/wide-mode?)]
 
     [:div.panel-wrap.is-editor
      (date-format-row t preferred-date-format)
      (show-brackets-row t show-brackets?)
+     (show-tags-in-tag-color-row t show-tags-in-tag-color?)
      (toggle-wide-mode-row t wide-mode?)
 
      (when (util/electron?) (switch-spell-check-row t))

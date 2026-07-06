@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "Tip pro vkládání súborů"
  :settings.editor/show-brackets "Zobraziť zátvorky"
  :settings.editor/show-full-blocks "Zobraziť všetky riadky referencie bloku"
+ :settings.editor/show-tags-in-tag-color "Zobraziť značky farbou značky"
  :settings.editor/spell-checker "Kontrola pravopisu"
  :settings.editor/wide-mode "Široký režim"
 

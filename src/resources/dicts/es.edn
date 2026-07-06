@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "Cuando está habilitado, al pegar una imagen de internet la imagen será descargada e insertada. Cuando está deshabilitado, el enlace a la imagen será pegado."
  :settings.editor/show-brackets "Mostrar corchetes"
  :settings.editor/show-full-blocks "Mostrar todas las líneas de una referencia a bloque"
+ :settings.editor/show-tags-in-tag-color "Mostrar etiquetas con el color de la etiqueta"
  :settings.editor/spell-checker "Corrector ortográfico"
  :settings.editor/wide-mode "Modo ancho"
 

@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "Tips for filinnliming"
  :settings.editor/show-brackets "Vis klammer"
  :settings.editor/show-full-blocks "Vis hele blokker"
+ :settings.editor/show-tags-in-tag-color "Vis tagger i taggfarge"
  :settings.editor/spell-checker "Stavekontroll"
  :settings.editor/wide-mode "Bred modus"
 

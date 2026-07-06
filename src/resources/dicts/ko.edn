@@ -1583,6 +1583,7 @@
  :settings.editor/preferred-pasting-file-hint "활성화하면, 인터넷으로부터 이미지를 붙여넣기할 때 이미지를 다운로드한 뒤 삽입합니다. 비활성화하면, 이미지의 링크를 붙여넣습니다."
  :settings.editor/show-brackets "대괄호 표시"
  :settings.editor/show-full-blocks "블록 참조의 모든 줄 표시"
+ :settings.editor/show-tags-in-tag-color "태그를 태그 색상으로 표시"
  :settings.editor/spell-checker "문법 검사"
  :settings.editor/wide-mode "와이드 모드"
 
