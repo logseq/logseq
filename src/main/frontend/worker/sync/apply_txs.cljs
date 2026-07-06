@@ -389,6 +389,10 @@
        vals
        set))
 
+(defn- remote-txs-db-migrate?
+  [remote-txs]
+  (some #(= :db-migrate (:outliner-op %)) remote-txs))
+
 (defn- tx-item-missing-stale-block-ref?
   [db stale-block-uuids item]
   (some (fn [block-uuid]
@@ -1450,9 +1454,14 @@
 
 (defn- apply-remote-tx-with-local-changes!
   [{:keys [repo conn local-txs remote-txs pre-repair-tx-data post-repair-tx-data stale-repair-block-uuids
-           prefetched-repair-block-uuids]}]
-  (let [tx-meta {:rtc-tx? true
-                 :with-local-changes? true}
+           prefetched-repair-block-uuids db-migrate? skip-final-validate?]}]
+  (let [tx-meta (cond-> {:rtc-tx? true
+                         :with-local-changes? true}
+                  db-migrate?
+                  (assoc :db-migrate? true
+                         :outliner-op :db-migrate)
+                  skip-final-validate?
+                  (assoc :skip-validate-db? true))
         *rebase-tx-reports (atom [])
         *rebase-results (atom [])
         *remote-tx-results (atom [])
@@ -1517,20 +1526,33 @@
         (worker-undo-redo/clear-history! repo)))))
 
 (defn- apply-remote-tx-without-local-changes!
-  [{:keys [repo conn local-txs remote-txs stale-repair-block-uuids]}]
+  [{:keys [repo conn local-txs remote-txs pre-repair-tx-data post-repair-tx-data stale-repair-block-uuids
+           prefetched-repair-block-uuids db-migrate? skip-final-validate?]}]
   (let [remote-tx-results (atom [])
         tx-report (ldb/batch-transact-with-temp-conn!
                    conn
-                   {:rtc-tx? true
-                    :without-local-changes? true}
+                   (cond-> {:rtc-tx? true
+                            :without-local-changes? true}
+                     db-migrate?
+                     (assoc :db-migrate? true
+                            :outliner-op :db-migrate)
+                     skip-final-validate?
+                     (assoc :skip-validate-db? true))
                    (fn [conn]
+                     (when (seq pre-repair-tx-data)
+                       (maybe-apply-repair-tx-data! conn pre-repair-tx-data))
+
                      (reset! remote-tx-results
                              (transact-remote-txs! conn remote-txs
-                                                   :stale-repair-block-uuids stale-repair-block-uuids)))
+                                                   :stale-repair-block-uuids stale-repair-block-uuids))
+
+                     (when (seq post-repair-tx-data)
+                       (maybe-apply-repair-tx-data! conn post-repair-tx-data)))
                    {:before-commit #(fail-if-pending-tx-snapshot-changed! repo local-txs)})]
     (repair-applied-txs! conn tx-report)
     {:repair-block-uuids (->> @remote-tx-results
                               (mapcat :repair-block-uuids)
+                              (remove (set prefetched-repair-block-uuids))
                               distinct
                               vec)
      :remote-asset-tx-data (mapcat (comp :tx-data :report) @remote-tx-results)}))
@@ -1689,8 +1711,11 @@
                                          (remove (set remote-created-block-uuids))
                                          distinct
                                          vec)
-                invalid-repair-block-uuids (when has-local-changes?
-                                             (remote-txs-invalid-repair-block-uuids @conn remote-txs))]
+                invalid-repair-block-uuids (remote-txs-invalid-repair-block-uuids @conn remote-txs)
+                db-migrate? (remote-txs-db-migrate? remote-txs)
+                apply-args (update apply-args :apply-context assoc
+                                   :db-migrate? db-migrate?
+                                   :skip-final-validate? db-migrate?)]
        (if has-local-changes?
          (if (or (seq missing-block-uuids)
                  (seq invalid-repair-block-uuids))
@@ -1712,12 +1737,25 @@
                  (apply-with-repair pre-repair-tx-data* post-repair-tx-data*))
                (apply-with-repair pre-repair-tx-data post-repair-tx-data)))
            (apply-remote-txs-after-server-repair! apply-args))
-         (if (seq missing-block-uuids)
-           (after-repair-result
-            (<apply-server-repair-blocks! repo client conn missing-block-uuids)
-            #(apply-remote-txs-after-server-repair!
-              (update apply-args :apply-context assoc
-                      :stale-repair-block-uuids missing-block-uuids)))
+         (if (or (seq missing-block-uuids)
+                 (seq invalid-repair-block-uuids))
+           (let [pre-repair-tx-data (<server-repair-blocks-tx-data repo client missing-block-uuids)
+                 post-repair-tx-data (<server-repair-blocks-tx-data repo client invalid-repair-block-uuids)
+                 apply-with-repair (fn [pre-repair-tx-data* post-repair-tx-data*]
+                                     (apply-remote-txs-after-server-repair!
+                                      (update apply-args :apply-context assoc
+                                              :pre-repair-tx-data pre-repair-tx-data*
+                                              :post-repair-tx-data post-repair-tx-data*
+                                              :stale-repair-block-uuids missing-block-uuids
+                                              :prefetched-repair-block-uuids
+                                              (distinct (concat missing-block-uuids
+                                                                invalid-repair-block-uuids)))))]
+             (if (or (p/promise? pre-repair-tx-data)
+                     (p/promise? post-repair-tx-data))
+               (p/let [pre-repair-tx-data* pre-repair-tx-data
+                       post-repair-tx-data* post-repair-tx-data]
+                 (apply-with-repair pre-repair-tx-data* post-repair-tx-data*))
+               (apply-with-repair pre-repair-tx-data post-repair-tx-data)))
            (apply-remote-txs-after-server-repair! apply-args))))
      (fail-fast :db-sync/missing-db {:repo repo :op :apply-remote-txs}))))
 
