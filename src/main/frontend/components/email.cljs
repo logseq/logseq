@@ -31,10 +31,12 @@
         tooltip-content (t (if masked?
                              :account/show-email-address
                              :account/hide-email-address))
-        button [:button.ls-email-visibility-toggle
+        button (shui/button
                 {:type "button"
+                 :variant :ghost
+                 :size :icon
                  :class (or icon-class
-                            "ml-1 inline-flex items-center border-0 bg-transparent p-0 text-current opacity-70 hover:opacity-100")
+                            "ml-1 inline-flex h-auto w-auto min-w-0 border-0 bg-transparent p-0 text-current opacity-70 hover:opacity-100")
                  :aria-label tooltip-content
                  :on-pointer-down stop-event!
                  :on-key-down (fn [^js e]
@@ -43,7 +45,7 @@
                  :on-click (fn [e]
                              (stop-event! e)
                              (set-revealed-for! (when-not revealed? reveal-key)))}
-                (shui/tabler-icon (if masked? "eye" "eye-off") {:size 14})]]
+                (shui/tabler-icon (if masked? "eye" "eye-off") {:size 14}))]
     (when (some? email)
       [:span.ls-email-address.inline-flex.items-center
        (cond-> {:class class}

@@ -225,16 +225,18 @@
                             [:small.opacity-70
                              (email-component/email-address {:email (user-handler/email)})]
                             (ui/tooltip
-                             [:button.absolute.opacity-0.group-hover:opacity-100.text-red-rx-09.border-0.bg-transparent.p-0
+                             (shui/button
                               {:type "button"
-                               :class "right-1 top-3"
+                               :variant :ghost
+                               :size :icon
+                               :class "absolute right-1 top-3 h-auto w-auto min-w-0 border-0 bg-transparent p-0 text-red-rx-09 opacity-0 group-hover:opacity-100"
                                :aria-label (t :ui/logout)
                                :on-pointer-down stop-event!
                                :on-click (fn [e]
                                            (stop-event! e)
                                            (user-handler/logout)
                                            (shui/popup-hide!))}
-                              (ui/icon "logout")]
+                              (ui/icon "logout"))
                              (t :ui/logout))]
                      :options {:on-select (fn [^js e] (.preventDefault e))
                                :class "w-full"}})]
