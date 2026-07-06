@@ -13,7 +13,6 @@
    [frontend.worker.sync.crypt :as sync-crypt]
    [frontend.worker.sync.large-title :as sync-large-title]
    [frontend.worker.sync.presence :as sync-presence]
-   [frontend.worker.sync.repair :as sync-repair]
    [frontend.worker.sync.transport :as sync-transport]
    [frontend.worker.sync.util :as sync-util :refer [fail-fast]]
    [frontend.worker.undo-redo :as worker-undo-redo]
@@ -1286,10 +1285,16 @@
                                     (:tx-data rebase-tx-report)
                                     tx-meta))
 
+(defn- sync-fix-tx-meta
+  []
+  {:outliner-op :fix
+   :gen-undo-ops? false
+   :db-sync/tx-id (random-uuid)})
+
 (defn- repair-applied-txs!
   [conn tx-report]
   (when (seq (:tx-data tx-report))
-    (fix-tx! conn tx-report (sync-repair/sync-fix-tx-meta))))
+    (fix-tx! conn tx-report (sync-fix-tx-meta))))
 
 (defn- pending-tx-ids
   [local-txs]
