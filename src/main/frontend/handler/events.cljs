@@ -5,6 +5,7 @@
   (:require-macros [frontend.handler.events.macros :refer [defevent!]])
   (:require ["@sentry/react" :as Sentry]
             [cljs-bean.core :as bean]
+            [cljs-time.core :as t]
             [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.components.rtc.indicator :as indicator]
@@ -18,8 +19,8 @@
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.code :as code-handler]
-            [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.comments :as comments-handler]
+            [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.db-based.sync :as rtc-handler]
@@ -52,8 +53,7 @@
             [logseq.api.plugin :as plugin-api]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
-            [cljs-time.core :as t]))
+            [promesa.core :as p]))
 
 ;; TODO: should we move all events here?
 
@@ -132,6 +132,7 @@
   (page-handler/init-commands!)
   ;; load config
   (repo-config-handler/restore-repo-config! graph)
+  (st/refresh!)
   (route-handler/redirect-to-home!)
   (graph-handler/settle-metadata-to-local! {:last-seen-at (js/Date.now)}))
 
@@ -159,13 +160,12 @@
 (defevent! :graph/switch [[_ graph opts]]
   (let [t1 (t/now)]
     (p/do!
-    (export/cancel-db-backup!)
-    (state/clear-async-queries!)
-    (st/refresh!)
-    (graph-switch-on-persisted graph opts)
-    (export/backup-db-graph (state/get-current-repo))
-    (let [t2 (t/now)]
-      (log/info ::graph-switch-spent (- t2 t1))))))
+     (export/cancel-db-backup!)
+     (state/clear-async-queries!)
+     (graph-switch-on-persisted graph opts)
+     (export/backup-db-graph (state/get-current-repo))
+     (let [t2 (t/now)]
+       (log/info ::graph-switch-spent (- t2 t1))))))
 
 (defevent! :graph/open-new-window [[_ev target]]
   (ui-handler/open-new-window-or-tab! target))
