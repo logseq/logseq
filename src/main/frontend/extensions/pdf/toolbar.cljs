@@ -584,7 +584,7 @@
          {:title (t :pdf/annotations-page)
           :on-click (fn []
                       (if asset-block
-                        (pdf-assets/goto-annotations-page! (:pdf/current @state/state))
+                        (pdf-assets/goto-annotations-page! pdf-current)
                         (state/pub-event! [:asset/dialog-edit-external-url nil pdf-current])))}
          (svg/annotations 16)]
 

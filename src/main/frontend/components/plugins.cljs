@@ -85,6 +85,7 @@
         [cursor] (hooks/use-atom *cursor)
         mode (rfx/use-sub [:ui/theme])
         all-themes (rfx/use-sub [:plugin/installed-themes])
+        installed-plugins (rfx/use-sub [:plugin/installed-plugins])
         selected (rfx/use-sub [:plugin/selected-theme])]
     (hooks/use-effect!
      (fn []
@@ -125,7 +126,7 @@
       (fn [idx opt]
         (let [current-selected? (:selected opt)
               group-first?      (:group-first opt)
-              plg               (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
+              plg               (get installed-plugins (keyword (:pid opt)))]
           [:div
            {:key (str idx (:name opt))}
            (when (and group-first? (not= idx 0)) [:hr.my-2])

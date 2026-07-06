@@ -2013,7 +2013,7 @@
       (comments-handler/expand-comments-area! comments-area)
       (state/set-state! :comments/inline-thread
                         (comments-model/next-inline-comment-thread
-                         (get @state/state :comments/inline-thread)
+                         (state/get-state :comments/inline-thread)
                          target-block-uuid
                          (:block/uuid comments-area))))))
 

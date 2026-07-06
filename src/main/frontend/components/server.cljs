@@ -17,7 +17,7 @@
 (hsx/defc panel-of-tokens
   [close-panel]
   (let [server-state (rfx/use-sub [:electron/server])
-        [tokens set-tokens!] (hooks/use-state (get-in @state/state [:electron/server :tokens]))
+        [tokens set-tokens!] (hooks/use-state (:tokens server-state))
         changed? (not= tokens (:tokens server-state))]
     [:div.cp__server-tokens-panel.pt-6
      [:h2.text-3xl.-translate-y-4 (t :server.token/title)]
@@ -64,7 +64,7 @@
 (hsx/defc panel-of-configs
   [close-panel]
   (let [server-state (rfx/use-sub [:electron/server])
-        [configs set-configs!] (hooks/use-state (:electron/server @state/state))
+        [configs set-configs!] (hooks/use-state server-state)
         {:keys [host port autostart]} configs
         hp-changed?  (or (not= host (:host server-state))
                          (not= (util/safe-parse-int (or port 0))

@@ -148,7 +148,7 @@
 (defn get-operating-blocks
   [block]
   (let [selected-blocks (get-selected-blocks)
-        view-selected-blocks (:view/selected-blocks @state/state)]
+        view-selected-blocks (state/get-state :view/selected-blocks)]
     (or (seq selected-blocks)
         (seq view-selected-blocks)
         [block])))
@@ -156,7 +156,7 @@
 (defn batch-operation?
   []
   (let [selected-blocks (get-selected-blocks)
-        view-selected-blocks (:view/selected-blocks @state/state)]
+        view-selected-blocks (state/get-state :view/selected-blocks)]
     (or (> (count selected-blocks) 1)
         (seq view-selected-blocks))))
 
@@ -268,7 +268,7 @@
                (property-handler/batch-set-block-property! block-ids :logseq.property.view/group-by-property
                                                            (:db/id (db/entity :block/page))
                                                            {:entity-id? entity-id?})))))
-        (when (seq (:view/selected-blocks @state/state))
+        (when (seq (state/get-state :view/selected-blocks))
           (notification/show! (t :property/update-success) :success))
         (when-not many?
           (cond

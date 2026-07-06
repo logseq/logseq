@@ -1402,13 +1402,14 @@
 
 (hsx/defc mcp-server-row
   [t]
-  (let [[checked set-checked!] (hooks/use-state false)]
+  (let [server-state (rfx/use-sub [:electron/server])
+        [checked set-checked!] (hooks/use-state false)]
 
     (hooks/use-effect!
      (fn []
-       (let [initial (get-in @state/state [:electron/server :mcp-enabled?])]
+       (let [initial (:mcp-enabled? server-state)]
          (set-checked! initial)))
-     [])
+     [server-state])
 
     (let [on-toggle (fn []
                       (let [new-val (not checked)]

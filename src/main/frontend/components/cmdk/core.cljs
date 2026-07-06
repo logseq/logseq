@@ -40,7 +40,7 @@
 
 (defn- get-action
   []
-  (:action (:search/args @state/state)))
+  (:action (state/get-state :search/args)))
 
 (defn translate
   [t-fn {:keys [id desc]}]
@@ -257,7 +257,7 @@
   :pinyin-t — Simplified Chinese pinyin initials; present only for :zh-CN.
   Cached by language — rebuilt only when preferred-language changes."
   []
-  (let [lang (or (some-> (:preferred-language @state/state) keyword) :en)
+  (let [lang (or (some-> (state/get-state :preferred-language) keyword) :en)
         cache @!commands-cache]
     (if (= (:lang cache) lang)
       (:commands cache)
@@ -276,7 +276,7 @@
   (let [!input   (::input state)
         !results (::results state)]
     (swap! !results assoc-in [group :status] :loading)
-    (let [lang        (or (some-> (:preferred-language @state/state) keyword) :en)
+    (let [lang        (or (some-> (state/get-state :preferred-language) keyword) :en)
           en?         (= lang :en)
           zh-cn?      (= lang :zh-CN)
           commands    (get-commands-for-search)
@@ -643,7 +643,7 @@
   (let [highlighted-item (some-> state state->highlighted-item)
         command (:source-command highlighted-item)
         dont-close-commands #{:graph/open :graph/remove :dev/replace-graph-with-db-file :misc/import-edn-data :editor/move-blocks}
-        search-args (:search/args @state/state)
+        search-args (state/get-state :search/args)
         action (or (:action command)
                    (when-let [trigger (:trigger search-args)]
                      #(trigger highlighted-item)))
@@ -696,8 +696,8 @@
         opts (:opts state)]
     (cmdk-state/persist-last-cmdk-search!
      opts
-     (:search/mode @state/state)
-     (:search/args @state/state)
+     (state/get-state :search/mode)
+     (state/get-state :search/args)
      (state/get-current-repo)
      input-value
      @(::filter state))))
@@ -1299,9 +1299,9 @@
   ;; commands list from cp-handler/top-commands (plugins, graph state, etc. may
   ;; have changed since the last session).
   (reset! !commands-cache {:lang nil :commands nil})
-  (let [raw-search-mode (:search/mode @state/state)
+  (let [raw-search-mode (state/get-state :search/mode)
         search-mode (or raw-search-mode :global)
-        search-args (:search/args @state/state)
+        search-args (state/get-state :search/args)
         {input :input filter-group :filter} (cmdk-state/build-initial-cmdk-search
                                              opts
                                              search-mode
