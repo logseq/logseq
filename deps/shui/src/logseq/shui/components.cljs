@@ -931,13 +931,19 @@
            children (prop props "children")]
        (when ref (set-prop! props' "ref" ref))
        (clean-props! props' "children")
+       (set-prop! props' "render"
+                  (fn [^js item-props ^js state]
+                    (react/createElement
+                     "div" item-props
+                     (when (.-selected state)
+                       (react/createElement
+                        "span"
+                        #js {:className "absolute left-2 top-1/2 flex h-3.5 w-3.5 -translate-y-1/2 items-center justify-center"}
+                        (react/createElement IconCheck #js {:className "h-4 w-4"})))
+                     (react/createElement SelectItemTextPart nil
+                                          (react/createElement "span" nil children)))))
        (react/createElement
-        SelectItemPart props'
-                (react/createElement SelectItemIndicatorPart
-                                     #js {:className "absolute left-2 top-1/2 flex h-3.5 w-3.5 -translate-y-1/2 items-center justify-center"}
-                                     (react/createElement IconCheck #js {:className "h-4 w-4"}))
-                (react/createElement SelectItemTextPart nil
-                                     (react/createElement "span" nil children)))))))
+        SelectItemPart props')))))
 
 (def Tooltip (forward-part TooltipRootPart nil))
 (def TooltipTrigger (forward-part TooltipTriggerPart nil))
