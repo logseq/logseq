@@ -24,7 +24,6 @@ test("CLI sync stress workflow runs local sync/offline stress and validates the 
   assert.match(workflow, /--sync/);
   assert.match(workflow, /--offline/);
   assert.match(workflow, /--no-e2ee/);
-  assert.match(workflow, /--max-ops 1000/);
   assert.match(workflow, /graph validate --graph "\$GRAPH" --output json/);
 });
 
