@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.core :as outliner-core]
@@ -242,11 +243,30 @@
                      (assoc (into {} block) :db/id (:db/id block)))
                    (rest template-blocks)))))))
 
+(defn- journal-title
+  [db journal-day]
+  (date-time-util/int->journal-title
+   journal-day
+   (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))))
+
+(defn- ensure-template-journal-pages!
+  [conn blocks]
+  (doseq [journal-day (outliner-template/dynamic-template-journal-days blocks)]
+    (when-not (ldb/get-journal-page-by-day @conn journal-day)
+      (let [title (journal-title @conn journal-day)
+            [_ page-uuid] (outliner-page/create! conn title {:journal? true})
+            page (d/entity @conn [:block/uuid page-uuid])
+            page-name (common-util/page-name-sanity-lc title)]
+        (when (and page (not= page-name (:block/name page)))
+          (ldb/transact! conn [{:db/id (:db/id page)
+                                :block/name page-name}] {}))))))
+
 (defn- apply-template-op!
   [conn *result [template-id target-block-id opts]]
   (when-let [target (d/entity @conn [:block/uuid target-block-id])]
     (let [blocks (or (some-> (:template-blocks opts) seq vec)
                      (template-children-blocks @conn [:block/uuid template-id]))
+          _ (ensure-template-journal-pages! conn blocks)
           blocks (outliner-template/resolve-dynamic-template-blocks @conn target blocks)]
       (when (seq blocks)
         (let [sibling? (:sibling? opts)

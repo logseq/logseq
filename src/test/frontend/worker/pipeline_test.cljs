@@ -4,6 +4,7 @@
             [frontend.worker.pipeline :as worker-pipeline]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]
@@ -342,6 +343,100 @@
       (is (= expected-name (:block/name page))
           "Journal block/name keeps the default formatter for stable identity"))))
 
+(deftest apply-template-today-dynamic-variable-persists-journal-ref-test
+  (testing "apply-template stores <% today %> as a DB graph id ref to the journal page"
+    (let [today (date-time-util/ms->journal-day (js/Date.))
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:build/journal today}
+                   :blocks [{:block/title "target block"}]}
+                  {:page {:block/title "Templates"}
+                   :blocks [{:block/title "template root"
+                             :build/children [{:block/title "date <% today %>"}]}]}]})
+          today-page (db-test/find-journal-by-journal-day @conn today)
+          template-root (db-test/find-block-by-content @conn "template root")
+          target-block (db-test/find-block-by-content @conn "target block")
+          template-blocks (->> (ldb/get-block-and-children @conn (:block/uuid template-root)
+                                                           {:include-property-block? true})
+                               rest)
+          blocks-to-insert (cons (assoc (into {} (first template-blocks))
+                                        :db/id (:db/id (first template-blocks))
+                                        :logseq.property/used-template (:db/id template-root))
+                                 (map (fn [block]
+                                        (assoc (into {} block) :db/id (:db/id block)))
+                                      (rest template-blocks)))]
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (outliner-op/apply-ops! conn
+                                [[:apply-template [(:block/uuid template-root)
+                                                   (:block/uuid target-block)
+                                                   {:template-blocks blocks-to-insert}]]]
+                                {})
+        (let [inserted-block (db-test/find-block-by-content
+                              @conn
+                              (str "date " (page-ref/->page-ref (:block/uuid today-page))))
+              raw-title (:v (first (d/datoms @conn :eavt (:db/id inserted-block) :block/title)))]
+          (is (some? inserted-block))
+          (is (= (str "date " (page-ref/->page-ref (:block/uuid today-page)))
+                 raw-title))
+          (is (= (str "date " (page-ref/->page-ref (:block/title today-page)))
+                 (:block/title inserted-block)))
+          (is (= [(:block/uuid today-page)]
+                 (mapv :block/uuid (:block/refs inserted-block)))))
+        (finally
+          (ldb/register-transact-pipeline-fn! identity))))))
+
+(deftest apply-template-tomorrow-dynamic-variable-creates-missing-journal-ref-test
+  (testing "apply-template creates a missing journal page before storing <% tomorrow %> as an id ref"
+    (let [today (date-time-util/ms->journal-day (js/Date.))
+          tomorrow (date-time-util/ms->journal-day (+ (js/Date.now) (* 24 60 60 1000)))
+          journal-title-format "yyyy-MM-dd"
+          expected-tomorrow-title (date-time-util/int->journal-title tomorrow journal-title-format)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:build/journal today}
+                   :blocks [{:block/title "target block"}]}
+                  {:page {:block/title "Templates"}
+                   :blocks [{:block/title "template root"
+                             :build/children [{:block/title "date <% tomorrow %>"}]}]}]})
+          template-root (db-test/find-block-by-content @conn "template root")
+          target-block (db-test/find-block-by-content @conn "target block")
+          template-blocks (->> (ldb/get-block-and-children @conn (:block/uuid template-root)
+                                                           {:include-property-block? true})
+                               rest)
+          blocks-to-insert (cons (assoc (into {} (first template-blocks))
+                                        :db/id (:db/id (first template-blocks))
+                                        :logseq.property/used-template (:db/id template-root))
+                                 (map (fn [block]
+                                        (assoc (into {} block) :db/id (:db/id block)))
+                                      (rest template-blocks)))]
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (ldb/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format journal-title-format]])
+        (is (nil? (db-test/find-journal-by-journal-day @conn tomorrow)))
+        (outliner-op/apply-ops! conn
+                                [[:apply-template [(:block/uuid template-root)
+                                                   (:block/uuid target-block)
+                                                   {:template-blocks blocks-to-insert}]]]
+                                {})
+        (let [tomorrow-page (db-test/find-journal-by-journal-day @conn tomorrow)
+              inserted-block (db-test/find-block-by-content
+                              @conn
+                              (str "date " (page-ref/->page-ref (:block/uuid tomorrow-page))))
+              raw-title (:v (first (d/datoms @conn :eavt (:db/id inserted-block) :block/title)))]
+          (is (some? tomorrow-page))
+          (is (= expected-tomorrow-title (:block/title tomorrow-page)))
+          (is (= expected-tomorrow-title (:block/name tomorrow-page)))
+          (is (some? inserted-block))
+          (is (= (str "date " (page-ref/->page-ref (:block/uuid tomorrow-page)))
+                 raw-title))
+          (is (= (str "date " (page-ref/->page-ref (:block/title tomorrow-page)))
+                 (:block/title inserted-block)))
+          (is (= [(:block/uuid tomorrow-page)]
+                 (mapv :block/uuid (:block/refs inserted-block)))))
+        (finally
+          (ldb/register-transact-pipeline-fn! identity))))))
+
 (deftest built-in-tag-must-not-convert-page-child-block-to-class-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "page1"}}]})
@@ -395,6 +490,7 @@
                            :build/children [{:block/title "auto <% current page %>"}]}]}]
                :classes {:DiaryEntry {}}})
         target-block (db-test/find-block-by-content @conn "target block")
+        target-page (ldb/get-page @conn "Target Page")
         template-root (db-test/find-block-by-content @conn "tag template root")
         diary-entry (ldb/get-page @conn "DiaryEntry")]
     (ldb/transact! conn [[:db/add (:db/id template-root)
@@ -403,7 +499,16 @@
     (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
     (try
       (ldb/transact! conn [[:db/add (:db/id target-block) :block/tags (:db/id diary-entry)]])
-      (is (some? (db-test/find-block-by-content @conn "auto [[Target Page]]")))
+      (let [inserted-block (db-test/find-block-by-content
+                            @conn
+                            (str "auto " (page-ref/->page-ref (:block/uuid target-page))))
+            raw-title (:v (first (d/datoms @conn :eavt (:db/id inserted-block) :block/title)))]
+        (is (some? inserted-block))
+        (is (= (str "auto " (page-ref/->page-ref (:block/uuid target-page)))
+               raw-title))
+        (is (= "auto [[Target Page]]" (:block/title inserted-block)))
+        (is (= [(:block/uuid target-page)]
+               (mapv :block/uuid (:block/refs inserted-block)))))
       (finally
         ;; return global fn back to previous behavior
         (ldb/register-transact-pipeline-fn! identity)))))
