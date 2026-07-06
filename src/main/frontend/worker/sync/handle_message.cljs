@@ -339,9 +339,9 @@
 (defn- handle-pull-ok!
   [repo client local-tx remote-tx remote-checksum message]
   (clear-pending-pull! client)
-  (log/info ::handle-pull-ok! {:repo repo
-                               :remote-tx remote-tx
-                               :local-tx local-tx})
+  ;; (log/info ::handle-pull-ok! {:repo repo
+  ;;                              :remote-tx remote-tx
+  ;;                              :local-tx local-tx})
   (when (> remote-tx local-tx)
     (let [txs (:txs message)]
       (require-non-negative remote-tx {:repo repo :type "pull/ok"})
@@ -351,14 +351,14 @@
                                 :outliner-op (:outliner-op data)
                                 :tx-data (parse-transit (:tx data) {:repo repo :type "pull/ok"})})
                              txs)]
-        (log/info ::handle-pull-remote-txs-count {:count (count remote-txs)})
+        ;; (log/info ::handle-pull-remote-txs-count {:count (count remote-txs)})
         (when (seq remote-txs)
           (->
            (p/let [graph-e2ee? (sync-crypt/graph-e2ee? repo)
-                   _ (log/info ::handle-pull-request-aes-key {})
+                   ;; _ (log/info ::handle-pull-request-aes-key {})
                    aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
-                   _ (when (some? aes-key)
-                       (log/info ::handle-pull-request-aes-key-success {}))
+                   ;; _ (when (some? aes-key)
+                   ;;     (log/info ::handle-pull-request-aes-key-success {}))
                    _ (when (and graph-e2ee? (nil? aes-key))
                        (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
                    remote-txs* (if aes-key
