@@ -5843,13 +5843,14 @@
             (is (= local-title (:block/title (d/entity @conn [:block/uuid block-uuid]))))
             (is (= 1 (count pending)))))))))
 
-(deftest rebase-replays-fix-pending-tx-with-empty-reversed-data-test
-  (testing "schema fix txs with no reverse data should not fail remote rebase"
+(deftest rebase-keeps-fix-pending-tx-with-empty-reversed-data-test
+  (testing "schema fix txs with no reverse data should not be replayed as local rebases"
     (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
           tx-id (random-uuid)
           parent-uuid (:block/uuid parent)
           child-uuid (:block/uuid child1)
           fix-title "local fix title"]
+      (d/transact! conn [[:db/add [:block/uuid parent-uuid] :block/title fix-title]])
       (with-datascript-conns conn client-ops-conn
         (fn []
           (seed-client-op-txs!
@@ -5870,10 +5871,10 @@
                    (:block/title (d/entity @conn [:block/uuid parent-uuid]))))
             (is (= "remote child"
                    (:block/title (d/entity @conn [:block/uuid child-uuid]))))
-            (is (= :rebase (:outliner-op pending-after)))))))))
+            (is (= :fix (:outliner-op pending-after)))))))))
 
-(deftest rebase-drops-no-op-fix-pending-tx-with-empty-reversed-data-test
-  (testing "schema fix txs with no reverse data should be dropped when remote already applied the same tx"
+(deftest rebase-keeps-no-op-fix-pending-tx-with-empty-reversed-data-test
+  (testing "schema fix txs with no reverse data should stay upload-only even when remote already applied the same tx"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
           tx-id (random-uuid)
           parent-uuid (:block/uuid parent)
@@ -5895,8 +5896,32 @@
            [{:tx-data [[:db/add [:block/uuid parent-uuid] :block/title fix-title]]}])
           (is (= fix-title
                  (:block/title (d/entity @conn [:block/uuid parent-uuid]))))
-          (is (not-any? #(= tx-id (:tx-id %))
-                        (#'sync-apply/pending-txs test-repo))))))))
+          (let [pending-after (#'sync-apply/pending-tx-by-id test-repo tx-id)]
+            (is (= :fix (:outliner-op pending-after)))))))))
+
+(deftest remote-log-uuid-string-scalar-values-stay-scalar-test
+  (testing "log-shaped remote history txs should only resolve UUID strings on ref attrs"
+    (let [{:keys [conn]} (setup-parent-child)
+          title-uuid #uuid "6a4970da-145c-430f-ba25-869617b87b1d"
+          title-uuid-str (str title-uuid)
+          class-temp-id "6a4970e3-275b-4d99-bc0e-04616f55afb9"
+          history-t 536872354]
+      (d/transact! conn [{:block/uuid title-uuid
+                          :block/title "existing page with UUID title text"
+                          :block/name "existing page with UUID title text"}])
+      (let [title-entity-id (:db/id (d/entity @conn [:block/uuid title-uuid]))]
+        (is (= [:db/add class-temp-id :block/title title-uuid-str history-t]
+               (#'sync-apply/resolve-temp-id
+                @conn
+                [:db/add class-temp-id :block/title title-uuid-str history-t])))
+        (is (= [:db/add class-temp-id :block/name title-uuid-str history-t]
+               (#'sync-apply/resolve-temp-id
+                @conn
+                [:db/add class-temp-id :block/name title-uuid-str history-t])))
+        (is (= [:db/add class-temp-id :block/refs title-entity-id history-t]
+               (#'sync-apply/resolve-temp-id
+                @conn
+                [:db/add class-temp-id :block/refs title-uuid-str history-t])))))))
 
 (deftest reverse-tx-data-create-property-text-block-restores-base-db-test
   (testing "reverse-tx-data for create-property-text-block should restore the base db"
