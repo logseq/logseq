@@ -23,7 +23,9 @@
     :or {tooltip? (not (state/mobile?))}}]
   (let [config (state/use-sub-config)
         mask-email? (email-util/mask-email? config)
-        [revealed? set-revealed!] (hooks/use-state false)
+        reveal-key [email mask-email?]
+        [revealed-for set-revealed-for!] (hooks/use-state nil)
+        revealed? (= revealed-for reveal-key)
         masked? (and mask-email? (not revealed?))
         text (if masked? (email-util/mask-email email) email)
         tooltip-content (t (if masked?
@@ -40,7 +42,7 @@
                                   (.stopPropagation e)))
                  :on-click (fn [e]
                              (stop-event! e)
-                             (set-revealed! (not revealed?)))}
+                             (set-revealed-for! (when-not revealed? reveal-key)))}
                 (shui/tabler-icon (if masked? "eye" "eye-off") {:size 14})]]
     (when (some? email)
       [:span.ls-email-address.inline-flex.items-center
