@@ -336,7 +336,7 @@ exports.cap = common.runCapWithLocalDevServerEntry
 exports.clean = common.clean
 exports.watch = gulp.series(
   common.syncResourceFile,
-  common.syncAssetFiles, common.switchReactDevelopmentMode,
+  common.syncAssetFiles,
   gulp.parallel(common.keepSyncResourceFile, common.keepSyncUIAssetFile, css.watchCSS))
 exports.watchMobile = gulp.series(
   common.syncResourceFile, common.syncAssetFiles,

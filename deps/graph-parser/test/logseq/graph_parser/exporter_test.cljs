@@ -447,6 +447,32 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-org-page-title-when-property-appears-in-middle
+  (p/let [file (write-temp-graph-file
+                "pages/20230410145300-end_to_end_note.org"
+                ":PROPERTIES:
+:ID:       c537c812-1ec9-4f13-adaf-1a39fd7da967
+:END:
+#+title: end_to_end_note
+#+date: <2023-04-10 Mon 14:53>
+#+filetags: :PUBLIC:
+
+abc
+
+#+hugo: more
+
+123
+")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})]
+    (is (some? (db-test/find-page-by-title @conn "end_to_end_note"))
+        "Org #+title is imported when another property appears in the middle of the file")
+    (is (nil? (db-test/find-page-by-title @conn "20230410145300-end_to_end_note"))
+        "Importer should not fall back to the org-roam file stem")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest-async import-empty-journal-file
   (p/let [file (write-temp-graph-file "journals/2025_11_11.md" "\n")
           conn (db-test/create-conn)
