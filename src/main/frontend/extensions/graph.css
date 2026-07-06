@@ -34,8 +34,8 @@
 
 .graph-settings {
     position: relative;
-    width: 46px;
-    height: 46px;
+    width: 36px;
+    height: 36px;
     display: flex;
     flex-direction: column-reverse;
     align-items: flex-start;
@@ -56,24 +56,25 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    color: var(--ls-link-text-color);
-    background: color-mix(in srgb, var(--ls-link-text-color) 10%, transparent);
+    color: var(--ls-primary-text-color);
+    background: color-mix(in srgb, currentColor 10%, transparent);
     transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
 }
 
 .graph-toolbar-button:hover {
     transform: translateY(-1px);
-    background: color-mix(in srgb, var(--ls-link-text-color) 16%, transparent);
+    background: color-mix(in srgb, currentColor 16%, transparent);
 }
 
 .graph-settings-toggle,
-.graph-interaction-reset {
-    width: 46px;
-    height: 46px;
-    min-width: 46px;
-    min-height: 46px;
-    max-height: 46px;
-    border: 1px solid color-mix(in srgb, var(--ls-link-text-color) 18%, var(--ls-border-color));
+.graph-interaction-reset,
+.graph-time-travel-toggle {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    max-height: 36px;
+    border: 1px solid currentColor;
     background: color-mix(in srgb, var(--ls-primary-background-color) 82%, transparent);
     box-shadow: 0 12px 34px rgba(15, 23, 42, 0.16);
     backdrop-filter: blur(16px);
@@ -528,19 +529,19 @@ html[data-theme='light'] .graph-mode-tab[aria-selected="true"],
 }
 
 .graph-time-travel {
-    width: 46px;
-    height: 46px;
+    width: 36px;
+    height: 36px;
     min-height: 0;
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 4px;
+    padding: 0;
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--ls-link-text-color) 18%, var(--ls-border-color));
+    border: none;
     border-radius: 9999px;
-    background: color-mix(in srgb, var(--ls-primary-background-color) 82%, transparent);
-    box-shadow: 0 12px 34px rgba(15, 23, 42, 0.16);
-    backdrop-filter: blur(16px);
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
     transition:
         width 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
         height 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
@@ -555,9 +556,11 @@ html[data-theme='light'] .graph-mode-tab[aria-selected="true"],
     height: 76px;
     min-height: 0;
     padding: 8px 14px;
+    border: 1px solid color-mix(in srgb, var(--ls-border-color) 78%, transparent);
     border-radius: 10px;
     background: color-mix(in srgb, var(--ls-primary-background-color) 91%, transparent);
     box-shadow: 0 16px 42px rgba(15, 23, 42, 0.18);
+    backdrop-filter: blur(16px);
 }
 
 .graph-time-travel-toggle,
@@ -577,21 +580,19 @@ html[data-theme='light'] .graph-mode-tab[aria-selected="true"],
     transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
 }
 
-.graph-time-travel-toggle {
-    border: none;
-    color: var(--ls-link-text-color);
-    background: color-mix(in srgb, var(--ls-link-text-color) 10%, transparent);
+.graph-time-travel-toggle,
+.graph-time-travel-reset {
+    color: var(--ls-primary-text-color);
 }
 
 .graph-time-travel-toggle:hover,
 .graph-time-travel-reset:hover {
     transform: translateY(-1px);
-    background: color-mix(in srgb, var(--ls-link-text-color) 16%, transparent);
+    background: color-mix(in srgb, currentColor 16%, transparent);
 }
 
 .graph-time-travel-reset {
-    border: 1px solid color-mix(in srgb, var(--ls-link-text-color) 30%, var(--ls-border-color));
-    color: var(--ls-link-text-color);
+    border: 1px solid currentColor;
     background: color-mix(in srgb, var(--ls-secondary-background-color) 58%, transparent);
 }
 

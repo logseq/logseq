@@ -727,9 +727,19 @@
   [repo]
   (db-sync/status repo))
 
+(defn- db-sync-dbs-open?
+  [repo]
+  (and (some? (worker-state/get-datascript-conn repo))
+       (some? (worker-state/get-client-ops-conn repo))))
+
+(declare start-db!)
 (def-thread-api :thread-api/db-sync-start
   [repo]
-  (db-sync/start! repo))
+  (if (db-sync-dbs-open? repo)
+    (db-sync/start! repo)
+    (p/do!
+     (start-db! repo {:close-other-db? false})
+     (db-sync/start! repo))))
 
 (def-thread-api :thread-api/db-sync-stop
   []
@@ -742,6 +752,14 @@
 (def-thread-api :thread-api/db-sync-request-asset-download
   [repo asset-uuid]
   (db-sync/request-asset-download! repo asset-uuid))
+
+(def-thread-api :thread-api/db-sync-download-missing-assets
+  [repo graph-id]
+  (db-sync/download-missing-assets! repo graph-id))
+
+(def-thread-api :thread-api/db-sync-retry-asset-upload
+  [repo]
+  (db-sync/retry-asset-upload! repo))
 
 (def-thread-api :thread-api/db-sync-grant-graph-access
   [repo graph-id target-email]
@@ -1345,9 +1363,9 @@
                     (keep #(d/entity db (:e %)))
                     (remove search/hidden-entity?)
                     vec)
-        vector-context (search/build-vector-context-cache blocks)
         total (count blocks)
         vector-index (worker-state/get-vector-index repo)
+        index-opts {:include-vector-title? (some? vector-index)}
         progress-for-fts (fn [processed]
                            (if (zero? total)
                              100
@@ -1380,7 +1398,7 @@
                                                            search-index-build-batch-size
                                                            search-index-build-time-budget-ms)
                processed' (+ processed (count batch))
-               indexed (vec (keep #(search/block->index-with-context vector-context %) batch))
+               indexed (vec (keep #(search/block->index % index-opts) batch))
                indexed-blocks' (into indexed-blocks indexed)
                progress (progress-for-fts processed')
                should-report? (> progress last-progress)]

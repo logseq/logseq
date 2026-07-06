@@ -116,7 +116,9 @@
     "cljs:build-electron": "clojure -A:cljs compile app db-worker db-worker-node electron",
     "cljs:lint": "clojure -M:clj-kondo --parallel --lint src --cache false",
     "ios:dev": "cross-env PLATFORM=ios gulp cap",
-    "android:dev": "cross-env PLATFORM=android gulp cap"
+    "android:dev": "cross-env PLATFORM=android gulp cap",
+    "ui:build": "cd packages/ui && pnpm install --config.confirmModulesPurge=false",
+    "postinstall": "pnpm ui:build"
   },
   "dependencies": {
     "@aparajita/capacitor-secure-storage": "^8.0.0",
@@ -201,11 +203,11 @@
     "yup": "^1.7.1"
   },
   "optionalDependencies": {
-    "@zvec/bindings-darwin-arm64": "0.4.0",
-    "@zvec/bindings-linux-arm64": "0.4.0",
-    "@zvec/bindings-linux-x64": "0.4.0",
-    "@zvec/bindings-win32-x64": "0.4.0",
-    "@zvec/zvec": "0.4.0"
+    "@zvec/bindings-darwin-arm64": "0.5.0",
+    "@zvec/bindings-linux-arm64": "0.5.0",
+    "@zvec/bindings-linux-x64": "0.5.0",
+    "@zvec/bindings-win32-x64": "0.5.0",
+    "@zvec/zvec": "0.5.0"
   },
   "pnpm": {
     "ignoredBuiltDependencies": [

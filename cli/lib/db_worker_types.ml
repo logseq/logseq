@@ -1,4 +1,4 @@
-type list_options = Melange_edn.any
+type list_options = Melange_edn_melange.any
 
 type page_filter = {
   expand : bool;

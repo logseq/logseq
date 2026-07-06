@@ -823,6 +823,33 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest wait-for-discovered-server-tolerates-busy-healthz
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-busy-healthz")
+               repo (str "logseq_db_busy_healthz_" (subs (str (random-uuid)) 0 8))
+               wait-opts* (atom nil)
+               server {:repo repo
+                       :host "127.0.0.1"
+                       :port 9313
+                       :pid (.-pid js/process)
+                       :owner-source :cli
+                       :revision (version/revision)
+                       :status :ready
+                       :root-dir root-dir}]
+           (-> (p/with-redefs [cli-server/discover-servers (fn [_]
+                                                            (p/resolved [server]))
+                               daemon/wait-for (fn [pred-fn opts]
+                                                 (reset! wait-opts* opts)
+                                                 (p/let [_ (pred-fn)]
+                                                   true))]
+                 (#'cli-server/wait-for-discovered-server {:root-dir root-dir} repo))
+               (p/then (fn [result]
+                         (is (= server result))
+                         (is (<= 30000 (:timeout-ms @wait-opts*)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest ensure-server-ignores-discovered-server-from-other-root-dir
   (async done
          (let [root-dir (node-helper/create-tmp-dir "cli-server-other-root-dir")

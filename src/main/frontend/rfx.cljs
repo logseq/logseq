@@ -299,19 +299,21 @@
           ;; cause an infinite re-render loop. Cache the last value and reuse
           ;; the previous reference whenever the new value is cljs `=` to it.
           *last-snapshot (react/useRef js/undefined)]
-      (react/useSyncExternalStore
-       (fn subscribe-to-state-path! [listener]
-         (let [id (str (gensym "state-path-listener"))]
-           (add-state-path-listener path id listener)
-           (fn []
-             (remove-state-path-listener path id))))
-       (fn get-state-path-snapshot []
-         (let [v (get-in (snapshot) path)
-               prev (.-current *last-snapshot)]
-           (if (and (not (identical? prev js/undefined))
-                    (= prev v))
-             prev
-             (do (set! (.-current *last-snapshot) v) v))))))
+      (letfn [(get-state-path-snapshot []
+                (let [v (get-in (snapshot) path)
+                      prev (.-current *last-snapshot)]
+                  (if (and (not (identical? prev js/undefined))
+                           (= prev v))
+                    prev
+                    (do (set! (.-current *last-snapshot) v) v))))]
+        (react/useSyncExternalStore
+         (fn subscribe-to-state-path! [listener]
+           (let [id (str (gensym "state-path-listener"))]
+             (add-state-path-listener path id listener)
+             (fn []
+               (remove-state-path-listener path id))))
+         get-state-path-snapshot
+         get-state-path-snapshot)))
 
     :else
     (rfx/use-sub sub)))

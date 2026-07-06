@@ -11,7 +11,7 @@ type t = {
   created_at : Time.date option;
   updated_at : Time.date option;
   deleted_at : Time.date option;
-  raw : Melange_edn.any;
+  raw : Melange_edn_melange.any;
 }
 
-val of_value : Melange_edn.any -> t
+val of_value : Melange_edn_melange.any -> t

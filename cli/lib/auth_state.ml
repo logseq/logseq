@@ -109,7 +109,7 @@ let parse_auth_json text =
   | None, None, None, None ->
       Error
         (Error.make
-           (Edn_util.keyword_t "invalid-auth-file")
+           (Error.Invalid_auth_file)
            "invalid auth file")
   | _, _, _, _ ->
       let provider = Option.value provider ~default:"cognito" in
@@ -144,7 +144,7 @@ let jwt_payload token =
   | _ ->
       Error
         (Error.make
-           (Edn_util.keyword_t "invalid-auth-token")
+           (Error.Invalid_auth_token)
            "invalid auth token")
 
 let claims_of_id_token id_token =
@@ -172,7 +172,7 @@ let read_auth_file config =
        with exn ->
          Error
            (Error.make ~context:(auth_path_context path)
-              (Edn_util.keyword_t "invalid-auth-file")
+              (Error.Invalid_auth_file)
               (Printexc.to_string exn)))
 
 let write_auth_file config data =
@@ -186,7 +186,7 @@ let write_auth_file config data =
      with exn ->
        Error
          (Error.make ~context:(auth_path_context path)
-            (Edn_util.keyword_t "auth-file-write-failed")
+            (Error.Auth_file_write_failed)
             (Printexc.to_string exn)))
 
 let delete_auth_file config =
@@ -198,7 +198,7 @@ let delete_auth_file config =
      with exn ->
        Error
          (Error.make ~context:(auth_path_context path)
-            (Edn_util.keyword_t "auth-file-delete-failed")
+            (Error.Auth_file_delete_failed)
             (Printexc.to_string exn)))
 
 let expired_auth auth =
@@ -209,7 +209,7 @@ let expired_auth auth =
 let missing_auth config message =
   Error.make ~hint:"Run `logseq login` first."
     ~context:(auth_path_context (auth_path config))
-    (Edn_util.keyword_t "missing-auth")
+    (Error.Missing_auth)
     message
 
 let config_auth config =
@@ -347,14 +347,14 @@ let refreshed_auth_of_body current body =
   | None ->
       Error
         (Error.make
-           (Edn_util.keyword_t "missing-id-token")
+           (Error.Missing_id_token)
            "auth token response missing id_token")
   | Some object_ -> (
       match first_string_field object_ [ "id_token"; "id-token" ] with
       | None ->
           Error
             (Error.make
-               (Edn_util.keyword_t "missing-id-token")
+               (Error.Missing_id_token)
                "auth token response missing id_token")
       | Some id_token ->
           Error.bind (claims_of_id_token id_token)
@@ -389,7 +389,7 @@ let refresh_auth config data =
           Cli_effect.pure
             (Error
                (Error.make ~hint:"Run `logseq login` first."
-                  (Edn_util.keyword_t "auth-refresh-failed")
+                  (Error.Auth_refresh_failed)
                   "auth token endpoint is not configured"))
       | Some url ->
           let fields =
@@ -425,7 +425,7 @@ let refresh_auth config data =
                              ( Edn_util.keyword "error",
                                Edn_util.string (Printexc.to_string exn) );
                            ])
-                      (Edn_util.keyword_t "auth-refresh-failed")
+                      (Error.Auth_refresh_failed)
                       "auth refresh failed"))))
 
 let auth_code_exchange config ~code ~redirect_uri ~code_verifier =
@@ -434,7 +434,7 @@ let auth_code_exchange config ~code ~redirect_uri ~code_verifier =
       Cli_effect.pure
         (Error
            (Error.make ~hint:"Run `logseq login` first."
-              (Edn_util.keyword_t "auth-code-exchange-failed")
+              (Error.Auth_code_exchange_failed)
               "auth token endpoint is not configured"))
   | Some url ->
       let fields =
@@ -484,7 +484,7 @@ let auth_code_exchange config ~code ~redirect_uri ~code_verifier =
                          ( Edn_util.keyword "error",
                            Edn_util.string (Printexc.to_string exn) );
                        ])
-                  (Edn_util.keyword_t "auth-code-exchange-failed")
+                  (Error.Auth_code_exchange_failed)
                   "authorization code exchange failed")))
 
 let redirect_path = "/auth/callback"
@@ -524,7 +524,7 @@ let callback_result_of_target ~state = function
       ( login_callback_response 400 "Invalid request",
         Error
           (Error.make
-             (Edn_util.keyword_t "invalid-callback-request")
+             (Error.Invalid_callback_request)
              "invalid login callback request") )
   | Some target -> (
       let path, query = split_once '?' target in
@@ -535,7 +535,7 @@ let callback_result_of_target ~state = function
           ( login_callback_response 404 "Not found",
             Error
               (Error.make
-                 (Edn_util.keyword_t "login-callback-not-found")
+                 (Error.Login_callback_not_found)
                  "login callback path not found") )
       | _, Some oauth_error, _, _ ->
           ( login_callback_response 400
@@ -548,14 +548,14 @@ let callback_result_of_target ~state = function
                         ( Edn_util.keyword "oauth-error",
                           Edn_util.string oauth_error );
                       ])
-                 (Edn_util.keyword_t "login-callback-error")
+                 (Error.Login_callback_error)
                  "login callback returned oauth error") )
       | _, _, Some callback_state, _ when callback_state <> state ->
           ( login_callback_response 400
               "Login failed due to state mismatch. Return to the CLI and retry.",
             Error
               (Error.make
-                 (Edn_util.keyword_t "invalid-callback-state")
+                 (Error.Invalid_callback_state)
                  "login callback state mismatch") )
       | _, _, _, Some code when String.trim code <> "" ->
           ( login_callback_response 200
@@ -566,7 +566,7 @@ let callback_result_of_target ~state = function
               "Login failed because the callback did not include a code.",
             Error
               (Error.make
-                 (Edn_util.keyword_t "missing-callback-code")
+                 (Error.Missing_callback_code)
                  "missing authorization code") ))
 
 let open_browser config url =
@@ -578,7 +578,7 @@ let open_browser config url =
   else
     Error
       (Error.make
-         (Edn_util.keyword_t "browser-open-failed")
+         (Error.Browser_open_failed)
          "failed to open browser")
 
 let resolve_auth config =
@@ -601,7 +601,7 @@ let login config =
       Cli_effect.pure
         (Error
            (Error.make
-              (Edn_util.keyword_t "login-not-configured")
+              (Error.Login_not_configured)
               "oauth authorize endpoint is not configured"))
   | Some authorize_endpoint -> (
       match oauth_client_id config with
@@ -609,7 +609,7 @@ let login config =
           Cli_effect.pure
             (Error
                (Error.make
-                  (Edn_util.keyword_t "login-not-configured")
+                  (Error.Login_not_configured)
                   "oauth client id is not configured"))
       | Some client_id -> (
           let state = raw_or_random config [ "oauth-state"; "state" ] 24 in
@@ -681,7 +681,7 @@ let login config =
               Cli_effect.pure
                 (Error
                    (Error.make
-                      (Edn_util.keyword_t "login-timeout")
+                      (Error.Login_timeout)
                       "login callback timed out"))
           | Error (Cli_platform.Login_callback_server_aborted message) -> (
               match !browser_open_error with
@@ -696,8 +696,7 @@ let login config =
                                  ( Edn_util.keyword "error",
                                    Edn_util.string message );
                                ])
-                          (Edn_util.keyword_t
-                             "login-callback-server-start-failed")
+                          (Error.Login_callback_server_start_failed)
                           "failed to start login callback server")))
           | Error (Cli_platform.Login_callback_server_start_failed message) ->
               Cli_effect.pure
@@ -708,7 +707,7 @@ let login config =
                            [
                              (Edn_util.keyword "error", Edn_util.string message);
                            ])
-                      (Edn_util.keyword_t "login-callback-server-start-failed")
+                      (Error.Login_callback_server_start_failed)
                       "failed to start login callback server"))))
 
 let logout config =
@@ -719,7 +718,7 @@ let logout config =
       Cli_effect.pure
         (Error
            (Error.make
-              (Edn_util.keyword_t "logout-not-configured")
+              (Error.Logout_not_configured)
               "oauth logout endpoint is not configured"))
   | Some logout_endpoint -> (
       match oauth_client_id config with
@@ -727,7 +726,7 @@ let logout config =
           Cli_effect.pure
             (Error
                (Error.make
-                  (Edn_util.keyword_t "logout-not-configured")
+                  (Error.Logout_not_configured)
                   "oauth client id is not configured"))
       | Some client_id -> (
           let redirect_uri = callback_uri redirect_path in

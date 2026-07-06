@@ -31,7 +31,7 @@ type t = {
   base_url : Cli_primitive.url option;
   owner_source : Cli_primitive.owner_source;
   project_dir : Cli_primitive.path option;
-  raw_file_config : Melange_edn.any option;
+  raw_file_config : Melange_edn_melange.any option;
   profile_session : Profile_types.session option;
 }
 
@@ -83,7 +83,7 @@ let repo_to_graph repo =
     (strip_db_version_prefix (Cli_primitive.string_of_repo repo))
 
 let value_of_edn edn = edn
-let edn_of_value = Melange_edn.to_edn_string
+let edn_of_value = Melange_edn_melange.to_edn_string
 let read_file = Cli_unix.read_text_file
 
 let read_config_file path =
@@ -91,15 +91,15 @@ let read_config_file path =
   else
     let content = read_file path in
     if String.trim content = "" then Ok None
-    else try Ok (Some (Melange_edn.of_edn_string content |> value_of_edn))
+    else try Ok (Some (Melange_edn_melange.of_edn_string content |> value_of_edn))
     with exn ->
       Error
         (Error.make
-           (Edn_util.keyword_t "invalid-config")
+           (Error.Invalid_config)
            ("invalid config file: " ^ path ^ " (" ^ Printexc.to_string exn ^ ")"))
 
 let invalid_config message =
-  Error.make (Edn_util.keyword_t "invalid-config") message
+  Error.make (Error.Invalid_config) message
 
 let parse_int_value value =
   let value = String.trim value in
@@ -200,7 +200,7 @@ let value_output key value =
   Option.bind (value_string key value) (fun value ->
       Output.Mode.of_string (normalize_output_string value))
 
-let edn_value_text value = Melange_edn.to_edn_string value
+let edn_value_text value = Melange_edn_melange.to_edn_string value
 
 let validate_int64_config_value ~source key value =
   match Edn_util.get value key with
@@ -480,5 +480,5 @@ let update_config config patch =
     Cli_effect.pure
       (Error
          (Error.make
-            (Edn_util.keyword_t "config-write-failed")
+            (Error.Config_write_failed)
             ("failed to write config file: " ^ Printexc.to_string exn)))

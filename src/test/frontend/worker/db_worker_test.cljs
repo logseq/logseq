@@ -31,7 +31,8 @@
         (concat
          [:thread-api/list-db :thread-api/init :thread-api/set-db-sync-config :thread-api/get-db-sync-config
           :thread-api/db-sync-status :thread-api/db-sync-start :thread-api/db-sync-stop :thread-api/db-sync-update-presence
-          :thread-api/db-sync-request-asset-download :thread-api/db-sync-grant-graph-access :thread-api/db-sync-ensure-user-rsa-keys
+          :thread-api/db-sync-request-asset-download :thread-api/db-sync-download-missing-assets
+          :thread-api/db-sync-grant-graph-access :thread-api/db-sync-ensure-user-rsa-keys
           :thread-api/db-sync-list-remote-graphs :thread-api/db-sync-upload-graph :thread-api/db-sync-create-remote-graph
           :thread-api/db-sync-stop-upload :thread-api/db-sync-resume-upload :thread-api/db-sync-upload-stopped?
           :thread-api/db-sync-get-block-conflicts :thread-api/db-sync-clear-block-conflicts :thread-api/db-sync-download-graph-by-id
@@ -722,98 +723,118 @@
     (is (empty? missing) (str "Missing thread apis: " missing))
     (is (empty? non-functions) (str "Non-function thread apis: " non-functions))))
 
+(defn- with-db-sync-core-wrapper-redefs
+  [calls f]
+  (let [results {:status {:state :connected}
+                 :ensure-keys {:ok true}
+                 :list-graphs [{:graph-id "g1"}]
+                 :upload-stopped? true
+                 :conflicts [{:op :conflict}]
+                 :download-missing-assets {:total 2 :downloaded 2 :skipped-existing 0}}]
+    (with-redefs [db-worker/db-sync-dbs-open? (fn [repo]
+                                                (swap! calls conj [:db-sync-dbs-open? repo])
+                                                true)
+                  db-sync/status (fn [repo]
+                                   (swap! calls conj [:status repo])
+                                   (:status results))
+                  db-sync/start! (fn [repo]
+                                   (swap! calls conj [:start repo])
+                                   :started)
+                  db-sync/stop! (fn []
+                                  (swap! calls conj [:stop])
+                                  :stopped)
+                  db-sync/update-presence! (fn [editing-block-uuid]
+                                             (swap! calls conj [:update-presence editing-block-uuid])
+                                             :presence-updated)
+                  db-sync/request-asset-download! (fn [repo asset-uuid]
+                                                    (swap! calls conj [:request-asset-download repo asset-uuid])
+                                                    :asset-requested)
+                  db-sync/download-missing-assets! (fn [repo graph-id]
+                                                     (swap! calls conj [:download-missing-assets repo graph-id])
+                                                     (:download-missing-assets results))
+                  sync-crypt/<grant-graph-access! (fn [repo graph-id target-email]
+                                                    (swap! calls conj [:grant-graph-access repo graph-id target-email])
+                                                    :granted)
+                  sync-crypt/ensure-user-rsa-keys! (fn [opts]
+                                                     (swap! calls conj [:ensure-user-rsa-keys opts])
+                                                     (:ensure-keys results))
+                  db-sync/list-remote-graphs! (fn []
+                                                (swap! calls conj [:list-remote-graphs])
+                                                (:list-graphs results))
+                  db-sync/upload-graph! (fn [repo]
+                                          (swap! calls conj [:upload-graph repo])
+                                          :uploading)
+                  db-sync/create-remote-graph! (fn [repo opts]
+                                                 (swap! calls conj [:create-remote-graph repo opts])
+                                                 :created)
+                  db-sync/stop-upload! (fn [repo]
+                                         (swap! calls conj [:stop-upload repo])
+                                         :stopped-upload)
+                  db-sync/resume-upload! (fn [repo]
+                                           (swap! calls conj [:resume-upload repo])
+                                           :resumed-upload)
+                  db-sync/upload-stopped? (fn [repo]
+                                            (swap! calls conj [:upload-stopped? repo])
+                                            (:upload-stopped? results))
+                  client-op/get-sync-conflicts (fn [repo block-uuid]
+                                                 (swap! calls conj [:get-sync-conflicts repo block-uuid])
+                                                 (:conflicts results))
+                  client-op/clear-sync-conflicts! (fn [repo block-uuid]
+                                                    (swap! calls conj [:clear-sync-conflicts repo block-uuid])
+                                                    nil)
+                  shared-service/broadcast-to-clients! (fn [event payload]
+                                                         (swap! calls conj [:broadcast event payload])
+                                                         nil)]
+      (f results))))
+
+(defn- assert-db-sync-core-wrapper-results!
+  [calls results request]
+  (let [{:keys [repo graph-id block asset email opts]} request]
+    (is (= (:status results) ((get-thread-api :thread-api/db-sync-status) repo)))
+    (is (= :started ((get-thread-api :thread-api/db-sync-start) repo)))
+    (is (= :stopped ((get-thread-api :thread-api/db-sync-stop))))
+    (is (= :presence-updated ((get-thread-api :thread-api/db-sync-update-presence) block)))
+    (is (= :asset-requested ((get-thread-api :thread-api/db-sync-request-asset-download) repo asset)))
+    (is (= (:download-missing-assets results)
+           ((get-thread-api :thread-api/db-sync-download-missing-assets) repo graph-id)))
+    (is (= :granted ((get-thread-api :thread-api/db-sync-grant-graph-access) repo graph-id email)))
+    (is (= (:ensure-keys results) ((get-thread-api :thread-api/db-sync-ensure-user-rsa-keys) opts)))
+    (is (= (:ensure-keys results) ((get-thread-api :thread-api/db-sync-ensure-user-rsa-keys))))
+    (is (= (:list-graphs results) ((get-thread-api :thread-api/db-sync-list-remote-graphs))))
+    (is (= :uploading ((get-thread-api :thread-api/db-sync-upload-graph) repo)))
+    (is (= :created ((get-thread-api :thread-api/db-sync-create-remote-graph) repo true false)))
+    (is (= :stopped-upload ((get-thread-api :thread-api/db-sync-stop-upload) repo)))
+    (is (= :resumed-upload ((get-thread-api :thread-api/db-sync-resume-upload) repo)))
+    (is (= (:upload-stopped? results) ((get-thread-api :thread-api/db-sync-upload-stopped?) repo)))
+    (is (= (:conflicts results) ((get-thread-api :thread-api/db-sync-get-block-conflicts) repo block)))
+    ((get-thread-api :thread-api/db-sync-clear-block-conflicts) repo block)
+    (is (some #(= [:broadcast
+                   :sync-conflicts-updated
+                   {:repo repo
+                    :block-uuid block
+                    :conflicts []}]
+                  %)
+              @calls))
+    (is (some #(= [:ensure-user-rsa-keys nil] %) @calls))
+    (is (some #(= [:create-remote-graph repo
+                   {:graph-e2ee? true
+                    :graph-ready-for-use? false}]
+                  %)
+              @calls))))
+
 (deftest thread-api-db-sync-wrappers-delegate-core-ops-test
   (restoring-worker-state
    (fn []
      (let [calls (atom [])
-           status-result {:state :connected}
-           ensure-keys-result {:ok true}
-           list-graphs-result [{:graph-id "g1"}]
-           upload-stopped-result true
-           conflicts-result [{:op :conflict}]
-           request-repo "graph-a"
-           request-graph-id "remote-graph-id"
-           request-block "block-1"
-           request-asset "asset-1"
-           request-email "user@example.com"
-           request-opts {:force? true}]
-       (with-redefs [db-sync/status (fn [repo]
-                                      (swap! calls conj [:status repo])
-                                      status-result)
-                     db-sync/start! (fn [repo]
-                                      (swap! calls conj [:start repo])
-                                      :started)
-                     db-sync/stop! (fn []
-                                     (swap! calls conj [:stop])
-                                     :stopped)
-                     db-sync/update-presence! (fn [editing-block-uuid]
-                                                (swap! calls conj [:update-presence editing-block-uuid])
-                                                :presence-updated)
-                     db-sync/request-asset-download! (fn [repo asset-uuid]
-                                                       (swap! calls conj [:request-asset-download repo asset-uuid])
-                                                       :asset-requested)
-                     sync-crypt/<grant-graph-access! (fn [repo graph-id target-email]
-                                                       (swap! calls conj [:grant-graph-access repo graph-id target-email])
-                                                       :granted)
-                     sync-crypt/ensure-user-rsa-keys! (fn [opts]
-                                                        (swap! calls conj [:ensure-user-rsa-keys opts])
-                                                        ensure-keys-result)
-                     db-sync/list-remote-graphs! (fn []
-                                                   (swap! calls conj [:list-remote-graphs])
-                                                   list-graphs-result)
-                     db-sync/upload-graph! (fn [repo]
-                                             (swap! calls conj [:upload-graph repo])
-                                             :uploading)
-                     db-sync/create-remote-graph! (fn [repo opts]
-                                                    (swap! calls conj [:create-remote-graph repo opts])
-                                                    :created)
-                     db-sync/stop-upload! (fn [repo]
-                                            (swap! calls conj [:stop-upload repo])
-                                            :stopped-upload)
-                     db-sync/resume-upload! (fn [repo]
-                                              (swap! calls conj [:resume-upload repo])
-                                              :resumed-upload)
-                     db-sync/upload-stopped? (fn [repo]
-                                               (swap! calls conj [:upload-stopped? repo])
-                                               upload-stopped-result)
-                     client-op/get-sync-conflicts (fn [repo block-uuid]
-                                                    (swap! calls conj [:get-sync-conflicts repo block-uuid])
-                                                    conflicts-result)
-                     client-op/clear-sync-conflicts! (fn [repo block-uuid]
-                                                       (swap! calls conj [:clear-sync-conflicts repo block-uuid])
-                                                       nil)
-                     shared-service/broadcast-to-clients! (fn [event payload]
-                                                            (swap! calls conj [:broadcast event payload])
-                                                            nil)]
-         (is (= status-result ((get-thread-api :thread-api/db-sync-status) request-repo)))
-         (is (= :started ((get-thread-api :thread-api/db-sync-start) request-repo)))
-         (is (= :stopped ((get-thread-api :thread-api/db-sync-stop))))
-         (is (= :presence-updated ((get-thread-api :thread-api/db-sync-update-presence) request-block)))
-         (is (= :asset-requested ((get-thread-api :thread-api/db-sync-request-asset-download) request-repo request-asset)))
-         (is (= :granted ((get-thread-api :thread-api/db-sync-grant-graph-access) request-repo request-graph-id request-email)))
-         (is (= ensure-keys-result ((get-thread-api :thread-api/db-sync-ensure-user-rsa-keys) request-opts)))
-         (is (= ensure-keys-result ((get-thread-api :thread-api/db-sync-ensure-user-rsa-keys))))
-         (is (= list-graphs-result ((get-thread-api :thread-api/db-sync-list-remote-graphs))))
-         (is (= :uploading ((get-thread-api :thread-api/db-sync-upload-graph) request-repo)))
-         (is (= :created ((get-thread-api :thread-api/db-sync-create-remote-graph) request-repo true false)))
-         (is (= :stopped-upload ((get-thread-api :thread-api/db-sync-stop-upload) request-repo)))
-         (is (= :resumed-upload ((get-thread-api :thread-api/db-sync-resume-upload) request-repo)))
-         (is (= upload-stopped-result ((get-thread-api :thread-api/db-sync-upload-stopped?) request-repo)))
-         (is (= conflicts-result ((get-thread-api :thread-api/db-sync-get-block-conflicts) request-repo request-block)))
-         ((get-thread-api :thread-api/db-sync-clear-block-conflicts) request-repo request-block)
-         (is (some #(= [:broadcast
-                        :sync-conflicts-updated
-                        {:repo request-repo
-                         :block-uuid request-block
-                         :conflicts []}]
-                       %)
-                   @calls))
-         (is (some #(= [:ensure-user-rsa-keys nil] %) @calls))
-         (is (some #(= [:create-remote-graph request-repo
-                        {:graph-e2ee? true
-                         :graph-ready-for-use? false}]
-                       %)
-                   @calls)))))))
+           request {:repo "graph-a"
+                    :graph-id "remote-graph-id"
+                    :block "block-1"
+                    :asset "asset-1"
+                    :email "user@example.com"
+                    :opts {:force? true}}]
+       (with-db-sync-core-wrapper-redefs
+        calls
+        #(assert-db-sync-core-wrapper-results! calls % request))))))
 
 (deftest thread-api-db-sync-wrappers-delegate-import-ops-test
   (restoring-worker-state
