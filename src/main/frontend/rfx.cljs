@@ -128,28 +128,29 @@
                                 (update-in [:paths path-key :checked-listeners] (fnil + 0) checked-listeners)
                                 (update-in [:paths path-key :notified-listeners] (fnil + 0) notified-listeners))))]
     (when (> (- now (:last-log-ms profile')) 1000)
-      (let [paths (->> (:paths profile')
-                       (map (fn [[path {:keys [calls total-ms store-ms notify-ms checked-listeners notified-listeners]}]]
-                              {:path path
-                               :calls calls
-                               :total-ms (.toFixed total-ms 2)
-                               :store-ms (.toFixed store-ms 2)
-                               :notify-ms (.toFixed notify-ms 2)
-                               :checked-listeners checked-listeners
-                               :notified-listeners notified-listeners}))
-                       (sort-by (fn [{:keys [total-ms]}]
-                                  (- (js/parseFloat total-ms))))
-                       (take 10))]
-        (js/console.log
-         "[rfx-state-profile]"
-         (clj->js {:calls (:calls profile')
-                   :total-ms (.toFixed (:total-ms profile') 2)
-                   :store-ms (.toFixed (:store-ms profile') 2)
-                   :notify-ms (.toFixed (:notify-ms profile') 2)
-                   :checked-listeners (:checked-listeners profile')
-                   :notified-listeners (:notified-listeners profile')
-                   :top-paths paths}))
-        (vreset! !state-write-profile {:last-log-ms now})))))
+      ;; Uncomment when profiling rfx state writes locally.
+      #_(let [paths (->> (:paths profile')
+                         (map (fn [[path {:keys [calls total-ms store-ms notify-ms checked-listeners notified-listeners]}]]
+                                {:path path
+                                 :calls calls
+                                 :total-ms (.toFixed total-ms 2)
+                                 :store-ms (.toFixed store-ms 2)
+                                 :notify-ms (.toFixed notify-ms 2)
+                                 :checked-listeners checked-listeners
+                                 :notified-listeners notified-listeners}))
+                         (sort-by (fn [{:keys [total-ms]}]
+                                    (- (js/parseFloat total-ms))))
+                         (take 10))]
+          (js/console.log
+           "[rfx-state-profile]"
+           (clj->js {:calls (:calls profile')
+                     :total-ms (.toFixed (:total-ms profile') 2)
+                     :store-ms (.toFixed (:store-ms profile') 2)
+                     :notify-ms (.toFixed (:notify-ms profile') 2)
+                     :checked-listeners (:checked-listeners profile')
+                     :notified-listeners (:notified-listeners profile')
+                     :top-paths paths})))
+      (vreset! !state-write-profile {:last-log-ms now}))))
 
 (defn- pub-event-deferred
   [event]
