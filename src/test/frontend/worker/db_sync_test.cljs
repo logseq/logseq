@@ -4430,8 +4430,8 @@
             (let [after-count (count (#'sync-apply/pending-txs test-repo))]
               (is (> after-count before-count)))))))))
 
-(deftest rebase-keeps-pending-reaction-tx-for-server-ack-or-reject-test
-  (testing "pending reaction tx remains pending after remote rebase until server ack or reject"
+(deftest rebase-drops-pending-reaction-tx-when-target-is-remotely-deleted-test
+  (testing "pending reaction tx is dropped when remote rebase deletes its target"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
           target-uuid (:block/uuid parent)
           remote-delete-tx (:tx-data (outliner-core/delete-blocks @conn [parent] {}))]
@@ -4449,9 +4449,9 @@
              remote-delete-tx)
             (let [pending-after (#'sync-apply/pending-txs test-repo)
                   tx-ent-after (client-op-tx-row client-ops-conn tx-id-before)]
-              (is (= 1 (count pending-after)))
+              (is (empty? pending-after))
               (is (some? tx-ent-after))
-              (is (= 1 (aget tx-ent-after "pending"))))))))))
+              (is (= 0 (aget tx-ent-after "pending"))))))))))
 
 (deftest tx-batch-ok-removes-acked-pending-txs-test
   (testing "tx/batch/ok clears inflight and removes acked pending txs"
