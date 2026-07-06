@@ -350,6 +350,18 @@
        :overflowY "auto"
        :overflowX "hidden"})
 
+(def ^:private popup-transition-class
+  "animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2")
+
+(def ^:private tooltip-transition-class
+  popup-transition-class)
+
+(def ^:private overlay-transition-class
+  "animate-in fade-in-0")
+
+(def ^:private dialog-transition-class
+  "ui__dialog-zoom-in")
+
 (defn- popup-normal-style
   []
   (doto (merge-object-props! #js {:fontSize "1rem"
@@ -428,7 +440,7 @@
            positioner-props (merge-object-props! (copy-named-props props positioner-prop-names)
                                                  (prop props "positionerProps"))
            popup-props (with-class-props props
-                         (cn base-class "outline-none focus:outline-none focus-visible:outline-none")
+                         (cn base-class popup-transition-class "outline-none focus:outline-none focus-visible:outline-none")
                          (some-> extra-class-fn (apply [props])))
            on-key-down (prop popup-props "onKeyDown")
            children (prop props "children")]
@@ -437,6 +449,7 @@
        (apply-default-collision-avoidance! positioner-props)
        (set-prop! popup-props "style"
                   (merge-object-props! (popup-normal-style) (prop popup-props "style")))
+       (set-prop! popup-props "data-state" "open")
        (set-prop! popup-props "onKeyDown" (popup-key-down-handler on-key-down))
        (adapt-focus-props! popup-props)
        (clean-radix-popup-props! popup-props)
@@ -723,10 +736,10 @@
 (def DropdownMenuRadioGroup MenuRadioGroupPart)
 (def DropdownMenuContent
   (composed-popup MenuPortalPart MenuPositionerPart MenuPopupPart
-                  "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[open]:animate-in"))
+                  "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md"))
 (def DropdownMenuSubContent
   (composed-popup MenuPortalPart MenuPositionerPart MenuPopupPart
-                  "ui__dropdown-menu-sub-content z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-lg data-[open]:animate-in"))
+                  "ui__dropdown-menu-sub-content z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-lg"))
 (def DropdownMenuItem
   (react/forwardRef
    (fn [^js props ref]
@@ -807,24 +820,26 @@
 
 (def Dialog (forward-part DialogRootPart nil))
 (def DialogPortal DialogPortalPart)
-(def DialogOverlay (forward-part DialogBackdropPart "ui__dialog-overlay fixed inset-0 z-50 bg-background/90 flex justify-center items-center"))
+(def DialogOverlay (forward-part DialogBackdropPart (cn "ui__dialog-overlay fixed inset-0 z-50 bg-background/90 flex justify-center items-center" overlay-transition-class)))
 (def DialogClose (forward-part DialogClosePart nil))
 (def DialogTrigger (forward-part DialogTriggerPart nil))
 (def DialogContent
   (react/forwardRef
    (fn [^js props ref]
       (let [overlay-props (or (prop props "overlayProps") #js {})
-           popup-props (with-class-props props "ui__dialog-content fixed left-[50%] top-[50%] z-50 grid w-full max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg bg-background p-6 shadow-lg transition-transform duration-200" nil)
+           popup-props (with-class-props props (cn "ui__dialog-content fixed left-[50%] top-[50%] z-50 grid w-full max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg bg-background p-6 shadow-lg" dialog-transition-class) nil)
            children (prop props "children")
            show-close? (not (false? (prop props "data-close-btn")))]
        (adapt-focus-props! popup-props)
        (clean-radix-popup-props! popup-props)
        (set-prop! popup-props "style" (js/Object.assign #js {} (prop popup-props "style") #js {:transform "translate(-50%, -50%) scale(calc(1 - var(--nested-dialogs, 0) * 0.03))"}))
+       (set-prop! popup-props "data-state" "open")
        (when ref (set-prop! popup-props "ref" ref))
        (clean-props! popup-props "overlayProps" "children")
        (react/createElement
         DialogPortalPart nil
-        (react/createElement DialogBackdropPart (with-class-props overlay-props "ui__dialog-overlay fixed inset-0 z-50 bg-background/90 flex justify-center items-center" nil))
+        (react/createElement DialogBackdropPart (doto (with-class-props overlay-props (cn "ui__dialog-overlay fixed inset-0 z-50 bg-background/90 flex justify-center items-center" overlay-transition-class) nil)
+                                                  (set-prop! "data-state" "open")))
         (react/createElement DialogPopupPart popup-props
                              children
                              (when show-close?
@@ -837,20 +852,22 @@
 
 (def AlertDialog (forward-part AlertDialogRootPart nil))
 (def AlertDialogPortal AlertDialogPortalPart)
-(def AlertDialogOverlay (forward-part AlertDialogBackdropPart "ui__alert-dialog-overlay fixed inset-0 z-50 bg-background/80 backdrop-blur-sm"))
+(def AlertDialogOverlay (forward-part AlertDialogBackdropPart (cn "ui__alert-dialog-overlay fixed inset-0 z-50 bg-background/80 backdrop-blur-sm" overlay-transition-class)))
 (def AlertDialogTrigger (forward-part AlertDialogTriggerPart nil))
 (def AlertDialogContent
   (react/forwardRef
    (fn [^js props ref]
      (let [overlay-props (or (prop props "overlayProps") #js {})
-           popup-props (with-class-props props "ui__alert-dialog-content fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg" nil)]
+           popup-props (with-class-props props (cn "ui__alert-dialog-content fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg gap-4 border bg-background p-6 shadow-lg sm:rounded-lg" dialog-transition-class) nil)]
        (adapt-focus-props! popup-props)
        (set-prop! popup-props "style" (js/Object.assign #js {} (prop popup-props "style") #js {:transform "translate(-50%, -50%)"}))
+       (set-prop! popup-props "data-state" "open")
        (when ref (set-prop! popup-props "ref" ref))
        (clean-props! popup-props "overlayProps")
        (react/createElement
         AlertDialogPortalPart nil
-        (react/createElement AlertDialogBackdropPart (with-class-props overlay-props "ui__alert-dialog-overlay fixed inset-0 z-50 bg-background/80 backdrop-blur-sm" nil))
+        (react/createElement AlertDialogBackdropPart (doto (with-class-props overlay-props (cn "ui__alert-dialog-overlay fixed inset-0 z-50 bg-background/80 backdrop-blur-sm" overlay-transition-class) nil)
+                                                       (set-prop! "data-state" "open")))
         (react/createElement AlertDialogPopupPart popup-props))))))
 (def AlertDialogHeader (forward-dom "div" "ui__alert-dialog-header flex flex-col space-y-2 text-center sm:text-left"))
 (def AlertDialogFooter (forward-dom "div" "ui__alert-dialog-footer flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2"))
@@ -890,7 +907,7 @@
                                              (prop props "portalProps"))
            positioner-props (merge-object-props! (copy-named-props props positioner-prop-names)
                                                  (prop props "positionerProps"))
-           popup-props (with-class-props props "ui__select-content relative z-[99999] min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md" nil)
+           popup-props (with-class-props props (cn "ui__select-content relative z-[99999] min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md" popup-transition-class) nil)
            children (prop props "children")]
        (when ref (set-prop! popup-props "ref" ref))
        (set-prop! positioner-props "className" (cn "z-[99999]" (prop positioner-props "className")))
@@ -903,6 +920,7 @@
                                          :flexDirection "column"}
                                     (prop popup-props "style")
                                     #js {:zIndex 99999}))
+       (set-prop! popup-props "data-state" "open")
        (doseq [k (concat portal-prop-names
                          positioner-prop-names
                          ["portalProps" "positionerProps"
@@ -952,13 +970,14 @@
                                              (prop props "portalProps"))
            positioner-props (merge-object-props! (copy-named-props props positioner-prop-names)
                                                  (prop props "positionerProps"))
-           popup-props (with-class-props props "ui__tooltip-content z-50 rounded-md border bg-popover px-3 py-1.5 text-xs text-popover-foreground shadow-md" nil)
+           popup-props (with-class-props props (cn "ui__tooltip-content z-50 rounded-md border bg-popover px-3 py-1.5 text-xs text-popover-foreground shadow-md" tooltip-transition-class) nil)
            children (prop props "children")]
        (set-prop! positioner-props "style"
                   (merge-object-props! #js {:zIndex 99999} (prop positioner-props "style")))
        (apply-default-collision-avoidance! positioner-props)
        (set-prop! popup-props "style"
                   (merge-object-props! #js {} popup-scroll-style (prop popup-props "style")))
+       (set-prop! popup-props "data-state" "open")
        (adapt-focus-props! popup-props)
        (clean-radix-popup-props! popup-props)
        (when ref (set-prop! popup-props "ref" ref))

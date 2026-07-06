@@ -94,6 +94,22 @@
 }
 
 @layer components {
+  @keyframes ui-dialog-zoom-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(calc((1 - var(--nested-dialogs, 0) * 0.03) * 0.95));
+    }
+
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(calc(1 - var(--nested-dialogs, 0) * 0.03));
+    }
+  }
+
+  .ui__dialog-zoom-in {
+    animation: ui-dialog-zoom-in 200ms ease-out;
+  }
+
   .ui__dialog-content[data-base-ui-inert],
   .ui__alert-dialog-content[data-base-ui-inert] {
     pointer-events: none !important;
