@@ -1135,6 +1135,45 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest test-execute-sync-download-prefetches-missing-assets
+  (async done
+         (let [invoke-calls (atom [])]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_config]
+                                                        [])
+                               cli-server/ensure-server! (fn [config _repo]
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
+                                                  (case method
+                                                    :thread-api/db-sync-list-remote-graphs
+                                                    (p/resolved [{:graph-id "remote-graph-id"
+                                                                  :graph-name "demo"
+                                                                  :graph-e2ee? false}])
+                                                    :thread-api/q
+                                                    (p/resolved 0)
+                                                    :thread-api/db-sync-download-graph-by-id
+                                                    (p/resolved {:ok true})
+                                                    :thread-api/db-sync-download-missing-assets
+                                                    (p/resolved {:total 2
+                                                                 :downloaded 2
+                                                                 :skipped-existing 0})
+                                                    (p/resolved nil)))]
+                 (p/let [result (execute-with-runtime-auth {:type :sync-download
+                                                            :repo "logseq_db_demo"
+                                                            :graph "demo"}
+                                                           {:base-url "http://example"
+                                                            :root-dir "/tmp"})]
+                   (is (= :ok (:status result)))
+                   (is (= [:thread-api/db-sync-download-graph-by-id ["logseq_db_demo" "remote-graph-id" false]]
+                          (some #(when (= :thread-api/db-sync-download-graph-by-id (first %)) %)
+                                @invoke-calls)))
+                   (is (= [:thread-api/db-sync-download-missing-assets ["logseq_db_demo" "remote-graph-id"]]
+                          (some #(when (= :thread-api/db-sync-download-missing-assets (first %)) %)
+                                @invoke-calls)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest test-execute-sync-download-uses-long-timeout-only-for-download-invoke
   (async done
          (let [invoke-calls (atom [])]
@@ -1160,7 +1199,7 @@
                                                            {:base-url "http://example"
                                                             :root-dir "/tmp"
                                                             :timeout-ms 10000})
-                         [sync-app-state-before set-config-before list-remote-graphs sync-app-state-after set-config-after check-empty-db download]
+                         [sync-app-state-before set-config-before list-remote-graphs sync-app-state-after set-config-after check-empty-db download download-assets]
                          @invoke-calls]
                    (is (= :ok (:status result)))
                    (is (= :thread-api/sync-app-state (:method sync-app-state-before)))
@@ -1170,13 +1209,15 @@
                    (is (= :thread-api/set-db-sync-config (:method set-config-after)))
                    (is (= :thread-api/q (:method check-empty-db)))
                    (is (= :thread-api/db-sync-download-graph-by-id (:method download)))
+                   (is (= :thread-api/db-sync-download-missing-assets (:method download-assets)))
                    (is (= 10000 (:timeout-ms sync-app-state-before)))
                    (is (= 10000 (:timeout-ms set-config-before)))
                    (is (= 10000 (:timeout-ms list-remote-graphs)))
                    (is (= 10000 (:timeout-ms sync-app-state-after)))
                    (is (= 10000 (:timeout-ms set-config-after)))
                    (is (= 10000 (:timeout-ms check-empty-db)))
-                   (is (= 1800000 (:timeout-ms download)))))
+                   (is (= 1800000 (:timeout-ms download)))
+                   (is (= 10000 (:timeout-ms download-assets)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))

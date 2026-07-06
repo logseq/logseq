@@ -209,6 +209,96 @@
       (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
       (is (nil? (d/entity @conn [:block/uuid child-uuid]))))))
 
+(deftest normalize-delete-blocks-keeps-property-history-retract-test
+  (testing "a normalized delete-blocks tx still removes property history rows for the deleted block"
+    (let [conn (new-conn)
+          page-uuid (create-page! conn "Page")
+          block-uuid (random-uuid)
+          history-uuid (random-uuid)
+          property-uuid (random-uuid)
+          value-uuid (random-uuid)
+          now (js/Date.now)]
+      (d/transact! conn [{:block/uuid property-uuid
+                          :block/name "p"
+                          :block/title "P"
+                          :db/ident :user.property/p
+                          :db/valueType :db.type/ref
+                          :db/cardinality :db.cardinality/one
+                          :logseq.property/type :default}
+                         {:block/uuid value-uuid
+                          :block/title "value"
+                          :block/page [:block/uuid page-uuid]
+                          :block/parent [:block/uuid page-uuid]
+                          :block/order "a0"}
+                         {:block/uuid block-uuid
+                          :block/title "target"
+                          :block/page [:block/uuid page-uuid]
+                          :block/parent [:block/uuid page-uuid]
+                          :block/order "a1"
+                          :block/created-at now
+                          :block/updated-at now}
+                         {:block/uuid history-uuid
+                          :block/created-at now
+                          :block/updated-at now
+                          :logseq.property.history/block [:block/uuid block-uuid]
+                          :logseq.property.history/property :user.property/p
+                          :logseq.property.history/ref-value [:block/uuid value-uuid]}])
+      (let [client-conn (d/conn-from-db @conn)
+            tx-report (ldb/transact! conn
+                                     [[:db/retractEntity [:block/uuid block-uuid]]]
+                                     {:outliner-op :delete-blocks})
+            normalized (db-normalize/normalize-tx-data (:db-after tx-report)
+                                                       (:db-before tx-report)
+                                                       (:tx-data tx-report))]
+        (is (some #(= [:db/retractEntity [:block/uuid history-uuid]] %) normalized))
+        (ldb/transact! client-conn normalized {:transact-remote? true
+                                               :outliner-op :delete-blocks})
+        (is (nil? (d/entity @client-conn [:block/uuid block-uuid])))
+        (is (nil? (d/entity @client-conn [:block/uuid history-uuid])))))))
+
+(deftest remote-delete-blocks-history-ref-retract-deletes-history-entity-test
+  (testing "remote delete-blocks tx fully removes property history rows when their history block ref is retracted"
+    (let [conn (new-conn)
+          page-uuid (create-page! conn "Page")
+          block-uuid (random-uuid)
+          history-uuid (random-uuid)
+          property-uuid (random-uuid)
+          value-uuid (random-uuid)
+          now (js/Date.now)]
+      (d/transact! conn [{:block/uuid property-uuid
+                          :block/name "p"
+                          :block/title "P"
+                          :db/ident :user.property/p
+                          :db/valueType :db.type/ref
+                          :db/cardinality :db.cardinality/one
+                          :logseq.property/type :default}
+                         {:block/uuid value-uuid
+                          :block/title "value"
+                          :block/page [:block/uuid page-uuid]
+                          :block/parent [:block/uuid page-uuid]
+                          :block/order "a0"}
+                         {:block/uuid block-uuid
+                          :block/title "target"
+                          :block/page [:block/uuid page-uuid]
+                          :block/parent [:block/uuid page-uuid]
+                          :block/order "a1"
+                          :block/created-at now
+                          :block/updated-at now}
+                         {:block/uuid history-uuid
+                          :block/created-at now
+                          :block/updated-at now
+                          :logseq.property.history/block [:block/uuid block-uuid]
+                          :logseq.property.history/property :user.property/p
+                          :logseq.property.history/ref-value [:block/uuid value-uuid]}])
+      (ldb/transact! conn
+                     [[:db/retract
+                       [:block/uuid history-uuid]
+                       :logseq.property.history/block
+                       [:block/uuid block-uuid]]]
+                     {:transact-remote? true
+                      :outliner-op :delete-blocks})
+      (is (nil? (d/entity @conn [:block/uuid history-uuid]))))))
+
 (deftest normalize-tx-data-replay-equivalence-for-retract-recreate-fuzz-test
   (testing "normalized tx-data should replay to same db-after for normal-block retract/recreate patterns"
     (let [conn (new-conn)

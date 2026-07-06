@@ -1,0 +1,201 @@
+name: CLI sync stress
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'scripts/cli-concurrent-edit-stress.mjs'
+      - 'scripts/cli-concurrent-edit-stress.test.mjs'
+      - 'scripts/cli-sync-stress-workflow.test.mjs'
+      - 'cli/**'
+      - 'cli-e2e/**'
+      - 'deps/db-sync/**'
+      - 'src/main/frontend/worker/**'
+      - 'src/test/frontend/worker/**'
+      - '.github/workflows/cli-sync-stress.yml'
+      - '!**/*.md'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'scripts/cli-concurrent-edit-stress.mjs'
+      - 'scripts/cli-concurrent-edit-stress.test.mjs'
+      - 'scripts/cli-sync-stress-workflow.test.mjs'
+      - 'cli/**'
+      - 'cli-e2e/**'
+      - 'deps/db-sync/**'
+      - 'src/main/frontend/worker/**'
+      - 'src/test/frontend/worker/**'
+      - '.github/workflows/cli-sync-stress.yml'
+      - '!**/*.md'
+  workflow_dispatch:
+
+env:
+  CLOJURE_VERSION: '1.12.4.1618'
+  JAVA_VERSION: '21'
+  NODE_VERSION: '24'
+  OCAML_VERSION: '5.4.0'
+  BABASHKA_VERSION: '1.12.215'
+
+jobs:
+  cli-sync-stress:
+    name: CLI sync/offline stress
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            cli/pnpm-lock.yaml
+            deps/db-sync/pnpm-lock.yaml
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@13.5
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+          bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
+      - name: Install CLI Linux runtime deps
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
+
+      - name: Fetch OCaml deps
+        working-directory: cli
+        run: opam install . --deps-only --with-test --yes
+
+      - name: Fetch pnpm deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Fetch CLI pnpm deps
+        run: pnpm --dir cli install --frozen-lockfile --ignore-workspace
+
+      - name: Fetch db-sync pnpm deps
+        run: pnpm --dir deps/db-sync install --frozen-lockfile
+
+      - name: Build stress runtime
+        run: |
+          opam exec -- pnpm cli:release
+          pnpm db-worker-node:release:bundle
+          pnpm --dir deps/db-sync build:node-adapter
+
+      - name: Verify stress tests
+        run: |
+          node --test scripts/cli-concurrent-edit-stress.test.mjs
+          node --test scripts/cli-sync-stress-workflow.test.mjs
+
+      - name: Prepare stress auth
+        run: |
+          mkdir -p tmp/cli-sync-stress/home/logseq
+          node <<'NODE'
+          const crypto = require("node:crypto");
+          const fs = require("node:fs");
+
+          const encode = (payload) => Buffer.from(JSON.stringify(payload)).toString("base64url");
+          const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+          const publicJwk = publicKey.export({ format: "jwk" });
+          const exp = Math.floor(Date.now() / 1000) + 3600;
+          const header = encode({ alg: "RS256", kid: "cli-sync-stress", typ: "JWT" });
+          const payload = encode({
+              sub: "cli-sync-stress-user",
+              email: "cli-sync-stress@example.com",
+              iss: "http://127.0.0.1:19091",
+              aud: "logseq-cli-sync-stress",
+              client_id: "logseq-cli-sync-stress",
+              exp,
+          });
+          const signature = crypto.createSign("RSA-SHA256")
+            .update(`${header}.${payload}`)
+            .sign(privateKey)
+            .toString("base64url");
+          const token = `${header}.${payload}.${signature}`;
+
+          fs.writeFileSync(
+            "tmp/cli-sync-stress/jwks.json",
+            `${JSON.stringify({
+              keys: [{ ...publicJwk, alg: "RS256", use: "sig", kid: "cli-sync-stress" }],
+            })}\n`,
+          );
+
+          fs.writeFileSync(
+            "tmp/cli-sync-stress/home/logseq/auth.json",
+            `${JSON.stringify({
+              "refresh-token": "cli-sync-stress-refresh-token",
+              "id-token": token,
+              "access-token": token,
+            })}\n`,
+          );
+          NODE
+
+      - name: Run CLI sync stress
+        env:
+          LOGSEQ_BIN: ${{ github.workspace }}/tmp/cli-sync-stress/logseq
+          LOGSEQ_CLI_ROOT_DIR: ${{ github.workspace }}/tmp/cli-sync-stress/root
+          HOME: ${{ github.workspace }}/tmp/cli-sync-stress/home
+        run: |
+          mkdir -p tmp/cli-sync-stress
+          node <<'NODE' &
+          const fs = require("node:fs");
+          const http = require("node:http");
+          const jwks = fs.readFileSync("tmp/cli-sync-stress/jwks.json");
+
+          http.createServer((req, res) => {
+            if (req.url === "/.well-known/jwks.json") {
+              res.writeHead(200, { "content-type": "application/json" });
+              res.end(jwks);
+              return;
+            }
+            res.writeHead(404, { "content-type": "application/json" });
+            res.end(JSON.stringify({ error: "not found" }));
+          }).listen(19091, "127.0.0.1");
+          NODE
+          JWKS_PID=$!
+          trap 'kill "$JWKS_PID" 2>/dev/null || true' EXIT
+
+          printf '#!/usr/bin/env sh\nexec node "%s/static/logseq-cli.js" "$@"\n' "$GITHUB_WORKSPACE" > "$LOGSEQ_BIN"
+          chmod +x "$LOGSEQ_BIN"
+
+          GRAPH="cli-sync-stress-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          "$LOGSEQ_BIN" graph create --graph "$GRAPH" --output json --timeout-ms 20000
+
+          node scripts/cli-concurrent-edit-stress.mjs \
+            --graph "$GRAPH" \
+            --config "$GITHUB_WORKSPACE/tmp/cli-sync-stress/cli.edn" \
+            --auth-path "$GITHUB_WORKSPACE/tmp/cli-sync-stress/home/logseq/auth.json" \
+            --clients 3 \
+            --concurrency 8 \
+            --sync \
+            --offline \
+            --no-e2ee \
+            --max-ops 3000 \
+            --timeout-ms 60000
+
+          "$LOGSEQ_BIN" graph validate --graph "$GRAPH" --output json --timeout-ms 60000
+
+      - name: Print stress logs on failure
+        if: failure()
+        run: |
+          tail -n 200 tmp/cli-concurrent-edit-stress/events.jsonl || true
+          tail -n 200 tmp/cli-concurrent-edit-stress/db-sync-server.log || true
+          find tmp -name 'db-worker-node-*.log' -print -exec tail -n 200 {} \; || true

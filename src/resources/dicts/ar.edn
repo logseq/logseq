@@ -994,7 +994,6 @@
  :node/built-in-cant-delete-error "لا يمكن حذف العناصر المدمجة."
  :node/new "عقدة جديدة"
 
-
  :notification/copied "تم النسخ"
 
  :onboarding.import/desc "وصف الاستيراد"
@@ -1246,7 +1245,6 @@
  :property/drag-to-reorder "اسحب لإعادة الترتيب"
  :property/existing-values "القيم الموجودة"
  :property/go-to-this-property "الانتقال إلى صفحة الخاصية"
- :property/hidden-properties "خصائص مخفية"
  :property/hide-by-default "إخفاء افتراضياً"
  :property/hide-choice-for-tag "إخفاء الخيار للوسم"
  :property/hide-empty-value "إخفاء القيم الفارغة"

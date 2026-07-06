@@ -156,7 +156,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Fetch CLI pnpm deps
-        run: pnpm --dir cli install --frozen-lockfile
+        run: pnpm --dir cli install --frozen-lockfile --ignore-workspace
 
       - name: Run CLI E2E tests
         run: opam exec -- bb dev:cli-e2e --jobs 1 --verbose
@@ -253,13 +253,13 @@ jobs:
         run: opam install . --deps-only --with-test --yes
 
       - name: Fetch scripts pnpm deps
-        run: cd scripts && pnpm install --frozen-lockfile
+        run: pnpm --dir scripts install --frozen-lockfile --ignore-workspace
 
       - name: Fetch root pnpm deps
         run: pnpm install --frozen-lockfile
 
       - name: Fetch CLI pnpm deps
-        run: pnpm --dir cli install --frozen-lockfile
+        run: pnpm --dir cli install --frozen-lockfile --ignore-workspace
 
       - name: Create DB graph with properties
         run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ./cli-root/graphs/properties-graph
@@ -268,7 +268,7 @@ jobs:
         run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./cli-root/graphs/schema-graph
 
       - name: Fetch deps/db pnpm deps
-        run: cd deps/db && pnpm install --frozen-lockfile
+        run: pnpm --dir deps/db install --frozen-lockfile --ignore-workspace
 
       - name: Build logseq CLI runtime
         run: |
@@ -276,7 +276,7 @@ jobs:
           pnpm db-worker-node:release:bundle
           pnpm --dir deps/db-sync build:node-adapter
           node scripts/prepare-cli-package.mjs
-          pnpm --dir dist/cli-package install --prod
+          pnpm --dir dist/cli-package install --prod --ignore-workspace
           pnpm --dir dist/cli-package pack --pack-destination ../
 
       - name: Smoke test packaged CLI

@@ -13,7 +13,6 @@
    [frontend.worker.sync.transport :as sync-transport]
    [frontend.worker.sync.upload :as sync-upload]
    [frontend.worker.sync.util :as sync-util]
-   [frontend.worker-common.util :as worker-util]
    [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
    [logseq.db-sync.checksum :as sync-checksum]
@@ -42,6 +41,7 @@
     :get-client-ops-conn worker-state/get-client-ops-conn
     :get-pending-local-tx-count client-op/get-pending-local-tx-count
     :get-unpushed-asset-ops-count client-op/get-unpushed-asset-ops-count
+    :get-missing-asset-upload-files sync-assets/get-missing-asset-upload-files
     :get-local-tx client-op/get-local-tx
     :get-local-checksum client-op/get-local-checksum
     :get-graph-uuid client-op/get-graph-uuid
@@ -51,21 +51,29 @@
 
 (defn update-local-sync-checksum!
   [repo tx-report]
-  (when (and worker-util/dev-or-test?
-             (worker-state/get-client-ops-conn repo))
+  (when (worker-state/get-client-ops-conn repo)
     (let [current-checksum (client-op/get-local-checksum repo)
           new-checksum (sync-checksum/update-checksum current-checksum tx-report)]
-      ;; (let [full-checksum (sync-checksum/recompute-checksum (:db-after tx-report))]
-      ;;   (when (not= new-checksum full-checksum)
-      ;;    (prn :debug
-      ;;         "checksum-doesn't match"
-      ;;         {:current-checksum current-checksum
-      ;;          :new-checksum new-checksum
-      ;;          :full-checksum full-checksum
-      ;;          :db-before (ldb/write-transit-str (:db-before tx-report))
-      ;;          :db-after (ldb/write-transit-str (:db-after tx-report))
-      ;;          :tx-data (ldb/write-transit-str (:tx-data tx-report))
-      ;;          :tx-meta (ldb/write-transit-str (:tx-meta tx-report))})))
+      (when (and (exists? js/process)
+                 (= "1" (aget (.-env js/process) "LOGSEQ_CHECKSUM_ASSERT")))
+        (let [recomputed-checksum (sync-checksum/recompute-checksum (:db-after tx-report))]
+          (when-not (= new-checksum recomputed-checksum)
+            (let [{:keys [tx-meta tx-data]} tx-report]
+              (log/error :db-sync/checksum-incremental-drift
+                         {:repo repo
+                          :current-checksum current-checksum
+                          :incremental-checksum new-checksum
+                          :recomputed-checksum recomputed-checksum
+                          :tx-meta tx-meta
+                          :tx-count (count tx-data)
+                          :tx-sample (take 30 tx-data)})
+              (throw (ex-info "Incremental checksum drift"
+                              {:repo repo
+                               :current-checksum current-checksum
+                               :incremental-checksum new-checksum
+                               :recomputed-checksum recomputed-checksum
+                               :tx-meta tx-meta
+                               :tx-count (count tx-data)}))))))
       (client-op/update-local-checksum repo new-checksum))))
 
 (defn- broadcast-rtc-state!
@@ -102,6 +110,11 @@
   [repo graph-id]
   (when (seq graph-id)
     (client-op/update-graph-uuid repo graph-id)))
+
+(defn- client-op-ready?
+  [repo]
+  (and (some? (worker-state/get-client-ops-conn repo))
+       (integer? (client-op/get-local-tx repo))))
 
 (defn- reconnect-delay-ms
   [attempt]
@@ -157,6 +170,7 @@
                  (p/catch (fn [_] nil))
                  (p/then (fn [_] (task)))
                  (p/catch (fn [error]
+                            (sync-util/set-last-sync-error! client error)
                             (log/error :db-sync/ws-handle-message-failed
                                        {:repo (:repo client)
                                         :error error}))))))
@@ -362,12 +376,18 @@
             (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base})
             (p/resolved nil))
 
+          (not (client-op-ready? repo))
+          (do
+            (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base :reason :client-op-not-ready})
+            (p/resolved nil))
+
           (= start-target inflight-target)
           (p/resolved nil)
 
           (active-client-for? current repo graph-id)
           (do
             (broadcast-rtc-state! current)
+            (sync-apply/enqueue-flush-pending! repo current)
             (p/resolved nil))
 
           :else
@@ -400,6 +420,21 @@
 (defn request-asset-download!
   [repo asset-uuid]
   (sync-apply/request-asset-download! repo asset-uuid))
+
+(defn download-missing-assets!
+  [repo graph-id]
+  (sync-assets/download-missing-remote-assets! repo graph-id))
+
+(defn retry-asset-upload!
+  [repo]
+  (when-let [client (current-client repo)]
+    (sync-assets/enqueue-asset-sync!
+     repo client
+     {:enqueue-asset-task-f enqueue-asset-task!
+      :current-client-f current-client
+      :broadcast-rtc-state!-f broadcast-rtc-state!
+      :fail-fast-f fail-fast}))
+  (p/resolved nil))
 
 (defn rehydrate-large-titles-from-db!
   [repo graph-id]

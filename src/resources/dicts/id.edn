@@ -994,7 +994,6 @@
  :node/built-in-cant-delete-error "Elemen bawaan tidak dapat dihapus."
  :node/new "Node baru"
 
-
  :notification/copied "Disalin"
 
  :onboarding.import/desc "Jika ia dalam format EDN atau Markdown, Logseq dapat bekerja dengannya."
@@ -1246,7 +1245,6 @@
  :property/drag-to-reorder "Seret untuk mengurutkan"
  :property/existing-values "Nilai yang ada"
  :property/go-to-this-property "Buka halaman properti"
- :property/hidden-properties "Properti tersembunyi"
  :property/hide-by-default "Sembunyikan secara default"
  :property/hide-choice-for-tag "Sembunyikan pilihan untuk tag"
  :property/hide-empty-value "Sembunyikan nilai kosong"

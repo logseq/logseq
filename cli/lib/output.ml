@@ -100,12 +100,31 @@ module Human_output = struct
         if index = last_index then value else pad_right width value)
     |> String.concat "  "
 
+  let strip_leading_colon value =
+    if String.length value > 0 && value.[0] = ':' then
+      String.sub value 1 (String.length value - 1)
+    else value
+
+  let is_keyword_namespace_char = function
+    | 'a' .. 'z' | '0' .. '9' | '.' | '-' | '_' -> true
+    | _ -> false
+
+  let is_keyword_namespace value =
+    value <> "" && String.for_all is_keyword_namespace_char value
+
+  let display_header header =
+    let header = strip_leading_colon header in
+    match String.split_on_char '/' header with
+    | [ namespace; name ] when is_keyword_namespace namespace && name <> "" ->
+        name
+    | _ -> header
+
   let lines t =
     let rows = display_rows t in
     let table_rows =
       match t.headers with
       | None | Some [] -> rows
-      | Some headers -> headers :: rows
+      | Some headers -> List.map display_header headers :: rows
     in
     let widths = column_widths table_rows in
     let lines = List.map (render_row widths) table_rows in
@@ -116,5 +135,5 @@ end
 
 type _ t =
   | Human : Human_output.t -> human t
-  | Edn : Melange_edn.any -> edn t
-  | Json : Melange_edn.any -> json t
+  | Edn : Melange_edn_melange.any -> edn t
+  | Json : Melange_edn_melange.any -> json t

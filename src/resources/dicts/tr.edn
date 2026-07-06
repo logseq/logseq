@@ -994,7 +994,6 @@
  :node/built-in-cant-delete-error "Yerleşik öğeler silinemez."
  :node/new "Yeni düğüm"
 
-
  :notification/copied "Kopyalandı"
 
  :onboarding.import/desc "Notlarınız EDN veya Markdown biçimindeyse, Logseq bunlarla çalışabilir."
@@ -1246,7 +1245,6 @@
  :property/drag-to-reorder "Sıralamak için sürükleyin"
  :property/existing-values "Mevcut değerler"
  :property/go-to-this-property "Özellik sayfasına git"
- :property/hidden-properties "Gizli özellikler"
  :property/hide-by-default "Varsayılan olarak gizle"
  :property/hide-choice-for-tag "Etiket için seçeneği gizle"
  :property/hide-empty-value "Boş değerleri gizle"

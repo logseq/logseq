@@ -126,7 +126,7 @@ jobs:
         run: opam install . --deps-only --with-test --yes
 
       - name: Fetch CLI pnpm deps
-        run: pnpm --dir cli install --frozen-lockfile
+        run: pnpm --dir cli install --frozen-lockfile --ignore-workspace
 
       - name: Retrieve tag version
         id: ref

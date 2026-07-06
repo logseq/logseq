@@ -453,7 +453,8 @@
              :inputs [:today :7d-after]
              :group-by-page? false
              :collapsed? true}]}
-          :ui/hide-empty-properties? false}))
+          :ui/hide-empty-properties? false
+          :ui/mask-email? true}))
 
 ;; State that most user config is dependent on
 (declare get-current-repo)
@@ -819,23 +820,62 @@ should be done through this fn in order to get global config and config defaults
   [f & args]
   (replace-state! (apply f (rfx/snapshot) args)))
 
+(defn- edit-block-fn-entry
+  [value]
+  (cond
+    (fn? value)
+    {:f value}
+
+    (and (map? value) (fn? (:f value)))
+    value
+
+    :else
+    nil))
+
 (defn- edit-block-fn-queue
   [value]
   (cond
-    (vector? value) value
-    (fn? value) [value]
-    :else []))
+    (vector? value) (into [] (keep edit-block-fn-entry) value)
+    :else (if-let [entry (edit-block-fn-entry value)]
+            [entry]
+            [])))
+
+(defn- take-edit-block-fn-entry
+  [queue pred]
+  (let [[before [entry & after]] (split-with (complement pred) queue)]
+    (when entry
+      [entry (vec (concat before after))])))
 
 (defn queue-edit-block-fn!
-  [f]
-  (when (fn? f)
-    (update-state! :editor/edit-block-fn #(conj (edit-block-fn-queue %) f))))
+  ([f]
+   (queue-edit-block-fn! nil f))
+  ([tx-id f]
+   (when (fn? f)
+     (update-state! :editor/edit-block-fn #(conj (edit-block-fn-queue %)
+                                                 {:tx-id tx-id
+                                                  :f f})))))
+
+(defn remove-edit-block-fn!
+  [tx-id]
+  (when tx-id
+    (update-state! :editor/edit-block-fn
+                   #(->> (edit-block-fn-queue %)
+                         (remove (fn [entry] (= tx-id (:tx-id entry))))
+                         vec))))
 
 (defn take-edit-block-fn!
-  []
-  (when-let [[f & more] (seq (edit-block-fn-queue (get-state :editor/edit-block-fn)))]
-    (set-state! :editor/edit-block-fn (vec more))
-    f))
+  ([]
+   (let [queue (edit-block-fn-queue (get-state :editor/edit-block-fn))]
+     (when-let [[entry more] (take-edit-block-fn-entry queue #(nil? (:tx-id %)))]
+       (set-state! :editor/edit-block-fn more)
+       (:f entry))))
+  ([tx-id]
+   (let [queue (edit-block-fn-queue (get-state :editor/edit-block-fn))
+         match (and tx-id
+                    (take-edit-block-fn-entry queue #(= tx-id (:tx-id %))))]
+     (when-let [[entry more] match]
+       (set-state! :editor/edit-block-fn more)
+       (:f entry)))))
 
 ;; State getters and setters
 ;; =========================
@@ -1113,11 +1153,18 @@ should be done through this fn in order to get global config and config defaults
         selected-ids (set (get-selected-block-ids selected-blocks))
         _ (set-state! :selection/blocks blocks)
         new-ids (set (get-selection-block-ids))
-        removed (set/difference selected-ids new-ids)]
+        removed (set/difference selected-ids new-ids)
+        next-blocks (set (remove nil? blocks))
+        removed-nodes-without-blockid (->> selected-blocks
+                                           (remove nil?)
+                                           (remove #(contains? next-blocks %))
+                                           (remove #(dom/attr % "blockid")))]
     (mark-dom-blocks-as-selected blocks)
     (doseq [id removed]
       (doseq [node (dom/sel (util/format "[blockid='%s']" id))]
-        (unselect-node node)))))
+        (unselect-node node)))
+    (doseq [node removed-nodes-without-blockid]
+      (unselect-node node))))
 
 (defn set-selection-blocks!
   ([blocks]

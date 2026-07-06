@@ -202,19 +202,19 @@ let expect_valid_json name text =
 
 let expect_valid_edn name text =
   try
-    ignore (Melange_edn.of_edn_string text);
+    ignore (Melange_edn_melange.of_edn_string text);
     pass
   with exn ->
     fail_test
       (Printf.sprintf "%s: expected valid EDN, got %s\n%s" name
          (Printexc.to_string exn) text)
 
-let edn_any value = Melange_edn.any value
-let edn_keyword value = edn_any (Melange_edn.keyword value)
-let edn_string value = edn_any (Melange_edn.string value)
+let edn_any value = Melange_edn_melange.any value
+let edn_keyword value = edn_any (Melange_edn_melange.keyword value)
+let edn_string value = edn_any (Melange_edn_melange.string value)
 
 let edn_map fields =
-  Melange_edn.map fields |> edn_any |> Melange_edn.to_edn_string
+  Melange_edn_melange.map fields |> edn_any |> Melange_edn_melange.to_edn_string
 
 let remove_tree path =
   rm_sync path
@@ -466,9 +466,9 @@ let assert_created_at_column_aligned stdout =
   | [] -> fail_test "missing list page output"
   | header :: rows ->
       let created_index =
-        match Js.String.indexOf ~search:"block/created-at" header with
+        match Js.String.indexOf ~search:"created-at" header with
         | -1 ->
-            fail_test ("missing block/created-at header:\n" ^ stdout);
+            fail_test ("missing created-at header:\n" ^ stdout);
             0
         | index -> index
       in

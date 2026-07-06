@@ -1,4 +1,4 @@
-type list_options = Melange_edn.any
+type list_options = Melange_edn_melange.any
 
 type page_filter = {
   expand : bool;
@@ -15,4 +15,4 @@ type node_filter = {
   property_idents : Cli_primitive.keyword list;
 }
 
-val minimal_list_item : Entity.t -> Melange_edn.map Melange_edn.t
+val minimal_list_item : Entity.t -> Melange_edn_melange.map Melange_edn_melange.t
