@@ -1975,6 +1975,71 @@
           (is (= (sync-checksum/recompute-checksum @conn)
                  (client-op/get-local-checksum test-repo))))))))
 
+(deftest local-checksum-updates-non-batch-report-with-stale-batch-flag-test
+  (testing "a non-batch tx report must not be skipped because conn batch state is stale"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
+          (try
+            (swap! conn assoc :batch-tx? true)
+            (d/transact! conn
+                         [[:db/add (:db/id parent)
+                           :block/title
+                           "non-batch tx while stale batch flag is set"]]
+                         {:outliner-op :checksum-stale-batch-flag-test})
+            (finally
+              (swap! conn dissoc :batch-tx?)))
+          (is (= (sync-checksum/recompute-checksum @conn)
+                 (client-op/get-local-checksum test-repo))))))))
+
+(deftest local-checksum-updates-ldb-non-batch-report-with-stale-batch-flag-test
+  (testing "ldb/transact! must not tag non-batch reports from stale conn batch state"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
+          (try
+            (swap! conn assoc :batch-tx? true)
+            (ldb/transact! conn
+                           [[:db/add (:db/id parent)
+                             :block/title
+                             "ldb non-batch tx while stale batch flag is set"]]
+                           {:outliner-op :checksum-ldb-stale-batch-flag-test})
+            (finally
+              (swap! conn dissoc :batch-tx?)))
+          (is (= (sync-checksum/recompute-checksum @conn)
+                 (client-op/get-local-checksum test-repo))))))))
+
+(deftest batch-transact-tags-inner-tx-reports-test
+  (testing "inner batch reports carry stable metadata independent from mutable conn state"
+    (let [{:keys [conn parent]} (setup-parent-child)
+          captured (atom [])]
+      (with-datascript-conns conn nil
+        (fn []
+          (d/listen! conn ::capture-batch-tx-meta
+                     (fn [tx-report]
+                       (swap! captured conj (:tx-meta tx-report))))
+          (try
+            (ldb/batch-transact!
+             conn
+             {:outliner-op :checksum-batch-final-test}
+             (fn [conn]
+               (ldb/transact! conn
+                              [[:db/add (:db/id parent)
+                                :block/title
+                                "inner batch report title"]]
+                              {:outliner-op :checksum-inner-batch-test})))
+            (finally
+              (d/unlisten! conn ::capture-batch-tx-meta)))
+          (let [[inner final] @captured]
+            (is (:batch-tx-report? inner))
+            (is (not (:batch-final-tx-report? inner)))
+            (is (:batch-final-tx-report? final))
+            (is (not (:batch-tx-report? final)))))))))
+
 (deftest remote-batch-drops-follow-up-ops-for-stale-created-block-test
   (testing "remote txs later in the same batch should not apply ops for an entity dropped as stale"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)

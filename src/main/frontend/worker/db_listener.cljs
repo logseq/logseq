@@ -80,7 +80,7 @@
                  [{:keys [tx-data tx-meta] :as tx-report}]
                  (when (seq tx-data)
                    (let [update-checksum? (or (:batch-final-tx-report? tx-meta)
-                                               (not (:batch-tx? @conn)))]
+                                               (not (:batch-tx-report? tx-meta)))]
                      (when update-checksum?
                        (db-sync/update-local-sync-checksum! repo tx-report)
                        (let [tx-report' (if sync-db-to-main-thread?

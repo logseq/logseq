@@ -35,6 +35,7 @@
 (defonce *transact-invalid-callback (atom nil))
 (defonce *transact-pipeline-fn (atom nil))
 (defonce *debounce-fn (atom nil))
+(def ^:dynamic *batch-tx-report?* false)
 
 (defn register-transact-fn!
   [f]
@@ -220,9 +221,12 @@
        ;; (cljs.pprint/pprint tx-data)
        ;; (js/console.trace)
 
-       (if-let [transact-fn @*transact-fn]
-         (transact-fn repo-or-conn tx-data tx-meta)
-         (transact-sync repo-or-conn tx-data tx-meta))))))
+       (let [tx-meta (cond-> tx-meta
+                       *batch-tx-report?*
+                       (assoc :batch-tx-report? true))]
+         (if-let [transact-fn @*transact-fn]
+           (transact-fn repo-or-conn tx-data tx-meta)
+           (transact-sync repo-or-conn tx-data tx-meta)))))))
 
 (defn- make-conn [db opts]
   ;; `datascript.conn/->Conn` is not exposed in nbb runtime.
@@ -317,7 +321,8 @@
         (throw (ex-info "batch-transact! can't be nested called" {:tx-meta tx-meta})))
       (batch-transact-listen! conn *tx-data listen-db)
       (swap! conn assoc :skip-store? true :batch-tx? true)
-      (batch-tx-fn conn)
+      (binding [*batch-tx-report?* true]
+        (batch-tx-fn conn))
       (batch-transact-cleanup! conn)
       (when-some [_storage (storage/storage @conn)]
         (d/store @conn)
