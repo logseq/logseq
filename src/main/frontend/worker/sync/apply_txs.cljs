@@ -827,38 +827,42 @@
                     (sort-by :block/order (:block/_parent block))))]
     (collect entity)))
 
-(defn- expand-insert-blocks-reverse-retracts
+(defn- retract-entity-op?
+  [item]
+  (and (vector? item)
+       (contains? #{:db/retractEntity :db.fn/retractEntity} (first item))))
+
+(defn- expand-block-retracts-to-descendants
   [db tx-data]
   (let [explicit-retracts (->> tx-data
                                (keep (fn [item]
-                                       (when (and (vector? item)
-                                                  (= :db/retractEntity (first item))
+                                       (when (and (retract-entity-op? item)
                                                   (block-ref? (second item)))
-                                         (:db/id (block-entity db (second item))))))
+                                         (some-> (block-entity db (second item)) :db/id))))
                                set)]
     (mapcat
      (fn [item]
-       (if (and (vector? item)
-                (= :db/retractEntity (first item))
-                (block-ref? (second item)))
-         (let [root (block-entity db (second item))
-               descendant-retracts (->> (block-descendants root)
-                                        (remove #(contains? explicit-retracts (:db/id %)))
-                                        (map (fn [entity]
-                                               [:db/retractEntity (block-entity-ref entity)])))]
-           (concat descendant-retracts [item]))
+       (if (and (retract-entity-op? item)
+                (block-ref? (second item))
+                (block-entity db (second item)))
+         (let [root (block-entity db (second item))]
+           (concat (->> (block-descendants root)
+                        (remove #(contains? explicit-retracts (:db/id %)))
+                        (map (fn [entity]
+                               [:db/retractEntity (block-entity-ref entity)])))
+                   [item]))
          [item]))
      tx-data)))
 
 (defn- reverse-history-action!
   [conn local-tx]
   (if-let [tx-data (seq (:reversed-tx local-tx))]
-    (let [db @conn
-          tx-data' (cond->> (some->> tx-data
-                                      (map (partial resolve-temp-id db))
-                                      normalize-tx-data-for-rebase)
-                     (= :insert-blocks (:outliner-op local-tx))
-                     (expand-insert-blocks-reverse-retracts db))]
+	      (let [db @conn
+	            tx-data' (cond->> (some->> tx-data
+	                                      (map (partial resolve-temp-id db))
+	                                      normalize-tx-data-for-rebase)
+	                     (= :insert-blocks (:outliner-op local-tx))
+	                     (expand-block-retracts-to-descendants db))]
       (ldb/transact! conn
                      tx-data'
                      {:outliner-op (:outliner-op local-tx)
@@ -1362,7 +1366,8 @@
         (ldb/transact! conn tx-data
                        {:outliner-op :recycle-delete-permanently})))
 
-    (let [[tx-data tx-meta] args]
+    (let [[tx-data tx-meta] args
+          tx-data (expand-block-retracts-to-descendants @conn tx-data)]
       (when-let [tx-data (seq tx-data)]
         (ldb/transact! conn tx-data tx-meta)))))
 
@@ -1512,16 +1517,17 @@
         (worker-undo-redo/clear-history! repo)))))
 
 (defn- apply-remote-tx-without-local-changes!
-  [{:keys [conn remote-txs stale-repair-block-uuids]}]
+  [{:keys [repo conn local-txs remote-txs stale-repair-block-uuids]}]
   (let [remote-tx-results (atom [])
-        tx-report (ldb/batch-transact!
+        tx-report (ldb/batch-transact-with-temp-conn!
                    conn
                    {:rtc-tx? true
                     :without-local-changes? true}
                    (fn [conn]
                      (reset! remote-tx-results
                              (transact-remote-txs! conn remote-txs
-                                                   :stale-repair-block-uuids stale-repair-block-uuids))))]
+                                                   :stale-repair-block-uuids stale-repair-block-uuids)))
+                   {:before-commit #(fail-if-pending-tx-snapshot-changed! repo local-txs)})]
     (repair-applied-txs! conn tx-report)
     {:repair-block-uuids (->> @remote-tx-results
                               (mapcat :repair-block-uuids)

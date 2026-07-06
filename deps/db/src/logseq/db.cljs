@@ -91,8 +91,11 @@
   [db tx-data]
   (when (some (fn [d] (and (:added d)
                            (= :block/parent (:a d))
-                           (entity-util/page? (d/entity db (:e d)))
-                           (not (entity-util/page? (d/entity db (:v d)))))) tx-data)
+                           (let [entity (d/entity db (:e d))
+                                 parent (:block/parent entity)]
+                             (and (entity-util/page? entity)
+                                  (= (:v d) (:db/id parent))
+                                  (not (entity-util/page? (d/entity db (:v d)))))))) tx-data)
     (throw (ex-info "Page can't have block as parent"
                     {:tx-data tx-data}))))
 
