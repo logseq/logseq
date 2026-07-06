@@ -878,13 +878,21 @@
       v)
     v))
 
+(defn- ref-attr?
+  [db attr]
+  (= :db.type/ref
+     (or (get-in (d/schema db) [attr :db/valueType])
+         (:db/valueType (d/entity db attr)))))
+
 (defn- resolve-temp-id
   [db datom-v]
   (if (and (= (count datom-v) 5)
            (= (first datom-v) :db/add))
     (let [[op e a v t] datom-v
           e' (replace-uuid-str-with-eid db e)
-          v' (replace-uuid-str-with-eid db v)]
+          v' (if (ref-attr? db a)
+               (replace-uuid-str-with-eid db v)
+               v)]
       [op e' a v' t])
     datom-v))
 
@@ -1350,42 +1358,45 @@
 
 (defn- rebase-local-op!
   [_repo conn local-tx rebase-db-before]
-  (let [{:keys [forward-ops inverse-ops]} (rebase-history-ops local-tx)
-        tx-meta {:outliner-op :rebase
-                 :original-outliner-op (:outliner-op local-tx)
-                 :db-sync/rebased-local? true
-                 ;; Keep stable tx-id across rebases so one logical pending op
-                 ;; doesn't fan out into duplicated pending rows.
-                 :db-sync/tx-id (:tx-id local-tx)
-                 :db-sync/forward-outliner-ops forward-ops
-                 :db-sync/inverse-outliner-ops inverse-ops}
-        forward-ops' (if (seq forward-ops)
-                       forward-ops
-                       (let [tx-data (-> (:tx local-tx) normalize-tx-data-for-rebase)]
-                         [[:transact [tx-data (assoc tx-meta
-                                                     :db-sync/suppress-stale-rebase-transact-failed-log?
-                                                     true)]]]))]
-    (try
-      (let [rebase-tx-report
-            (ldb/batch-transact-with-temp-conn!
-             conn
-             tx-meta
-             (fn [conn]
-               (doseq [op forward-ops']
-                 (replay-canonical-outliner-op! conn op rebase-db-before))))
-            status (if rebase-tx-report :rebased :no-op)]
-        {:tx-id (:tx-id local-tx)
-         :status status})
-      (catch :default error
-        (let [drop-log {:tx-id (:tx-id local-tx)
-                        :outliner-op (:outliner-op local-tx)
-                        :undo? (:undo? local-tx)
-                        :redo? (:redo? local-tx)
-                        :error error}]
-          (when-not (expected-stale-rebase-error? error)
-            (log/warn :db-sync/drop-op-driven-pending-tx drop-log))
+  (if (= :fix (:outliner-op local-tx))
+    {:tx-id (:tx-id local-tx)
+     :status :kept}
+    (let [{:keys [forward-ops inverse-ops]} (rebase-history-ops local-tx)
+          tx-meta {:outliner-op :rebase
+                   :original-outliner-op (:outliner-op local-tx)
+                   :db-sync/rebased-local? true
+                   ;; Keep stable tx-id across rebases so one logical pending op
+                   ;; doesn't fan out into duplicated pending rows.
+                   :db-sync/tx-id (:tx-id local-tx)
+                   :db-sync/forward-outliner-ops forward-ops
+                   :db-sync/inverse-outliner-ops inverse-ops}
+          forward-ops' (if (seq forward-ops)
+                         forward-ops
+                         (let [tx-data (-> (:tx local-tx) normalize-tx-data-for-rebase)]
+                           [[:transact [tx-data (assoc tx-meta
+                                                       :db-sync/suppress-stale-rebase-transact-failed-log?
+                                                       true)]]]))]
+      (try
+        (let [rebase-tx-report
+              (ldb/batch-transact-with-temp-conn!
+               conn
+               tx-meta
+               (fn [conn]
+                 (doseq [op forward-ops']
+                   (replay-canonical-outliner-op! conn op rebase-db-before))))
+              status (if rebase-tx-report :rebased :no-op)]
           {:tx-id (:tx-id local-tx)
-           :status :failed})))))
+           :status status})
+        (catch :default error
+          (let [drop-log {:tx-id (:tx-id local-tx)
+                          :outliner-op (:outliner-op local-tx)
+                          :undo? (:undo? local-tx)
+                          :redo? (:redo? local-tx)
+                          :error error}]
+            (when-not (expected-stale-rebase-error? error)
+              (log/warn :db-sync/drop-op-driven-pending-tx drop-log))
+            {:tx-id (:tx-id local-tx)
+             :status :failed}))))))
 
 (defn- rebase-local-txs!
   [repo conn local-txs rebase-db-before]
