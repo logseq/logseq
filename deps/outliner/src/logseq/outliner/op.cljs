@@ -253,13 +253,7 @@
   [conn blocks]
   (doseq [journal-day (outliner-template/dynamic-template-journal-days blocks)]
     (when-not (ldb/get-journal-page-by-day @conn journal-day)
-      (let [title (journal-title @conn journal-day)
-            [_ page-uuid] (outliner-page/create! conn title {:journal? true})
-            page (d/entity @conn [:block/uuid page-uuid])
-            page-name (common-util/page-name-sanity-lc title)]
-        (when (and page (not= page-name (:block/name page)))
-          (ldb/transact! conn [{:db/id (:db/id page)
-                                :block/name page-name}] {}))))))
+      (outliner-page/create! conn (journal-title @conn journal-day) {:journal? true}))))
 
 (defn- apply-template-op!
   [conn *result [template-id target-block-id opts]]

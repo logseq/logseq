@@ -8,6 +8,7 @@
             [frontend.worker.react :as worker-react]
             [frontend.worker.state :as worker-state]
             [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
@@ -20,6 +21,7 @@
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.datascript-report :as ds-report]
+            [logseq.outliner.page :as outliner-page]
             [logseq.outliner.template :as outliner-template]
             [logseq.outliner.pipeline :as outliner-pipeline]))
 
@@ -61,6 +63,27 @@
                         added-refs)))))
             blocks)))
 
+(defn- journal-title
+  [db journal-day]
+  (date-time-util/int->journal-title
+   journal-day
+   (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))))
+
+(defn- ensure-template-journal-pages
+  [db blocks]
+  (reduce
+   (fn [{:keys [db tx-data] :as result} journal-day]
+     (if (ldb/get-journal-page-by-day db journal-day)
+       result
+       (let [{page-tx-data :tx-data} (outliner-page/create db (journal-title db journal-day) {:journal? true})]
+         (when-not (seq page-tx-data)
+           (throw (ex-info "failed to create template journal page" {:journal-day journal-day})))
+         {:db (:db-after (d/with db page-tx-data))
+          :tx-data (concat tx-data page-tx-data)})))
+   {:db db
+    :tx-data []}
+   (outliner-template/dynamic-template-journal-days blocks)))
+
 (defn- insert-tag-templates
   [tx-report]
   (let [db (:db-after tx-report)
@@ -79,47 +102,54 @@
                            (cond->> templates
                              journal-page
                              (map (fn [t] (assoc t :journal journal-page))))))
-        template->blocks (fn [object template]
-                           (let [template-children (rest (ldb/get-block-and-children db (:block/uuid template)
-                                                                                      {:include-property-block? true}))
-                                 blocks (->> (cons (assoc (first template-children)
-                                                          :logseq.property/used-template (:db/id template))
-                                                   (rest template-children))
-                                             (map (fn [block]
-                                                    (cond->
-                                                     (assoc (into {} block) :db/id (:db/id block))
-                                                      (:journal template)
-                                                      (assoc :block/uuid
-                                                             (common-uuid/gen-journal-template-block
-                                                              (:block/uuid (:journal template))
-                                                              (:block/uuid block)))))))]
-                             (outliner-template/resolve-dynamic-template-blocks db object blocks)))
+        raw-template-blocks (fn [template]
+                              (let [template-children (rest (ldb/get-block-and-children db (:block/uuid template)
+                                                                                         {:include-property-block? true}))]
+                                (->> (cons (assoc (first template-children)
+                                                  :logseq.property/used-template (:db/id template))
+                                           (rest template-children))
+                                     (map (fn [block]
+                                            (cond->
+                                             (assoc (into {} block) :db/id (:db/id block))
+                                              (:journal template)
+                                              (assoc :block/uuid
+                                                     (common-uuid/gen-journal-template-block
+                                                      (:block/uuid (:journal template))
+                                                      (:block/uuid block)))))))))
         tag-additions (->> (:tx-data tx-report)
                            (filter (fn [d] (and (= (:a d) :block/tags) (:added d))))
                            (group-by :e))
-        tx-data (mapcat
-                 (fn [[e datoms]]
-                   (let [object (d/entity db e)
-                         templates (->> (set (map :v datoms))
-                                        (mapcat tag->templates)
-                                        distinct
-                                        (sort-by :block/created-at))
-                         blocks-to-insert (mapcat (partial template->blocks object) templates)]
-                     (when (seq blocks-to-insert)
-                       (let [result (outliner-core/insert-blocks
-                                     db blocks-to-insert object
-                                     {:sibling? false
-                                      :keep-uuid? journal-template?
-                                      :outliner-op :insert-template-blocks})]
-                         (concat
-                          (:tx-data result)
-                          (mapcat (fn [block]
-                                    (when-let [refs (seq (outliner-pipeline/block-content-refs db block))]
-                                      [{:db/id (:db/id block)
-                                        :block/refs refs}]))
-                                  (:blocks result)))))))
-                 tag-additions)]
-    tx-data))
+        insertion-inputs (mapcat
+                          (fn [[e datoms]]
+                            (let [templates (->> (set (map :v datoms))
+                                                 (mapcat tag->templates)
+                                                 distinct
+                                                 (sort-by :block/created-at))]
+                              (map (fn [template]
+                                     {:object-id e
+                                      :blocks (raw-template-blocks template)})
+                                   templates)))
+                          tag-additions)
+        {db-with-pages :db page-tx-data :tx-data} (ensure-template-journal-pages db (mapcat :blocks insertion-inputs))
+        insert-tx-data (mapcat
+                        (fn [{:keys [object-id blocks]}]
+                          (let [object (d/entity db-with-pages object-id)
+                                blocks-to-insert (outliner-template/resolve-dynamic-template-blocks db-with-pages object blocks)]
+                            (when (seq blocks-to-insert)
+                              (let [result (outliner-core/insert-blocks
+                                            db-with-pages blocks-to-insert object
+                                            {:sibling? false
+                                             :keep-uuid? journal-template?
+                                             :outliner-op :insert-template-blocks})]
+                                (concat
+                                 (:tx-data result)
+                                 (mapcat (fn [block]
+                                           (when-let [refs (seq (outliner-pipeline/block-content-refs db-with-pages block))]
+                                             [{:db/id (:db/id block)
+                                               :block/refs refs}]))
+                                         (:blocks result)))))))
+                        insertion-inputs)]
+    (concat page-tx-data insert-tx-data)))
 
 (defn- fix-page-tags
   "Add missing attributes and remove #Page when inserting or updating block/title with inline tags"
