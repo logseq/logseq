@@ -546,7 +546,6 @@
  :electron/block-not-exist "Open link failed. Block-id `{1}` doesn't exist in the graph."
  :electron/cancel "Cancel"
  :electron/cli-install-failed "Failed to install Logseq CLI.\n{1}"
- :electron/cli-installed "Logseq CLI was installed to {1}"
  :electron/copy-image "Copy Image"
  :electron/link-open-confirm "Are you sure you want to open this link? \n{1}"
  :electron/link-open-failed-missing-graph "Failed to open link. Missing graph identifier after `logseq://graph/`."
