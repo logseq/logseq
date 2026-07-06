@@ -1,4 +1,5 @@
 (ns frontend.util.email
+  "Utilities for displaying email addresses in privacy-aware UI surfaces."
   (:require [clojure.string :as string]))
 
 (defn mask-email
