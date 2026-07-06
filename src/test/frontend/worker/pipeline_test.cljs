@@ -15,6 +15,17 @@
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.recycle :as outliner-recycle]))
 
+(defn- raw-block-title
+  [db block]
+  (when block
+    (:v (first (d/datoms db :eavt (:db/id block) :block/title)))))
+
+(defn- default-journal-page-name
+  [journal-day]
+  (-> journal-day
+      (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
+      common-util/page-name-sanity-lc))
+
 (deftest test-built-in-page-updates-that-should-be-reverted
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -375,7 +386,7 @@
         (let [inserted-block (db-test/find-block-by-content
                               @conn
                               (str "date " (page-ref/->page-ref (:block/uuid today-page))))
-              raw-title (:v (first (d/datoms @conn :eavt (:db/id inserted-block) :block/title)))]
+              raw-title (raw-block-title @conn inserted-block)]
           (is (some? inserted-block))
           (is (= (str "date " (page-ref/->page-ref (:block/uuid today-page)))
                  raw-title))
@@ -392,6 +403,7 @@
           tomorrow (date-time-util/ms->journal-day (+ (js/Date.now) (* 24 60 60 1000)))
           journal-title-format "yyyy-MM-dd"
           expected-tomorrow-title (date-time-util/int->journal-title tomorrow journal-title-format)
+          expected-tomorrow-name (default-journal-page-name tomorrow)
           conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
                  [{:page {:build/journal today}
@@ -420,16 +432,16 @@
                                                    {:template-blocks blocks-to-insert}]]]
                                 {})
         (let [tomorrow-page (db-test/find-journal-by-journal-day @conn tomorrow)
-              inserted-block (db-test/find-block-by-content
-                              @conn
-                              (str "date " (page-ref/->page-ref (:block/uuid tomorrow-page))))
-              raw-title (:v (first (d/datoms @conn :eavt (:db/id inserted-block) :block/title)))]
+              expected-raw-title (when tomorrow-page
+                                   (str "date " (page-ref/->page-ref (:block/uuid tomorrow-page))))
+              inserted-block (when expected-raw-title
+                               (db-test/find-block-by-content @conn expected-raw-title))
+              raw-title (raw-block-title @conn inserted-block)]
           (is (some? tomorrow-page))
           (is (= expected-tomorrow-title (:block/title tomorrow-page)))
-          (is (= expected-tomorrow-title (:block/name tomorrow-page)))
+          (is (= expected-tomorrow-name (:block/name tomorrow-page)))
           (is (some? inserted-block))
-          (is (= (str "date " (page-ref/->page-ref (:block/uuid tomorrow-page)))
-                 raw-title))
+          (is (= expected-raw-title raw-title))
           (is (= (str "date " (page-ref/->page-ref (:block/title tomorrow-page)))
                  (:block/title inserted-block)))
           (is (= [(:block/uuid tomorrow-page)]
@@ -502,7 +514,7 @@
       (let [inserted-block (db-test/find-block-by-content
                             @conn
                             (str "auto " (page-ref/->page-ref (:block/uuid target-page))))
-            raw-title (:v (first (d/datoms @conn :eavt (:db/id inserted-block) :block/title)))]
+            raw-title (raw-block-title @conn inserted-block)]
         (is (some? inserted-block))
         (is (= (str "auto " (page-ref/->page-ref (:block/uuid target-page)))
                raw-title))
@@ -511,6 +523,49 @@
                (mapv :block/uuid (:block/refs inserted-block)))))
       (finally
         ;; return global fn back to previous behavior
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest tag-template-insertion-creates-missing-journal-ref-test
+  (let [today (date-time-util/ms->journal-day (js/Date.))
+        tomorrow (date-time-util/ms->journal-day (+ (js/Date.now) (* 24 60 60 1000)))
+        journal-title-format "yyyy-MM-dd"
+        expected-tomorrow-title (date-time-util/int->journal-title tomorrow journal-title-format)
+        expected-tomorrow-name (default-journal-page-name tomorrow)
+        conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:build/journal today}
+                 :blocks [{:block/title "target block"}]}
+                {:page {:block/title "Templates"}
+                 :blocks [{:block/title "tag template root"
+                           :build/children [{:block/title "auto <% tomorrow %>"}]}]}]
+               :classes {:DiaryEntry {}}})
+        target-block (db-test/find-block-by-content @conn "target block")
+        template-root (db-test/find-block-by-content @conn "tag template root")
+        diary-entry (ldb/get-page @conn "DiaryEntry")]
+    (ldb/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format journal-title-format]
+                         [:db/add (:db/id template-root)
+                          :logseq.property/template-applied-to
+                          (:db/id diary-entry)]])
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (is (nil? (db-test/find-journal-by-journal-day @conn tomorrow)))
+      (ldb/transact! conn [[:db/add (:db/id target-block) :block/tags (:db/id diary-entry)]])
+      (let [tomorrow-page (db-test/find-journal-by-journal-day @conn tomorrow)
+            expected-raw-title (when tomorrow-page
+                                 (str "auto " (page-ref/->page-ref (:block/uuid tomorrow-page))))
+            inserted-block (when expected-raw-title
+                             (db-test/find-block-by-content @conn expected-raw-title))
+            raw-title (raw-block-title @conn inserted-block)]
+        (is (some? tomorrow-page))
+        (is (= expected-tomorrow-title (:block/title tomorrow-page)))
+        (is (= expected-tomorrow-name (:block/name tomorrow-page)))
+        (is (some? inserted-block))
+        (is (= expected-raw-title raw-title))
+        (is (= (str "auto " (page-ref/->page-ref (:block/title tomorrow-page)))
+               (:block/title inserted-block)))
+        (is (= [(:block/uuid tomorrow-page)]
+               (mapv :block/uuid (:block/refs inserted-block)))))
+      (finally
         (ldb/register-transact-pipeline-fn! identity)))))
 
 (deftest import-tx-skips-property-history-recording-test
