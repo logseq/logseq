@@ -1174,7 +1174,7 @@
 
 (deftest tx-reject-db-transact-failed-rebase-keeps-checksum-aligned-test
   (testing "rollback plus rebase of later pending txs should keep the stored checksum aligned"
-    (let [{:keys [conn client-ops-conn parent-a parent-b a-child-1 b-child-1]} (setup-two-parents)
+    (let [{:keys [conn client-ops-conn parent-a a-child-1 b-child-1]} (setup-two-parents)
           deleted-uuid (:block/uuid a-child-1)]
       (with-datascript-conns conn client-ops-conn
         (fn []
@@ -5099,7 +5099,6 @@
                 {:pages-and-blocks
                  [{:page {:block/title "page 1"}
                    :blocks [{:block/title "temporary parent"}]}]})
-          page (ldb/get-page @conn "page 1")
           temporary-parent (db-test/find-block-by-content @conn "temporary parent")
           page-tag (:db/id (d/entity @conn :logseq.class/Page))
           page-uuid (random-uuid)

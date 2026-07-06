@@ -1752,7 +1752,7 @@
 
 (defn enqueue-local-tx!
   [repo {:keys [tx-meta tx-data] :as tx-report}]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
+  (when (worker-state/get-datascript-conn repo)
     (when (and (persistable-local-tx-meta? tx-meta)
                (not (and (:batch-tx-report? tx-meta) (not= :rebase (:outliner-op tx-meta))))
                (not (:reverse? tx-meta))
