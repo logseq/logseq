@@ -133,13 +133,14 @@
 (defn bug-report-url []
   (let [ua (.-userAgent js/navigator)
         safe-ua (string/replace ua #"[^_/a-zA-Z0-9\.\(\)]+" " ")
+        installed-plugins (state/get-state :plugin/installed-plugins)
         platform (str "App Version: " version "\n"
                       "Git Revision: " (build-version/revision) "\n"
                       "Platform: " safe-ua "\n"
                       "Language: " (.-language js/navigator) "\n"
                       "Plugins: " (string/join ", " (map (fn [[k v]]
                                                            (str (name k) " (" (:version v) ")"))
-                                                         (:plugin/installed-plugins @state/state))))]
+                                                         installed-plugins)))]
     (str "https://github.com/logseq/logseq/issues/new?"
          "title=&"
          "template=bug_report.yaml&"
@@ -450,7 +451,7 @@
                                   [:default-home :page] "")
         left-menu (left-menu-button {:on-click (fn []
                                                  (state/set-left-sidebar-open!
-                                                  (not (:ui/left-sidebar-open? @state/state))))})
+                                                  (not (state/get-state :ui/left-sidebar-open?))))})
         custom-home-page? (and (state/custom-home-page?)
                                (= default-home-page (state/get-current-page)))]
     [:div.cp__header.drag-region#head
