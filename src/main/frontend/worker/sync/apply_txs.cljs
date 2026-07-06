@@ -389,6 +389,10 @@
        vals
        set))
 
+(defn- remote-txs-db-migrate?
+  [remote-txs]
+  (some #(= :db-migrate (:outliner-op %)) remote-txs))
+
 (defn- tx-item-missing-stale-block-ref?
   [db stale-block-uuids item]
   (some (fn [block-uuid]
@@ -396,7 +400,7 @@
                (nil? (d/entity db [:block/uuid block-uuid]))))
         (tx-item-ref-block-uuids item)))
 
-(defn- drop-stale-missing-block-ref-ops
+(defn- drop-stale-missing-block-ref-ops-result
   [db stale-block-uuids tx-data]
   (let [temp-id->uuid (tx-temp-id->uuid tx-data)
         stale-entity-block-uuids (->> tx-data
@@ -404,12 +408,14 @@
                                               (when (tx-item-missing-stale-block-ref?
                                                      db stale-block-uuids item)
                                                 (tx-item-entity-block-uuid db temp-id->uuid item))))
-                                      set)]
-    (remove (fn [item]
-              (or (tx-item-missing-stale-block-ref? db stale-block-uuids item)
-                  (contains? stale-entity-block-uuids
-                             (tx-item-entity-block-uuid db temp-id->uuid item))))
-            tx-data)))
+                                      set)
+        tx-data* (remove (fn [item]
+                           (or (tx-item-missing-stale-block-ref? db stale-block-uuids item)
+                               (contains? stale-entity-block-uuids
+                                          (tx-item-entity-block-uuid db temp-id->uuid item))))
+                         tx-data)]
+    {:tx-data tx-data*
+     :dropped-entity-block-uuids stale-entity-block-uuids}))
 
 (defn- repair-block-uuids-in-tx-data
   [db tx-data]
@@ -825,38 +831,42 @@
                     (sort-by :block/order (:block/_parent block))))]
     (collect entity)))
 
-(defn- expand-insert-blocks-reverse-retracts
+(defn- retract-entity-op?
+  [item]
+  (and (vector? item)
+       (contains? #{:db/retractEntity :db.fn/retractEntity} (first item))))
+
+(defn- expand-block-retracts-to-descendants
   [db tx-data]
   (let [explicit-retracts (->> tx-data
                                (keep (fn [item]
-                                       (when (and (vector? item)
-                                                  (= :db/retractEntity (first item))
+                                       (when (and (retract-entity-op? item)
                                                   (block-ref? (second item)))
-                                         (:db/id (block-entity db (second item))))))
+                                         (some-> (block-entity db (second item)) :db/id))))
                                set)]
     (mapcat
      (fn [item]
-       (if (and (vector? item)
-                (= :db/retractEntity (first item))
-                (block-ref? (second item)))
-         (let [root (block-entity db (second item))
-               descendant-retracts (->> (block-descendants root)
-                                        (remove #(contains? explicit-retracts (:db/id %)))
-                                        (map (fn [entity]
-                                               [:db/retractEntity (block-entity-ref entity)])))]
-           (concat descendant-retracts [item]))
+       (if (and (retract-entity-op? item)
+                (block-ref? (second item))
+                (block-entity db (second item)))
+         (let [root (block-entity db (second item))]
+           (concat (->> (block-descendants root)
+                        (remove #(contains? explicit-retracts (:db/id %)))
+                        (map (fn [entity]
+                               [:db/retractEntity (block-entity-ref entity)])))
+                   [item]))
          [item]))
      tx-data)))
 
 (defn- reverse-history-action!
   [conn local-tx]
   (if-let [tx-data (seq (:reversed-tx local-tx))]
-    (let [db @conn
-          tx-data' (cond->> (some->> tx-data
-                                      (map (partial resolve-temp-id db))
-                                      normalize-tx-data-for-rebase)
-                     (= :insert-blocks (:outliner-op local-tx))
-                     (expand-insert-blocks-reverse-retracts db))]
+	      (let [db @conn
+	            tx-data' (cond->> (some->> tx-data
+	                                      (map (partial resolve-temp-id db))
+	                                      normalize-tx-data-for-rebase)
+	                     (= :insert-blocks (:outliner-op local-tx))
+	                     (expand-block-retracts-to-descendants db))]
       (ldb/transact! conn
                      tx-data'
                      {:outliner-op (:outliner-op local-tx)
@@ -992,7 +1002,8 @@
                       :or {allow-invalid-repair? true}}]
   (loop [remaining remote-txs
          index 0
-         results []]
+         results []
+         carried-stale-block-uuids #{}]
     (let [db @conn]
       (if-let [remote-tx (first remaining)]
         (let [deleted-block-uuids (remote-txs-retract-entity-block-uuids remaining)
@@ -1001,9 +1012,13 @@
               tx-data (some->> (:tx-data remote-tx)
                                (map (partial resolve-temp-id db))
                                (tx-sanitize/sanitize-tx db)
-                               (drop-stale-deleted-block-ref-ops db deleted-block-uuids)
-                               (drop-stale-missing-block-ref-ops db stale-block-uuids)
-                               seq)
+                               (drop-stale-deleted-block-ref-ops db deleted-block-uuids))
+              {:keys [tx-data dropped-entity-block-uuids]}
+              (drop-stale-missing-block-ref-ops-result
+               db
+               (set/union carried-stale-block-uuids stale-block-uuids)
+               tx-data)
+              tx-data (seq tx-data)
               tx-meta (apply-tx-meta remote-tx)
               invalid-retry? (and allow-invalid-repair?
                                   (missing-datom-repair-tx? tx-data)
@@ -1020,7 +1035,10 @@
                                 :report report
                                 :invalid-retry? invalid-retry?
                                 :repair-block-uuids repair-block-uuids}))]
-          (recur (next remaining) (inc index) results'))
+          (recur (next remaining)
+                 (inc index)
+                 results'
+                 (set/union carried-stale-block-uuids dropped-entity-block-uuids)))
         results))))
 
 (defn reverse-local-txs!
@@ -1352,7 +1370,8 @@
         (ldb/transact! conn tx-data
                        {:outliner-op :recycle-delete-permanently})))
 
-    (let [[tx-data tx-meta] args]
+    (let [[tx-data tx-meta] args
+          tx-data (expand-block-retracts-to-descendants @conn tx-data)]
       (when-let [tx-data (seq tx-data)]
         (ldb/transact! conn tx-data tx-meta)))))
 
@@ -1435,9 +1454,14 @@
 
 (defn- apply-remote-tx-with-local-changes!
   [{:keys [repo conn local-txs remote-txs pre-repair-tx-data post-repair-tx-data stale-repair-block-uuids
-           prefetched-repair-block-uuids]}]
-  (let [tx-meta {:rtc-tx? true
-                 :with-local-changes? true}
+           prefetched-repair-block-uuids db-migrate? skip-final-validate?]}]
+  (let [tx-meta (cond-> {:rtc-tx? true
+                         :with-local-changes? true}
+                  db-migrate?
+                  (assoc :db-migrate? true
+                         :outliner-op :db-migrate)
+                  skip-final-validate?
+                  (assoc :skip-validate-db? true))
         *rebase-tx-reports (atom [])
         *rebase-results (atom [])
         *remote-tx-results (atom [])
@@ -1502,19 +1526,33 @@
         (worker-undo-redo/clear-history! repo)))))
 
 (defn- apply-remote-tx-without-local-changes!
-  [{:keys [conn remote-txs stale-repair-block-uuids]}]
+  [{:keys [repo conn local-txs remote-txs pre-repair-tx-data post-repair-tx-data stale-repair-block-uuids
+           prefetched-repair-block-uuids db-migrate? skip-final-validate?]}]
   (let [remote-tx-results (atom [])
-        tx-report (ldb/batch-transact!
+        tx-report (ldb/batch-transact-with-temp-conn!
                    conn
-                   {:rtc-tx? true
-                    :without-local-changes? true}
+                   (cond-> {:rtc-tx? true
+                            :without-local-changes? true}
+                     db-migrate?
+                     (assoc :db-migrate? true
+                            :outliner-op :db-migrate)
+                     skip-final-validate?
+                     (assoc :skip-validate-db? true))
                    (fn [conn]
+                     (when (seq pre-repair-tx-data)
+                       (maybe-apply-repair-tx-data! conn pre-repair-tx-data))
+
                      (reset! remote-tx-results
                              (transact-remote-txs! conn remote-txs
-                                                   :stale-repair-block-uuids stale-repair-block-uuids))))]
+                                                   :stale-repair-block-uuids stale-repair-block-uuids))
+
+                     (when (seq post-repair-tx-data)
+                       (maybe-apply-repair-tx-data! conn post-repair-tx-data)))
+                   {:before-commit #(fail-if-pending-tx-snapshot-changed! repo local-txs)})]
     (repair-applied-txs! conn tx-report)
     {:repair-block-uuids (->> @remote-tx-results
                               (mapcat :repair-block-uuids)
+                              (remove (set prefetched-repair-block-uuids))
                               distinct
                               vec)
      :remote-asset-tx-data (mapcat (comp :tx-data :report) @remote-tx-results)}))
@@ -1673,8 +1711,11 @@
                                          (remove (set remote-created-block-uuids))
                                          distinct
                                          vec)
-                invalid-repair-block-uuids (when has-local-changes?
-                                             (remote-txs-invalid-repair-block-uuids @conn remote-txs))]
+                invalid-repair-block-uuids (remote-txs-invalid-repair-block-uuids @conn remote-txs)
+                db-migrate? (remote-txs-db-migrate? remote-txs)
+                apply-args (update apply-args :apply-context assoc
+                                   :db-migrate? db-migrate?
+                                   :skip-final-validate? db-migrate?)]
        (if has-local-changes?
          (if (or (seq missing-block-uuids)
                  (seq invalid-repair-block-uuids))
@@ -1696,12 +1737,25 @@
                  (apply-with-repair pre-repair-tx-data* post-repair-tx-data*))
                (apply-with-repair pre-repair-tx-data post-repair-tx-data)))
            (apply-remote-txs-after-server-repair! apply-args))
-         (if (seq missing-block-uuids)
-           (after-repair-result
-            (<apply-server-repair-blocks! repo client conn missing-block-uuids)
-            #(apply-remote-txs-after-server-repair!
-              (update apply-args :apply-context assoc
-                      :stale-repair-block-uuids missing-block-uuids)))
+         (if (or (seq missing-block-uuids)
+                 (seq invalid-repair-block-uuids))
+           (let [pre-repair-tx-data (<server-repair-blocks-tx-data repo client missing-block-uuids)
+                 post-repair-tx-data (<server-repair-blocks-tx-data repo client invalid-repair-block-uuids)
+                 apply-with-repair (fn [pre-repair-tx-data* post-repair-tx-data*]
+                                     (apply-remote-txs-after-server-repair!
+                                      (update apply-args :apply-context assoc
+                                              :pre-repair-tx-data pre-repair-tx-data*
+                                              :post-repair-tx-data post-repair-tx-data*
+                                              :stale-repair-block-uuids missing-block-uuids
+                                              :prefetched-repair-block-uuids
+                                              (distinct (concat missing-block-uuids
+                                                                invalid-repair-block-uuids)))))]
+             (if (or (p/promise? pre-repair-tx-data)
+                     (p/promise? post-repair-tx-data))
+               (p/let [pre-repair-tx-data* pre-repair-tx-data
+                       post-repair-tx-data* post-repair-tx-data]
+                 (apply-with-repair pre-repair-tx-data* post-repair-tx-data*))
+               (apply-with-repair pre-repair-tx-data post-repair-tx-data)))
            (apply-remote-txs-after-server-repair! apply-args))))
      (fail-fast :db-sync/missing-db {:repo repo :op :apply-remote-txs}))))
 
@@ -1736,9 +1790,9 @@
 
 (defn enqueue-local-tx!
   [repo {:keys [tx-meta tx-data] :as tx-report}]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
+  (when (worker-state/get-datascript-conn repo)
     (when (and (persistable-local-tx-meta? tx-meta)
-               (not (and (:batch-tx? @conn) (not= :rebase (:outliner-op tx-meta))))
+               (not (and (:batch-tx-report? tx-meta) (not= :rebase (:outliner-op tx-meta))))
                (not (:reverse? tx-meta))
                (seq tx-data))
       (enqueue-local-tx-aux repo tx-report))))
