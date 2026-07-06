@@ -625,6 +625,12 @@ should be done through this fn in order to get global config and config defaults
   [ref key]
   (path-cursor-in ref [key]))
 
+(defn path-ref
+  [path]
+  (if (coll? path)
+    (path-cursor-in state path)
+    (path-cursor state path)))
+
 (defn get-state
   "Returns a plain state value.
 

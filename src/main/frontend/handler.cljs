@@ -50,13 +50,6 @@
           (when-not (error/ignored? message)
             (log/error :exception error)))))
 
-(defn- watch-for-date!
-  []
-  (let [f (fn []
-            (page-handler/create-today-journal!))]
-    (f)
-    (js/setInterval f 3000)))
-
 (defn restore-and-setup!
   [repo]
   (when repo
@@ -87,7 +80,7 @@
 
            (page-handler/init-commands!)
 
-           (watch-for-date!)))
+           (page-handler/create-today-journal!)))
         (p/catch (fn [error]
                    (log/error :exception error))))))
 

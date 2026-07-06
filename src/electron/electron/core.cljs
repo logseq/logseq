@@ -2,13 +2,13 @@
   (:require ["/electron/utils" :as js-utils]
             ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
             ["fs-extra" :as fs]
-
             ["os" :as os]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.cli-install :as cli-install]
             [electron.configs :as cfgs]
+            [electron.daily-journal :as daily-journal]
             [electron.db :as db]
             [electron.embedding-server :as embedding-server]
             [electron.exceptions :as exceptions]
@@ -412,7 +412,8 @@
                             t2 (setup-app-manager! win)
                             t3 (handler/set-ipc-handler! win)
                             t4 (server/setup! win)
-                            t5 (when (cfgs/semantic-search-enabled?)
+                            t5 (daily-journal/setup!)
+                            t6 (when (cfgs/semantic-search-enabled?)
                                  (embedding-server/setup! app'))
                             tt (exceptions/setup-exception-listeners!)]
 
@@ -420,7 +421,7 @@
                                  #(-> (handler/stop-all-db-workers!)
                                       (p/finally
                                         (fn []
-                                          (doseq [f [t0 t1 t2 t3 t4 t5 tt]]
+                                          (doseq [f [t0 t1 t2 t3 t4 t5 t6 tt]]
                                             (and f (f))))))))))
 
            ;; setup effects
