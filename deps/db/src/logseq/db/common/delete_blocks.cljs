@@ -22,10 +22,12 @@
                             block-content))))
 
 (defn- build-retracted-tx
-  [retracted-blocks]
+  ([retracted-blocks]
+   (build-retracted-tx retracted-blocks #{}))
+  ([retracted-blocks extra-retract-ids]
   (let [refs (->> (mapcat (fn [block] (:block/_refs block)) retracted-blocks)
                   (common-util/distinct-by :db/id))
-        retract-ids (set (map :db/id retracted-blocks))]
+        retract-ids (into (set (map :db/id retracted-blocks)) extra-retract-ids)]
     (mapcat
      (fn [ref]
        (let [id (:db/id ref)
@@ -43,7 +45,7 @@
                   replaced-title
                   (conj [:db/add id :block/title replaced-title]))]
          tx))
-     refs)))
+     refs))))
 
 (defn- block-entity?
   [entity]
@@ -174,15 +176,17 @@
 (defn- direct-cleanup-tx
   [entities]
   (let [retracted-blocks (filter block-entity? entities)
-        retracted-history-self-tx (->> entities
-                                       (filter property-history-entity?)
-                                       (map (fn [history] [:db/retractEntity (:db/id history)])))
+        retracted-history-self-entities (filter property-history-entity? entities)
+        retracted-history-self-tx (map (fn [history] [:db/retractEntity (:db/id history)])
+                                       retracted-history-self-entities)
         reaction-entities (->> entities
                                (mapcat :logseq.property.reaction/_target)
                                (common-util/distinct-by :db/id))
         retract-reactions-tx (map (fn [reaction] [:db/retractEntity (:db/id reaction)])
                                   reaction-entities)
-        retracted-tx (build-retracted-tx retracted-blocks)
+        view-entities (->> entities
+                           (mapcat :logseq.property/_view-for)
+                           (common-util/distinct-by :db/id))
         history-entities (->> entities
                               (mapcat (fn [entity]
                                         (concat (:logseq.property.history/_block entity)
@@ -191,9 +195,14 @@
                               (common-util/distinct-by :db/id))
         retract-history-tx (map (fn [history] [:db/retractEntity (:db/id history)])
                                 history-entities)
-        delete-views (->> entities
-                          (mapcat :logseq.property/_view-for)
-                          (map (fn [view] [:db/retractEntity (:db/id view)])))]
+        cleanup-retract-ids (->> (concat retracted-history-self-entities
+                                          reaction-entities
+                                          view-entities
+                                          history-entities)
+                                 (keep :db/id)
+                                 set)
+        retracted-tx (build-retracted-tx retracted-blocks cleanup-retract-ids)
+        delete-views (map (fn [view] [:db/retractEntity (:db/id view)]) view-entities)]
     (vec (concat retracted-tx delete-views retracted-history-self-tx retract-history-tx retract-reactions-tx))))
 
 (defn- build-cleanup-tx
