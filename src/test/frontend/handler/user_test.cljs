@@ -1,5 +1,6 @@
 (ns frontend.handler.user-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.core.async :as a]
+            [cljs.test :refer [deftest is testing]]
             [electron.ipc :as ipc]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
@@ -7,31 +8,39 @@
             [promesa.core :as p]))
 
 (defn- with-mocked-local-storage
-  [f]
-  (let [old-storage (.-localStorage js/globalThis)
-        had-local-storage?
-        (.call (.-hasOwnProperty (.-prototype js/Object))
-               js/globalThis
-               "localStorage")
-        mocked-storage #js {:clear (fn [] nil)
-                            :setItem (fn [& _] nil)
-                            :getItem (fn [& _] nil)
-                            :removeItem (fn [& _] nil)}]
-    (js/Object.defineProperty js/globalThis
-                              "localStorage"
-                              #js {:value mocked-storage
-                                   :configurable true
-                                   :writable true})
-    (try
-      (f)
-      (finally
-        (if had-local-storage?
-          (js/Object.defineProperty js/globalThis
-                                    "localStorage"
-                                    #js {:value old-storage
-                                         :configurable true
-                                         :writable true})
-          (js/Reflect.deleteProperty js/globalThis "localStorage"))))))
+  ([f]
+   (with-mocked-local-storage {} f))
+  ([items f]
+   (let [old-storage (.-localStorage js/globalThis)
+         had-local-storage?
+         (.call (.-hasOwnProperty (.-prototype js/Object))
+                js/globalThis
+                "localStorage")
+         mocked-storage #js {:clear (fn [] nil)
+                             :setItem (fn [& _] nil)
+                             :getItem (fn [k] (get items k))
+                             :removeItem (fn [& _] nil)}]
+     (js/Object.defineProperty js/globalThis
+                               "localStorage"
+                               #js {:value mocked-storage
+                                    :configurable true
+                                    :writable true})
+     (try
+       (f)
+       (finally
+         (if had-local-storage?
+           (js/Object.defineProperty js/globalThis
+                                     "localStorage"
+                                     #js {:value old-storage
+                                          :configurable true
+                                          :writable true})
+           (js/Reflect.deleteProperty js/globalThis "localStorage")))))))
+
+(defn- jwt
+  [payload]
+  (str "header."
+       (js/btoa (js/JSON.stringify (clj->js (merge {:cognito:username ""} payload))))
+       ".sig"))
 
 (deftest set-tokens-persists-auth-json-with-latest-token-values-test
   (let [writes* (atom [])
@@ -80,6 +89,27 @@
                     :refresh-token "refresh-token-existing"}
                    (select-keys (js->clj (js/JSON.parse (:content (first @writes*))) :keywordize-keys true)
                                 [:id-token :access-token :refresh-token]))))))
+      (finally
+        (reset! state/state old-state)))))
+
+(deftest restore-tokens-preserves-refresh-token-before-refreshing-expired-id-token-test
+  (let [old-state @state/state
+        expired-id-token (jwt {:exp 0})
+        refresh-token "refresh-token-from-local-storage"]
+    (reset! state/state (assoc old-state
+                               :auth/id-token nil
+                               :auth/access-token nil
+                               :auth/refresh-token nil))
+    (try
+      (with-mocked-local-storage
+        {"id-token" expired-id-token
+         "access-token" "access-token-from-local-storage"
+         "refresh-token" refresh-token}
+        (fn []
+          (with-redefs [user-handler/<refresh-id-token&access-token (fn [] (a/go nil))
+                        state/pub-event! (fn [& _] nil)]
+            (user-handler/restore-tokens-from-localstorage)
+            (is (= refresh-token (state/get-auth-refresh-token))))))
       (finally
         (reset! state/state old-state)))))
 
