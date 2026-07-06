@@ -24,10 +24,10 @@ type bridge_result = {
   mode : Cli_primitive.keyword;
   graph : Cli_primitive.graph;
   agent_name : string;
-  routed : Melange_edn.any list;
+  routed : Melange_edn_melange.any list;
 }
 
-type routed_task = { block : Melange_edn.any; session : string option }
+type routed_task = { block : Melange_edn_melange.any; session : string option }
 type prompt_templates = { task : string; comment : string }
 type inherited_session = { parent_block_uuid : string; session_id : string }
 
@@ -164,7 +164,7 @@ let resolve_agent_name config hostname =
   | true, None ->
       Error
         (Error.make
-           (Edn_util.keyword_t "agent-name-invalid")
+           (Error.Agent_name_invalid)
            "agent-name in cli.edn must be a non-empty string")
   | false, _ -> (
       match Option.bind hostname trim_non_empty with
@@ -175,7 +175,7 @@ let resolve_agent_name config hostname =
           | None ->
               Error
                 (Error.make
-                   (Edn_util.keyword_t "agent-name-invalid")
+                   (Error.Agent_name_invalid)
                    "agent-name cannot be resolved from cli.edn or hostname")))
 
 let value_list = function
@@ -261,7 +261,7 @@ let validate_prompt_template template =
   if String.trim template.body = "" then
     Error
       (Error.make
-         (Edn_util.keyword_t "missing-template-code-block")
+         (Error.Missing_template_code_block)
          "agent bridge prompt template code block is missing")
   else
     let vars = template_vars template.body in
@@ -269,14 +269,14 @@ let validate_prompt_template template =
     | _ :: _ ->
         Error
           (Error.make
-             (Edn_util.keyword_t "unknown-template-vars")
+             (Error.Unknown_template_vars)
              "agent bridge prompt template has unknown variables")
     | [] -> (
         match list_diff template.required_vars vars with
         | _ :: _ ->
             Error
               (Error.make
-                 (Edn_util.keyword_t "missing-template-vars")
+                 (Error.Missing_template_vars)
                  "agent bridge prompt template is missing required variables")
         | [] -> Ok ())
 
@@ -323,7 +323,7 @@ let start_command_detached command =
   match command with
   | [] ->
       Error
-        (Error.make (Edn_util.keyword_t "codex-start-failed") "missing command")
+        (Error.make (Error.Codex_start_failed) "missing command")
   | bin :: _ -> (
       try
         ignore
@@ -334,12 +334,12 @@ let start_command_detached command =
       | Cli_unix.Cli_unix_error (_, op, detail) ->
           Error
             (Error.make
-               (Edn_util.keyword_t "codex-start-failed")
+               (Error.Codex_start_failed)
                ("failed to start codex " ^ op ^ ": " ^ detail))
       | exn ->
           Error
             (Error.make
-               (Edn_util.keyword_t "codex-start-failed")
+               (Error.Codex_start_failed)
                ("failed to start codex: " ^ Printexc.to_string exn)))
 
 let codex_available config =
@@ -377,7 +377,7 @@ let start_codex _config command =
   if result.Cli_unix.status <> 0 then
     Error
       (Error.make
-         (Edn_util.keyword_t "codex-start-failed")
+         (Error.Codex_start_failed)
          ("codex exited before startup completed: " ^ result.Cli_unix.stderr))
   else
     match parse_codex_session_id result.Cli_unix.stdout with
@@ -385,7 +385,7 @@ let start_codex _config command =
     | _ ->
         Error
           (Error.make
-             (Edn_util.keyword_t "codex-session-id-missing")
+             (Error.Codex_session_id_missing)
              "codex exited before reporting a session id")
 
 let ensure_master_session config master_prompt =
@@ -663,7 +663,7 @@ let prompt_template_from_block kind block =
       | _ ->
           Error
             (Error.make
-               (Edn_util.keyword_t "agent-prompt-template-invalid")
+               (Error.Agent_prompt_template_invalid)
                "agent bridge prompt template must contain one code block"))
 
 let blocks_by_title blocks title =
@@ -694,7 +694,7 @@ let agent_bridge_registry_page_query =
                sym "...";
              ];
          ]
-       ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?page-name" ]
+       ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?page-name" ]
        ~where:[ where_v [ sym "?p"; kw "block/name"; sym "?page-name" ] ]
        ())
     [ Edn_util.string (registry_page_name ()) ]
@@ -722,7 +722,7 @@ let registered_agent_query agent_name =
                sym "...";
              ];
          ]
-       ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?agent-page-name" ]
+       ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?agent-page-name" ]
        ~where:[ where_v [ sym "?p"; kw "block/name"; sym "?agent-page-name" ] ]
        ())
     [ Edn_util.string (agent_page_name agent_name) ]
@@ -773,7 +773,7 @@ let agent_master_prompt_blocks_query page_id =
                sym "...";
              ];
          ]
-       ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?page-id" ]
+       ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?page-id" ]
        ~where:[ where_v [ sym "?b"; kw "block/parent"; sym "?page-id" ] ]
        ())
     [ Edn_util.int64 page_id ]
@@ -822,7 +822,7 @@ let prompt_template_blocks_query page_id =
                sym "...";
              ];
          ]
-       ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?page-id" ]
+       ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?page-id" ]
        ~where:[ where_v [ sym "?b"; kw "block/parent"; sym "?page-id" ] ]
        ())
     [ Edn_util.int64 page_id ]
@@ -870,9 +870,9 @@ let routable_task_query agent_name =
          [ vector [ list [ sym "pull"; sym "?e"; routable_task_selector ]; sym "..." ] ]
        ~in_:
          [
-           Melange_edn.symbol "$";
-           Melange_edn.symbol "?agent-name";
-           Melange_edn.symbol "%";
+           Melange_edn_melange.symbol "$";
+           Melange_edn_melange.symbol "?agent-name";
+           Melange_edn_melange.symbol "%";
          ]
        ~where:
          [
@@ -960,10 +960,10 @@ let reaction_query target_uuid emoji_id =
        ~find:[ list [ sym "?r"; sym "." ] ]
        ~in_:
          [
-           Melange_edn.symbol "$";
-           Melange_edn.symbol "?target-uuid";
-           Melange_edn.symbol "?emoji-id";
-           Melange_edn.symbol "%";
+           Melange_edn_melange.symbol "$";
+           Melange_edn_melange.symbol "?target-uuid";
+           Melange_edn_melange.symbol "?emoji-id";
+           Melange_edn_melange.symbol "%";
          ]
        ~where:
          [
@@ -987,7 +987,7 @@ let task_status_query block_uuid =
   query_call
     (Cli_primitive.make_datascript_query
        ~find:[ list [ sym "?status-ident"; sym "." ] ]
-       ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?block-uuid" ]
+       ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?block-uuid" ]
        ~where:
          [
            where_v [ sym "?block"; kw "block/uuid"; sym "?block-uuid" ];
@@ -1003,7 +1003,7 @@ let values_of_query_result value =
   | _ -> []
 
 let unquote_transit_value = function
-  | Melange_edn.Any (Melange_edn.Tagged (("transit/quote" | "'"), value)) ->
+  | Melange_edn_melange.Any (Melange_edn_melange.Tagged (("transit/quote" | "'"), value)) ->
       value
   | value -> value
 
@@ -1114,17 +1114,17 @@ let master_prompt_from_block block =
       | [] ->
           Error
             (Error.make
-               (Edn_util.keyword_t "agent-master-prompt-invalid")
+               (Error.Agent_master_prompt_invalid)
                "agent bridge master prompt code block is missing")
       | _ ->
           Error
             (Error.make
-               (Edn_util.keyword_t "agent-master-prompt-invalid")
+               (Error.Agent_master_prompt_invalid)
                "agent bridge master prompt must contain one code block"))
   | _ ->
       Error
         (Error.make
-           (Edn_util.keyword_t "agent-master-prompt-invalid")
+           (Error.Agent_master_prompt_invalid)
            "agent bridge master prompt wrapper is invalid")
 
 let hex_digest_prefix byte_count seed =
@@ -1526,7 +1526,7 @@ let rec decode_transit_string reader ?(cache_string_key = false)
         Edn_util.keyword (transit_drop_prefix text)
     | '$' ->
         if remember_value then transit_remember reader text;
-        Edn_util.any (Melange_edn.symbol (transit_drop_prefix text))
+        Edn_util.any (Melange_edn_melange.symbol (transit_drop_prefix text))
     | 'u' -> Edn_util.uuid (transit_drop_prefix text)
     | _ -> Edn_util.string text
 
@@ -1557,7 +1557,7 @@ let rec normalize_transit_value reader value =
               normalize_transit_rep_values reader rep |> Edn_util.list
           | Some tag ->
               Edn_util.any
-                (Melange_edn.tagged tag (normalize_transit_value reader rep))
+                (Melange_edn_melange.tagged tag (normalize_transit_value reader rep))
           | None -> normalize_transit_vector reader (tag_value :: [ rep ]))
       | Some values -> normalize_transit_vector reader values
       | None -> value)
@@ -1602,7 +1602,7 @@ let normalize_event_payload payload =
 
 let datom_vector datom =
   match datom with
-  | Melange_edn.Any (Melange_edn.Tagged ("datascript/Datom", value)) ->
+  | Melange_edn_melange.Any (Melange_edn_melange.Tagged ("datascript/Datom", value)) ->
       Edn_util.as_vector value
   | _ -> Edn_util.as_vector datom
 
@@ -1851,7 +1851,7 @@ let bridge_lock_owner_path lock_dir = Filename.concat lock_dir "owner.edn"
 
 let bridge_lock_owner graph agent_name =
   let graph = Cli_primitive.string_of_graph graph in
-  Melange_edn.to_edn_string
+  Melange_edn_melange.to_edn_string
     (Edn_util.map
        [
          (Edn_util.keyword "pid", Edn_util.int (Cli_unix.getpid ()));
@@ -1867,18 +1867,18 @@ let bridge_lock_owner graph agent_name =
 let bridge_lock_error graph agent_name =
   let graph = Cli_primitive.string_of_graph graph in
   Error.make
-    (Edn_util.keyword_t "agent-bridge-already-running")
+    (Error.Agent_bridge_already_running)
     ("agent bridge is already running for graph '" ^ graph
    ^ "' and AgentBridge name '" ^ agent_name ^ "'")
 
 let bridge_lock_failure message =
-  Error.make (Edn_util.keyword_t "agent-bridge-lock-failed") message
+  Error.make (Error.Agent_bridge_lock_failed) message
 
 let bridge_lock_owner_pid lock_dir =
   try
     let owner =
       Cli_unix.read_text_file (bridge_lock_owner_path lock_dir)
-      |> Melange_edn.of_edn_string
+      |> Melange_edn_melange.of_edn_string
     in
     Edn_util.get_int owner "pid"
   with _ -> None
@@ -2046,7 +2046,7 @@ let execute_with_mode (Agent_bridge { repo; graph }) config mode =
         pure
           (Output_mode.error ~command:Command_id.Agent_bridge mode
              (Error.make
-                (Edn_util.keyword_t "codex-not-found")
+                (Error.Codex_not_found)
                 "codex executable is not available"))
       else
         with_bridge_lock config graph agent_name mode (fun () ->
@@ -2067,6 +2067,7 @@ let metadata () =
       requires_graph = Command_id.requires_graph Command_id.Agent_bridge;
       requires_auth = Command_id.requires_auth Command_id.Agent_bridge;
       write_command = Command_id.is_write Command_id.Agent_bridge;
+      human_table_headers_order = [];
     };
   ]
 

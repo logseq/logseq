@@ -30,6 +30,7 @@ const staticCleanKeep = new Set([
   'package.json',
   'pnpm-lock.yaml',
 ])
+const staticInstallCommand = 'pnpm install --ignore-workspace --frozen-lockfile'
 
 const css = {
   watchCSS () {
@@ -101,6 +102,13 @@ const common = {
     return rawCopySrc(resourceSyncGlobs).pipe(gulp.dest(outputPath))
   },
 
+  syncUIAssetFile (...params) {
+    return gulp.series(
+      () => rawCopySrc(['packages/ui/dist/ui.js']).pipe(gulp.dest(path.join(outputPath, 'js'))),
+      () => rawCopySrc(['packages/ui/dist/ui.js']).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
+    )(...params)
+  },
+
   // NOTE: All assets from node_modules are copied to the output directory
   syncAssetFiles (...params) {
     return gulp.series(
@@ -161,6 +169,11 @@ const common = {
   keepSyncResourceFile () {
     return gulp.watch(resourceSyncGlobs, { ignoreInitial: true },
       common.syncResourceFile)
+  },
+
+  keepSyncUIAssetFile () {
+    return gulp.watch(['packages/ui/dist/ui.js'], { ignoreInitial: true },
+      common.syncUIAssetFile)
   },
 
   syncAllStatic () {
@@ -253,7 +266,7 @@ const common = {
 }
 
 exports.electron = () => {
-  cp.execSync('pnpm install --frozen-lockfile', {
+  cp.execSync(staticInstallCommand, {
     cwd: outputPath,
     stdio: 'inherit',
   })
@@ -295,7 +308,7 @@ const prepareElectronMaker = async () => {
   await common.pruneDesktopPackageFiles()
 
   if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
-    cp.execSync('pnpm install --frozen-lockfile', {
+    cp.execSync(staticInstallCommand, {
       cwd: outputPath,
       stdio: 'inherit',
     })
@@ -323,11 +336,11 @@ exports.cap = common.runCapWithLocalDevServerEntry
 exports.clean = common.clean
 exports.watch = gulp.series(
   common.syncResourceFile,
-  common.syncAssetFiles,
-  gulp.parallel(common.keepSyncResourceFile, css.watchCSS))
+  common.syncAssetFiles, common.switchReactDevelopmentMode,
+  gulp.parallel(common.keepSyncResourceFile, common.keepSyncUIAssetFile, css.watchCSS))
 exports.watchMobile = gulp.series(
   common.syncResourceFile, common.syncAssetFiles,
-  gulp.parallel(common.keepSyncResourceFile, common.keepSyncWorkersToMobile, css.watchMobileCSS))
+  gulp.parallel(common.keepSyncResourceFile, common.keepSyncUIAssetFile, common.keepSyncWorkersToMobile, css.watchMobileCSS))
 exports.build = gulp.series(common.clean, common.syncResourceFile,
   common.syncAssetFiles, css.buildCSS)
 exports.buildMobile = gulp.series(common.clean, common.syncResourceFile,

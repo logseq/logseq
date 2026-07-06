@@ -191,11 +191,27 @@ let profile_lines config result exit_code =
         ~status:(profile_status exit_code)
       |> Profile_types.render_lines
 
+let human_table_headers_order registry command =
+  match command with
+  | None -> []
+  | Some command ->
+      registry.Command_registry.commands
+      |> List.find_opt (fun meta -> meta.Command_registry.id = command)
+      |> Option.map
+           (fun (meta : Command_registry.command_meta) ->
+             meta.human_table_headers_order)
+      |> Option.value ~default:[]
+
+let with_registry_metadata app result =
+  Cli_result.with_human_table_headers_order
+    (human_table_headers_order app.registry result.Cli_result.command)
+    result
+
 let verbose_line config result =
   if not config.Cli_config.verbose then []
   else
     [
-      Melange_edn.to_edn_string
+      Melange_edn_melange.to_edn_string
         (Edn_util.map
            [
              (Edn_util.keyword "level", Edn_util.keyword "debug");
@@ -282,7 +298,7 @@ let graph_exists_error graph =
   Error.make
     ~context:
       (Edn_util.map [ (Edn_util.keyword "graph", Edn_util.string graph_name) ])
-    (Edn_util.keyword_t "graph-exists")
+    (Error.Graph_exists)
     ("graph already exists: " ^ graph_name)
 
 let action_graph_exists config graph =
@@ -383,9 +399,10 @@ let execute_action : type marker.
     app_context ->
     (built_action, marker) state ->
     (executed_action, final) state Error.build_result Cli_effect.t =
- fun _ (Built_action_state (config, action)) ->
+ fun app (Built_action_state (config, action)) ->
   Cli_effect.map
-    (fun result -> Ok (Executed_action_state (config, result)))
+    (fun result ->
+      Ok (Executed_action_state (config, with_registry_metadata app result)))
     (Cli_action.execute action config)
 
 let format_cli_result result config = Format_types.format_result result config

@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker-handler-ws-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require [cljs-bean.core :as bean]
+            [cljs.test :refer [async deftest is]]
             [datascript.core :as d]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.storage :as storage]
@@ -66,6 +67,44 @@
     (is (= "hello" (:type @sent)))
     (is (false? (contains? @sent :checksum)))))
 
+(deftest tx-batch-message-adds-graph-and-user-context-to-transact-meta-test
+  (let [sql (test-sql/make-sql)
+        conn (storage/open-conn sql)
+        ws #js {:readyState 1}
+        sent (atom nil)
+        tx-metas (atom [])
+        self #js {:conn conn
+                  :graph-id "graph-ws"
+                  :schema-ready true
+                  :sql sql}
+        raw (protocol/encode-message
+             {:type "tx/batch"
+              :client-revision "revision-ws"
+              :t-before 0
+              :txs [{:tx (protocol/tx->transit [[:db/add -1 :block/title "ws context"]])
+                     :outliner-op :save-block}]})]
+    (with-redefs [presence/get-user (fn [_self _ws]
+                                      {:user-id "user-1"
+                                       :username "alice"})
+                  ws/broadcast! (fn [& _] nil)
+                  ws/send! (fn [_target msg]
+                             (reset! sent msg))]
+      (d/listen! conn ::capture-ws-context-tx-meta
+                 (fn [tx-report]
+                   (swap! tx-metas conj (:tx-meta tx-report))))
+      (try
+        (ws-handler/handle-ws-message! self ws raw)
+        (finally
+          (d/unlisten! conn ::capture-ws-context-tx-meta))))
+    (is (= "tx/batch/ok" (:type @sent)))
+    (is (some #(= {:op :apply-client-tx
+                   :outliner-op :save-block
+                   :graph-id "graph-ws"
+                   :client-revision "revision-ws"
+                   :username "alice"}
+                  (select-keys % [:op :outliner-op :graph-id :client-revision :username]))
+              @tx-metas))))
+
 (deftest ws-send-serializes-tx-reject-uuids-as-strings-test
   (let [raw* (atom nil)
         ws #js {:readyState 1
@@ -81,6 +120,33 @@
       (is (= "tx/reject" (:type message)))
       (is (= [(str success-tx-id)] (:success-tx-ids message)))
       (is (= (str failed-tx-id) (:failed-tx-id message))))))
+
+(deftest online-users-broadcast-restored-attachment-user-test
+  (let [attachment* (atom nil)
+        ws #js {:readyState 1
+                :serializeAttachment (fn [attachment]
+                                       (reset! attachment* attachment))
+                :deserializeAttachment (fn []
+                                         @attachment*)}
+        self #js {}
+        restored-self #js {}
+        user {:user-id "user-1"
+              :email "user@example.com"
+              :username "alice"}
+        sent (atom nil)]
+    (presence/add-presence! self ws user)
+    (is (= {:presence/user user}
+           (bean/->clj (.deserializeAttachment ws))))
+    (swap! (presence/presence* restored-self)
+           assoc
+           ws
+           (presence/attachment->user (.deserializeAttachment ws)))
+    (with-redefs [ws/broadcast! (fn [_self _sender message]
+                                  (reset! sent message))]
+      (presence/broadcast-online-users! restored-self))
+    (is (= {:type "online-users"
+            :online-users [user]}
+           @sent))))
 
 (deftest websocket-connection-is-rejected-while-snapshot-upload-is-in-progress-test
   (async done

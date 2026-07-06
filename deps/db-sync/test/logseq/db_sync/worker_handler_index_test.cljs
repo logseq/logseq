@@ -186,7 +186,7 @@
                           (is false (str error))
                           (done)))))))
 
-(deftest graphs-create-non-e2ee-requires-user-rsa-key-pair-test
+(deftest graphs-create-non-e2ee-skips-user-rsa-key-pair-test
   (async done
          (let [request (js/Request. "http://localhost/graphs" #js {:method "POST"})
                url (js/URL. (.-url request))
@@ -217,9 +217,10 @@
                                                              :path-params {}}})
                          text (.text resp)
                          body (js->clj (js/JSON.parse text) :keywordize-keys true)]
-                   (is (= 400 (.-status resp)))
-                   (is (= "missing user rsa key pair" (:error body)))
-                   (is (zero? @index-upsert-calls*))))
+                   (is (= 200 (.-status resp)))
+                   (is (string? (:graph-id body)))
+                   (is (= false (:graph-e2ee? body)))
+                   (is (= 1 @index-upsert-calls*))))
                (p/then (fn []
                          (done)))
                (p/catch (fn [error]

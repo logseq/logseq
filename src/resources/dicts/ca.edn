@@ -994,7 +994,6 @@
  :node/built-in-cant-delete-error "Els elements integrats no es poden eliminar."
  :node/new "Nou node"
 
-
  :notification/copied "Copiat"
 
  :onboarding.import/desc "Descripció d'importació"
@@ -1246,7 +1245,6 @@
  :property/drag-to-reorder "Arrossegueu per reordenar"
  :property/existing-values "Valors existents"
  :property/go-to-this-property "Anar a la pàgina de la propietat"
- :property/hidden-properties "Propietats ocultes"
  :property/hide-by-default "Amagar per defecte"
  :property/hide-choice-for-tag "Amagar opció per etiqueta"
  :property/hide-empty-value "Amagar valors buits"

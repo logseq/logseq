@@ -19,6 +19,7 @@ type block_opts = {
 type page_opts = {
   id : Cli_primitive.db_id option;
   page : string option;
+  restore : bool;
   update_tags_edn : string option;
   update_properties_edn : string option;
   remove_tags_edn : string option;
@@ -127,6 +128,7 @@ type action =
       mode : mode;
       id : Cli_primitive.db_id option;
       page : string option;
+      restore : bool;
       plan : Property.update_plan;
     }
   | Upsert_task of {
@@ -413,7 +415,7 @@ let block_target_of_parts target_id target_uuid target_page =
   | None, None, None ->
       Error
         (Error.make
-           (Edn_util.keyword_t "missing-target")
+           (Error.Missing_target)
            "target page or block is required")
   | _ ->
       Error
@@ -478,7 +480,7 @@ let block_update_of_update_action (action : Update.action) =
     | _ ->
         Error
           (Error.make
-             (Edn_util.keyword_t "missing-source")
+             (Error.Missing_source)
              "source block is required")
   in
   Error.bind source (fun source ->
@@ -566,8 +568,8 @@ let tag_of_value value =
 let key_of_value = Property.parse_key
 
 let edn_value_of_string ~label text =
-  try Ok (Melange_edn.of_edn_string text)
-  with Melange_edn.Parse_error _ ->
+  try Ok (Melange_edn_melange.of_edn_string text)
+  with Melange_edn_melange.Parse_error _ ->
     Error (Error.invalid_options ("invalid " ^ label ^ " edn"))
 
 let parse_vector_edn ~label text =
@@ -649,7 +651,7 @@ let build_tag repo graph (opts : tag_opts) =
       | None, None ->
           Error
             (Error.make
-               (Edn_util.keyword_t "missing-tag-name")
+               (Error.Missing_tag_name)
                "tag name is required"))
 
 let parse_property_assignments_edn ~label = function
@@ -696,15 +698,31 @@ let build_page repo graph (opts : page_opts) =
       | Some id, page ->
           Ok
             (Upsert_page
-               { repo; graph; mode = Update; id = Some id; page; plan })
+               {
+                 repo;
+                 graph;
+                 mode = Update;
+                 id = Some id;
+                 page;
+                 restore = opts.restore;
+                 plan;
+               })
       | None, Some page ->
           Ok
             (Upsert_page
-               { repo; graph; mode = Create; id = None; page = Some page; plan })
+               {
+                 repo;
+                 graph;
+                 mode = Create;
+                 id = None;
+                 page = Some page;
+                 restore = opts.restore;
+                 plan;
+               })
       | None, None ->
           Error
             (Error.make
-               (Edn_util.keyword_t "missing-page-name")
+               (Error.Missing_page_name)
                "page name is required"))
 
 let schema_of_property_opts (opts : property_opts) =
@@ -733,7 +751,7 @@ let build_property repo graph (opts : property_opts) =
   | None, None ->
       Error
         (Error.make
-           (Edn_util.keyword_t "missing-property-name")
+           (Error.Missing_property_name)
            "property name is required")
 
 let normalize_content value =
@@ -821,7 +839,7 @@ let build_asset repo graph (opts : asset_opts) =
   | None, None, None ->
       Error
         (Error.make
-           (Edn_util.keyword_t "missing-asset-selector")
+           (Error.Missing_asset_selector)
            "asset id, uuid, or path is required")
   | Some _, Some _, _ ->
       Error (Error.invalid_options "only one of --id or --uuid is allowed")
@@ -953,7 +971,7 @@ let build_task repo graph (opts : task_opts) =
           | Some _, _, _, _ | _, Some _, _, _ | _, _, _, Some _ ->
               Error
                 (Error.make
-                   (Edn_util.keyword_t "spec-blocker")
+                   (Error.Spec_blocker)
                    "upsert task create currently supports only --target-page \
                     because spec/l3/upsert.mli does not carry target id, \
                     target uuid, or pos in Upsert_task actions")
@@ -991,12 +1009,12 @@ let build_task repo graph (opts : task_opts) =
           | _ ->
               Error
                 (Error.make
-                   (Edn_util.keyword_t "missing-target")
+                   (Error.Missing_target)
                    "target page is required when creating a task block"))
       | _ ->
           Error
             (Error.make
-               (Edn_util.keyword_t "missing-target")
+               (Error.Missing_target)
                "block or page is required"))
 
 let parse_block_update_plan (opts : block_opts) =
@@ -1174,7 +1192,7 @@ let graph_assets_dir config repo =
 let class_query selector class_ident =
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [
         Cli_primitive.V
@@ -1192,7 +1210,7 @@ let property_query selector = class_query selector "logseq.class/Property"
 let page_query selector =
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [
         Cli_primitive.V
@@ -1217,6 +1235,26 @@ let pull_tag_by_name config repo name selector =
            query_value (tag_query selector);
            Edn_util.string (normalized_lookup_name name);
          ])
+
+let list_tags config repo =
+  Transport.thread_api_cli_list_tags config ~repo ~options:(Edn_util.map_t [])
+
+let tag_name_matches name entity =
+  let expected = normalized_lookup_name name in
+  let matches value = String.equal (normalized_lookup_name value) expected in
+  match
+    (Edn_util.get_string entity "block/title", Edn_util.get_string entity "block/name")
+  with
+  | Some title, _ when matches title -> true
+  | _, Some name when matches name -> true
+  | _ -> false
+
+let find_tag_by_name config repo name =
+  let open Cli_effect in
+  bind (list_tags config repo) (fun value ->
+      match Edn_util.as_seq value with
+      | Some tags -> pure (List.find_opt (tag_name_matches name) tags)
+      | None -> pure None)
 
 let pull_property_by_name config repo name selector =
   Transport.thread_api_q config ~repo
@@ -1390,12 +1428,12 @@ let ok_asset_ids mode ids =
 let tag_not_found mode =
   Cli_result.error ~command:Command_id.Upsert_tag mode
     (Error.make
-       (Edn_util.keyword_t "tag-not-found")
+       (Error.Tag_not_found)
        "tag not found after upsert")
 
 let upsert_id_not_found entity_type id =
   Error.make
-    (Edn_util.keyword_t "upsert-id-not-found")
+    (Error.Upsert_id_not_found)
     (entity_type ^ " not found for id")
     ~context:
       (Edn_util.map
@@ -1406,7 +1444,7 @@ let upsert_id_not_found entity_type id =
 
 let upsert_id_type_mismatch entity_type id =
   Error.make
-    (Edn_util.keyword_t "upsert-id-type-mismatch")
+    (Error.Upsert_id_type_mismatch)
     ("id must be a node tagged with #" ^ entity_type)
     ~context:
       (Edn_util.map
@@ -1428,31 +1466,37 @@ let rename_conflict current_entity target =
   | Some _, _ when tag_entity target ->
       Some
         (Error.make
-           (Edn_util.keyword_t "tag-rename-conflict")
+           (Error.Tag_rename_conflict)
            "rename target already exists as a tag")
   | Some _, _ ->
       Some
         (Error.make
-           (Edn_util.keyword_t "tag-name-conflict")
+           (Error.Tag_name_conflict)
            "tag already exists as a page and is not a tag")
 
 let page_entity value = Option.is_some (name_of_entity value)
+
+let recycled_entity value =
+  Option.is_some (Edn_util.get value "logseq.property/deleted-at")
+
+let page_not_found () =
+  Error.make (Error.Page_not_found) "page not found"
+
+let recycled_page_error () =
+  Error.make (Error.Recycled_page) "page is recycled"
 
 let resolve_tag_id invoke_config repo tag =
   let open Cli_effect in
   match tag with
   | Selector.Tag_id id -> pure (Ok id)
   | Tag_name name ->
-      bind (pull_tag_by_name invoke_config repo name tag_selector)
-        (fun result ->
-          match Option.bind (first_entity result) id_of_entity with
+      bind (find_tag_by_name invoke_config repo name) (fun result ->
+          match Option.bind result id_of_entity with
           | Some id -> pure (Ok id)
           | None ->
               pure
                 (Error
-                   (Error.make
-                      (Edn_util.keyword_t "tag-not-found")
-                      "tag not found")))
+                   (Error.make (Error.Tag_not_found) "tag not found")))
   | Tag_ident _ | Tag_uuid _ ->
       bind
         (pull_entity_by_lookup invoke_config repo tag_selector
@@ -1464,7 +1508,7 @@ let resolve_tag_id invoke_config repo tag =
               pure
                 (Error
                    (Error.make
-                      (Edn_util.keyword_t "tag-not-found")
+                      (Error.Tag_not_found)
                       "tag not found")))
 
 let property_key_label = function
@@ -1483,7 +1527,7 @@ let qualified_property_ident ident =
 let property_not_found_error key =
   let label = property_key_label key in
   Error.make
-    (Edn_util.keyword_t "property-not-found")
+    (Error.Property_not_found)
     ("property not found: " ^ label)
 
 let resolved_property_ident key entity =
@@ -1638,7 +1682,7 @@ let resolve_block_uuid_ref invoke_config repo uuid =
           pure
             (Error
                (Error.make
-                  (Edn_util.keyword_t "block-not-found")
+                  (Error.Block_not_found)
                   ("block not found: " ^ uuid))))
 
 let rec resolve_property_value_refs invoke_config repo value =
@@ -1658,12 +1702,12 @@ let rec resolve_property_value_refs invoke_config repo value =
         loop [] values
       in
       match value with
-      | Melange_edn.Any (Melange_edn.Vector values) ->
-          resolve_values Edn_util.vector (Edn_util.iarray_to_list values)
+      | Melange_edn_melange.Any (Melange_edn_melange.Vector values) ->
+          resolve_values Edn_util.vector (Edn_util.array_to_list values)
       | Any (List values) ->
-          resolve_values Edn_util.list (Edn_util.iarray_to_list values)
+          resolve_values Edn_util.list (Edn_util.array_to_list values)
       | Any (Set values) ->
-          resolve_values Edn_util.set (Edn_util.iarray_to_list values)
+          resolve_values Edn_util.set (Edn_util.array_to_list values)
       | Any (Map fields) ->
           let rec loop acc = function
             | [] -> pure (Ok (Edn_util.map (List.rev acc)))
@@ -1673,7 +1717,7 @@ let rec resolve_property_value_refs invoke_config repo value =
                   | Error err -> pure (Error err)
                   | Ok value -> loop ((key, value) :: acc) rest)
           in
-          loop [] (Edn_util.iarray_to_list fields)
+          loop [] (Edn_util.array_to_list fields)
       | _ -> pure (Ok value))
 
 let rec resolve_property_assignments invoke_config repo = function
@@ -1731,7 +1775,7 @@ let inline_property_assignments block =
                   Error
                     (Error.invalid_options
                        ("invalid block property key: "
-                       ^ Melange_edn.to_edn_string key)))
+                       ^ Melange_edn_melange.to_edn_string key)))
       in
       loop [] fields
 
@@ -1937,6 +1981,10 @@ let execute_plan_on_uuids invoke_config repo block_uuids plan =
 let execute_page_plan invoke_config repo page_uuid plan =
   execute_plan_on_uuids invoke_config repo [ page_uuid ] plan
 
+let restore_recycled_page invoke_config repo page_uuid =
+  apply_outliner_ops invoke_config repo
+    [ vector [ kw "restore-recycled"; vector [ Edn_util.uuid page_uuid ] ] ]
+
 let pull_created_page invoke_config repo name create_result =
   match (Edn_util.as_vector create_result, Edn_util.as_list create_result) with
   | Some (_ :: uuid_value :: _), _ | _, Some (_ :: uuid_value :: _) -> (
@@ -2021,13 +2069,13 @@ let tag_result_with_schema_properties mode invoke_config repo entity
         pure
           (Cli_result.error ~command:Command_id.Upsert_tag mode
              (Error.make
-                (Edn_util.keyword_t "tag-create-not-tag")
+                (Error.Tag_create_not_tag)
                 "created entity is not tagged as :logseq.class/Tag"))
   | Some _, None ->
       pure
         (Cli_result.error ~command:Command_id.Upsert_tag mode
            (Error.make
-              (Edn_util.keyword_t "upsert-id-not-found")
+              (Error.Upsert_id_not_found)
               "tag uuid not found"))
   | None, _ -> pure (tag_not_found mode)
 
@@ -2088,7 +2136,7 @@ let execute_update_tag mode invoke_config repo id name ~add_properties
                             (Cli_result.error ~command:Command_id.Upsert_tag
                                mode
                                (Error.make
-                                  (Edn_util.keyword_t "upsert-id-not-found")
+                                  (Error.Upsert_id_not_found)
                                   "tag uuid not found"))
                       | Some uuid ->
                           bind (rename_page invoke_config repo uuid target_name)
@@ -2116,7 +2164,7 @@ let execute_create_property mode invoke_config repo name schema =
                   pure
                     (Cli_result.error ~command:Command_id.Upsert_property mode
                        (Error.make
-                          (Edn_util.keyword_t "property-not-found")
+                          (Error.Property_not_found)
                           "property not found after upsert")))))
 
 let execute_update_property mode invoke_config repo id schema =
@@ -2162,7 +2210,7 @@ let ensure_asset_file_metadata path =
     Error
       (Error.make
          ~context:(Edn_util.map [ (kw "path", Edn_util.string path) ])
-         (Edn_util.keyword_t "asset-file-not-found")
+         (Error.Asset_file_not_found)
          "asset file not found")
   else
     match file_extension path with
@@ -2170,7 +2218,7 @@ let ensure_asset_file_metadata path =
         Error
           (Error.make
              ~context:(Edn_util.map [ (kw "path", Edn_util.string path) ])
-             (Edn_util.keyword_t "invalid-options")
+             (Error.Invalid_options)
              "asset path must include a file extension")
     | Some asset_type -> (
         match file_sha256 path with
@@ -2178,7 +2226,7 @@ let ensure_asset_file_metadata path =
             Error
               (Error.make
                  ~context:(Edn_util.map [ (kw "path", Edn_util.string path) ])
-                 (Edn_util.keyword_t "asset-checksum-failed")
+                 (Error.Asset_checksum_failed)
                  "asset checksum failed")
         | Some checksum -> Ok (asset_type, file_size path, checksum))
 
@@ -2195,7 +2243,7 @@ let ensure_asset_tag_id invoke_config repo =
           pure
             (Error
                (Error.make
-                  (Edn_util.keyword_t "asset-tag-not-found")
+                  (Error.Asset_tag_not_found)
                   "asset tag not found")))
 
 let with_asset_metadata (block : Block.t) asset_tag_id asset_type asset_size
@@ -2256,7 +2304,7 @@ let execute_create_asset mode config repo path create_action =
                       pure
                         (Cli_result.error ~command:Command_id.Upsert_asset mode
                            (Error.make
-                              (Edn_util.keyword_t "asset-create-failed")
+                              (Error.Asset_create_failed)
                               "created asset block missing uuid"))
                   | first :: rest -> (
                       match first.Block.uuid with
@@ -2265,7 +2313,7 @@ let execute_create_asset mode config repo path create_action =
                             (Cli_result.error ~command:Command_id.Upsert_asset
                                mode
                                (Error.make
-                                  (Edn_util.keyword_t "asset-create-failed")
+                                  (Error.Asset_create_failed)
                                   "created asset block missing uuid"))
                       | Some block_uuid -> (
                           let first =
@@ -2300,15 +2348,14 @@ let execute_create_asset mode config repo path create_action =
                                         (Cli_result.error
                                            ~command:Command_id.Upsert_asset mode
                                            (Error.make
-                                              (Edn_util.keyword_t
-                                                 "asset-create-failed")
+                                              (Error.Asset_create_failed)
                                               "asset block not created")))
                           with exn ->
                             pure
                               (Cli_result.error ~command:Command_id.Upsert_asset
                                  mode
                                  (Error.make
-                                    (Edn_util.keyword_t "asset-file-copy-failed")
+                                    (Error.Asset_file_copy_failed)
                                     (Printexc.to_string exn)))))))))
 
 let execute_update_asset mode invoke_config repo id uuid content =
@@ -2338,7 +2385,7 @@ let execute_update_asset mode invoke_config repo id uuid content =
               pure
                 (Cli_result.error ~command:Command_id.Upsert_asset mode
                    (Error.make
-                      (Edn_util.keyword_t "upsert-id-not-found")
+                      (Error.Upsert_id_not_found)
                       "asset uuid not found"))
           | None, _ -> pure (ok_asset_ids mode [ id ])))
 
@@ -2379,7 +2426,7 @@ let ensure_task_tag_id invoke_config repo =
           pure
             (Error
                (Error.make
-                  (Edn_util.keyword_t "task-tag-not-found")
+                  (Error.Task_tag_not_found)
                   "task tag not found")))
 
 let ensure_task_page invoke_config repo page =
@@ -2393,7 +2440,7 @@ let ensure_task_page invoke_config repo page =
               pure
                 (Error
                    (Error.make
-                      (Edn_util.keyword_t "page-not-found")
+                      (Error.Page_not_found)
                       "page not found after upsert")))
       | None ->
           bind (create_page invoke_config repo page) (fun create_result ->
@@ -2405,7 +2452,7 @@ let ensure_task_page invoke_config repo page =
                       pure
                         (Error
                            (Error.make
-                              (Edn_util.keyword_t "page-not-found")
+                              (Error.Page_not_found)
                               "page not found after upsert")))))
 
 let execute_task_plan_on_uuids invoke_config repo block_uuids task_tag_id
@@ -2502,7 +2549,7 @@ let execute_task_update mode invoke_config repo id uuid status_input
                       pure
                         (Cli_result.error ~command:Command_id.Upsert_task mode
                            (Error.make
-                              (Edn_util.keyword_t "upsert-id-not-found")
+                              (Error.Upsert_id_not_found)
                               "task uuid not found"))
                   | None, _ ->
                       pure
@@ -2510,29 +2557,44 @@ let execute_task_update mode invoke_config repo id uuid status_input
                            (upsert_id_not_found "task"
                               (Option.value id ~default:0L))))))
 
-let page_result_with_plan mode invoke_config repo page_id page_uuid plan =
+let page_result_with_plan ?(restore = false) mode invoke_config repo page_id
+    page_uuid plan =
   let open Cli_effect in
-  bind (execute_page_plan invoke_config repo page_uuid plan) (function
-    | Error err ->
-        pure (Cli_result.error ~command:Command_id.Upsert_page mode err)
-    | Ok _ -> pure (ok_page_ids mode [ page_id ]))
+  let restore_effect =
+    if restore then restore_recycled_page invoke_config repo page_uuid
+    else pure Edn_util.nil
+  in
+  bind restore_effect (fun _ ->
+      bind (execute_page_plan invoke_config repo page_uuid plan) (function
+      | Error err ->
+          pure (Cli_result.error ~command:Command_id.Upsert_page mode err)
+      | Ok _ -> pure (ok_page_ids mode [ page_id ])))
 
-let execute_create_page mode invoke_config repo name plan =
+let execute_create_page mode invoke_config repo name restore plan =
   let open Cli_effect in
   bind (pull_pages_by_name invoke_config repo name page_selector)
     (fun existing ->
       match first_entity existing with
       | Some page -> (
-          match (id_of_entity page, uuid_of_entity page) with
-          | Some id, Some uuid ->
-              page_result_with_plan mode invoke_config repo id uuid plan
-          | Some id, None -> pure (ok_page_ids mode [ id ])
-          | _ ->
-              pure
-                (Cli_result.error ~command:Command_id.Upsert_page mode
-                   (Error.make
-                      (Edn_util.keyword_t "page-not-found")
-                      "page not found after upsert")))
+          let recycled = recycled_entity page in
+          if recycled && not restore then
+            pure
+              (Cli_result.error ~command:Command_id.Upsert_page mode
+                 (recycled_page_error ()))
+          else
+            match (id_of_entity page, uuid_of_entity page) with
+            | Some id, Some uuid ->
+                page_result_with_plan ~restore:recycled mode invoke_config repo
+                  id uuid plan
+            | Some _, None when recycled ->
+                pure
+                  (Cli_result.error ~command:Command_id.Upsert_page mode
+                     (recycled_page_error ()))
+            | Some id, None -> pure (ok_page_ids mode [ id ])
+            | _ ->
+                pure
+                  (Cli_result.error ~command:Command_id.Upsert_page mode
+                     (page_not_found ())))
       | None ->
           bind (create_page invoke_config repo name) (fun create_result ->
               bind (pull_created_page invoke_config repo name create_result)
@@ -2544,11 +2606,9 @@ let execute_create_page mode invoke_config repo name plan =
                   | _ ->
                       pure
                         (Cli_result.error ~command:Command_id.Upsert_page mode
-                           (Error.make
-                              (Edn_util.keyword_t "page-not-found")
-                              "page not found after upsert")))))
+                           (page_not_found ())))))
 
-let execute_update_page mode invoke_config repo id plan =
+let execute_update_page mode invoke_config repo id restore plan =
   let open Cli_effect in
   bind (pull_entity_by_id invoke_config repo page_selector id) (fun entity ->
       match id_of_entity entity with
@@ -2560,10 +2620,20 @@ let execute_update_page mode invoke_config repo id plan =
           pure
             (Cli_result.error ~command:Command_id.Upsert_page mode
                (upsert_id_type_mismatch "Page" id))
+      | Some _ when recycled_entity entity && not restore ->
+          pure
+            (Cli_result.error ~command:Command_id.Upsert_page mode
+               (recycled_page_error ()))
       | Some id -> (
+          let recycled = recycled_entity entity in
           match uuid_of_entity entity with
           | Some uuid ->
-              page_result_with_plan mode invoke_config repo id uuid plan
+              page_result_with_plan ~restore:recycled mode invoke_config repo id
+                uuid plan
+          | None when recycled ->
+              pure
+                (Cli_result.error ~command:Command_id.Upsert_page mode
+                   (recycled_page_error ()))
           | None -> pure (ok_page_ids mode [ id ])))
 
 let update_plan_empty (plan : Property.update_plan) =
@@ -2642,8 +2712,7 @@ let execute_task_create mode config invoke_config repo target_page content
                               (Cli_result.error ~command:Command_id.Upsert_task
                                  mode
                                  (Error.make
-                                    (Edn_util.keyword_t
-                                       "add-id-resolution-failed")
+                                    (Error.Add_id_resolution_failed)
                                     "unable to resolve created ids"))
                         | Some ids ->
                             let block_uuids =
@@ -2730,8 +2799,7 @@ let execute_create_block mode (action : block_create) config =
                                              ~command:Command_id.Upsert_block
                                              mode
                                              (Error.make
-                                                (Edn_util.keyword_t
-                                                   "add-id-resolution-failed")
+                                                (Error.Add_id_resolution_failed)
                                                 "unable to resolve created ids"))
                                     | Some ids ->
                                         bind
@@ -2805,27 +2873,27 @@ let execute_with_mode action config mode =
       pure
         (Cli_result.error ~command:Command_id.Upsert_tag mode
            (Error.make
-              (Edn_util.keyword_t "not-implemented")
+              (Error.Not_implemented)
               "upsert tag is not implemented"))
-  | Upsert_page { repo; mode = Create; page = Some page; plan; _ } ->
+  | Upsert_page { repo; mode = Create; page = Some page; restore; plan; _ } ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
         (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_page mode err)
         | Ok invoke_config ->
-            execute_create_page mode invoke_config repo page plan)
-  | Upsert_page { repo; mode = Update; id = Some id; plan; _ } ->
+            execute_create_page mode invoke_config repo page restore plan)
+  | Upsert_page { repo; mode = Update; id = Some id; restore; plan; _ } ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
         (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_page mode err)
         | Ok invoke_config ->
-            execute_update_page mode invoke_config repo id plan)
+            execute_update_page mode invoke_config repo id restore plan)
   | Upsert_page _ ->
       pure
         (Cli_result.error ~command:Command_id.Upsert_page mode
            (Error.make
-              (Edn_util.keyword_t "not-implemented")
+              (Error.Not_implemented)
               "upsert page is not implemented"))
   | Upsert_property { repo; mode = Create; name = Some name; schema; _ } ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
@@ -2845,7 +2913,7 @@ let execute_with_mode action config mode =
       pure
         (Cli_result.error ~command:Command_id.Upsert_property mode
            (Error.make
-              (Edn_util.keyword_t "not-implemented")
+              (Error.Not_implemented)
               "upsert property is not implemented"))
   | Upsert_asset { repo; mode = Update; id; uuid; content; _ } ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
@@ -2867,7 +2935,7 @@ let execute_with_mode action config mode =
       pure
         (Cli_result.error ~command:Command_id.Upsert_asset mode
            (Error.make
-              (Edn_util.keyword_t "not-implemented")
+              (Error.Not_implemented)
               "upsert asset is not implemented"))
   | Upsert_task
       {
@@ -2926,7 +2994,7 @@ let execute_with_mode action config mode =
       pure
         (Cli_result.error ~command:Command_id.Upsert_task mode
            (Error.make
-              (Edn_util.keyword_t "not-implemented")
+              (Error.Not_implemented)
               "upsert task is not implemented"))
 
 let meta ?(examples = []) id doc =
@@ -2941,6 +3009,7 @@ let meta ?(examples = []) id doc =
     requires_graph = Command_id.requires_graph id;
     requires_auth = Command_id.requires_auth id;
     write_command = Command_id.is_write id;
+    human_table_headers_order = [];
   }
 
 let metadata () =

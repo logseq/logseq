@@ -994,7 +994,6 @@
  :node/built-in-cant-delete-error "Wbudowanych elementów nie można usunąć."
  :node/new "Nowy węzeł"
 
-
  :notification/copied "Skopiowano"
 
  :onboarding.import/desc "Opis importu"
@@ -1246,7 +1245,6 @@
  :property/drag-to-reorder "Przeciągnij aby zmienić kolejność"
  :property/existing-values "Istniejące wartości"
  :property/go-to-this-property "Przejdź do strony właściwości"
- :property/hidden-properties "Ukryte właściwości"
  :property/hide-by-default "Ukryj domyślnie"
  :property/hide-choice-for-tag "Ukryj opcję dla tagu"
  :property/hide-empty-value "Ukryj puste wartości"

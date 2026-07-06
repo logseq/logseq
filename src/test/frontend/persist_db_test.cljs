@@ -236,7 +236,7 @@
         original-state @state/state
         events (atom [])]
     (try
-      (reset! state/state (assoc original-state :git/current-repo repo))
+      (state/replace-state! (assoc original-state :git/current-repo repo))
       (with-redefs [state/pub-event! (fn [event]
                                        (swap! events conj event)
                                        (p/resolved nil))]
@@ -248,7 +248,7 @@
                          :total 1})
         (is (= [[:graph/ready repo]] @events)))
       (finally
-        (reset! state/state original-state)))))
+        (state/replace-state! original-state)))))
 
 (deftest search-index-build-progress-keeps-completed-build-visible-through-idle
   (let [repo "logseq_db_graph_a"
@@ -256,7 +256,7 @@
         progress! (get @thread-api/*thread-apis :thread-api/search-index-build-progress)
         original-state @state/state]
     (try
-      (reset! state/state (assoc original-state :git/current-repo repo))
+      (state/replace-state! (assoc original-state :git/current-repo repo))
       (progress! repo {:build-id build-id
                        :status :completed
                        :progress 100
@@ -273,11 +273,11 @@
               :progress 100
               :processed 1
               :total 1}
-             (:search/index-build @state/state)))
+             (state/get-state :search/index-build)))
       (finally
         (progress! repo {:build-id build-id
                          :status :running})
-        (reset! state/state original-state)))))
+        (state/replace-state! original-state)))))
 
 (deftest event-stream-error-loggable-throttles-after-powers-of-two
   (let [loggable? #'persist-db/event-stream-error-loggable?]

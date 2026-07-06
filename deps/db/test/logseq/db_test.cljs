@@ -134,6 +134,79 @@
                                     :block/tags :logseq.class/Property}])
          (ldb/transact! temp-conn [[:db/retract :logseq.class/Task :block/tags :logseq.class/Property]]))))))
 
+(deftest batch-transact-with-temp-conn-preserves-retracts-test
+  (testing "temp conn batch replays retractions instead of treating every datom as an add"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "page 1"}
+                                     :blocks [{:block/title "old"}]}]})
+          block (db-test/find-block-by-content @conn "old")
+          block-id (:db/id block)]
+      (ldb/batch-transact-with-temp-conn!
+       conn
+       {}
+       (fn [temp-conn]
+         (ldb/transact! temp-conn [[:db/retract [:block/uuid (:block/uuid block)] :block/title "old"]])
+         (ldb/transact! temp-conn [[:db/add [:block/uuid (:block/uuid block)] :block/title "new"]])))
+      (is (= "new" (:block/title (d/entity @conn block-id)))))))
+
+(deftest batch-transact-with-temp-conn-preserves-cardinality-one-schema-test
+  (testing "temp conn emits replacement retractions for cardinality-one attrs"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "page 1"}
+                                     :blocks [{:block/title "old"}]}]})
+          block (db-test/find-block-by-content @conn "old")
+          block-id (:db/id block)]
+      (ldb/transact! conn [[:db/add block-id :block/order "a0"]])
+      (ldb/batch-transact-with-temp-conn!
+       conn
+       {}
+         (fn [temp-conn]
+           (ldb/transact! temp-conn [[:db/add [:block/uuid (:block/uuid block)] :block/order "a1"]])))
+      (is (= "a1" (:block/order (d/entity @conn block-id)))))))
+
+(deftest batch-transact-with-temp-conn-before-commit-can-abort-live-commit-test
+  (testing "before-commit runs after temp work and before the live conn is modified"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "page 1"}
+                                     :blocks [{:block/title "old"}]}]})
+          block (db-test/find-block-by-content @conn "old")
+          block-id (:db/id block)]
+      (is (thrown? js/Error
+                   (ldb/batch-transact-with-temp-conn!
+                    conn
+                    {}
+                    (fn [temp-conn]
+                      (ldb/transact! temp-conn [[:db/add [:block/uuid (:block/uuid block)] :block/title "new"]]))
+                    {:before-commit #(throw (js/Error. "abort before commit"))})))
+      (is (= "old" (:block/title (d/entity @conn block-id)))))))
+
+(deftest validated-transact-retries-when-live-conn-changes-before-commit-test
+  (testing "validated transact does not overwrite a concurrent live commit"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "page 1"}
+                                     :blocks [{:block/title "first"}
+                                              {:block/title "second"}]}]})
+          first-block (db-test/find-block-by-content @conn "first")
+          second-block (db-test/find-block-by-content @conn "second")
+          injected? (atom false)
+          original-pipeline @ldb/*transact-pipeline-fn]
+      (try
+        (ldb/register-transact-pipeline-fn!
+         (fn [tx-report]
+           (when (and (not @injected?)
+                      (some (fn [datom]
+                              (and (= :block/title (:a datom))
+                                   (= "first updated" (:v datom))))
+                            (:tx-data tx-report)))
+             (reset! injected? true)
+             (ldb/transact! conn [[:db/add (:db/id second-block) :block/title "second updated"]]))
+           tx-report))
+        (ldb/transact! conn [[:db/add (:db/id first-block) :block/title "first updated"]])
+        (is (= "first updated" (:block/title (d/entity @conn (:db/id first-block)))))
+        (is (= "second updated" (:block/title (d/entity @conn (:db/id second-block)))))
+        (finally
+          (reset! ldb/*transact-pipeline-fn original-pipeline))))))
+
 (deftest test-batch-transact-clears-stale-tx-tail-before-next-store-tail
   (let [block-uuid #uuid "00000001-2026-0421-0000-000000000000"
         schema  {:block/uuid {:db/unique :db.unique/identity}}

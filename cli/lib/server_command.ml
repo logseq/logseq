@@ -94,8 +94,7 @@ let stop_result_value (result : Server_runtime.stop_result) =
 let error_value (err : Error.t) =
   Edn_util.map
     [
-      ( Edn_util.keyword "code",
-        Edn_util.string (Edn_util.keyword_to_string err.code) );
+      (Edn_util.keyword "code", Edn_util.string (Error.code_to_string err.code));
       (Edn_util.keyword "message", Edn_util.string err.message);
     ]
 
@@ -190,6 +189,7 @@ let meta ?(examples = []) id doc =
     requires_graph = Command_id.requires_graph id;
     requires_auth = Command_id.requires_auth id;
     write_command = Command_id.is_write id;
+    human_table_headers_order = [];
   }
 
 let metadata () =

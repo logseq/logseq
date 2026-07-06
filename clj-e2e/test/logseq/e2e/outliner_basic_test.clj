@@ -2,6 +2,7 @@
   (:require
    [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
+   [logseq.e2e.api :refer [ls-api-call!]]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
@@ -223,3 +224,25 @@
     (assert/assert-is-visible
      ".ls-block a.tag:has-text('tag1')")
     (is (= ["b2"] (util/get-page-blocks-contents)))))
+
+(deftest backspace-empty-first-child-keeps-empty-parent-subtree-test
+  (testing "Backspace in the first empty child of an empty parent deletes only the child"
+    (p/new-page "backspace empty first child")
+    (let [page-uuid (get (ls-api-call! :editor.getBlock "backspace empty first child") "uuid")
+          [parent first-child child2 child3]
+          (ls-api-call! :editor.insertBatchBlock
+                        page-uuid
+                        [{:content ""
+                          :children [{:content ""}
+                                     {:content "child2"}
+                                     {:content "child3"}]}])
+          block-visible? #(pos? (util/count-elements (str "#ls-block-" %)))]
+      (w/click (str "#ls-block-" (get first-child "uuid") " .block-content"))
+      (util/wait-editor-visible)
+      (is (= "" (util/get-edit-content)))
+      (k/backspace)
+      (util/wait-timeout 100)
+      (is (not (block-visible? (get first-child "uuid"))))
+      (is (block-visible? (get parent "uuid")))
+      (is (block-visible? (get child2 "uuid")))
+      (is (block-visible? (get child3 "uuid"))))))

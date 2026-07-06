@@ -18,7 +18,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.sdk.assets :as sdk-assets]
             [logseq.sdk.core]
-            [logseq.sdk.experiments]
+            [logseq.sdk.experiments :as exper]
             [logseq.sdk.ui :as sdk-ui]
             [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]))
@@ -149,6 +149,7 @@
 (def ^:export make_asset_url sdk-assets/make_url)
 
 ;; experiments
+(def ^:export exper_register_fenced_code_renderer exper/register_fenced_code_renderer)
 (defn ^:export exper_load_scripts
   [pid & scripts]
   (when-let [^js _pl (plugin-handler/get-plugin-inst pid)]

@@ -994,7 +994,6 @@
  :node/built-in-cant-delete-error "Elementos integrados não podem ser excluídos."
  :node/new "Novo nó"
 
-
  :notification/copied "Copiado"
 
  :onboarding.import/desc "Se elas estiverem em formato EDN ou Markdown, o Logseq pode trabalhar com elas."
@@ -1246,7 +1245,6 @@
  :property/drag-to-reorder "Arraste para reordenar"
  :property/existing-values "Valores existentes"
  :property/go-to-this-property "Ir para a página da propriedade"
- :property/hidden-properties "Propriedades ocultas"
  :property/hide-by-default "Ocultar por padrão"
  :property/hide-choice-for-tag "Ocultar opção para tag"
  :property/hide-empty-value "Ocultar valores vazios"

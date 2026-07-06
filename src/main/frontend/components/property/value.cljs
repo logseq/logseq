@@ -50,6 +50,46 @@
      (when-not (string/starts-with? (get block (:db/ident property)) "zotero://")
        (state/pub-event! [:asset/dialog-edit-external-url block])))})
 
+(def ^:private editor-navigation-trigger-class "jtrigger")
+
+(defn- property-value-block-container-class
+  []
+  (str "property-block-container content w-full " editor-navigation-trigger-class))
+
+(defn- editing-navigation?
+  [e]
+  (= "edit" (some-> (.-currentTarget e) (.getAttribute "data-property-nav-mode"))))
+
+(defn- move-property-value-boundary!
+  [e direction]
+  (util/stop e)
+  (if (editing-navigation? e)
+    (editor-handler/move-cross-boundary-up-down direction {:input nil})
+    (editor-handler/move-property-focus-up-down direction)))
+
+(defn- property-value-block-container-props
+  [property]
+  {:class (property-value-block-container-class)
+   :tabIndex 0
+   :on-key-down (fn [e]
+                  (when (= (.-currentTarget e) js/document.activeElement)
+                    (case (util/ekey e)
+                      "ArrowUp"
+                      (move-property-value-boundary! e :up)
+
+                      "ArrowDown"
+                      (move-property-value-boundary! e :down)
+
+                      nil)))
+   :style (if (= (:db/ident property) :logseq.property/default-value)
+            {:min-width 300}
+            {})})
+
+(defn- show-inline-asset-picker?
+  [editing? value]
+  (and editing?
+       (not (and value (:db/id value)))))
+
 (defn- entity-map?
   [m]
   (and (map? m) (:db/id m)))
@@ -79,11 +119,11 @@
              (d/has-class? node "tag")))))
 
 (hsx/defc property-empty-btn-value
-  [property & opts]
+  [property & [opts]]
   (let [text (if (= (:db/ident property) :logseq.property/description)
                (t :property/add-description)
-               (t :ui/empty))]
-    (shui/button (merge {:class "empty-btn" :variant :text} opts)
+               (ui/icon "line-dashed"))]
+    (shui/button (merge {:class "empty-btn" :variant :text} (or opts {}))
                  text)))
 
 (hsx/defc property-empty-text-value
@@ -91,11 +131,11 @@
   [:span.inline-flex.items-center.cursor-pointer.w-full
    (merge {:class "empty-text-btn" :variant :text})
    (when-not table-view?
-     (if property-position
+     (if (= property-position :block-below)
+       (ui/icon "line-dashed")
        (if-let [icon (:logseq.property/icon property)]
          (icon-component/icon icon {:color? true})
-         (ui/icon "line-dashed"))
-       (t :ui/empty)))])
+         (ui/icon "line-dashed"))))])
 
 (defn- get-selected-blocks
   []
@@ -475,26 +515,35 @@
       (= (.getTime given-date) (.getTime tomorrow))  (t :date.nlp/tomorrow)
       :else nil)))
 
+(defn- date-page-link-props
+  [other-position?]
+  (cond-> {}
+    other-position?
+    (assoc :on-click util/stop-propagation)))
+
 (hsx/defc datetime-value
-  [value property-id repeated-task?]
+  [value property-id repeated-task? {:keys [datetime? other-position? suppress-inline-edit-icon?]}]
   (when-let [date (t/to-default-time-zone (tc/from-long value))]
     (let [content [:div.ls-datetime.flex.flex-row.gap-1.items-center
                    (when-let [page-cp (state/get-component :block/page-cp)]
                      (let [page-title (date/journal-name date)]
                        ^{:key page-title}
-                       [:<> (page-cp {:disable-preview? true
-                                      :show-non-exists-page? true
-                                      :label (human-date-label value)}
-                                     {:block/name page-title})]))
-                   (let [date (js/Date. value)
-                         hours (.getHours date)
-                         minutes (.getMinutes date)]
-                     [:span.select-none
-                      (if (= 0 hours minutes)
-                        (ui/icon "edit" {:size 14 :class "text-muted-foreground hover:text-foreground align-middle"})
-                        (str (util/zero-pad hours)
-                             ":"
-                             (util/zero-pad minutes)))])]]
+                       [:span.inline-flex (date-page-link-props other-position?)
+                        (page-cp {:disable-preview? true
+                                  :show-non-exists-page? true
+                                  :label (human-date-label value)}
+                                 {:block/name page-title})]))
+                   (when datetime?
+                     (let [date (js/Date. value)
+                           hours (.getHours date)
+                           minutes (.getMinutes date)]
+                       [:span.select-none
+                        (if (= 0 hours minutes)
+                          (when-not (or other-position? suppress-inline-edit-icon?)
+                            (ui/icon "edit" {:size 14 :class "text-muted-foreground hover:text-foreground align-middle"}))
+                          (str (util/zero-pad hours)
+                               ":"
+                               (util/zero-pad minutes)))]))]]
       (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} property-id))
         (overdue date content)
         content))))
@@ -505,8 +554,15 @@
   (property-handler/remove-block-property! (:db/id block)
                                            (:db/ident property)))
 
+(defn- prevent-bottom-property-edit-pointer-dismiss
+  [^js e]
+  (when (some-> (.-target e) (.closest ".bottom-property-edit-icon"))
+    (.preventDefault e)
+    false))
+
 (hsx/defc date-picker
-  [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?]}]
+  [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?
+                 suppress-inline-edit-icon? property-position]}]
   (let [*el (hooks/use-ref nil)
         content-fn (fn [{:keys [id]}] (calendar-inner id
                                                       {:block block
@@ -524,7 +580,8 @@
                           (shui/popup-show! (.-target e) content-fn
                                             {:align "start"
                                              :auto-focus? true
-                                             :content-props {:without-animation true}}))))
+                                             :content-props {:without-animation true
+                                                             :onPointerDownOutside prevent-bottom-property-edit-pointer-dismiss}}))))
         repeated-task? (:logseq.property.repeat/repeated? block)]
     (if editing?
       (content-fn {:id :date-picker})
@@ -563,18 +620,23 @@
                                         (t/minus (t/seconds 1)))
                   content (when-let [page-cp (state/get-component :block/page-cp)]
                             ^{:key (:db/id value)}
-                            [:<> (page-cp {:disable-preview? true
-                                           :meta-click? other-position?
-                                           :label (human-date-label value)} value)])]
+                            [:span.inline-flex (date-page-link-props other-position?)
+                             (page-cp {:disable-preview? true
+                                       :label (human-date-label value)} value)])]
               (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} (:db/id property)))
                 (overdue compare-value content)
                 content))
 
             (number? value)
-            (datetime-value value (:db/ident property) repeated-task?)
+            (datetime-value value
+                            (:db/ident property)
+                            repeated-task?
+                            {:datetime? datetime?
+                             :other-position? other-position?
+                             :suppress-inline-edit-icon? suppress-inline-edit-icon?})
 
             :else
-            (property-empty-btn-value nil))])))))
+            (property-empty-btn-value nil {:property-position property-position}))])))))
 
 (hsx/defc property-value-date-picker
   [block property value opts]
@@ -1186,10 +1248,7 @@
         :property-ident (:db/ident property)})
       (cond
         (seq value-block)
-        [:div.property-block-container.content.w-full
-         {:style (if (= (:db/ident property) :logseq.property/default-value)
-                   {:min-width 300}
-                   {})}
+        [:div (property-value-block-container-props property)
          (let [config {:id (str (if multiple-values?
                                   (:block/uuid block)
                                   (:block/uuid value-block)))
@@ -1329,6 +1388,18 @@
                            value')]
               (inline-text {} :markdown value'))])))))
 
+(defn multiple-values-trigger-class
+  [{:keys [expanded? other-position? page-property?]}]
+  (str "flex flex-1 min-w-0 flex-row items-center gap-1 "
+       (if (and other-position? (not expanded?) (not page-property?))
+         "flex-nowrap multi-values-nowrap"
+         (str "flex-wrap " (when expanded? "multi-values-expanded")))))
+
+(defn multiple-value-item-class
+  [{:keys [expanded? other-position? page-property? show-popup!]}]
+  (when (and show-popup! other-position? (not expanded?) (not page-property?))
+    "shrink-0"))
+
 (hsx/defc select-item
   [property type value {:keys [page-cp inline-text other-position? property-position table-view? _icon?] :as opts}]
   (let [closed-values? (seq (:property/closed-values property))
@@ -1337,9 +1408,10 @@
                          [:div.flex.flex-row.items-center
                           (inline-text {} :markdown (macro-util/expand-value-if-macro content (state/get-macros)))])]
     [:div.select-item.cursor-pointer
+     {:class (multiple-value-item-class opts)}
      (cond
        (= value :logseq.property/empty-placeholder)
-       (property-empty-btn-value property)
+       (property-empty-btn-value property opts)
 
        closed-values?
        (closed-value-item value opts)
@@ -1503,7 +1575,8 @@
         *ref (hooks/use-ref nil)
         *input-ref (hooks/use-ref nil)
         number-value (db-property/property-value-content value-block)
-        [value set-value!] (hooks/use-state number-value)
+        number-value-str (if (some? number-value) (str number-value) "")
+        [value set-value!] (hooks/use-state number-value-str)
         [*value _] (hooks/use-state (atom value))
         set-property-value! (fn [value & {:keys [exit-editing?]
                                           :or {exit-editing? true}}]
@@ -1529,9 +1602,9 @@
 
     (hooks/use-effect!
      (fn []
-       (set-value! number-value)
+       (set-value! number-value-str)
        #())
-     [number-value])
+     [number-value-str])
 
     [:div.ls-number.flex.flex-1.jtrigger
      {:ref *ref
@@ -1577,7 +1650,9 @@
                                (.focus (hooks/deref *ref)))
 
                               nil))))})
-       value)]))
+       (if (string/blank? value)
+         (property-empty-btn-value property)
+         value))]))
 
 (defn- asset-icon-for-type
   "Returns a tabler-icon name for a given asset file extension string."
@@ -1888,7 +1963,7 @@
                                                                  asset-embedded-control-selector)))
                                   (util/stop e)
                                   (show-grid! (or (.-currentTarget e) (hooks/deref *el)))))]
-    (if editing?
+    (if (show-inline-asset-picker? editing? value)
       [:div.property-select.w-full
        (asset-grid-popup-content block property opts)]
       (shui/trigger-as
@@ -1900,6 +1975,12 @@
         :on-click show-grid-from-click!
         :on-key-down (fn [e]
                        (case (util/ekey e)
+                         "ArrowUp"
+                         (move-property-value-boundary! e :up)
+
+                         "ArrowDown"
+                         (move-property-value-boundary! e :down)
+
                          ("Backspace" "Delete")
                          (when-not config/publishing?
                            (delete-block-property! block property))
@@ -1975,9 +2056,11 @@
                                 (<add-property! block (:db/ident property) value opts)
                                 (when-let [on-checked-change (:on-checked-change opts)]
                                   (on-checked-change value)))]
-            [:label.flex.w-full.as-scalar-value-wrap.cursor-pointer
+            [:label.flex.w-full.items-center.as-scalar-value-wrap.cursor-pointer
              ^{:key "checkbox"}
              [:<> (shui/checkbox {:class "jtrigger flex flex-row items-center"
+                                  :style {:width 16
+                                          :min-width 16}
                                   :disabled config/publishing?
                                   :auto-focus editing?
                                   :checked value
@@ -2055,7 +2138,7 @@
                            ("Backspace" "Delete")
                            (delete-block-property! block property)
                            :dune))
-          :class "flex flex-1 flex-row items-center flex-wrap gap-1"}
+          :class (multiple-values-trigger-class opts)}
                  (let [items' (vec items)
                        not-empty-value? (not= (map :db/ident items') [:logseq.property/empty-placeholder])]
                    (if (and (seq items) not-empty-value?)

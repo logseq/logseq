@@ -994,7 +994,6 @@
  :node/built-in-cant-delete-error "Les éléments intégrés ne peuvent pas être supprimés."
  :node/new "Nouveau nœud"
 
-
  :notification/copied "Copié"
 
  :onboarding.import/desc "S'ils sont au format EDN ou Markdown, Logseq peut les importer."
@@ -1246,7 +1245,6 @@
  :property/drag-to-reorder "Glisser pour réordonner"
  :property/existing-values "Valeurs existantes"
  :property/go-to-this-property "Aller à la page de propriété"
- :property/hidden-properties "Propriétés masquées"
  :property/hide-by-default "Masquer par défaut"
  :property/hide-choice-for-tag "Masquer le choix pour le tag"
  :property/hide-empty-value "Masquer les valeurs vides"

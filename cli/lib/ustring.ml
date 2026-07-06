@@ -3,14 +3,18 @@ type uint8_array
 type text_decoder
 
 external char_code_at : string -> int -> int = "charCodeAt" [@@mel.send]
-external make_uint8_array : int -> uint8_array = "Uint8Array" [@@mel.new]
-external make_text_decoder : string -> text_decoder = "TextDecoder" [@@mel.new]
+external uint8_array_from : string -> (string -> int) -> uint8_array = "from"
+[@@mel.scope "Uint8Array"]
+
+external make_text_decoder : string -> < fatal : bool > Js.t -> text_decoder
+  = "TextDecoder"
+[@@mel.new]
+
 external decode : text_decoder -> uint8_array -> string = "decode" [@@mel.send]
-external set_uint8 : uint8_array -> int -> int -> unit = "" [@@mel.set_index]
 
 type string_kind = Ascii | Utf8_bytes | Unicode
 
-let decoder = make_text_decoder "utf-8"
+let decoder = make_text_decoder "utf-8" [%obj { fatal = true }]
 
 let string_kind value =
   let length = String.length value in
@@ -28,11 +32,7 @@ let of_string value =
   match string_kind value with
   | Ascii | Unicode -> value
   | Utf8_bytes ->
-      let length = String.length value in
-      let payload = make_uint8_array length in
-      for index = 0 to length - 1 do
-        set_uint8 payload index (char_code_at value index)
-      done;
-      decode decoder payload
+      let payload = uint8_array_from value (fun ch -> char_code_at ch 0) in
+      (try decode decoder payload with _ -> value)
 
 let to_string value = value

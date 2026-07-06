@@ -3,6 +3,7 @@
             [electron.ipc :as ipc]
             [frontend.colors :as colors]
             [frontend.components.assets :as assets]
+            [frontend.components.email :as email-component]
             [frontend.components.shortcut :as shortcut]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -1048,8 +1049,9 @@
            [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25 w-full"}]]
           [:div.flex-1.flex.flex-col.gap-2.col-span-2
            [:label.text-sm.font-semibold (t :account/username)]
-           [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25"
-                                                        :value (user-handler/email)}]]]
+           [:div.rounded.border.px-2.py-1.box-border
+            {:class "border-blue-500 bg-black/25"}
+            (email-component/email-address {:email (user-handler/email)})]]]
          [:div (t :account/authentication)]
          [:div.col-span-2
           [:div.grid.grid-cols-2.gap-4
@@ -1155,7 +1157,7 @@
         [:hr]
         (if logged-in?
           [:div
-           (user-handler/email)
+           (email-component/email-address {:email (user-handler/email)})
            [:p (ui/button (t :ui/logout) {:class "p-1"
                                           :icon "logout"
                                           :on-click user-handler/logout})]]
@@ -1222,7 +1224,9 @@
             [:div.flex.flex-row.items-center.gap-2
              {:key (str "user-" (or user-uuid user-name))}
              [:div user-name]
-             (when user-email [:div.opacity-50.text-sm user-email])
+             (when user-email
+               (email-component/email-address {:email user-email
+                                               :class "opacity-50 text-sm"}))
              (when graph<->user-user-type [:div.opacity-50.text-sm (name graph<->user-user-type)])
              (when can-remove?
                (shui/dropdown-menu

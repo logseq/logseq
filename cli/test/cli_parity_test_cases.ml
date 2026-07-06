@@ -45,7 +45,7 @@ let expect_error_code name expected = function
         else code
       in
       expect_equal name (normalize_code expected)
-        (normalize_code (Edn_util.keyword_to_string err.Error.code))
+        (normalize_code (Error.code_to_string err.Error.code))
   | Ok _ -> fail_test (name ^ ": expected Error")
 
 let expect_error_context_code name expected err =
@@ -67,7 +67,7 @@ let expect_parse_error_code name expected argv =
   expect_error_code name expected (Cli_parse.parse argv)
 
 let keyword_text value = Edn_util.keyword_to_string value
-let edn_of_string text = Melange_edn.of_edn_string text
+let edn_of_string text = Melange_edn_melange.of_edn_string text
 let repo_text repo = Cli_primitive.string_of_repo repo
 let graph_text graph = Cli_primitive.string_of_graph graph
 
@@ -113,6 +113,73 @@ let open_url_capture_calls () : string =
     {|
 JSON.stringify((globalThis.__logseqOpenUrlCapture && globalThis.__logseqOpenUrlCapture.calls) || [])
 |}]
+
+let start_spawn_capture () : unit =
+  [%mel.raw
+    {|
+(function () {
+  const childProcess = require("child_process");
+  const capture = {
+    originalSpawn: childProcess.spawn,
+    calls: []
+  };
+  globalThis.__logseqSpawnCapture = capture;
+  childProcess.spawn = function (command, args, options) {
+    capture.calls.push({ command, args: Array.from(args), options });
+    if (typeof capture.onSpawn === "function") capture.onSpawn(command, args, options);
+    return { pid: 4242, unref: function () {} };
+  };
+})()
+|}]
+
+let stop_spawn_capture () : unit =
+  [%mel.raw
+    {|
+(function () {
+  const capture = globalThis.__logseqSpawnCapture;
+  if (!capture) return;
+  const childProcess = require("child_process");
+  childProcess.spawn = capture.originalSpawn;
+  delete globalThis.__logseqSpawnCapture;
+})()
+|}]
+
+let spawn_capture_calls () : string =
+  [%mel.raw
+    {|
+JSON.stringify((globalThis.__logseqSpawnCapture && globalThis.__logseqSpawnCapture.calls) || [])
+|}]
+
+let set_spawn_capture_on_spawn_raw : string -> string -> int -> unit =
+  [%mel.raw
+    {|
+function (lockPath, serverListPath, port) {
+  const capture = globalThis.__logseqSpawnCapture;
+  if (!capture) throw new Error("spawn capture is not active");
+  capture.onSpawn = function () {
+    const fs = require("fs");
+    fs.writeFileSync(lockPath, JSON.stringify({
+      repo: "logseq_db_demo",
+      pid: process.pid,
+      "lock-id": "test",
+      "owner-source": "cli"
+    }));
+    fs.writeFileSync(serverListPath, process.pid + " " + port + "\n");
+  };
+}
+|}]
+
+let set_spawn_capture_on_spawn ~lock_path ~server_list_path ~port : unit =
+  set_spawn_capture_on_spawn_raw lock_path server_list_path port
+
+let set_env key value : unit =
+  Js.Dict.set Node.Process.process##env key value
+
+let unset_env_raw : string -> unit =
+  [%mel.raw {| function (key) { delete process.env[key]; } |}]
+
+let unset_env key : unit =
+  unset_env_raw key
 
 let property_key_text = function
   | Property.Key_ident ident -> keyword_text ident
@@ -265,7 +332,7 @@ let invoke_args body =
       match
         Option.bind (Js.Dict.get object_ "argsTransit") Js.Json.decodeString
       with
-      | Some args -> Transit.Json.(of_string args |> to_edn)
+      | Some args -> Transit_melange.Transit.Json.(of_string args |> to_edn)
       | None ->
           fail_test ("missing invoke argsTransit: " ^ body);
           Edn_util.vector [])
@@ -407,6 +474,8 @@ let () =
 
   test "CLI parity ustring decodes utf8 byte strings to JS unicode strings"
     (fun () ->
+      let ascii = Ustring.of_string "ABC" |> Ustring.to_string in
+      expect_equal "ascii text" "ABC" ascii;
       let utf8_byte_string =
         Js.String.fromCharCode 0xe4
         ^ Js.String.fromCharCode 0xb8
@@ -415,7 +484,17 @@ let () =
       let decoded = Ustring.of_string utf8_byte_string |> Ustring.to_string in
       expect_equal "decoded unicode text" (unicode_text [ 0x4e2d ]) decoded;
       expect_int "decoded JS length" 1 (String.length decoded);
-      expect_int "decoded char code" 0x4e2d (string_char_code_at decoded 0));
+      expect_int "decoded char code" 0x4e2d (string_char_code_at decoded 0);
+      let latin1_unicode =
+        "Diese Vorteile " ^ unicode_text [ 0x00f6 ] ^ " und "
+        ^ unicode_text [ 0x00fc ]
+      in
+      let preserved = Ustring.of_string latin1_unicode |> Ustring.to_string in
+      expect_equal "latin1 supplement unicode text" latin1_unicode preserved;
+      expect_int "latin1 supplement char code" 0x00f6
+        (string_char_code_at preserved 15);
+      expect_int "latin1 supplement char code 2" 0x00fc
+        (string_char_code_at preserved 21));
 
   test
     "CLI parity id parser accepts single multi comma whitespace and vector \
@@ -822,7 +901,7 @@ let () =
           Js.Promise.resolve pass
       | Error err ->
           expect_equal "missing id token code" "missing-id-token"
-            (Edn_util.keyword_to_string err.Error.code);
+            (Error.code_to_string err.Error.code);
           Js.Promise.resolve pass);
 
   test_promise
@@ -1203,7 +1282,7 @@ let () =
         | Ok _ -> fail_test "invalid width: expected Error"
         | Error err ->
             expect_equal "invalid width code" "invalid-config"
-              (Edn_util.keyword_to_string err.Error.code);
+              (Error.code_to_string err.Error.code);
             expect_named_contains "invalid width message" err.Error.message
               "Expected integer");
         remove_tree root
@@ -1226,7 +1305,7 @@ let () =
         | Ok _ -> fail_test "invalid output: expected Error"
         | Error err ->
             expect_equal "invalid output code" "invalid-config"
-              (Edn_util.keyword_to_string err.Error.code);
+              (Error.code_to_string err.Error.code);
             expect_named_contains "invalid output message" err.Error.message
               "Expected one of human, json, edn");
         remove_tree root
@@ -1283,6 +1362,11 @@ let () =
     (fun () ->
       let cjk = decode_uri_component "%E7%95%8C" in
       let combining_acute = decode_uri_component "%CC%81" in
+      let o_umlaut = decode_uri_component "%C3%B6" in
+      let accented_title =
+        decode_uri_component
+          "Diese%20Vorteile%20k%C3%B6nnten%20besonders%20f%C3%BCr%20eine"
+      in
       let repeat count value =
         String.concat "" (List.init count (fun _ -> value))
       in
@@ -1290,6 +1374,11 @@ let () =
       expect_int "cjk width" 2 (Display_width.width cjk);
       expect_int "combining width" 1
         (Display_width.width ("e" ^ combining_acute));
+      expect_int "latin-1 code point width" 1 (Display_width.width o_umlaut);
+      expect_int "latin-1 followed by ascii width" 4
+        (Display_width.width (o_umlaut ^ "abc"));
+      expect_int "accented latin title width" 41
+        (Display_width.width accented_title);
       expect_equal "short segment" "Project Alpha"
         (Display_width.truncate "Project Alpha" 24);
       expect_equal "exact ascii segment" "123456789012345678901234"
@@ -1301,7 +1390,12 @@ let () =
         (Display_width.truncate (repeat 12 cjk) 24);
       expect_equal "one over cjk segment"
         (repeat 11 cjk ^ Cli_platform.Symbols.ellipsis)
-        (Display_width.truncate (repeat 13 cjk) 24));
+        (Display_width.truncate (repeat 13 cjk) 24);
+      expect_equal "accented latin title truncation"
+        (decode_uri_component
+           "Diese%20Vorteile%20k%C3%B6nnten%20besonders%20f%C3%BCr%20ei"
+        ^ Cli_platform.Symbols.ellipsis)
+        (Display_width.truncate accented_title 40));
 
   test "CLI parity profile sessions aggregate repeated stages" (fun () ->
       expect_none "disabled profile" (Profile_types.create_session false);
@@ -1396,6 +1490,28 @@ let () =
       expect_named_contains "blank value" output "2   -";
       expect_named_contains "footer" output "Count: 2");
 
+  test "CLI parity human table renders keyword headers without namespaces"
+    (fun () ->
+      let output =
+        Output.Human_output.create
+          ~headers:
+            [
+              "db/id";
+              "block/title";
+              ":logseq.property/status";
+              "Input/Output";
+            ]
+          ~rows:[ [ "1"; "Ship"; "logseq.property/status.todo"; "Ready" ] ]
+          ()
+        |> Output.Human_output.to_string
+      in
+      expect_named_contains "keyword headers" output "id  title  status";
+      expect_named_contains "plain slash header" output "Input/Output";
+      expect_named_not_contains "db namespace" output "db/id";
+      expect_named_not_contains "block namespace" output "block/title";
+      expect_named_not_contains "property namespace" output
+        ":logseq.property/status");
+
   test "CLI parity output mode parser accepts exact lowercase values only"
     (fun () ->
       expect_equal "json" "json"
@@ -1481,7 +1597,7 @@ let () =
       let ok = Cli_result.ok Output.Mode.Human (Cli_result.Message "ok") in
       expect_bool "ok is not error" false (Cli_result.is_error ok);
       expect_int "ok exit" 0 (Cli_result.exit_code ok);
-      let err = Error.make (Edn_util.keyword_t "missing-auth") "missing auth" in
+      let err = Error.make (Error.Missing_auth) "missing auth" in
       let error = Cli_result.error Output.Mode.Human err in
       expect_bool "error is error" true (Cli_result.is_error error);
       expect_int "error exit" 1 (Cli_result.exit_code error));
@@ -1489,7 +1605,7 @@ let () =
   test "CLI parity edn includes hint and human error stays concise" (fun () ->
       let err =
         Error.make ~hint:"Run `logseq login` first."
-          (Edn_util.keyword_t "missing-auth")
+          (Error.Missing_auth)
           "missing auth"
       in
       let edn = Format_types.to_edn (Cli_result.error Output.Mode.Edn err) in
@@ -2409,7 +2525,7 @@ let () =
           (match result.Cli_result.error with
           | Some err ->
               expect_equal "remove page target code" "invalid-target"
-                (keyword_text err.Error.code)
+                (Error.code_to_string err.Error.code)
           | None -> fail_test "expected remove error");
           expect_bool "delete not called" false !apply_called;
           Js.Promise.resolve pass));
@@ -2580,6 +2696,48 @@ let () =
         (Show.build (config ~repo:"demo" ()) (Global_opts.create ())
            (Show.Parsed_show { base_opts with level = Some 0 })));
 
+  test_promise "CLI parity show rejects recycled pages" (fun () ->
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then
+              "[\"^ \
+               \",\"~:db/id\",42,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000042\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]"
+            else if Js.String.includes ~search:"thread-api/q" body then "[]"
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            {
+              Show.repo;
+              graph = Cli_config.repo_to_graph repo;
+              target = Show.By_page "home";
+              multi_id = false;
+              linked_references = false;
+              ref_id_footer = false;
+              page_hierarchy = false;
+              level = Some 10;
+            }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Show.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "show recycled page errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "show recycled code" "recycled-page"
+                (Error.code_to_string err.Error.code)
+          | None -> fail_test "expected show error");
+          Js.Promise.resolve pass));
+
   test
     "CLI parity upsert validation rejects ambiguous and mode-specific options"
     (fun () ->
@@ -2591,6 +2749,7 @@ let () =
                  {
                    id = Some 1L;
                    page = Some "Home";
+                   restore = false;
                    update_tags_edn = None;
                    update_properties_edn = None;
                    remove_tags_edn = None;
@@ -2633,6 +2792,394 @@ let () =
                    no_scheduled = false;
                    no_deadline = false;
                  }))));
+
+  test "CLI parity upsert page parses restore option" (fun () ->
+      let request =
+        expect_parse_ok "upsert page restore"
+        [
+          "upsert";
+          "page";
+          "--page";
+          "Home";
+          "--restore";
+          "--update-properties";
+          "{\"status\" \"done\"}";
+        ]
+      in
+      match request.command with
+      | Cli_request.Upsert (Upsert.Parsed_page opts) ->
+          expect_equal "page" "Home" (expect_some "page" opts.page);
+          expect_bool "restore" true opts.restore
+      | _ -> fail_test "expected upsert page");
+
+  test_promise "CLI parity upsert page rejects recycled page by default"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                mode = Upsert.Create;
+                id = None;
+                page = Some "Home";
+                restore = false;
+                plan = Property.empty_update_plan;
+              }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert recycled page errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert recycled code" "recycled-page"
+                (Error.code_to_string err.Error.code)
+          | None -> fail_test "expected upsert error");
+          expect_bool "no ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity upsert page update rejects recycled page by default"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then
+              "[\"^ \
+               \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                mode = Upsert.Update;
+                id = Some 50L;
+                page = None;
+                restore = false;
+                plan = Property.empty_update_plan;
+              }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert recycled page update errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert recycled update code" "recycled-page"
+                (Error.code_to_string err.Error.code)
+          | None -> fail_test "expected upsert update error");
+          expect_bool "no update ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity upsert page restores recycled page when requested"
+    (fun () ->
+      let apply_calls = ref [] in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_calls := !apply_calls @ [ body ];
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let plan =
+            {
+              Property.empty_update_plan with
+              update_properties =
+                [
+                  {
+                    Property.key =
+                      Property.Key_ident
+                        (Edn_util.keyword_t "user.property/status");
+                    value = Edn_util.string "done";
+                  };
+                ];
+            }
+          in
+          let action =
+            Upsert.Upsert_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                mode = Upsert.Create;
+                id = None;
+                page = Some "Home";
+                restore = true;
+                plan;
+              }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert restore ok" false (Cli_result.is_error result);
+          expect_int "restore then update calls" 2 (List.length !apply_calls);
+          expect_named_contains "first op restores recycled page"
+            (List.nth !apply_calls 0) "restore-recycled";
+          expect_named_contains "second op updates restored page"
+            (List.nth !apply_calls 1) "batch-set-property";
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity upsert page restore rejects recycled page without uuid"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",50,\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                mode = Upsert.Create;
+                id = None;
+                page = Some "Home";
+                restore = true;
+                plan = Property.empty_update_plan;
+              }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert recycled restore without uuid errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert recycled restore without uuid code"
+                "recycled-page" (Error.code_to_string err.Error.code)
+          | None -> fail_test "expected upsert restore error");
+          expect_bool "no restore ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise
+    "CLI parity upsert page update restore rejects recycled page without uuid"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then
+              "[\"^ \
+               \",\"~:db/id\",50,\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                mode = Upsert.Update;
+                id = Some 50L;
+                page = None;
+                restore = true;
+                plan = Property.empty_update_plan;
+              }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert recycled update restore without uuid errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert recycled update restore without uuid code"
+                "recycled-page" (Error.code_to_string err.Error.code)
+          | None -> fail_test "expected upsert update restore error");
+          expect_bool "no update restore ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity upsert block create rejects recycled target page"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/q" body then
+              "[[\"^ \
+               \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]]"
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_block
+              (Upsert.Block_create
+                 {
+                   repo;
+                   graph = Cli_config.repo_to_graph repo;
+                   target = Upsert.Target_page "Home";
+                   pos = Block.Last_child;
+                   status = None;
+                   tags = [];
+                   properties = [];
+                   blocks = [ Block.make ~title:"Child" () ];
+                   update_plan = Property.empty_update_plan;
+                 })
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert block create recycled target errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert block create recycled code" "recycled-page"
+                (Error.code_to_string err.Error.code)
+          | None -> fail_test "expected upsert block create error");
+          expect_bool "no create ops applied" false !apply_called;
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity upsert block update rejects recycled target page"
+    (fun () ->
+      let apply_called = ref false in
+      let pull_count = ref 0 in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then (
+              incr pull_count;
+              match !pull_count with
+              | 1 ->
+                  "[\"^ \
+                   \",\"~:db/id\",207,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000207\",\"~:block/title\",\"Source\"]"
+              | 2 ->
+                  "[\"^ \
+                   \",\"~:db/id\",50,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000050\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\",\"~:logseq.property/deleted-at\",1712000000000]"
+              | _ ->
+                  fail_test
+                    (Printf.sprintf "unexpected pull %d: %s" !pull_count body);
+                  "")
+            else if Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "true")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            Upsert.Upsert_block
+              (Upsert.Block_update
+                 {
+                   repo;
+                   graph = Cli_config.repo_to_graph repo;
+                   source = Upsert.Source_id 207L;
+                   target = Some (Upsert.Target_page "Home");
+                   pos = Some Block.Last_child;
+                   update_tags = [];
+                   update_properties = [];
+                   remove_tags = [];
+                   remove_properties = [];
+                   content = None;
+                   source_label = Some "207";
+                   target_label = Some "page:Home";
+                 })
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Upsert.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "upsert block update recycled target errors" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "upsert block update recycled code" "recycled-page"
+                (Error.code_to_string err.Error.code)
+          | None -> fail_test "expected upsert block update error");
+          expect_bool "no update ops applied" false !apply_called;
+          Js.Promise.resolve pass));
 
   test "CLI parity upsert block update property parsing keeps update contracts"
     (fun () ->
@@ -3175,12 +3722,71 @@ let () =
       in
       expect_int "metadata ops count" 3 (List.length ops);
       let output =
-        String.concat "\n" (List.map Melange_edn.to_edn_string ops)
+        String.concat "\n" (List.map Melange_edn_melange.to_edn_string ops)
       in
       expect_named_contains "status op" output ":logseq.property/status.todo";
       expect_named_contains "tag op" output ":block/tags 901";
       expect_named_contains "property op" output
         ":user.property/root-answer \"root\"");
+
+  test_promise
+    "CLI parity add reports target-not-found when concurrent delete removes \
+     insert target" (fun () ->
+      let pull_count = ref 0 in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then (
+              incr pull_count;
+              match !pull_count with
+              | 1 ->
+                  "[\"^ \
+                   \",\"~:db/id\",627,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000627\"]"
+              | _ -> "null")
+            else if
+              Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then "null"
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let action =
+            expect_ok "add action"
+              (Add.build_add_block_action
+                 {
+                   Add.target_id = Some 627L;
+                   target_uuid = None;
+                   target_page_name = None;
+                   pos = Some Block.First_child;
+                   status = None;
+                   tags_edn = None;
+                   properties_edn = None;
+                   content = Some "Child";
+                   blocks_edn = None;
+                   blocks_file = None;
+                 }
+                 []
+                 (Cli_primitive.create_repo "demo"))
+          in
+          let* result =
+            effect_to_promise
+              (Add.execute_add_block action
+                 (config_with_output cfg Output.Mode.Human)
+                 Output.Mode.Human)
+          in
+          expect_bool "add result is error" true (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "add concurrent target delete code"
+                "target-not-found"
+                (Error.code_to_string err.Error.code)
+          | None -> fail_test "expected add error");
+          expect_int "target was rechecked" 3 !pull_count;
+          Js.Promise.resolve pass));
 
   test "CLI parity update build action validates property and tag edn"
     (fun () ->
@@ -3250,6 +3856,13 @@ let () =
       expect_int "update properties include status" 2
         (List.length action.update_properties);
       expect_int "remove properties" 1 (List.length action.remove_properties));
+
+  test "CLI parity update tag query uses datascript find syntax" (fun () ->
+      let query =
+        Melange_edn_melange.to_edn_string (Update.tag_query Update.tag_selector)
+      in
+      expect_named_contains "find" query ":find";
+      expect_named_contains "tag class" query "logseq.class/Tag");
 
   test "CLI parity sync config key parser accepts ws-url and http-base only"
     (fun () ->
@@ -3523,7 +4136,7 @@ let () =
           (match result.Cli_result.error with
           | Some err ->
               expect_equal "sync not started code" "sync-not-started"
-                (keyword_text err.Error.code);
+                (Error.code_to_string err.Error.code);
               expect_equal "sync start hint"
                 "Run logseq sync start --graph demo first."
                 (expect_some "sync hint" err.hint)
@@ -3585,7 +4198,7 @@ let () =
             (match result.Cli_result.error with
             | Some err ->
                 expect_equal (label ^ " code") expected_code
-                  (keyword_text err.Error.code)
+                  (Error.code_to_string err.Error.code)
             | None -> fail_test (label ^ ": expected error"));
             expect_bool (label ^ " no request") false !request_called;
             Js.Promise.resolve pass)
@@ -3683,7 +4296,7 @@ let () =
           ]
       in
       let edn query =
-        Melange_edn.to_edn_string
+        Melange_edn_melange.to_edn_string
           (Edn_util.any (Cli_primitive.datascript_query_to_edn query))
       in
       let without_inputs =
@@ -3694,7 +4307,7 @@ let () =
         "[:find ?b :where [?b :block/title ?title]]" (edn without_inputs);
       let with_inputs =
         Cli_primitive.make_datascript_query ~find:[ Edn_util.symbol "?b" ]
-          ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?title" ]
+          ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?title" ]
           ~where:[ Cli_primitive.V title_clause ] ()
       in
       expect_equal "datascript query with inputs"
@@ -4022,7 +4635,7 @@ let () =
              queries)
       in
       expect_int "list-status inputs" 0 (List.length list_status.inputs);
-      let status_query = Melange_edn.to_edn_string list_status.query in
+      let status_query = Melange_edn_melange.to_edn_string list_status.query in
       expect_named_contains "list-status query status keyword" status_query
         ":logseq.property/status";
       let list_priority =
@@ -4033,7 +4646,7 @@ let () =
       in
       expect_int "list-priority inputs" 0 (List.length list_priority.inputs);
       expect_named_contains "list-priority query priority keyword"
-        (Melange_edn.to_edn_string list_priority.query)
+        (Melange_edn_melange.to_edn_string list_priority.query)
         ":logseq.property/priority");
 
   test "CLI parity debug selector requires exactly one id uuid or ident"
@@ -4073,7 +4686,7 @@ let () =
           | Debug.By_id 42L -> pass
           | _ -> fail_test "expected debug id lookup");
           expect_equal "debug selector" "[*]"
-            (Melange_edn.to_edn_string selector));
+            (Melange_edn_melange.to_edn_string selector));
       let ident =
         expect_ok "debug ident option"
           (Debug.parse_ident_option ":logseq.class/Tag")
@@ -4105,8 +4718,7 @@ let () =
         (Edn_util.keyword_to_string missing.id);
       expect_bool "doctor missing status" true (missing.status = Doctor.Error);
       expect_equal "doctor missing code" "doctor-script-missing"
-        (Edn_util.keyword_to_string
-           (expect_some "missing script code" missing.code));
+        (Error.code_to_string (expect_some "missing script code" missing.code));
       expect_equal "doctor missing path" missing_path
         (expect_some "missing script path" missing.path);
       let root = temp_dir "logseq-cli-parity-doctor-" in
@@ -4171,6 +4783,7 @@ let () =
               requires_graph = false;
               requires_auth = false;
               write_command = false;
+              human_table_headers_order = [];
             };
             {
               id = Command_id.Graph_create;
@@ -4183,6 +4796,7 @@ let () =
               requires_graph = true;
               requires_auth = false;
               write_command = true;
+              human_table_headers_order = [];
             };
           ]
       in
@@ -4212,6 +4826,7 @@ let () =
               requires_graph = true;
               requires_auth = false;
               write_command = true;
+              human_table_headers_order = [];
             };
             {
               id = Command_id.Upsert_tag;
@@ -4224,6 +4839,7 @@ let () =
               requires_graph = true;
               requires_auth = false;
               write_command = true;
+              human_table_headers_order = [];
             };
           ]
       in
@@ -4246,6 +4862,7 @@ let () =
               requires_graph = true;
               requires_auth = false;
               write_command = true;
+              human_table_headers_order = [];
             };
           ]
       in
@@ -4529,13 +5146,13 @@ let () =
             match invalid.Cli_result.error with
             | Some err ->
                 expect_equal "validation error code" "graph-validation-failed"
-                  (keyword_text err.Error.code);
+                  (Error.code_to_string err.Error.code);
                 expect_named_contains "validation error count" err.message
                   "Found 1 entity with errors:"
             | None -> fail_test "expected graph validation error")
       in
       let* () =
-        run_validate "[\"^ \",\"~:errors\",null,\"~:datom-count\",10]"
+        run_validate "[\"^ \",\"~:errors\",null,\"~:datoms\",10]"
           (fun valid ->
             expect_bool "valid graph status" false (Cli_result.is_error valid);
             let data =
@@ -4860,7 +5477,7 @@ let () =
           (match missing_restore.Cli_result.error with
           | Some err ->
               expect_equal "missing restore code" "backup-not-found"
-                (keyword_text err.Error.code)
+                (Error.code_to_string err.Error.code)
           | None -> fail_test "expected missing restore error");
           let* restore_result =
             effect_to_promise
@@ -5324,6 +5941,18 @@ let () =
         List.mem name option.names
       in
       let option_by_name name options = List.find_opt (has_name name) options in
+      let assert_timestamp_headers_last (command : Command_registry.command_meta) =
+        let headers = command.human_table_headers_order in
+        if List.mem "created-at" headers || List.mem "updated-at" headers then
+          match List.rev headers with
+          | "updated-at" :: "created-at" :: _ -> pass
+          | _ ->
+              fail_test
+                (Printf.sprintf "%s: expected created-at,updated-at suffix, got %s"
+                   (String.concat " " command.path)
+                   (String.concat "," headers))
+      in
+      List.iter assert_timestamp_headers_last registry.commands;
       let output_option =
         expect_some "global output option"
           (option_by_name "--output" Command_registry.global_options)
@@ -5426,6 +6055,13 @@ let () =
         (List.mem "title" tag_fields.choices);
       expect_bool "tag fields include uuid" true
         (List.mem "uuid" tag_fields.choices);
+      let list_task =
+        expect_some "list task"
+          (Command_registry.find_by_path [ "list"; "task" ] registry)
+      in
+      expect_equal "list task human header order"
+        "id,title,status,priority,scheduled,deadline,created-at,updated-at"
+        (String.concat "," list_task.human_table_headers_order);
       let show =
         expect_some "show command"
           (Command_registry.find_by_path [ "show" ] registry)
@@ -5487,7 +6123,9 @@ let () =
         expect_some "search content option"
           (option_by_name "--content" search_block.options)
       in
-      expect_equal "search content doc" "Content search text" search_content.doc);
+      expect_equal "search content doc" "Content search text" search_content.doc;
+      expect_equal "search block human header order" "id,ident,title"
+        (String.concat "," search_block.human_table_headers_order));
 
   test "CLI parity command registry help renders command and option details"
     (fun () ->
@@ -5615,6 +6253,7 @@ let () =
               requires_graph = false;
               requires_auth = false;
               write_command = false;
+              human_table_headers_order = [];
             };
           ]
       in
@@ -6004,7 +6643,7 @@ let () =
           (Bytes.to_string
              (expect_some "sqlite bytes" (Edn_util.as_bytes sqlite_value)));
         expect_named_contains "read sqlite uses transit bytes tag"
-          (Melange_edn.to_edn_string sqlite_value)
+          (Melange_edn_melange.to_edn_string sqlite_value)
           "#transit/bytes";
         ignore
           (expect_ok "write db"
@@ -6022,7 +6661,7 @@ let () =
           (Bytes.to_string
              (expect_some "db bytes" (Edn_util.as_bytes db_value)));
         expect_named_contains "read db uses transit bytes tag"
-          (Melange_edn.to_edn_string db_value)
+          (Melange_edn_melange.to_edn_string db_value)
           "#transit/bytes";
         expect_error_code "bad write format" ":unsupported-output-format"
           (effect_result "bad write format"
@@ -6061,11 +6700,11 @@ let () =
               (expect_some "invoke large int value"
                  (Edn_util.as_int64 (List.nth query 5)));
             (match List.nth query 6 with
-            | Melange_edn.Any (Melange_edn.Bigint value) ->
+            | Melange_edn_melange.Any (Melange_edn_melange.Bigint value) ->
                 expect_equal "invoke bigint" "900719925474099312345" value
             | _ -> fail_test "invoke bigint: expected Bigint");
             (match List.nth query 7 with
-            | Melange_edn.Any (Melange_edn.Decimal value) ->
+            | Melange_edn_melange.Any (Melange_edn_melange.Decimal value) ->
                 expect_equal "invoke decimal" "1234567890.123456789" value
             | _ -> fail_test "invoke decimal: expected Decimal");
             "\"ok\"")
@@ -6097,9 +6736,9 @@ let () =
                         Edn_util.keyword "created-at";
                         Edn_util.int64 large_int;
                         Edn_util.any
-                          (Melange_edn.bigint "900719925474099312345");
+                          (Melange_edn_melange.bigint "900719925474099312345");
                         Edn_util.any
-                          (Melange_edn.decimal "1234567890.123456789");
+                          (Melange_edn_melange.decimal "1234567890.123456789");
                       ]))
           in
           expect_equal "decoded invoke result" "ok"
@@ -6214,7 +6853,7 @@ let () =
             effect_to_promise
               (Transport.connect_events invoke_config (fun event_type payload ->
                    received :=
-                     (event_type, Melange_edn.to_edn_string payload)
+                     (event_type, Melange_edn_melange.to_edn_string payload)
                      :: !received;
                    Cli_effect.pure ()))
           in
@@ -6244,6 +6883,273 @@ let () =
         "/tmp/logseq-root/graphs/foo~2Fbar/db-worker.lock"
         (Server_runtime.lock_path ~root_dir:"/tmp/logseq-root"
            (Cli_primitive.create_repo "logseq_db_foo/bar")));
+
+  test_promise
+    "CLI parity server start launches db-worker-node with parent executable"
+    (fun () ->
+      let root = temp_dir "logseq-cli-server-parent-exec-" in
+      let worker_script = Node.Path.join [| root; "db-worker-node.js" |] in
+      let graphs_dir = Node.Path.join [| root; "graphs" |] in
+      let graph_dir = Node.Path.join [| graphs_dir; "demo" |] in
+      let lock_path = Node.Path.join [| graph_dir; "db-worker.lock" |] in
+      let server_list_path = Node.Path.join [| root; "server-list" |] in
+      let server =
+        create_server (fun[@u] req res ->
+            if req_method req = "GET" && req_url req = "/healthz" then
+              write_json res 200
+                (Printf.sprintf
+                   "{\"repo\":\"logseq_db_demo\",\"status\":\"ready\",\"host\":\"127.0.0.1\",\"pid\":%d,\"owner-source\":\"cli\",\"root-dir\":%S,\"revision\":\"test-revision\"}"
+                   (Cli_unix.getpid ()) root)
+            else write_json res 404 (error_response "not found"))
+      in
+      try
+        mkdir_p graph_dir;
+        write_file worker_script "console.log('db-worker');\n";
+        start_spawn_capture ();
+        set_env "LOGSEQ_DB_WORKER_NODE_SCRIPT" worker_script;
+        Js.Promise.make (fun ~resolve ~reject ->
+            server_listen server 0 "127.0.0.1" (fun[@u] () ->
+                let port = (server_address server)##port in
+                set_spawn_capture_on_spawn ~lock_path ~server_list_path ~port;
+                let config = config ~root_dir:root ~repo:"demo" () in
+                let finish_ok () =
+                  server_close server (fun[@u] () -> (resolve pass [@u]))
+                in
+                let finish_error message =
+                  server_close server (fun[@u] () ->
+                      (reject (Failure message) [@u]))
+                in
+                Cli_effect.on_any
+                  (Server_runtime.start_server config
+                     (Cli_primitive.create_repo "logseq_db_demo")
+                     ~create_empty_db:false)
+                  (fun result ->
+                    let calls = spawn_capture_calls () in
+                    stop_spawn_capture ();
+                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+                    remove_tree root;
+                    match result with
+                    | Error err ->
+                        finish_error ("server start failed: " ^ err.Error.message)
+                    | Ok _ ->
+                        let expected_command = Node.Process.argv.(0) in
+                        (try
+                           expect_named_contains "spawn command" calls
+                             ("\"command\":\"" ^ expected_command ^ "\"");
+                           expect_named_contains "spawn worker arg" calls
+                             worker_script;
+                           finish_ok ()
+                         with exn -> finish_error (Printexc.to_string exn)))
+                  (fun exn ->
+                    stop_spawn_capture ();
+                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+                    remove_tree root;
+                    finish_error (Printexc.to_string exn))))
+      with exn ->
+        stop_spawn_capture ();
+        unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+        remove_tree root;
+        server_close server (fun[@u] () -> ());
+        fail_promise (Printexc.to_string exn));
+
+  test_promise "CLI parity server start reuses starting db-worker-node"
+    (fun () ->
+      let root = temp_dir "logseq-cli-server-starting-existing-" in
+      let worker_script = Node.Path.join [| root; "db-worker-node.js" |] in
+      let graphs_dir = Node.Path.join [| root; "graphs" |] in
+      let graph_dir = Node.Path.join [| graphs_dir; "demo" |] in
+      let lock_path = Node.Path.join [| graph_dir; "db-worker.lock" |] in
+      let server_list_path = Node.Path.join [| root; "server-list" |] in
+      let health_calls = ref 0 in
+      let server =
+        create_server (fun[@u] req res ->
+            if req_method req = "GET" && req_url req = "/healthz" then (
+              incr health_calls;
+              let status_code, status =
+                if !health_calls = 1 then (503, "starting") else (200, "ready")
+              in
+              write_json res status_code
+                (Printf.sprintf
+                   "{\"repo\":\"logseq_db_demo\",\"status\":%S,\"host\":\"127.0.0.1\",\"pid\":%d,\"owner-source\":\"cli\",\"root-dir\":%S,\"revision\":\"test-revision\"}"
+                   status (Cli_unix.getpid ()) root))
+            else write_json res 404 (error_response "not found"))
+      in
+      try
+        mkdir_p graph_dir;
+        write_file worker_script "console.log('db-worker');\n";
+        write_file lock_path
+          (Printf.sprintf
+             "{\"repo\":\"logseq_db_demo\",\"pid\":%d,\"lock-id\":\"test\",\"owner-source\":\"cli\"}"
+             (Cli_unix.getpid ()));
+        start_spawn_capture ();
+        set_env "LOGSEQ_DB_WORKER_NODE_SCRIPT" worker_script;
+        Js.Promise.make (fun ~resolve ~reject ->
+            server_listen server 0 "127.0.0.1" (fun[@u] () ->
+                let port = (server_address server)##port in
+                write_file server_list_path
+                  (string_of_int (Cli_unix.getpid ()) ^ " "
+                 ^ string_of_int port ^ "\n");
+                let config = config ~root_dir:root ~repo:"demo" () in
+                let finish_ok () =
+                  server_close server (fun[@u] () -> (resolve pass [@u]))
+                in
+                let finish_error message =
+                  server_close server (fun[@u] () ->
+                      (reject (Failure message) [@u]))
+                in
+                Cli_effect.on_any
+                  (Server_runtime.start_server config
+                     (Cli_primitive.create_repo "logseq_db_demo")
+                     ~create_empty_db:false)
+                  (fun result ->
+                    let calls = spawn_capture_calls () in
+                    stop_spawn_capture ();
+                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+                    remove_tree root;
+                    match result with
+                    | Error err ->
+                        finish_error ("server start failed: " ^ err.Error.message)
+                    | Ok _ -> (
+                        try
+                          expect_equal "spawn calls" "[]" calls;
+                          expect_bool "health calls include ready retry" true
+                            (!health_calls >= 2);
+                          finish_ok ()
+                        with exn -> finish_error (Printexc.to_string exn)))
+                  (fun exn ->
+                    stop_spawn_capture ();
+                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+                    remove_tree root;
+                    finish_error (Printexc.to_string exn))))
+      with exn ->
+        stop_spawn_capture ();
+        unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+        remove_tree root;
+        server_close server (fun[@u] () -> ());
+        fail_promise (Printexc.to_string exn));
+
+  test_promise "CLI parity ensure server retries final health discovery"
+    (fun () ->
+      let root = temp_dir "logseq-cli-ensure-final-health-" in
+      let worker_script = Node.Path.join [| root; "db-worker-node.js" |] in
+      let graphs_dir = Node.Path.join [| root; "graphs" |] in
+      let graph_dir = Node.Path.join [| graphs_dir; "demo" |] in
+      let lock_path = Node.Path.join [| graph_dir; "db-worker.lock" |] in
+      let server_list_path = Node.Path.join [| root; "server-list" |] in
+      let health_calls = ref 0 in
+      let server =
+        create_server (fun[@u] req res ->
+            if req_method req = "GET" && req_url req = "/healthz" then (
+              incr health_calls;
+              match !health_calls with
+              | 1 ->
+                  write_json res 503
+                    (Printf.sprintf
+                       "{\"repo\":\"logseq_db_demo\",\"status\":\"starting\",\"host\":\"127.0.0.1\",\"pid\":%d,\"owner-source\":\"cli\",\"root-dir\":%S,\"revision\":\"test-revision\"}"
+                       (Cli_unix.getpid ()) root)
+              | 3 -> write_json res 500 (error_response "busy")
+              | _ ->
+                  write_json res 200
+                    (Printf.sprintf
+                       "{\"repo\":\"logseq_db_demo\",\"status\":\"ready\",\"host\":\"127.0.0.1\",\"pid\":%d,\"owner-source\":\"cli\",\"root-dir\":%S,\"revision\":\"test-revision\"}"
+                       (Cli_unix.getpid ()) root))
+            else write_json res 404 (error_response "not found"))
+      in
+      try
+        mkdir_p graph_dir;
+        write_file worker_script "console.log('db-worker');\n";
+        start_spawn_capture ();
+        set_env "LOGSEQ_DB_WORKER_NODE_SCRIPT" worker_script;
+        Js.Promise.make (fun ~resolve ~reject ->
+            server_listen server 0 "127.0.0.1" (fun[@u] () ->
+                let port = (server_address server)##port in
+                set_spawn_capture_on_spawn ~lock_path ~server_list_path ~port;
+                let config = config ~root_dir:root ~repo:"demo" () in
+                let finish_ok () =
+                  server_close server (fun[@u] () -> (resolve pass [@u]))
+                in
+                let finish_error message =
+                  server_close server (fun[@u] () ->
+                      (reject (Failure message) [@u]))
+                in
+                Cli_effect.on_any
+                  (Server_runtime.ensure_server config
+                     (Cli_primitive.create_repo "logseq_db_demo")
+                     ~create_empty_db:false)
+                  (fun result ->
+                    let calls = spawn_capture_calls () in
+                    stop_spawn_capture ();
+                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+                    remove_tree root;
+                    match result with
+                    | Error err ->
+                        finish_error
+                          ("ensure server failed: " ^ err.Error.message)
+                    | Ok _ -> (
+                        try
+                          expect_named_contains "spawned worker" calls
+                            worker_script;
+                          expect_bool "final health retried" true
+                            (!health_calls >= 4);
+                          finish_ok ()
+                        with exn -> finish_error (Printexc.to_string exn)))
+                  (fun exn ->
+                    stop_spawn_capture ();
+                    unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+                    remove_tree root;
+                    finish_error (Printexc.to_string exn))))
+      with exn ->
+        stop_spawn_capture ();
+        unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+        remove_tree root;
+        server_close server (fun[@u] () -> ());
+        fail_promise (Printexc.to_string exn));
+
+  test_promise
+    "CLI parity server start orphan timeout reports db-worker-node command"
+    (fun () ->
+      let root = temp_dir "logseq-cli-server-orphan-command-" in
+      let worker_script = Node.Path.join [| root; "db-worker-node.js" |] in
+      let graphs_dir = Node.Path.join [| root; "graphs" |] in
+      let graph_dir = Node.Path.join [| graphs_dir; "demo" |] in
+      try
+        mkdir_p graph_dir;
+        write_file worker_script "console.log('db-worker');\n";
+        start_spawn_capture ();
+        set_env "LOGSEQ_DB_WORKER_NODE_SCRIPT" worker_script;
+        let config = config ~root_dir:root ~repo:"demo" () in
+        effect_to_promise
+          (Server_runtime.start_server config
+             (Cli_primitive.create_repo "logseq_db_demo")
+             ~create_empty_db:false)
+        |> Js.Promise.then_ (fun result ->
+               let calls = spawn_capture_calls () in
+               stop_spawn_capture ();
+               unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+               remove_tree root;
+               match result with
+               | Ok _ -> fail_promise "expected orphan timeout"
+               | Error err ->
+                   expect_equal "orphan error code" "server-start-timeout-orphan"
+                     (Error.code_to_string err.Error.code);
+                   expect_named_contains "orphan command executable"
+                     err.Error.message Node.Process.argv.(0);
+                   expect_named_contains "orphan command worker"
+                     err.Error.message worker_script;
+                   expect_named_contains "orphan command repo"
+                     err.Error.message "--repo logseq_db_demo";
+                   expect_named_contains "orphan command root"
+                     err.Error.message ("--root-dir " ^ root);
+                   expect_named_contains "orphan command owner"
+                     err.Error.message "--owner-source cli";
+                   expect_named_contains "spawn was attempted" calls
+                     worker_script;
+                   Js.Promise.resolve pass)
+      with exn ->
+        stop_spawn_capture ();
+        unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+        remove_tree root;
+        fail_promise (Printexc.to_string exn));
 
   test "CLI parity server command build keeps cleanup repo-free contract"
     (fun () ->
@@ -6410,6 +7316,32 @@ let () =
         (Format_types.format_result (message Output.Mode.Edn)
            (config ~output_format:(Output.Mode.Packed Output.Mode.Edn) ())));
 
+  test "CLI parity default human tables keep discovered header order" (fun () ->
+      let value =
+        Edn_util.map
+          [
+            ( Edn_util.keyword "items",
+              Edn_util.vector
+                [
+                  Edn_util.map
+                    [
+                      ( Edn_util.keyword "block/updated-at",
+                        Edn_util.int64 90000L );
+                      (Edn_util.keyword "block/title", Edn_util.string "Alpha");
+                      ( Edn_util.keyword "block/created-at",
+                        Edn_util.int64 40000L );
+                    ];
+                ] );
+          ]
+      in
+      let output =
+        Format_types.format_result
+          (Cli_result.ok Output.Mode.Human (Cli_result.Raw value))
+          (config ())
+      in
+      expect_equal "default table header order" "updated-at,title,created-at"
+        (headers_from output |> Array.to_list |> String.concat ","));
+
   test "CLI parity format graph list marks current graph and old graph dirs"
     (fun () ->
       let graph_list_data =
@@ -6486,13 +7418,23 @@ let () =
       in
       let list_output =
         Format_types.format_result
+          ~human_table_headers_order:
+            [ "id"; "ident"; "title"; "uuid"; "created-at"; "updated-at" ]
           (Cli_result.ok ~command:Command_id.List_page Output.Mode.Human
              (Cli_result.Raw list_value))
           (config ())
       in
-      expect_named_contains "list id header" list_output "db/id";
+      expect_named_contains "list id header" list_output "id";
       expect_named_contains "list title" list_output "Alpha";
       expect_named_contains "list count" list_output "Count: 1";
+      let empty_order_output =
+        Format_types.format_result ~human_table_headers_order:[]
+          (Cli_result.ok ~command:Command_id.List_page Output.Mode.Human
+             (Cli_result.Raw list_value))
+          (config ())
+      in
+      expect_equal "empty header order does not infer columns" "Count: 1"
+        (String.trim empty_order_output);
       let search_value =
         Edn_util.map
           [
@@ -6516,6 +7458,7 @@ let () =
       in
       let search_output =
         Format_types.format_result
+          ~human_table_headers_order:[ "id"; "ident"; "title" ]
           (Cli_result.ok ~command:Command_id.Search_block Output.Mode.Human
              (Cli_result.Raw search_value))
           (config ())
@@ -6532,6 +7475,14 @@ let () =
       in
       let human command value =
         Format_types.format_result
+          ~human_table_headers_order:
+            (let registry = (Cli.make_app_context ()).Cli.registry in
+             let meta =
+               expect_some "command metadata"
+                 (Command_registry.find_by_path (Command_id.to_path command)
+                    registry)
+             in
+             meta.human_table_headers_order)
           (Cli_result.ok ~command Output.Mode.Human (Cli_result.Raw value))
           (config ())
       in
@@ -6548,8 +7499,8 @@ let () =
                  ];
              ])
       in
-      expect_named_contains "tag id header" tag_output "db/id";
-      expect_named_contains "tag title header" tag_output "block/title";
+      expect_named_contains "tag id header" tag_output "id";
+      expect_named_contains "tag title header" tag_output "title";
       expect_named_contains "tag ident value" tag_output "logseq.class/Tag";
       let property_output =
         human Command_id.List_property
@@ -6571,10 +7522,9 @@ let () =
                  ];
              ])
       in
-      expect_named_contains "property type header" property_output
-        "logseq.property/type";
+      expect_named_contains "property type header" property_output "type";
       expect_named_contains "property cardinality header" property_output
-        "db/cardinality";
+        "cardinality";
       expect_named_contains "property cardinality value" property_output
         "db.cardinality/many";
       let task_output =
@@ -6592,10 +7542,46 @@ let () =
                  ];
              ])
       in
-      expect_named_contains "task status column" task_output
-        "logseq.property/status";
-      expect_named_contains "task priority column" task_output
-        "logseq.property/priority";
+      expect_named_contains "task status column" task_output "status";
+      expect_named_contains "task priority column" task_output "priority";
+      let unordered_task_output =
+        Format_types.format_result
+          ~human_table_headers_order:
+            [
+              "id";
+              "title";
+              "status";
+              "priority";
+              "scheduled";
+              "deadline";
+              "updated-at";
+              "created-at";
+            ]
+          (Cli_result.ok ~command:Command_id.List_task Output.Mode.Human
+             (Cli_result.Raw
+                (items
+                   [
+                     row
+                       [
+                         ( Edn_util.keyword "logseq.property/priority",
+                           Edn_util.keyword "logseq.property/priority.high" );
+                         (Edn_util.keyword "block/title", Edn_util.string "Ship");
+                         ( Edn_util.keyword "logseq.property/status",
+                           Edn_util.keyword "logseq.property/status.todo" );
+                         ( Edn_util.keyword "block/created-at",
+                           Edn_util.int64 40000L );
+                         ( Edn_util.keyword "block/updated-at",
+                           Edn_util.int64 90000L );
+                         (Edn_util.keyword "db/id", Edn_util.int64 12L);
+                         (Edn_util.keyword "block/uuid", Edn_util.string "u1");
+                       ];
+                   ])))
+          (config ())
+      in
+      expect_equal "ordered task headers"
+        "id,title,status,priority,updated-at,created-at"
+        (headers_from unordered_task_output |> Array.to_list
+        |> String.concat ",");
       let node_output =
         human Command_id.List_node
           (items
@@ -6610,8 +7596,8 @@ let () =
                  ];
              ])
       in
-      expect_named_contains "node type column" node_output "node/type";
-      expect_named_contains "node uuid column" node_output "block/uuid";
+      expect_named_contains "node type column" node_output "type";
+      expect_named_not_contains "node uuid column" node_output "uuid";
       let asset_output =
         human Command_id.List_asset
           (items
@@ -6627,10 +7613,8 @@ let () =
                  ];
              ])
       in
-      expect_named_contains "asset type column" asset_output
-        "logseq.property.asset/type";
-      expect_named_contains "asset size column" asset_output
-        "logseq.property.asset/size";
+      expect_named_contains "asset type column" asset_output "type";
+      expect_named_contains "asset size column" asset_output "size";
       expect_named_contains "asset raw size" asset_output "2552");
 
   test "CLI parity format list title truncation keeps current display contracts"
@@ -6649,6 +7633,8 @@ let () =
       in
       let truncated =
         Format_types.format_result
+          ~human_table_headers_order:
+            [ "id"; "ident"; "title"; "uuid"; "created-at"; "updated-at" ]
           (Cli_result.ok ~command:Command_id.List_page Output.Mode.Human
              (Cli_result.Raw (value "ABCDEFGH")))
           (config ~list_title_max_display_width:6 ())
@@ -6659,16 +7645,64 @@ let () =
         "ABCDEFGH";
       let multiline =
         Format_types.format_result
+          ~human_table_headers_order:
+            [ "id"; "ident"; "title"; "uuid"; "created-at"; "updated-at" ]
           (Cli_result.ok ~command:Command_id.List_page Output.Mode.Human
              (Cli_result.Raw (value "Line 1\nLine 2\nLine 3\nLine 4\nLine 5")))
           (config ())
       in
       expect_named_contains "multiline line one" multiline "Line 1";
-      expect_named_contains "multiline line two" multiline "Line 2";
+      expect_named_not_contains "multiline line two" multiline "Line 2";
       ignore ellipsis;
-      expect_named_contains "multiline line three" multiline "Line 3";
-      expect_named_contains "multiline line four" multiline "Line 4";
-      expect_named_contains "multiline line five" multiline "Line 5");
+      expect_named_not_contains "multiline line three" multiline "Line 3";
+      expect_named_not_contains "multiline line four" multiline "Line 4";
+      expect_named_not_contains "multiline line five" multiline "Line 5");
+
+  test "CLI parity list task aligns status after accented latin titles" (fun () ->
+      let accented_title =
+        decode_uri_component
+          "Diese%20Vorteile%20k%C3%B6nnten%20besonders%20f%C3%BCr%20eine"
+      in
+      let item id title =
+        Edn_util.map
+          [
+            (Edn_util.keyword "db/id", Edn_util.int64 id);
+            (Edn_util.keyword "block/title", Edn_util.string title);
+            ( Edn_util.keyword "logseq.property/status",
+              Edn_util.keyword "logseq.property/status.todo" );
+          ]
+      in
+      let value =
+        Edn_util.map
+          [
+            ( Edn_util.keyword "items",
+              Edn_util.vector [ item 1L "yyy"; item 2L accented_title ] );
+          ]
+      in
+      let output =
+        Format_types.format_result
+          ~human_table_headers_order:[ "id"; "title"; "status" ]
+          (Cli_result.ok ~command:Command_id.List_task Output.Mode.Human
+             (Cli_result.Raw value))
+          (config ())
+      in
+      let status_column line token =
+        match Js.String.indexOf ~search:token line with
+        | -1 ->
+            fail_test ("missing " ^ token ^ " in line:\n" ^ line ^ "\n" ^ output);
+            0
+        | index -> display_width (String.sub line 0 index)
+      in
+      match
+        Array.to_list (string_split (string_trim_end output) "\n")
+      with
+      | header :: short_row :: accented_row :: _footer :: [] ->
+          let expected = status_column header "status" in
+          expect_int "short task status column" expected
+            (status_column short_row "status.todo");
+          expect_int "accented task status column" expected
+            (status_column accented_row "status.todo")
+      | _ -> fail_test ("unexpected list task output:\n" ^ output));
 
   test "CLI parity format upsert summaries use current generic tables"
     (fun () ->
@@ -6876,7 +7910,7 @@ let () =
         Format_types.format_result
           (Cli_result.error ~command:Command_id.Graph_validate Output.Mode.Human
              (Error.make
-                (Edn_util.keyword_t "graph-validation-failed")
+                (Error.Graph_validation_failed)
                 "Found 1 entity with errors:\n({:entity {:db/id 1}})\n"))
           (config ())
       in
@@ -6936,7 +7970,7 @@ let () =
                   "Logseq restarted db-worker-node, but the replacement still \
                    reports a different revision. Check the installed Logseq \
                    build and retry"
-                (Edn_util.keyword_t "server-revision-mismatch-after-restart")
+                (Error.Server_revision_mismatch_after_restart)
                 "db-worker-node revision still does not match after restart"))
           (config ())
       in

@@ -28,6 +28,13 @@
                      :client-revision "test-revision")]
     (is (= body' (coerce-request :sync/tx-batch body')))))
 
+(deftest ws-tx-batch-client-revision-accepts-string-test
+  (let [body {:type "tx/batch"
+              :t-before 0
+              :txs []
+              :client-revision "test-revision"}]
+    (is (= body (db-sync-schema/ws-client-message-coercer body)))))
+
 (deftest tx-batch-request-client-revision-rejects-non-string-test
   (is (thrown? js/Error
                (coerce-request :sync/tx-batch

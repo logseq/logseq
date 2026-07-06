@@ -563,6 +563,151 @@
         (is (= "pull/ok" (:type pull-response)))
         (is (empty? (:txs pull-response)))))))
 
+(deftest tx-batch-adds-request-context-to-transact-meta-test
+  (testing "graph id and client revision should be present in transact failure diagnostics"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          tx-metas (atom [])
+          tx-entry {:tx (protocol/tx->transit [[:db/add -1 :block/title "context"]])
+                    :outliner-op :save-block}
+          response (with-redefs [ws/broadcast! (fn [& _] nil)]
+                     (d/listen! conn ::capture-request-context-tx-meta
+                                (fn [tx-report]
+                                  (swap! tx-metas conj (:tx-meta tx-report))))
+                     (try
+                       (sync-handler/handle-tx-batch!
+                        self
+                        nil
+                        [tx-entry]
+                        0
+                        {:graph-id "graph-context"
+                         :client-revision "revision-context"})
+                       (finally
+                         (d/unlisten! conn ::capture-request-context-tx-meta))))]
+      (is (= "tx/batch/ok" (:type response)))
+      (is (some #(= {:op :apply-client-tx
+                     :outliner-op :save-block
+                     :graph-id "graph-context"
+                     :client-revision "revision-context"}
+                    (select-keys % [:op :outliner-op :graph-id :client-revision]))
+                @tx-metas)))))
+
+(deftest tx-batch-rejects-move-blocks-when-target-is-missing-test
+  (testing "move-blocks against a block missing on the server should request client repair"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          page-uuid (random-uuid)
+          parent-uuid (random-uuid)
+          missing-block-uuid (random-uuid)
+          _ (d/transact! conn [{:block/uuid page-uuid
+                                :block/name "stale-move-page"
+                                :block/title "stale-move-page"}
+                               {:block/uuid parent-uuid
+                                :block/title "existing-parent"
+                                :block/order "a0"
+                                :block/parent [:block/uuid page-uuid]
+                                :block/page [:block/uuid page-uuid]}])
+          t-before (storage/get-t sql)
+          checksum-before (storage/get-checksum sql)
+          tx-id (random-uuid)
+          tx-entry {:tx-id tx-id
+                    :tx (protocol/tx->transit
+                         [[:db/retract [:block/uuid missing-block-uuid]
+                           :block/parent
+                           [:block/uuid page-uuid]
+                           537062408]
+                          [:db/add [:block/uuid missing-block-uuid]
+                           :block/parent
+                           [:block/uuid parent-uuid]
+                           537062408]
+                          [:db/retract [:block/uuid missing-block-uuid]
+                           :block/order
+                           "a0"
+                           537062408]
+                          [:db/add [:block/uuid missing-block-uuid]
+                           :block/order
+                           "a3"
+                           537062408]])
+                    :outliner-op :move-blocks}
+          changed-messages (atom [])
+          response (with-redefs [ws/broadcast! (fn [_self _sender payload]
+                                                 (swap! changed-messages conj payload))]
+                     (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
+      (is (= "tx/reject" (:type response)))
+      (is (= "db transact failed" (:reason response)))
+      (is (= t-before (:t response)))
+      (is (= tx-id (:failed-tx-id response)))
+      (is (= [missing-block-uuid] (:missing-block-uuids response)))
+      (is (= checksum-before (storage/get-checksum sql)))
+      (is (empty? (storage/fetch-tx-since sql t-before)))
+      (is (empty? @changed-messages)))))
+
+(deftest tx-batch-delete-blocks-ignores-redundant-updates-and-deletes-descendants-test
+  (testing "delete-blocks should retract current descendants even when tx-data omits them"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          page-uuid (random-uuid)
+          parent-uuid (random-uuid)
+          child-uuid (random-uuid)
+          property-value-uuid (random-uuid)
+          now 1783043128375
+          _ (d/transact! conn [{:db/ident :user.property/sync-report}
+                               {:block/uuid page-uuid
+                                :block/name "delete-descendants-page"
+                                :block/title "delete-descendants-page"
+                                :block/created-at now
+                                :block/updated-at now}
+                               {:block/uuid parent-uuid
+                                :block/title "parent"
+                                :block/parent [:block/uuid page-uuid]
+                                :block/page [:block/uuid page-uuid]
+                                :block/order "a0"
+                                :block/created-at now
+                                :block/updated-at now}
+                               {:block/uuid child-uuid
+                                :block/title "child"
+                                :block/parent [:block/uuid parent-uuid]
+                                :block/page [:block/uuid page-uuid]
+                                :block/order "a1"
+                                :block/created-at now
+                                :block/updated-at now}
+                               {:block/uuid property-value-uuid
+                                :block/title "property value"
+                                :block/parent [:block/uuid child-uuid]
+                                :block/page [:block/uuid page-uuid]
+                                :block/order "a4"
+                                :logseq.property/created-from-property :user.property/sync-report
+                                :block/created-at now
+                                :block/updated-at now}])
+          t-before (storage/get-t sql)
+          tx-entry {:tx (protocol/tx->transit
+                         [[:db/add [:block/uuid child-uuid]
+                           :block/parent
+                           [:block/uuid page-uuid]
+                           537866038]
+                          [:db/add [:block/uuid property-value-uuid]
+                           :block/updated-at
+                           (inc now)
+                           537866038]
+                          [:db/retractEntity [:block/uuid parent-uuid]]
+                          [:db/retractEntity [:block/uuid child-uuid]]])
+                    :outliner-op :delete-blocks}
+          response (with-redefs [ws/broadcast! (fn [& _] nil)]
+                     (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
+      (is (= "tx/batch/ok" (:type response)))
+      (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
+      (is (nil? (d/entity @conn [:block/uuid child-uuid])))
+      (is (nil? (d/entity @conn [:block/uuid property-value-uuid]))))))
+
 (deftest repair-blocks-response-returns-server-block-data-test
   (testing "repair block response returns transactable datoms with lookup refs"
     (let [{:keys [conn self]} (make-server-self)
@@ -1031,6 +1176,49 @@
                      (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
       (is (= "tx/batch/ok" (:type response)))
       (is (= t-before (:t response)))
+      (is (= checksum-before (storage/get-checksum sql)))
+      (is (empty? (storage/fetch-tx-since sql t-before)))
+      (is (empty? @changed-messages)))))
+
+(deftest tx-batch-acknowledges-noop-stale-rebase-with-tx-id-test
+  (testing "an accepted no-op should acknowledge its client tx id"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          tx-id (random-uuid)
+          page-uuid (random-uuid)
+          parent-uuid (random-uuid)
+          missing-block-uuid (random-uuid)
+          _ (d/transact! conn [{:block/uuid page-uuid
+                                :block/name "rebase-stale-page-with-tx-id"
+                                :block/title "rebase-stale-page-with-tx-id"}
+                               {:block/uuid parent-uuid
+                                :block/title "existing-parent"
+                                :block/order "a0"
+                                :block/parent [:block/uuid page-uuid]
+                                :block/page [:block/uuid page-uuid]}])
+          t-before (storage/get-t sql)
+          checksum-before (storage/get-checksum sql)
+          tx-entry {:tx-id tx-id
+                    :tx (protocol/tx->transit
+                         [[:db/retract [:block/uuid missing-block-uuid]
+                           :block/parent
+                           [:block/uuid page-uuid]
+                           536882158]
+                          [:db/add [:block/uuid missing-block-uuid]
+                           :block/parent
+                           [:block/uuid parent-uuid]
+                           536882158]])
+                    :outliner-op :rebase}
+          changed-messages (atom [])
+          response (with-redefs [ws/broadcast! (fn [_self _sender payload]
+                                                 (swap! changed-messages conj payload))]
+                     (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
+      (is (= "tx/batch/ok" (:type response)))
+      (is (= t-before (:t response)))
+      (is (nil? (:failed-tx-id response)))
       (is (= checksum-before (storage/get-checksum sql)))
       (is (empty? (storage/fetch-tx-since sql t-before)))
       (is (empty? @changed-messages)))))

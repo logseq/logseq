@@ -994,7 +994,6 @@
  :node/built-in-cant-delete-error "Ingebouwde elementen kunnen niet worden verwijderd."
  :node/new "Nieuw knooppunt"
 
-
  :notification/copied "Gekopieerd"
 
  :onboarding.import/desc "Beschrijving van importeren"
@@ -1246,7 +1245,6 @@
  :property/drag-to-reorder "Sleep om te herordenen"
  :property/existing-values "Bestaande waarden"
  :property/go-to-this-property "Ga naar eigenschapspagina"
- :property/hidden-properties "Verborgen eigenschappen"
  :property/hide-by-default "Standaard verbergen"
  :property/hide-choice-for-tag "Keuze verbergen voor tag"
  :property/hide-empty-value "Lege waarden verbergen"

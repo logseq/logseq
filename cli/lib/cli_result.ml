@@ -2,10 +2,10 @@ type status = Ok | Error
 
 type ok_data =
   | Message of string
-  | Items of Melange_edn.any list
-  | Entity of Melange_edn.any
-  | Query_result of Melange_edn.any
-  | Raw of Melange_edn.any
+  | Items of Melange_edn_melange.any list
+  | Entity of Melange_edn_melange.any
+  | Query_result of Melange_edn_melange.any
+  | Raw of Melange_edn_melange.any
   | Empty
 
 type error_data = Error.t
@@ -15,9 +15,10 @@ type t = {
   data : ok_data option;
   error : error_data option;
   command : Command_id.t option;
-  context : Melange_edn.any option;
+  context : Melange_edn_melange.any option;
   output : 'o. 'o Output.Mode.t -> 'o Output.t;
   exit_code : int option;
+  human_table_headers_order : string list;
 }
 
 let data_value = function
@@ -40,7 +41,7 @@ let strip_leading_colon value =
 
 let field_label key =
   key |> Edn_util.as_string_like
-  |> Option.value ~default:(Melange_edn.to_edn_string key)
+  |> Option.value ~default:(Melange_edn_melange.to_edn_string key)
   |> strip_leading_colon
 
 let value_text value =
@@ -56,7 +57,7 @@ let value_text value =
   | _, _, Some value, _, _ -> string_of_int value
   | _, _, _, Some value, _ -> string_of_bool value
   | _, _, _, _, Some value -> string_of_float value
-  | _ -> Melange_edn.to_edn_string value
+  | _ -> Melange_edn_melange.to_edn_string value
 
 let has_suffix ~suffix value =
   let suffix_len = String.length suffix in
@@ -110,14 +111,6 @@ let graph_info_field_value_text label value =
 
 let add_column acc label = if List.mem label acc then acc else acc @ [ label ]
 
-let move_datetime_columns_last columns =
-  let non_datetime, datetime =
-    List.partition (fun label -> not (is_datetime_field label)) columns
-  in
-  let created_at = List.filter is_created_at_field datetime in
-  let updated_at = List.filter is_updated_at_field datetime in
-  non_datetime @ created_at @ updated_at
-
 let table_columns items =
   items
   |> List.fold_left
@@ -126,7 +119,6 @@ let table_columns items =
          |> List.map (fun (key, _) -> field_label key)
          |> List.fold_left add_column acc)
        []
-  |> move_datetime_columns_last
 
 let field_by_label label fields =
   fields
@@ -234,7 +226,7 @@ let graph_list_human value =
                   (fun graph ->
                     let graph =
                       Option.value (Edn_util.as_string graph)
-                        ~default:(Melange_edn.to_edn_string graph)
+                        ~default:(Melange_edn_melange.to_edn_string graph)
                     in
                     let prefix =
                       if Option.equal String.equal current_graph (Some graph)
@@ -364,7 +356,7 @@ let human_output command data =
   | Items values ->
       human_table ~headers:[ "Value" ]
         ~footer:(count_footer (List.length values))
-        (List.map (fun value -> [ Melange_edn.to_edn_string value ]) values)
+        (List.map (fun value -> [ Melange_edn_melange.to_edn_string value ]) values)
 
 let output_for_data : type a.
     Command_id.t option -> a Output.Mode.t -> ok_data -> a Output.t =
@@ -384,6 +376,7 @@ let ok ?command ?context mode data =
     context;
     output = (fun mode -> output_for_data command mode data);
     exit_code = None;
+    human_table_headers_order = [];
   }
 
 let error ?command ?context mode error =
@@ -401,6 +394,7 @@ let error ?command ?context mode error =
     context;
     output;
     exit_code = Some 1;
+    human_table_headers_order = [];
   }
 
 let is_error t = t.status = Error
@@ -414,3 +408,6 @@ let data_value t =
   | Some data -> Some (data_value data)
 
 let with_command command t = { t with command = Some command }
+
+let with_human_table_headers_order human_table_headers_order t =
+  { t with human_table_headers_order }

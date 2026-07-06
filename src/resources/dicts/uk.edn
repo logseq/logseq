@@ -994,7 +994,6 @@
  :node/built-in-cant-delete-error "Вбудованые элементы нельзя видалити."
  :node/new "Новый узел"
 
-
  :notification/copied "Скопійовано"
 
  :onboarding.import/desc "Описание імпорта"
@@ -1246,7 +1245,6 @@
  :property/drag-to-reorder "Перетащите для изменения порядка"
  :property/existing-values "Существующие значения"
  :property/go-to-this-property "Перейти к сторіноке властивості"
- :property/hidden-properties "Приховані властивості"
  :property/hide-by-default "Скрывать по умолчанию"
  :property/hide-choice-for-tag "Сховати вариант для тега"
  :property/hide-empty-value "Сховати пустые значения"
