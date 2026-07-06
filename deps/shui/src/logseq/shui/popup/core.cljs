@@ -32,6 +32,7 @@
 (defonce ^:private *popups (atom []))
 (defonce ^:private *id (atom 0))
 (defonce ^:private gen-id #(reset! *id (inc @*id)))
+(defonce ^:private *last-hidden (atom nil))
 (def *opened-sub-menus (atom #{}))
 
 (defn get-popup
@@ -60,15 +61,16 @@
       (swap! *popups assoc index config))))
 
 (defn detach-popup!
-  [id]
-  (let [[index config] (get-popup id)]
-    (when index
-      (swap! *popups #(->> % (medley/remove-nth index) (vec)))
-      (let [{:keys [auto-focus? target trigger-id]} config]
-        (when (and auto-focus? target)
-          (when-let [target (if trigger-id (js/document.getElementById trigger-id) target)]
-            (d/add-class! target "ls-popup-closed")
-            (.focus target)))))))
+  ([id] (detach-popup! id false))
+  ([id skip-focus?]
+   (let [[index config] (get-popup id)]
+     (when index
+       (swap! *popups #(->> % (medley/remove-nth index) (vec)))
+       (let [{:keys [auto-focus? target trigger-id]} config]
+         (when (and (not skip-focus?) auto-focus? target)
+           (when-let [target (if trigger-id (js/document.getElementById trigger-id) target)]
+             (d/add-class! target "ls-popup-closed")
+             (.focus target))))))))
 
 (declare hide!)
 
@@ -76,7 +78,18 @@
   [^js target ^js target']
   (and target target'
        (or (= target target')
-           (and (.-contains target) (.contains target target')))))
+           (and (instance? js/Node target')
+                (.-contains target)
+                (.contains target target')))))
+
+(defn- recently-hidden-target?
+  [target]
+  (let [{hidden-target :target until :until} @*last-hidden]
+    (and target
+         hidden-target
+         (number? until)
+         (< (js/Date.now) until)
+         (same-popup-target? hidden-target target))))
 
 (defn- element?
   [target]
@@ -99,22 +112,23 @@
         (some-> event (.-toElement))
         (some-> native-event (.-toElement)))))
 
+(defn- event-composed-path [^js event]
+  (let [^js native-event (native-event event)]
+    (cond
+      (fn? (some-> native-event (.-composedPath)))
+      (array-seq (.composedPath native-event))
+
+      (fn? (some-> event (.-composedPath)))
+      (array-seq (.composedPath event)))))
+
 (defn- close-targets
   [^js event-details]
   (let [event (some-> event-details (.-event))]
     (remove nil?
-            [(some-> event-details (.-trigger))
-             (event-related-target event)
-             (event-target event)])))
-
-(defn- popup-content-target?
-  [target]
-  (and (element? target)
-       (some? (.closest target ".ui__dropdown-menu-content, .ui__dropdown-menu-sub-content, .ui__popover-content, .ui__context-menu-content, .ui__context-menu-sub-content"))))
-
-(defn- popup-focus-retained?
-  [targets]
-  (some popup-content-target? targets))
+            (concat [(some-> event-details (.-trigger))
+                     (event-related-target event)
+                     (event-target event)]
+                    (event-composed-path event)))))
 
 (def ^:private menu-transition-close-reasons
   #{"trigger-hover" "trigger-focus" "list-navigation" "sibling-open"})
@@ -216,49 +230,67 @@
                    (when (and (nil? provided-id) target)
                      (some #(when (same-popup-target? target (:target %)) %)
                            (get-popups))))]
-    (if opened
+    (cond
+      (recently-hidden-target? target)
+      (do
+        (reset! *last-hidden nil)
+        (consume-toggle-event! event)
+        nil)
+
+      opened
       (do
         (consume-toggle-event! event)
-        (hide! (:id opened) 0 {:event event})
+        (if (and (number? (:ignore-opening-outside-press-until opened))
+                 (< (js/Date.now) (:ignore-opening-outside-press-until opened)))
+          (update-popup! (:id opened) :ignore-opening-outside-press-until nil)
+          (hide! (:id opened) 0 {:event event :skip-focus? true :suppress-next-show? true}))
         (:id opened))
+
+      :else
       (do
         (when (element? target)
+          (d/remove-class! target "ls-popup-closed")
           (d/set-attr! target "data-popup-active" (if (keyword? id) (name id) (str id))))
-        (let [on-before-hide (fn [^js e]
-                               (when (and (not (false? focus-trigger?))
-                                          (some? target)
-                                          (= js/document (.-ownerDocument target))
-                                          (.-isConnected target)
-                                          (fn? (.-focus target)))
-                                 (js/setTimeout #(.focus target) 16))
-                               (some-> on-before-hide (apply [e])))]
-          (upsert-popup!
-           (merge opts
-                  {:id id :target target
-                   :trigger-id trigger-id
-                   :open? true :content content :position position
-                   :as-dropdown? as-dropdown?
-                   :as-content? as-content?
-                   :root-props root-props
-                   :on-before-hide on-before-hide
-                   :on-after-hide on-after-hide
-                   :content-props (cond-> content-props
-                                    (not (nil? align))
-                                    (assoc :align (name align)))})))))))
+        (upsert-popup!
+         (merge opts
+                {:id id :target target
+                 :trigger-id trigger-id
+                 :ignore-opening-outside-press-until (+ (js/Date.now) 150)
+                 :focus-trigger? focus-trigger?
+                 :open? true :content content :position position
+                 :as-dropdown? as-dropdown?
+                 :as-content? as-content?
+                 :root-props root-props
+                 :on-before-hide on-before-hide
+                 :on-after-hide on-after-hide
+                 :content-props (cond-> content-props
+                                  (not (nil? align))
+                                  (assoc :align (name align)))}))
+        id))))
 
 (defn hide!
   ([] (when-let [id (some-> (get-popups) (last) :id)] (hide! id 0)))
   ([id] (hide! id 0 {}))
   ([id delay] (hide! id delay {}))
-  ([id delay {:keys [_all? ^js event]}]
+  ([id delay {:keys [_all? ^js event skip-focus? suppress-next-show?]}]
    ;; (prn :debug :hide id)
    (when-let [popup (get-popup id)]
      (let [config (last popup)
            target (:target config)
            f (fn []
-               (detach-popup! id)
+               (when suppress-next-show?
+                 (reset! *last-hidden {:target target
+                                        :until (+ (js/Date.now) 150)}))
+               (detach-popup! id skip-focus?)
                (some-> (:on-after-hide config) (apply [])))]
        (when (not (false? (some-> (:on-before-hide config) (apply [event]))))
+         (when (and (not skip-focus?)
+                    (not (false? (:focus-trigger? config)))
+                    (some? target)
+                    (= js/document (.-ownerDocument target))
+                    (.-isConnected target)
+                    (fn? (.-focus target)))
+           (js/setTimeout #(.focus target) 16))
          (some-> target (d/remove-attr! "data-popup-active"))
          (if (and (number? delay) (> delay 0))
            (js/setTimeout f delay)
@@ -294,11 +326,12 @@
 (hsx/defc x-popup
   [{:keys [id open? content position as-dropdown? as-content? force-popover?
            auto-side? as-mask? _auto-focus? target root-props content-props
-           _on-before-hide _on-after-hide]
+           ignore-opening-outside-press-until _on-before-hide _on-after-hide]
     :as _props}]
   (when-let [[_x y _width height] position]
     (let [use-menu? (not force-popover?)
           popup-root (if use-menu? dropdown-menu popover)
+          popup-trigger (if use-menu? dropdown-menu-trigger popover-trigger)
           popup-content (if use-menu? dropdown-menu-content popover-content)
           auto-side-fn (fn []
                          (let [vh js/window.innerHeight
@@ -319,25 +352,29 @@
                                           reason (some-> e (.-reason))
                                           targets (close-targets e)
                                           target-toggle? (some #(same-popup-target? target %) targets)
-                                          focus-retained? (and (= reason "focus-out")
-                                                            (popup-focus-retained? targets))
+                                          opening-outside-press? (and (= reason "outside-press")
+                                                                      (number? ignore-opening-outside-press-until)
+                                                                      (< (js/Date.now) ignore-opening-outside-press-until))
+                                          focus-transition? (= reason "focus-out")
                                           menu-transition? (and use-menu?
-                                                             (contains? menu-transition-close-reasons reason))
+                                                                (contains? menu-transition-close-reasons reason))
                                           handler (case reason
                                                     "escape-key" (:onEscapeKeyDown content-props)
                                                     "outside-press" (:onPointerDownOutside content-props)
                                                     nil)]
-                                      ; (prn :debug :id id :reason reason)
                                       (if (or (not last-popup?)
-                                            target-toggle?
-                                            menu-transition?
-                                            focus-retained?)
+                                              target-toggle?
+                                              opening-outside-press?
+                                              menu-transition?
+                                              focus-transition?)
                                         (some-> e (.cancel))
                                         (when-not (close-canceled? handler e)
-                                          (hide! id 1 {:event native-event})))))))]
+                                          (hide! id 1 {:event native-event
+                                                       :skip-focus? (= reason "outside-press")
+                                                       :suppress-next-show? (= reason "outside-press")})))))))]
       (let [disable-menu-handlers? (and use-menu? (not as-dropdown?))
             content-props (cond-> (merge content-props
-                                          (anchor-props content-props target position))
+                                         (anchor-props content-props target position))
                             as-mask?
                             (assoc :data-as-mask true)
 
@@ -347,13 +384,23 @@
 
                             disable-menu-handlers?
                             (assoc :on-pointer-move prevent-base-ui-handler!))
-             content (if (fn? content)
-                       (content (cond-> {:id id}
-                                  as-content?
-                                  (assoc :content-props content-props))) content)]
+            content (if (fn? content)
+                      (content (cond-> {:id id}
+                                 as-content?
+                                 (assoc :content-props content-props))) content)]
         (popup-root
          (merge root-props {:open open?
                             :onOpenChange handle-open-change!})
+         (popup-trigger
+          {:as-child true}
+          (button {:class "fixed p-0 opacity-0 pointer-events-none"
+                   :tab-index -1
+                   :aria-hidden true
+                   :style {:height 1
+                           :width 1
+                           :top -10000
+                           :left -10000}}
+                  ""))
          (if as-content?
            content
            (popup-content content-props content)))))))
