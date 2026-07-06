@@ -1,17 +1,15 @@
 (ns electron.cli-install-test
-  (:require ["path" :as node-path]
-            [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
             [electron.cli-install :as cli-install]))
 
 (defn- path-join
   [& parts]
-  (apply node-path/join parts))
+  (apply str (interpose "/" parts)))
 
 (defn- t
   [k & args]
   (case k
-    :electron/cli-installed (str "Logseq CLI was installed to " (first args))
     :electron/cli-install-failed (str "Failed to install Logseq CLI.\n" (first args))))
 
 (deftest preferred-unix-cli-dir-prefers-local-bin
@@ -60,27 +58,16 @@
      :chmods @chmods
      :messages @messages
      :errors @errors
-     :deferred @deferred
-     :messages-atom messages}))
+     :deferred @deferred}))
 
-(defn- run-deferred!
-  [result]
-  (doseq [f (:deferred result)]
-    (f))
-  (assoc result :messages @(:messages-atom result)))
-
-(deftest install-cli-launcher-shows-success-dialog
-  (testing "successful Unix install writes to ~/.local/bin and reports the user-facing directory"
+(deftest install-cli-launcher-does-not-show-success-dialog
+  (testing "successful Unix install writes to ~/.local/bin without showing a success dialog"
     (let [result (run-install! {:existing-files #{"/app/logseq-cli.js"}})]
       (is (= "/home/me/.local/bin/logseq" (ffirst (:writes result))))
       (is (= [["/home/me/.local/bin/logseq" "755"]] (:chmods result)))
       (is (= [] (:errors result)))
       (is (= [] (:messages result)))
-      (is (= 1 (count (:deferred result))))
-      (let [result (run-deferred! result)]
-      (is (= [{:title "Logseq"
-               :message "Logseq CLI was installed to ~/.local/bin"}]
-             (:messages result)))))))
+      (is (= [] (:deferred result))))))
 
 (deftest install-cli-launcher-uses-stable-appimage-path
   (testing "Linux AppImage launchers use APPIMAGE instead of the temporary mounted executable path"
@@ -107,7 +94,7 @@
       (is (= [] (:errors result))))))
 
 (deftest install-cli-launcher-keeps-windows-path
-  (testing "Windows keeps the existing Windows install path behavior and reports that directory"
+  (testing "Windows keeps the existing Windows install path behavior without showing a success dialog"
     (let [windows-dir "C:/Users/me/AppData/Local/Microsoft/WindowsApps"
           result (run-install! {:windows? true
                                 :cli-dir windows-dir
@@ -116,11 +103,7 @@
       (is (= [] (:chmods result)))
       (is (= [] (:errors result)))
       (is (= [] (:messages result)))
-      (is (= 1 (count (:deferred result))))
-      (let [result (run-deferred! result)]
-      (is (= [{:title "Logseq"
-               :message (str "Logseq CLI was installed to " windows-dir)}]
-             (:messages result)))))))
+      (is (= [] (:deferred result))))))
 
 (deftest install-cli-launcher-shows-error-dialog-on-failure
   (testing "installer failures are visible through an Electron error dialog"
