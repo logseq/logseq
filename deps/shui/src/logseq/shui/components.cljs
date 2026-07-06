@@ -933,9 +933,9 @@
        (clean-props! props' "children")
        (react/createElement
         SelectItemPart props'
-                (react/createElement "span" #js {:className "absolute left-2 flex h-3.5 w-3.5 items-center justify-center"}
-                                     (react/createElement SelectItemIndicatorPart nil
-                                                          (react/createElement IconCheck #js {:className "h-4 w-4"})))
+                (react/createElement SelectItemIndicatorPart
+                                     #js {:className "absolute left-2 top-1/2 flex h-3.5 w-3.5 -translate-y-1/2 items-center justify-center"}
+                                     (react/createElement IconCheck #js {:className "h-4 w-4"}))
                 (react/createElement SelectItemTextPart nil
                                      (react/createElement "span" nil children)))))))
 
