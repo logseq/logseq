@@ -363,7 +363,7 @@
 
 (defn get-current-page
   []
-  (let [match (:route-match @state/state)]
+  (let [match (state/get-state :route-match)]
     (get-page match)))
 
 (hsx/defc sidebar-resizer
