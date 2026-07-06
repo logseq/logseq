@@ -249,8 +249,7 @@
     (hooks/use-effect!
      (fn []
        (when (false? open?)
-         (let [timeout (js/setTimeout #(detach-dialog! id) 128)]
-           #(js/clearTimeout timeout))))
+         (detach-dialog! id)))
      [open?])
 
     (alert-dialog
