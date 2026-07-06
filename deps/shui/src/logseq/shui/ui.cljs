@@ -125,6 +125,7 @@
 (def tabs (util/ui-wrap "Tabs"))
 (def tabs-list (util/ui-wrap "TabsList"))
 (def tabs-trigger (util/ui-wrap "TabsTrigger"))
+(def tabs-indicator (util/ui-wrap "TabsIndicator"))
 (def tabs-content (util/ui-wrap "TabsContent"))
 
 (def dialog dialog-core/dialog)
