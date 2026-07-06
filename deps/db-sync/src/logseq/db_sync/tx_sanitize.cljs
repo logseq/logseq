@@ -27,6 +27,27 @@
 (def ^:private entity-op-kinds
   #{:db/add :db/retract :db/cas :db.fn/cas})
 
+(defn- entity-op?
+  [item]
+  (and (vector? item)
+       (<= 4 (count item))
+       (contains? entity-op-kinds (first item))))
+
+(defn- drop-ops-targeting-retracted-entities
+  [db tx-data]
+  (let [retract-eids (->> tx-data
+                          (keep (fn [item]
+                                  (when (retract-entity-op? item)
+                                    (entity-ref->eid db (second item)))))
+                          set)]
+    (if (empty? retract-eids)
+      tx-data
+      (remove (fn [item]
+                (and (entity-op? item)
+                     (contains? retract-eids
+                                (entity-ref->eid db (second item)))))
+              tx-data))))
+
 (def ^:private migration-deleted-attrs
   #{:block/path-refs
     :block/pre-block?
@@ -38,7 +59,7 @@
   (keep (fn [item]
           (when-not (and (vector? item)
                          (<= 4 (count item))
-                         (contains? entity-op-kinds (first item))
+                         (entity-op? item)
                          (contains? migration-deleted-attrs (nth item 2)))
             item))
         tx-data))
@@ -97,13 +118,19 @@
 (defn sanitize-tx
   ([db tx-data]
    (sanitize-tx db tx-data nil))
-  ([db tx-data {:keys [drop-missing-retract-ops?]
-                :or {drop-missing-retract-ops? false}}]
+  ([db tx-data {:keys [drop-missing-retract-ops?
+                       drop-ops-targeting-retracted-entities?
+                       retract-touched-descendants?]
+                :or {drop-missing-retract-ops? false
+                     drop-ops-targeting-retracted-entities? false
+                     retract-touched-descendants? false}}]
    (let [tx-data* (cond->> (strip-migration-deleted-attrs tx-data)
                     drop-missing-retract-ops?
                     (remove (fn [item]
                               (and (retract-entity-op? item)
-                                   (nil? (entity-ref->eid db (second item)))))))
+                                   (nil? (entity-ref->eid db (second item))))))
+                    drop-ops-targeting-retracted-entities?
+                    (drop-ops-targeting-retracted-entities db))
          tx-data* (drop-conflicted-encrypted-retracts tx-data*)
          tx-data* (vec tx-data*)
          retract-eids (->> tx-data*
@@ -121,7 +148,10 @@
                                                   (when (:block/uuid entity)
                                                     (ldb/get-block-full-children-ids db eid)))))
                                       set)
-         missing-retract-eids (sort (set/difference descendant-retract-eids retract-eids touched-eids))]
+         preserved-eids (cond-> retract-eids
+                          (not retract-touched-descendants?)
+                          (set/union touched-eids))
+         missing-retract-eids (sort (set/difference descendant-retract-eids preserved-eids))]
      (cond-> tx-data*
        (seq missing-retract-eids)
        (into (map (fn [eid] [:db/retractEntity eid]) missing-retract-eids))))))
