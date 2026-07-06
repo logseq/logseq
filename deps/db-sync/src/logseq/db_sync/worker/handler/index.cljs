@@ -128,7 +128,7 @@
                                   (string? (:encrypted-private-key user-rsa-key-pair)))]
                        (if name-exists?
                          (http/bad-request "duplicate graph name")
-                         (if-not has-user-rsa-key-pair?
+                         (if (and graph-e2ee? (not has-user-rsa-key-pair?))
                            (http/bad-request "missing user rsa key pair")
                            (p/let [_ (index/<index-upsert! db graph-id graph-name user-id schema-version graph-e2ee? graph-ready-for-use?)
                                    _ (index/<graph-member-upsert! db graph-id user-id "manager" user-id)]

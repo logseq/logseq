@@ -14,6 +14,9 @@
    [:tx :string]
    [:outliner-op {:optional true} [:maybe :keyword]]])
 
+(def client-revision-entry
+  [:client-revision {:optional true} :string])
+
 (def ws-client-message-schema
   [:multi {:dispatch :type}
    ["hello"
@@ -31,6 +34,7 @@
    ["tx/batch"
     [:map
      [:type [:= "tx/batch"]]
+     client-revision-entry
      [:t-before :int]
      [:txs [:sequential tx-entry-schema]]]]
    ["ping"
@@ -123,9 +127,6 @@
 
 (def graph-member-role-schema
   [:enum "manager" "member"])
-
-(def client-revision-entry
-  [:client-revision {:optional true} :string])
 
 (def graph-info-schema
   [:map

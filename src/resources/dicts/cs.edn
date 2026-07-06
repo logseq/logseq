@@ -994,7 +994,6 @@
  :node/built-in-cant-delete-error "Vestavěné prvky nelze smazat."
  :node/new "Nový uzel"
 
-
  :notification/copied "Zkopírováno"
 
  :onboarding.import/desc "Popis importu"
@@ -1246,7 +1245,6 @@
  :property/drag-to-reorder "Přetáhněte pro změnu pořadí"
  :property/existing-values "Existující hodnoty"
  :property/go-to-this-property "Přejít na stránku vlastnosti"
- :property/hidden-properties "Skryté vlastnosti"
  :property/hide-by-default "Skrýt ve výchozím nastavení"
  :property/hide-choice-for-tag "Skrýt volbu pro štítek"
  :property/hide-empty-value "Skrýt prázdné hodnoty"

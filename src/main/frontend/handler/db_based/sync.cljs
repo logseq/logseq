@@ -149,9 +149,10 @@
   (if (not= false server-rsa-keys-exists?)
     (p/resolved nil)
     (if @state/*db-worker
-      (-> (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys
-                                    {:ensure-server? true
-                                     :server-rsa-keys-exists? false})
+      (-> (p/let [_ (<sync-auth-state-to-db-worker!)]
+            (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys
+                                     {:ensure-server? true
+                                      :server-rsa-keys-exists? false}))
           (p/catch (fn [error]
                      (log/error :db-sync/ensure-user-rsa-keys-failed
                                 {:error error
@@ -235,13 +236,14 @@
    (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
      (let [base (http-base)
            repo (state/get-current-repo)
-           cached-users (get @(:rtc/users-info @state/state) repo)]
+           users-info (state/get-state :rtc/users-info)
+           cached-users (get users-info repo)]
        (cond
-         (and (not force?) (contains? @(:rtc/users-info @state/state) repo))
+         (and (not force?) (contains? users-info repo))
          (p/resolved cached-users)
 
          base
-         (p/let [_ (js/Promise. user-handler/<ensure-id&access-token!)
+         (p/let [_ (user-handler/<ensure-id&access-token!)
                  resp (fetch-json (str base "/graphs/" graph-uuid "/members")
                                   {:method "GET"}
                                   {:response-schema :graph-members/list})
@@ -254,7 +256,7 @@
                                           :graph<->user/user-type user-type}
                                    (string? email) (assoc :user/email email))))
                              members)]
-           (state/set-state! :rtc/users-info users :path-in-sub-atom repo)
+           (state/set-state! :rtc/users-info users :nested-path repo)
            users)
 
          :else
@@ -302,7 +304,10 @@
                        graph (str config/db-version-prefix graph-name)
                        _ (<ensure-download-runtime-bound! graph)
                        _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
-                                                  graph graph-uuid graph-e2ee?)]
+                                                  graph graph-uuid graph-e2ee?)
+                       _ (when (util/electron?)
+                           (state/<invoke-db-worker :thread-api/db-sync-download-missing-assets
+                                                    graph graph-uuid))]
                  true)
                (p/rejected (ex-info "db-sync missing graph info"
                                     {:type :db-sync/invalid-graph
@@ -422,7 +427,8 @@
     (reject-graph-operation-in-progress :upload operation)
     (do
       (state/set-state! :rtc/uploading? true)
-      (-> (p/let [_ (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
+      (-> (p/let [_ (<sync-auth-state-to-db-worker!)
+                  _ (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
                   _ (<get-remote-graphs)
                   _ (state/set-state! :rtc/uploading? false)
                   _ (<rtc-start! repo)]

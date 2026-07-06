@@ -12,7 +12,7 @@ let () =
   test "json output renders transit quoted uuid as string" (fun () ->
       let uuid = "11111111-1111-4111-8111-111111111111" in
       let value =
-        Edn_util.any (Melange_edn.tagged "transit/quote" (Edn_util.uuid uuid))
+        Edn_util.any (Melange_edn_melange.tagged "transit/quote" (Edn_util.uuid uuid))
       in
       let output =
         Format_types.to_json
@@ -25,12 +25,13 @@ let () =
   test "json error output includes hint" (fun () ->
       let err =
         Error.make ~hint:"Run logseq sync start --graph demo."
-          (Edn_util.keyword_t "sync-not-started")
-          "sync is not started for this graph"
+          Error.Sync_not_started "sync is not started for this graph"
       in
       let output =
         Format_types.to_json (Cli_result.error Output.Mode.Json err)
       in
+      expect_named_contains "json error code" output
+        "\"code\":\"sync-not-started\"";
       expect_named_contains "json error hint" output
         "\"hint\":\"Run logseq sync start --graph demo.\"")
 
@@ -812,16 +813,9 @@ let () =
           else
             let headers = headers_from output.stdout in
             let expected_prefix =
-              [|
-                "db/id";
-                "block/title";
-                "logseq.property.asset/size";
-                "logseq.property.asset/type";
-              |]
+              [| "id"; "title"; "size"; "type" |]
             in
-            let expected_suffix =
-              [| "block/created-at"; "block/updated-at" |]
-            in
+            let expected_suffix = [| "created-at"; "updated-at" |] in
             if
               not
                 (string_array_equal
@@ -840,14 +834,79 @@ let () =
               fail_promise
                 ("unexpected asset header suffix: "
                 ^ String.concat "," (Array.to_list headers))
-            else if
-              not
-                (Array.exists (( = ) "logseq.property.asset/checksum") headers)
-            then fail_promise ("missing middle asset column:\n" ^ output.stdout)
-            else if Array.exists (( = ) "node/type") headers then
+            else if not (Array.exists (( = ) "checksum") headers) then
+              fail_promise ("missing middle asset column:\n" ^ output.stdout)
+            else if Js.String.includes ~search:"node/type" output.stdout then
               fail_promise
                 ("asset output must not render node/type:\n" ^ output.stdout)
             else Js.Promise.resolve pass));
+
+  test_promise "list task human output uses registry header order" (fun () ->
+      let result_transit =
+        "[{\"~:logseq.property/priority\":\"~:logseq.property/priority.high\",\"~:block/title\":\"Ship\",\"~:logseq.property/status\":\"~:logseq.property/status.todo\",\"~:block/created-at\":40000,\"~:block/updated-at\":90000,\"~:db/id\":12,\"~:block/uuid\":\"u1\"}]"
+      in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/cli-list-tasks" body then
+              result_transit
+            else (
+              fail_test ("unexpected request: " ^ body);
+              "null"))
+      in
+      let root = temp_dir "logseq-cli-list-task-order-" in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [ "--root-dir"; root; "--graph"; "alpha"; "list"; "task" ]
+          in
+          remove_tree root;
+          ignore (expect_cli_exit_zero "list task" output);
+          let headers =
+            headers_from output.stdout |> Array.to_list |> String.concat ","
+          in
+          if headers <> "id,title,status,priority,created-at,updated-at" then
+            fail_promise ("unexpected task headers: " ^ headers)
+          else if
+            Js.String.includes ~search:"logseq.property/status.todo"
+              output.stdout
+          then
+            fail_promise ("task status value kept namespace:\n" ^ output.stdout)
+          else if
+            Js.String.includes ~search:"logseq.property/priority.high"
+              output.stdout
+          then
+            fail_promise ("task priority value kept namespace:\n" ^ output.stdout)
+          else (
+            ignore
+              (expect_named_contains "task status value" output.stdout
+                 "status.todo");
+            ignore
+              (expect_named_contains "task priority value" output.stdout
+                 "priority.high");
+            Js.Promise.resolve pass)));
+
+  test "CLI exits quietly on stdout EPIPE" (fun () ->
+      let root = temp_dir "logseq-cli-stdout-epipe-" in
+      let script_path = Node.Path.join [| root; "emit-stdout-epipe.js" |] in
+      let entrypoint_path = Node.Path.resolve "." entrypoint in
+      try
+        write_file script_path
+          ("process.argv = [process.argv[0], "
+          ^ Js.Json.stringify (Js.Json.string entrypoint_path)
+          ^ ", '--version'];\nrequire("
+          ^ Js.Json.stringify (Js.Json.string entrypoint_path)
+          ^ ");\nconst err = new Error('write EPIPE');\nerr.code = \
+             'EPIPE';\nprocess.stdout.emit('error', err);\n");
+        let output = spawn_cli_from script_path [] in
+        remove_tree root;
+        ignore (expect_exit_zero "stdout EPIPE" output);
+        expect_named_not_contains "stdout EPIPE stderr" output##stderr "EPIPE";
+        expect_named_not_contains "stdout EPIPE unhandled" output##stderr
+          "Unhandled 'error' event"
+      with exn ->
+        remove_tree root;
+        fail_test (Printexc.to_string exn));
 
   test_promise "list page human output aligns ragged property rows" (fun () ->
       let request_count = ref 0 in
@@ -1375,6 +1434,128 @@ let () =
           else
             fail_promise
               (Printf.sprintf "expected five invoke requests, got %d" !step)));
+
+  test_promise "upsert block create sends page refs from block title"
+    (fun () ->
+      let step = ref 0 in
+      let ref_uuid = "22222222-2222-4222-8222-222222222222" in
+      let captured_apply_body = ref None in
+      let server =
+        invoke_server (fun body ->
+            incr step;
+            match !step with
+            | 1
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"home" body ->
+                "[[\"^ \
+                 \",\"~:db/id\",42,\"~:block/uuid\",\"11111111-1111-1111-1111-111111111111\",\"~:block/name\",\"home\",\"~:block/title\",\"Home\"]]"
+            | 2
+              when Js.String.includes ~search:"thread-api/q" body
+                   && Js.String.includes ~search:"bar_page" body ->
+                "[[\"^ \",\"~:db/id\",88,\"~:block/uuid\",\"" ^ ref_uuid
+                ^ "\",\"~:block/name\",\"bar_page\",\"~:block/title\",\"bar_page\"]]"
+            | 3
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                captured_apply_body := Some body;
+                "[]"
+            | 4 when Js.String.includes ~search:"thread-api/pull" body ->
+                "[\"^ \",\"~:db/id\",10]"
+            | _ ->
+                fail_test
+                  (Printf.sprintf "unexpected request at step %d: %s" !step body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "block";
+                "--target-page";
+                "Home";
+                "--content";
+                "Foo links to [[bar_page]]";
+              ]
+          in
+          ignore (expect_cli_exit_zero "upsert block title page refs" output);
+          let body =
+            match !captured_apply_body with
+            | Some body -> body
+            | None ->
+                fail_test "missing captured apply body";
+                failwith "missing captured apply body"
+          in
+          expect_named_contains "block refs attr" body "block/refs";
+          expect_named_contains "resolved page ref uuid" body ref_uuid;
+          expect_named_contains "resolved page ref title" body "bar_page";
+          if !step = 4 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected four invoke requests, got %d" !step)));
+
+  test_promise "upsert block update resolves tag names from tag list"
+    (fun () ->
+      let step = ref 0 in
+      let captured_apply_body = ref None in
+      let server =
+        invoke_server (fun body ->
+            incr step;
+            match !step with
+            | 1
+              when Js.String.includes ~search:"thread-api/pull" body
+                   && Js.String.includes ~search:"233" body ->
+                "[\"^ \
+                 \",\"~:db/id\",233,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000233\"]"
+            | 2
+              when Js.String.includes ~search:"thread-api/cli-list-tags" body ->
+                "[[\"^ \",\"~:db/id\",200,\"~:block/title\",\"Tag A\"]]"
+            | 3
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                captured_apply_body := Some body;
+                "[]"
+            | _ ->
+                fail_test
+                  (Printf.sprintf "unexpected request at step %d: %s" !step body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "block";
+                "--id";
+                "233";
+                "--update-tags";
+                "[\"Tag A\"]";
+              ]
+          in
+          ignore (expect_cli_exit_zero "upsert block tag name" output);
+          let body =
+            match !captured_apply_body with
+            | Some body -> body
+            | None ->
+                fail_test "missing captured apply body";
+                failwith "missing captured apply body"
+          in
+          expect_named_contains "batch tag set op" body "batch-set-property";
+          expect_named_contains "resolved tag id" body "200";
+          if !step = 3 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected three invoke requests, got %d" !step)));
 
   test_promise "upsert block create resolves inline block uuid property refs"
     (fun () ->

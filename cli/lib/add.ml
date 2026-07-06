@@ -32,8 +32,8 @@ let normalized_lookup_name value = String.lowercase_ascii (String.trim value)
 let query_value query = Edn_util.any (Cli_primitive.datascript_query_to_edn query)
 
 let edn_value_of_string ~label text =
-  try Ok (Melange_edn.of_edn_string text)
-  with Melange_edn.Parse_error _ ->
+  try Ok (Melange_edn_melange.of_edn_string text)
+  with Melange_edn_melange.Parse_error _ ->
     Error (Error.invalid_options ("invalid " ^ label ^ " edn"))
 
 let strip_tag_prefix value =
@@ -122,7 +122,7 @@ let parse_properties_option ?(allow_non_built_in = false) = function
                         Error
                           (Error.invalid_options
                              ("invalid property key: "
-                             ^ Melange_edn.to_edn_string key)))
+                             ^ Melange_edn_melange.to_edn_string key)))
               in
               loop [] fields
           | None -> Error (Error.invalid_options "properties must be a map"))
@@ -146,7 +146,7 @@ let parse_properties_vector_option ?(allow_non_built_in = false) = function
                         Error
                           (Error.invalid_options
                              ("invalid property key: "
-                             ^ Melange_edn.to_edn_string value)))
+                             ^ Melange_edn_melange.to_edn_string value)))
               in
               loop [] values
           | None -> Error (Error.invalid_options "properties must be a vector"))
@@ -212,6 +212,16 @@ end
 
 let generate_uuid = Node_crypto.random_uuid
 
+let unique = Uuid_refs_types.unique_preserve_order
+
+let extract_page_refs title =
+  title |> Uuid_refs_types.extract_wiki_refs
+  |> List.filter_map (fun ref_title ->
+         let ref_title = String.trim ref_title in
+         if ref_title = "" || Cli_primitive.is_uuid_string ref_title then None
+         else Some ref_title)
+  |> unique
+
 let rec block_of_value raw =
   match Edn_util.as_map raw with
   | Some fields ->
@@ -267,7 +277,7 @@ let parse_blocks_edn ~label text =
       | None ->
           Error
             (Error.make
-               (Edn_util.keyword_t "invalid-blocks")
+               (Error.Invalid_blocks)
                "blocks must be a vector")))
 
 let read_file path = Cli_unix.read_text_file path
@@ -285,7 +295,7 @@ let read_blocks (opts : opts) args =
   | _ ->
       Error
         (Error.make
-           (Edn_util.keyword_t "missing-content")
+           (Error.Missing_content)
            "content is required")
 
 let build_add_block_action (opts : opts) args repo =
@@ -320,7 +330,14 @@ let build_add_block_action (opts : opts) args repo =
                         })))
 
 let page_selector =
-  vector [ kw "db/id"; kw "block/uuid"; kw "block/name"; kw "block/title" ]
+  vector
+    [
+      kw "db/id";
+      kw "block/uuid";
+      kw "block/name";
+      kw "block/title";
+      kw "logseq.property/deleted-at";
+    ]
 
 let tag_selector =
   vector
@@ -349,7 +366,7 @@ let property_entity_selector =
 let page_query selector =
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [ Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "block/name"; sym "?name" ]) ]
     ()
@@ -357,7 +374,7 @@ let page_query selector =
 let tag_query selector =
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [
         Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "block/name"; sym "?name" ]);
@@ -370,7 +387,7 @@ let tag_query selector =
 let property_query selector =
   Cli_primitive.make_datascript_query
     ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn.symbol "$"; Melange_edn.symbol "?name" ]
+    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
     ~where:
       [
         Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "block/name"; sym "?name" ]);
@@ -397,6 +414,15 @@ let id_of_entity value = Edn_util.get_int64 value "db/id"
 
 let ident_of_entity value =
   Option.bind (Edn_util.get value "db/ident") Edn_util.as_keyword_t
+
+let recycled_entity value =
+  Option.is_some (Edn_util.get value "logseq.property/deleted-at")
+
+let page_not_found () =
+  Error.make (Error.Page_not_found) "page not found"
+
+let recycled_page_error () =
+  Error.make (Error.Recycled_page) "page is recycled"
 
 let pull_entity config repo selector lookup =
   Transport.thread_api_pull config ~repo
@@ -429,6 +455,26 @@ let pull_tag_by_name config repo name selector =
       (Edn_util.vector_t
          [ query_value (tag_query selector); Edn_util.string (normalized_lookup_name name) ])
 
+let list_tags config repo =
+  Transport.thread_api_cli_list_tags config ~repo ~options:(Edn_util.map_t [])
+
+let tag_name_matches name entity =
+  let expected = normalized_lookup_name name in
+  let matches value = String.equal (normalized_lookup_name value) expected in
+  match
+    (Edn_util.get_string entity "block/title", Edn_util.get_string entity "block/name")
+  with
+  | Some title, _ when matches title -> true
+  | _, Some name when matches name -> true
+  | _ -> false
+
+let find_tag_by_name config repo name =
+  let open Cli_effect in
+  bind (list_tags config repo) (fun value ->
+      match Edn_util.as_seq value with
+      | Some tags -> pure (List.find_opt (tag_name_matches name) tags)
+      | None -> pure None)
+
 let pull_property_by_name config repo name selector =
   Transport.thread_api_q config ~repo
     ~query:
@@ -443,39 +489,42 @@ let pull_created_page config repo name create_result =
   | Some (_ :: uuid_value :: _), _ | _, Some (_ :: uuid_value :: _) -> (
       match Edn_util.as_string_like uuid_value with
       | Some uuid ->
-          pull_entity config repo
-            (vector [ kw "db/id"; kw "block/uuid" ])
+          pull_entity config repo page_selector
             (vector [ kw "block/uuid"; Edn_util.uuid uuid ])
       | _ ->
-          pull_entity config repo
-            (vector [ kw "db/id"; kw "block/uuid" ])
+          pull_entity config repo page_selector
             (vector
                [
                  kw "block/name"; Edn_util.string (normalized_lookup_name name);
                ]))
   | _ ->
-      pull_entity config repo
-        (vector [ kw "db/id"; kw "block/uuid" ])
+      pull_entity config repo page_selector
         (vector
            [ kw "block/name"; Edn_util.string (normalized_lookup_name name) ])
 
-let ensure_page config repo page_name =
+let ensure_page_entity config repo page_name =
   let open Cli_effect in
   bind (pull_pages_by_name config repo page_name page_selector) (fun result ->
-      match Option.bind (first_entity result) uuid_of_entity with
-      | Some uuid -> pure (Ok uuid)
+      match first_entity result with
+      | Some entity when recycled_entity entity ->
+          pure (Error (recycled_page_error ()))
+      | Some entity -> pure (Ok entity)
       | None ->
           bind (create_page config repo page_name) (fun create_result ->
               bind (pull_created_page config repo page_name create_result)
                 (fun page ->
                   match uuid_of_entity page with
-                  | Some uuid -> pure (Ok uuid)
-                  | None ->
-                      pure
-                        (Error
-                           (Error.make
-                              (Edn_util.keyword_t "page-not-found")
-                              "page not found")))))
+                  | Some _ -> pure (Ok page)
+                  | None -> pure (Error (page_not_found ())))))
+
+let ensure_page config repo page_name =
+  let open Cli_effect in
+  bind (ensure_page_entity config repo page_name) (function
+    | Ok entity -> (
+        match uuid_of_entity entity with
+        | Some uuid -> pure (Ok uuid)
+        | None -> pure (Error (page_not_found ())))
+    | Error err -> pure (Error err))
 
 let resolve_add_target config (action : action) =
   let open Cli_effect in
@@ -492,7 +541,7 @@ let resolve_add_target config (action : action) =
               pure
                 (Error
                    (Error.make
-                      (Edn_util.keyword_t "target-not-found")
+                      (Error.Target_not_found)
                       "target block not found")))
   | None, Some uuid, _ ->
       bind
@@ -506,14 +555,14 @@ let resolve_add_target config (action : action) =
               pure
                 (Error
                    (Error.make
-                      (Edn_util.keyword_t "target-not-found")
+                      (Error.Target_not_found)
                       "target block not found")))
   | None, None, Some page_name -> ensure_page config action.repo page_name
   | None, None, None ->
       pure
         (Error
            (Error.make
-              (Edn_util.keyword_t "missing-target")
+              (Error.Missing_target)
               "target page or block is required"))
 
 let flatten_blocks blocks =
@@ -575,18 +624,10 @@ let collect_uuids_from_value value =
   in
   List.rev (loop [] value)
 
-let unique values =
-  let rec loop seen = function
-    | [] -> List.rev seen
-    | value :: rest when List.mem value seen -> loop seen rest
-    | value :: rest -> loop (value :: seen) rest
-  in
-  loop [] values
-
 let collect_action_block_uuids blocks =
   blocks |> flatten_blocks
   |> List.filter_map (fun block -> block.Block.uuid)
-  |> unique
+  |> Uuid_refs_types.unique_preserve_order
 
 let result_ids ids =
   Edn_util.map
@@ -615,19 +656,21 @@ let tag_entity value =
 
 let resolve_tag_entity invoke_config repo tag =
   let open Cli_effect in
-  let pulled =
-    match tag with
-    | Selector.Tag_name name ->
-        pull_tag_by_name invoke_config repo name tag_selector
-    | _ -> pull_entity invoke_config repo tag_selector (lookup_of_tag tag)
-  in
-  bind pulled (fun entity ->
-      match first_entity entity with
-      | Some entity
-        when Option.is_some (id_of_entity entity) && tag_entity entity ->
-          pure (Entity.of_value entity)
-      | Some _ -> failwith "tag not found"
-      | None -> failwith "tag not found")
+  match tag with
+  | Selector.Tag_name name ->
+      bind (find_tag_by_name invoke_config repo name) (function
+        | Some entity when Option.is_some (id_of_entity entity) ->
+            pure (Entity.of_value entity)
+        | _ -> failwith "tag not found")
+  | _ ->
+      bind (pull_entity invoke_config repo tag_selector (lookup_of_tag tag))
+        (fun entity ->
+          match first_entity entity with
+          | Some entity
+            when Option.is_some (id_of_entity entity) && tag_entity entity ->
+              pure (Entity.of_value entity)
+          | Some _ -> failwith "tag not found"
+          | None -> failwith "tag not found")
 
 let resolve_tags config repo tags =
   match tags with
@@ -691,7 +734,7 @@ let resolve_created_ids config repo blocks insert_result =
   let uuids =
     match collect_uuids_from_value insert_result with
     | [] -> collect_action_block_uuids blocks
-    | uuids -> unique uuids
+    | uuids -> Uuid_refs_types.unique_preserve_order uuids
   in
   let rec loop acc = function
     | [] -> pure (Ok (List.rev acc))
@@ -707,10 +750,28 @@ let resolve_created_ids config repo blocks insert_result =
                 pure
                   (Error
                      (Error.make
-                        (Edn_util.keyword_t "add-id-resolution-failed")
+                        (Error.Add_id_resolution_failed)
                         "unable to resolve created ids")))
   in
   loop [] uuids
+
+let target_not_found_error () =
+  Error.make (Error.Target_not_found) "target block not found"
+
+let resolve_created_ids_or_target_error config repo target_uuid blocks
+    insert_result =
+  let open Cli_effect in
+  bind (resolve_created_ids config repo blocks insert_result) (function
+    | Ok ids -> pure (Ok ids)
+    | Error err when err.Error.code = Error.Add_id_resolution_failed ->
+        bind
+          (pull_entity config repo
+             (vector [ kw "db/id"; kw "block/uuid" ])
+             (vector [ kw "block/uuid"; Edn_util.uuid target_uuid ]))
+          (fun target ->
+            if Option.is_some (id_of_entity target) then pure (Error err)
+            else pure (Error (target_not_found_error ())))
+    | Error err -> pure (Error err))
 
 let property_key_to_value = function
   | Property.Key_ident ident -> Edn_util.any ident
@@ -742,7 +803,7 @@ let metadata_ops block_uuids status tags properties =
   let tag_ops =
     tags
     |> List.filter_map (fun tag -> tag.Entity.id)
-    |> unique
+    |> Uuid_refs_types.unique_preserve_order
     |> List.map (fun tag_id ->
         Edn_util.vector
           [
@@ -774,6 +835,82 @@ let metadata_ops block_uuids status tags properties =
   in
   if block_uuids = [] then [] else status_ops @ tag_ops @ property_ops
 
+let page_ref_value entity fallback_title =
+  match uuid_of_entity entity with
+  | None -> None
+  | Some uuid ->
+      let fields =
+        [
+          (kw "block/uuid", Edn_util.uuid uuid);
+          ( kw "block/title",
+            Edn_util.string
+              (Option.value
+                 (Edn_util.get_string entity "block/title")
+                 ~default:fallback_title) );
+        ]
+      in
+      let fields =
+        match Edn_util.get_string entity "block/name" with
+        | Some name -> (kw "block/name", Edn_util.string name) :: fields
+        | None -> fields
+      in
+      Some (Edn_util.map fields)
+
+let resolve_title_page_refs invoke_config repo title =
+  let open Cli_effect in
+  let page_names = extract_page_refs title in
+  let rec loop acc = function
+    | [] -> pure (Ok (List.rev acc))
+    | page_name :: rest ->
+        bind (ensure_page_entity invoke_config repo page_name) (function
+          | Error err -> pure (Error err)
+          | Ok entity -> (
+              match page_ref_value entity page_name with
+              | Some ref_value -> loop (ref_value :: acc) rest
+              | None -> pure (Error (page_not_found ()))))
+  in
+  loop [] page_names
+
+let rec resolve_block_title_page_refs invoke_config repo block =
+  let open Cli_effect in
+  let title_refs =
+    match block.Block.title with
+    | Some title -> resolve_title_page_refs invoke_config repo title
+    | None -> pure (Ok [])
+  in
+  bind title_refs (function
+    | Error err -> pure (Error err)
+    | Ok refs ->
+        let rec resolve_children acc = function
+          | [] -> pure (Ok (List.rev acc))
+          | child :: rest ->
+              bind (resolve_block_title_page_refs invoke_config repo child)
+                (function
+                | Error err -> pure (Error err)
+                | Ok child_refs ->
+                    resolve_children (List.rev_append child_refs acc) rest)
+        in
+        bind (resolve_children [] block.Block.children) (function
+          | Error err -> pure (Error err)
+          | Ok child_refs ->
+              let own_refs =
+                match (block.Block.uuid, refs) with
+                | Some uuid, _ :: _ -> [ (uuid, refs) ]
+                | _ -> []
+              in
+              pure (Ok (own_refs @ child_refs))))
+
+let resolve_blocks_title_page_refs invoke_config repo blocks =
+  let open Cli_effect in
+  let rec loop acc = function
+    | [] -> pure (Ok (List.rev acc))
+    | block :: rest ->
+        bind (resolve_block_title_page_refs invoke_config repo block) (function
+          | Error err -> pure (Error err)
+          | Ok refs -> loop (List.rev_append refs acc) rest)
+  in
+  loop [] blocks
+
 let execute_add_block action config mode =
   let open Cli_effect in
   bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
@@ -788,15 +925,38 @@ let execute_add_block action config mode =
               bind (resolve_tags config action.repo action.tags) (fun tags ->
                   bind (resolve_properties config action.repo action.properties)
                     (fun properties ->
+                      bind
+                        (resolve_blocks_title_page_refs invoke_config action.repo
+                           action.blocks)
+                        (function
+                        | Error err ->
+                            pure
+                              (Cli_result.error
+                                 ~command:Command_id.Upsert_block mode err)
+                        | Ok refs_by_uuid ->
                       let all_blocks = Block.flatten action.blocks in
                       let block_uuids =
                         List.filter_map
                           (fun block -> block.Block.uuid)
                           all_blocks
-                        |> unique
+                        |> Uuid_refs_types.unique_preserve_order
                       in
                       let block_for_insert block =
                         { block with Block.parent = None; children = [] }
+                      in
+                      let block_value_for_insert block =
+                        let value =
+                          Edn_util.any (Block.to_value (block_for_insert block))
+                        in
+                        match block.Block.uuid with
+                        | Some uuid -> (
+                            match List.assoc_opt uuid refs_by_uuid with
+                            | Some refs ->
+                                Edn_util.assoc "block/refs"
+                                  (Edn_util.vector refs)
+                                  value
+                            | None -> value)
+                        | None -> value
                       in
                       let insert_blocks target_uuid pos blocks =
                         let insert_op =
@@ -808,9 +968,7 @@ let execute_add_block action config mode =
                                   Edn_util.vector
                                     (List.map
                                        (fun block ->
-                                         Edn_util.any
-                                           (Block.to_value
-                                              (block_for_insert block)))
+                                         block_value_for_insert block)
                                        blocks);
                                   Edn_util.uuid target_uuid;
                                   insert_opts pos;
@@ -857,7 +1015,8 @@ let execute_add_block action config mode =
                                  metadata_ops)
                             (fun _metadata_result ->
                               bind
-                                (resolve_created_ids invoke_config action.repo
+                                (resolve_created_ids_or_target_error
+                                   invoke_config action.repo target_uuid
                                    all_blocks insert_result) (function
                                 | Error err ->
                                     pure
@@ -868,4 +1027,4 @@ let execute_add_block action config mode =
                                     pure
                                       (Cli_result.ok
                                          ~command:Command_id.Upsert_block mode
-                                         (Raw (result_ids ids))))))))))
+                                         (Raw (result_ids ids)))))))))))

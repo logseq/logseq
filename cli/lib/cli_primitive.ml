@@ -1,4 +1,4 @@
-type keyword = Melange_edn.keyword Melange_edn.t
+type keyword = Melange_edn_melange.keyword Melange_edn_melange.t
 type graph = string
 type repo = string
 type db_id = int64
@@ -11,12 +11,12 @@ type port = int
 type pid = int
 type owner_source = Cli | Electron | Unknown | Other of string
 type ds_where_clause =
-  | V of Melange_edn.vector Melange_edn.t
-  | L of Melange_edn.list_ Melange_edn.t
+  | V of Melange_edn_melange.vector Melange_edn_melange.t
+  | L of Melange_edn_melange.list_ Melange_edn_melange.t
 
 type datascript_query = {
-  find : Melange_edn.any list;
-  in_ : Melange_edn.symbol Melange_edn.t list option;
+  find : Melange_edn_melange.any list;
+  in_ : Melange_edn_melange.symbol Melange_edn_melange.t list option;
   where : ds_where_clause list;
 }
 
