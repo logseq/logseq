@@ -111,7 +111,13 @@
                                      {:sibling? false
                                       :keep-uuid? journal-template?
                                       :outliner-op :insert-template-blocks})]
-                         (:tx-data result)))))
+                         (concat
+                          (:tx-data result)
+                          (mapcat (fn [block]
+                                    (when-let [refs (seq (outliner-pipeline/block-content-refs db block))]
+                                      [{:db/id (:db/id block)
+                                        :block/refs refs}]))
+                                  (:blocks result)))))))
                  tag-additions)]
     tx-data))
 
