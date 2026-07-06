@@ -7,6 +7,7 @@
             [electron.ipc :as ipc]
             [frontend.components.avatar :as avatar]
             [frontend.components.block :as component-block]
+            [frontend.components.email :as email-component]
             [frontend.components.export :as export]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
@@ -29,6 +30,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.email :as email-util]
             [frontend.version :refer [version]]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -92,6 +94,7 @@
 (hsx/defc rtc-collaborators
   []
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
+        config (state/use-sub-config)
         online-users (hooks/use-flow-state nil rtc-flows/rtc-online-users-flow)]
     (when rtc-graph-id
       [:div.rtc-collaborators.flex.gap-1.text-sm.bg-gray-01.items-center
@@ -111,7 +114,7 @@
              (avatar/user-avatar
               {:class "w-5 h-5"
                :style {:app-region "no-drag"}
-               :title user-email
+               :title (email-util/display-email user-email config)
                :name user-name
                :uuid user-uuid
                :fallback-props {:style {:font-size 11}}}))))])))
@@ -140,6 +143,11 @@
          "labels=from:in-app&"
          "platform="
          (js/encodeURIComponent platform))))
+
+(defn- stop-event!
+  [^js e]
+  (.preventDefault e)
+  (.stopPropagation e))
 
 (hsx/defc ^:large-vars/cleanup-todo toolbar-dots-menu
   [{:keys [current-repo t]}]
@@ -214,11 +222,21 @@
                   (when login?
                     {:item [:span.flex.flex-col.relative.group.pt-1.w-full
                             [:b.leading-none (user-handler/username)]
-                            [:small.opacity-70 (user-handler/email)]
-                            [:i.absolute.opacity-0.group-hover:opacity-100.text-red-rx-09
-                             {:class "right-1 top-3" :title (t :ui/logout)}
-                             (ui/icon "logout")]]
-                     :options {:on-click #(user-handler/logout)
+                            [:small.opacity-70
+                             (email-component/email-address {:email (user-handler/email)})]
+                            (ui/tooltip
+                             [:button.absolute.opacity-0.group-hover:opacity-100.text-red-rx-09.border-0.bg-transparent.p-0
+                              {:type "button"
+                               :class "right-1 top-3"
+                               :aria-label (t :ui/logout)
+                               :on-pointer-down stop-event!
+                               :on-click (fn [e]
+                                           (stop-event! e)
+                                           (user-handler/logout)
+                                           (shui/popup-hide!))}
+                              (ui/icon "logout")]
+                             (t :ui/logout))]
+                     :options {:on-select (fn [^js e] (.preventDefault e))
                                :class "w-full"}})]
                  (concat (page-menu-items) [{:hr true}])
                  (remove nil?)))]
