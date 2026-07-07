@@ -205,17 +205,19 @@
 
 (defn- import-edn-data
   [conn *result export-map {:keys [tx-meta] :as import-options}]
-  (let [{:keys [init-tx block-props-tx misc-tx error] :as _txs}
+  (let [{:keys [error] :as txs}
         (try (sqlite-export/build-import export-map @conn (dissoc import-options :tx-meta))
              (catch :default e
                (js/console.error "Import EDN error: " e)
-               {:error "An unexpected error occurred building the import. See the javascript console for details."}))]
-    ;; (cljs.pprint/pprint _txs)
-    (if error
-      (reset! *result {:error error})
+               {:error "An unexpected error occurred building the import. See the javascript console for details."}))
+        validation (when-not error
+                     (sqlite-export/validate-import-txs txs @conn))]
+    ;; (cljs.pprint/pprint txs)
+    (if (or error (:error validation))
+      (reset! *result {:error (or error (:error validation))})
       (try
         ;; Datom graph imports replace seeded built-ins and must not be reverted by the pipeline.
-        (ldb/transact! conn (vec (concat init-tx block-props-tx misc-tx))
+        (ldb/transact! conn (:tx-data validation)
                        (cond-> (merge {::sqlite-export/imported-data? true} tx-meta)
                          (= :datoms (::sqlite-export/graph-format export-map))
                          (assoc :initial-db? true)))
