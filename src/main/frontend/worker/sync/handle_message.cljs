@@ -186,6 +186,7 @@
       (require-seq missing-block-uuids {:repo repo :type "tx/reject" :field :missing-block-uuids})
       (doseq [block-uuid missing-block-uuids]
         (require-uuid block-uuid {:repo repo :type "tx/reject" :field :missing-block-uuids})))
+    (sync-apply/mark-tx-batch-response! repo @(:inflight client))
     (case reason
       "stale"
       (request-pull! client local-tx)
@@ -266,6 +267,7 @@
   (require-non-negative remote-tx {:repo repo :type "tx/batch/ok"})
   (let [current-local-tx (client-op/get-local-tx repo)
         next-local-tx (max current-local-tx remote-tx)]
+    (sync-apply/mark-tx-batch-response! repo @(:inflight client))
     (client-op/update-local-tx repo next-local-tx)
     (sync-util/clear-last-sync-error! client)
     (broadcast-rtc-state! client)
