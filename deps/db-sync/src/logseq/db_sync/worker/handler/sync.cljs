@@ -7,7 +7,6 @@
             [logseq.db-sync.common :as common]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.protocol :as protocol]
-            [logseq.db-sync.repair :as repair]
             [logseq.db-sync.snapshot :as snapshot]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.tx-sanitize :as tx-sanitize]
@@ -293,21 +292,6 @@
              :txs txs}
       (string? checksum) (assoc :checksum checksum))))
 
-(defn- parse-uuid-param
-  [value]
-  (try
-    (when (seq value)
-      (uuid value))
-    (catch :default _
-      nil)))
-
-(defn repair-blocks-response
-  [^js self block-uuids]
-  (ensure-conn! self)
-  (let [db @(.-conn self)
-        tx-data (repair/tx-data db block-uuids)]
-    {:tx (protocol/tx->transit tx-data)}))
-
 (defn- block-uuid-lookup-ref
   [entity-id]
   (when (and (sequential? entity-id)
@@ -472,26 +456,6 @@
         (if-not ready-for-sync?
           (http/error-response "graph not ready" 409)
           (http/json-response :sync/pull (pull-response self since)))))))
-
-(defn- handle-sync-repair-blocks
-  [^js self request ^js url]
-  (let [graph-id (graph-id-from-request request)
-        block-uuids (->> (.getAll (.-searchParams url) "uuid")
-                         (map parse-uuid-param)
-                         (remove nil?)
-                         distinct
-                         vec)]
-    (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
-      (cond
-        (not ready-for-sync?)
-        (http/error-response "graph not ready" 409)
-
-        (empty? block-uuids)
-        (http/bad-request "missing block uuid")
-
-        :else
-        (http/json-response :sync/repair-blocks
-                            (repair-blocks-response self block-uuids))))))
 
 (defn- normalize-diagnostic-block
   [{:keys [block/uuid block/parent block/page block/order] :as block}]
@@ -681,9 +645,6 @@
 
     :sync/pull
     (handle-sync-pull self url)
-
-    :sync/repair-blocks
-    (handle-sync-repair-blocks self request url)
 
     :sync/checksum-diagnostics
     (handle-sync-checksum-diagnostics self request)
