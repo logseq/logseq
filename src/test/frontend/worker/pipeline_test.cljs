@@ -26,6 +26,15 @@
       (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
       common-util/page-name-sanity-lc))
 
+(defn- silence-stderr
+  [f]
+  (let [orig-write (.-write js/process.stderr)]
+    (set! (.-write js/process.stderr) (fn [& _] true))
+    (try
+      (f)
+      (finally
+        (set! (.-write js/process.stderr) orig-write)))))
+
 (deftest test-built-in-page-updates-that-should-be-reverted
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -130,7 +139,9 @@
 
 (deftest batch-import-edn-datom-format-with-shifted-builtin-eids-test
   (let [source-conn (d/create-conn db-schema/schema)
-        _ (d/transact! source-conn [{:block/uuid (random-uuid)}])
+        ;; Shift subsequent built-in eids without leaving invalid datoms in the export.
+        _ (d/transact! source-conn [{:db/id 1 :block/uuid (random-uuid)}])
+        _ (d/transact! source-conn [[:db/retractEntity 1]])
         _ (d/transact! source-conn (sqlite-create-graph/build-db-initial-data "{}"))
         export-edn (sqlite-export/build-export @source-conn {:export-type :graph})
         source-purple-eid (some (fn [[e a v]]
@@ -154,6 +165,32 @@
         (is (= :logseq.property/color.purple
                (:db/ident (d/entity @conn :logseq.property/color.purple)))
             "color.purple ident is preserved after datom import despite eid shift"))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest batch-import-edn-invalid-datom-format-does-not-change-db-test
+  (let [conn (sqlite-export/create-conn)
+        page-class-id (:db/id (d/entity @conn :logseq.class/Page))
+        invalid-export-edn {::sqlite-export/export-type :graph
+                            ::sqlite-export/graph-format :datoms
+                            :datoms [[1 :block/title "Orphan Page"]
+                                     [1 :block/name "orphan page"]
+                                     [1 :block/uuid #uuid "33333333-3333-4333-8333-000000000001"]
+                                     [1 :block/tags 2]
+                                     [2 :block/title "Page"]
+                                     [2 :block/name "page"]
+                                     [2 :db/ident :logseq.class/Page]
+                                     [2 :block/uuid #uuid "33333333-3333-4333-8333-000000000002"]]}]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (let [result (silence-stderr
+                    #(outliner-op/apply-ops!
+                      conn
+                      [[:batch-import-edn [invalid-export-edn {:tx-meta {:import-db? true}}]]]
+                      {}))]
+        (is (string? (:error result)))
+        (is (= page-class-id (:db/id (d/entity @conn :logseq.class/Page)))
+            "Invalid datom import should not replace the existing graph"))
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
 
