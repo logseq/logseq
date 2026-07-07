@@ -320,12 +320,24 @@ export function classifyCliResult(result, parsed, context = {}) {
   };
 }
 
+const rawViewHistoryOps = new Set([
+  "http-create-property-history",
+  "http-create-linked-references-view",
+  "http-create-unlinked-references-view",
+  "http-delete-view-target-with-related-entities",
+]);
+
 function expectedHttpRace(parsed, context = {}) {
   const message = parsed?.error?.message || "";
   return (
-    Number.isInteger(context.id) &&
-    parsed?.error?.code === "exception" &&
-    message === "Set block property failed: block or property doesn't exist"
+    (Number.isInteger(context.id) &&
+      parsed?.error?.code === "exception" &&
+      message === "Set block property failed: block or property doesn't exist") ||
+    (Number.isInteger(context.id) &&
+      rawViewHistoryOps.has(context.op) &&
+      parsed?.error?.code === "exception" &&
+      (message.startsWith("Nothing found for entity id (:block/uuid") ||
+        message.startsWith("Nothing found for entity id [:block/uuid")))
   );
 }
 
@@ -578,6 +590,16 @@ async function applyOutlinerOps(opts, state, ops, options, context = {}) {
     state,
     "thread-api/apply-outliner-ops",
     [state.repo, ops, options || transit.map()],
+    context,
+  );
+}
+
+async function transactRaw(opts, state, txData, txMeta, context = {}) {
+  return invokeThreadApi(
+    opts,
+    state,
+    "thread-api/transact",
+    [state.repo, txData, txMeta || tmap(), null],
     context,
   );
 }
@@ -1016,7 +1038,11 @@ export function operationWeights(opts = {}) {
     ["http-batch-set-property", 2],
     ["http-batch-remove-property", 1],
     ["http-batch-delete-property-value", 1],
+    ["http-create-property-history", 2],
+    ["http-create-linked-references-view", 2],
+    ["http-create-unlinked-references-view", 2],
     ["http-toggle-reaction", 1],
+    ["http-delete-view-target-with-related-entities", 4],
     ["http-insert-undo-redo", 12],
     ["delete-single", 18],
     ["delete-batch", 12],
@@ -1051,6 +1077,10 @@ function liveBlocksQuery(page) {
   return `[:find [(pull ?b [:db/id :block/uuid]) ...] :where [?p :block/name ${ednString(page.toLowerCase())}] [?b :block/page ?p] (not [?b :block/name])]`;
 }
 
+export function blockByUuidQuery(uuidValue) {
+  return `[:find ?b . :where [?b :block/uuid #uuid ${ednString(uuidValue)}]]`;
+}
+
 function pageByNameQuery(page) {
   return `[:find (pull ?p [:db/id :block/uuid :block/name :block/title]) . :where [?p :block/name ${ednString(page.toLowerCase())}]]`;
 }
@@ -1067,6 +1097,10 @@ function normalizedUuidString(value) {
 
 function pageUuidFromQueryResult(response) {
   return normalizedUuidString(response.parsed?.data?.result?.["block/uuid"]);
+}
+
+export function blockExistsFromQueryResult(response) {
+  return Number.isInteger(response.parsed?.data?.result);
 }
 
 function liveBlocksFromQueryResult(response) {
@@ -1210,8 +1244,20 @@ function tmap(entries = []) {
   return transit.map(entries);
 }
 
+function localTxMeta(entries = []) {
+  return tmap([kw("db-sync/tx-id"), uuid(crypto.randomUUID()), kw("local-tx?"), true, ...entries]);
+}
+
 function blockMap(entries) {
   return tmap(entries.flatMap(([key, value]) => [kw(key), value]));
+}
+
+function lookupRef(attr, value) {
+  return [kw(attr), value];
+}
+
+function blockUuidRef(uuidValue) {
+  return lookupRef("block/uuid", uuid(uuidValue));
 }
 
 function chooseActiveUuid(state) {
@@ -1221,6 +1267,43 @@ function chooseActiveUuid(state) {
   }
   const uuidValue = state.activeBlockUuids.get(id);
   return uuidValue ? { id, uuid: uuidValue } : null;
+}
+
+async function blockStillExists(opts, block, context = {}) {
+  const response = await runCli(
+    opts,
+    ["query", "--graph", opts.graph, "--query", blockByUuidQuery(block.uuid)],
+    { ...context, op: "check-live-block", sourceOp: context.op, id: block.id, uuid: block.uuid },
+  );
+  return blockExistsFromQueryResult(response);
+}
+
+async function chooseLiveActiveUuid(opts, state, context = {}) {
+  const candidates = Array.from(state.activeIds)
+    .map((id) => {
+      const uuidValue = state.activeBlockUuids.get(id);
+      return uuidValue ? { id, uuid: uuidValue } : null;
+    })
+    .filter(Boolean);
+  candidates.sort(() => Math.random() - 0.5);
+
+  for (const block of candidates.slice(0, 4)) {
+    if (await blockStillExists(opts, block, context)) {
+      return block;
+    }
+
+    state.activeIds.delete(block.id);
+    state.activeBlockUuids.delete(block.id);
+    logEvent(opts, {
+      event: "skip-stale-raw-target",
+      level: "info",
+      context,
+      id: block.id,
+      uuid: block.uuid,
+    });
+  }
+
+  return null;
 }
 
 function chooseDistinctActiveUuids(state) {
@@ -1606,18 +1689,161 @@ async function applyRawBatchDeletePropertyValue(opts, state, context) {
   );
 }
 
+function referenceViewBlock(viewUuid, viewsPageUuid, target, featureType, title, order, now) {
+  return blockMap([
+    ["block/uuid", uuid(viewUuid)],
+    ["block/title", title],
+    ["block/page", blockUuidRef(viewsPageUuid)],
+    ["block/parent", blockUuidRef(viewsPageUuid)],
+    ["block/order", order],
+    ["block/created-at", now],
+    ["block/updated-at", now],
+    ["block/refs", blockUuidRef(target.uuid)],
+    ["logseq.property/view-for", blockUuidRef(target.uuid)],
+    ["logseq.property.view/type", kw("logseq.property.view/type.list")],
+    ["logseq.property.view/group-by-property", kw("block/page")],
+    ["logseq.property.view/feature-type", kw(featureType)],
+  ]);
+}
+
+function propertyHistoryBlock(historyUuid, targetRef, statusIdent, now) {
+  return blockMap([
+    ["block/uuid", uuid(historyUuid)],
+    ["block/created-at", now],
+    ["block/updated-at", now],
+    ["logseq.property.history/block", targetRef],
+    ["logseq.property.history/property", kw("logseq.property/status")],
+    ["logseq.property.history/ref-value", kw(statusIdent)],
+  ]);
+}
+
+function statusHistoryValue(context, offset = 0) {
+  const statuses = ["logseq.property/status.todo", "logseq.property/status.doing", "logseq.property/status.done"];
+  const seq = Number.isInteger(context.seq) ? context.seq : 0;
+  return statuses[(seq + offset) % statuses.length];
+}
+
+function reactionEmojiId(context) {
+  const emojiIds = ["+1", "eyes", "tada"];
+  const seq = Number.isInteger(context.seq) ? context.seq : 0;
+  return emojiIds[seq % emojiIds.length];
+}
+
+async function findViewsPageUuid(opts, context = {}) {
+  return findPageUuid(opts, "$$$views", context);
+}
+
+async function createReferenceView(opts, state, context, featureType, title) {
+  const target = await chooseLiveActiveUuid(opts, state, context);
+  if (!target) {
+    return null;
+  }
+  const viewsPageUuid = await findViewsPageUuid(opts, context);
+  if (!viewsPageUuid) {
+    return null;
+  }
+  const now = Date.now();
+  const viewUuid = crypto.randomUUID();
+  await transactRaw(
+    opts,
+    state,
+    [referenceViewBlock(viewUuid, viewsPageUuid, target, featureType, title, `a${context.seq ?? 0}`, now)],
+    localTxMeta([kw("outliner-op"), kw("create-view")]),
+    { ...context, id: target.id, uuid: target.uuid, viewUuid, featureType },
+  );
+  return { target, viewUuid };
+}
+
+async function applyRawCreatePropertyHistory(opts, state, context) {
+  const target = await chooseLiveActiveUuid(opts, state, context);
+  if (!target) {
+    return;
+  }
+  const viewsPageUuid = await findViewsPageUuid(opts, context);
+  if (!viewsPageUuid) {
+    return;
+  }
+  const now = Date.now();
+  const historyUuid = crypto.randomUUID();
+  await transactRaw(
+    opts,
+    state,
+    [propertyHistoryBlock(historyUuid, blockUuidRef(target.uuid), statusHistoryValue(context), now)],
+    localTxMeta([kw("outliner-op"), kw("record-property-history")]),
+    { ...context, id: target.id, uuid: target.uuid, historyUuid },
+  );
+}
+
+async function applyRawCreateReferenceView(opts, state, context, featureType, title) {
+  await createReferenceView(opts, state, context, featureType, title);
+}
+
+async function applyRawToggleReactionForBlock(opts, state, block, context) {
+  await applyOutlinerOps(
+    opts,
+    state,
+    [[kw("toggle-reaction"), [uuid(block.uuid), reactionEmojiId(context), null]]],
+    tmap(),
+    { ...context, id: block.id, uuid: block.uuid },
+  );
+}
+
 async function applyRawToggleReaction(opts, state, context) {
   const block = chooseActiveUuid(state);
   if (!block) {
     return;
   }
+  await applyRawToggleReactionForBlock(opts, state, block, context);
+}
+
+async function applyRawDeleteViewTargetWithRelatedEntities(opts, state, context) {
+  const target = await chooseLiveActiveUuid(opts, state, context);
+  if (!target) {
+    return;
+  }
+  const viewsPageUuid = await findViewsPageUuid(opts, context);
+  if (!viewsPageUuid) {
+    return;
+  }
+  const now = Date.now();
+  const linkedViewUuid = crypto.randomUUID();
+  const unlinkedViewUuid = crypto.randomUUID();
+  const targetHistoryUuid = crypto.randomUUID();
+  const linkedViewHistoryUuid = crypto.randomUUID();
+  const unlinkedViewHistoryUuid = crypto.randomUUID();
+  await transactRaw(
+    opts,
+    state,
+    [
+      referenceViewBlock(linkedViewUuid, viewsPageUuid, target, "linked-references", "Linked references", `a${context.seq ?? 0}0`, now),
+      referenceViewBlock(unlinkedViewUuid, viewsPageUuid, target, "unlinked-references", "Unlinked references", `a${context.seq ?? 0}1`, now),
+      propertyHistoryBlock(targetHistoryUuid, blockUuidRef(target.uuid), statusHistoryValue(context), now),
+      propertyHistoryBlock(linkedViewHistoryUuid, blockUuidRef(linkedViewUuid), statusHistoryValue(context, 1), now),
+      propertyHistoryBlock(unlinkedViewHistoryUuid, blockUuidRef(unlinkedViewUuid), statusHistoryValue(context, 2), now),
+    ],
+    localTxMeta([kw("outliner-op"), kw("create-view")]),
+    {
+      ...context,
+      id: target.id,
+      uuid: target.uuid,
+      linkedViewUuid,
+      unlinkedViewUuid,
+      targetHistoryUuid,
+      linkedViewHistoryUuid,
+      unlinkedViewHistoryUuid,
+      phase: "create-related-entities",
+    },
+  );
+  await applyRawToggleReactionForBlock(opts, state, target, { ...context, phase: "create-reaction" });
   await applyOutlinerOps(
     opts,
     state,
-    [[kw("toggle-reaction"), [uuid(block.uuid), "thumbs-up", null]]],
+    [[kw("delete-blocks"), [[uuid(target.uuid)], tmap()]]],
     tmap(),
-    { ...context, id: block.id, uuid: block.uuid },
+    { ...context, id: target.id, uuid: target.uuid, phase: "delete-target" },
   );
+  state.activeIds.delete(target.id);
+  state.activeBlockUuids.delete(target.id);
 }
 
 async function applyRawInsertUndoRedo(opts, state, context, title) {
@@ -2362,8 +2588,24 @@ async function runOperation(opts, state, workerId, seq, forcedOp = null) {
       await applyRawBatchDeletePropertyValue(opts, state, { workerId, seq, op });
       return;
 
+    case "http-create-property-history":
+      await applyRawCreatePropertyHistory(opts, state, { workerId, seq, op });
+      return;
+
+    case "http-create-linked-references-view":
+      await applyRawCreateReferenceView(opts, state, { workerId, seq, op }, "linked-references", "Linked references");
+      return;
+
+    case "http-create-unlinked-references-view":
+      await applyRawCreateReferenceView(opts, state, { workerId, seq, op }, "unlinked-references", "Unlinked references");
+      return;
+
     case "http-toggle-reaction":
       await applyRawToggleReaction(opts, state, { workerId, seq, op });
+      return;
+
+    case "http-delete-view-target-with-related-entities":
+      await applyRawDeleteViewTargetWithRelatedEntities(opts, state, { workerId, seq, op });
       return;
 
     case "http-insert-undo-redo":
