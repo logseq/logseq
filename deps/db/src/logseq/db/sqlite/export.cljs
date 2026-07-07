@@ -1327,6 +1327,32 @@
                                            (::property-history export-map'')))))
           (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map'')))))))
 
+(defn import-tx-data
+  [{:keys [init-tx block-props-tx misc-tx]}]
+  (vec (concat init-tx block-props-tx misc-tx)))
+
+(defn validate-import-txs
+  "Dry-runs import txs against db and validates the resulting local DB.
+   Returns {:db db-after :tx-data tx-data} when valid or {:error string} when invalid."
+  [txs db]
+  (if-let [error (:error txs)]
+    {:error error}
+    (try
+      (let [tx-data (import-tx-data txs)
+            db-after (:db-after (d/with db tx-data))
+            validation (db-validate/validate-local-db! db-after)]
+        (if-let [errors (seq (:errors validation))]
+          (do
+            (js/console.error "Imported EDN has validation errors:")
+            (pprint/pprint errors)
+            {:error (str "The imported EDN has " (count errors) " validation error(s)")
+             :db db-after})
+          {:db db-after
+           :tx-data tx-data}))
+      (catch :default e
+        (js/console.error "Unexpected import EDN validation error:" e)
+        {:error (str "The imported EDN is unexpectedly invalid: " (pr-str (ex-message e)))}))))
+
 (defn create-conn
   "Create a conn for a DB graph seeded with initial data"
   []
@@ -1341,19 +1367,8 @@
   [export-edn]
   (try
     (let [import-conn (create-conn)
-          {:keys [init-tx block-props-tx misc-tx] :as _txs} (build-import export-edn @import-conn {})
-          _ (d/transact! import-conn (concat init-tx block-props-tx misc-tx))]
-      ;; :graph datom is skipping validation which may cause issues for imported graphs
-      (if (datom-export? export-edn)
-        {:db @import-conn}
-        (let [validation (db-validate/validate-local-db! @import-conn)]
-          (if-let [errors (seq (:errors validation))]
-            (do
-              (js/console.error "Exported EDN has the following invalid errors when imported into a new graph:")
-              (pprint/pprint errors)
-              {:error (str "The exported EDN has " (count errors) " validation error(s)")
-               :db @import-conn})
-            {:db @import-conn}))))
+          txs (build-import export-edn @import-conn {})]
+      (validate-import-txs txs @import-conn))
     (catch :default e
       (js/console.error "Unexpected export-edn validation error:" e)
       {:error (str "The exported EDN is unexpectedly invalid: " (pr-str (ex-message e)))})))

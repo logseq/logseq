@@ -727,7 +727,9 @@
 
 (deftest graph-datom-import-replaces-seeded-data
   (let [source-conn (d/create-conn db-schema/schema)
-        _ (d/transact! source-conn [{:block/uuid (random-uuid)}])
+        ;; Shift subsequent built-in eids without leaving invalid datoms in the export.
+        _ (d/transact! source-conn [{:db/id 1 :block/uuid (random-uuid)}])
+        _ (d/transact! source-conn [[:db/retractEntity 1]])
         _ (d/transact! source-conn (sqlite-create-graph/build-db-initial-data "{}"))
         export-edn (sqlite-export/build-export @source-conn {:export-type :graph})
         valid-result (sqlite-export/validate-export export-edn)
@@ -767,6 +769,21 @@
     (is (has-datom? (mapv (juxt :e :a :v) (d/datoms @conn :eavt))
                     1 :block/refs 2)
         "Datom import should apply lookup-ref targets before values that use them")))
+
+(deftest validate-export-rejects-invalid-graph-datoms
+  (let [validation (sqlite-export/validate-export
+                    {::sqlite-export/export-type :graph
+                     ::sqlite-export/graph-format :datoms
+                     :datoms [[1 :block/title "Orphan Page"]
+                              [1 :block/name "orphan page"]
+                              [1 :block/uuid #uuid "33333333-3333-4333-8333-000000000001"]
+                              [1 :block/tags 2]
+                              [2 :block/title "Page"]
+                              [2 :block/name "page"]
+                              [2 :db/ident :logseq.class/Page]
+                              [2 :block/uuid #uuid "33333333-3333-4333-8333-000000000002"]]})]
+    (is (string? (:error validation))
+        "Datom import validation should reject invalid graph datoms")))
 
 (deftest graph-datom-export-resolves-lookup-ref-values
   (let [conn (d/create-conn db-schema/schema)
