@@ -22,8 +22,8 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.datascript-report :as ds-report]
             [logseq.outliner.page :as outliner-page]
-            [logseq.outliner.template :as outliner-template]
-            [logseq.outliner.pipeline :as outliner-pipeline]))
+            [logseq.outliner.pipeline :as outliner-pipeline]
+            [logseq.outliner.template :as outliner-template]))
 
 (def ^:private rtc-tx-or-download-graph?
   (let [p (some-fn :rtc-op? :rtc-tx? :rtc-download-graph? :transact-remote?)]
@@ -104,7 +104,7 @@
                              (map (fn [t] (assoc t :journal journal-page))))))
         raw-template-blocks (fn [template]
                               (let [template-children (rest (ldb/get-block-and-children db (:block/uuid template)
-                                                                                         {:include-property-block? true}))]
+                                                                                        {:include-property-block? true}))]
                                 (->> (cons (assoc (first template-children)
                                                   :logseq.property/used-template (:db/id template))
                                            (rest template-children))
@@ -519,15 +519,19 @@
                                   (rtc-tx-or-download-graph? tx-meta)
                                   (::sqlite-export/imported-data? tx-meta))
                       (commands/run-commands tx-report))
+        before-template-tx-data (concat revert-tx-data
+                                        toggle-page-and-block-tx-data
+                                        display-blocks-tx-data
+                                        ensure-query-tx-data
+                                        ensure-comments-tx-data
+                                        commands-tx)
+        template-db (if (seq before-template-tx-data)
+                      (:db-after (d/with db-after before-template-tx-data))
+                      db-after)
         insert-templates-tx (when-not (rtc-tx-or-download-graph? tx-meta)
-                              (insert-tag-templates tx-report))
+                              (insert-tag-templates (assoc tx-report :db-after template-db)))
         created-by-tx (add-created-by-ref-hook db-before db-after tx-data tx-meta)]
-    (concat revert-tx-data
-            toggle-page-and-block-tx-data
-            display-blocks-tx-data
-            ensure-query-tx-data
-            ensure-comments-tx-data
-            commands-tx
+    (concat before-template-tx-data
             insert-templates-tx
             created-by-tx
             fix-page-tags-tx-data
