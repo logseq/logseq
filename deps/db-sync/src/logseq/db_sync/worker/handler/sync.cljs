@@ -116,12 +116,26 @@
   (common/sql-exec sql "delete from sync_meta")
   (storage/set-t! sql 0))
 
+(defn- graph-id-from-sync-path
+  [^js url]
+  (let [path (.-pathname url)
+        prefix "/sync/"]
+    (when (string/starts-with? path prefix)
+      (let [rest-path (subs path (count prefix))
+            slash-idx (or (string/index-of rest-path "/") -1)
+            graph-id (if (neg? slash-idx)
+                       rest-path
+                       (subs rest-path 0 slash-idx))]
+        (when (seq graph-id)
+          graph-id)))))
+
 (defn graph-id-from-request [request]
   (let [header-id (.get (.-headers request) "x-graph-id")
         url (js/URL. (.-url request))
-        param-id (.get (.-searchParams url) "graph-id")]
-    (when (seq (or header-id param-id))
-      (or header-id param-id))))
+        param-id (.get (.-searchParams url) "graph-id")
+        graph-id (or header-id param-id (graph-id-from-sync-path url))]
+    (when (seq graph-id)
+      graph-id)))
 
 ;; (defn- snapshot-key [graph-id snapshot-id]
 ;;   (str graph-id "/" snapshot-id ".snapshot"))
