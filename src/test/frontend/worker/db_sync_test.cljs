@@ -287,6 +287,8 @@
 
 (def ^:private remote-apply-test-settle-ms 500)
 
+(declare minimal-platform)
+
 (defn- with-datascript-conns
   [db-conn ops-conn f]
   (let [db-prev @worker-state/*datascript-conns
@@ -699,6 +701,98 @@
             (is (= 1 @prepare-calls))
             (is (= 0 @send-calls)))
           (#'sync-apply/set-upload-stopped! test-repo false))))))
+
+(deftest flush-pending-reports-upload-response-timeout-test
+  (async done
+         (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+               tx-id (random-uuid)
+               sent (atom [])
+               events (atom [])
+               timeout-callback (atom nil)
+               timeout-ms (atom nil)
+               original-set-timeout js/setTimeout
+               original-clear-timeout js/clearTimeout
+               platform-prev (try
+                               (platform/current)
+                               (catch :default _ nil))
+               client {:repo test-repo
+                       :graph-id "graph-1"
+                       :inflight (atom [])
+                       :upload-request (atom nil)
+                       :ws (doto (js-obj)
+                             (aset "readyState" 1)
+                             (aset "send" (fn [raw]
+                                            (swap! sent conj
+                                                   (js->clj (js/JSON.parse raw)
+                                                            :keywordize-keys true)))))}
+               test-platform (assoc-in (minimal-platform :browser)
+                                       [:broadcast :post-message!]
+                                       (fn [type payload]
+                                         (swap! events conj [type payload])))]
+           (set! js/setTimeout
+                 (fn [f ms]
+                   (reset! timeout-callback f)
+                   (reset! timeout-ms ms)
+                   :upload-timeout))
+           (set! js/clearTimeout (fn [& _] nil))
+           (platform/set-platform! test-platform)
+           (with-datascript-conns
+             conn
+             client-ops-conn
+             (fn []
+               (-> (p/with-redefs [worker-state/online? (constantly true)
+                                    sync-crypt/graph-e2ee? (constantly false)]
+                     (reset! sync-apply/*repo->latest-remote-tx {test-repo 0})
+                     (client-op/update-local-tx test-repo 0)
+                     (seed-client-op-txs!
+                      test-repo
+                      [{:db-sync/tx-id tx-id
+                        :db-sync/pending? true
+                        :db-sync/created-at 1
+                        :db-sync/outliner-op :save-block
+                        :db-sync/normalized-tx-data
+                        [[:db/add [:block/uuid (:block/uuid child1)]
+                          :block/title
+                          "pending upload timeout report"]]}])
+                     (p/let [_ (#'sync-apply/flush-pending! test-repo client)]
+                       (is (= "tx/batch" (:type (first @sent))))
+                       (is (= [tx-id] @(:inflight client)))
+                       (is (= (* 2 60 1000) @timeout-ms))
+                       (is (fn? @timeout-callback))
+                       (@timeout-callback)
+                       (is (= 1 (count @events)))
+                       (let [[type payload] (first @events)]
+                         (is (= :capture-error type))
+                         (is (= "db-sync" (get-in payload [:payload :source])))
+                         (is (= "upload-tx-batch" (get-in payload [:payload :operation])))
+                         (is (= test-repo (get-in payload [:payload :repo])))
+                         (is (= "graph-1" (get-in payload [:payload :graph-id])))
+                         (is (= 1 (get-in payload [:payload :tx-count])))
+                         (is (= "save-block" (get-in payload [:payload :outliner-op])))
+                         (is (= (* 2 60 1000) (get-in payload [:payload :timeout-ms])))
+                         (is (= [(str tx-id)] (get-in payload [:extra :tx-ids])))
+                         (is (= ["save-block"] (get-in payload [:extra :outliner-ops])))
+                         (is (= "Sync upload request did not get response"
+                                (ex-message (:error payload)))))
+                       (reset! events [])
+                       (aset (:ws client) "readyState" 3)
+                       (#'sync-apply/start-upload-response-timeout!
+                        client
+                        {:tx-ids [tx-id]
+                         :outliner-ops [:save-block]
+                         :t-before 0})
+                       (@timeout-callback)
+                       (is (empty? @events))))
+                   (p/catch (fn [error]
+                              (is nil (str error))))
+                   (p/finally
+                     (fn []
+                       (set! js/setTimeout original-set-timeout)
+                       (set! js/clearTimeout original-clear-timeout)
+                       (if platform-prev
+                         (platform/set-platform! platform-prev)
+                         (platform/set-platform! (minimal-platform :browser)))
+                       (done)))))))))
 
 (deftest start-active-client-flushes-pending-local-txs-test
   (async done
