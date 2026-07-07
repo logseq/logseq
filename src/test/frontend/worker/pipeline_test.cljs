@@ -568,6 +568,52 @@
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
 
+(deftest tag-template-journal-ref-survives-cli-upsert-property-history-tx-test
+  (let [today (date-time-util/ms->journal-day (js/Date.))
+        tomorrow (date-time-util/ms->journal-day (+ (js/Date.now) (* 24 60 60 1000)))
+        conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:build/journal today}}
+                {:page {:block/title "Templates"}
+                 :blocks [{:block/title "tag template root"
+                           :build/children [{:block/title "auto <% tomorrow %>"}]}]}]
+               :classes {:DiaryEntry {}}})
+        today-page (db-test/find-journal-by-journal-day @conn today)
+        target-block-uuid (random-uuid)
+        template-root (db-test/find-block-by-content @conn "tag template root")
+        diary-entry (ldb/get-page @conn "DiaryEntry")]
+    (ldb/transact! conn [[:db/add (:db/id template-root)
+                          :logseq.property/template-applied-to
+                          (:db/id diary-entry)]])
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (outliner-op/apply-ops! conn [[:insert-blocks [[{:block/uuid target-block-uuid
+                                                        :block/title "target block"}]
+                                                      (:block/uuid today-page)
+                                                      {:outliner-op :insert-blocks
+                                                       :keep-uuid? true
+                                                       :bottom? true}]]
+                                    [:batch-set-property [[target-block-uuid]
+                                                          :logseq.property/status
+                                                          :logseq.property/status.done
+                                                          {}]]
+                                    [:batch-set-property [[target-block-uuid]
+                                                          :block/tags
+                                                          (:db/id diary-entry)
+                                                          {}]]]
+                               {})
+      (let [target-block (db-test/find-block-by-content @conn "target block")
+            tomorrow-page (db-test/find-journal-by-journal-day @conn tomorrow)
+            expected-raw-title (str "auto " (page-ref/->page-ref (:block/uuid tomorrow-page)))
+            inserted-block (db-test/find-block-by-content @conn expected-raw-title)]
+        (is (= 1 (count (:logseq.property.history/_block target-block)))
+            "The CLI-style batched outliner ops create property history before tag template tx-data")
+        (is (some? inserted-block))
+        (is (= [(:block/uuid tomorrow-page)]
+               (mapv :block/uuid (:block/refs inserted-block)))))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
 (deftest import-tx-skips-property-history-recording-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "page1"}
