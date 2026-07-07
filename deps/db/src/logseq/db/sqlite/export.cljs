@@ -1327,6 +1327,81 @@
                                            (::property-history export-map'')))))
           (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map'')))))))
 
+(defn import-tx-data
+  [{:keys [init-tx block-props-tx misc-tx]}]
+  (vec (concat init-tx block-props-tx misc-tx)))
+
+(defn- disallowed-key-error?
+  [error]
+  (some #(= "disallowed key" %)
+        (tree-seq coll? seq error)))
+
+(defn- disallowed-key-attrs
+  [errors]
+  (into {}
+        (keep (fn [{:keys [entity errors]}]
+                (let [attrs (->> errors
+                                 (keep (fn [[attr error]]
+                                         (when (disallowed-key-error? error)
+                                           attr)))
+                                 set)]
+                  (when (seq attrs)
+                    [(:db/id entity) attrs]))))
+        errors))
+
+(defn- all-disallowed-key-errors?
+  [errors]
+  (every? (fn [{:keys [errors]}]
+            (and (seq errors)
+                 (every? disallowed-key-error? (vals errors))))
+          errors))
+
+(defn- remove-disallowed-key-datoms
+  [tx-data eid->attrs]
+  (remove (fn [tx]
+            (and (vector? tx)
+                 (= :db/add (first tx))
+                 (contains? (get eid->attrs (second tx)) (nth tx 2))))
+          tx-data))
+
+(defn- validate-import-tx-data
+  [txs db edn-label]
+  (loop [tx-data (import-tx-data txs)]
+    (let [db-after (:db-after (d/with db tx-data))
+          validation (db-validate/validate-local-db! db-after)]
+      (if-let [errors (seq (:errors validation))]
+        (let [eid->attrs (disallowed-key-attrs errors)
+              tx-data' (remove-disallowed-key-datoms tx-data eid->attrs)]
+          (if (and (all-disallowed-key-errors? errors)
+                   (seq eid->attrs)
+                   (not= (count tx-data) (count tx-data')))
+            (recur (vec tx-data'))
+            {:error (str "The " edn-label " has " (count errors) " validation error(s)")
+             :errors errors}))
+        {:db db-after
+         :tx-data tx-data}))))
+
+(defn validate-import-txs
+  "Dry-runs import txs against db and validates the resulting local DB.
+   Returns {:db db-after :tx-data tx-data} when valid or {:error string} when invalid."
+  ([txs db]
+   (validate-import-txs txs db {:edn-label "imported EDN"}))
+  ([txs db {:keys [edn-label]
+            :or {edn-label "imported EDN"}}]
+   (if-let [error (:error txs)]
+     {:error error}
+     (try
+       (let [result (validate-import-tx-data txs db edn-label)]
+         (if-let [errors (seq (:errors result))]
+           (do
+             (js/console.error (str (string/capitalize edn-label) " has validation errors:"))
+             (pprint/pprint errors)
+             (dissoc result :errors))
+           result))
+       (catch :default e
+         (js/console.error (str "Unexpected " edn-label " validation error:") e)
+         {:error (str "The " edn-label " is unexpectedly invalid: " (pr-str (ex-message e)))})))))
+
 (defn create-conn
   "Create a conn for a DB graph seeded with initial data"
   []
@@ -1341,19 +1416,8 @@
   [export-edn]
   (try
     (let [import-conn (create-conn)
-          {:keys [init-tx block-props-tx misc-tx] :as _txs} (build-import export-edn @import-conn {})
-          _ (d/transact! import-conn (concat init-tx block-props-tx misc-tx))]
-      ;; :graph datom is skipping validation which may cause issues for imported graphs
-      (if (datom-export? export-edn)
-        {:db @import-conn}
-        (let [validation (db-validate/validate-local-db! @import-conn)]
-          (if-let [errors (seq (:errors validation))]
-            (do
-              (js/console.error "Exported EDN has the following invalid errors when imported into a new graph:")
-              (pprint/pprint errors)
-              {:error (str "The exported EDN has " (count errors) " validation error(s)")
-               :db @import-conn})
-            {:db @import-conn}))))
+          txs (build-import export-edn @import-conn {})]
+      (validate-import-txs txs @import-conn {:edn-label "exported EDN"}))
     (catch :default e
       (js/console.error "Unexpected export-edn validation error:" e)
       {:error (str "The exported EDN is unexpectedly invalid: " (pr-str (ex-message e)))})))
