@@ -9,6 +9,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
             [logseq.common.path :as path]
+            [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
@@ -470,6 +471,62 @@ abc
         "Org #+title is imported when another property appears in the middle of the file")
     (is (nil? (db-test/find-page-by-title @conn "20230410145300-end_to_end_note"))
         "Importer should not fall back to the org-roam file stem")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
+(deftest-async import-org-roam-file-timestamp-as-page-created-at
+  (p/let [org-roam-without-created-at (write-temp-graph-file
+                                       "pages/20230410114031-org_roam_without_created_at.org"
+                                       "#+title: org_roam_without_created_at
+
+body
+")
+          org-roam-with-created-at (write-temp-graph-file
+                                    "pages/20230410114031-org_roam_with_created_at.org"
+                                    ":PROPERTIES:
+:created-at: 1681098030000
+:END:
+#+title: org_roam_with_created_at
+
+body
+")
+          plain-with-created-at (write-temp-graph-file
+                                 "pages/plain_with_created_at.org"
+                                 ":PROPERTIES:
+:created-at: 1681098030000
+:END:
+#+title: plain_with_created_at
+
+body
+")
+          plain-without-created-at (write-temp-graph-file
+                                    "pages/plain_without_created_at.org"
+                                    "#+title: plain_without_created_at
+
+body
+")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          before-import (common-util/time-ms)
+          _ (import-files-to-db [org-roam-without-created-at
+                                 org-roam-with-created-at
+                                 plain-with-created-at
+                                 plain-without-created-at]
+                                conn {})
+          after-import (common-util/time-ms)]
+    (is (= (.getTime (js/Date. 2023 3 10 11 40 31))
+           (:block/created-at (db-test/find-page-by-title @conn "org_roam_without_created_at")))
+        "Org-roam timestamped filenames are used when created-at is absent")
+    (is (= 1681098030000
+           (:block/created-at (db-test/find-page-by-title @conn "org_roam_with_created_at")))
+        "Explicit created-at properties take precedence over org-roam filename timestamps")
+    (is (= 1681098030000
+           (:block/created-at (db-test/find-page-by-title @conn "plain_with_created_at")))
+        "Explicit created-at properties are imported without org-roam filename timestamps")
+    (is (<= before-import
+            (:block/created-at (db-test/find-page-by-title @conn "plain_without_created_at"))
+            after-import)
+        "Pages without created-at properties or org-roam filename timestamps use the import timestamp")
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
