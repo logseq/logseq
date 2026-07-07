@@ -24,7 +24,6 @@
 (def ^:private reconnect-jitter-ms 250)
 (def ^:private ws-stale-kill-interval-ms 60000)
 (def ^:private ws-stale-timeout-ms 600000)
-(def ^:private ws-heartbeat-interval-ms 30000)
 (def fail-fast sync-util/fail-fast)
 
 (defonce *repo->latest-remote-tx sync-apply/*repo->latest-remote-tx)
@@ -144,13 +143,6 @@
       (js/clearInterval timer)
       (reset! *timer nil))))
 
-(defn- clear-heartbeat-timer!
-  [client]
-  (when-let [*timer (:heartbeat-timer client)]
-    (when-let [timer @*timer]
-      (js/clearInterval timer)
-      (reset! *timer nil))))
-
 (defn- touch-last-ws-message!
   [client]
   (when-let [*ts (:last-ws-message-ts client)]
@@ -209,7 +201,6 @@
    :last-sync-error (atom nil)
    :reconnect (atom {:attempt 0 :timer nil})
    :stale-kill-timer (atom nil)
-   :heartbeat-timer (atom nil)
    :last-ws-message-ts (atom (common-util/time-ms))
    :online-users (atom [])
    :ws-state (atom :closed)})
@@ -251,14 +242,8 @@
                                       (sync-handle-message/handle-message! repo client (.-data event))))))
   (set! (.-onerror ws) (fn [error] (log/error :db-sync/ws-error error)))
   (set! (.-onclose ws)
-        (fn [event]
-          (log/info :db-sync/ws-closed
-                    {:repo repo
-                     :code (.-code event)
-                     :reason (.-reason event)
-                     :was-clean? (.-wasClean event)
-                     :ready-state (ready-state ws)})
-          (clear-heartbeat-timer! client)
+        (fn [_]
+          (log/info :db-sync/ws-closed {:repo repo})
           (clear-stale-ws-loop-timer! client)
           (clear-inflight! client)
           (update-online-users! client [])
@@ -296,7 +281,6 @@
                            (contains? #{2 3} (ready-state ws))
                            (do
                              (log/warn :db-sync/ws-stale-closed {:repo repo :ready-state (ready-state ws)})
-                             (clear-heartbeat-timer! current)
                              (clear-stale-ws-loop-timer! current)
                              (clear-inflight! current)
                              (update-online-users! current [])
@@ -306,32 +290,8 @@
         (reset! *timer timer))))
   client)
 
-(defn- start-heartbeat-loop!
-  [client ws]
-  (clear-heartbeat-timer! client)
-  (when-let [*timer (:heartbeat-timer client)]
-    (let [repo (:repo client)
-          graph-id (:graph-id client)
-          timer (js/setInterval
-                 (fn []
-                   (when-let [current @worker-state/*db-sync-client]
-                     (when (and (= repo (:repo current))
-                                (= graph-id (:graph-id current))
-                                (identical? ws (:ws current)))
-                       (if (ws-open? ws)
-                         (send! ws {:type "ping"})
-                         (do
-                           (log/warn :db-sync/ws-heartbeat-skipped
-                                     {:repo repo
-                                      :ready-state (ready-state ws)})
-                           (clear-heartbeat-timer! current))))))
-                 ws-heartbeat-interval-ms)]
-      (reset! *timer timer)))
-  client)
-
 (defn- stop-client!
   [client]
-  (clear-heartbeat-timer! client)
   (clear-stale-ws-loop-timer! client)
   (when-let [reconnect (:reconnect client)]
     (clear-reconnect-timer! reconnect))
@@ -371,7 +331,6 @@
                 :current-client-f current-client
                 :broadcast-rtc-state!-f broadcast-rtc-state!
                 :fail-fast-f fail-fast})))
-      (start-heartbeat-loop! updated ws)
       (close-stale-ws-loop updated ws url))))
 
 (defn stop!
