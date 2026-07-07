@@ -153,7 +153,7 @@
         ws (:ws client)
         online? (worker-state/online?)
         ws-open-state? (ws-open? ws)]
-    (when (and online? ws-open-state?)
+    (when online?
       (let [elapsed-ms (- (common-util/time-ms) (:sent-at request))
             outliner-ops (mapv outliner-op->string (:outliner-ops request))
             outliner-op-tag (when (seq outliner-ops)
@@ -741,18 +741,19 @@
                             tx-ids (mapv :tx-id tx-entries)]
                       (when (seq tx-entries)
                         (reset! (:inflight client) tx-ids)
-                        (start-upload-response-timeout!
-                         client
-                         {:tx-ids tx-ids
-                          :outliner-ops (->> tx-entries
-                                             (keep :outliner-op)
-                                             distinct
-                                             vec)
-                          :t-before local-tx})
-                        (send! ws {:type "tx/batch"
-                                   :client-revision (build-version/revision)
-                                   :t-before local-tx
-                                   :txs payload})))
+                        (p/do!
+                         (send! ws {:type "tx/batch"
+                                    :client-revision (build-version/revision)
+                                    :t-before local-tx
+                                    :txs payload})
+                         (start-upload-response-timeout!
+                          client
+                          {:tx-ids tx-ids
+                           :outliner-ops (->> tx-entries
+                                              (keep :outliner-op)
+                                              distinct
+                                              vec)
+                           :t-before local-tx}))))
                     (p/catch (fn [error]
                                (sync-util/set-last-sync-error! client error)
                                (log/error :db-sync/flush-pending-failed
