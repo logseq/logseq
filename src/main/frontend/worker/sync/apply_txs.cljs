@@ -2,6 +2,7 @@
   "Pending tx and remote tx application helpers for db sync."
   (:require
    [clojure.set :as set]
+   [clojure.string :as string]
    [datascript.core :as d]
    [frontend.worker.platform :as platform]
    [frontend.worker.shared-service :as shared-service]
@@ -41,6 +42,7 @@
 
 (def ^:private max-remote-apply-snapshot-retries 3)
 (def ^:private remote-apply-snapshot-retry-delay-ms 50)
+(def ^:private upload-response-timeout-ms (* 2 60 1000))
 
 (defn set-upload-stopped!
   [repo stopped?]
@@ -132,6 +134,80 @@
 
 (defn- ws-open? [ws]
   (sync-transport/ws-open? ws))
+
+(defn- ws-ready-state
+  [ws]
+  (when ws
+    (.-readyState ws)))
+
+(defn- outliner-op->string
+  [op]
+  (cond
+    (keyword? op) (name op)
+    (some? op) (str op)
+    :else nil))
+
+(defn- report-upload-response-timeout!
+  [client request]
+  (let [repo (:repo client)
+        ws (:ws client)
+        online? (worker-state/online?)
+        ws-open-state? (ws-open? ws)]
+    (when online?
+      (let [elapsed-ms (- (common-util/time-ms) (:sent-at request))
+            outliner-ops (mapv outliner-op->string (:outliner-ops request))
+            outliner-op-tag (when (seq outliner-ops)
+                              (string/join "," outliner-ops))
+            data (cond-> {:source "db-sync"
+                          :operation "upload-tx-batch"
+                          :repo repo
+                          :graph-id (:graph-id client)
+                          :timeout-ms upload-response-timeout-ms
+                          :elapsed-ms elapsed-ms
+                          :tx-count (count (:tx-ids request))
+                          :t-before (:t-before request)
+                          :latest-remote-tx (get @*repo->latest-remote-tx repo)
+                          :current-local-tx (client-op/get-local-tx repo)
+                          :online? online?
+                          :ws-open? ws-open-state?
+                          :ws-ready-state (ws-ready-state ws)}
+                   outliner-op-tag
+                   (assoc :outliner-op outliner-op-tag))]
+        (log/error :db-sync/upload-response-timeout
+                   (assoc data :tx-ids (:tx-ids request)))
+        (try
+          (platform/post-message!
+           (platform/current)
+           :capture-error
+           {:error (ex-info "Sync upload request did not get response" data)
+            :payload data
+            :extra (cond-> {:tx-ids (mapv str (:tx-ids request))}
+                     (seq outliner-ops)
+                     (assoc :outliner-ops outliner-ops))})
+          (catch :default report-error
+            (log/error :db-sync/report-upload-response-timeout-failed
+                       {:repo repo
+                        :error report-error})))))))
+
+(defn clear-upload-response-timeout!
+  [client]
+  (when-let [*upload-request (:upload-request client)]
+    (when-let [timer (:timer @*upload-request)]
+      (js/clearTimeout timer))
+    (reset! *upload-request nil)))
+
+(defn- start-upload-response-timeout!
+  [client request]
+  (when-let [*upload-request (:upload-request client)]
+    (when-not (:timer @*upload-request)
+      (let [request' (assoc request :sent-at (common-util/time-ms))
+            timer (js/setTimeout
+                   (fn []
+                     (when (= request' (dissoc @*upload-request :timer))
+                       (reset! *upload-request nil)
+                       (report-upload-response-timeout! client request')))
+                   upload-response-timeout-ms)]
+        (reset! *upload-request (assoc request' :timer timer))))))
 
 (defn upload-large-title! [repo graph-id title aes-key]
   (sync-large-title/upload-large-title!
@@ -665,10 +741,19 @@
                             tx-ids (mapv :tx-id tx-entries)]
                       (when (seq tx-entries)
                         (reset! (:inflight client) tx-ids)
-                        (send! ws {:type "tx/batch"
-                                   :client-revision (build-version/revision)
-                                   :t-before local-tx
-                                   :txs payload})))
+                        (p/do!
+                         (send! ws {:type "tx/batch"
+                                    :client-revision (build-version/revision)
+                                    :t-before local-tx
+                                    :txs payload})
+                         (start-upload-response-timeout!
+                          client
+                          {:tx-ids tx-ids
+                           :outliner-ops (->> tx-entries
+                                              (keep :outliner-op)
+                                              distinct
+                                              vec)
+                           :t-before local-tx}))))
                     (p/catch (fn [error]
                                (sync-util/set-last-sync-error! client error)
                                (log/error :db-sync/flush-pending-failed
