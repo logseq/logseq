@@ -132,6 +132,23 @@
       (is (= (checksum/recompute-checksum (:db-after tx-report))
              (checksum/update-checksum nil tx-report))))))
 
+(deftest no-recompute-checksum-can-start-from-empty-db-test
+  (testing "nil initial checksum can be updated incrementally when db-before is empty"
+    (let [db-before (d/empty-db db-schema/schema)
+          page-uuid (random-uuid)
+          block-uuid (random-uuid)
+          tx-report (d/with db-before [{:db/id 1
+                                         :block/uuid page-uuid
+                                         :block/name "page-a"
+                                         :block/title "Page A"}
+                                        {:db/id 2
+                                         :block/uuid block-uuid
+                                         :block/title "Block A"
+                                         :block/parent 1
+                                         :block/page 1}])]
+      (is (= (checksum/recompute-checksum (:db-after tx-report))
+             (checksum/update-checksum-no-recompute nil tx-report))))))
+
 (deftest checksum-e2ee-ignores-title-and-name-test
   (testing "with E2EE enabled, checksum ignores title/name changes for both modes"
     (let [db-before (-> (sample-db)

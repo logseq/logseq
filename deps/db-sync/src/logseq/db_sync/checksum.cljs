@@ -62,6 +62,24 @@
    (and (string? checksum)
         (re-matches #"[0-9a-fA-F]{16}" checksum))))
 
+(defn- empty-db?
+  [db]
+  (empty? (d/datoms db :eavt)))
+
+(defn- incremental-initial-state
+  [checksum db-before]
+  (cond
+    (valid-checksum? checksum)
+    (checksum->state checksum)
+
+    (and (nil? checksum)
+         (empty-db? db-before))
+    [0 0]
+
+    :else
+    (throw (ex-info "Cannot update checksum incrementally without a valid previous checksum"
+                    {:type :db-sync/checksum-incremental-missing-previous-checksum}))))
+
 (defn- state->checksum
   [[fnv djb]]
   (str (unsigned-hex fnv)
@@ -441,12 +459,8 @@
       (empty? tx-data)
       checksum
 
-      (not (valid-checksum? checksum))
-      (throw (ex-info "Cannot update checksum incrementally without a valid previous checksum"
-                      {:type :db-sync/checksum-incremental-missing-previous-checksum}))
-
       :else
-      (let [initial-state (checksum->state checksum)
+      (let [initial-state (incremental-initial-state checksum db-before)
             {:keys [removed added]} (net-tuple-delta db-before db-after after-e2ee? tx-data)
             state-after-removals (reduce-kv (fn [checksum-state tuple count]
                                               (apply-digest-n checksum-state tuple count subtract-digest))
