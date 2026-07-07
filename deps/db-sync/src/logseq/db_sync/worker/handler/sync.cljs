@@ -24,7 +24,7 @@
 (def ^:private snapshot-content-encoding "gzip")
 (def ^:private snapshot-uploading-meta-key :snapshot-uploading?)
 (def ^:private large-tx-min-items 500)
-(def ^:private large-tx-max-chunk-items 100)
+(def ^:private large-tx-max-chunk-items 500)
 ;; 10m
 ;; (def ^:private snapshot-multipart-part-size (* 10 1024 1024))
 
@@ -465,6 +465,18 @@
            :tx-tail []
            :db-last-stored @conn)))
 
+(defn- run-conn-callbacks!
+  [conn tx-report]
+  (doseq [[_key callback] (:listeners @(:atom conn))]
+    (callback tx-report)))
+
+(defn- transact-large-tx-chunk!
+  [conn tx-data tx-meta]
+  (let [tx-report (d/with @conn tx-data tx-meta)]
+    (swap! (:atom conn) assoc :db (:db-after tx-report))
+    (run-conn-callbacks! conn tx-report)
+    tx-report))
+
 (defn- import-snapshot! [^js self rows reset?]
   (let [sql (.-sql self)]
     (ensure-schema! self)
@@ -509,7 +521,7 @@
            db-before
            (fn [_ chunk]
              (vswap! chunk-count inc)
-             (let [tx-report (ldb/transact! conn chunk live-tx-meta)]
+             (let [tx-report (transact-large-tx-chunk! conn chunk live-tx-meta)]
                (vswap! changed-ids into (keep :e (:tx-data tx-report))))
              nil)
            nil

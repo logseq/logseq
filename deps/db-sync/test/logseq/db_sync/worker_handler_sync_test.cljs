@@ -883,13 +883,14 @@
               self #js {:sql sql
                         :conn conn
                         :schema-ready true}
+              tx-tail-size-before (count (:tx-tail @(:atom conn)))
               tx-report-count (atom 0)
               tx-tail-sizes (atom [])
               response (try
                          (d/listen! conn ::large-entry-chunks
                                     (fn [_tx-report]
                                       (swap! tx-report-count inc)
-                                      (swap! tx-tail-sizes conj (count (:tx-tail @conn)))))
+                                      (swap! tx-tail-sizes conj (count (:tx-tail @(:atom conn))))))
                          (with-redefs [sync-checksum/recompute-checksum
                                        (fn [_db]
                                          (throw (ex-info "large tx should update checksum incrementally"
@@ -901,7 +902,7 @@
           (is (= "tx/batch/ok" (:type response)))
           (is (> @tx-report-count 1))
           (is (seq @tx-tail-sizes))
-          (is (every? zero? @tx-tail-sizes))
+          (is (every? #(= tx-tail-size-before %) @tx-tail-sizes))
           (is (= (inc t-before) (:t response)))
           (is (= 1 (count (storage/fetch-tx-since sql t-before))))
           (is (= block-count
@@ -1010,7 +1011,7 @@
                          (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
           (is (= "tx/batch/ok" (:type response)))
           (is (= block-count (reduce + @validation-tx-data-counts)))
-          (is (every? #(<= % 100) @validation-tx-data-counts)))))))
+          (is (every? #(<= % 500) @validation-tx-data-counts)))))))
 
 (deftest finished-snapshot-upload-persists-provided-checksum-test
   (async done
