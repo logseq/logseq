@@ -2370,6 +2370,7 @@ let () =
   run_sync_progress_case
     "sync download prints progress from closed event stream"
     "logseq-cli-sync-progress-"
+    ~delay_download_response:true
     (fun res ->
       res_write_head res 200
         (Js.Dict.fromArray [| ("Content-Type", "text/event-stream") |]);
