@@ -198,6 +198,7 @@
    :asset-queue (atom (p/resolved nil))
    :pending-pull-since (atom nil)
    :inflight (atom [])
+   :upload-request (atom nil)
    :last-sync-error (atom nil)
    :reconnect (atom {:attempt 0 :timer nil})
    :stale-kill-timer (atom nil)
@@ -293,6 +294,7 @@
 (defn- stop-client!
   [client]
   (clear-stale-ws-loop-timer! client)
+  (sync-apply/clear-upload-response-timeout! client)
   (when-let [reconnect (:reconnect client)]
     (clear-reconnect-timer! reconnect))
   (when-let [ws (:ws client)]
