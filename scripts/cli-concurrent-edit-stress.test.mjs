@@ -111,6 +111,22 @@ test("classifies stale raw outliner block property failures as race outcomes", (
   );
 });
 
+test("classifies stale raw view targets as race outcomes", () => {
+  assert.equal(
+    classifyHttpResult(
+      { ok: false, status: 500 },
+      {
+        error: {
+          code: "exception",
+          message: 'Nothing found for entity id (:block/uuid #uuid "b5cf1ff2-1403-4eed-9449-d326b1e9efad")',
+        },
+      },
+      { id: 231, op: "http-create-unlinked-references-view" },
+    ).outcome,
+    "race-conflict",
+  );
+});
+
 test("classifies required outliner no-op results as failures", () => {
   assert.deepEqual(
     classifyHttpResult(
@@ -542,7 +558,11 @@ test("operation set covers broad outliner and metadata mutations", () => {
     "http-batch-set-property",
     "http-batch-remove-property",
     "http-batch-delete-property-value",
+    "http-create-property-history",
+    "http-create-linked-references-view",
+    "http-create-unlinked-references-view",
     "http-toggle-reaction",
+    "http-delete-view-target-with-related-entities",
     "http-insert-undo-redo",
     "delete-single",
     "delete-batch",
@@ -580,6 +600,23 @@ test("multi-client offline operations require sync, offline mode, and more than 
   assert.equal(operationNames({ sync: false, offline: true, clients: 3 }).includes("multi-client-offline-rebase"), false);
 });
 
+test("3k sync stress includes view-related history references and reactions", () => {
+  const maxOps = 3000;
+  const weights = new Map(operationWeights({ sync: true, offline: true, clients: 3 }));
+  const totalWeight = [...weights.values()].reduce((sum, weight) => sum + weight, 0);
+
+  for (const name of [
+    "http-create-property-history",
+    "http-create-linked-references-view",
+    "http-create-unlinked-references-view",
+    "http-toggle-reaction",
+    "http-delete-view-target-with-related-entities",
+  ]) {
+    assert.ok(weights.has(name), `${name} should be in the sync stress operation set`);
+    assert.ok((weights.get(name) / totalWeight) * maxOps >= 10, `${name} should run often enough in a 3k-op stress run`);
+  }
+});
+
 test("critical outliner mutations dominate the stress distribution", () => {
   const weights = new Map(operationWeights({ sync: true, offline: true }));
   const criticalOps = [
@@ -595,6 +632,7 @@ test("critical outliner mutations dominate the stress distribution", () => {
     "http-move-up-down",
     "http-indent-outdent",
     "http-delete-restore-page",
+    "http-delete-view-target-with-related-entities",
     "http-insert-undo-redo",
     "delete-single",
     "delete-batch",
