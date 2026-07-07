@@ -74,7 +74,7 @@
 (defn set-t! [sql t]
   (set-meta! sql :t t))
 
-(defn- with-sql-transaction!
+(defn with-sql-transaction!
   [sql f]
   (if-let [db (aget sql "_db")]
     (let [transaction (.-transaction db)]
@@ -127,6 +127,22 @@
                    created-at
                    (outliner-op->sql outliner-op)))
 
+(defn append-normalized-tx!
+  [sql db-before db-after tx-data checksum-tx-data tx-meta]
+  (when (seq tx-data)
+    (let [created-at (common/now-ms)
+          normalized-data (vec tx-data)
+          tx-str (common/write-transit normalized-data)
+          checksum (sync-checksum/update-checksum-no-recompute
+                    (get-checksum sql)
+                    {:db-before db-before
+                     :db-after db-after
+                     :tx-data checksum-tx-data})
+          new-t (inc (get-t sql))]
+      (append-tx! sql new-t tx-str created-at (:outliner-op tx-meta))
+      (set-t! sql new-t)
+      (set-checksum! sql checksum))))
+
 (defn fetch-tx-since [sql since-t]
   (let [rows (common/get-sql-rows
               (common/sql-exec sql
@@ -175,7 +191,8 @@
 
 (defn- append-tx-for-tx-report
   [sql {:keys [db-after db-before tx-data tx-meta] :as tx-report}]
-  (when-not (empty? tx-data)
+  (when-not (or (:db-sync/skip-tx-log? tx-meta)
+                (empty? tx-data))
     (let [created-at (common/now-ms)
           normalized-data (->> tx-data
                                (db-normalize/normalize-tx-data db-after db-before)

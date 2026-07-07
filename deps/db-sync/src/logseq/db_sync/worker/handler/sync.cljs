@@ -1,5 +1,7 @@
 (ns logseq.db-sync.worker.handler.sync
   (:require [clojure.string :as string]
+            [datascript.core :as d]
+            [datascript.storage :as d-storage]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.batch :as batch]
@@ -13,6 +15,7 @@
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.routes.sync :as sync-routes]
             [logseq.db-sync.worker.ws :as ws]
+            [logseq.db.frontend.validate :as db-validate]
             [promesa.core :as p]))
 
 (def ^:private snapshot-download-batch-size 10000)
@@ -20,6 +23,8 @@
 (def ^:private snapshot-content-type "application/transit+json")
 (def ^:private snapshot-content-encoding "gzip")
 (def ^:private snapshot-uploading-meta-key :snapshot-uploading?)
+(def ^:private large-tx-min-items 500)
+(def ^:private large-tx-max-chunk-items 100)
 ;; 10m
 ;; (def ^:private snapshot-multipart-part-size (* 10 1024 1024))
 
@@ -335,6 +340,131 @@
     client-revision (assoc :client-revision client-revision)
     username (assoc :username username)))
 
+(defn- tempid?
+  [value]
+  (or (and (integer? value) (neg? value))
+      (string? value)))
+
+(defn- ref-attr?
+  [db attr]
+  (= :db.type/ref (:db/valueType (d/entity db attr))))
+
+(defn- tx-item-tempids
+  [db item]
+  (cond
+    (and (map? item) (tempid? (:db/id item)))
+    #{(:db/id item)}
+
+    (and (vector? item)
+         (contains? #{:db/add :db/retract :db/cas :db.fn/cas} (first item))
+         (<= 4 (count item)))
+    (let [[_op entity attr value] item]
+      (cond-> #{}
+        (tempid? entity)
+        (conj entity)
+        (and (ref-attr? db attr)
+             (tempid? value))
+        (conj value)))
+
+    (and (vector? item)
+         (contains? #{:db/retractEntity :db.fn/retractEntity} (first item))
+         (= 2 (count item))
+         (tempid? (second item)))
+    #{(second item)}
+
+    :else
+    #{}))
+
+(defn- merge-ranges
+  [ranges]
+  (loop [remaining (sort-by first ranges)
+         merged []]
+    (if-let [[start end] (first remaining)]
+      (if-let [[prev-start prev-end] (peek merged)]
+        (if (<= start prev-end)
+          (recur (next remaining)
+                 (conj (pop merged) [prev-start (max prev-end end)]))
+          (recur (next remaining)
+                 (conj merged [start end])))
+        (recur (next remaining) [[start end]]))
+      merged)))
+
+(defn- tempid-ranges
+  [db tx-data]
+  (let [ranges-by-tempid
+        (reduce-kv
+         (fn [acc idx item]
+           (reduce (fn [acc* tempid]
+                     (update acc* tempid
+                             (fn [[start end]]
+                               [(if (some? start) (min start idx) idx)
+                                (if (some? end) (max end idx) idx)])))
+                   acc
+                   (tx-item-tempids db item)))
+         {}
+         tx-data)]
+    (merge-ranges (vals ranges-by-tempid))))
+
+(defn- tempid-range-by-start
+  [db tx-data]
+  (let [ranges (tempid-ranges db tx-data)
+        range-by-start (into {} (map (fn [[start end]] [start end]) ranges))]
+    range-by-start))
+
+(defn- next-ordered-tx-group
+  [tx-data range-by-start idx]
+  (if-let [end (get range-by-start idx)]
+    [(inc end) (subvec tx-data idx (inc end))]
+    [(inc idx) [(nth tx-data idx)]]))
+
+(defn- add-group-to-chunk
+  [items group]
+  (into items group))
+
+(defn- reduce-ordered-tx-chunks
+  [db f init tx-data]
+  (let [tx-data (vec tx-data)
+        item-count (count tx-data)
+        range-by-start (tempid-range-by-start db tx-data)]
+    (loop [idx 0
+           chunk []
+           acc init]
+      (if (< idx item-count)
+        (let [[next-idx group] (next-ordered-tx-group tx-data range-by-start idx)
+              next-count (+ (count chunk) (count group))]
+          (if (and (seq chunk)
+                   (> next-count large-tx-max-chunk-items))
+            (recur idx [] (f acc chunk))
+            (recur next-idx (add-group-to-chunk chunk group) acc)))
+        (cond-> acc
+          (seq chunk) (f chunk))))))
+
+(defn- large-tx?
+  [tx-data]
+  (>= (count tx-data) large-tx-min-items))
+
+(defn- validate-final-large-tx!
+  [db changed-ids tx-meta]
+  (doseq [changed-id-batch (partition-all large-tx-max-chunk-items changed-ids)]
+    (let [[valid? errors] (db-validate/validate-tx-report
+                           {:db-after db
+                            :tx-data (mapv (fn [id] {:e id}) changed-id-batch)
+                            :tx-meta tx-meta}
+                           nil)]
+      (when-not valid?
+        (throw (ex-info "large tx final validation failed"
+                        {:type :db-sync/large-tx-final-validation-failed
+                         :changed-id-count (count changed-id-batch)
+                         :errors errors}))))))
+
+(defn- store-large-tx-db!
+  [conn]
+  (when-some [_storage (d-storage/storage @conn)]
+    (d/store @conn)
+    (swap! (:atom conn) assoc
+           :tx-tail []
+           :db-last-stored @conn)))
+
 (defn- import-snapshot! [^js self rows reset?]
   (let [sql (.-sql self)]
     (ensure-schema! self)
@@ -343,8 +473,79 @@
       (reset-import! sql))
     (import-snapshot-rows! sql "kvs" rows)))
 
+(defn- apply-client-tx-meta
+  [request-context outliner-op]
+  (cond-> (merge {:op :apply-client-tx}
+                 (request-context->tx-meta request-context))
+    outliner-op
+    (assoc :outliner-op outliner-op)
+    (= outliner-op :db-migrate)
+    (assoc :db-migrate? true
+           :skip-validate-db? true)))
+
+(defn- apply-large-tx-entry!
+  [^js self conn tx-data {:keys [tx-id outliner-op]} request-context]
+  (let [sql (.-sql self)
+        db-before @conn
+        tx-meta (apply-client-tx-meta request-context outliner-op)
+        live-tx-meta (assoc tx-meta
+                            :skip-validate-db? true
+                            :skip-store? true
+                            :db-sync/skip-tx-log? true
+                            :db-sync/suppress-transact-failed-log? true)
+        chunk-count (volatile! 0)
+        changed-ids (volatile! #{})]
+    (log/info :db-sync/apply-large-tx-entry-start
+              {:graph-id (:graph-id request-context)
+               :tx-id tx-id
+               :outliner-op outliner-op
+               :tx-count (count tx-data)
+               :max-chunk-items large-tx-max-chunk-items})
+    (try
+      (storage/with-sql-transaction!
+        sql
+        (fn []
+          (reduce-ordered-tx-chunks
+           db-before
+           (fn [_ chunk]
+             (vswap! chunk-count inc)
+             (let [tx-report (ldb/transact! conn chunk live-tx-meta)]
+               (vswap! changed-ids into (keep :e (:tx-data tx-report))))
+             nil)
+           nil
+           tx-data)
+          (when (and (not= outliner-op :db-migrate)
+                     (seq @changed-ids))
+            (validate-final-large-tx! @conn @changed-ids tx-meta))
+          (store-large-tx-db! conn)
+          (storage/append-normalized-tx!
+           sql
+           db-before
+           @conn
+           tx-data
+           (mapv (fn [id] {:e id}) @changed-ids)
+           tx-meta)))
+      (log/info :db-sync/apply-large-tx-entry-done
+                {:graph-id (:graph-id request-context)
+                 :tx-id tx-id
+                 :outliner-op outliner-op
+                 :tx-count (count tx-data)
+                 :chunk-count @chunk-count
+                 :changed-id-count (count @changed-ids)})
+      true
+      (catch :default error
+        (log/info :db-sync/apply-large-tx-entry-failed
+                  {:graph-id (:graph-id request-context)
+                   :tx-id tx-id
+                   :outliner-op outliner-op
+                   :tx-count (count tx-data)
+                   :chunk-count @chunk-count
+                   :changed-id-count (count @changed-ids)})
+        (set! (.-conn self) (storage/open-conn sql))
+        (throw error)))))
+
 (defn- apply-tx-entry!
-  [conn {:keys [tx outliner-op]} request-context]
+  [self conn {:keys [tx outliner-op] :as tx-entry} request-context]
   (let [tx-data (tx-sanitize/sanitize-tx @conn
                                          (protocol/transit->tx tx)
                                          {:drop-missing-retract-ops? (or (= outliner-op :fix)
@@ -354,14 +555,12 @@
                                           :retract-touched-descendants? (contains? delete-outliner-ops outliner-op)})]
     (if (seq tx-data)
       (try
-        (ldb/transact! conn tx-data (cond-> (merge {:op :apply-client-tx}
-                                                   (request-context->tx-meta request-context))
-                                      outliner-op
-                                      (assoc :outliner-op outliner-op)
-                                      (= outliner-op :db-migrate)
-                                      (assoc :db-migrate? true
-                                             :skip-validate-db? true)))
-        true
+        (if (and (not= outliner-op :db-migrate)
+                 (large-tx? tx-data))
+          (apply-large-tx-entry! self conn tx-data tx-entry request-context)
+          (do
+            (ldb/transact! conn tx-data (apply-client-tx-meta request-context outliner-op))
+            true))
         (catch :default e
           ;; Rebase/fix txs are inferred from local history and can become stale
           ;; when concurrent remote edits remove referenced entities before upload.
@@ -387,7 +586,7 @@
         (if-let [tx-entry (first remaining)]
           (let [tx-id (:tx-id tx-entry)
                 applied-entry? (try
-                                 (boolean (apply-tx-entry! conn tx-entry request-context))
+                                 (boolean (apply-tx-entry! self conn tx-entry request-context))
                                  (catch :default e
                                    (log/error :db-sync/transact-failed e)
                                    (let [missing-block-uuids (missing-block-uuids-from-error e)]

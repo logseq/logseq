@@ -427,3 +427,33 @@
                                              state-after-removals
                                              added)]
         (state->checksum state-after-additions)))))
+
+(defn update-checksum-no-recompute
+  [checksum {:keys [db-before db-after tx-data]}]
+  (let [before-e2ee? (ldb/get-graph-rtc-e2ee? db-before)
+        after-e2ee? (ldb/get-graph-rtc-e2ee? db-after)
+        tx-data (or tx-data [])]
+    (cond
+      (not= before-e2ee? after-e2ee?)
+      (throw (ex-info "Cannot update checksum incrementally when E2EE mode changes"
+                      {:type :db-sync/checksum-incremental-e2ee-mode-changed}))
+
+      (empty? tx-data)
+      checksum
+
+      (not (valid-checksum? checksum))
+      (throw (ex-info "Cannot update checksum incrementally without a valid previous checksum"
+                      {:type :db-sync/checksum-incremental-missing-previous-checksum}))
+
+      :else
+      (let [initial-state (checksum->state checksum)
+            {:keys [removed added]} (net-tuple-delta db-before db-after after-e2ee? tx-data)
+            state-after-removals (reduce-kv (fn [checksum-state tuple count]
+                                              (apply-digest-n checksum-state tuple count subtract-digest))
+                                            initial-state
+                                            removed)
+            state-after-additions (reduce-kv (fn [checksum-state tuple count]
+                                               (apply-digest-n checksum-state tuple count add-digest))
+                                             state-after-removals
+                                             added)]
+        (state->checksum state-after-additions)))))
