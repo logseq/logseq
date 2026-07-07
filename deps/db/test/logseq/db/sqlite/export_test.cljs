@@ -593,7 +593,7 @@
            (get-in export-edn [:classes :user.class/MyClass :build/class-properties])))
     (is (not (contains? (:properties export-edn) legacy-property)))))
 
-(deftest graph-export-omits-legacy-plugin-property-schema-attrs
+(deftest graph-datom-import-drops-legacy-plugin-property-schema-attrs
   (let [plugin-property :plugin.property.degrande-colors/mugpet_degrande_colors_controls
         conn (db-test/create-conn-with-import-map
               {:properties {plugin-property {:logseq.property/type :json}}
@@ -604,10 +604,17 @@
                               :hide? true
                               :public? false}])
         export-edn (sqlite-export/build-export @conn {:export-type :graph})
-        validation (sqlite-export/validate-export export-edn)]
+        import-conn (sqlite-export/create-conn)
+        validation (sqlite-export/validate-import-txs
+                    (sqlite-export/build-import export-edn @import-conn {})
+                    @import-conn
+                    {:edn-label "exported EDN"})
+        tx-data (:tx-data validation)]
     (is (nil? (:error validation)))
     (is (has-datom? (:datoms export-edn) (:db/id plugin-property-ent) :hide? true))
-    (is (has-datom? (:datoms export-edn) (:db/id plugin-property-ent) :public? false))))
+    (is (has-datom? (:datoms export-edn) (:db/id plugin-property-ent) :public? false))
+    (is (not (some #{[:db/add (:db/id plugin-property-ent) :hide? true]} tx-data)))
+    (is (not (some #{[:db/add (:db/id plugin-property-ent) :public? false]} tx-data)))))
 
 (deftest graph-export-keeps-referenced-recycled-closed-value-config
   (let [property-id :plugin.property.degrande-colors/tldraw
