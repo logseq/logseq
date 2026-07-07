@@ -783,7 +783,11 @@
                               [2 :db/ident :logseq.class/Page]
                               [2 :block/uuid #uuid "33333333-3333-4333-8333-000000000002"]]})]
     (is (string? (:error validation))
-        "Datom import validation should reject invalid graph datoms")))
+        "Datom import validation should reject invalid graph datoms")
+    (is (re-find #"exported EDN" (:error validation))
+        "Export validation error should describe exported EDN")
+    (is (not (contains? validation :db))
+        "Invalid export validation should not return a transient DB snapshot")))
 
 (deftest graph-datom-export-resolves-lookup-ref-values
   (let [conn (d/create-conn db-schema/schema)

@@ -2068,12 +2068,12 @@
 (deftest import-edn-datom-format-with-shifted-builtin-eids-test
   (restoring-worker-state
    (fn []
-	     (let [;; Source: shift built-in eids by one relative to a freshly seeded dest
-	           source-conn (d/create-conn db-schema/schema)
-	           ;; Shift subsequent built-in eids without leaving invalid datoms in the export.
-	           _ (d/transact! source-conn [{:db/id 1 :block/uuid (random-uuid)}])
-	           _ (d/transact! source-conn [[:db/retractEntity 1]])
-	           _ (d/transact! source-conn (sqlite-create-graph/build-db-initial-data "{}"))
+     (let [;; Source: shift built-in eids by one relative to a freshly seeded dest
+           source-conn (d/create-conn db-schema/schema)
+	         ;; Shift subsequent built-in eids without leaving invalid datoms in the export.
+           _ (d/transact! source-conn [{:db/id 1 :block/uuid (random-uuid)}])
+           _ (d/transact! source-conn [[:db/retractEntity 1]])
+           _ (d/transact! source-conn (sqlite-create-graph/build-db-initial-data "{}"))
            export-edn (sqlite-export/build-export @source-conn {:export-type :graph})
            source-purple-eid (some (fn [[e a v]]
                                      (when (and (= a :db/ident)

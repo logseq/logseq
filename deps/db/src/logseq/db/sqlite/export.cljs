@@ -1334,24 +1334,26 @@
 (defn validate-import-txs
   "Dry-runs import txs against db and validates the resulting local DB.
    Returns {:db db-after :tx-data tx-data} when valid or {:error string} when invalid."
-  [txs db]
-  (if-let [error (:error txs)]
-    {:error error}
-    (try
-      (let [tx-data (import-tx-data txs)
-            db-after (:db-after (d/with db tx-data))
-            validation (db-validate/validate-local-db! db-after)]
-        (if-let [errors (seq (:errors validation))]
-          (do
-            (js/console.error "Imported EDN has validation errors:")
-            (pprint/pprint errors)
-            {:error (str "The imported EDN has " (count errors) " validation error(s)")
-             :db db-after})
-          {:db db-after
-           :tx-data tx-data}))
-      (catch :default e
-        (js/console.error "Unexpected import EDN validation error:" e)
-        {:error (str "The imported EDN is unexpectedly invalid: " (pr-str (ex-message e)))}))))
+  ([txs db]
+   (validate-import-txs txs db {:edn-label "imported EDN"}))
+  ([txs db {:keys [edn-label]
+            :or {edn-label "imported EDN"}}]
+   (if-let [error (:error txs)]
+     {:error error}
+     (try
+       (let [tx-data (import-tx-data txs)
+             db-after (:db-after (d/with db tx-data))
+             validation (db-validate/validate-local-db! db-after)]
+         (if-let [errors (seq (:errors validation))]
+           (do
+             (js/console.error (str (string/capitalize edn-label) " has validation errors:"))
+             (pprint/pprint errors)
+             {:error (str "The " edn-label " has " (count errors) " validation error(s)")})
+           {:db db-after
+            :tx-data tx-data}))
+       (catch :default e
+         (js/console.error (str "Unexpected " edn-label " validation error:") e)
+         {:error (str "The " edn-label " is unexpectedly invalid: " (pr-str (ex-message e)))})))))
 
 (defn create-conn
   "Create a conn for a DB graph seeded with initial data"
@@ -1368,7 +1370,7 @@
   (try
     (let [import-conn (create-conn)
           txs (build-import export-edn @import-conn {})]
-      (validate-import-txs txs @import-conn))
+      (validate-import-txs txs @import-conn {:edn-label "exported EDN"}))
     (catch :default e
       (js/console.error "Unexpected export-edn validation error:" e)
       {:error (str "The exported EDN is unexpectedly invalid: " (pr-str (ex-message e)))})))
