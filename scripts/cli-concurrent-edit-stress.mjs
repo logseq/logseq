@@ -336,7 +336,8 @@ function expectedHttpRace(parsed, context = {}) {
     (Number.isInteger(context.id) &&
       rawViewHistoryOps.has(context.op) &&
       parsed?.error?.code === "exception" &&
-      message.startsWith("Nothing found for entity id (:block/uuid"))
+      (message.startsWith("Nothing found for entity id (:block/uuid") ||
+        message.startsWith("Nothing found for entity id [:block/uuid")))
   );
 }
 
@@ -1076,6 +1077,10 @@ function liveBlocksQuery(page) {
   return `[:find [(pull ?b [:db/id :block/uuid]) ...] :where [?p :block/name ${ednString(page.toLowerCase())}] [?b :block/page ?p] (not [?b :block/name])]`;
 }
 
+export function blockByUuidQuery(uuidValue) {
+  return `[:find ?b . :where [?b :block/uuid #uuid ${ednString(uuidValue)}]]`;
+}
+
 function pageByNameQuery(page) {
   return `[:find (pull ?p [:db/id :block/uuid :block/name :block/title]) . :where [?p :block/name ${ednString(page.toLowerCase())}]]`;
 }
@@ -1092,6 +1097,10 @@ function normalizedUuidString(value) {
 
 function pageUuidFromQueryResult(response) {
   return normalizedUuidString(response.parsed?.data?.result?.["block/uuid"]);
+}
+
+export function blockExistsFromQueryResult(response) {
+  return Number.isInteger(response.parsed?.data?.result);
 }
 
 function liveBlocksFromQueryResult(response) {
@@ -1258,6 +1267,43 @@ function chooseActiveUuid(state) {
   }
   const uuidValue = state.activeBlockUuids.get(id);
   return uuidValue ? { id, uuid: uuidValue } : null;
+}
+
+async function blockStillExists(opts, block, context = {}) {
+  const response = await runCli(
+    opts,
+    ["query", "--graph", opts.graph, "--query", blockByUuidQuery(block.uuid)],
+    { ...context, op: "check-live-block", sourceOp: context.op, id: block.id, uuid: block.uuid },
+  );
+  return blockExistsFromQueryResult(response);
+}
+
+async function chooseLiveActiveUuid(opts, state, context = {}) {
+  const candidates = Array.from(state.activeIds)
+    .map((id) => {
+      const uuidValue = state.activeBlockUuids.get(id);
+      return uuidValue ? { id, uuid: uuidValue } : null;
+    })
+    .filter(Boolean);
+  candidates.sort(() => Math.random() - 0.5);
+
+  for (const block of candidates.slice(0, 4)) {
+    if (await blockStillExists(opts, block, context)) {
+      return block;
+    }
+
+    state.activeIds.delete(block.id);
+    state.activeBlockUuids.delete(block.id);
+    logEvent(opts, {
+      event: "skip-stale-raw-target",
+      level: "info",
+      context,
+      id: block.id,
+      uuid: block.uuid,
+    });
+  }
+
+  return null;
 }
 
 function chooseDistinctActiveUuids(state) {
@@ -1688,9 +1734,12 @@ async function findViewsPageUuid(opts, context = {}) {
 }
 
 async function createReferenceView(opts, state, context, featureType, title) {
-  const target = chooseActiveUuid(state);
+  const target = await chooseLiveActiveUuid(opts, state, context);
+  if (!target) {
+    return null;
+  }
   const viewsPageUuid = await findViewsPageUuid(opts, context);
-  if (!target || !viewsPageUuid) {
+  if (!viewsPageUuid) {
     return null;
   }
   const now = Date.now();
@@ -1706,9 +1755,12 @@ async function createReferenceView(opts, state, context, featureType, title) {
 }
 
 async function applyRawCreatePropertyHistory(opts, state, context) {
-  const target = chooseActiveUuid(state);
+  const target = await chooseLiveActiveUuid(opts, state, context);
+  if (!target) {
+    return;
+  }
   const viewsPageUuid = await findViewsPageUuid(opts, context);
-  if (!target || !viewsPageUuid) {
+  if (!viewsPageUuid) {
     return;
   }
   const now = Date.now();
@@ -1745,9 +1797,12 @@ async function applyRawToggleReaction(opts, state, context) {
 }
 
 async function applyRawDeleteViewTargetWithRelatedEntities(opts, state, context) {
-  const target = chooseActiveUuid(state);
+  const target = await chooseLiveActiveUuid(opts, state, context);
+  if (!target) {
+    return;
+  }
   const viewsPageUuid = await findViewsPageUuid(opts, context);
-  if (!target || !viewsPageUuid) {
+  if (!viewsPageUuid) {
     return;
   }
   const now = Date.now();

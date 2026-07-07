@@ -6,6 +6,8 @@ import test from "node:test";
 
 import {
   bootstrapStressPageNames,
+  blockByUuidQuery,
+  blockExistsFromQueryResult,
   classifyHttpResult,
   classifyCliResult,
   clientRuntimeOptions,
@@ -112,19 +114,36 @@ test("classifies stale raw outliner block property failures as race outcomes", (
 });
 
 test("classifies stale raw view targets as race outcomes", () => {
-  assert.equal(
-    classifyHttpResult(
-      { ok: false, status: 500 },
-      {
-        error: {
-          code: "exception",
-          message: 'Nothing found for entity id (:block/uuid #uuid "b5cf1ff2-1403-4eed-9449-d326b1e9efad")',
+  for (const message of [
+    'Nothing found for entity id (:block/uuid #uuid "b5cf1ff2-1403-4eed-9449-d326b1e9efad")',
+    'Nothing found for entity id [:block/uuid #uuid "b5cf1ff2-1403-4eed-9449-d326b1e9efad"]',
+  ]) {
+    assert.equal(
+      classifyHttpResult(
+        { ok: false, status: 500 },
+        {
+          error: {
+            code: "exception",
+            message,
+          },
         },
-      },
-      { id: 231, op: "http-create-unlinked-references-view" },
-    ).outcome,
-    "race-conflict",
+        { id: 231, op: "http-create-unlinked-references-view" },
+      ).outcome,
+      "race-conflict",
+    );
+  }
+});
+
+test("builds block uuid lookup queries for raw view target checks", () => {
+  assert.equal(
+    blockByUuidQuery("b5cf1ff2-1403-4eed-9449-d326b1e9efad"),
+    '[:find ?b . :where [?b :block/uuid #uuid "b5cf1ff2-1403-4eed-9449-d326b1e9efad"]]',
   );
+});
+
+test("detects existing blocks from uuid lookup query results", () => {
+  assert.equal(blockExistsFromQueryResult({ parsed: { data: { result: 231 } } }), true);
+  assert.equal(blockExistsFromQueryResult({ parsed: { data: { result: null } } }), false);
 });
 
 test("classifies required outliner no-op results as failures", () => {
