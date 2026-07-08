@@ -23,6 +23,7 @@ import {
   parseArgs,
   stressPageNames,
   stressConfigText,
+  stressReferenceViewOrder,
   syncDownloadArgs,
   syncEnsureKeysArgs,
   syncNeedsEnsureKeys,
@@ -522,6 +523,17 @@ test("bootstrap stress pages exclude auto-created journal pages", () => {
 test("today journal page name uses the local calendar date", () => {
   assert.equal(todayJournalPageName({}, new Date("2026-07-01T16:30:00+08:00")), "Jul 1st, 2026");
   assert.equal(todayJournalPageName({ todayDate: "2026-07-02" }), "Jul 2nd, 2026");
+});
+
+test("reference view stress orders stay in short fractional-index form", () => {
+  assert.equal(stressReferenceViewOrder({ seq: 35 }, 0), "s2");
+  assert.equal(stressReferenceViewOrder({ seq: 35 }, 1), "t2");
+
+  for (let seq = 0; seq < 1000; seq += 1) {
+    assert.match(stressReferenceViewOrder({ seq }, 0), /^[a-z][0-9]$/);
+    assert.match(stressReferenceViewOrder({ seq }, 1), /^[a-z][0-9]$/);
+    assert.notEqual(stressReferenceViewOrder({ seq }, 0), stressReferenceViewOrder({ seq }, 1));
+  }
 });
 
 test("raw page delete/restore uses unique operation-owned page titles", () => {

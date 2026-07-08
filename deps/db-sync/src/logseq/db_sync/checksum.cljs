@@ -62,24 +62,6 @@
    (and (string? checksum)
         (re-matches #"[0-9a-fA-F]{16}" checksum))))
 
-(defn- empty-db?
-  [db]
-  (empty? (d/datoms db :eavt)))
-
-(defn- incremental-initial-state
-  [checksum db-before]
-  (cond
-    (valid-checksum? checksum)
-    (checksum->state checksum)
-
-    (and (nil? checksum)
-         (empty-db? db-before))
-    [0 0]
-
-    :else
-    (throw (ex-info "Cannot update checksum incrementally without a valid previous checksum"
-                    {:type :db-sync/checksum-incremental-missing-previous-checksum}))))
-
 (defn- state->checksum
   [[fnv djb]]
   (str (unsigned-hex fnv)
@@ -435,32 +417,6 @@
       (let [initial-state (if (valid-checksum? checksum)
                             (checksum->state checksum)
                             (checksum->state (recompute-checksum db-before)))
-            {:keys [removed added]} (net-tuple-delta db-before db-after after-e2ee? tx-data)
-            state-after-removals (reduce-kv (fn [checksum-state tuple count]
-                                              (apply-digest-n checksum-state tuple count subtract-digest))
-                                            initial-state
-                                            removed)
-            state-after-additions (reduce-kv (fn [checksum-state tuple count]
-                                               (apply-digest-n checksum-state tuple count add-digest))
-                                             state-after-removals
-                                             added)]
-        (state->checksum state-after-additions)))))
-
-(defn update-checksum-no-recompute
-  [checksum {:keys [db-before db-after tx-data]}]
-  (let [before-e2ee? (ldb/get-graph-rtc-e2ee? db-before)
-        after-e2ee? (ldb/get-graph-rtc-e2ee? db-after)
-        tx-data (or tx-data [])]
-    (cond
-      (not= before-e2ee? after-e2ee?)
-      (throw (ex-info "Cannot update checksum incrementally when E2EE mode changes"
-                      {:type :db-sync/checksum-incremental-e2ee-mode-changed}))
-
-      (empty? tx-data)
-      checksum
-
-      :else
-      (let [initial-state (incremental-initial-state checksum db-before)
             {:keys [removed added]} (net-tuple-delta db-before db-after after-e2ee? tx-data)
             state-after-removals (reduce-kv (fn [checksum-state tuple count]
                                               (apply-digest-n checksum-state tuple count subtract-digest))
