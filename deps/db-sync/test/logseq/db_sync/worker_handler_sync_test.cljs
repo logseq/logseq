@@ -1156,6 +1156,38 @@
           (is (= (count tx-data) (reduce + @tx-data-counts)))
           (is (every? #(<= % 500) @tx-data-counts)))))))
 
+(deftest tx-batch-large-entry-updates-checksum-once-for-logical-tx-test
+  (testing "large tx chunks append visible tx-log rows but update stored checksum once for the full logical tx"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-checksum-page"
+                                    :block/title "large-checksum-page"}])
+              t-before (storage/get-t sql)
+              block-count 1200
+              tx-data (large-block-insert-tx page-uuid block-count)
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              original-set-checksum! storage/set-checksum!
+              checksum-updates (atom [])
+              response (with-redefs [storage/set-checksum! (fn [sql* checksum]
+                                                             (swap! checksum-updates conj checksum)
+                                                             (original-set-checksum! sql* checksum))
+                                     ws/broadcast! (fn [& _] nil)]
+                         (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (> (:t response) (inc t-before)))
+          (is (= 1 (count @checksum-updates)))
+          (is (= (sync-checksum/recompute-checksum @conn)
+                 (storage/get-checksum sql))))))))
+
 (deftest finished-snapshot-upload-persists-provided-checksum-test
   (async done
          (let [sql (test-sql/make-sql)

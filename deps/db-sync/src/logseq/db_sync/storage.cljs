@@ -192,14 +192,15 @@
       (with-sql-transaction!
         sql
         (fn []
-          (let [prev-checksum (get-checksum sql)
-                checksum (sync-checksum/update-checksum
-                          prev-checksum
-                          (assoc tx-report :tx-data normalized-data))
-                new-t (inc (get-t sql))]
+          (let [new-t (inc (get-t sql))]
             (append-tx! sql new-t tx-str created-at (:outliner-op tx-meta))
             (set-t! sql new-t)
-            (set-checksum! sql checksum)))))))
+            (when-not (:db-sync/skip-checksum-update? tx-meta)
+              (let [prev-checksum (get-checksum sql)
+                    checksum (sync-checksum/update-checksum
+                              prev-checksum
+                              (assoc tx-report :tx-data normalized-data))]
+                (set-checksum! sql checksum)))))))))
 
 (defn- listen-db-updates!
   [sql conn]

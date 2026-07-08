@@ -463,6 +463,9 @@
   [self conn tx-data {:keys [tx-id outliner-op]} request-context]
   (let [db-before @conn
         tx-meta (apply-client-tx-meta request-context outliner-op)
+        sql (when self (.-sql ^js self))
+        prev-checksum (when sql (storage/get-checksum sql))
+        logical-tx-data (volatile! [])
         chunk-count (volatile! 0)]
     (log/info :db-sync/apply-large-tx-entry-start
               {:graph-id (:graph-id request-context)
@@ -471,18 +474,38 @@
                :tx-count (count tx-data)
                :max-chunk-items large-tx-max-chunk-items})
     (try
-      ((if-let [sql (when self (.-sql ^js self))]
+      (when sql
+        (d/listen! conn ::large-logical-tx-checksum
+                   (fn [{:keys [tx-data]}]
+                     (vswap! logical-tx-data into tx-data))))
+      ((if sql
          #(storage/with-sql-transaction! sql %)
          (fn [f] (f)))
        (fn []
-         (reduce-ordered-tx-chunks
-          db-before
-          (fn [_ chunk]
-            (vswap! chunk-count inc)
-            (ldb/transact! conn chunk tx-meta)
-            nil)
-          nil
-          tx-data)))
+         (try
+           (reduce-ordered-tx-chunks
+            db-before
+            (fn [_ chunk]
+              (vswap! chunk-count inc)
+              (ldb/transact! conn
+                             chunk
+                             (cond-> tx-meta
+                               sql
+                               (assoc :db-sync/skip-checksum-update? true)))
+              nil)
+            nil
+            tx-data)
+           (when sql
+             (storage/set-checksum!
+              sql
+              (sync-checksum/update-checksum
+               prev-checksum
+               {:db-before db-before
+                :db-after @conn
+                :tx-data @logical-tx-data})))
+           (finally
+             (when sql
+               (d/unlisten! conn ::large-logical-tx-checksum))))))
       (log/info :db-sync/apply-large-tx-entry-done
                 {:graph-id (:graph-id request-context)
                  :tx-id tx-id
