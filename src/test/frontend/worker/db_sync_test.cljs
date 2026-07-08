@@ -1136,6 +1136,7 @@
                               (is nil (str error))))
                    (p/finally
                      (fn []
+                       (sync-apply/mark-pending-txs-false! test-repo [tx-id])
                        (set! js/setTimeout original-set-timeout)
                        (set! js/clearTimeout original-clear-timeout)
                        (if platform-prev
