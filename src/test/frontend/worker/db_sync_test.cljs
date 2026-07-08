@@ -702,6 +702,64 @@
             (is (= 0 @send-calls)))
           (#'sync-apply/set-upload-stopped! test-repo false))))))
 
+(deftest flush-pending-splits-large-upload-request-test
+  (async done
+         (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+               tx-id (random-uuid)
+               split-tempid "large-upload-request-split"
+               tx-data (vec (concat
+                             (repeat 4999 [:db/add [:block/uuid (:block/uuid child1)]
+                                           :block/title
+                                           "large upload request split"])
+                             [[:db/add split-tempid :block/uuid (random-uuid)]
+                              [:db/add split-tempid :block/title "grouped split tail"]]))
+               sent (atom [])
+               client {:repo test-repo
+                       :graph-id "graph-1"
+                       :inflight (atom [])
+                       :ws (doto (js-obj)
+                             (aset "readyState" 1)
+                             (aset "send" (fn [raw]
+                                            (swap! sent conj
+                                                   (js->clj (js/JSON.parse raw)
+                                                            :keywordize-keys true)))))}]
+           (-> (with-datascript-conns
+                 conn
+                 client-ops-conn
+                 (fn []
+                   (-> (p/with-redefs [worker-state/online? (constantly true)
+                                        sync-crypt/graph-e2ee? (constantly false)]
+                         (reset! sync-apply/*repo->latest-remote-tx {test-repo 0})
+                         (client-op/update-local-tx test-repo 0)
+                         (seed-client-op-txs!
+                          test-repo
+                          [{:db-sync/tx-id tx-id
+                            :db-sync/pending? true
+                            :db-sync/created-at 1
+                            :db-sync/outliner-op :insert-blocks
+                            :db-sync/normalized-tx-data tx-data}])
+                         (p/let [_ (#'sync-apply/flush-pending! test-repo client)
+                                 _ (let [payload (first @sent)
+                                         tx-entry (first (:txs payload))
+                                         uploaded-tx (sqlite-util/read-transit-str (:tx tx-entry))]
+                                     (is (= "tx/batch" (:type payload)))
+                                     (is (nil? (:tx-id tx-entry)))
+                                     (is (= 4999 (count uploaded-tx)))
+                                     (is (= [] @(:inflight client)))
+                                     (reset! sync-apply/*repo->latest-remote-tx {test-repo 1})
+                                     (client-op/update-local-tx test-repo 1)
+                                     (#'sync-apply/flush-pending! test-repo client))]
+                           (let [payload (second @sent)
+                                 tx-entry (first (:txs payload))
+                                 uploaded-tx (sqlite-util/read-transit-str (:tx tx-entry))]
+                             (is (= "tx/batch" (:type payload)))
+                             (is (= (str tx-id) (:tx-id tx-entry)))
+                             (is (= 2 (count uploaded-tx)))
+                             (is (= [tx-id] @(:inflight client))))))
+                       (p/catch (fn [error]
+                                  (is nil (str error)))))))
+               (p/finally done)))))
+
 (deftest flush-pending-reports-upload-response-timeout-test
   (async done
          (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)

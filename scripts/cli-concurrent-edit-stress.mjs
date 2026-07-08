@@ -1730,10 +1730,15 @@ function reactionEmojiId(context) {
 }
 
 export function stressReferenceViewOrder(context = {}, offset = 0) {
+  const base62Digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
   const seq = Number.isInteger(context.seq) ? context.seq : 0;
   const index = Math.abs(seq * 2 + offset);
-  const bucket = String.fromCharCode("a".charCodeAt(0) + (index % 26));
-  return `${bucket}${Math.floor(index / 26) % 10}`;
+  const digit = base62Digits[index % base62Digits.length];
+  if (index < base62Digits.length) {
+    return `a${digit}`;
+  }
+  const bucket = base62Digits[Math.floor((index - base62Digits.length) / base62Digits.length)];
+  return `b${bucket}${digit}`;
 }
 
 async function findViewsPageUuid(opts, context = {}) {
