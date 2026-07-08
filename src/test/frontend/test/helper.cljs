@@ -4,20 +4,14 @@
             [datascript.core :as d]
             [frontend.background-tasks]
             [frontend.config :as config]
-            [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
-            [frontend.handler.db-based.property :as db-property-handler]
-            [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
-            [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
             [logseq.db :as ldb]
-            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.test.helper :as db-test]))
 
 (defn react-components
@@ -38,13 +32,12 @@
   (let [db-name (conn/get-repo-path test-db)
         db-conn (d/create-conn (merge db-schema/schema schema))]
     (conn/destroy-all!)
-    (swap! conn/conns assoc db-name db-conn))
-  (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
-  (let [conn (conn/get-db test-db false)]
-    (when build-init-data? (d/transact! conn (sqlite-create-graph/build-db-initial-data config/config-default-content)))
-    (d/listen! conn ::listen-db-changes!
+    (swap! conn/conns assoc db-name db-conn)
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (when build-init-data? (d/transact! db-conn (sqlite-create-graph/build-db-initial-data config/config-default-content)))
+    (d/listen! db-conn ::listen-db-changes!
                (fn [tx-report]
-                 (worker-pipeline/invoke-hooks conn tx-report {})))))
+                 (worker-pipeline/invoke-hooks db-conn tx-report {})))))
 
 (defn destroy-test-db!
   []
@@ -92,33 +85,7 @@
         ;; Allow pages to reference each other via uuid and for unordered init-tx
         init-index (map #(select-keys % [:block/uuid]) init-tx)]
     ;; (cljs.pprint/pprint _txs)
-    (db/transact! test-db (concat init-index init-tx block-props-tx))))
-
-(defn initial-test-page-and-blocks
-  [& {:keys [page-uuid]}]
-  (let [page-uuid (or page-uuid (random-uuid))
-        first-block-uuid (random-uuid)
-        second-block-uuid (random-uuid)
-        page-id [:block/uuid page-uuid]]
-    (->>
-     [;; page
-      {:block/uuid page-uuid
-       :block/name "test"
-       :block/title "Test"
-       :block/tags #{:logseq.class/Page}}
-      ;; first block
-      {:block/uuid first-block-uuid
-       :block/page page-id
-       :block/parent page-id
-       :block/order (db-order/gen-key nil)
-       :block/title "block 1"}
-      ;; second block
-      {:block/uuid second-block-uuid
-       :block/page page-id
-       :block/parent page-id
-       :block/order (db-order/gen-key nil)
-       :block/title "block 2"}]
-     (map sqlite-util/block-with-timestamps))))
+    (conn/transact! test-db (concat init-index init-tx block-props-tx))))
 
 (defn start-and-destroy-db
   "Sets up a db connection and current repo like fixtures/reset-datascript. It
@@ -129,7 +96,7 @@
   (start-test-db! start-opts)
   (when-let [init-f (:init-data start-opts)]
     (assert (fn? f) "init-data should be a fn")
-    (init-f (db/get-db test-db false)))
+    (init-f (conn/get-db test-db false)))
   (f)
   (state/set-current-repo! nil)
   (destroy-test-db!))
@@ -140,24 +107,6 @@
   when use together with other map-type fixtures"
     {:before start-test-db!
      :after #(destroy-test-db!)}))
-
-(defn save-block!
-  "Wrapper around editor-handler/save-block! that also adds tags"
-  [repo block-uuid content {:keys [tags]}]
-  (editor-handler/save-block! repo block-uuid content)
-  (doseq [tag tags]
-    (db-property-handler/set-block-property! block-uuid :block/tags
-                                             (db/get-page tag))))
-
-(defn create-page!
-  [title & {:as opts}]
-  (let [repo (state/get-current-repo)
-        conn (db/get-db repo false)
-        [page-name _page-uuid] (worker-page/create! conn title opts)]
-    page-name))
-
-(defn find-page-by-title [page-title]
-  (db-test/find-page-by-title (conn/get-db) page-title))
 
 (defn find-block-by-content [block-title]
   (db-test/find-block-by-content (conn/get-db) block-title))

@@ -5,7 +5,6 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]
-            [frontend.db.utils :as db-utils]
             [frontend.handler.command-palette :as palette-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.plugin :as plugin-handler]
@@ -19,6 +18,7 @@
             [logseq.sdk.core]
             [logseq.sdk.experiments]
             [logseq.sdk.utils :as sdk-utils]
+            [promesa.core :as p]
             [reitit.frontend.easy :as rfe]))
 
 (defn get_state_from_store
@@ -84,11 +84,10 @@
 
 (def get_current_graph_recent
   (fn []
-    (some->> (recent-handler/get-recent-pages)
-             (map #(db-utils/entity (:db/id %)))
-             (remove nil?)
-             (sdk-utils/normalize-keyword-for-json)
-             (bean/->js))))
+    (p/let [recent-pages (recent-handler/get-recent-pages)]
+      (some->> recent-pages
+               (sdk-utils/normalize-keyword-for-json)
+               (bean/->js)))))
 
 (def get_current_graph
   (fn []

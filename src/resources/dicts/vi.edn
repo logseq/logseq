@@ -199,7 +199,6 @@
  :cmdk.action/search "Tìm kiếm"
  :cmdk.action/trigger "Kích hoạt"
 
- :cmdk.create/configure-tag "Cấu hình thẻ"
  :cmdk.create/page "Tạo trang"
  :cmdk.create/tag "Tạo thẻ"
 
@@ -226,7 +225,6 @@
  :cmdk.group/recently-updated "Cập nhật gần đây"
  :cmdk.group/themes "Chủ đề"
 
- :cmdk.info/configure-tag "Cấu hình #{1}"
  :cmdk.info/create-page "Tạo trang có tên '{1}'"
  :cmdk.info/create-tag "Tạo thẻ có tên '{1}'"
 

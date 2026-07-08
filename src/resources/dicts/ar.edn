@@ -178,7 +178,6 @@
  :cmdk.action/search "بحث"
  :cmdk.action/trigger "تنفيذ"
 
- :cmdk.create/configure-tag "تكوين الوسم"
  :cmdk.create/page "إنشاء صفحة"
  :cmdk.create/tag "إنشاء وسم"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "محدّثة مؤخراً"
  :cmdk.group/themes "السمات"
 
- :cmdk.info/configure-tag "تهيئة الوسم #{1}"
  :cmdk.info/create-page "إنشاء صفحة '{1}'"
  :cmdk.info/create-tag "إنشاء وسم '{1}'"
 

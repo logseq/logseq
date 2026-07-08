@@ -9,7 +9,6 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [interpolate-rich-text-node locale-join-rich-text-node locale-format-date t]]
             [frontend.date :as date]
-            [frontend.db :as db]
             [frontend.dicts :as dicts]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.sync :as rtc-handler]
@@ -32,7 +31,6 @@
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
             [logseq.common.version :as build-version]
-            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -456,10 +454,14 @@
        :on-change (fn [e]
                     (let [format (util/evalue e)]
                       (when-not (string/blank? format)
-                        (p/do!
-                         (property-handler/set-block-property! (:block/uuid (db/entity :logseq.class/Journal))
-                                                               :logseq.property.journal/title-format
-                                                               format)
+                        (p/let [journal-class (state/<invoke-db-worker :thread-api/pull
+                                                                       (state/get-current-repo)
+                                                                       [:block/uuid]
+                                                                       :logseq.class/Journal)]
+                         (property-handler/set-block-property! (:block/uuid journal-class)
+                                                              :logseq.property.journal/title-format
+                                                              format)
+                         (state/set-date-formatter! (state/get-current-repo) format)
                          (notification/show! (t :settings.general/refresh-required-feedback)))
                         (shui/dialog-close-all!))))}
       (for [format (sort (date/journal-title-formatters))]
@@ -520,15 +522,18 @@
          (config-handler/set-config! :default-home new-home)
          (notification/show! (t :settings.features/home-default-page-update-success) :success)))
 
-      ;; FIXME: home page should be db id instead of page name
-      (ldb/get-page (db/get-db) value)
-      (let [home (get (state/get-config) :default-home {})
-            new-home (assoc home :page value)]
-        (config-handler/set-config! :default-home new-home)
-        (notification/show! (t :settings.features/home-default-page-update-success) :success))
-
       :else
-      (notification/show! (t :settings.features/page-not-found value) :warning))))
+      ;; FIXME: home page should be db id instead of page name
+      (p/let [page (state/<invoke-db-worker :thread-api/pull
+                                            (state/get-current-repo)
+                                            [:db/id]
+                                            [:block/name (util/page-name-sanity-lc value)])]
+        (if page
+          (let [home (get (state/get-config) :default-home {})
+                new-home (assoc home :page value)]
+            (config-handler/set-config! :default-home new-home)
+            (notification/show! (t :settings.features/home-default-page-update-success) :success))
+          (notification/show! (t :settings.features/page-not-found value) :warning))))))
 
 (defn enable-all-pages-public-row [t enable-all-pages-public?]
   (toggle "all pages public"
@@ -1190,18 +1195,20 @@
   []
   (let [[invite-email set-invite-email!] (hooks/use-state "")
         [loading? set-loading!] (hooks/use-state true)
+        [graph-uuid set-graph-uuid!] (hooks/use-state nil)
         current-repo (state/get-current-repo)
         manager? (user-handler/manager? current-repo)
         users-info (rfx/use-sub [:rtc/users-info])
         users (get users-info current-repo)
         invite-user! (fn []
-                       (let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
-                         (when-not (string/blank? invite-email)
-                           (when graph-uuid
-                             (rtc-handler/<rtc-invite-email graph-uuid invite-email)))))]
+                       (when-not (string/blank? invite-email)
+                         (when graph-uuid
+                           (rtc-handler/<rtc-invite-email graph-uuid invite-email))))]
     (hooks/use-effect!
      #(do
-        (p/let [_ (rtc-handler/<rtc-get-users-info)]
+        (p/let [graph-uuid (state/<invoke-db-worker :thread-api/get-rtc-graph-uuid current-repo)
+                _ (rtc-handler/<rtc-get-users-info)]
+          (set-graph-uuid! graph-uuid)
           (set-loading! false))
         nil)
      [])
@@ -1240,11 +1247,10 @@
                 (shui/dropdown-menu-content
                  {:align "end"}
                  (shui/dropdown-menu-item
-                  {:class "remove-member-menu-item"
-                   :on-click (fn []
-                               (let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))
-                                     member-id user-uuid]
-                                 (when (and graph-uuid member-id)
+	                   {:class "remove-member-menu-item"
+	                    :on-click (fn []
+	                               (let [member-id user-uuid]
+	                                 (when (and graph-uuid member-id)
                                    (-> (rtc-handler/<rtc-remove-member! graph-uuid member-id)
                                        (p/then (fn []
                                                  (rtc-handler/<rtc-get-users-info true)))

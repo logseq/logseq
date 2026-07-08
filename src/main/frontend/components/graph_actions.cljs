@@ -1,8 +1,8 @@
 (ns frontend.components.graph-actions
-  (:require [frontend.db :as db]
-            [frontend.handler.route :as route-handler]
+  (:require [frontend.handler.route :as route-handler]
             [frontend.state :as state]
-            [logseq.shui.ui :as shui]))
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]))
 
 (defn redirect-to-node!
   [node]
@@ -18,34 +18,40 @@
 
 (defn- node-preview-ref
   [node]
-  (or (some-> (:uuid node) str)
-      (some-> (:db-id node) db/entity :block/uuid str)
-      (when (:page? node)
-        (:label node))))
+  (if-let [node-ref (or (:uuid node) (:block/uuid node))]
+    (p/resolved (str node-ref))
+    (p/let [block (when-let [db-id (:db-id node)]
+                    (state/<invoke-db-worker :thread-api/pull
+                                             (state/get-current-repo)
+                                             [:block/uuid]
+                                             db-id))]
+      (or (some-> (:block/uuid block) str)
+          (when (:page? node)
+            (:label node))))))
 
 (defn preview-node!
   [node event]
   (when node
-    (let [page-name (node-preview-ref node)
-          page-preview-option (cond->
-                                {:repo (state/get-current-repo)
-                                 :page-name page-name
-                                 :scroll-container (some-> js/document
-                                                           (.querySelector ".ls-preview-popup"))
-                                 :preview? true}
-                                (:db-id node)
-                                (assoc :db/id (:db-id node)))
-          content (fn []
-                    [:div.tippy-wrapper.as-page
-                     {:tab-index -1
-                      :style {:width "100%"
-                              :max-height "min(760px, calc(100vh - 64px))"
-                              :overflow "auto"
-                              :text-align "left"
-                              :font-weight "normal"
-                              :padding-bottom 64}}
-                     (when-let [page-cp (state/get-page-blocks-cp)]
-                       (page-cp page-preview-option))])]
+    (p/let [page-name (node-preview-ref node)
+            page-preview-option (cond->
+                                  {:repo (state/get-current-repo)
+                                   :page-name page-name
+                                   :scroll-container (some-> js/document
+                                                             (.querySelector ".ls-preview-popup"))
+                                   :preview? true}
+                                  (:db-id node)
+                                  (assoc :db/id (:db-id node)))
+            content (fn []
+                      [:div.tippy-wrapper.as-page
+                       {:tab-index -1
+                        :style {:width "100%"
+                                :max-height "min(760px, calc(100vh - 64px))"
+                                :overflow "auto"
+                                :text-align "left"
+                                :font-weight "normal"
+                                :padding-bottom 64}}
+                       (when-let [page-cp (state/get-page-blocks-cp)]
+                         (page-cp page-preview-option))])]
       (shui/popup-show! [(.-clientX event) (.-clientY event)]
                         content
                         {:id :graph-node-preview

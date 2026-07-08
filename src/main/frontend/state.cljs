@@ -4,11 +4,9 @@
             [cljs.core.async :as async :refer [>!]]
             [clojure.set :as set]
             [clojure.string :as string]
-            [datascript.core :as d]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [electron.locale :as electron-locale]
-            [frontend.db.conn-state :as db-conn-state]
             [frontend.dicts :as dicts]
             [frontend.graph-tab :as graph-tab]
             [frontend.mobile.util :as mobile-util]
@@ -17,11 +15,11 @@
             [frontend.storage :as storage]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
+            [frontend.util.entity :as entity]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -390,14 +388,6 @@
 (register-rfx-state-subs!)
 
 (declare get-state update-state! set-state!)
-(defn async-query-requested?
-  [query-key]
-  (get (get-state :db/async-queries) query-key))
-
-(defn mark-async-query-requested!
-  [query-key]
-  (update-state! :db/async-queries assoc query-key true))
-
 (defn clear-async-queries!
   []
   (set-state! :db/async-queries {}))
@@ -554,14 +544,18 @@ should be done through this fn in order to get global config and config defaults
   (= (keyword (get-preferred-format))
      :markdown))
 
+(def ^:private default-date-formatter "MMM do, yyyy")
+
+(defn set-date-formatter!
+  [repo formatter]
+  (when repo
+    (set-state! :ui/date-formatter (or formatter default-date-formatter) :nested-path repo)))
+
 (defn get-date-formatter
   []
-  (or
-   (when-let [repo (get-current-repo)]
-     (when-let [conn (db-conn-state/get-conn repo)]
-       (get (entity-plus/entity-memoized @conn :logseq.class/Journal)
-            :logseq.property.journal/title-format)))
-   "MMM do, yyyy"))
+  (or (when-let [repo (get-current-repo)]
+        (get-state :ui/date-formatter :nested-path repo))
+      default-date-formatter))
 
 (defn custom-shortcuts []
   (merge (try (storage/get :ls-shortcuts)
@@ -1174,10 +1168,10 @@ should be done through this fn in order to get global config and config defaults
      (let [blocks (->> blocks
                        (remove nil?)
                        (remove (fn [block]
-                                 (when-let [id (some-> block (dom/attr "blockid"))]
-                                   (when-let [conn (db-conn-state/get-conn (get-current-repo))]
-                                     (when-let [entity (d/entity @conn [:block/uuid (uuid id)])]
-                                       (ldb/recycled? entity))))))
+                                 (let [class-list (some-> block .-classList)]
+                                   (and class-list
+                                        (.contains class-list "line-through")
+                                        (.contains class-list "opacity-70")))))
                        vec)]
        (set-selection-blocks-aux! blocks)
        (when direction (set-state! :selection/direction direction))
@@ -1753,13 +1747,22 @@ should be done through this fn in order to get global config and config defaults
 (defn sidebar-add-block!
   [repo db-id block-type]
   (when (not (util/sm-breakpoint?))
-    (let [page (and (= :page block-type)
-                    (some-> (db-conn-state/get-conn repo) deref (d/entity db-id)))]
+    (p/let [page (when (and repo (= :page block-type) (number? db-id))
+                   (<invoke-db-worker :thread-api/pull
+                                      repo
+                                      [:block/title
+                                       :logseq.property/hide?
+                                       :logseq.property/deleted-at
+                                       :logseq.property/built-in?
+                                       {:block/parent
+                                        [:db/id :logseq.property/hide? :logseq.property/deleted-at]}
+                                       {:block/tags [:db/ident]}]
+                                      db-id))]
       (if (and page
                ;; TODO: Use config/dev? when it's not a circular dep
                (not goog.DEBUG)
                (not= common-config/recycle-page-name (:block/title page))
-               (or (and (ldb/hidden? page) (not (ldb/property? page)))
+               (or (and (ldb/hidden? page) (not (entity/property? page)))
                    (and (ldb/built-in? page) (ldb/private-built-in-page? page))))
         (pub-event! [:notification/show {:content "Cannot open an internal page." :status :warning}])
         (when db-id
@@ -1855,7 +1858,7 @@ should be done through this fn in order to get global config and config defaults
    (set-selection-blocks! blocks direction)))
 
 (defn set-editing!
-  [edit-input-id content block cursor-range & {:keys [db move-cursor? container-id property-block direction event pos]
+  [edit-input-id content block cursor-range & {:keys [move-cursor? container-id property-block direction event pos]
                                                :or {move-cursor? true}}]
   (when-not (exists? js/process)
     (when (and edit-input-id block
@@ -1888,7 +1891,7 @@ should be done through this fn in order to get global config and config defaults
           (when (and (coll? online-users) (> (count online-users) 1))
             (when-let [block-uuid (:block/uuid block)]
               (pub-event! [:rtc/presence-update {:editing-block-uuid (str block-uuid)}]))))
-        (when (= :code (:logseq.property.node/display-type (d/entity db (:db/id block))))
+        (when (= :code (:logseq.property.node/display-type block))
           (pub-event! [:editor/focus-code-editor block block-element]))
         (when-let [input (gdom/getElement edit-input-id)]
           (let [pos (count cursor-range)]

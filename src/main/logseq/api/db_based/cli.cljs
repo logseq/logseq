@@ -5,7 +5,7 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
-            [logseq.api.db-based.tools :as api-tools]
+            [logseq.api.db-based.util :as api-util]
             [logseq.common.config :as common-config]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
@@ -51,7 +51,7 @@
                              (outliner-op/batch-import-edn! edn-data {})))]
     (when error (throw (ex-info error {})))
     (ui-handler/re-render-root!)
-    (api-tools/summarize-upsert-operations ops options)))
+    (api-util/summarize-upsert-operations ops options)))
 
 (defn import-edn
   "Given EDN data as a transitized string, converts to EDN and imports it."

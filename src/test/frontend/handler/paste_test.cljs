@@ -2,7 +2,7 @@
   (:require ["/frontend/utils" :as utils]
             [cljs.test :refer [deftest are is testing]]
             [frontend.commands :as commands]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.extensions.html-parser :as html-parser]
             [frontend.format.block :as block]
             [frontend.handler.editor :as editor-handler]
@@ -174,7 +174,61 @@
                  #js {:clipboardData #js {:getData (constantly clipboard)}})]
         (is (= expected-blocks @actual-blocks))))))
 
-(deftest paste-text-parseable-preserves-og-copied-heading-page-refs
+(deftest-async editor-on-paste-embed-block-uses-worker-loaded-link
+  (let [linked-block-id #uuid "11111111-1111-1111-1111-111111111111"
+        current-block-id #uuid "22222222-2222-2222-2222-222222222222"
+        inserted-opts (atom nil)
+        clear-edit? (atom false)
+        loaded-blocks (atom [])]
+    (p/with-redefs
+     [util/stop (constantly nil)
+      state/get-current-repo (constantly "test")
+      paste-handler/get-copied-blocks (constantly (p/resolved {:graph "test"
+                                                               :embed-block? true
+                                                               :blocks [{:block/uuid linked-block-id
+                                                                         :block/properties {:ignored true}}]}))
+      utils/getCopiedBlocksFromMemory (constantly nil)
+      state/get-block-op-type (constantly nil)
+      state/get-edit-block (constantly {:block/uuid current-block-id})
+      db-async/<get-block-parents (fn [repo db-id depth]
+                                    (is (= "test" repo))
+                                    (is (= 7 db-id))
+                                    (is (= 100 depth))
+                                    (p/resolved []))
+      db-async/<get-block (fn [repo block-id opts]
+                            (swap! loaded-blocks conj block-id)
+                            (is (= "test" repo))
+                            (is (= {:children? false} opts))
+                            (p/resolved
+                             (case block-id
+                               #uuid "22222222-2222-2222-2222-222222222222"
+                               {:db/id 7
+                                :block/uuid current-block-id}
+
+                               #uuid "11111111-1111-1111-1111-111111111111"
+                               {:db/id 42
+                                :block/uuid linked-block-id})))
+      editor-handler/api-insert-new-block! (fn [_content opts]
+                                             (reset! inserted-opts opts)
+                                             (p/resolved nil))
+      state/clear-edit! (fn [] (reset! clear-edit? true))]
+      (p/let [_ ((paste-handler/editor-on-paste! nil)
+                 #js {:clipboardData #js {:getData (constantly "copied")}})]
+        (is (= {:block-uuid current-block-id
+                :sibling? true
+                :outliner-op :paste
+                :replace-empty-target? true
+                :other-attrs {:block/link 42}}
+               @inserted-opts))
+        (is (= [current-block-id linked-block-id] @loaded-blocks))
+        (is @clear-edit?)))))
+
+(deftest editing-display-type-block-uses-state-block
+  (with-redefs [state/get-edit-block (constantly {:db/id 1
+                                                  :logseq.property.node/display-type :code})]
+    (is (true? (#'paste-handler/editing-display-type-block?)))))
+
+(deftest-async paste-text-parseable-preserves-og-copied-heading-page-refs
   (let [actual-blocks (atom nil)
         date-page-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
         parsed-blocks [{:block/title "## [[2026-06-15]]"
@@ -183,40 +237,88 @@
                                       :block/uuid date-page-uuid}]
                         :logseq.property/heading 2
                         :block/level 1}]]
-    (with-redefs [state/get-edit-block (constantly {:block/page {:db/id 1}})
-                  db/entity (fn [id]
-                              (when (= id 1)
-                                {:block/name "paste target"}))
-                  block/extract-blocks (fn [& _] parsed-blocks)
-                  gp-block/with-parent-and-order (fn [_ blocks] blocks)
-                  editor-handler/paste-blocks (fn [blocks _opts]
-                                                (reset! actual-blocks blocks))]
-      (#'paste-handler/paste-text-parseable :markdown "- ## [[2026-06-15]]")
-      (is (= [{:block/title (str "[[" date-page-uuid "]]")
-               :logseq.property/heading 2}]
-             (mapv #(select-keys % [:block/title :logseq.property/heading])
-                   @actual-blocks))))))
+    (p/with-redefs [state/get-current-repo (constantly "test")
+                    state/get-edit-block (constantly {:db/id 10})
+                    db-async/<get-block-page-info
+                    (fn [_repo _block-ref]
+                      (p/resolved {:db/id 1
+                                   :block/name "paste target"}))
+                    block/extract-blocks (fn [& _] parsed-blocks)
+                    gp-block/with-parent-and-order (fn [_ blocks] blocks)
+                    editor-handler/paste-blocks (fn [blocks _opts]
+                                                  (reset! actual-blocks blocks)
+                                                  (p/resolved nil))]
+      (p/let [_ (#'paste-handler/paste-text-parseable :markdown "- ## [[2026-06-15]]")]
+        (is (= [{:block/title (str "[[" date-page-uuid "]]")
+                 :logseq.property/heading 2}]
+               (mapv #(select-keys % [:block/title :logseq.property/heading])
+                     @actual-blocks)))))))
 
-(deftest paste-text-parseable-does-not-create-empty-page-ref
+(deftest-async paste-text-parseable-resolves-page-refs-through-worker-test
+  (let [actual-blocks (atom nil)
+        page-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        parsed-blocks [{:block/title "## [[Existing Page]]"
+                        :block/uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+                        :block/refs [{:block/title "Existing Page"}]
+                        :logseq.property/heading 2
+                        :block/level 1}]
+        calls (atom [])]
+    (p/with-redefs [state/get-current-repo (constantly "test")
+                    state/get-edit-block (constantly {:db/id 10})
+                    state/get-date-formatter (constantly "yyyy-MM-dd")
+                    db-async/<get-block-page-info
+                    (fn [repo block-ref]
+                      (swap! calls conj [:get-block-page-info repo block-ref])
+                      (p/resolved {:db/id 1
+                                   :block/name "paste target"}))
+                    state/<invoke-db-worker
+                    (fn [& args]
+                      (swap! calls conj (vec args))
+                      (case (first args)
+                        :thread-api/pull
+                        (p/resolved {:block/uuid page-uuid
+                                     :block/title "Existing Page"
+                                     :block/name "existing page"})))
+                    block/extract-blocks (fn [& _] parsed-blocks)
+                    gp-block/with-parent-and-order (fn [_ blocks] blocks)
+                    editor-handler/paste-blocks (fn [blocks _opts]
+                                                  (reset! actual-blocks blocks)
+                                                  (p/resolved nil))]
+      (p/let [_ (#'paste-handler/paste-text-parseable :markdown "- ## [[Existing Page]]")]
+        (is (= [[:get-block-page-info "test" 10]
+                [:thread-api/pull "test" [:block/uuid :block/title :block/name] [:block/name "existing page"]]]
+               @calls))
+        (is (= [{:block/title (str "[[" page-uuid "]]")
+                 :logseq.property/heading 2}]
+               (mapv #(select-keys % [:block/title :logseq.property/heading])
+                     @actual-blocks)))))))
+
+(deftest-async paste-text-parseable-does-not-create-empty-page-ref
   (let [actual-blocks (atom nil)
         parsed-blocks [{:block/title "## [[2026-06-15]]"
                         :block/uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
                         :block/refs [{:block/title "2026-06-15"}]
                         :logseq.property/heading 2
                         :block/level 1}]]
-    (with-redefs [state/get-edit-block (constantly {:block/page {:db/id 1}})
-                  db/entity (fn [id]
-                              (when (= id 1)
-                                {:block/name "paste target"}))
-                  block/extract-blocks (fn [& _] parsed-blocks)
-                  gp-block/with-parent-and-order (fn [_ blocks] blocks)
-                  editor-handler/paste-blocks (fn [blocks _opts]
-                                                (reset! actual-blocks blocks))]
-      (#'paste-handler/paste-text-parseable :markdown "- ## [[2026-06-15]]")
-      (is (= [{:block/title "[[00000001-2026-0615-0000-000000000000]]"
-               :logseq.property/heading 2}]
-             (mapv #(select-keys % [:block/title :logseq.property/heading])
-                   @actual-blocks))))))
+    (p/with-redefs [state/get-current-repo (constantly "test")
+                    state/get-edit-block (constantly {:db/id 10})
+                    state/get-date-formatter (constantly "yyyy-MM-dd")
+                    db-async/<get-block-page-info
+                    (fn [_repo _block-ref]
+                      (p/resolved {:db/id 1
+                                   :block/name "paste target"}))
+                    state/<invoke-db-worker
+                    (fn [& _] (p/resolved nil))
+                    block/extract-blocks (fn [& _] parsed-blocks)
+                    gp-block/with-parent-and-order (fn [_ blocks] blocks)
+                    editor-handler/paste-blocks (fn [blocks _opts]
+                                                  (reset! actual-blocks blocks)
+                                                  (p/resolved nil))]
+      (p/let [_ (#'paste-handler/paste-text-parseable :markdown "- ## [[2026-06-15]]")]
+        (is (= [{:block/title "[[00000001-2026-0615-0000-000000000000]]"
+                 :logseq.property/heading 2}]
+               (mapv #(select-keys % [:block/title :logseq.property/heading])
+                     @actual-blocks)))))))
 
 (deftest-async editor-on-paste-prefers-blocks-from-memory-when-clipboard-custom-type-is-missing
   (let [actual-blocks (atom nil)
@@ -279,9 +381,7 @@
        [commands/delete-selection! (constantly nil)
         commands/simple-insert! (fn [_input text] (p/resolved text))
         util/stop (constantly nil)
-        util/get-selected-text (constantly "")
-        state/get-current-page (constantly nil)
-        db/get-page-format (constantly :markdown)]
+        util/get-selected-text (constantly "")]
         (p/let [result ((paste-handler/editor-on-paste! nil)
                         #js {:clipboardData #js {:getData (fn [type]
                                                             (if (= type "text/html")

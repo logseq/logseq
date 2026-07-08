@@ -2,7 +2,6 @@
   "Handles creation, editing, deletion, and focus behavior for block comment threads."
   (:require [clojure.string :as string]
             [frontend.components.block.comments-model :as comments-model]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.handler.block :as block-handler]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -11,35 +10,49 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.entity :as entity]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
-(defn- block-ref->entity
+(defn- <block-ref
   [block-ref]
   (cond
     (map? block-ref)
-    block-ref
+    (p/resolved block-ref)
 
     (uuid? block-ref)
-    (db/entity [:block/uuid block-ref])
+    (db-async/<get-block (state/get-current-repo) block-ref {:children? false})
 
     (and (string? block-ref) (util/uuid-string? block-ref))
-    (db/entity [:block/uuid (uuid block-ref)])
+    (db-async/<get-block (state/get-current-repo) (uuid block-ref) {:children? false})
 
     (number? block-ref)
-    (db/entity block-ref)
+    (db-async/<get-block (state/get-current-repo) block-ref {:children? false})
 
     :else
-    nil))
+    (p/resolved nil)))
 
 (defn- comments-area-child
   [block]
   (some (fn [child]
           (when (comments-model/comments-area? child)
             child))
-        (db/sort-by-order (:block/_parent block))))
+        (ldb/sort-by-order (:block/children block))))
+
+(defn- <block-with-children
+  [block]
+  (if-let [uuid (:block/uuid block)]
+    (p/let [{loaded-block :block children :children}
+            (db-async/<get-block-with-children
+             (state/get-current-repo)
+             uuid
+             {:children? true
+              :include-collapsed-children? true
+              :skip-refresh? true})]
+      (assoc (or loaded-block block) :block/children children))
+    (p/resolved block)))
 
 (defn- block-ref-uuid
   [block-ref]
@@ -79,18 +92,15 @@
                                    [(missing? $ ?comments-area :logseq.property/deleted-at)]]
                                  block-uuid
                                  comment-thread-pull-selector)
-            _ (p/all
-               (mapv (fn [thread]
-                       (db-async/<get-block repo
-                                            (:block/uuid thread)
-                                            {:children? true
-                                             :include-collapsed-children? true
-                                             :skip-refresh? true}))
-                     threads))]
-      (->> threads
-           (keep (fn [thread]
-                   (db/entity [:block/uuid (:block/uuid thread)])))
-           vec))))
+            blocks (p/all
+                    (mapv (fn [thread]
+                            (db-async/<get-block repo
+                                                 (:block/uuid thread)
+                                                 {:children? true
+                                                  :include-collapsed-children? true
+                                                  :skip-refresh? true}))
+                          threads))]
+      (vec (keep identity blocks)))))
 
 (defn <get-comment-thread-block-uuids
   ([block-uuids]
@@ -127,11 +137,6 @@
   [block]
   #{(block-lookup-ref block)})
 
-(defn- comments-area-entity
-  [comments-area]
-  (when-let [uuid (:block/uuid comments-area)]
-    (db/entity [:block/uuid uuid])))
-
 (defn- ensure-single-comment-target-property!
   [comments-area block]
   (when (and comments-area block (not (seq (get comments-area comments-model/comments-blocks-property))))
@@ -141,29 +146,40 @@
 
 (defn- comments-area-title
   [block]
-  (if (ldb/page? block)
+  (if (entity/page? block)
     "Comments on this page"
     "Comments"))
 
 (defn- comments-area-insert-position
   [block]
-  (if (ldb/page? block)
+  (if (entity/page? block)
     {:start? true}
     {:end? true}))
 
+(defn- <comments-area-block
+  [comments-area]
+  (if-let [uuid (:block/uuid comments-area)]
+    (db-async/<get-block (state/get-current-repo)
+                         uuid
+                         {:children? false
+                          :skip-refresh? true})
+    (p/resolved nil)))
+
 (defn ensure-comments-area!
   [block-id]
-  (when-let [block (db/entity [:block/uuid block-id])]
-    (if-let [comments-area (comments-area-child block)]
-      (p/let [_ (ensure-single-comment-target-property! comments-area block)]
-        comments-area)
-      (editor-handler/api-insert-new-block!
-       (comments-area-title block)
-       (merge {:block-uuid block-id
-               :edit-block? false
-               :other-attrs {:block/tags #{comments-model/comments-tag-ident}
-                             comments-model/comments-blocks-property (single-comment-targets block)}}
-              (comments-area-insert-position block))))))
+  (p/let [block (<block-ref block-id)
+          block (when block (<block-with-children block))]
+    (when block
+      (if-let [comments-area (comments-area-child block)]
+        (p/let [_ (ensure-single-comment-target-property! comments-area block)]
+          comments-area)
+        (editor-handler/api-insert-new-block!
+         (comments-area-title block)
+         (merge {:block-uuid (:block/uuid block)
+                 :edit-block? false
+                 :other-attrs {:block/tags #{comments-model/comments-tag-ident}
+                               comments-model/comments-blocks-property (single-comment-targets block)}}
+                (comments-area-insert-position block)))))))
 
 (defn- same-comment-targets?
   [comments-area target-uuids]
@@ -182,13 +198,14 @@
 
 (defn ensure-comments-area-for-selected-blocks!
   [block-refs]
-  (let [blocks (->> block-refs
-                    (keep block-ref->entity)
-                    block-handler/get-top-level-blocks
-                    comments-model/comment-target-blocks)]
+  (p/let [blocks (p/all (mapv <block-ref block-refs))
+          blocks (->> blocks
+                      (keep identity)
+                      block-handler/get-top-level-blocks
+                      comments-model/comment-target-blocks)]
     (when-let [last-block (last blocks)]
       (if (= 1 (count blocks))
-        (p/let [comments-area (ensure-comments-area! (:block/uuid last-block))]
+        (p/let [comments-area (ensure-comments-area! last-block)]
           (when comments-area
             (editor-handler/expand-block! (:block/uuid comments-area)))
           comments-area)
@@ -220,44 +237,50 @@
   ([comments-area]
    (reveal-comments-area! comments-area nil))
   ([comments-area {:keys [focus-editor?]}]
-   (when-let [uuid (:block/uuid (comments-area-entity comments-area))]
-     (p/do!
-      (editor-handler/expand-block! uuid)
-      (js/requestAnimationFrame
-       #(when-let [comments-area-el (gdom/getElement (str "ls-block-" uuid))]
-          (.scrollIntoView comments-area-el #js {:block "nearest"
-                                                 :behavior "smooth"})
-          (when focus-editor?
-            (js/setTimeout
-             (fn []
-               (some-> (gdom/getElement (str "ls-block-" uuid))
-                       (focus-comments-reply!)))
-             0))))))))
+   (p/let [comments-area (<comments-area-block comments-area)]
+     (when-let [uuid (:block/uuid comments-area)]
+       (p/do!
+        (editor-handler/expand-block! uuid)
+        (js/requestAnimationFrame
+         #(when-let [comments-area-el (gdom/getElement (str "ls-block-" uuid))]
+            (.scrollIntoView comments-area-el #js {:block "nearest"
+                                                   :behavior "smooth"})
+            (when focus-editor?
+              (js/setTimeout
+               (fn []
+                 (some-> (gdom/getElement (str "ls-block-" uuid))
+                         (focus-comments-reply!)))
+               0)))))))))
 
 (defn expand-comments-area!
   [comments-area]
-  (when-let [uuid (:block/uuid (comments-area-entity comments-area))]
-    (editor-handler/expand-block! uuid)))
+  (p/let [comments-area (<comments-area-block comments-area)]
+    (when-let [uuid (:block/uuid comments-area)]
+      (editor-handler/expand-block! uuid))))
 
 (defn edit-comments-area-title!
   [comments-area container-id]
-  (when-let [block (comments-area-entity comments-area)]
-    (editor-handler/edit-block! block :max {:container-id (or container-id :unknown-container)})))
+  (p/let [comments-area (<comments-area-block comments-area)]
+    (when comments-area
+      (editor-handler/edit-block! comments-area :max {:container-id (or container-id :unknown-container)}))))
 
 (defn- selected-block-entities
   []
-  (vec (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids))))
+  (p/let [blocks (p/all (mapv <block-ref (state/get-selection-block-ids)))]
+    (vec (keep identity blocks))))
 
 (defn- edit-block-entity
   []
   (when-let [block (state/get-edit-block)]
-    (db/entity [:block/uuid (:block/uuid block)])))
+    (<block-ref (:block/uuid block))))
 
 (defn- comment-shortcut-targets
   []
-  (or (when (state/editing?)
-        (some-> (edit-block-entity) vector seq))
-      (seq (selected-block-entities))))
+  (if (state/editing?)
+    (p/let [block (edit-block-entity)]
+      (some-> block vector seq))
+    (p/let [blocks (selected-block-entities)]
+      (seq blocks))))
 
 (defn- current-edit-block-blank?
   []
@@ -291,7 +314,7 @@
   (if (and (state/editing?)
            (current-edit-block-blank?))
     (set-current-block-as-comments-area!)
-    (let [comment-targets (comment-shortcut-targets)]
+    (p/let [comment-targets (comment-shortcut-targets)]
       (when (state/editing?)
         (editor-handler/save-current-block!)
         (state/clear-edit!))
@@ -318,22 +341,22 @@
   [comment-block content]
   (editor-handler/save-block! (state/get-current-repo) comment-block content))
 
-(defn- comment-delete-targets
+(defn- <comment-delete-targets
   [comment-block]
-  (let [comments-area' (:block/parent comment-block)
-        comments-area (or (some-> comments-area' :db/id db/entity)
-                          comments-area')
-        live-children (remove :logseq.property/deleted-at (:block/_parent comments-area))]
-    (if (and (comments-model/comments-area? comments-area)
-             (<= (count live-children) 1))
-      [comments-area]
-      [comment-block])))
+  (let [comments-area (:block/parent comment-block)]
+    (p/let [comments-area (when comments-area (<block-with-children comments-area))
+            live-children (remove :logseq.property/deleted-at (:block/children comments-area))]
+      (if (and (comments-model/comments-area? comments-area)
+               (<= (count live-children) 1))
+        [comments-area]
+        [comment-block]))))
 
 (defn delete-comment!
   [comment-block]
-  (ui-outliner-tx/transact!
-   {:outliner-op :delete-blocks}
-   (outliner-op/delete-blocks! (comment-delete-targets comment-block) nil)))
+  (p/let [targets (<comment-delete-targets comment-block)]
+    (ui-outliner-tx/transact!
+     {:outliner-op :delete-blocks}
+     (outliner-op/delete-blocks! targets nil))))
 
 (defn paste-assets!
   [target-block e]

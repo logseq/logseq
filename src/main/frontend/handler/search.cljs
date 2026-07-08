@@ -5,11 +5,17 @@
             [electron.ipc :as ipc]
             [frontend.common.search-fuzzy :as fuzzy]
             [frontend.config :as config]
-            [frontend.db :as db]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]))
+
+(defn- <resolve-page-db-id
+  [repo page-db-id]
+  (if (string? page-db-id)
+    (p/let [page (state/<invoke-db-worker :thread-api/pull repo [:db/id] [:block/name page-db-id])]
+      (:db/id page))
+    page-db-id))
 
 (defn search
   "The aggregation of search results"
@@ -22,20 +28,18 @@
                  limit 10}
             :as opts}]
    (when-not (string/blank? q)
-     (let [page-db-id (if (string? page-db-id)
-                        (:db/id (db/get-page page-db-id))
-                        page-db-id)
-           opts (if page-db-id (assoc opts :page (str page-db-id)) opts)]
-       (p/let [blocks (search/block-search repo q opts)
-               files (search/file-search q)]
-         (let [result (merge
-                       {:blocks blocks
-                        :has-more? (= limit (count blocks))}
-                       (when-not page-db-id
-                         {:files files}))
-               search-key (if more? :search/more-result :search/result)]
-           (state/swap-state! assoc search-key result)
-           result))))))
+     (p/let [page-db-id (<resolve-page-db-id repo page-db-id)
+             opts (if page-db-id (assoc opts :page (str page-db-id)) opts)
+             blocks (search/block-search repo q opts)
+             files (search/file-search q)]
+       (let [result (merge
+                     {:blocks blocks
+                      :has-more? (= limit (count blocks))}
+                     (when-not page-db-id
+                       {:files files}))
+             search-key (if more? :search/more-result :search/result)]
+         (state/swap-state! assoc search-key result)
+         result)))))
 
 (defn open-find-in-page!
   []

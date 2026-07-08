@@ -1,7 +1,7 @@
-(ns frontend.common.graph-view-test
+(ns frontend.worker.graph-view-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [frontend.common.graph-view :as graph-view]
+            [frontend.worker.graph-view :as graph-view]
             [logseq.db.test.helper :as db-test]))
 
 (defn- node-labels

@@ -25,10 +25,10 @@ Primary source files:
 - `src/main/frontend/extensions/graph/pixi/logic.cljs` owns pure graph layout,
   visibility, highlighting, zoom, label selection, edge runs, and geometry
   helpers.
-- `src/main/frontend/common/graph_view.cljs` builds graph node/link data from a
+- `src/main/frontend/worker/graph_view.cljs` builds graph node/link data from a
   Datascript db.
 - `src/main/frontend/worker/db_core.cljs` exposes
-  `:thread-api/build-graph`, which delegates to `frontend.common.graph-view`.
+  `:thread-api/build-graph`, which delegates to `frontend.worker.graph-view`.
 - `src/main/frontend/extensions/graph.css` styles the global Graph View toolbar,
   settings panel, time travel control, reset control, accessibility panel, and
   canvas shell.
@@ -90,7 +90,7 @@ the db worker:
 connection and delegates to:
 
 ```clojure
-(frontend.common.graph-view/build-graph @conn opts)
+(frontend.worker.graph-view/build-graph @conn opts)
 ```
 
 `build-graph` dispatches by `(:type opts)`:
@@ -145,7 +145,7 @@ Global Graph View has two modes:
 - `:tags-and-objects`, the default mode.
 - `:all-pages`.
 
-`frontend.common.graph-view/normalize-view-mode` treats any value other than
+`frontend.worker.graph-view/normalize-view-mode` treats any value other than
 `:all-pages` as `:tags-and-objects`.
 
 ### Tags And Objects
@@ -565,7 +565,7 @@ the FPS overlay lives in `frontend.extensions.graph.pixi`.
 
 Focused test files:
 
-- `src/test/frontend/common/graph_view_test.cljs` covers global graph data
+- `src/test/frontend/worker/graph_view_test.cljs` covers global graph data
   building, view modes, visibility filters, ref property labels, created-at
   metadata, icons, class extension links, parent links, large graph shortcuts,
   and performance expectations.
@@ -580,12 +580,12 @@ Focused test files:
 - `src/test/frontend/components/graph_actions_test.cljs` covers activation,
   sidebar opening, and redirect refs.
 - `src/test/frontend/worker/db_core_test.cljs` verifies
-  `:thread-api/build-graph` delegates to `frontend.common.graph-view`.
+  `:thread-api/build-graph` delegates to `frontend.worker.graph-view`.
 
 Focused validation commands:
 
 ```bash
-bb dev:test -v frontend.common.graph-view-test
+bb dev:test -v frontend.worker.graph-view-test
 bb dev:test -v frontend.components.graph-test
 bb dev:test -v frontend.extensions.graph-test
 bb dev:test -v frontend.extensions.graph-pixi-logic-test

@@ -2,35 +2,42 @@
   "Custom queries."
   (:require [clojure.string :as string]
             [clojure.walk :as walk]
-            [frontend.db.conn :as conn]
-            [frontend.db.model :as model]
+            [frontend.db.async :as db-async]
             [frontend.db.react :as react]
-            [frontend.db.utils :as db-utils]
             [frontend.extensions.sci :as sci]
             [frontend.state :as state]
             [frontend.util.datalog :as datalog-util]
             [lambdaisland.glogi :as log]
             [logseq.common.util.page-ref :as page-ref]
-            [logseq.db.frontend.inputs :as db-inputs]))
+            [promesa.core :as p]))
 
-(defn resolve-input
-  "Wrapper around db-inputs/resolve-input which provides editor-specific state"
-  ([db input]
-   (resolve-input db input {}))
-  ([db input opts]
-   (db-inputs/resolve-input db
-                            input
-                            (merge {:current-page-fn (fn []
-                                                       (or (when-let [name-or-uuid (state/get-current-page)]
-                                                             (:block/title (model/get-block-by-uuid name-or-uuid)))
-                                                           (:page (state/get-default-home))
-                                                           (model/get-today-journal-title)))}
-                                   opts))))
+(defn- seq-flatten
+  [coll]
+  (flatten (seq coll)))
+
+(defn- query-current-page-title
+  [query-opts]
+  (when-let [f (:current-page-fn query-opts)]
+    (f)))
+
+(defn- current-page
+  []
+  (or (state/get-current-page)
+      (:page (state/get-default-home))))
+
+(defn- <resolve-inputs
+  [repo inputs current-page-title]
+  (p/let [today-title (db-async/<get-today-journal-title repo)]
+    (db-async/<resolve-query-inputs repo inputs
+                                    (cond-> {:current-page (current-page)
+                                             :today-title today-title}
+                                      current-page-title
+                                      (assoc :current-page-title current-page-title)))))
 
 (defn custom-query-result-transform
   [query-result remove-blocks q]
   (try
-    (let [result (db-utils/seq-flatten query-result)
+    (let [result (seq-flatten query-result)
           block? (:block/uuid (first result))
           result (if block?
                    (let [result (if (seq remove-blocks)
@@ -39,7 +46,7 @@
                                               (contains? remove-blocks (:block/uuid h)))
                                             result))
                                   result)]
-                     (model/with-pages result))
+                     result)
                    result)
           result-transform-fn (:result-transform q)]
       (if-let [result-transform (if (keyword? result-transform-fn)
@@ -82,17 +89,26 @@
   [repo {:keys [query inputs rules] :as query'} query-opts]
   (let [query (resolve-query query)
         repo (or repo (state/get-current-repo))
-        db (conn/get-db repo)
-        resolve-with (select-keys query-opts [:current-page-fn :current-block-uuid])
-        resolved-inputs (mapv #(resolve-input db % resolve-with) inputs)
         rules-input (cond
                       (some? rules) rules
                       (query-expects-rules? query) [])
-        inputs (cond-> resolved-inputs
-                 (some? rules-input)
-                 (conj rules-input))
+        current-page-title (query-current-page-title query-opts)
+        inputs-key {:inputs inputs
+                    :rules rules-input
+                    :current-page (current-page)
+                    :current-page-title current-page-title}
+        inputs-fn (when (or (seq inputs) (some? rules-input))
+                    (fn []
+                      (p/let [resolved-inputs (if (seq inputs)
+                                                (<resolve-inputs repo inputs current-page-title)
+                                                [])]
+                        (cond-> (vec resolved-inputs)
+                          (some? rules-input)
+                          (conj rules-input)))))
         k [:custom
            (or (:query-string query') (dissoc query' :title))
            (:today-query? query-opts)
-           inputs]]
-    [k (apply react/q repo k query-opts query inputs)]))
+           inputs-key]]
+    [k (react/q repo k (cond-> query-opts
+                         inputs-fn (assoc :inputs-fn inputs-fn))
+                query)]))

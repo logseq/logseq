@@ -4,8 +4,6 @@
             [cljs.pprint :as pprint]
             [clojure.set :as set]
             [clojure.string :as string]
-            [datascript.impl.entity :as de]
-            [frontend.db :as db]
             [frontend.context.i18n :refer [t]]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.db-based.sync :as rtc-handler]
@@ -15,33 +13,28 @@
             [frontend.util :as util]
             [frontend.util.page :as page-util]
             [logseq.shui.ui :as shui]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.property :as db-property]
             [promesa.core :as p]))
 
+(def ^:private <invoke-db-worker state/<invoke-db-worker)
+
 ;; Fns used between menus and commands
+(defn- debug-pull-result
+  [result]
+  (cond-> result
+    (seq (:block/properties result))
+    (assoc :block.debug/properties (into {} (:block/properties result)))
+
+    (seq (:block/refs result))
+    (assoc :block.debug/refs (mapv #(or (:block/title %) %) (:block/refs result)))))
+
 (defn show-entity-data
   [eid]
-  (let [result* (db/pull eid)
-        entity (db/entity eid)
-        result (cond-> result*
-                 (seq (:block/properties entity))
-                 (assoc :block.debug/properties
-                        (->> (:block/properties entity)
-                             (map (fn [[k v]]
-                                    [k
-                                     (cond
-                                       (de/entity? v)
-                                       (db-property/property-value-content v)
-                                       (and (set? v) (every? de/entity? v))
-                                       (set (map db-property/property-value-content v))
-                                       :else
-                                       v)]))
-                             (into {})))
-                 (seq (:block/refs result*))
-                 (assoc :block.debug/refs
-                        (mapv #(or (:block/title (db/entity (:db/id %))) %) (:block/refs result*))))
-        pull-data (with-out-str (pprint/pprint result))]
+  (p/let [result* (<invoke-db-worker :thread-api/pull
+                                     (state/get-current-repo)
+                                     '[*]
+                                     eid)
+          result (debug-pull-result result*)
+          pull-data (with-out-str (pprint/pprint result))]
     (println pull-data)
     (notification/show!
      [:div.ls-wrap-widen
@@ -107,8 +100,9 @@
 
 (defn- <fetch-server-checksum-diagnostics
   [repo]
-  (let [base (rtc-handler/http-base)
-        graph-id (some-> (db/get-db repo) ldb/get-graph-rtc-uuid str)]
+  (p/let [base (rtc-handler/http-base)
+          graph-id' (state/<invoke-db-worker :thread-api/get-rtc-graph-uuid repo)
+          graph-id (some-> graph-id' str)]
     (if (and (seq base) (seq graph-id))
       (rtc-handler/fetch-json (str base "/sync/" graph-id "/checksum/diagnostics")
                               {:method "GET"}

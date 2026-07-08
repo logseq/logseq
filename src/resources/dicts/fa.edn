@@ -178,7 +178,6 @@
  :cmdk.action/search "جستجو"
  :cmdk.action/trigger "اجرا"
 
- :cmdk.create/configure-tag "پیکربندی برچسب"
  :cmdk.create/page "ایجاد صفحه"
  :cmdk.create/tag "ایجاد برچسب"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "اخیراً به‌روزرسانی شده"
  :cmdk.group/themes "پوسته‌ها"
 
- :cmdk.info/configure-tag "پیکربندی #{1}"
  :cmdk.info/create-page "ایجاد صفحه '{1}'"
  :cmdk.info/create-tag "ایجاد برچسب '{1}'"
 

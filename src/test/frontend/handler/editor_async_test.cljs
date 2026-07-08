@@ -2,23 +2,104 @@
   (:require [cljs.test :refer [deftest is testing async use-fixtures]]
             [datascript.core :as d]
             [frontend.components.block.comments-model :as comments-model]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
+            [frontend.db.conn :as conn]
+            [frontend.db.transact :as db-transact]
+            [frontend.db.utils :as db-utils]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.comments :as comments-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor]
-            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.modules.outliner.op :as frontend-outliner-op]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async load-test-files]]
             [frontend.util :as util]
             [goog.dom :as gdom]
             [logseq.db :as ldb]
+            [logseq.outliner.op :as outliner-op]
             [promesa.core :as p]))
 
 (defonce ^:private *previous-state (atom nil))
+
+(def ^:private test-worker-block-pull
+  '[* {:block/page [*]
+       :block/parent [*]
+       :block/_parent [*]
+       :block/tags [*]}])
+
+(defn- block-by-worker-id
+  [test-db id]
+  (when-let [entity
+             (or
+              (when (uuid? id)
+                (db-utils/entity test-db [:block/uuid id]))
+              (when (string? id)
+                (or
+                 (when (util/uuid-string? id)
+                   (db-utils/entity test-db [:block/uuid (uuid id)]))
+                 (ldb/get-page test-db id)))
+              (db-utils/entity test-db id))]
+    (d/pull test-db test-worker-block-pull (:db/id entity))))
+
+(defn- <test-db-worker
+  [api & args]
+  (case api
+    :thread-api/get-blocks
+    (let [[repo requests-transit] args
+          test-db (conn/get-db repo)
+          requests (ldb/read-transit-str requests-transit)]
+      (p/resolved
+       (ldb/write-transit-str
+        (mapv (fn [{:keys [id opts]}]
+                (let [block (block-by-worker-id test-db id)]
+                  (if (:children? opts)
+                    block
+                    {:block block})))
+              requests))))
+
+    :thread-api/get-block-sibling
+    (let [[repo block-id direction] args
+          test-db (conn/get-db repo)
+          block (db-utils/entity test-db block-id)
+          sibling (case direction
+                    :left (ldb/get-left-sibling block)
+                    :right (ldb/get-right-sibling block)
+                    nil)]
+      (p/resolved
+       (when sibling
+         (d/pull test-db test-worker-block-pull (:db/id sibling)))))
+
+    (p/resolved nil)))
+
+(defn- <test-db-worker-with-blocks
+  [blocks api & args]
+  (case api
+    :thread-api/get-blocks
+    (let [[repo requests-transit] args
+          test-db (conn/get-db repo)
+          requests (ldb/read-transit-str requests-transit)
+          block-by-id (into {}
+                            (mapcat (fn [block]
+                                      [[(:block/uuid block) block]
+                                       [(str (:block/uuid block)) block]
+                                       [(:db/id block) block]]))
+                            blocks)]
+      (p/resolved
+       (ldb/write-transit-str
+        (mapv (fn [{:keys [id opts]}]
+                (let [block (or (get block-by-id id)
+                                (block-by-worker-id test-db id))]
+                  (if (:children? opts)
+                    block
+                    {:block block})))
+              requests))))
+
+    (apply <test-db-worker api args)))
+
+(defn- apply-test-outliner-ops!
+  [_db ops opts]
+  (outliner-op/apply-ops! (conn/get-db test-helper/test-db false) ops opts))
 
 (use-fixtures :each
   {:before (fn []
@@ -63,6 +144,8 @@
                                         :block-parent-id block-dom-id
                                         :config {:embed? embed?}
                                         :value edit-content})
+          state/<invoke-db-worker <test-db-worker
+          db-transact/apply-outliner-ops apply-test-outliner-ops!
                   ;; stub for delete-block
           gdom/getElement (constantly #js {:id block-dom-id})
                   ;; stub since not testing moving
@@ -106,7 +189,7 @@
        [{:block/title "b1"}
         {:block/title "b2"}
         {:block/title ""}]}])
-    (p/let [conn (db/get-db test-helper/test-db false)
+    (p/let [conn (conn/get-db test-helper/test-db false)
             block (->> (d/q '[:find (pull ?b [*])
                               :where [?b :block/title ""]
                               [?p :block/name "page1"]
@@ -147,7 +230,7 @@
   (testing "backspace deletes empty block in embedded context"
     ;; testing embed at this layer doesn't require an embed block since
     ;; delete-block handles all the embed setup
-    (p/let [conn (db/get-db test-helper/test-db false)
+    (p/let [conn (conn/get-db test-helper/test-db false)
             block (->> (d/q '[:find (pull ?b [*])
                               :where [?b :block/title ""]
                               [?p :block/name "page1"]
@@ -183,7 +266,7 @@
        :logseq.property.asset/checksum "blank-asset-checksum"
        :logseq.property.asset/size 1}
       {:block/title "after"}]}])
-  (p/let [conn (db/get-db test-helper/test-db false)
+  (p/let [conn (conn/get-db test-helper/test-db false)
           block (->> (d/q '[:find (pull ?b [*])
                             :where [?b :block/title "after"]
                             [?p :block/name "page1"]
@@ -216,7 +299,7 @@
       {:block/title ""
        :build/tags [:logseq.class/Comments]}
       {:block/title "after"}]}])
-  (p/let [conn (db/get-db test-helper/test-db false)
+  (p/let [conn (conn/get-db test-helper/test-db false)
           block (->> (d/q '[:find (pull ?b [*])
                             :where [?b :block/title "after"]
                             [?p :block/name "page1"]
@@ -252,7 +335,7 @@
        :logseq.property.asset/checksum "blank-asset-checksum"
        :logseq.property.asset/size 1}
       {:block/title "after"}]}])
-  (p/let [conn (db/get-db test-helper/test-db false)
+  (p/let [conn (conn/get-db test-helper/test-db false)
           asset-block (->> (d/q '[:find (pull ?b [*])
                                   :where [?b :logseq.property.asset/type "png"]
                                   [?p :block/name "page1"]
@@ -267,7 +350,9 @@
                           ffirst)
           asset-dom #js {:getAttribute #({"blockid" (str (:block/uuid asset-block))
                                           "containerid" nil} %)}]
-    (-> (p/with-redefs [state/get-edit-content (constantly "")
+    (-> (p/with-redefs [state/<invoke-db-worker <test-db-worker
+                        db-transact/apply-outliner-ops apply-test-outliner-ops!
+                        state/get-edit-content (constantly "")
                         util/get-prev-block-non-collapsed-non-embed (constantly asset-dom)
                         editor/edit-block! (constantly nil)]
           (p/do!
@@ -306,7 +391,7 @@
       {:block/title ""
        :build/tags [:logseq.class/Comments]}
       {:block/title "after"}]}])
-  (p/let [conn (db/get-db test-helper/test-db false)
+  (p/let [conn (conn/get-db test-helper/test-db false)
           comments-block (->> (d/q '[:find (pull ?b [* {:block/tags [:db/ident]}])
                                       :where
                                       [?p :block/name "page1"]
@@ -322,7 +407,9 @@
                           ffirst)
           comments-dom #js {:getAttribute #({"blockid" (str (:block/uuid comments-block))
                                              "containerid" nil} %)}]
-    (-> (p/with-redefs [state/get-edit-content (constantly "")
+    (-> (p/with-redefs [state/<invoke-db-worker <test-db-worker
+                        db-transact/apply-outliner-ops apply-test-outliner-ops!
+                        state/get-edit-content (constantly "")
                         util/get-prev-block-non-collapsed-non-embed (constantly comments-dom)
                         editor/edit-block! (constantly nil)]
           (p/do!
@@ -372,15 +459,11 @@
     (set! (.-document js/globalThis)
           #js {:activeElement input
                :getElementById (fn [_id] input)})
-    (-> (p/with-redefs [state/get-edit-input-id (constantly "edit-block-current")
+    (-> (p/with-redefs [state/<invoke-db-worker (partial <test-db-worker-with-blocks [current-block next-block])
+                        state/get-edit-input-id (constantly "edit-block-current")
                         gdom/getElement (constantly input)
                         util/get-selection-start (constantly 5)
                         util/get-selection-end (constantly 5)
-                        db/entity (fn [lookup-ref]
-                                    (case lookup-ref
-                                      [:block/uuid (:block/uuid current-block)] current-block
-                                      [:block/uuid (:block/uuid next-block)] next-block
-                                      current-block))
                         editor/get-state (constantly {:block current-block
                                                       :value "first"
                                                       :config {}
@@ -441,15 +524,11 @@
     (set! (.-document js/globalThis)
           #js {:activeElement input
                :getElementById (fn [_id] input)})
-    (-> (p/with-redefs [state/get-edit-input-id (constantly "edit-block-current")
+    (-> (p/with-redefs [state/<invoke-db-worker (partial <test-db-worker-with-blocks [current-block first-new-block])
+                        state/get-edit-input-id (constantly "edit-block-current")
                         gdom/getElement (constantly input)
                         util/get-selection-start (constantly 5)
                         util/get-selection-end (constantly 5)
-                        db/entity (fn [lookup-ref]
-                                    (case lookup-ref
-                                      [:block/uuid (:block/uuid current-block)] current-block
-                                      [:block/uuid (:block/uuid first-new-block)] first-new-block
-                                      current-block))
                         editor/get-state (constantly {:block current-block
                                                       :value "first"
                                                       :config {}
@@ -501,15 +580,11 @@
     (set! (.-document js/globalThis)
           #js {:activeElement input
                :getElementById (fn [_id] input)})
-    (-> (p/with-redefs [state/get-edit-input-id (constantly "edit-block-current")
+    (-> (p/with-redefs [state/<invoke-db-worker (partial <test-db-worker-with-blocks [current-block next-block])
+                        state/get-edit-input-id (constantly "edit-block-current")
                         gdom/getElement (constantly input)
                         util/get-selection-start (constantly 5)
                         util/get-selection-end (constantly 5)
-                        db/entity (fn [lookup-ref]
-                                    (case lookup-ref
-                                      [:block/uuid (:block/uuid current-block)] current-block
-                                      [:block/uuid (:block/uuid next-block)] next-block
-                                      current-block))
                         editor/get-state (constantly {:block current-block
                                                       :value "first"
                                                       :config {}
@@ -563,15 +638,18 @@
   (let [comments-area (test-helper/find-block-by-content "Comments")
         target (test-helper/find-block-by-content "target")
         original-parent-id (:db/id (:block/parent target))]
-    (db/transact! test-helper/test-db
-                  [[:db/add (:db/id comments-area) :block/tags comments-model/comments-tag-ident]])
-    (p/let [_ (block-handler/indent-outdent-blocks! [target] true nil)
-            target' (db/entity [:block/uuid (:block/uuid target)])
-            comments-area' (db/entity [:block/uuid (:block/uuid comments-area)])]
-      (is (= original-parent-id (:db/id (:block/parent target')))
-          "Indenting a block after #Comments should leave it at the same parent")
-      (is (not= (:db/id comments-area') (:db/id (:block/parent target')))
-          "The target block must not become a child of the comments area"))))
+    (d/transact! (conn/get-db test-helper/test-db false)
+                 [[:db/add (:db/id comments-area) :block/tags comments-model/comments-tag-ident]])
+    (p/with-redefs [state/<invoke-db-worker <test-db-worker
+                    db-transact/apply-outliner-ops apply-test-outliner-ops!]
+      (p/let [_ (block-handler/indent-outdent-blocks! [target] true nil)
+              test-db (conn/get-db test-helper/test-db)
+              target' (db-utils/entity test-db [:block/uuid (:block/uuid target)])
+              comments-area' (db-utils/entity test-db [:block/uuid (:block/uuid comments-area)])]
+        (is (= original-parent-id (:db/id (:block/parent target')))
+            "Indenting a block after #Comments should leave it at the same parent")
+        (is (not= (:db/id comments-area') (:db/id (:block/parent target')))
+            "The target block must not become a child of the comments area")))))
 
 (deftest-async db-based-save-assets-appends-to-today-page-without-editor
   (let [today-page {:block/uuid (random-uuid)
@@ -581,17 +659,21 @@
                                                             (p/resolved ["/repo" "assets"]))
                         assets-handler/get-file-checksum (constantly "checksum")
                         db-async/<get-asset-with-checksum (fn [& _] (p/resolved nil))
-                        db-model/get-today-journal-title (constantly "today")
-                        db-model/get-journal-page (constantly today-page)
+                        db-async/<get-today-journal-title (fn [& _] (p/resolved "today"))
+                        db-async/<get-journal-page-by-day (fn [& _] (p/resolved today-page))
+                        state/<invoke-db-worker (fn [& _] (p/resolved nil))
                         state/get-edit-block (constantly nil)
                         state/get-edit-content (constantly "")
-                        outliner-op/insert-blocks! (fn [blocks target opts]
+                        frontend-outliner-op/insert-blocks! (fn [blocks target opts]
                                                      (reset! inserted {:blocks blocks
                                                                        :target target
                                                                        :opts opts})
                                                      [:insert-blocks [blocks target opts]])
-                        db/entity (fn [[_lookup uuid]]
-                                    {:block/uuid uuid})]
+                        db-async/<get-blocks (fn [_repo block-ids _opts]
+                                               (p/resolved
+                                                (mapv (fn [block-id]
+                                                        {:block/uuid block-id})
+                                                      block-ids)))]
           (editor/db-based-save-assets! "repo" [{:src "image.png"
                                                  :title "image"}]))
         (p/then
@@ -612,18 +694,22 @@
                                                             (p/resolved ["/repo" "assets"]))
                         assets-handler/get-file-checksum (constantly "checksum")
                         db-async/<get-asset-with-checksum (fn [& _] (p/resolved nil))
-                        db-model/get-today-journal-title (constantly "today")
-                        db-model/get-journal-page (constantly {:block/uuid (random-uuid)
-                                                               :block/title "today"})
+                        db-async/<get-today-journal-title (fn [& _] (p/resolved "today"))
+                        db-async/<get-journal-page-by-day (fn [& _] (p/resolved {:block/uuid (random-uuid)
+                                                                                 :block/title "today"}))
+                        state/<invoke-db-worker (fn [& _] (p/resolved nil))
                         state/get-edit-block (constantly nil)
                         state/get-edit-content (constantly "")
-                        outliner-op/insert-blocks! (fn [blocks target opts]
+                        frontend-outliner-op/insert-blocks! (fn [blocks target opts]
                                                      (reset! inserted {:blocks blocks
                                                                        :target target
                                                                        :opts opts})
                                                      [:insert-blocks [blocks target opts]])
-                        db/entity (fn [[_lookup uuid]]
-                                    {:block/uuid uuid})]
+                        db-async/<get-blocks (fn [_repo block-ids _opts]
+                                               (p/resolved
+                                                (mapv (fn [block-id]
+                                                        {:block/uuid block-id})
+                                                      block-ids)))]
           (editor/db-based-save-assets! "repo"
                                         [{:src "image.png"
                                           :title "image"}]
@@ -650,18 +736,22 @@
                                                             (p/resolved ["/repo" "assets"]))
                         assets-handler/get-file-checksum (constantly "checksum")
                         db-async/<get-asset-with-checksum (fn [& _] (p/resolved nil))
-                        db-model/get-today-journal-title (constantly "today")
-                        db-model/get-journal-page (constantly {:block/uuid (random-uuid)
-                                                               :block/title "today"})
+                        db-async/<get-today-journal-title (fn [& _] (p/resolved "today"))
+                        db-async/<get-journal-page-by-day (fn [& _] (p/resolved {:block/uuid (random-uuid)
+                                                                                 :block/title "today"}))
+                        state/<invoke-db-worker (fn [& _] (p/resolved nil))
                         state/get-edit-block (constantly temp-edit-block)
                         state/get-edit-content (constantly "")
-                        outliner-op/insert-blocks! (fn [blocks target opts]
+                        frontend-outliner-op/insert-blocks! (fn [blocks target opts]
                                                      (reset! inserted {:blocks blocks
                                                                        :target target
                                                                        :opts opts})
                                                      [:insert-blocks [blocks target opts]])
-                        db/entity (fn [[_lookup uuid]]
-                                    {:block/uuid uuid})]
+                        db-async/<get-blocks (fn [_repo block-ids _opts]
+                                               (p/resolved
+                                                (mapv (fn [block-id]
+                                                        {:block/uuid block-id})
+                                                      block-ids)))]
           (editor/db-based-save-assets! "repo"
                                         [{:src "image.png"
                                           :title "image"}]
@@ -704,12 +794,7 @@
                                comments-model/comments-blocks-property [first-block second-block]}
         inserts (atom [])
         expanded (atom [])]
-    (-> (p/with-redefs [db/entity (fn [lookup-ref]
-                                    (case lookup-ref
-                                      [:block/uuid first-uuid] first-block
-                                      [:block/uuid second-uuid] second-block
-                                      nil))
-                        block-handler/get-top-level-blocks identity
+    (-> (p/with-redefs [block-handler/get-top-level-blocks identity
                         editor/api-insert-new-block! (fn [content opts]
                                                        (swap! inserts conj {:content content
                                                                            :opts opts})
@@ -747,11 +832,7 @@
                                :block/tags #{comments-model/comments-tag-ident}}
         inserts (atom [])
         expanded (atom [])]
-    (-> (p/with-redefs [db/entity (fn [lookup-ref]
-                                    (case lookup-ref
-                                      [:block/uuid block-uuid] block
-                                      nil))
-                        db/sort-by-order identity
+    (-> (p/with-redefs [ldb/sort-by-order identity
                         block-handler/get-top-level-blocks identity
                         editor/api-insert-new-block! (fn [content opts]
                                                        (swap! inserts conj {:content content
@@ -822,11 +903,12 @@
                         state/get-edit-block (constantly block)
                         state/get-edit-content (constantly "typing")
                         state/get-selection-block-ids (constantly [selected-uuid])
-                        db/entity (fn [lookup-ref]
-                                    (case lookup-ref
-                                      [:block/uuid block-uuid] block
-                                      [:block/uuid selected-uuid] selected-block
-                                      nil))
+                        db-async/<get-block (fn [_repo block-id _opts]
+                                              (p/resolved
+                                               (cond
+                                                 (= block-uuid block-id) block
+                                                 (= selected-uuid block-id) selected-block
+                                                 :else nil)))
                         block-handler/get-top-level-blocks identity
                         editor/save-current-block! #(reset! saved? true)
                         state/clear-edit! #(reset! cleared? true)

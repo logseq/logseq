@@ -3,7 +3,7 @@
   (:require [clojure.pprint :as pprint]
             [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.context.i18n :refer [locale-format-date t]]
             [frontend.handler.db-based.sync :as rtc-handler]
@@ -13,6 +13,7 @@
             [frontend.util :as util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
+            [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
 (comment
@@ -141,22 +142,39 @@
 
 (hsx/defc assets-progressing
   [progress]
-  (let [downloading (->>
-                     (keep (fn [[id {:keys [direction loaded total]}]]
-                             (when (and (= direction :download)
-                                        (not= loaded total)
-                                        (number? loaded) (number? total))
-                               (when-let [block (db/entity [:block/uuid (uuid id)])]
-                                 {:block block
-                                  :percent (int (* 100 (/ loaded total)))}))) progress)
+  (let [ids (->> progress
+                 (keep (fn [[id {:keys [loaded total]}]]
+                         (when (and (not= loaded total)
+                                    (number? loaded) (number? total))
+                           (uuid id))))
+                 distinct
+                 vec)
+        [id->block set-id->block!] (hooks/use-state {})
+        _ (hooks/use-effect!
+           (fn []
+             (p/let [results (db-async/<get-blocks (state/get-current-repo) ids {:children? false})]
+               (set-id->block! (into {} (keep (fn [{:keys [block]}]
+                                                (when-let [id (:block/uuid block)]
+                                                  [id block]))
+                                              results))))
+             nil)
+           [ids])
+        downloading (->>
+	                     (keep (fn [[id {:keys [direction loaded total]}]]
+	                             (when (and (= direction :download)
+	                                        (not= loaded total)
+	                                        (number? loaded) (number? total))
+	                               (when-let [block (get id->block (uuid id))]
+	                                 {:block block
+	                                  :percent (int (* 100 (/ loaded total)))}))) progress)
                      (sort-by (fn [{:keys [block]}] (:block/title block))))
         uploading (->> (keep (fn [[id {:keys [direction loaded total]}]]
-                               (when (and (= direction :upload)
-                                          (not= loaded total)
-                                          (number? loaded) (number? total))
-                                 (when-let [block (db/entity [:block/uuid (uuid id)])]
-                                   {:block block
-                                    :percent (int (* 100 (/ loaded total)))}))) progress)
+	                               (when (and (= direction :upload)
+	                                          (not= loaded total)
+	                                          (number? loaded) (number? total))
+	                                 (when-let [block (get id->block (uuid id))]
+	                                   {:block block
+	                                    :percent (int (* 100 (/ loaded total)))}))) progress)
                        (sort-by (fn [{:keys [block]}] (:block/title block))))]
     [:div.assets-sync-progress.flex.flex-col.gap-2
      (when (seq downloading)

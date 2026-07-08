@@ -1,4 +1,4 @@
-(ns frontend.common.graph-view
+(ns frontend.worker.graph-view
   "Main namespace for graph view fns."
   (:require [clojure.set :as set]
             [clojure.string :as string]

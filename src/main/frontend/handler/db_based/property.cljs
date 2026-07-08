@@ -1,10 +1,12 @@
 (ns frontend.handler.db-based.property
   "db based property handler"
-  (:require [frontend.db :as db]
+  (:require [frontend.db.async :as db-async]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.state :as state]
             [logseq.db.frontend.property :as db-property]
-            [logseq.outliner.op]))
+            [logseq.outliner.op]
+            [promesa.core :as p]))
 
 (defn upsert-property!
   [property-id schema property-opts]
@@ -75,8 +77,11 @@
 
 (defn batch-set-property-closed-value!
   [block-ids db-ident closed-value]
-  (let [db (db/get-db)]
-    (if-let [closed-value-entity (db-property/get-closed-value-entity-by-name db db-ident closed-value)]
+  (p/let [closed-values (db-async/<get-property-closed-values (state/get-current-repo) db-ident)]
+    (if-let [closed-value-entity (some (fn [entity]
+                                         (when (= (db-property/closed-value-content entity) closed-value)
+                                           entity))
+                                       closed-values)]
       (batch-set-property! block-ids
                            db-ident
                            (:db/id closed-value-entity)

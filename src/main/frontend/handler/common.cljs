@@ -1,7 +1,6 @@
 (ns frontend.handler.common
   "Common fns for handlers"
   (:require [cljs.reader :as reader]
-            [frontend.db :as db]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
@@ -9,7 +8,10 @@
 
 (defn copy-to-clipboard-without-id-property!
   [repo raw-text html blocks]
-  (let [blocks' (map (fn [b] (assoc b :block/title (:block/raw-title (db/entity (:db/id b))))) blocks)]
+  (let [blocks' (map (fn [block]
+                       (assoc block :block/title (or (:block/raw-title block)
+                                                     (:block/title block))))
+                     blocks)]
     (util/copy-to-clipboard! raw-text
                              :html html
                              :graph repo

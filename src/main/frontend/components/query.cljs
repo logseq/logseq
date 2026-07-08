@@ -3,7 +3,6 @@
             [frontend.components.query.result :as query-result]
             [frontend.components.query.view :as query-view]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.db.react :as react]
             [frontend.extensions.sci :as sci]
             [frontend.rfx :as rfx]
@@ -167,9 +166,7 @@
                  (->> result
                       (remove (fn [b]
                                 (when (and (map? b) (:block/title b))
-                                  (ldb/hidden? (or (when-let [id (:db/id b)]
-                                                     (db/entity id))
-                                                   (:block/title b))))))
+                                  (ldb/hidden? b))))
                       (remove (fn [b]
                                 (when (and current-block (:db/id current-block)) (= (:db/id b) (:db/id current-block))))))
                  result)
@@ -216,7 +213,7 @@
                                             (state/get-current-repo))
          current-block-uuid (or (:block/uuid (:block config))
                                 (:block/uuid config))
-         current-block (db/entity [:block/uuid current-block-uuid])
+         current-block (:block config)
          temp-collapsed? (rfx/use-sub [:ui/collapsed-blocks
                                        (state/get-current-repo)
                                        (state/resolve-container-id (:container-id config))

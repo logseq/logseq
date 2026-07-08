@@ -3,8 +3,7 @@
             [frontend.components.export :as export]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
-            [frontend.db.model :as db-model]
+            [frontend.date :as date]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.notification :as notification]
@@ -14,11 +13,16 @@
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db :as ldb]
+            [frontend.util.entity :as entity]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
+
+(defn- today-journal-page?
+  [page]
+  (and (entity/journal? page)
+       (= (:block/journal-day page) (date/today-journal-day))))
 
 (hsx/defc publish-page-dialog
   [page]
@@ -62,7 +66,7 @@
   (page-handler/<delete! (:block/uuid page)
                          (fn []
                            (notification/show!
-                            (if (db-model/today-journal-page? page)
+	                            (if (today-journal-page? page)
                               (t :page.delete/today-journal-truncate-success)
                               (t :page.delete/success (:block/title page)))
                             :success))
@@ -77,7 +81,7 @@
          {:title [:span.flex.gap-2.items-center
                   [:span.relative
                    (shui/tabler-icon "alert-triangle")]
-                  (if (or (ldb/class? page) (ldb/property? page) (db-model/today-journal-page? page))
+	                  (if (or (entity/class? page) (entity/property? page) (today-journal-page? page))
                     (t :page.delete/permanent-confirm-title)
                     (t :page.delete/confirm-title))]
           :content [:p.opacity-60 (str "- " (:block/title page))]
@@ -89,9 +93,7 @@
 
 (defn- latest-page
   [page]
-  (or (when-let [id (:db/id page)]
-        (db/entity id))
-      page))
+  page)
 
 (defn- toggle-public-attribute!
   [page]
@@ -103,7 +105,7 @@
 (defn ^:large-vars/cleanup-todo page-menu
   [page]
   (when-let [page' (latest-page page)]
-    (when-let [page-name (and (db/page? page') (:block/name page'))]
+    (when-let [page-name (and (entity/page? page') (:block/name page'))]
       (let [page-title (str (:block/uuid page'))
             block? (util/uuid-string? page-name)
             contents? (= page-name "contents")
@@ -154,12 +156,12 @@
                  :options {:on-click #(commands/exec-plugin-simple-command!
                                        pid (assoc cmd :page page-name) action)}}))
 
-            (when (and (ldb/internal-page? page') (not (:logseq.property/built-in? page')))
+            (when (and (entity/internal-page? page') (not (:logseq.property/built-in? page')))
               {:title (t :page/convert-to-tag)
                :options {:on-click (fn []
                                      (db-page-handler/convert-page-to-tag! page'))}})
 
-            (when (and (ldb/class? page') (not (:logseq.property/built-in? page')))
+            (when (and (entity/class? page') (not (:logseq.property/built-in? page')))
               {:title (t :page.convert/tag-to-page-action)
                :options {:on-click (fn []
                                      (db-page-handler/convert-tag-to-page! page'))}})

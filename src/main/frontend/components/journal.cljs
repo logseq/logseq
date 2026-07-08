@@ -1,7 +1,7 @@
 (ns frontend.components.journal
   (:require [frontend.components.page :as page]
-            [frontend.db :as db]
             [frontend.components.views :as views]
+            [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.react :as react]
             [frontend.state :as state]
@@ -88,11 +88,10 @@
                     :selection/block-ids selection-block-ids})]))
 
 (defn- journal-block-ids
-  [journal-ids]
-  (->> journal-ids
-       (mapcat (fn [id]
-                 (some->> (db/entity id)
-                          :block/_parent
+  [journals]
+  (->> journals
+       (mapcat (fn [journal]
+                 (some->> (:block/children journal)
                           ldb/sort-by-order
                           (map :block/uuid))))
        vec))
@@ -110,19 +109,27 @@
 
 (hsx/defc all-journals
   []
-  (let [data (sub-journals)]
+  (let [data (sub-journals)
+        [journals set-journals!] (hooks/use-state nil)
+        selection-block-ids (journal-block-ids journals)]
+    (hooks/use-effect!
+     (fn []
+       (when (seq data)
+         (p/let [journals (p/all (map #(db-async/<get-block (state/get-current-repo) % {:children? true}) data))]
+           (set-journals! journals)))
+       nil)
+     [data])
     (when (seq data)
-      (let [selection-block-ids (journal-block-ids data)]
-        [:div#journals
-         (ui/virtualized-list
-          {:custom-scroll-parent (util/app-scroll-container-node)
-           :increase-viewport-by {:top 100 :bottom 100}
-           :skipAnimationFrameInResizeObserver true
-           :compute-item-key (fn [idx]
-                               (let [id (util/nth-safe data idx)]
-                                 (str "journal-" id)))
-           :total-count (count data)
-           :item-content (fn [idx]
-                           (let [id (util/nth-safe data idx)
-                                 last? (= (inc idx) (count data))]
-                             (journal-cp id last? selection-block-ids)))})]))))
+      [:div#journals
+       (ui/virtualized-list
+        {:custom-scroll-parent (util/app-scroll-container-node)
+         :increase-viewport-by {:top 100 :bottom 100}
+         :skipAnimationFrameInResizeObserver true
+         :compute-item-key (fn [idx]
+                             (let [id (util/nth-safe data idx)]
+                               (str "journal-" id)))
+         :total-count (count data)
+         :item-content (fn [idx]
+                         (let [id (util/nth-safe data idx)
+                               last? (= (inc idx) (count data))]
+                           (journal-cp id last? selection-block-ids)))})])))

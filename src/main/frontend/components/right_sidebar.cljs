@@ -12,7 +12,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
+            [frontend.date :as date]
             [frontend.db.async :as db-async]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.handler.editor :as editor-handler]
@@ -24,7 +24,7 @@
             [frontend.ui :as ui]
             [frontend.undo-redo.debug-ui :as undo-redo-debug-ui]
             [frontend.util :as util]
-            [logseq.db :as ldb]
+            [frontend.util.entity :as entity]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
@@ -92,26 +92,25 @@
                                                                    [repo new-value block-type]))}])
 
 (defn- build-sidebar-item
-  [repo idx db-id block-type *db-id init-key]
-  (let [lookup (cond
-                 (integer? db-id) db-id
-                 (uuid? db-id) [:block/uuid db-id]
-                 :else nil)
-        entity (when lookup (db/entity repo lookup))
-        page? (ldb/page? entity)
+  [repo idx db-id block-type *db-id init-key entity contents-page]
+  (let [page? (entity/page? entity)
+        item-meta {:drag-name (:block/name entity)}
         block-render (fn []
                        (when entity
                          (if page?
                            [[:.flex.items-center.page-title.gap-1
                              (icon/get-node-icon-cp entity {:class "text-md"})
                              [:span.overflow-hidden.text-ellipsis (:block/title entity)]]
-                            (page-cp repo (str (:block/uuid entity)))]
-                           (block-with-breadcrumb repo entity idx [repo db-id block-type] false))))]
+                            (page-cp repo (str (:block/uuid entity)))
+                            item-meta]
+                           (conj (block-with-breadcrumb repo entity idx [repo db-id block-type] false)
+                                 item-meta))))]
     (case (keyword block-type)
       :contents
-      (when-let [page (db/get-page "Contents")]
+      (when-let [page contents-page]
         [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :page/contents)]
-         (page-cp repo (str (:block/uuid page)))])
+         (page-cp repo (str (:block/uuid page)))
+         {:drag-name (:block/name page)}])
 
       :help
       [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :nav/help)] (onboarding/help)]
@@ -121,10 +120,11 @@
        (page/page-graph)]
 
       :block-ref
-      (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
-        (when-let [block (db/entity repo lookup)]
+      (let [block entity]
+        (when block
           [(t :reference/blocks)
-           (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
+           (block-with-breadcrumb repo block idx [repo db-id block-type] true)
+           {:drag-name (:block/name block)}]))
 
       :block
       (block-render)
@@ -164,10 +164,11 @@
 
 (defn- <build-sidebar-item
   [repo idx db-id block-type *db-id init-key]
-  (-> (p/do!
-       (when-not (contains? #{:contents :search} block-type)
-         (db-async/<get-block repo db-id))
-       (build-sidebar-item repo idx db-id block-type *db-id init-key))
+  (-> (p/let [entity (when (or (integer? db-id) (uuid? db-id))
+                       (db-async/<get-block repo db-id {:children? false}))
+              contents-page (when (= :contents (keyword block-type))
+                              (db-async/<get-block repo "Contents" {:children? false}))]
+       (build-sidebar-item repo idx db-id block-type *db-id init-key entity contents-page))
       (p/catch (fn [error]
                  (js/console.error error)))))
 
@@ -193,8 +194,16 @@
   [db-id idx type collapsed? block-count]
   (let [multi-items? (> block-count 1)
         menu-item shui/dropdown-menu-item
-        block (when (integer? db-id) (db/entity db-id))
-        page? (or (contains? #{:page :contents} type) (ldb/page? block))]
+        [block set-block!] (hooks/use-state nil)
+        page? (or (contains? #{:page :contents} type) (entity/page? block))]
+    (hooks/use-effect!
+     (fn []
+       (if (integer? db-id)
+         (p/let [block (db-async/<get-block (state/get-current-repo) db-id {:children? false})]
+           (set-block! block))
+         (set-block! nil))
+       nil)
+     [db-id])
     [:<>
      (menu-item {:on-click #(state/sidebar-remove-block! idx)} (t :sidebar.right/close))
      (when multi-items? (menu-item {:on-click #(state/sidebar-remove-rest! db-id)} (t :sidebar.right/close-others)))
@@ -243,7 +252,7 @@
 
 (hsx/defc sidebar-item-inner
   [db-id {:keys [repo idx block-type collapsed? drag-from drag-to block-count *db-id init-key]}]
-  (let [[item set-item!] (hooks/use-state #(build-sidebar-item repo idx db-id block-type *db-id init-key))]
+  (let [[item set-item!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
        (p/let [item (<build-sidebar-item repo idx db-id block-type *db-id init-key)]
@@ -255,7 +264,7 @@
        [:div.flex.sidebar-item.content.color-level.rounded-md.shadow-lg
         {:class [(str "item-type-" (name block-type))
                  (when collapsed? "collapsed")]}
-        (let [[title component] item]
+        (let [[title component {:keys [drag-name]}] item]
           [:div.flex.flex-col.w-full.relative
            [:.flex.flex-row.justify-between.sidebar-item-header.color-level.rounded-t-md
             {:class         (when collapsed? "rounded-b-md")
@@ -267,7 +276,7 @@
                                                   {:as-dropdown? true
                                                    :content-props {:on-click (fn [] (shui/popup-hide!))}}))
              :on-drag-start (fn [event]
-                              (editor-handler/block->data-transfer! (:block/name (db/entity db-id)) event true)
+                              (editor-handler/block->data-transfer! drag-name event true)
                               (reset! *drag-from idx))
              :on-drag-end   (fn [_event]
                               (when drag-to (state/sidebar-move-block! idx drag-to))
@@ -357,7 +366,7 @@
                :file
                (get-in match [:path-params :path])
 
-               (db/get-today-journal-title))]
+               (date/today))]
     (when page
       (string/lower-case page))))
 

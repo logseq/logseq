@@ -5,11 +5,7 @@
             [cljs.reader]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [datascript.core :as d]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.conn :as db-conn]
-            [frontend.db.model :as db-model]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -18,10 +14,10 @@
             [frontend.modules.layout.core]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.entity :as entity]
             [goog.object :as gobj]
             [logseq.api.block :as api-block]
             [logseq.db :as ldb]
-            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.graph-parser.text :as text]
             [logseq.outliner.core :as outliner-core]
             [logseq.sdk.core]
@@ -33,15 +29,19 @@
   (->> (vals (bean/->clj (gobj/get emoji-data "emojis")))
        (group-by :name)))
 
+(defn- <get-block
+  [id]
+  (db-async/<get-block (state/get-current-repo) id {:children? false}))
+
 (defn -get-property
   [^js plugin k]
   (when-let [k' (and (string? k) (api-block/sanitize-user-property-name k))]
     (let [property-ident (api-block/get-db-ident-from-property-name k' plugin)]
-      (db/entity property-ident))))
+      (<get-block property-ident))))
 
 (defn get-favorites
   []
-  (p/let [favorites (page-handler/get-favorites)]
+  (p/let [favorites (page-handler/<get-favorites)]
     (sdk-utils/result->js favorites)))
 
 (defn insert-batch-blocks
@@ -49,30 +49,32 @@
   (let [blocks' (walk/prewalk
                  (fn [f]
                    (if (and (map? f) (:content f) (nil? (:uuid f)))
-                     (assoc f :uuid (d/squuid))
+                     (assoc f :uuid (random-uuid))
                      f))
                  blocks)
         {:keys [sibling before schema]} opts
-        block (if before
-                (db/pull (:db/id (ldb/get-left-sibling (db/entity (:db/id target))))) target)
-        sibling? (if (entity-util/page? block) false sibling)
         uuid->properties (let [blocks (outliner-core/tree-vec-flatten blocks' :children)]
                            (when (some (fn [b] (seq (:properties b))) blocks)
                              (zipmap (map :uuid blocks)
                                      (map :properties blocks))))]
-    (p/let [result (editor-handler/insert-block-tree-after-target
+    (p/let [block (if before
+                    (db-async/<get-block-sibling (state/get-current-repo) (:db/id target) :left)
+                    target)
+            sibling? (if (entity/page? block) false sibling)
+            result (editor-handler/insert-block-tree-after-target
                     (:db/id block) sibling? blocks' :markdown true)
             blocks (:blocks result)]
       (when (seq blocks)
         (p/doseq [block blocks]
           (let [id (:block/uuid block)
-                b (db/entity [:block/uuid id])
                 properties (when uuid->properties (uuid->properties id))]
             (when (seq properties)
-              (api-block/db-based-save-block-properties! b properties {:plugin this
-                                                                       :schema schema})))))
-      (let [blocks' (map (fn [b] (db/entity [:block/uuid (:block/uuid b)])) blocks)]
-        (sdk-utils/result->js blocks')))))
+              (api-block/db-based-save-block-properties! block properties {:plugin this
+                                                                          :schema schema})))))
+      (p/let [blocks' (db-async/<get-blocks (state/get-current-repo)
+                                            (map :block/uuid blocks))]
+        (let [blocks' (keep :block blocks')]
+          (sdk-utils/result->js blocks'))))))
 
 (defn insert-block
   [this content properties schema opts]
@@ -80,8 +82,9 @@
     (when (seq properties)
       (api-block/db-based-save-block-properties! new-block properties {:plugin this
                                                                        :schema schema}))
-    (let [block (db/entity [:block/uuid (:block/uuid new-block)])]
+    (p/let [block (<get-block (:block/uuid new-block))]
       (sdk-utils/result->js block))))
+
 
 (defn update-block
   [this block content opts]
@@ -151,7 +154,7 @@
                      (dissoc :type)))
           p (db-property-handler/upsert-property! property-ident schema
                                                   (assoc opts :property-name k'))]
-    (db/entity (:db/id p))))
+    (<get-block (:db/id p))))
 
 (defn upsert-property
   "schema:
@@ -189,34 +192,39 @@
 
 (defn get-all-tags
   []
-  (-> (db-model/get-all-classes (state/get-current-repo)
-                                {:except-root-class? true})
-      sdk-utils/result->js))
+  (p/let [tags (db-async/<get-all-classes (state/get-current-repo)
+                                          {:except-root-class? true})]
+    (sdk-utils/result->js tags)))
 
 (defn get-all-properties
   []
-  (-> (db-model/get-all-properties (state/get-current-repo))
-      sdk-utils/result->js))
+  (p/let [properties (db-async/<get-all-properties (state/get-current-repo) {})]
+    (sdk-utils/result->js properties)))
 
 (defn get-tag-objects
   [class-uuid-or-ident-or-title]
-  (when-let [db (db/get-db)]
-    (let [eid (if (util/uuid-string? class-uuid-or-ident-or-title)
-               (when-let [id (sdk-utils/uuid-or-throw-error class-uuid-or-ident-or-title)]
-                 [:block/uuid id])
-               (let [k (keyword (api-block/sanitize-user-property-name class-uuid-or-ident-or-title))]
-                 (if (qualified-keyword? k)
+  (let [k (when-not (util/uuid-string? class-uuid-or-ident-or-title)
+            (keyword (api-block/sanitize-user-property-name class-uuid-or-ident-or-title)))
+        class-id (cond
+                   (util/uuid-string? class-uuid-or-ident-or-title)
+                   (sdk-utils/uuid-or-throw-error class-uuid-or-ident-or-title)
+
+                   (qualified-keyword? k)
                    k
-                   (some-> (ldb/get-case-page db class-uuid-or-ident-or-title) :db/id))))
-         class (db/entity eid)]
-     (when-not (ldb/class? class)
-       (throw (ex-info "Not a tag" {:input class-uuid-or-ident-or-title})))
-     (if-not class
-       (throw (ex-info (str "Tag not exists with id: " eid) {}))
-       (p/let [result (state/<invoke-db-worker :thread-api/get-class-objects
-                                               (state/get-current-repo)
-                                               (:db/id class))]
-         (sdk-utils/result->js result))))))
+
+                   :else
+                   class-uuid-or-ident-or-title)]
+    (p/let [class (if (or (uuid? class-id) (qualified-keyword? class-id))
+                    (<get-block class-id)
+                    (db-async/<get-case-page (state/get-current-repo) class-id))]
+      (when-not (entity/class? class)
+        (throw (ex-info "Not a tag" {:input class-uuid-or-ident-or-title})))
+      (if-not class
+        (throw (ex-info (str "Tag not exists with id: " class-id) {}))
+        (p/let [result (db-async/<get-class-objects-from-worker
+                        (state/get-current-repo)
+                        (:db/id class))]
+          (sdk-utils/result->js result))))))
 
 (defn create-tag [title ^js opts]
   (this-as this
@@ -235,23 +243,23 @@
                    tag (db-page-handler/<create-class! title opts')
                    properties (when (seq tag-properties)
                                 (p/all (map
-                                        (fn [{:keys [name schema properties]}]
-                                          (let [name' (api-block/sanitize-user-property-name name)
-                                                property-ident (api-block/get-db-ident-from-property-name name' this)
-                                                property-entity (db/entity property-ident)]
-                                            (or property-entity    ; property exists already
-                                                (upsert-property-aux this name schema {:properties properties}))))
+                                           (fn [{:keys [name schema properties]}]
+                                             (let [name' (api-block/sanitize-user-property-name name)
+                                                   property-ident (api-block/get-db-ident-from-property-name name' this)]
+                                               (p/let [property-entity (<get-block property-ident)]
+                                                 (or property-entity    ; property exists already
+                                                     (upsert-property-aux this name schema {:properties properties})))))
                                         tag-properties)))]
              (when (seq properties)
                (db-property-handler/set-block-property! (:db/id tag)
                                                         :logseq.property.class/properties
                                                         (map :db/id properties)))
-             (let [tag (db/entity (:db/id tag))]
+             (p/let [tag (<get-block (:db/id tag))]
                (sdk-utils/result->js tag)))))
 
 (defn- throw-error-if-not-tag!
   [tag tag-id]
-  (when-not (ldb/class? tag)
+  (when-not (entity/class? tag)
     (throw (ex-info (str "Not a tag: " tag-id)
                     {:tag tag}))))
 
@@ -301,54 +309,55 @@
                api-block/resolve-property-prefix-for-db))
 
 (defn- get-tags [name]
-  (when-let [db (db-conn/get-db)]
-    (some->> (entity-util/get-pages-by-name db name)
-            (map #(some-> % (first) (db/entity)))
-            (filter ldb/class?))))
+  (db-async/<get-tags-by-name (state/get-current-repo) name))
 
 (defn get-tag [class-uuid-or-ident-or-title]
   (this-as this
-           (let [eid (resolve-tag-eid this class-uuid-or-ident-or-title)
-                 tag (db/entity eid)
-                 tag (or tag (some-> (get-tags class-uuid-or-ident-or-title) first))]
-             (when (ldb/class? tag)
+           (p/let [eid (resolve-tag-eid this class-uuid-or-ident-or-title)
+                   tag (<get-block eid)
+                   tags-by-name (when-not tag (get-tags class-uuid-or-ident-or-title))
+                   tag (or tag (first tags-by-name))]
+             (when (entity/class? tag)
                (sdk-utils/result->js tag)))))
 
 (defn get-tags-by-name [name]
-  (when-let [tags (get-tags name)]
+  (p/let [tags (get-tags name)]
     (sdk-utils/result->js tags)))
 
 (defn tag-add-property [tag-id property-id-or-name]
   (this-as this
-           (p/let [tag (db/get-case-page tag-id)
+           (p/let [tag (db-async/<get-case-page (state/get-current-repo) tag-id)
                    eid (resolve-property-eid this property-id-or-name)
-                   property (db/entity eid)]
-             (when-not (ldb/class? tag) (throw (ex-info "Not a valid tag" {:tag tag-id})))
-             (when-not (ldb/property? property) (throw (ex-info "Not a valid property" {:property property-id-or-name})))
+                   property (<get-block eid)]
+             (when-not (entity/class? tag) (throw (ex-info "Not a valid tag" {:tag tag-id})))
+             (when-not (entity/property? property) (throw (ex-info "Not a valid property" {:property property-id-or-name})))
              (when (and (not (ldb/public-built-in-property? property))
                         (ldb/built-in? property))
                (throw (ex-info "This is a private built-in property that can't be used." {:value property})))
              (p/do!
               (db-property-handler/class-add-property! (:db/id tag) (:db/ident property))
-              (sdk-utils/result->js (db/get-case-page tag-id))))))
+              (p/let [tag (db-async/<get-case-page (state/get-current-repo) tag-id)]
+                (sdk-utils/result->js tag))))))
 
 (defn tag-remove-property [tag-id property-id-or-name]
-  (p/let [tag (db/get-case-page tag-id)
-          property (db/get-case-page property-id-or-name)]
-    (when-not (ldb/class? tag) (throw (ex-info "Not a valid tag" {:tag tag-id})))
-    (when-not (ldb/property? property) (throw (ex-info "Not a valid property" {:property property-id-or-name})))
+  (p/let [repo (state/get-current-repo)
+          tag (db-async/<get-case-page repo tag-id)
+          property (db-async/<get-case-page repo property-id-or-name)]
+    (when-not (entity/class? tag) (throw (ex-info "Not a valid tag" {:tag tag-id})))
+    (when-not (entity/property? property) (throw (ex-info "Not a valid property" {:property property-id-or-name})))
     (p/do!
      (db-property-handler/class-remove-property! (:db/id tag) (:db/ident property))
-     (sdk-utils/result->js (db/get-case-page tag-id)))))
+     (p/let [tag (db-async/<get-case-page repo tag-id)]
+       (sdk-utils/result->js tag)))))
 
 (defn add-block-tag [id-or-name tag-id]
   (this-as this
            (p/let [repo (state/get-current-repo)
                    block (db-async/<get-block repo id-or-name)
                    tag-eid (resolve-tag-eid this tag-id)
-                   tag (or (db/entity tag-eid)
-                           (db-async/<get-block repo tag-id))]
-             (when-not (ldb/class? tag)
+                   tag-by-eid (db-async/<get-block repo tag-eid)
+                   tag (or tag-by-eid (db-async/<get-block repo tag-id))]
+             (when-not (entity/class? tag)
                (throw (ex-info (str "Not a tag: " tag-id)
                                {:tag (pr-str tag)})))
              (when (and tag block)
@@ -359,9 +368,9 @@
            (p/let [repo (state/get-current-repo)
                    block (db-async/<get-block repo id-or-name)
                    tag-eid (resolve-tag-eid this tag-id)
-                   tag (or (db/entity tag-eid)
-                           (db-async/<get-block repo tag-id))]
-             (when-not (ldb/class? tag)
+                   tag-by-eid (db-async/<get-block repo tag-eid)
+                   tag (or tag-by-eid (db-async/<get-block repo tag-id))]
+             (when-not (entity/class? tag)
                (throw (ex-info (str "Not a tag: " tag-id)
                                {:tag tag})))
              (when (and block tag)
@@ -403,7 +412,7 @@
   (let [tag-ids (and property-id (seq (bean/->clj tag-ids)))]
     (p/let [repo (state/get-current-repo)
             property (db-async/<get-block repo property-id)]
-      (when-not (ldb/property? property)
+      (when-not (entity/property? property)
         (throw (ex-info "Not a valid property" {:property property-id})))
 
       (doseq [tag-id tag-ids]

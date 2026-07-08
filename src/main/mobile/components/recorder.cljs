@@ -5,8 +5,7 @@
             [cljs-time.local :as tl]
             [clojure.string :as string]
             [frontend.date :as date]
-            [frontend.db :as db]
-            [frontend.db.model :as db-model]
+            [frontend.db.async :as db-async]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.audio-recorder :as audio-recorder]
             [frontend.mobile.util :as mobile-util]
@@ -15,7 +14,6 @@
             [goog.functions :as gfun]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
-            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [mobile.init :as init]
@@ -67,15 +65,18 @@
                                            (tl/local-now)
                                           {:formatter-str audio-file-format})
                                           "."))]
-      (-> (p/let [file (js/File. [blob] filename #js {:type (.-type blob)})
+      (-> (p/let [repo (state/get-current-repo)
+                  file (js/File. [blob] filename #js {:type (.-type blob)})
                   capture? (= "capture" @mobile-state/*tab)
+                  save-to-page (when capture?
+                                 (db-async/<get-block repo common-config/quick-add-page-name {:children? false}))
                   insert-opts (cond->
                                {:last-edit-block @*last-edit-block}
                                 @*target-block
                                 (assoc :target-block @*target-block)
                                 capture?
-                                (assoc :save-to-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)))
-                  result (editor-handler/db-based-save-assets! (state/get-current-repo) [file] insert-opts)
+                                (assoc :save-to-page save-to-page))
+                  result (editor-handler/db-based-save-assets! repo [file] insert-opts)
                   asset-entity (first result)]
             (when (nil? asset-entity)
               (log/error ::empty-asset-entity {}))
@@ -200,7 +201,10 @@
       (if-not (string/blank? editing-id)
         (p/do!
          (editor-handler/save-current-block!)
-         (let [block (db-model/query-block-by-uuid (:block/uuid (state/get-edit-block)))]
+         (p/let [block (when-let [edit-block (state/get-edit-block)]
+                         (db-async/<get-block (state/get-current-repo)
+                                              (:block/uuid edit-block)
+                                              {:children? false}))]
            (if (or quick-add? save-to-today?)
              (p/do!
               (state/clear-edit!)

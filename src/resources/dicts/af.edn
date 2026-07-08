@@ -178,7 +178,6 @@
  :cmdk.action/search "Soek"
  :cmdk.action/trigger "Voer uit"
 
- :cmdk.create/configure-tag "Tag configureren"
  :cmdk.create/page "Skep bladsy"
  :cmdk.create/tag "Skep etiket"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Onlangs opgedateer"
  :cmdk.group/themes "Tema's"
 
- :cmdk.info/configure-tag "#{1} configureren"
  :cmdk.info/create-page "Bladsy '{1}' aanmaken"
  :cmdk.info/create-tag "Tag '{1}' aanmaken"
 

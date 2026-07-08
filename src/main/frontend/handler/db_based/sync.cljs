@@ -3,7 +3,6 @@
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
@@ -12,7 +11,6 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [promesa.core :as p]))
 
@@ -100,10 +98,25 @@
   [repo]
   (some #(when (= repo (:url %)) %) (state/get-rtc-graphs)))
 
-(defn- graph-has-local-rtc-id?
+(defn- <get-rtc-graph-uuid
   [repo]
-  (boolean (some-> (db/get-db repo)
-                   ldb/get-graph-rtc-uuid)))
+  (p/let [graph-uuid (state/<invoke-db-worker :thread-api/get-rtc-graph-uuid repo)]
+    (some-> graph-uuid str)))
+
+(defn- <get-rtc-graph-e2ee?
+  [repo]
+  (state/<invoke-db-worker :thread-api/get-rtc-graph-e2ee? repo))
+
+(defn- <ensure-invite-auth!
+  []
+  (user-handler/<ensure-id&access-token!))
+
+(defn- <grant-graph-access-for-invite!
+  [repo graph-uuid email]
+  (p/let [e2ee? (when repo (<get-rtc-graph-e2ee? repo))]
+    (when (and repo e2ee?)
+      (state/<invoke-db-worker :thread-api/db-sync-grant-graph-access
+                               repo graph-uuid email))))
 
 (defn- should-start-rtc?
   [repo]
@@ -216,8 +229,7 @@
           (state/<invoke-db-worker :thread-api/db-sync-start repo)))
       (do
         (log/info :db-sync/skip-start {:repo repo :reason :graph-not-in-remote-list
-                                       :remote-graphs-loading? (:rtc/loading-graphs? @state/state)
-                                       :has-local-rtc-id? (graph-has-local-rtc-id? repo)})
+                                       :remote-graphs-loading? (:rtc/loading-graphs? @state/state)})
         (<rtc-stop!)))))
 
 (defonce ^:private debounced-update-presence
@@ -233,34 +245,35 @@
 (defn <rtc-get-users-info
   ([] (<rtc-get-users-info false))
   ([force?]
-   (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
-     (let [base (http-base)
-           repo (state/get-current-repo)
-           users-info (state/get-state :rtc/users-info)
-           cached-users (get users-info repo)]
-       (cond
-         (and (not force?) (contains? users-info repo))
-         (p/resolved cached-users)
+   (let [repo (state/get-current-repo)]
+     (p/let [graph-uuid (<get-rtc-graph-uuid repo)]
+       (when graph-uuid
+         (let [base (http-base)
+               users-info (state/get-state :rtc/users-info)
+               cached-users (get users-info repo)]
+           (cond
+             (and (not force?) (contains? users-info repo))
+             (p/resolved cached-users)
 
-         base
-         (p/let [_ (user-handler/<ensure-id&access-token!)
-                 resp (fetch-json (str base "/graphs/" graph-uuid "/members")
-                                  {:method "GET"}
-                                  {:response-schema :graph-members/list})
-                 members (:members resp)
-                 users (mapv (fn [{:keys [user-id role email username]}]
-                               (let [name (or username email user-id)
-                                     user-type (some-> role keyword)]
-                                 (cond-> {:user/uuid user-id
-                                          :user/name name
-                                          :graph<->user/user-type user-type}
-                                   (string? email) (assoc :user/email email))))
-                             members)]
-           (state/set-state! :rtc/users-info users :nested-path repo)
-           users)
+             base
+             (p/let [_ (user-handler/<ensure-id&access-token!)
+                     resp (fetch-json (str base "/graphs/" graph-uuid "/members")
+                                      {:method "GET"}
+                                      {:response-schema :graph-members/list})
+                     members (:members resp)
+                     users (mapv (fn [{:keys [user-id role email username]}]
+                                   (let [name (or username email user-id)
+                                         user-type (some-> role keyword)]
+                                     (cond-> {:user/uuid user-id
+                                              :user/name name
+                                              :graph<->user/user-type user-type}
+                                       (string? email) (assoc :user/email email))))
+                                 members)]
+               (state/set-state! :rtc/users-info users :nested-path repo)
+               users)
 
-         :else
-         (p/resolved nil))))))
+             :else
+             (p/resolved nil))))))))
 
 (defn <rtc-create-graph!
   ([repo]
@@ -362,7 +375,7 @@
         graph-uuid (str graph-uuid)]
     (if (and base (string? graph-uuid) (string? email))
       (->
-       (p/let [_ (user-handler/<ensure-id&access-token!)
+       (p/let [_ (<ensure-invite-auth!)
                body (coerce-http-request :graph-members/create
                                          {:email email
                                           :role "member"})
@@ -376,10 +389,7 @@
                               :body (js/JSON.stringify (clj->js body))}
                              {:response-schema :graph-members/create})
                repo (state/get-current-repo)
-               e2ee? (ldb/get-graph-rtc-e2ee? (db/get-db))
-               _ (when (and repo e2ee?)
-                   (state/<invoke-db-worker :thread-api/db-sync-grant-graph-access
-                                            repo graph-uuid email))
+               _ (<grant-graph-access-for-invite! repo graph-uuid email)
                _ (<rtc-get-users-info true)]
          (notification/show! (t :sync/invitation-sent) :success))
        (p/catch (fn [e]

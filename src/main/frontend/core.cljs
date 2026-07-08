@@ -135,22 +135,6 @@
 
     (display-welcome-message)))
 
-(comment
-  (def d-entity-count (volatile! 0))
-  (def ident->count (volatile! {}))
-  (def time-sum (volatile! 0))
-  (defn- setup-entity-profile!
-    []
-    (let [origin-d-entity d/entity]
-      (set! d/entity (fn [& args]
-                       (let [{r :result time :time} (util/with-time (apply origin-d-entity args))
-                             k (last args)]
-                         (vswap! d-entity-count inc)
-                         (vswap! ident->count update k inc)
-                         (vswap! time-sum #(+ time %))
-                         (println @d-entity-count (:db/id r) k (get @ident->count k) @time-sum "ms")
-                         r))))))
-
 (defn ^:export init []
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported

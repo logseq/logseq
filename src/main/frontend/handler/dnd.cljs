@@ -1,7 +1,6 @@
 (ns frontend.handler.dnd
   "Provides fns for drag and drop"
   (:require [frontend.components.block.comments-model :as comments-model]
-            [frontend.db :as db]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.op :as outliner-op]
@@ -37,8 +36,7 @@
 
 (defn move-blocks
   [^js event blocks target-block original-block move-to]
-  (let [target-block (db/entity (:db/id target-block))
-        blocks' (map #(db/entity (:db/id %)) blocks)
+  (let [blocks' blocks
         first-block (first blocks')
         top? (= move-to :top)
         nested? (= move-to :nested)

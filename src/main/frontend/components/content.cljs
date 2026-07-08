@@ -10,7 +10,7 @@
             [frontend.components.page-menu :as page-menu]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.comments :as comments-handler]
@@ -40,9 +40,17 @@
 
 (hsx/defc ^:large-vars/cleanup-todo custom-context-menu-content
   []
-  (let [[set-icon-sub-menu-open? set-icon-sub-menu-open] (hooks/use-state false)
+  (let [selection-block-ids (state/get-selection-block-ids)
+        [selected-blocks set-selected-blocks!] (hooks/use-state nil)
+        [set-icon-sub-menu-open? set-icon-sub-menu-open] (hooks/use-state false)
         comment-targets (comments-model/comment-target-blocks
-                         (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids)))]
+                         selected-blocks)]
+    (hooks/use-effect!
+     (fn []
+       (p/let [results (db-async/<get-blocks (state/get-current-repo) selection-block-ids)]
+         (set-selected-blocks! (vec (keep :block results))))
+       nil)
+     [selection-block-ids])
     [:<>
      (ui/menu-background-color #(property-handler/batch-set-block-property! (state/get-selection-block-ids)
                                                                             :logseq.property/background-color
@@ -171,12 +179,20 @@
 
 (hsx/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id property-default-value?]
-  (let [block (db/entity [:block/uuid block-id])
+  (let [[block set-block!] (hooks/use-state nil)
         simple-commands (rfx/use-sub [:plugin/simple-commands])
         developer-mode? (rfx/use-sub [:ui/developer-mode?])
         [set-icon-sub-menu-open? set-icon-sub-menu-open] (hooks/use-state false)
-        [heading set-heading!] (hooks/use-state (or (pu/lookup block :logseq.property/heading) false))
+        [heading set-heading!] (hooks/use-state false)
         [current-color set-current-color!] (hooks/use-state (pu/lookup block :logseq.property/background-color))]
+    (hooks/use-effect!
+     (fn []
+       (p/let [block (db-async/<get-block (state/get-current-repo) block-id {:children? false})]
+         (set-block! block)
+         (set-heading! (or (pu/lookup block :logseq.property/heading) false))
+         (set-current-color! (pu/lookup block :logseq.property/background-color)))
+       nil)
+     [block-id])
     (when block
       [:<>
        (ui/menu-background-color current-color
@@ -372,13 +388,12 @@
                 :on-click (fn []
                             (dev-common-handler/show-entity-data [:block/uuid block-id]))}
                (shortcut-dh/shortcut-desc-by-id :dev/show-block-data))
-              (shui/dropdown-menu-item
-               {:key :dev/show-block-ast
-                :on-click (fn []
-                            (let [block (db/entity [:block/uuid block-id])]
-                              (dev-common-handler/show-content-ast (:block/title block)
-                                                                   (get block :block/format :markdown))))}
-               (shortcut-dh/shortcut-desc-by-id :dev/show-block-ast))))])])))
+	              (shui/dropdown-menu-item
+	               {:key :dev/show-block-ast
+	                :on-click (fn []
+	                            (dev-common-handler/show-content-ast (:block/title block)
+	                                                                 (get block :block/format :markdown)))}
+	               (shortcut-dh/shortcut-desc-by-id :dev/show-block-ast))))])])))
 
 (hsx/defc block-ref-custom-context-menu-content
   [block block-ref-id]

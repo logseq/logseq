@@ -5,7 +5,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.persist :as db-persist]
             [frontend.db.restore :as db-restore]
             [frontend.handler.global-config :as global-config-handler]
@@ -54,7 +54,7 @@
                           :repo url}))
     (let [current-repo (state/get-current-repo)]
       (p/do!
-       (db/remove-conn! url)
+       (persist-db/<close-db url)
        (db-persist/delete-graph! url)
        (search/remove-db! url)
        (state/delete-repo! repo)
@@ -70,11 +70,6 @@
                (state/pub-event! [:graph/switch graph {:persist? false}])))
            (notification/show! (t :graph/removed (text-util/get-graph-name-from-path url)) :success)))))))
 
-(defn start-repo-db-if-not-exists!
-  [repo & {:as opts}]
-  (state/set-current-repo! repo)
-  (db/start-db-conn! repo (assoc opts :db-graph? true)))
-
 (defn restore-and-setup-repo!
   "Restore the db of a graph from the persisted data, and setup. Create a new
   conn, or replace the conn in state with a new one."
@@ -82,6 +77,8 @@
   (p/do!
    (state/set-db-restoring! true)
    (db-restore/restore-graph! repo opts)
+   (p/let [date-formatter (db-async/<get-date-formatter repo)]
+     (state/set-date-formatter! repo date-formatter))
    (repo-config-handler/restore-repo-config! repo)
    (when (config/global-config-enabled?)
      (global-config-handler/restore-global-config!))
@@ -162,7 +159,6 @@
                                        :graph-git-sha (build-version/revision)
                                        :creating-remote-graph? creating-remote-graph?}
                                 file-graph-import? (assoc :import-type :file-graph)))
-           _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name :root (config/get-local-dir full-graph-name)})
            _ (restore-and-setup-repo! full-graph-name {:file-graph-import? file-graph-import?})
            _ (when-not file-graph-import? (route-handler/redirect-to-home!))

@@ -1,9 +1,7 @@
 (ns frontend.handler.db-based.page
   "DB graph only page util fns"
   (:require [clojure.string :as string]
-            [datascript.impl.entity :as de]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -13,88 +11,78 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.outliner.validate :as outliner-validate]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
-(defn- valid-tag?
+(defn- <valid-tag?
   "Returns a boolean indicating whether the new tag passes all valid checks.
    When returning false, this fn also displays appropriate notifications to the user"
-  [repo block tag-entity]
-  (try
-    (outliner-validate/validate-unique-by-name-and-tags
-     (db/get-db repo)
-     (:block/title block)
-     (update block :block/tags (fnil conj #{}) tag-entity))
-    true
-    (catch :default e
-      (if (= :notification (:type (ex-data e)))
-        (let [payload (:payload (ex-data e))]
-          (notification/show! (:message payload) (:type payload))
-          false)
-        (throw e)))))
+  [repo block-id tag-id]
+  (p/let [result (state/<invoke-db-worker :thread-api/validate-block-tag repo block-id tag-id)]
+    (if (:valid? result)
+      true
+      (let [payload (:payload result)]
+        (notification/show! (:message payload) (:type payload))
+        false))))
 
 (defn add-tag [repo block-id tag-entity]
-  (p/do!
-   (editor-handler/save-current-block!)
-   ;; Check after save-current-block to get most up to date block content
-   (when (valid-tag? repo (db/entity repo [:block/uuid block-id]) tag-entity)
-     (db-property-handler/set-block-property! block-id :block/tags (:db/id tag-entity)))))
+  ;; Check after save-current-block to get most up to date block content.
+  (-> (editor-handler/save-current-block!)
+      (p/then (fn [_]
+                (<valid-tag? repo block-id (:db/id tag-entity))))
+      (p/then (fn [valid?]
+                (when valid?
+                  (db-property-handler/set-block-property! block-id :block/tags (:db/id tag-entity)))))))
 
 (defn convert-page-to-tag!
   "Converts a Page to a Tag"
   [page-entity]
-  (cond (db/page-exists? (:block/title page-entity) #{:logseq.class/Tag})
-        (notification/show! (t :page.convert/page-to-tag-duplicate (:block/title page-entity)) :warning false)
-        (:block/parent page-entity)
-        (notification/show! (t :page.convert/page-to-tag-namespaced) :error false)
-        (ldb/built-in? page-entity)
-        (notification/show! (t :page.convert/page-to-tag-built-in) :error)
-        :else
-        ;; FIXME: should move to worker
-        (let [txs [(db-class/build-new-class (db/get-db)
-                                             {:block/uuid (:block/uuid page-entity)
-                                              :block/title (:block/title page-entity)
-                                              :block/created-at (:block/created-at page-entity)})
-                   [:db/retract (:db/id page-entity) :block/tags :logseq.class/Page]]]
-
-          (db/transact! (state/get-current-repo) txs {:outliner-op :save-block}))))
+  (let [repo (state/get-current-repo)]
+    (p/let [tag-exists? (db-async/<page-exists? repo (:block/title page-entity) #{:logseq.class/Tag})]
+      (cond tag-exists?
+            (notification/show! (t :page.convert/page-to-tag-duplicate (:block/title page-entity)) :warning false)
+            (:block/parent page-entity)
+            (notification/show! (t :page.convert/page-to-tag-namespaced) :error false)
+            (ldb/built-in? page-entity)
+            (notification/show! (t :page.convert/page-to-tag-built-in) :error)
+            :else
+            (-> (state/<invoke-db-worker :thread-api/build-convert-page-to-tag-tx repo (:db/id page-entity))
+                (p/then
+                 (fn [txs]
+                   (state/<invoke-db-worker :thread-api/transact
+                                            repo
+                                            txs
+                                            {:outliner-op :save-block}
+                                            nil))))))))
 
 (defn convert-tag-to-page!
   [entity]
-  (cond (db/page-exists? (:block/title entity) #{:logseq.class/Page})
-        (notification/show! (t :page.convert/tag-to-page-duplicate (:block/title entity)) :warning false)
-        (ldb/built-in? entity)
-        (notification/show! (t :page.convert/tag-to-page-built-in) :error)
-        :else
-        (if (seq (:logseq.property.class/_extends entity))
-          (notification/show! (t :page.convert/tag-to-page-has-children) :error false)
-          (p/let [objects (db-async/<get-tag-objects (state/get-current-repo) (:db/id entity))]
-            (let [convert-fn
-                  (fn convert-fn []
-                    (let [page-txs [[:db/retract (:db/id entity) :db/ident]
-                                    [:db/retract (:db/id entity) :block/tags :logseq.class/Tag]
-                                    [:db/retract (:db/id entity) :logseq.property.class/extends]
-                                    [:db/retract (:db/id entity) :logseq.property.class/properties]
-                                    [:db/add (:db/id entity) :block/tags :logseq.class/Page]]
-                          obj-txs (mapcat (fn [obj]
-                                            (let [tags (map #(db/entity (state/get-current-repo) (:db/id %)) (:block/tags obj))]
-                                              [{:db/id (:db/id obj)
-                                                :block/title (db-content/replace-tag-refs-with-page-refs (:block/title obj) tags)}
-                                               [:db/retract (:db/id obj) :block/tags (:db/id entity)]]))
-                                          objects)
-                          txs (concat page-txs obj-txs)]
-                      (db/transact! (state/get-current-repo) txs {:outliner-op :save-block})))]
-              (-> (shui/dialog-confirm!
-                   (t :page.convert/tag-to-page-confirm-desc)
-                   {:id :convert-tag-to-page
-                    :data-reminder :ok
-                    :data-reminder-label (t :ui/dont-remind-me-again)
-                    :cancel-label (t :ui/cancel)
-                    :ok-label (t :ui/confirm)})
-                  (p/then convert-fn)))))))
+  (let [repo (state/get-current-repo)]
+    (p/let [page-exists? (db-async/<page-exists? repo (:block/title entity) #{:logseq.class/Page})
+            class-children (db-async/<get-structured-children repo (:db/id entity))]
+      (cond page-exists?
+            (notification/show! (t :page.convert/tag-to-page-duplicate (:block/title entity)) :warning false)
+            (ldb/built-in? entity)
+            (notification/show! (t :page.convert/tag-to-page-built-in) :error)
+            :else
+            (if (seq class-children)
+              (notification/show! (t :page.convert/tag-to-page-has-children) :error false)
+              (let [convert-fn
+                    (fn convert-fn [_]
+                  (p/let [txs (state/<invoke-db-worker :thread-api/build-convert-tag-to-page-tx repo (:db/id entity))]
+                    (state/<invoke-db-worker :thread-api/transact
+                                             repo
+                                             txs
+                                             {:outliner-op :save-block}
+                                             nil)))]
+                (-> (shui/dialog-confirm!
+                     (t :page.convert/tag-to-page-confirm-desc)
+                     {:id :convert-tag-to-page
+                      :data-reminder :ok
+                      :data-reminder-label (t :ui/dont-remind-me-again)
+                      :cancel-label (t :ui/cancel)
+                      :ok-label (t :ui/confirm)})
+                    (p/then convert-fn))))))))
 
 (defn <create-class!
   "Creates a class page and provides class-specific error handling"
@@ -111,22 +99,23 @@
   [chosen chosen-result class? edit-content current-pos last-pattern]
   (let [tag (string/trim chosen)
         edit-block (state/get-edit-block)
-        create-opts {:redirect? false}]
+        create-opts {:redirect? false}
+        existing-result? (:db/id chosen-result)]
     (when (:block/uuid edit-block)
-      (p/let [result (when-not (de/entity? chosen-result) ; page not exists yet
+      (p/let [result (when-not existing-result? ; page not exists yet
                        (if class?
                          (<create-class! tag create-opts)
                          (page-common-handler/<create! tag create-opts)))]
         (when class?
-          (let [tag-entity (or (when (de/entity? chosen-result) chosen-result) result)
+          (let [tag-entity (or (when existing-result? chosen-result) result)
                 hash-idx (string/last-index-of (subs edit-content 0 current-pos) last-pattern)
                 add-tag-to-nearest-node? (= page-ref/right-brackets (common-util/safe-subs edit-content (- hash-idx 2) hash-idx))
                 nearest-node (some-> (editor-handler/get-nearest-page) string/trim)]
             (if (and add-tag-to-nearest-node? (not (string/blank? nearest-node)))
-              (p/let [node-ent (db/get-case-page nearest-node)
+              (p/let [node-ent (db-async/<get-case-page (state/get-current-repo) nearest-node)
                       ;; Save because nearest node doesn't exist yet
                       _ (when-not node-ent (editor-handler/save-current-block!))
-                      node-ent' (or node-ent (db/get-case-page nearest-node))
+                      node-ent' (or node-ent (db-async/<get-case-page (state/get-current-repo) nearest-node))
                       _ (add-tag (state/get-current-repo) (:block/uuid node-ent') tag-entity)]
                 ;; Notify as action has been applied to a node off screen
                 (notification/show! (t :page/added-tag-to-node (:block/title tag-entity) (:block/title node-ent'))))

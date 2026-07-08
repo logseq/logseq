@@ -130,7 +130,7 @@
             [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.config :as config]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.extensions.calc :as calc]
             [frontend.handler.code :as code-handler]
             [frontend.handler.editor :as editor-handler]
@@ -392,7 +392,9 @@
   (p/do!
    (code-handler/save-code-editor!)
    (when-let [block (or (:code-block config) (:block config))]
-     (let [block (db/entity [:block/uuid (:block/uuid block)])]
+     (p/let [block (db-async/<get-block (state/get-current-repo)
+                                        (:block/uuid block)
+                                        {:children? false})]
        (state/set-state! :editor/raw-mode-block block)
        (editor-handler/edit-block! block :max {:save-code-editor? false})))))
 

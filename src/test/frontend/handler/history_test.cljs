@@ -1,11 +1,11 @@
 (ns frontend.handler.history-test
-  (:require [clojure.test :refer [deftest is]]
-            [frontend.db :as db]
+  (:require [cljs.test :refer [async deftest is]]
             [frontend.handler.editor :as editor]
             [frontend.handler.history :as history]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
 
 (deftest restore-cursor-and-state-prefers-ui-state-test
   (let [pause-calls (atom [])
@@ -66,8 +66,7 @@
                   state/exit-editing-and-set-selected-blocks! (fn [blocks direction]
                                                                 (swap! selection-calls conj [blocks direction]))
                   editor/edit-block! (fn [& args]
-                                       (swap! edit-calls conj args))
-                  db/pull (constantly nil)]
+                                       (swap! edit-calls conj args))]
       (#'history/restore-cursor!
        {:undo? true
         :editor-cursors [{:selected-block-uuids [#uuid "00000000-0000-0000-0000-000000000001"
@@ -77,31 +76,40 @@
              @selection-calls))
       (is (empty? @edit-calls)))))
 
-(deftest restore-cursor-selection-falls-back-to-editor-cursor-test
-  (let [selection-calls (atom [])
-        edit-calls (atom [])
-        block-uuid #uuid "00000000-0000-0000-0000-000000000003"]
-    (with-redefs [util/get-blocks-by-id (constantly nil)
-                  state/exit-editing-and-set-selected-blocks! (fn [blocks direction]
-                                                                (swap! selection-calls conj [blocks direction]))
-                  editor/edit-block! (fn [& args]
-                                       (swap! edit-calls conj args))
-                  db/pull (fn [[_lookup-k id]]
-                            (when (= block-uuid id)
-                              {:db/id 42
-                               :block/uuid block-uuid}))]
-      (#'history/restore-cursor!
-       {:undo? false
-        :editor-cursors [{:selected-block-uuids [#uuid "00000000-0000-0000-0000-000000000001"]
-                          :selection-direction :up
-                          :block-uuid block-uuid
-                          :container-id 99
-                          :start-pos 1
-                          :end-pos 3}]})
-      (is (empty? @selection-calls))
-      (is (= [[{:db/id 42
-                :block/uuid block-uuid}
-               3
-               {:container-id 99
-                :custom-content nil}]]
-             @edit-calls)))))
+(deftest restore-cursor-selection-falls-back-to-worker-block-test
+  (async done
+    (let [selection-calls (atom [])
+          edit-calls (atom [])
+          worker-calls (atom [])
+          block-uuid #uuid "00000000-0000-0000-0000-000000000003"]
+      (-> (p/with-redefs [util/get-blocks-by-id (constantly nil)
+                          state/get-current-repo (constantly "logseq_db_history")
+                          state/exit-editing-and-set-selected-blocks! (fn [blocks direction]
+                                                                        (swap! selection-calls conj [blocks direction]))
+                          state/<invoke-db-worker (fn [& args]
+                                                   (swap! worker-calls conj (vec args))
+                                                   (p/resolved {:db/id 42
+                                                                :block/uuid block-uuid}))
+                          editor/edit-block! (fn [& args]
+                                               (swap! edit-calls conj args))]
+            (p/let [_ (#'history/restore-cursor!
+                       {:undo? false
+                        :editor-cursors [{:selected-block-uuids [#uuid "00000000-0000-0000-0000-000000000001"]
+                                          :selection-direction :up
+                                          :block-uuid block-uuid
+                                          :container-id 99
+                                          :start-pos 1
+                                          :end-pos 3}]})]
+              (is (empty? @selection-calls))
+              (is (= [[:thread-api/pull "logseq_db_history" '[*] [:block/uuid block-uuid]]]
+                     @worker-calls))
+              (is (= [[{:db/id 42
+                        :block/uuid block-uuid}
+                       3
+                       {:container-id 99
+                        :custom-content nil}]]
+                     @edit-calls))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done)))))

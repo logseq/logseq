@@ -4,7 +4,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
-            [frontend.db.conn-state :as db-conn-state]
+            [frontend.db.conn :as db-conn]
             [frontend.state :as state]
             [frontend.test.noise :as test-noise]
             [frontend.worker.handler.page :as worker-page]
@@ -136,15 +136,15 @@
   [repo->conns f]
   (let [worker-db-prev @worker-state/*datascript-conns
         ops-prev @worker-state/*client-ops-conns
-        db-prev @db-conn-state/conns
+        db-prev @db-conn/conns
         apply-history-action-prev @undo-redo/*apply-history-action!
         listeners (atom [])]
     (reset! worker-state/*datascript-conns (into {} (map (fn [[repo {:keys [conn]}]]
                                                            [repo conn])
                                                          repo->conns)))
-    (reset! db-conn-state/conns (into {} (map (fn [[repo {:keys [conn]}]]
-                                                [repo conn])
-                                              repo->conns)))
+    (reset! db-conn/conns (into {} (map (fn [[repo {:keys [conn]}]]
+                                          [repo conn])
+                                        repo->conns)))
     (reset! worker-state/*client-ops-conns (into {} (map (fn [[repo {:keys [ops-conn]}]]
                                                            [repo ops-conn])
                                                          repo->conns)))
@@ -175,7 +175,7 @@
             (.close ops-conn)))
         (reset! worker-state/*datascript-conns worker-db-prev)
         (reset! worker-state/*client-ops-conns ops-prev)
-        (reset! db-conn-state/conns db-prev)
+        (reset! db-conn/conns db-prev)
         (doseq [[repo _] repo->conns]
           (undo-redo/clear-history! repo))
         (reset! undo-redo/*undo-ops {})

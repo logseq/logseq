@@ -7,7 +7,6 @@
             [electron.ipc :as ipc]
             [electron.locale :as electron-locale]
             [frontend.context.i18n :as i18n]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
@@ -66,8 +65,9 @@
                    (let [{:keys [page-name block-id]} (bean/->clj data)]
                      (cond
                        page-name
-                       (when (db/get-page page-name)
-                         (route-handler/redirect-to-page! page-name {:block-id block-id}))
+                       (p/let [page (db-async/<get-block (state/get-current-repo) page-name {:children? false})]
+                         (when page
+                           (route-handler/redirect-to-page! page-name {:block-id block-id})))
 
                        block-id
                        (p/let [block (db-async/<get-block (state/get-current-repo) block-id {:children? false})]

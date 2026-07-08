@@ -15,7 +15,6 @@
             [frontend.components.window-controls :as window-controls]
             [frontend.config :as config]
             [frontend.context.i18n :refer [interpolate-rich-text-node t]]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
@@ -126,33 +125,48 @@
 (hsx/defc main-content
   []
   (let [default-home (app-left-sidebar/get-default-home-if-valid)
-           current-repo (rfx/use-sub [:git/current-repo])
-           redirect-target (cond
-                             (and default-home
-                                  (= :home (state/get-current-route))
-                                  (not (state/route-has-p?))
-                                  (:page default-home))
-                             [:page (:page default-home)]
+        current-repo (rfx/use-sub [:git/current-repo])
+        [latest-journals set-latest-journals!] (hooks/use-state nil)
+        redirect-target (cond
+                          (and default-home
+                               (= :home (state/get-current-route))
+                               (not (state/route-has-p?))
+                               (:page default-home))
+                          [:page (:page default-home)]
 
-                             (let [latest-journals (db/get-latest-journals (state/get-current-repo) 1)]
-                               (and config/publishing?
-                                    (not default-home)
-                                    (empty? latest-journals)))
-                             [:route :all-pages])]
+                          (and config/publishing?
+                               (not default-home)
+                               (some? latest-journals)
+                               (empty? latest-journals))
+                          [:route :all-pages])]
        (hooks/use-effect!
         (fn []
-          (when-not @sidebar-inited?
-            (let [sidebar (:sidebar default-home)
-                  sidebar (if (string? sidebar) [sidebar] sidebar)]
-              (when-let [pages (->> (seq sidebar)
-                                    (remove string/blank?))]
-                (doseq [page pages]
-                  (let [page (util/safe-page-name-sanity-lc page)
-                        [db-id block-type] (if (= page "contents")
-                                             [(or (:db/id (db/get-page page)) "contents") :contents]
-                                             [(:db/id (db/get-page page)) :page])]
-                    (state/sidebar-add-block! current-repo db-id block-type)))
-                (reset! sidebar-inited? true)))))
+          (if (and config/publishing? current-repo (not default-home))
+            (p/let [journals (db-async/<get-latest-journals current-repo 1)]
+              (set-latest-journals! journals))
+            (set-latest-journals! nil))
+          nil)
+        [current-repo default-home])
+       (hooks/use-effect!
+	   (fn []
+	     (when-not @sidebar-inited?
+	       (let [sidebar (:sidebar default-home)
+	             sidebar (if (string? sidebar) [sidebar] sidebar)]
+	         (when-let [pages (->> (seq sidebar)
+	                               (remove string/blank?))]
+	           (p/let [page-items
+	                   (p/all
+	                    (mapv (fn [page]
+	                            (let [page (util/safe-page-name-sanity-lc page)
+	                                  block-type (if (= page "contents") :contents :page)]
+	                              (p/let [page-entity (db-async/<get-block current-repo page {:children? false})]
+	                                {:db-id (or (:db/id page-entity)
+	                                            (when (= page "contents") "contents"))
+	                                 :block-type block-type})))
+	                          pages))]
+	             (doseq [{:keys [db-id block-type]} page-items]
+	               (state/sidebar-add-block! current-repo db-id block-type))
+	             (reset! sidebar-inited? true))))))
         [current-repo default-home])
        (hooks/use-effect!
         (fn []

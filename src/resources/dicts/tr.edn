@@ -178,7 +178,6 @@
  :cmdk.action/search "Ara"
  :cmdk.action/trigger "Çalıştır"
 
- :cmdk.create/configure-tag "Etiketi yapılandır"
  :cmdk.create/page "Sayfa oluştur"
  :cmdk.create/tag "Etiket oluştur"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Son güncellenenler"
  :cmdk.group/themes "Temalar"
 
- :cmdk.info/configure-tag "#{1} yapılandır"
  :cmdk.info/create-page "'{1}' sayfası oluştur"
  :cmdk.info/create-tag "'{1}' etiketi oluştur"
 

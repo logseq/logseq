@@ -20,7 +20,7 @@
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.handler :as handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
@@ -32,11 +32,11 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.email :as email-util]
+            [frontend.util.entity :as entity]
             [frontend.version :refer [version]]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.version :as build-version]
-            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -55,15 +55,27 @@
    {:trigger-props {:as-child true}}))
 
 (defn current-local-uploadable-graph
-  []
+  [db-rtc-uuid]
   (let [current-repo (state/get-current-repo)]
     (some (fn [{:keys [url] :as graph}]
             (when (and (= current-repo url)
                        (repo/local-uploadable-graph?
                         (assoc graph :rtc-graph?
-                               (boolean (ldb/get-graph-rtc-uuid (db/get-db current-repo))))))
+                               (boolean db-rtc-uuid))))
               graph))
           (state/get-repos))))
+
+(defn- use-db-rtc-uuid
+  [repo]
+  (let [[db-rtc-uuid set-db-rtc-uuid!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (when repo
+         (p/let [graph-uuid (state/<invoke-db-worker :thread-api/get-rtc-graph-uuid repo)]
+           (set-db-rtc-uuid! graph-uuid)))
+       nil)
+     [repo])
+    db-rtc-uuid))
 
 (defn- current-remote-rtc-graph
   [current-repo rtc-graphs]
@@ -93,7 +105,7 @@
 
 (hsx/defc rtc-collaborators
   []
-  (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
+  (let [rtc-graph-id (use-db-rtc-uuid (state/get-current-repo))
         config (rfx/use-sub [:config])
         online-users (rfx/use-sub [:rtc/state :online-users])]
     (when rtc-graph-id
@@ -157,14 +169,14 @@
   [{:keys [current-repo t]}]
   (let [_route-match (rfx/use-sub [:route-match])
         current-page (sidebar/get-current-page)
-        page (or (some-> current-page db/get-page)
-                 (when (util/uuid-string? current-page)
-                   (db/entity [:block/uuid (uuid current-page)])))
+        [page set-page!] (hooks/use-state nil)
+        [recycle-page? set-recycle-page?!] (hooks/use-state false)
         ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
         working-page? (if config/publishing? (not (rfx/use-sub [:db/restoring?])) true)
-        page-menu (if (and working-page? (ldb/page? page))
-                    (page-menu/page-menu page)
-                    (when-not config/publishing?
+        page-menu (when page
+                    (if (and working-page? (entity/page? page))
+                      (page-menu/page-menu page)
+                      (when-not config/publishing?
                       (let [block-id-str (str (:block/uuid page))
                             favorited? (page-handler/favorited? block-id-str)]
                         [{:title   (if favorited?
@@ -174,10 +186,10 @@
                                     (fn []
                                       (if favorited?
                                         (page-handler/<unfavorite-page! block-id-str)
-                                        (page-handler/<favorite-page! block-id-str)))}}
+                                     (page-handler/<favorite-page! block-id-str)))}}
                          {:title   (t :publish/dialog-title)
                           :options {:on-click #(shui/dialog-open! (fn [] (page-menu/publish-page-dialog page))
-                                                                  {:class "w-auto max-w-md"})}}])))
+                                                                  {:class "w-auto max-w-md"})}}]))))
         page-menu-and-hr (concat page-menu [{:hr true}])
         login? (and (rfx/use-sub [:auth/id-token]) (user-handler/logged-in?))
         items (fn []
@@ -196,7 +208,7 @@
                    :options {:on-click #(state/pub-event! [:ui/toggle-appearance])}
                    :icon (ui/icon "color-swatch")}
 
-                  (when (db/get-page common-config/recycle-page-name)
+                  (when recycle-page?
                     {:title (t :storage.recycle/title)
                      :options {:on-click page-handler/open-recycle!}
                      :icon (ui/icon "trash")})
@@ -245,6 +257,23 @@
                                :class "w-full"}})]
                  (concat page-menu-and-hr)
                  (remove nil?)))]
+    (hooks/use-effect!
+     (fn []
+       (p/do!
+        (if (and current-repo current-page)
+          (p/let [page (db-async/<get-block current-repo
+                                            (if (util/uuid-string? current-page)
+                                              (uuid current-page)
+                                              current-page)
+                                            {:children? false})]
+            (set-page! page))
+          (set-page! nil))
+        (if current-repo
+          (p/let [recycle-page (db-async/<get-block current-repo common-config/recycle-page-name {:children? false})]
+            (set-recycle-page?! (boolean recycle-page)))
+          (set-recycle-page?! false)))
+       nil)
+     [current-repo current-page])
 
     (ui/tooltip
      (shui/button-ghost-icon
@@ -349,25 +378,34 @@
        (when thumb-ref
          (.focus ^js thumb-ref)))
      [thumb-ref])
-    (hooks/use-effect!
-     (fn []
-       (let [all-nodes (d/by-class "ls-block")
-             recent-node (fn [node]
-                           (let [id (some-> (d/attr node "blockid") uuid)
-                                 block (db/entity [:block/uuid id])]
-                             (when block
-                               (t/after?
-                                (tc/from-long (:block/updated-at block))
-                                (t/ago (t/days recent-days))))))
-             recent-nodes (filter recent-node all-nodes)
-             old-nodes (remove recent-node all-nodes)]
-         (when (seq recent-nodes)
-           (doseq [node recent-nodes]
-             (d/add-class! node "recent-block")))
-         (when (seq old-nodes)
-           (doseq [node old-nodes]
-             (d/remove-class! node "recent-block")))))
-     [recent-days])
+	    (hooks/use-effect!
+	     (fn []
+	       (let [all-nodes (d/by-class "ls-block")
+	             node-ids (->> all-nodes
+	                           (keep #(some-> (d/attr % "blockid") uuid))
+	                           vec)]
+	         (p/let [results (db-async/<get-blocks (state/get-current-repo) node-ids {:children? false})
+	                 id->block (into {} (keep (fn [{:keys [block]}]
+	                                            (when-let [id (:block/uuid block)]
+	                                              [id block]))
+	                                          results))
+	                 recent-node (fn [node]
+	                               (let [id (some-> (d/attr node "blockid") uuid)
+	                                     block (get id->block id)]
+	                                 (when block
+	                                   (t/after?
+	                                    (tc/from-long (:block/updated-at block))
+	                                    (t/ago (t/days recent-days))))))
+	                 recent-nodes (filter recent-node all-nodes)
+	                 old-nodes (remove recent-node all-nodes)]
+	           (when (seq recent-nodes)
+	             (doseq [node recent-nodes]
+	               (d/add-class! node "recent-block")))
+	           (when (seq old-nodes)
+	             (doseq [node old-nodes]
+	               (d/remove-class! node "recent-block")))))
+	       nil)
+	     [recent-days])
     [:div.recent-slider.flex.flex-row.gap-1.items-center
      {:class "w-[32%]"}
      (shui/slider
@@ -413,12 +451,19 @@
 
 (hsx/defc block-breadcrumb
   [page-name]
-  (let [db-restoring? (rfx/use-sub [:db/restoring?])]
-    (when-let [page (when (and page-name (common-util/uuid-string? page-name))
-                      (db/entity [:block/uuid (uuid page-name)]))]
+  (let [db-restoring? (rfx/use-sub [:db/restoring?])
+        [page set-page!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (when (and page-name (common-util/uuid-string? page-name))
+         (p/let [page (db-async/<get-block (state/get-current-repo) (uuid page-name) {:children? false})]
+           (set-page! page)))
+       nil)
+     [page-name])
+    (when page
       ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
       (when (and (if config/publishing? (not db-restoring?) true)
-                 (ldb/page? page) (:block/parent page))
+                 (entity/page? page) (:block/parent page))
         [:div.ls-block-breadcrumb
          [:div.text-sm
           (component-block/breadcrumb {}
@@ -445,7 +490,7 @@
   (let [electron-mac? (and util/mac? (util/electron?))
         rtc-graphs (rfx/use-sub [:rtc/graphs])
         rtc-state (rfx/use-sub [:rtc/state])
-        db-rtc-uuid (ldb/get-graph-rtc-uuid (db/get-db))
+        db-rtc-uuid (use-db-rtc-uuid current-repo)
         default-home-page (get-in (state/config-for-repo (rfx/use-sub [:config])
                                                          (state/get-current-repo))
                                   [:default-home :page] "")
@@ -513,7 +558,7 @@
          (rtc-indicator/uploading-detail))
        (search-index-progress)
 
-       (when-let [graph (current-local-uploadable-graph)]
+       (when-let [graph (current-local-uploadable-graph db-rtc-uuid)]
          (local-graph-sync-button graph))
 
        (when (and (not= (state/get-current-route) :home)

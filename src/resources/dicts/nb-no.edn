@@ -178,7 +178,6 @@
  :cmdk.action/search "Søk"
  :cmdk.action/trigger "Utfør"
 
- :cmdk.create/configure-tag "Konfigurer tagg"
  :cmdk.create/page "Opprett side"
  :cmdk.create/tag "Opprett tagg"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Nylig oppdatert"
  :cmdk.group/themes "Temaer"
 
- :cmdk.info/configure-tag "Konfigurer #{1}"
  :cmdk.info/create-page "Opprett side '{1}'"
  :cmdk.info/create-tag "Opprett tagg '{1}'"
 

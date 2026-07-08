@@ -1,8 +1,6 @@
 (ns frontend.handler.export.common
   "Common functions for exporting."
-  (:require [clojure.string :as string]
-            [frontend.db.conn :as conn]
-            [frontend.state :as state]
+  (:require [frontend.state :as state]
             [frontend.handler.export.common-impl :as common-impl]
             [promesa.core :as p]))
 
@@ -10,30 +8,22 @@
   {:export-bullet-indentation (state/get-export-bullet-indentation)
    :date-formatter (state/get-date-formatter)})
 
-(defn root-block-uuids->content
-  "Converts given block uuids to content for given repo"
-  ([repo root-block-uuids]
-   (root-block-uuids->content repo root-block-uuids nil))
-  ([repo root-block-uuids {:keys [open-blocks-only? include-properties?]}]
-   (binding [common-impl/*current-db* (conn/get-db repo)
-             common-impl/*content-config* (get-content-config)]
-     (let [contents (mapv (fn [id]
-                            (common-impl/get-blocks-contents id
-                                                                   :open-blocks-only? open-blocks-only?
-                                                                   :include-properties? include-properties?))
-                          root-block-uuids)]
-       (string/join "\n" (mapv string/trim-newline contents))))))
+(defn <export-blocks-as-format
+  [repo root-block-uuids-or-page-uuid format-type options]
+  (state/<invoke-db-worker :thread-api/export-blocks-as-format
+                           repo
+                           root-block-uuids-or-page-uuid
+                           format-type
+                           options
+                           (get-content-config)))
 
-(defn get-page-content
-  "Gets page content for current repo, db and state"
-  ([page-uuid]
-   (get-page-content page-uuid nil))
-  ([page-uuid {:keys [open-blocks-only? include-properties?]}]
-   (binding [common-impl/*current-db* (conn/get-db (state/get-current-repo))
-             common-impl/*content-config* (get-content-config)]
-     (common-impl/get-page-content page-uuid
-                                         :open-blocks-only? open-blocks-only?
-                                         :include-properties? include-properties?))))
+(defn <get-blocks-export-data
+  [repo root-block-uuids-or-page-uuid opts]
+  (state/<invoke-db-worker :thread-api/export-get-blocks-data
+                           repo
+                           root-block-uuids-or-page-uuid
+                           opts
+                           (get-content-config)))
 
 (defn <get-debug-datoms
   [repo]
@@ -54,7 +44,7 @@
                          :format :markdown})
                       page->content)))
 
-;; Aliased fns requiring common-impl dynamic bindings e.g. common-impl/*current-db*
+;; Aliased fns requiring worker-bound resolvers when replacing block/page embeds.
 (def replace-block&page-reference&embed common-impl/replace-block&page-reference&embed)
 (def replace-Heading-with-Paragraph common-impl/replace-Heading-with-Paragraph)
 

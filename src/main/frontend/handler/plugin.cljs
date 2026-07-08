@@ -5,7 +5,6 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [datascript.impl.entity :as de]
             [electron.ipc :as ipc]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -780,16 +779,15 @@
 
 (defn serialize-property-value-for-plugin
   "Serialize a property value so it survives `clj->js`.
-   Datascript Entity implements `IEncodeJS` as returning nil,
-   so raw entities would become null in JS.  This fn converts:
-     - Entity       → {:uuid \"...\" :title \"...\"}  (js object)
-     - Set/coll of entities → JS array of the above
+   This fn converts:
+     - Block maps   → {:uuid \"...\" :title \"...\"}  (js object)
+     - Set/coll of block maps → JS array of the above
      - keyword      → \":ns/name\" string
      - uuid         → string
      - other values → as-is"
   [v]
   (cond
-    (de/entity? v)
+    (and (map? v) (or (:block/uuid v) (:block/title v) (:db/id v)))
     (let [m (cond-> {}
               (:block/uuid v)  (assoc :uuid (str (:block/uuid v)))
               (:block/title v) (assoc :title (:block/title v)))]
@@ -798,7 +796,8 @@
     (set? v)
     (mapv serialize-property-value-for-plugin v)
 
-    (and (sequential? v) (some de/entity? v))
+    (and (sequential? v)
+         (some #(and (map? %) (or (:block/uuid %) (:block/title %) (:db/id %))) v))
     (mapv serialize-property-value-for-plugin v)
 
     (keyword? v)
