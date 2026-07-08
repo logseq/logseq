@@ -8,6 +8,7 @@
    [clojure.string :as string]
    [clojure.walk :as walk]
    [datascript.core :as d]
+   [datascript.impl.entity :as de]
    [datascript.storage :refer [IStorage] :as storage]
    [frontend.common.cache :as common.cache]
    [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
@@ -1782,6 +1783,9 @@
   [db entity {:keys [properties]}]
   (when entity
     (let [property-set (some-> properties set)
+          title (or (:block/raw-title entity)
+                    (:block/title entity)
+                    (:block/name entity))
           datoms (cond->> (d/datoms db :eavt (:db/id entity))
                    (seq property-set)
                    (filter #(contains? property-set (:a %))))
@@ -1794,8 +1798,8 @@
                   {:db/id (:db/id entity)}
                   datoms)]
       (cond-> result
-        (:block/raw-title entity)
-        (assoc :block/title (:block/raw-title entity))))))
+        title
+        (assoc :block/title title)))))
 
 (defn- ref-db-id
   [value]
@@ -1878,6 +1882,39 @@
        (with-explicit-ref-fields value)
        value))
    form))
+
+(declare worker-plain-value)
+
+(defn- worker-plain-map
+  [db m]
+  (with-explicit-ref-fields
+    (persistent!
+     (reduce-kv
+      (fn [result k v]
+        (assoc! result k (worker-plain-value db v)))
+      (transient {})
+      m))))
+
+(defn- worker-plain-value
+  [db value]
+  (cond
+    (de/entity? value)
+    (worker-plain-map db (entity-forward-map db value {}))
+
+    (map? value)
+    (worker-plain-map db value)
+
+    (vector? value)
+    (mapv #(worker-plain-value db %) value)
+
+    (set? value)
+    (set (map #(worker-plain-value db %) value))
+
+    (sequential? value)
+    (mapv #(worker-plain-value db %) value)
+
+    :else
+    value))
 
 (defn- block-has-children?
   [db block-id]
@@ -2684,8 +2721,7 @@
 (def-thread-api :thread-api/get-view-data
   [repo view-id option]
   (let [db @(worker-state/get-datascript-conn repo)]
-    (with-explicit-ref-fields-recursive
-      (db-view/get-view-data db view-id option))))
+    (worker-plain-value db (db-view/get-view-data db view-id option))))
 
 (def-thread-api :thread-api/get-class-objects
   [repo class-id]

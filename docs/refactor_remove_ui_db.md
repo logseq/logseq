@@ -2697,3 +2697,17 @@ Manual smoke checks:
     - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/plugin-db-based-api-uses-plain-entity-predicates-test -n frontend.remove-ui-db-test -n logseq.api-test`
     - `rtk pnpm cljs:run-test -n frontend.remove-ui-db-test -n logseq.api-test`
   - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Fixed worker-backed rendering regressions found after the UI DB removal:
+  - Journals and route pages now reuse page maps that already include children where available, avoiding extra first-render page fetches.
+  - Page titles fall back to the worker `:block/title`, so normal pages no longer render as `Untitled` when no display title is provided.
+  - Worker block maps now preserve a title fallback from raw title/title/name, and `get-view-data` returns plain maps instead of Datascript entities.
+  - Editor Enter now passes the live textarea content into the insert path, and saving handles worker blocks that do not carry `:block/level`.
+  - Worker outliner ops now publish a small refresh marker after completion, and block rendering observes worker-refetched title changes instead of relying only on UI DB-era `:block/tx-id`.
+  - Selection copy now writes plain markdown as soon as worker markdown export finishes, then follows with the rich copied-block payload, so keyboard copy is responsive without reintroducing a UI DB cache.
+  - Focused browser verification passed for creating a page, rendering the page title, rendering a worker-created block, and creating a new block via editor Enter with visible content.
+  - Focused verification passed:
+    - `rtk clojure -M:dev:test -v logseq.e2e.editor-basic-test/copy-blocks-selected-after-fast-scroll-virtualized-list`
+    - `rtk clojure -M:dev:test -v logseq.e2e.editor-basic-test/journals-linked-refs-remain-visible -v logseq.e2e.editor-basic-test/copy-blocks-selected-after-fast-scroll-virtualized-list`
+    - `rtk git diff --check`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/components/block.cljs src/main/frontend/components/journal.cljs src/main/frontend/components/page.cljs src/main/frontend/db/transact.cljs src/main/frontend/handler/common/page.cljs src/main/frontend/handler/editor.cljs src/main/frontend/runtime/globals.cljs src/main/frontend/worker/db_core.cljs`
+  - Note: clj-kondo reported one warning for an unused `datoms` binding in `src/main/frontend/worker/db_core.cljs`; no lint errors were reported. Full local verification intentionally not run per user instruction.

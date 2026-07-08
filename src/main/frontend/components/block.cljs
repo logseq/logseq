@@ -2451,18 +2451,18 @@
         display-title (:display-title config)
         query? (query-block? block)]
     (cond
+      display-title
+      (text-block-title (dissoc config :display-title)
+                        (-> block
+                            (assoc :block/title display-title)
+                            (dissoc :block.temp/ast-title :block.temp/ast-body)))
+
       (and (:page-title? config) (entity/page? block) (string/blank? (:block/title block)))
       [:div.opacity-75 (t :ui/untitled)]
 
       (and (ldb/asset? block)
            (= :pdf (some-> (:logseq.property.asset/type block) string/lower-case keyword)))
       (asset-cp config block)
-
-      display-title
-      (text-block-title (dissoc config :display-title)
-                        (-> block
-                            (assoc :block/title display-title)
-                            (dissoc :block.temp/ast-title :block.temp/ast-body)))
 
       (:raw-title? config)
       (text-block-title (dissoc config :raw-title?) block)
@@ -4626,7 +4626,8 @@
 
 (defn- block-changed?
   [old-block new-block]
-  (not= (:block/tx-id old-block) (:block/tx-id new-block)))
+  (not= (select-keys old-block [:block/tx-id :block/title :block/raw-title :block/updated-at])
+        (select-keys new-block [:block/tx-id :block/title :block/raw-title :block/updated-at])))
 
 (defn- same-block-render-input?
   [[old-config old-block] [new-config new-block]]
@@ -4742,6 +4743,11 @@
         load-children? (editor-handler/load-children? block
                                                       temporary-collapsed-state
                                                       ignore-block-collapsed?)]
+    (hooks/use-effect!
+     (fn []
+       (set-block! block*)
+       nil)
+     [(:block/uuid block*) (:block/tx-id block*) (:block/title block*) (:block/raw-title block*) (:block/updated-at block*)])
     (hooks/use-effect!
      (fn []
        (when-not (or (:page-title? config) (:view? config))

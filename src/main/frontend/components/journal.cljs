@@ -46,8 +46,9 @@
       (swap! journal-item-height-by-key* assoc cache-key height))))
 
 (hsx/defc journal-cp
-  [id last? selection-block-ids]
-  (let [cache-key (journal-item-cache-key id)
+  [journal last? selection-block-ids]
+  (let [id (if (map? journal) (:db/id journal) journal)
+        cache-key (journal-item-cache-key id)
         [reserve set-reserve!] (hooks/use-state {:cache-key cache-key
                                                  :height (get @journal-item-height-by-key* cache-key)})
         reserve-height (when (= cache-key (:cache-key reserve))
@@ -84,6 +85,7 @@
        reserve-height (assoc :on-focus clear-reserve!)
        reserve-height (assoc :on-input clear-reserve!))
      (page/page-cp {:db/id id
+                    :page (when (map? journal) journal)
                     :journals? true
                     :selection/block-ids selection-block-ids})]))
 
@@ -111,6 +113,7 @@
   []
   (let [data (sub-journals)
         [journals set-journals!] (hooks/use-state nil)
+        journals-by-id (into {} (map (juxt :db/id identity) journals))
         selection-block-ids (journal-block-ids journals)]
     (hooks/use-effect!
      (fn []
@@ -131,5 +134,6 @@
          :total-count (count data)
          :item-content (fn [idx]
                          (let [id (util/nth-safe data idx)
+                               journal (get journals-by-id id id)
                                last? (= (inc idx) (count data))]
-                           (journal-cp id last? selection-block-ids)))})])))
+                           (journal-cp journal last? selection-block-ids)))})])))
