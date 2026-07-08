@@ -825,7 +825,9 @@
 
 (defn- node-option-info
   [property node]
-  (when (integer? (:db/id node))
+  (if-not (integer? (:db/id node))
+    {:node node
+     :label-value (:block/title node)}
     (let [class-scoped? (seq (:logseq.property/classes property))
           resolve-title-refs? (and class-scoped?
                                    (some->> (:block/title node) (re-find db-content/id-ref-pattern)))
