@@ -956,6 +956,45 @@
                    drop-txs))
             (is (= [valid-tx-id] (mapv :tx-id tx-entries)))))))))
 
+(defn- large-block-insert-upload-tx
+  [page-uuid parent-uuid block-count]
+  (vec
+   (mapcat (fn [idx]
+             (let [block-uuid (random-uuid)
+                   eid (str block-uuid)]
+               [[:db/add eid :block/uuid block-uuid idx]
+                [:db/add eid :block/title (str "large-client-block-" idx) idx]
+                [:db/add eid :block/page [:block/uuid page-uuid] idx]
+                [:db/add eid :block/parent [:block/uuid parent-uuid] idx]
+                [:db/add eid :block/order "a0" idx]
+                [:db/add eid :block/created-at idx idx]
+                [:db/add eid :block/updated-at idx idx]]))
+           (range block-count))))
+
+(deftest prepare-upload-tx-entries-keeps-large-client-op-test
+  (testing "large pending upload ops should stay intact for server-side chunking"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          tx-id (random-uuid)
+          page-uuid (:block/uuid (:block/page parent))
+          parent-uuid (:block/uuid parent)
+          tx-data (large-block-insert-upload-tx page-uuid parent-uuid 120)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (seed-client-op-txs!
+           test-repo
+           [{:db-sync/tx-id tx-id
+             :db-sync/pending? true
+             :db-sync/created-at 1
+             :db-sync/outliner-op :insert-blocks
+             :db-sync/normalized-tx-data tx-data}])
+          (let [pending (#'sync-apply/pending-txs test-repo)
+                {:keys [tx-entries drop-tx-ids]}
+                (sync-apply/prepare-upload-tx-entries conn pending)]
+            (is (empty? drop-tx-ids))
+            (is (= 1 (count tx-entries)))
+            (is (= tx-id (:tx-id (first tx-entries))))
+            (is (= tx-data (:tx-data (first tx-entries))))))))))
+
 (deftest sync-counts-counts-only-true-pending-local-ops-test
   (testing "pending-local should count only rows with :db-sync/pending? true"
     (let [{:keys [conn client-ops-conn]} (setup-parent-child)]

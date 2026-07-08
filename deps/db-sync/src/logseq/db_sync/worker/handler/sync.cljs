@@ -1,7 +1,6 @@
 (ns logseq.db-sync.worker.handler.sync
   (:require [clojure.string :as string]
             [datascript.core :as d]
-            [datascript.storage :as d-storage]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.batch :as batch]
@@ -15,7 +14,6 @@
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.routes.sync :as sync-routes]
             [logseq.db-sync.worker.ws :as ws]
-            [logseq.db.frontend.validate :as db-validate]
             [promesa.core :as p]))
 
 (def ^:private snapshot-download-batch-size 10000)
@@ -443,40 +441,6 @@
   [tx-data]
   (>= (count tx-data) large-tx-min-items))
 
-(defn- validate-final-large-tx!
-  [db changed-ids tx-meta]
-  (doseq [changed-id-batch (partition-all large-tx-max-chunk-items changed-ids)]
-    (let [[valid? errors] (db-validate/validate-tx-report
-                           {:db-after db
-                            :tx-data (mapv (fn [id] {:e id}) changed-id-batch)
-                            :tx-meta tx-meta}
-                           nil)]
-      (when-not valid?
-        (throw (ex-info "large tx final validation failed"
-                        {:type :db-sync/large-tx-final-validation-failed
-                         :changed-id-count (count changed-id-batch)
-                         :errors errors}))))))
-
-(defn- store-large-tx-db!
-  [conn]
-  (when-some [_storage (d-storage/storage @conn)]
-    (d/store @conn)
-    (swap! (:atom conn) assoc
-           :tx-tail []
-           :db-last-stored @conn)))
-
-(defn- run-conn-callbacks!
-  [conn tx-report]
-  (doseq [[_key callback] (:listeners @(:atom conn))]
-    (callback tx-report)))
-
-(defn- transact-large-tx-chunk!
-  [conn tx-data tx-meta]
-  (let [tx-report (d/with @conn tx-data tx-meta)]
-    (swap! (:atom conn) assoc :db (:db-after tx-report))
-    (run-conn-callbacks! conn tx-report)
-    tx-report))
-
 (defn- import-snapshot! [^js self rows reset?]
   (let [sql (.-sql self)]
     (ensure-schema! self)
@@ -496,17 +460,10 @@
            :skip-validate-db? true)))
 
 (defn- apply-large-tx-entry!
-  [^js self conn tx-data {:keys [tx-id outliner-op]} request-context]
-  (let [sql (.-sql self)
-        db-before @conn
+  [conn tx-data {:keys [tx-id outliner-op]} request-context]
+  (let [db-before @conn
         tx-meta (apply-client-tx-meta request-context outliner-op)
-        live-tx-meta (assoc tx-meta
-                            :skip-validate-db? true
-                            :skip-store? true
-                            :db-sync/skip-tx-log? true
-                            :db-sync/suppress-transact-failed-log? true)
-        chunk-count (volatile! 0)
-        changed-ids (volatile! #{})]
+        chunk-count (volatile! 0)]
     (log/info :db-sync/apply-large-tx-entry-start
               {:graph-id (:graph-id request-context)
                :tx-id tx-id
@@ -514,36 +471,20 @@
                :tx-count (count tx-data)
                :max-chunk-items large-tx-max-chunk-items})
     (try
-      (storage/with-sql-transaction!
-        sql
-        (fn []
-          (reduce-ordered-tx-chunks
-           db-before
-           (fn [_ chunk]
-             (vswap! chunk-count inc)
-             (let [tx-report (transact-large-tx-chunk! conn chunk live-tx-meta)]
-               (vswap! changed-ids into (keep :e (:tx-data tx-report))))
-             nil)
-           nil
-           tx-data)
-          (when (and (not= outliner-op :db-migrate)
-                     (seq @changed-ids))
-            (validate-final-large-tx! @conn @changed-ids tx-meta))
-          (store-large-tx-db! conn)
-          (storage/append-normalized-tx!
-           sql
-           db-before
-           @conn
-           tx-data
-           (mapv (fn [id] {:e id}) @changed-ids)
-           tx-meta)))
+      (reduce-ordered-tx-chunks
+       db-before
+       (fn [_ chunk]
+         (vswap! chunk-count inc)
+         (ldb/transact! conn chunk tx-meta)
+         nil)
+       nil
+       tx-data)
       (log/info :db-sync/apply-large-tx-entry-done
                 {:graph-id (:graph-id request-context)
                  :tx-id tx-id
                  :outliner-op outliner-op
                  :tx-count (count tx-data)
-                 :chunk-count @chunk-count
-                 :changed-id-count (count @changed-ids)})
+                 :chunk-count @chunk-count})
       true
       (catch :default error
         (log/info :db-sync/apply-large-tx-entry-failed
@@ -551,42 +492,50 @@
                    :tx-id tx-id
                    :outliner-op outliner-op
                    :tx-count (count tx-data)
-                   :chunk-count @chunk-count
-                   :changed-id-count (count @changed-ids)})
-        (set! (.-conn self) (storage/open-conn sql))
+                   :chunk-count @chunk-count})
         (throw error)))))
 
-(defn- apply-tx-entry!
-  [self conn {:keys [tx outliner-op] :as tx-entry} request-context]
-  (let [tx-data (tx-sanitize/sanitize-tx @conn
+(defn- sanitize-tx-entry
+  [db {:keys [tx outliner-op] :as tx-entry}]
+  (let [tx-data (tx-sanitize/sanitize-tx db
                                          (protocol/transit->tx tx)
                                          {:drop-missing-retract-ops? (or (= outliner-op :fix)
                                                                          (contains? delete-outliner-ops outliner-op))
                                           :drop-ops-targeting-retracted-entities? (contains? delete-outliner-ops
                                                                                              outliner-op)
                                           :retract-touched-descendants? (contains? delete-outliner-ops outliner-op)})]
-    (if (seq tx-data)
-      (try
-        (if (and (not= outliner-op :db-migrate)
-                 (large-tx? tx-data))
-          (apply-large-tx-entry! self conn tx-data tx-entry request-context)
-          (do
-            (ldb/transact! conn tx-data (apply-client-tx-meta request-context outliner-op))
-            true))
-        (catch :default e
-          ;; Rebase/fix txs are inferred from local history and can become stale
-          ;; when concurrent remote edits remove referenced entities before upload.
-          ;; Treat stale :entity-id/missing rebases/fixes as no-op so sync can continue.
-          (if (and (contains? #{:rebase :fix} outliner-op)
-                   (= :entity-id/missing (:error (ex-data e))))
-            (do
-              (log/warn :db-sync/drop-stale-rebase-tx
-                        {:outliner-op outliner-op
-                         :tx-data tx-data
-                         :error (str e)})
-              false)
-            (throw e))))
-      false)))
+    {:tx-data tx-data
+     :tx-entry tx-entry}))
+
+(defn- apply-tx-entry!
+  ([conn tx-entry]
+   (apply-tx-entry! nil conn tx-entry nil))
+  ([_self conn {:keys [outliner-op] :as tx-entry} request-context]
+   (let [sanitized (sanitize-tx-entry @conn tx-entry)
+         tx-data (:tx-data sanitized)
+         sanitized-entry (:tx-entry sanitized)]
+     (if (seq tx-data)
+       (try
+         (if (and (not= outliner-op :db-migrate)
+                  (large-tx? tx-data))
+           (apply-large-tx-entry! conn tx-data sanitized-entry request-context)
+           (do
+             (ldb/transact! conn tx-data (apply-client-tx-meta request-context outliner-op))
+             true))
+         (catch :default e
+           ;; Rebase/fix txs are inferred from local history and can become stale
+           ;; when concurrent remote edits remove referenced entities before upload.
+           ;; Treat stale :entity-id/missing rebases/fixes as no-op so sync can continue.
+           (if (and (contains? #{:rebase :fix} outliner-op)
+                    (= :entity-id/missing (:error (ex-data e))))
+             (do
+               (log/warn :db-sync/drop-stale-rebase-tx
+                         {:outliner-op outliner-op
+                          :tx-data tx-data
+                          :error (str e)})
+               false)
+             (throw e))))
+       false))))
 
 (defn- apply-tx! [^js self tx-entries request-context]
   (let [sql (.-sql self)]

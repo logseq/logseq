@@ -153,7 +153,7 @@
         ws (:ws client)
         online? (worker-state/online?)
         ws-open-state? (ws-open? ws)]
-    (when online?
+    (when (and online? ws-open-state?)
       (let [elapsed-ms (- (common-util/time-ms) (:sent-at request))
             outliner-ops (mapv outliner-op->string (:outliner-ops request))
             outliner-op-tag (when (seq outliner-ops)

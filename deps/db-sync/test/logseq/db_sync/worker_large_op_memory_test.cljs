@@ -107,12 +107,63 @@
                  (str "expected tx/batch/ok, got " (pr-str response)))
         (assert! (> @tx-report-count 1)
                  (str "expected more than one chunk, got " @tx-report-count))
-        (assert! (= (inc t-before) (:t response))
-                 (str "expected response t to advance once, got " (:t response)))
-        (assert! (= 1 (count (storage/fetch-tx-since sql t-before)))
-                 "expected large tx to be persisted as one tx log entry")
+        (assert! (= (+ t-before @tx-report-count) (:t response))
+                 (str "expected response t to advance by visible chunks, got " (:t response)))
+        (assert! (= @tx-report-count (count (storage/fetch-tx-since sql t-before)))
+                 "expected large tx chunks to be persisted as visible tx log entries")
         (assert! (sample-blocks-present? @conn block-uuids)
                  "expected sampled large tx blocks to be persisted")))))
+
+(defn- run-client-split-large-op-memory-test!
+  [{:keys [serial?]}]
+  (with-memory-sql
+    (fn [sql]
+      (storage/init-schema! sql)
+      (let [conn (storage/open-conn sql)
+            page-uuid (random-uuid)
+            _ (d/transact! conn [{:block/uuid page-uuid
+                                  :block/name "large-memory-page"
+                                  :block/title "large-memory-page"}])
+            t-before (storage/get-t sql)
+            {:keys [tx-data block-uuids]} (large-block-insert-tx page-uuid 2000)
+            tx-id (random-uuid)
+            tx-entries (mapv (fn [chunk]
+                               {:tx (protocol/tx->transit chunk)
+                                :tx-id tx-id
+                                :outliner-op :insert-blocks})
+                             (partition-all 392 tx-data))
+            self #js {:sql sql
+                      :conn conn
+                      :schema-ready true}
+            tx-report-count (atom 0)
+            response (try
+                       (d/listen! conn ::large-op-memory-client-split
+                                  (fn [_tx-report]
+                                    (swap! tx-report-count inc)))
+                       (with-redefs [ws/broadcast! (fn [& _] nil)]
+                         (if serial?
+                           (loop [t-before* t-before
+                                  [tx-entry & more] tx-entries
+                                  response nil]
+                             (if tx-entry
+                               (let [response* (sync-handler/handle-tx-batch! self nil [tx-entry] t-before*)]
+                                 (assert! (= "tx/batch/ok" (:type response*))
+                                          (str "expected tx/batch/ok, got " (pr-str response*)))
+                                 (recur (:t response*) more response*))
+                               response))
+                           (sync-handler/handle-tx-batch! self nil tx-entries t-before)))
+                       (finally
+                         (d/unlisten! conn ::large-op-memory-client-split)))]
+        (assert! (= "tx/batch/ok" (:type response))
+                 (str "expected tx/batch/ok, got " (pr-str response)))
+        (assert! (= (count tx-entries) @tx-report-count)
+                 (str "expected one tx report per client split entry, got " @tx-report-count))
+        (assert! (= (+ t-before @tx-report-count) (:t response))
+                 (str "expected response t to advance by client split entries, got " (:t response)))
+        (assert! (= @tx-report-count (count (storage/fetch-tx-since sql t-before)))
+                 "expected client split tx entries to be persisted as visible tx log entries")
+        (assert! (sample-blocks-present? @conn block-uuids)
+                 "expected sampled client split blocks to be persisted")))))
 
 (defn- run-open-sql-memory-test!
   []
@@ -146,6 +197,8 @@
     "open-sql" (run-open-sql-memory-test!)
     "prepare" (run-prepare-memory-test!)
     "apply" (run-large-op-memory-test! nil)
+    "apply-client-split" (run-client-split-large-op-memory-test! nil)
+    "apply-client-split-serial" (run-client-split-large-op-memory-test! {:serial? true})
     "apply-no-store" (run-large-op-memory-test! {:skip-final-store? true})
     "apply-no-validation" (run-large-op-memory-test! {:skip-validation? true})
     "apply-no-store-validation" (run-large-op-memory-test! {:skip-final-store? true

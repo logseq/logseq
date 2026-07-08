@@ -12,7 +12,6 @@
             [logseq.db-sync.test-sql :as test-sql]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.ws :as ws]
-            [logseq.db.frontend.validate :as db-validate]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
@@ -883,14 +882,11 @@
               self #js {:sql sql
                         :conn conn
                         :schema-ready true}
-              tx-tail-size-before (count (:tx-tail @(:atom conn)))
               tx-report-count (atom 0)
-              tx-tail-sizes (atom [])
               response (try
                          (d/listen! conn ::large-entry-chunks
                                     (fn [_tx-report]
-                                      (swap! tx-report-count inc)
-                                      (swap! tx-tail-sizes conj (count (:tx-tail @(:atom conn))))))
+                                      (swap! tx-report-count inc)))
                          (with-redefs [sync-checksum/recompute-checksum
                                        (fn [_db]
                                          (throw (ex-info "large tx should update checksum incrementally"
@@ -901,10 +897,8 @@
                            (d/unlisten! conn ::large-entry-chunks)))]
           (is (= "tx/batch/ok" (:type response)))
           (is (> @tx-report-count 1))
-          (is (seq @tx-tail-sizes))
-          (is (every? #(= tx-tail-size-before %) @tx-tail-sizes))
-          (is (= (inc t-before) (:t response)))
-          (is (= 1 (count (storage/fetch-tx-since sql t-before))))
+          (is (= (+ t-before @tx-report-count) (:t response)))
+          (is (= @tx-report-count (count (storage/fetch-tx-since sql t-before))))
           (is (= block-count
                   (block-title-prefix-count @conn "large-op-block-"))))))))
 
@@ -947,7 +941,8 @@
                            (d/unlisten! conn ::large-tempid-entry-chunks)))]
           (is (= "tx/batch/ok" (:type response)))
           (is (> @tx-report-count 1))
-          (is (= (inc t-before) (:t response)))
+          (is (= (+ t-before @tx-report-count) (:t response)))
+          (is (= @tx-report-count (count (storage/fetch-tx-since sql t-before))))
           (is (= 300 (block-title-prefix-count @conn "large-tempid-block-"))))))))
 
 (deftest tx-batch-rolls-back-large-entry-when-live-chunk-fails-test
@@ -982,8 +977,8 @@
           (is (empty? (storage/fetch-tx-since sql t-before)))
           (is (zero? (block-title-prefix-count @(.-conn self) "large-op-block-"))))))))
 
-(deftest tx-batch-final-validation-uses-changed-entity-ids-test
-  (testing "large tx final validation does not retain all applied datoms"
+(deftest tx-batch-large-entry-uses-bounded-visible-tx-reports-test
+  (testing "large tx chunks are visible and each tx report stays bounded"
     (with-memory-sql
       (fn [sql]
         (storage/init-schema! sql)
@@ -1001,17 +996,18 @@
               self #js {:sql sql
                         :conn conn
                         :schema-ready true}
-              validation-tx-data-counts (atom [])
-              original-validate-tx-report db-validate/validate-tx-report
-              response (with-redefs [db-validate/validate-tx-report
-                                     (fn [{:keys [tx-data] :as tx-report} options]
-                                       (swap! validation-tx-data-counts conj (count tx-data))
-                                       (original-validate-tx-report tx-report options))
-                                     ws/broadcast! (fn [& _] nil)]
-                         (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
+              tx-data-counts (atom [])
+              response (try
+                         (d/listen! conn ::large-visible-tx-report-size
+                                    (fn [{:keys [tx-data]}]
+                                      (swap! tx-data-counts conj (count tx-data))))
+                         (with-redefs [ws/broadcast! (fn [& _] nil)]
+                           (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))
+                         (finally
+                           (d/unlisten! conn ::large-visible-tx-report-size)))]
           (is (= "tx/batch/ok" (:type response)))
-          (is (= block-count (reduce + @validation-tx-data-counts)))
-          (is (every? #(<= % 500) @validation-tx-data-counts)))))))
+          (is (= (count tx-data) (reduce + @tx-data-counts)))
+          (is (every? #(<= % 500) @tx-data-counts)))))))
 
 (deftest finished-snapshot-upload-persists-provided-checksum-test
   (async done
@@ -1115,12 +1111,17 @@
           tx-entry-2 {:tx (protocol/tx->transit [[:db/add -2 :block/title "bad"]])
                       :outliner-op :save-block}
           apply-calls (atom 0)
+          apply-tx-entry (fn [_conn tx-entry]
+                           (swap! apply-calls inc)
+                           (when (= 2 @apply-calls)
+                             (throw (ex-info "DB write failed with invalid data"
+                                             {:tx-entry tx-entry}))))
           response (with-redefs [ws/broadcast! (fn [& _] nil)
-                                 sync-handler/apply-tx-entry! (fn [_conn tx-entry]
-                                                                (swap! apply-calls inc)
-                                                                (when (= 2 @apply-calls)
-                                                                  (throw (ex-info "DB write failed with invalid data"
-                                                                                  {:tx-entry tx-entry}))))]
+                                 sync-handler/apply-tx-entry! (fn
+                                                                ([conn tx-entry]
+                                                                 (apply-tx-entry conn tx-entry))
+                                                                ([_self conn tx-entry _request-context]
+                                                                 (apply-tx-entry conn tx-entry)))]
                      (sync-handler/handle-tx-batch! self nil [tx-entry-1 tx-entry-2] 0))]
       (is (= "tx/reject" (:type response)))
       (is (= "db transact failed" (:reason response)))
