@@ -447,7 +447,8 @@
         home? (= :home (state/get-current-route))
         recycled? (ldb/recycled? page)
         page-display-title (when (entity/page? page)
-                             (route-handler/built-in-page-title (:block/title page)))
+                             (or (route-handler/built-in-page-title (:block/title page))
+                                 (:block/title page)))
         show-tabs? (and (or class-page? (entity/property? page)) (not tag-dialog?))
         blocks-ready? (or journals?
                           (= page-id linked-refs-blocks-ready-page-id))
@@ -552,6 +553,7 @@
 (hsx/defc page-aux
   [option]
   (let [page-name (:page-name option)
+        provided-page (:page option)
         route-page-name (get-page-name option)
         block-route-name (get-block-route-name option)
         [route-block-uuid set-route-block-uuid!] (hooks/use-state nil)
@@ -564,7 +566,9 @@
         *refs-count (hooks/use-memo #(atom nil) [])
         [loading?] (hooks/use-atom *loading?)
         [page] (hooks/use-atom *page)
-        [refs-count] (hooks/use-atom *refs-count)]
+        [refs-count] (hooks/use-atom *refs-count)
+        page (or provided-page page)
+        loading? (if provided-page false loading?)]
     (hooks/use-effect!
      (fn []
        (if (and block-route-name route-page-name)
@@ -578,25 +582,28 @@
      [route-page-name block-route-name])
     (hooks/use-effect!
      (fn []
-       (reset! *loading? true)
-       (p/let [repo (state/get-current-repo)
-               page-block (db-async/<get-block repo page-id-uuid-or-name)
-               page-id (:db/id page-block)
-               refs-count (when-not (or (entity/class? page-block) (entity/property? page-block))
-                            (db-async/<get-block-refs-count repo page-id))]
-         (reset! *loading? false)
-         (reset! *page page-block)
-         (reset! *refs-count refs-count)
-         (when page-block
-           (when-not (or preview-or-sidebar? (:tag-dialog? option))
-             (if-let [page-uuid (and (not (:db/id option))
-                                     page-name
-                                     (not page-uuid?)
-                                     (:block/uuid page-block))]
-               (route-handler/redirect-to-page! (str page-uuid) {:push false})
-               (route-handler/update-page-title-and-label! (state/get-route-match))))))
+       (when-not provided-page
+         (reset! *loading? true)
+         (p/let [repo (state/get-current-repo)
+                 page-block (db-async/<get-block repo page-id-uuid-or-name
+                                                  {:children? true
+                                                   :include-collapsed-children? true})
+                 page-id (:db/id page-block)
+                 refs-count (when-not (or (entity/class? page-block) (entity/property? page-block))
+                              (db-async/<get-block-refs-count repo page-id))]
+           (reset! *loading? false)
+           (reset! *page page-block)
+           (reset! *refs-count refs-count)
+           (when page-block
+             (when-not (or preview-or-sidebar? (:tag-dialog? option))
+               (if-let [page-uuid (and (not (:db/id option))
+                                       page-name
+                                       (not page-uuid?)
+                                       (:block/uuid page-block))]
+                 (route-handler/redirect-to-page! (str page-uuid) {:push false})
+                 (route-handler/update-page-title-and-label! (state/get-route-match)))))))
        #(state/set-state! :editor/virtualized-scroll-fn nil))
-     [page-id-uuid-or-name preview-or-sidebar? (:tag-dialog? option)])
+     [provided-page page-id-uuid-or-name preview-or-sidebar? (:tag-dialog? option)])
     (when (and page (not loading?))
       (page-inner (assoc option
                          :page page

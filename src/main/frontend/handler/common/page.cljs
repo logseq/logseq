@@ -80,7 +80,7 @@
                                (page-lookup-ref page-id-or-title)))))
 
 (def ^:private page-for-create-selector
-  '[:db/id :block/uuid :block/title :logseq.property/deleted-at {:block/parent ...}])
+  '[:db/id :block/uuid :block/title :block/name :logseq.property/deleted-at {:block/parent ...}])
 
 (defn- <page-for-create
   [page-id-or-title]

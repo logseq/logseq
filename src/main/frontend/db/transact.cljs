@@ -27,6 +27,35 @@
     (nil? (:db-sync/tx-id tx-meta))
     (assoc :db-sync/tx-id (random-uuid))))
 
+(defn- op-block-uuids
+  [ops]
+  (->> ops
+       (mapcat (fn [[op args]]
+                 (case op
+                   :save-block
+                   [(some-> args first :block/uuid)]
+
+                   :insert-blocks
+                   (let [[blocks target-id] args]
+                     (cons (when (uuid? target-id) target-id)
+                           (map :block/uuid blocks)))
+
+                   :delete-blocks
+                   (first args)
+
+                   [])))
+       (remove nil?)
+       set))
+
+(defn- refresh-worker-op-blocks!
+  [ops tx-meta]
+  (let [updated-ids (op-block-uuids ops)]
+    (when (seq updated-ids)
+      (state/set-state! :db/latest-transacted-entity-uuids
+                        {:updated-ids updated-ids
+                         :deleted-ids #{}
+                         :tx-id (:db-sync/tx-id tx-meta)}))))
+
 (defn transact [worker-transact repo tx-data tx-meta]
   (let [tx-meta' (-> tx-meta
                      ensure-local-op-tx-id
@@ -61,4 +90,6 @@
             (state/<invoke-db-worker :thread-api/undo-redo-set-pending-editor-info
                                      (state/get-current-repo)
                                      (state/get-editor-info))
-            (request))))))))
+            (p/let [result (request)]
+              (refresh-worker-op-blocks! ops opts')
+              result))))))))

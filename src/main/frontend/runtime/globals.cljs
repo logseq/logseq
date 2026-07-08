@@ -11,3 +11,5 @@
   (set! (.-ReactDOM js/globalThis) react-dom)
   (set! (.-ReactDOMClient js/globalThis) react-dom-client)
   (set! (.-ReactJSXRuntime js/globalThis) react-jsx-runtime))
+
+(install!)
