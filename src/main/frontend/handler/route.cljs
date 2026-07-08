@@ -157,12 +157,22 @@
     "Import data into Logseq"
     "Logseq"))
 
+(defn- get-current-graph-name
+  []
+  (when-let [db (state/get-current-repo)]
+    (when-let [repo-name (db/get-repo-name db)]
+      (let [short-repo-name (db/get-short-repo-name repo-name)]
+        (if (= config/local-repo short-repo-name) "Demo" short-repo-name)))))
+
 (defn update-page-title!
   [route]
   (let [{:keys [data path-params]} route
-        title (get-title (:name data) path-params)
-        hls? (pdf-utils/hls-file? title)]
-    (util/set-title! (if hls? (pdf-utils/fix-local-asset-pagename title) title))))
+        title      (get-title (:name data) path-params)
+        hls?       (pdf-utils/hls-file? title)
+        title      (if hls? (pdf-utils/fix-local-asset-pagename title) title)
+        graph-name (get-current-graph-name)
+        full-title (if graph-name (str title " — " graph-name) title)]
+    (util/set-title! full-title)))
 
 (defn update-page-label!
   [route]
