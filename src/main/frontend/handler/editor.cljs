@@ -1012,27 +1012,28 @@
   (let [repo (state/get-current-repo)
         selected-ids (state/get-selection-block-ids)
         ids (or (seq selected-ids) (map :block/uuid selected-blocks))]
-    (p/let [[top-level-block-uuids content blocks] (compose-copied-blocks-contents repo ids opts)
-            copied-source-blocks (get-all-blocks-by-ids repo top-level-block-uuids)
-            html (export-html/export-blocks-as-html repo top-level-block-uuids nil)]
+    (p/let [[top-level-block-uuids content blocks] (compose-copied-blocks-contents repo ids opts)]
       (when (seq blocks)
-        (let [copied-blocks (cond->> copied-source-blocks
-                              true
-                              (map (fn [block]
-                                     (let [b block]
-                                       (->
-                                        (->> (map (fn [[k v]]
-                                                    (let [v' (cond
-                                                               (and (map? v) (:db/id v))
-                                                               [:block/uuid (:block/uuid v)]
-                                                               (and (coll? v) (every? #(and (map? %) (:db/id %)) v))
-                                                               (set (map (fn [i] [:block/uuid (:block/uuid i)]) v))
-                                                               :else
-                                                               v)]
-                                                      [k v'])) b)
-                                             (into {}))
-                                        (assoc :db/id (:db/id b)))))))]
-          (common-handler/copy-to-clipboard-without-id-property! repo content (when html? html) copied-blocks))
+        (util/copy-to-clipboard! content)
+        (p/let [copied-source-blocks (get-all-blocks-by-ids repo top-level-block-uuids)
+                html (export-html/export-blocks-as-html repo top-level-block-uuids nil)]
+          (let [copied-blocks (cond->> copied-source-blocks
+                                true
+                                (map (fn [block]
+                                       (let [b block]
+                                         (->
+                                          (->> (map (fn [[k v]]
+                                                      (let [v' (cond
+                                                                 (and (map? v) (:db/id v))
+                                                                 [:block/uuid (:block/uuid v)]
+                                                                 (and (coll? v) (every? #(and (map? %) (:db/id %)) v))
+                                                                 (set (map (fn [i] [:block/uuid (:block/uuid i)]) v))
+                                                                 :else
+                                                                 v)]
+                                                        [k v'])) b)
+                                               (into {}))
+                                          (assoc :db/id (:db/id b)))))))]
+            (common-handler/copy-to-clipboard-without-id-property! repo content (when html? html) copied-blocks)))
         (state/set-block-op-type! :copy)
         ;; (notification/show! "Copied!" :success)
         ))))
@@ -1450,7 +1451,9 @@
                elem (and input-id (gdom/getElement input-id))
                db-content (:block/title db-block)
                db-content-without-heading (and db-content
-                                               (common-util/safe-subs db-content (:block/level db-block)))
+                                               (if (number? (:block/level db-block))
+                                                 (common-util/safe-subs db-content (:block/level db-block))
+                                                 db-content))
                value (if (= (:block/uuid current-block) (:block/uuid block))
                        (:block/title current-block)
                        (and elem (gobj/get elem "value")))]
@@ -2312,7 +2315,7 @@
               (indent-outdent false)
 
               :else
-              (insert-new-block! state right-sibling))))))))
+              (insert-new-block! state content right-sibling))))))))
 
 (defn- inside-of-single-block
   "When we are in a single block wrapper, we should always insert a new line instead of new block"
