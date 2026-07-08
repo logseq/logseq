@@ -218,6 +218,22 @@
     (is (= [existing new-choice]
            (#'property-value/add-initial-node-choice [existing] new-choice)))))
 
+(deftest node-option-title-resolves-search-result-uuid-refs-test
+  (let [ref-uuid #uuid "11111111-2222-3333-4444-555555555555"
+        search-result {:db/id 1
+                       :block/title (str "Alpha [[" ref-uuid "]] Gamma")}
+        full-node (assoc search-result
+                         :block/refs [{:block/uuid ref-uuid
+                                       :block/title "Beta"}])
+        property {:logseq.property/classes [{:db/id 2}]}]
+    (with-redefs [db/entity (fn [id]
+                              (when (= id (:db/id search-result))
+                                full-node))]
+      (is (= "Alpha [[Beta]] Gamma"
+             (:title (#'property-value/node-option-info property search-result))))
+      (is (= "Alpha [[Beta]] Gamma"
+             (:label-value (#'property-value/node-option-info property search-result)))))))
+
 (deftest scoped-class-nodes-skips-broad-node-property-preload-test
   (let [calls* (atom [])
         property {:logseq.property/type :node}

@@ -823,6 +823,26 @@
         classes)
        distinct))))
 
+(defn- node-option-info
+  [property node]
+  (when (integer? (:db/id node))
+    (let [class-scoped? (seq (:logseq.property/classes property))
+          resolve-title-refs? (and class-scoped?
+                                   (some->> (:block/title node) (re-find db-content/id-ref-pattern)))
+          node' (if resolve-title-refs?
+                  (or (db/entity (:db/id node)) node)
+                  node)
+          title (if class-scoped?
+                  (some-> (db-content/recur-replace-uuid-in-block-title node')
+                          (subs 0 256))
+                  (block-handler/block-unique-title node))]
+      {:title title
+       :node node'
+       :resolved? resolve-title-refs?
+       :label-value (if class-scoped?
+                      (or title (:block/title node))
+                      (or (:block/title node) title))})))
+
 (defn- <load-initial-node-choices
   [repo property non-root-classes]
   (if (seq non-root-classes)
@@ -936,14 +956,12 @@
                                     (assoc (:value node) :block/title (:label node))
                                     node)
                              id (:db/id node)
-                             title (when (integer? id)
-                                     (if (seq (:logseq.property/classes property))
-                                       (some-> (db-content/recur-replace-uuid-in-block-title node)
-                                               (subs 0 256))
-                                       (block-handler/block-unique-title node)))
+                             {:keys [title node resolved? label-value]} (node-option-info property node)
                              [header label] (if (integer? id)
                                               (when title
-                                                (let [node (or (db/entity id) node)
+                                                (let [node (or (when resolved? node)
+                                                               (db/entity id)
+                                                               node)
                                                       header (when-not (db/page? node)
                                                                (when-let [breadcrumb (state/get-component :block/breadcrumb)]
                                                                  [:div.text-xs.opacity-70
@@ -960,7 +978,7 @@
                                               [nil (:block/title node)])]
                                               (assoc node
                                                      :header header
-                                                     :label-value (or (:block/title node) title)
+                                                     :label-value (or label-value (:block/title node) title)
                                                      :label label
                                                      :value id
                                                      :disabled? (and tags? (contains?
