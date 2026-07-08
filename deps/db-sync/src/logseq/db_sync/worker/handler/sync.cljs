@@ -460,7 +460,7 @@
            :skip-validate-db? true)))
 
 (defn- apply-large-tx-entry!
-  [conn tx-data {:keys [tx-id outliner-op]} request-context]
+  [self conn tx-data {:keys [tx-id outliner-op]} request-context]
   (let [db-before @conn
         tx-meta (apply-client-tx-meta request-context outliner-op)
         chunk-count (volatile! 0)]
@@ -471,14 +471,18 @@
                :tx-count (count tx-data)
                :max-chunk-items large-tx-max-chunk-items})
     (try
-      (reduce-ordered-tx-chunks
-       db-before
-       (fn [_ chunk]
-         (vswap! chunk-count inc)
-         (ldb/transact! conn chunk tx-meta)
-         nil)
-       nil
-       tx-data)
+      ((if-let [sql (when self (.-sql ^js self))]
+         #(storage/with-sql-transaction! sql %)
+         (fn [f] (f)))
+       (fn []
+         (reduce-ordered-tx-chunks
+          db-before
+          (fn [_ chunk]
+            (vswap! chunk-count inc)
+            (ldb/transact! conn chunk tx-meta)
+            nil)
+          nil
+          tx-data)))
       (log/info :db-sync/apply-large-tx-entry-done
                 {:graph-id (:graph-id request-context)
                  :tx-id tx-id
@@ -493,6 +497,7 @@
                    :outliner-op outliner-op
                    :tx-count (count tx-data)
                    :chunk-count @chunk-count})
+        (reset! conn db-before)
         (throw error)))))
 
 (defn- sanitize-tx-entry
@@ -510,7 +515,7 @@
 (defn- apply-tx-entry!
   ([conn tx-entry]
    (apply-tx-entry! nil conn tx-entry nil))
-  ([_self conn {:keys [outliner-op] :as tx-entry} request-context]
+  ([self conn {:keys [outliner-op] :as tx-entry} request-context]
    (let [sanitized (sanitize-tx-entry @conn tx-entry)
          tx-data (:tx-data sanitized)
          sanitized-entry (:tx-entry sanitized)]
@@ -518,7 +523,7 @@
        (try
          (if (and (not= outliner-op :db-migrate)
                   (large-tx? tx-data))
-           (apply-large-tx-entry! conn tx-data sanitized-entry request-context)
+           (apply-large-tx-entry! self conn tx-data sanitized-entry request-context)
            (do
              (ldb/transact! conn tx-data (apply-client-tx-meta request-context outliner-op))
              true))

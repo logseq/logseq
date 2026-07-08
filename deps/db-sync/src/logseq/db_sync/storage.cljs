@@ -74,15 +74,22 @@
 (defn set-t! [sql t]
   (set-meta! sql :t t))
 
+(def ^:dynamic *in-sql-transaction?* false)
+
 (defn with-sql-transaction!
   [sql f]
-  (if-let [db (aget sql "_db")]
-    (let [transaction (.-transaction db)]
-      (if (fn? transaction)
-        (let [tx-fn (.call transaction db f)]
-          (tx-fn))
-        (f)))
-    (f)))
+  (if *in-sql-transaction?*
+    (f)
+    (let [f' (fn []
+               (binding [*in-sql-transaction?* true]
+                 (f)))]
+      (if-let [db (aget sql "_db")]
+        (let [transaction (.-transaction db)]
+          (if (fn? transaction)
+            (let [tx-fn (.call transaction db f')]
+              (tx-fn))
+            (f')))
+        (f')))))
 
 (defn set-initial-checksum! [sql checksum]
   (with-sql-transaction!

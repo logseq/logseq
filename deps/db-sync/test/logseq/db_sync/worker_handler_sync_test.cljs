@@ -1092,6 +1092,38 @@
           (is (empty? (storage/fetch-tx-since sql t-before)))
           (is (zero? (block-title-prefix-count @(.-conn self) "large-op-block-"))))))))
 
+(deftest tx-batch-rolls-back-large-entry-when-later-live-chunk-fails-test
+  (testing "large tx later chunk failure leaves no persisted partial chunks"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-later-rollback-page"
+                                    :block/title "large-later-rollback-page"}])
+              t-before (storage/get-t sql)
+              checksum-before (storage/get-checksum sql)
+              missing-parent-uuid (random-uuid)
+              tx-data* (large-block-insert-tx page-uuid 1200)
+              [_op entity _attr _value tx] (nth tx-data* 700)
+              tx-data (assoc tx-data*
+                             700 [:db/add entity :block/page [:block/uuid missing-parent-uuid] tx])
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              response (with-redefs [ws/broadcast! (fn [& _] nil)]
+                         (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
+          (is (= "tx/reject" (:type response)))
+          (is (= "db transact failed" (:reason response)))
+          (is (= t-before (storage/get-t sql)))
+          (is (= checksum-before (storage/get-checksum sql)))
+          (is (empty? (storage/fetch-tx-since sql t-before)))
+          (is (zero? (block-title-prefix-count @(.-conn self) "large-op-block-"))))))))
+
 (deftest tx-batch-large-entry-uses-bounded-visible-tx-reports-test
   (testing "large tx chunks are visible and each tx report stays bounded"
     (with-memory-sql
