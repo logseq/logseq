@@ -218,22 +218,6 @@
     (is (= [existing new-choice]
            (#'property-value/add-initial-node-choice [existing] new-choice)))))
 
-(deftest node-option-title-resolves-search-result-uuid-refs-test
-  (let [ref-uuid #uuid "11111111-2222-3333-4444-555555555555"
-        search-result {:db/id 1
-                       :block/title (str "Alpha [[" ref-uuid "]] Gamma")}
-        full-node (assoc search-result
-                         :block/refs [{:block/uuid ref-uuid
-                                       :block/title "Beta"}])
-        property {:logseq.property/classes [{:db/id 2}]}]
-    (with-redefs [db/entity (fn [id]
-                              (when (= id (:db/id search-result))
-                                full-node))]
-      (is (= "Alpha [[Beta]] Gamma"
-             (:title (#'property-value/node-option-info property search-result))))
-      (is (= "Alpha [[Beta]] Gamma"
-             (:label-value (#'property-value/node-option-info property search-result)))))))
-
 (deftest scoped-class-nodes-skips-broad-node-property-preload-test
   (let [calls* (atom [])
         property {:logseq.property/type :node}
@@ -284,33 +268,20 @@
               "repo" property [topic-class] [matching-parent matching-child matching-wrapped matching-entity-tags unrelated])))
       (is (= [] @calls*)))))
 
-(deftest scoped-class-nodes-preloads-narrow-node-property-choices-test
-  (let [property {:logseq.property/type :node}
+(deftest scoped-class-nodes-waits-for-async-narrow-scope-choices-test
+  (let [calls* (atom [])
+        property {:logseq.property/type :node}
         topic-class {:db/id 10
-                     :db/ident :user.class/Topic}
-        choices [{:db/id 100
-                  :block/title "Topic 100"}]]
+                     :db/ident :user.class/Topic}]
     (with-redefs [model/get-class-objects (fn [_repo class-id]
-                                            (when (= 10 class-id)
-                                              choices))
+                                            (swap! calls* conj class-id)
+                                            [{:db/id 100
+                                              :block/title "Topic 100"}])
                   model/get-structured-children (fn [_repo _class-id] [])]
-      (is (= choices
+      (is (= []
              (#'property-value/scoped-class-nodes
-              "repo" property [topic-class] nil))))))
-
-(deftest scoped-class-nodes-preloads-tag-only-node-property-choices-test
-  (let [property {:logseq.property/type :node}
-        tag-class {:db/id 2
-                   :db/ident :logseq.class/Tag}
-        choices [{:db/id 100
-                  :block/title "Tag 100"}]]
-    (with-redefs [model/get-class-objects (fn [_repo class-id]
-                                            (when (= 2 class-id)
-                                              choices))
-                  model/get-structured-children (fn [_repo _class-id] [])]
-      (is (= choices
-             (#'property-value/scoped-class-nodes
-              "repo" property [tag-class] nil))))))
+              "repo" property [topic-class] nil)))
+      (is (= [] @calls*)))))
 
 (deftest scoped-class-nodes-keeps-hydrated-broad-scope-initial-choices-test
   (let [property {:logseq.property/type :node}
@@ -357,6 +328,30 @@
                  (p/then (fn [result]
                            (is (= [:user.property/p1] @queried-properties*))
                            (is (= existing-values result))
+                           (done)))
+                 (p/catch (fn [error]
+                            (is false (str error))
+                            (done))))))))
+
+(deftest load-initial-node-choices-loads-narrow-scope-with-one-worker-request-test
+  (async done
+         (let [property {:db/ident :user.property/p1
+                         :logseq.property/type :node
+                         :logseq.property/classes [{:db/id 10
+                                                    :db/ident :user.class/Topic}
+                                                   {:db/id 2
+                                                    :db/ident :logseq.class/Tag}]}
+               choices [{:db/id 100
+                         :block/title "Entry [[Reference]] Done"}]
+               calls* (atom [])]
+           (with-redefs [db-async/<get-property-node-objects
+                         (fn [repo class-ids]
+                           (swap! calls* conj [repo class-ids])
+                           (p/resolved choices))]
+             (-> (#'property-value/<load-initial-node-choices "repo" property (:logseq.property/classes property))
+                 (p/then (fn [result]
+                           (is (= choices result))
+                           (is (= [["repo" [10 2]]] @calls*))
                            (done)))
                  (p/catch (fn [error]
                             (is false (str error))

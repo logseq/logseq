@@ -60,7 +60,8 @@
           :thread-api/markdown-mirror-set-enabled :thread-api/markdown-mirror-flush :thread-api/markdown-mirror-regenerate
           :thread-api/export-get-debug-datoms :thread-api/export-get-all-page->content :thread-api/validate-db
           :thread-api/recompute-checksum-diagnostics :thread-api/export-edn :thread-api/import-edn :thread-api/get-view-data
-          :thread-api/get-class-objects :thread-api/get-property-values :thread-api/get-bidirectional-properties
+          :thread-api/get-class-objects :thread-api/get-property-node-objects
+          :thread-api/get-property-values :thread-api/get-bidirectional-properties
           :thread-api/build-graph :thread-api/get-all-page-titles :thread-api/gc-graph :thread-api/mobile-logs
           :thread-api/get-rtc-graph-uuid :thread-api/cli-list-properties :thread-api/cli-list-tags :thread-api/cli-list-pages
           :thread-api/cli-list-tasks :thread-api/cli-list-nodes :thread-api/api-get-page-data :thread-api/api-list-properties
