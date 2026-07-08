@@ -2711,3 +2711,8 @@ Manual smoke checks:
     - `rtk git diff --check`
     - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/components/block.cljs src/main/frontend/components/journal.cljs src/main/frontend/components/page.cljs src/main/frontend/db/transact.cljs src/main/frontend/handler/common/page.cljs src/main/frontend/handler/editor.cljs src/main/frontend/runtime/globals.cljs src/main/frontend/worker/db_core.cljs`
   - Note: clj-kondo reported one warning for an unused `datoms` binding in `src/main/frontend/worker/db_core.cljs`; no lint errors were reported. Full local verification intentionally not run per user instruction.
+- 2026-07-08: Fixed the worker DB open/import datom fallback scope:
+  - The `datoms` value derived from `:debug-transit-raw` now scopes over the full worker DB creation path instead of an empty `let`, so worker imports use the normalized datoms and no lint warning remains.
+  - Focused verification passed:
+    - `rtk pnpm cljs:run-test -v frontend.worker.db-core-test/import-file-graph-imports-documents-into-worker-conn -v frontend.worker.db-core-test/import-edn-datom-format-with-shifted-builtin-eids-test -v frontend.remove-ui-db-test/renderer-has-no-unapproved-datascript-references-test -v frontend.remove-ui-db-test/editor-handler-reverse-and-nested-read-count-batch-target-test -v frontend.components.imports-test/file-graph-import-delegates-db-work-to-worker-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/worker/db_core.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/remove_ui_db_test.cljs`
