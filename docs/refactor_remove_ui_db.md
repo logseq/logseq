@@ -2716,3 +2716,13 @@ Manual smoke checks:
   - Focused verification passed:
     - `rtk pnpm cljs:run-test -v frontend.worker.db-core-test/import-file-graph-imports-documents-into-worker-conn -v frontend.worker.db-core-test/import-edn-datom-format-with-shifted-builtin-eids-test -v frontend.remove-ui-db-test/renderer-has-no-unapproved-datascript-references-test -v frontend.remove-ui-db-test/editor-handler-reverse-and-nested-read-count-batch-target-test -v frontend.components.imports-test/file-graph-import-delegates-db-work-to-worker-test`
     - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/worker/db_core.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+- 2026-07-08: Resumed goal audit after the branch was pushed:
+  - Confirmed the branch was clean and aligned with `origin/refactor/remove-ui-db`.
+  - Re-ran production source guards for unapproved renderer DataScript calls, `frontend.db` facade usage, reverse lookup attrs, and nested entity-shaped reads; no remaining UI DB ownership gap was found.
+  - Confirmed file graph import still delegates DB work to `:thread-api/import-file-graph`, with worker-side `gp-exporter/export-file-graph` ownership.
+  - Focused verification passed:
+    - `rtk pnpm cljs:run-test -n frontend.remove-ui-db-test -v frontend.components.imports-test/file-graph-import-delegates-db-work-to-worker-test -v frontend.worker.db-core-test/import-file-graph-imports-documents-into-worker-conn -v frontend.worker.db-core-test/import-edn-datom-format-with-shifted-builtin-eids-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/components/imports.cljs src/main/frontend/handler/db_based/import.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/components/imports_test.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs`
+    - `rtk bb serve -p 3001`
+    - `rtk clojure -M:dev:test -v logseq.e2e.editor-basic-test/journals-linked-refs-remain-visible -v logseq.e2e.editor-basic-test/copy-blocks-selected-after-fast-scroll-virtualized-list`
+  - Full local verification intentionally not run per user instruction.
