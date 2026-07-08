@@ -58,6 +58,7 @@
 (declare enqueue-asset-task!
          apply-remote-txs!
          cap-upload-request-tx-entries
+         commit-large-upload-progress!
          ref-attr?
          resolve-temp-id
          tx-temp-id->uuid
@@ -196,9 +197,11 @@
 (defn clear-upload-response-timeout!
   [client]
   (when-let [*upload-request (:upload-request client)]
-    (when-let [timer (:timer @*upload-request)]
-      (js/clearTimeout timer))
-    (reset! *upload-request nil)))
+    (let [request @*upload-request]
+      (when-let [timer (:timer request)]
+        (js/clearTimeout timer))
+      (reset! *upload-request nil)
+      (some-> request (dissoc :timer)))))
 
 (defn- start-upload-response-timeout!
   [client request]
@@ -212,6 +215,11 @@
                        (report-upload-response-timeout! client request')))
                    upload-response-timeout-ms)]
         (reset! *upload-request (assoc request' :timer timer))))))
+
+(defn ack-upload-response!
+  [repo client]
+  (when-let [request (clear-upload-response-timeout! client)]
+    (commit-large-upload-progress! repo (:large-upload-progress request))))
 
 (defn upload-large-title! [repo graph-id title aes-key]
   (sync-large-title/upload-large-title!
@@ -680,6 +688,18 @@
           (swap! *repo->large-upload-progress dissoc progress-key)
           (swap! *repo->large-upload-progress assoc progress-key large-upload-next-index))))))
 
+(defn- large-upload-progress
+  [tx-entries]
+  (->> tx-entries
+       (keep (fn [{:keys [large-upload-original-tx-id
+                          large-upload-next-index
+                          large-upload-final?]}]
+               (when large-upload-original-tx-id
+                 {:large-upload-original-tx-id large-upload-original-tx-id
+                  :large-upload-next-index large-upload-next-index
+                  :large-upload-final? large-upload-final?})))
+       vec))
+
 (defn pending-txs
   [repo & {:keys [limit]}]
   (client-op/get-pending-local-txs repo :limit limit))
@@ -911,7 +931,6 @@
                                     :client-revision (build-version/revision)
                                     :t-before local-tx
                                     :txs payload})
-                         (commit-large-upload-progress! repo tx-entries)
                          (start-upload-response-timeout!
                           client
                           {:tx-ids tx-ids
@@ -919,6 +938,7 @@
                                               (keep :outliner-op)
                                               distinct
                                               vec)
+                           :large-upload-progress (large-upload-progress tx-entries*)
                            :t-before local-tx}))))
                     (p/catch (fn [error]
                                (sync-util/set-last-sync-error! client error)

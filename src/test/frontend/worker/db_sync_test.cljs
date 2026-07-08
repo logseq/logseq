@@ -717,6 +717,7 @@
                client {:repo test-repo
                        :graph-id "graph-1"
                        :inflight (atom [])
+                       :upload-request (atom nil)
                        :ws (doto (js-obj)
                              (aset "readyState" 1)
                              (aset "send" (fn [raw]
@@ -746,6 +747,7 @@
                                      (is (nil? (:tx-id tx-entry)))
                                      (is (= 4999 (count uploaded-tx)))
                                      (is (= [] @(:inflight client)))
+                                     (sync-apply/ack-upload-response! test-repo client)
                                      (reset! sync-apply/*repo->latest-remote-tx {test-repo 1})
                                      (client-op/update-local-tx test-repo 1)
                                      (#'sync-apply/flush-pending! test-repo client))]
@@ -756,6 +758,56 @@
                              (is (= (str tx-id) (:tx-id tx-entry)))
                              (is (= 2 (count uploaded-tx)))
                              (is (= [tx-id] @(:inflight client))))))
+                       (p/catch (fn [error]
+                                  (is nil (str error)))))))
+               (p/finally done)))))
+
+(deftest flush-pending-retries-large-upload-chunk-until-server-ack-test
+  (async done
+         (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+               tx-id (random-uuid)
+               tx-data (vec (concat
+                             (repeat 5000 [:db/add [:block/uuid (:block/uuid child1)]
+                                           :block/title
+                                           "large upload retry split"])
+                             [[:db/add [:block/uuid (:block/uuid child1)]
+                               :block/title
+                               "large upload retry tail"]]))
+               sent (atom [])
+               client {:repo test-repo
+                       :graph-id "graph-1"
+                       :inflight (atom [])
+                       :upload-request (atom nil)
+                       :ws (doto (js-obj)
+                             (aset "readyState" 1)
+                             (aset "send" (fn [raw]
+                                            (swap! sent conj
+                                                   (js->clj (js/JSON.parse raw)
+                                                            :keywordize-keys true)))))}]
+           (-> (with-datascript-conns
+                 conn
+                 client-ops-conn
+                 (fn []
+                   (-> (p/with-redefs [worker-state/online? (constantly true)
+                                        sync-crypt/graph-e2ee? (constantly false)]
+                         (reset! sync-apply/*repo->latest-remote-tx {test-repo 0})
+                         (client-op/update-local-tx test-repo 0)
+                         (seed-client-op-txs!
+                          test-repo
+                          [{:db-sync/tx-id tx-id
+                            :db-sync/pending? true
+                            :db-sync/created-at 1
+                            :db-sync/outliner-op :insert-blocks
+                            :db-sync/normalized-tx-data tx-data}])
+                         (p/let [_ (#'sync-apply/flush-pending! test-repo client)
+                                 _ (#'sync-apply/flush-pending! test-repo client)]
+                           (is (= 2 (count @sent)))
+                           (doseq [payload @sent]
+                             (let [tx-entry (first (:txs payload))
+                                   uploaded-tx (sqlite-util/read-transit-str (:tx tx-entry))]
+                               (is (= "tx/batch" (:type payload)))
+                               (is (nil? (:tx-id tx-entry)))
+                               (is (= 5000 (count uploaded-tx)))))))
                        (p/catch (fn [error]
                                   (is nil (str error)))))))
                (p/finally done)))))
@@ -792,6 +844,7 @@
                client {:repo test-repo
                        :graph-id "graph-1"
                        :inflight (atom [])
+                       :upload-request (atom nil)
                        :ws (doto (js-obj)
                              (aset "readyState" 1)
                              (aset "send" (fn [raw]
@@ -822,6 +875,7 @@
                                  _ (do
                                      (is (= 5000 (count first-uploaded-tx)))
                                      (is (= parent-tx (subvec first-uploaded-tx 4993 5000)))
+                                     (sync-apply/ack-upload-response! test-repo client)
                                      (reset! sync-apply/*repo->latest-remote-tx {test-repo 1})
                                      (client-op/update-local-tx test-repo 1)
                                      (#'sync-apply/flush-pending! test-repo client))]
@@ -848,6 +902,7 @@
                client {:repo test-repo
                        :graph-id "graph-1"
                        :inflight (atom [])
+                       :upload-request (atom nil)
                        :ws (doto (js-obj)
                              (aset "readyState" 1)
                              (aset "send" (fn [raw]
@@ -877,6 +932,7 @@
                                                      (sqlite-util/read-transit-str (:tx tx-entry)))
                                  _ (do
                                      (is (= 5000 (count first-uploaded-tx)))
+                                     (sync-apply/ack-upload-response! test-repo client)
                                      (reset! sync-apply/*repo->latest-remote-tx {test-repo 1})
                                      (client-op/update-local-tx test-repo 1)
                                      (#'sync-apply/flush-pending! test-repo client))]
@@ -901,6 +957,7 @@
                client {:repo test-repo
                        :graph-id "graph-1"
                        :inflight (atom [])
+                       :upload-request (atom nil)
                        :ws (doto (js-obj)
                              (aset "readyState" 1)
                              (aset "send" (fn [raw]
@@ -930,6 +987,7 @@
                                                      (sqlite-util/read-transit-str (:tx tx-entry)))
                                  _ (do
                                      (is (= 5000 (count first-uploaded-tx)))
+                                     (sync-apply/ack-upload-response! test-repo client)
                                      (reset! sync-apply/*repo->latest-remote-tx {test-repo 1})
                                      (client-op/update-local-tx test-repo 1)
                                      (#'sync-apply/flush-pending! test-repo client))]
@@ -957,6 +1015,7 @@
                client {:repo test-repo
                        :graph-id "graph-1"
                        :inflight (atom [])
+                       :upload-request (atom nil)
                        :ws (doto (js-obj)
                              (aset "readyState" 1)
                              (aset "send" (fn [raw]
