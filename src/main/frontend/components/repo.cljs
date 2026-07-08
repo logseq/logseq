@@ -3,7 +3,6 @@
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.graph :as graph]
             [frontend.handler.notification :as notification]
@@ -19,7 +18,6 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
@@ -31,6 +29,13 @@
   (when remote?
     (if graph-e2ee? "lock" "cloud")))
 
+(defn- repo-display-name
+  [repo-url]
+  (let [repo-name (text-util/get-graph-name-from-path repo-url)]
+    (if (config/db-based-graph? repo-name)
+      (config/db-graph-name repo-name)
+      repo-name)))
+
 (defn local-uploadable-graph?
   [{:keys [root remote? rtc-graph?]}]
   (and (or root
@@ -40,14 +45,22 @@
        (user-handler/logged-in?)
        (user-handler/rtc-group?)))
 
+(defn <invoke-db-worker
+  [op & args]
+  (apply state/<invoke-db-worker op args))
+
 (defn- graph-e2ee-enabled?
   [{:keys [url graph-e2ee?] :as graph}]
-  (if (contains? graph :graph-e2ee?)
-    (true? graph-e2ee?)
-    (if (= url (state/get-current-repo))
-      (let [e2ee? (ldb/get-graph-rtc-e2ee? (db/get-db))]
-        (if (nil? e2ee?) true (true? e2ee?)))
-      true)))
+  (cond
+    (contains? graph :graph-e2ee?)
+    (p/resolved (true? graph-e2ee?))
+
+    (= url (state/get-current-repo))
+    (p/let [e2ee? (<invoke-db-worker :thread-api/get-rtc-graph-e2ee? url)]
+      (if (nil? e2ee?) true (true? e2ee?)))
+
+    :else
+    (p/resolved true)))
 
 (defn- <ensure-current-graph-for-upload!
   [repo]
@@ -457,8 +470,7 @@
                             :on-click (fn []
                                         (rtc-handler/<get-remote-graphs))}
                            (ui/icon "refresh" {:size 15}))))])
-        _remote? (and current-repo (:remote? (first (filter #(= current-repo (:url %)) repos))))
-        _repo-name (when current-repo (db/get-repo-name current-repo))]
+        _remote? (and current-repo (:remote? (first (filter #(= current-repo (:url %)) repos))))]
 
     [:div
      {:class (when (<= (count repos) 1) "no-repos")}
@@ -518,10 +530,9 @@
   (let [current-repo (rfx/use-sub [:git/current-repo])
         user-repos (rfx/use-sub [:me :repos])
         current-repo' (some->> user-repos (medley/find-first #(= current-repo (:url %))))
-        repo-name (when current-repo (db/get-repo-name current-repo))
         remote? (:remote? current-repo')
         short-repo-name (if current-repo
-                          (db/get-short-repo-name repo-name)
+                          (repo-display-name current-repo)
                           (t :graph.switch/select-prompt))
         selector-opts (cond-> {:on-click (fn [^js e]
                                            (shui/popup-show! (.closest (.-target e) "a")
@@ -594,11 +605,11 @@
   (if (and cloud? graph-e2ee? refresh-token token user-uuid (not e2ee-rsa-key-ensured?))
     (-> (p/do!
          (state/pub-event! [:rtc/sync-app-state])
-         (state/<invoke-db-worker :thread-api/set-db-sync-config
-                                  {:enabled? true
-                                   :ws-url (config/db-sync-ws-url)
-                                   :http-base (config/db-sync-http-base)})
-         (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys)]
+         (<invoke-db-worker :thread-api/set-db-sync-config
+                            {:enabled? true
+                             :ws-url (config/db-sync-ws-url)
+                             :http-base (config/db-sync-http-base)})
+         (p/let [rsa-key-pair (<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys)]
            (set-e2ee-rsa-key-ensured? (some? rsa-key-pair))))
         (p/catch (fn [e]
                    (log/error :db-sync/ensure-user-rsa-keys-failed e)

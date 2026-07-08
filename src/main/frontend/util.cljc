@@ -12,7 +12,6 @@
                      [cljs-bean.core :as bean]
                      [cljs-time.core :as t]
                      [clojure.pprint]
-                     [datascript.impl.entity :as de]
                      [dommy.core :as d]
                      [frontend.loader :refer [load]]
                      [frontend.mobile.util :as mobile-util]
@@ -732,11 +731,7 @@
 #?(:cljs
    (defn copy-to-clipboard!
      [text & {:keys [graph html blocks embed-block? owner-window]}]
-     (let [blocks (map (fn [block] (if (de/entity? block)
-                                     (-> (into {} block)
-                                         ;; FIXME: why :db/id is not included?
-                                         (assoc :db/id (:db/id block)))
-                                     block)) blocks)
+     (let [blocks (map identity blocks)
            data (clj->js
                  (common-util/remove-nils-non-nested
                   {:text text
@@ -772,9 +767,6 @@
     (println (str "Debug " k))
     (time (reset! result (doall (f))))
     @result))
-
-#?(:cljs
-   (def concat-without-nil common-util/concat-without-nil))
 
 #?(:cljs
    (defn set-title!
@@ -929,9 +921,6 @@
 
 #?(:cljs
    (def safe-page-name-sanity-lc common-util/safe-page-name-sanity-lc))
-
-#?(:cljs
-   (def get-page-title common-util/get-page-title))
 
 #?(:cljs
    (defn add-style!

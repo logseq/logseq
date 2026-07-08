@@ -178,7 +178,6 @@
  :cmdk.action/search "Cercar"
  :cmdk.action/trigger "Executar"
 
- :cmdk.create/configure-tag "Configurar etiqueta"
  :cmdk.create/page "Crear pàgina"
  :cmdk.create/tag "Crear etiqueta"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Actualitzats recentment"
  :cmdk.group/themes "Temes"
 
- :cmdk.info/configure-tag "Configurar #{1}"
  :cmdk.info/create-page "Crear la pàgina '{1}'"
  :cmdk.info/create-tag "Crear l'etiqueta '{1}'"
 

@@ -593,7 +593,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   '[:db/id
     :block/uuid
     :block/title
-    {:block/page [:block/uuid]}
+    {:block/page [:block/uuid :block/name :block/title]}
     {:block/parent [:db/id :block/uuid :block/title :logseq.property/built-in?
                     :logseq.property/hide? :logseq.property/deleted-at]}
     {:block/tags [:db/id :db/ident :block/title :logseq.property/icon]}
@@ -749,40 +749,45 @@ DROP TRIGGER IF EXISTS blocks_au;
                                               [keyword-rrf-weight vector-rrf-weight]))
          unique-results (unique-search-results (concat keyword-results vector-results))
          block-by-id (pull-search-result-blocks db unique-results)
-         merged (keep (fn [{:keys [id] :as result}]
-                        (let [block (get block-by-id id)]
-                          (when-not (ldb/hidden? block)
-                            (let [keyword-score (if (ldb/page? block)
-                                                  (+ (or (:keyword-score result) 0.0) 2)
-                                                  (or (:keyword-score result) 0.0))
-                                  vector-score (or (:vector-score result) 0.0)
-                                  base-score (if use-rrf?
-                                               (or (get fused-score-by-id id) 0.0)
-                                               keyword-score)
-                                  vector-match-score (if use-rrf?
-                                                       (vector-term-match-score q result block)
-                                                       0)
-                                  combined-score (+ base-score
-                                                    vector-match-score
-                                                    (* source-score-tie-break-weight
-                                                       (+ keyword-score vector-score))
-                                                    (if-not use-rrf?
-                                                      (cond
-                                                        (ldb/page? block)
-                                                        0.02
-                                                        (:block/tags block)
-                                                        0.01
-                                                        :else
-                                                        0)
-                                                      0))]
-                              (assoc result
-                                     search-result-block-key block
-                                     :title (or (:title result) (:block/title block))
-                                     :combined-score combined-score
-                                     :keyword-score keyword-score)))))
-                      unique-results)
-         sorted-result (sort-by :combined-score #(compare %2 %1) merged)]
-     sorted-result)))
+         merged (reduce (fn [acc {:keys [id] :as result}]
+                          (let [block (get block-by-id id)]
+                            (if (ldb/hidden? block)
+                              acc
+                              (let [page? (ldb/page? block)
+                                    keyword-score (if page?
+                                                    (+ (or (:keyword-score result) 0.0) 2)
+                                                    (or (:keyword-score result) 0.0))
+                                    vector-score (or (:vector-score result) 0.0)
+                                    base-score (if use-rrf?
+                                                 (or (get fused-score-by-id id) 0.0)
+                                                 keyword-score)
+                                    vector-match-score (if use-rrf?
+                                                         (vector-term-match-score q result block)
+                                                         0)
+                                    combined-score (+ base-score
+                                                      vector-match-score
+                                                      (* source-score-tie-break-weight
+                                                         (+ keyword-score vector-score))
+                                                      (if-not use-rrf?
+                                                        (cond
+                                                          page?
+                                                          0.02
+                                                          (:block/tags block)
+                                                          0.01
+                                                          :else
+                                                          0)
+                                                        0))]
+                                (conj acc
+                                      (assoc result
+                                             search-result-block-key block
+                                             :title (or (:title result) (:block/title block))
+                                             :combined-score combined-score
+                                             :keyword-score keyword-score))))))
+                        []
+                        unique-results)
+         sorted-result (to-array merged)]
+     (.sort sorted-result #(compare (:combined-score %2) (:combined-score %1)))
+     (or (array-seq sorted-result) '()))))
 
 (defn- code-block?
   [code-class block]
@@ -873,6 +878,38 @@ DROP TRIGGER IF EXISTS blocks_au;
                          (d/entity @conn [:block/uuid block-id]))]
       (include-search-block? conn block code-class option))))
 
+(defn- direct-page-results
+  [conn q code-class option limit]
+  (when (:page-only? option)
+    (let [needle (some-> q
+                         (fuzzy/search-normalize true)
+                         fuzzy/clean-str
+                         string/lower-case)]
+      (when-not (string/blank? needle)
+        (let [pages (->> (d/datoms @conn :avet :block/name)
+                         (keep #(d/entity @conn (:e %)))
+                         (filter ldb/page?)
+                         (filter (fn [page]
+                                   (let [title (or (:block/title page) (:block/name page))
+                                         haystack (some-> title
+                                                          (fuzzy/search-normalize true)
+                                                          fuzzy/clean-str
+                                                          string/lower-case)]
+                                     (and haystack (string/includes? haystack needle)))))
+                         (take limit)
+                         vec)]
+          (keep (fn [page]
+                  (search-result->block-result
+                   conn
+                   q
+                   code-class
+                   option
+                   {:id (str (:block/uuid page))
+                    :page (str (:block/uuid page))
+                    :title (:block/title page)
+                    search-result-block-key page}))
+                pages))))))
+
 (defn- vector-search-blocks
   [vector-index {:keys [limit page query-embedding]}]
   (when-let [query-fn (:query vector-index)]
@@ -952,7 +989,16 @@ DROP TRIGGER IF EXISTS blocks_au;
                            (count (filter #(search-result-visible? conn code-class option %) combined-result)))
            result (->> combined-result
                        (common-util/distinct-by :id)
-                       (keep #(search-result->block-result conn q code-class option %)))]
+                       (keep #(search-result->block-result conn q code-class option %)))
+           result (cond->> result
+                    (:page-only? option)
+                    (concat (direct-page-results conn q code-class option limit))
+                    true
+                    (remove nil?)
+                    true
+                    (common-util/distinct-by :block/uuid))
+           matched-count (when include-matched-count?
+                           (max (or matched-count 0) (count result)))]
        (if include-matched-count?
          {:items (take limit result)
           :matched-count matched-count}

@@ -2,7 +2,6 @@
   (:require [frontend.components.reference-filters :as filters]
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -53,8 +52,7 @@
 
 (hsx/defc references-cp
   [entity config]
-  (let [block (db/sub-block (:db/id entity))]
-       (references-aux block config)))
+  (references-aux entity config))
 
 (hsx/defc references
   [entity config]

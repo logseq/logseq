@@ -29,33 +29,57 @@
 (def ^:private expected-db-core-thread-apis
   (into #{}
         (concat
-         [:thread-api/list-db :thread-api/init :thread-api/set-db-sync-config :thread-api/get-db-sync-config
+         [:thread-api/list-db :thread-api/init :thread-api/set-db-sync-config :thread-api/get-db-sync-config :thread-api/get-key-value
           :thread-api/db-sync-status :thread-api/db-sync-start :thread-api/db-sync-stop :thread-api/db-sync-update-presence
           :thread-api/db-sync-request-asset-download :thread-api/db-sync-download-missing-assets
           :thread-api/db-sync-grant-graph-access :thread-api/db-sync-ensure-user-rsa-keys
           :thread-api/db-sync-list-remote-graphs :thread-api/db-sync-upload-graph :thread-api/db-sync-create-remote-graph
           :thread-api/db-sync-stop-upload :thread-api/db-sync-resume-upload :thread-api/db-sync-upload-stopped?
           :thread-api/db-sync-get-block-conflicts :thread-api/db-sync-clear-block-conflicts :thread-api/db-sync-download-graph-by-id
-          :thread-api/create-or-open-db :thread-api/q :thread-api/datoms :thread-api/pull :thread-api/get-blocks
+          :thread-api/create-or-open-db :thread-api/q :thread-api/datoms :thread-api/pull :thread-api/task-spent-time :thread-api/get-blocks
           :thread-api/get-block-refs :thread-api/get-block-refs-count :thread-api/get-block-source :thread-api/block-refs-check
           :thread-api/get-block-parents :thread-api/set-context :thread-api/transact :thread-api/undo-redo-set-pending-editor-info
           :thread-api/undo-redo-record-editor-info :thread-api/undo-redo-record-ui-state :thread-api/undo-redo-undo
           :thread-api/undo-redo-redo :thread-api/undo-redo-clear-history :thread-api/undo-redo-get-debug-state
-          :thread-api/get-initial-data :thread-api/reset-db :thread-api/unsafe-unlink-db :thread-api/close-db
+          :thread-api/get-initial-data :thread-api/reset-db :thread-api/get-file-content :thread-api/get-all-properties
+          :thread-api/get-date-scheduled-or-deadlines
+          :thread-api/unsafe-unlink-db :thread-api/close-db
           :thread-api/db-sync-close-db :thread-api/db-sync-invalidate-search-db :thread-api/db-sync-recreate-lock
           :thread-api/db-sync-rehydrate-large-titles :thread-api/db-sync-import-prepare :thread-api/db-sync-import-rows-chunk
           :thread-api/db-sync-import-finalize :thread-api/release-access-handles :thread-api/db-exists
-          :thread-api/export-db-binary
+          :thread-api/export-db-binary :thread-api/import-file-graph
           :thread-api/export-client-ops-db-binary :thread-api/backup-db-sqlite
           :thread-api/import-db-binary :thread-api/search-blocks :thread-api/search-upsert-blocks :thread-api/search-delete-blocks
           :thread-api/search-truncate-tables :thread-api/search-build-blocks-indice :thread-api/search-build-blocks-indice-in-worker
           :thread-api/search-build-pages-indice :thread-api/apply-outliner-ops :thread-api/sync-app-state
           :thread-api/markdown-mirror-set-enabled :thread-api/markdown-mirror-flush :thread-api/markdown-mirror-regenerate
           :thread-api/export-get-debug-datoms :thread-api/export-get-all-page->content :thread-api/validate-db
-          :thread-api/recompute-checksum-diagnostics :thread-api/export-edn :thread-api/import-edn :thread-api/get-view-data
-          :thread-api/get-class-objects :thread-api/get-property-values :thread-api/get-bidirectional-properties
+          :thread-api/recompute-checksum-diagnostics :thread-api/export-edn :thread-api/import-edn
+          :thread-api/get-fsrs-due-card-block-ids :thread-api/get-view-data
+          :thread-api/get-class-objects :thread-api/validate-block-tag
+          :thread-api/build-convert-tag-to-page-tx
+          :thread-api/build-convert-page-to-tag-tx
+          :thread-api/build-favorite-page-ops
+          :thread-api/build-unfavorite-page-ops
+          :thread-api/build-reorder-favorites-ops
+          :thread-api/get-page-route-info :thread-api/query-dsl-query :thread-api/query-dsl-custom-query
+          :thread-api/get-today-journal-title :thread-api/get-date-formatter :thread-api/get-journal-page-title
+          :thread-api/get-journal-page-by-day :thread-api/get-latest-journals
+          :thread-api/page-exists? :thread-api/get-case-page :thread-api/get-tags-by-name
+          :thread-api/resolve-query-inputs :thread-api/get-block-parent
+          :thread-api/get-block-page-info
+          :thread-api/get-block-immediate-children :thread-api/get-block-sibling
+          :thread-api/get-page-blocks-tree :thread-api/get-block-class-default-properties
+          :thread-api/get-all-classes :thread-api/get-structured-children :thread-api/get-class-extends-children-tree
+          :thread-api/get-alias-source-page :thread-api/get-property-closed-values
+          :thread-api/get-first-url-property-value
+          :thread-api/get-display-properties :thread-api/reorder-display-property
+          :thread-api/get-all-properties :thread-api/get-property-values :thread-api/get-bidirectional-properties
           :thread-api/build-graph :thread-api/get-all-page-titles :thread-api/gc-graph :thread-api/mobile-logs
-          :thread-api/get-rtc-graph-uuid :thread-api/cli-list-properties :thread-api/cli-list-tags :thread-api/cli-list-pages
+          :thread-api/get-graph-uuid :thread-api/get-rtc-graph-uuid :thread-api/get-rtc-graph-e2ee?
+          :thread-api/ensure-local-graph-uuid
+          :thread-api/get-graph-schema-version
+          :thread-api/cli-list-properties :thread-api/cli-list-tags :thread-api/cli-list-pages
           :thread-api/cli-list-tasks :thread-api/cli-list-nodes :thread-api/api-get-page-data :thread-api/api-list-properties
           :thread-api/api-list-tags :thread-api/api-list-pages :thread-api/api-build-upsert-nodes-edn])))
 

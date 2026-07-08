@@ -1,12 +1,10 @@
 (ns frontend.components.query.result
   "Query result related functionality for query components"
   (:require [clojure.string :as string]
-            [frontend.db :as db]
             [frontend.db.query-custom :as query-custom]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.query-react :as query-react]
-            [frontend.db.utils :as db-utils]
             [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -41,9 +39,8 @@
                                    (let [result (->> blocks
                                                      (keep (fn [b]
                                                              (when-not (= (:block/uuid b) current-block-uuid)
-                                                               (let [entity (or (db/entity [:block/uuid (:block/uuid b)]) b)]
-                                                                 (when-not (ldb/hidden? entity)
-                                                                   entity))))))]
+                                                               (when-not (ldb/hidden? b)
+                                                                 b)))))]
                                      (reset! *result result))))
                                *result)
 
@@ -75,7 +72,14 @@
     false ;; Immediately return false as table view can't handle grouping
     (get query-m :group-by-page?
          (and (not result-transform)
-              (not (and (string? query) (string/includes? query "(by-page false)")))))))
+	              (not (and (string? query) (string/includes? query "(by-page false)")))))))
+
+(defn- group-blocks-by-page
+  [blocks]
+  (if (:block/page (first blocks))
+    (some->> blocks
+             (group-by :block/page))
+    blocks))
 
 (defn transform-query-result
   "Transforms a query result if query conditions and config indicate a transformation"
@@ -91,7 +95,7 @@
                                        result)))
         group-by-page? (get-group-by-page query-m config)
         result (if (and group-by-page? (:block/uuid (first transformed-query-result)))
-                 (let [result (db-utils/group-by-page transformed-query-result)]
+                 (let [result (group-blocks-by-page transformed-query-result)]
                    (if (map? result)
                      (dissoc result nil)
                      result))

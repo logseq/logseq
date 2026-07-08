@@ -233,7 +233,6 @@
  :cmdk.action/search "搜索"
  :cmdk.action/trigger "触发"
 
- :cmdk.create/configure-tag "配置标签"
  :cmdk.create/page "创建页面"
  :cmdk.create/tag "创建标签"
 
@@ -260,7 +259,6 @@
  :cmdk.group/recently-updated "最近更新"
  :cmdk.group/themes "主题"
 
- :cmdk.info/configure-tag "配置 #{1}"
  :cmdk.info/create-page "创建名为“{1}”的页面"
  :cmdk.info/create-tag "创建名为“{1}”的标签"
 

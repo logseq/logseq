@@ -5,7 +5,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -21,7 +21,8 @@
         (re-matches #"^https://x\.com/.*?/status/.*?$" url))))
 
 (defn quick-capture [args]
-  (if-let [today-page-title (db/get-today-journal-title)]
+  (p/let [today-page-title (db-async/<get-today-journal-title (state/get-current-repo))]
+   (if today-page-title
     (let [{:keys [url title content page append]} (bean/->clj args)
           title (or title "")
           url (or url "")
@@ -98,4 +99,4 @@
                                                                         :edit-block? true
                                                                         :replace-empty-target? true})
                         100))))
-    (notification/show! (t :journal/parse-date-to-name-error) :error)))
+    (notification/show! (t :journal/parse-date-to-name-error) :error))))

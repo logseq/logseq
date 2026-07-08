@@ -12,9 +12,9 @@
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.entity :as entity]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
-            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [logseq.common.util :as common-util]
@@ -61,11 +61,11 @@
       (let [asset-type (:logseq.property.asset/type node-entity)
             first-tag-icon (some :logseq.property/icon (sort-by :db/id (:block/tags node-entity)))]
         (cond
-          (ldb/class? node-entity)
+          (entity/class? node-entity)
           "hash"
-          (ldb/property? node-entity)
+          (entity/property? node-entity)
           "letter-p"
-          (ldb/page? node-entity)
+          (entity/page? node-entity)
           "file"
           (= asset-type "pdf")
           "book"

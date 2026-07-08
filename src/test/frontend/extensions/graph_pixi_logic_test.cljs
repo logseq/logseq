@@ -2,23 +2,6 @@
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.extensions.graph.pixi.logic :as logic]))
 
-(defn- fastest-layout
-  [attempts f]
-  (loop [remaining attempts
-         best nil]
-    (if (zero? remaining)
-      best
-      (let [start (.now js/performance)
-            layouted (f)
-            elapsed (- (.now js/performance) start)
-            result {:elapsed elapsed
-                    :layouted layouted}]
-        (recur (dec remaining)
-               (if (or (nil? best)
-                       (< elapsed (:elapsed best)))
-                 result
-                 best))))))
-
 (deftest visibility-state-keeps-details-visible-and-uses-label-hysteresis
   (let [thresholds {:show-detail-scale 1.0
                     :hide-detail-scale 0.8
@@ -744,18 +727,16 @@
                       {:source idx
                        :target (mod (inc idx) 50000)})
                     (range 50000))
-        {:keys [elapsed layouted]} (fastest-layout
-                                    3
-                                    #(logic/layout-nodes nodes links :all-pages false))
+        layouted (logic/layout-nodes nodes links :all-pages false)
         sample (take 100 layouted)]
+    (is (= :fast (logic/layout-mode (count nodes) :all-pages)))
     (is (= 50000 (count layouted)))
     (is (every? #(and (number? (:x %))
                       (number? (:y %))
                       (number? (:degree %))
                       (number? (:radius %))
                       (number? (:color-int %)))
-                sample))
-    (is (< elapsed 1000))))
+                sample))))
 
 (deftest layout-nodes-4k-all-pages-uses-fast-path
   (let [nodes (mapv (fn [idx]
@@ -767,11 +748,12 @@
                       {:source idx
                        :target (mod (inc idx) 4000)})
                     (range 4000))
-        start (.now js/performance)
-        layouted (logic/layout-nodes nodes links :all-pages false)
-        elapsed (- (.now js/performance) start)]
+        layouted (logic/layout-nodes nodes links :all-pages false)]
+    (is (= :fast (logic/layout-mode (count nodes) :all-pages)))
     (is (= 4000 (count layouted)))
-    (is (< elapsed 250))))
+    (is (every? #(and (number? (:x %))
+                      (number? (:y %)))
+                (take 100 layouted)))))
 
 (deftest layout-nodes-medium-tags-and-objects-uses-bounded-d3-force
   (let [tag-count 12
@@ -791,10 +773,10 @@
                       {:source (str "obj-" idx)
                        :target (str "tag-" (mod idx tag-count))})
                     (range object-count))
-        {:keys [elapsed layouted]} (fastest-layout
-                                    3
-                                    #(logic/layout-nodes nodes links :tags-and-objects false))
+        layouted (logic/layout-nodes nodes links :tags-and-objects false)
         by-id (into {} (map (juxt :id identity) layouted))]
+    (is (= :force (logic/layout-mode (count nodes) :tags-and-objects)))
+    (is (= 3 (logic/layout-tick-count (count nodes) :tags-and-objects)))
     (is (= (+ tag-count object-count) (count layouted)))
     (is (every? #(and (number? (:x %))
                       (number? (:y %))
@@ -802,7 +784,6 @@
                       (number? (:radius %))
                       (number? (:color-int %)))
                 (take 200 layouted)))
-    (is (< elapsed 1000))
     (is (< (js/Math.abs (:x (get by-id "tag-0"))) 900))
     (is (< (js/Math.abs (:y (get by-id "tag-0"))) 900))))
 

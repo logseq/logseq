@@ -3,7 +3,7 @@
             [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.extensions.html-parser :as html-parser]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
@@ -22,42 +22,51 @@
             [logseq.graph-parser.block :as gp-block]
             [promesa.core :as p]))
 
-(defn- with-ref-ids
-  [db date-formatter refs]
-  (mapv (fn [ref]
-          (if (and (map? ref)
-                   (:block/title ref)
-                   (nil? (:block/uuid ref)))
-            (gp-block/page-name->map (:block/title ref) db true date-formatter)
-            ref))
-        refs))
+(defn- <ref-with-id
+  [repo date-formatter ref]
+  (if (and (map? ref)
+           (:block/title ref)
+           (nil? (:block/uuid ref)))
+    (p/let [page (state/<invoke-db-worker :thread-api/pull
+                                           repo
+                                           [:block/uuid :block/title :block/name]
+                                           [:block/name (common-util/page-name-sanity-lc (:block/title ref))])]
+      (or page
+          (gp-block/page-name->map (:block/title ref) nil true date-formatter)))
+    ref))
+
+(defn- <with-ref-ids
+  [repo date-formatter refs]
+  (p/all (mapv #(<ref-with-id repo date-formatter %) refs)))
 
 (defn- paste-text-parseable
   [format text]
   (when-let [editing-block (state/get-edit-block)]
-    (let [page-id (:db/id (:block/page editing-block))
-          current-db (db/get-db (state/get-current-repo))
-          date-formatter (state/get-date-formatter)
-          blocks (block/extract-blocks
-                  (mldoc/->edn text format)
-                  text format
-                  {:page-name (:block/name (db/entity page-id))})
-          blocks' (cond->> (gp-block/with-parent-and-order page-id blocks)
-                    true
-                    (map (fn [block]
-                           (let [refs (some->> (:block/refs block)
-                                               (with-ref-ids current-db date-formatter))]
-                             (-> block
-                                 (dissoc :block/tags)
-                                 (cond-> refs
-                                   (assoc :block/refs refs))
-                                 (cond-> (:logseq.property/heading block)
-                                   (update :block/title commands/clear-markdown-heading))
-                                 (update :block/title (fn [title]
-                                                        (let [title' (db-content/replace-tags-with-id-refs title refs)]
-                                                          (db-content/title-ref->id-ref title' refs)))))))))]
-      (editor-handler/paste-blocks blocks' {:keep-uuid? true
-                                            :outliner-real-op :paste-text}))))
+    (let [repo (state/get-current-repo)
+          date-formatter (state/get-date-formatter)]
+      (p/let [page-info (db-async/<get-block-page-info repo (or (:db/id editing-block)
+                                                                (:block/uuid editing-block)))
+              blocks (block/extract-blocks
+                      (mldoc/->edn text format)
+                      text format
+                      {:page-name (:block/name page-info)})
+              blocks (gp-block/with-parent-and-order (:db/id page-info) blocks)
+              blocks' (p/all
+                       (mapv (fn [block]
+                               (p/let [refs (some->> (:block/refs block)
+                                                     (<with-ref-ids repo date-formatter))]
+                                 (-> block
+                                     (dissoc :block/tags)
+                                     (cond-> refs
+                                       (assoc :block/refs refs))
+                                     (cond-> (:logseq.property/heading block)
+                                       (update :block/title commands/clear-markdown-heading))
+                                     (update :block/title (fn [title]
+                                                            (let [title' (db-content/replace-tags-with-id-refs title refs)]
+                                                              (db-content/title-ref->id-ref title' refs)))))))
+                             blocks))]
+        (editor-handler/paste-blocks blocks' {:keep-uuid? true
+                                              :outliner-real-op :paste-text})))))
 
 (defn- paste-segmented-text
   [format text]
@@ -163,7 +172,7 @@
 
       :else
       ;; from external
-      (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
+      (let [format :markdown
             html-text (let [result (when-not (string/blank? html)
                                      (try
                                        (html-parser/convert html)
@@ -186,6 +195,12 @@
           :else
           (replace-text-f text'))))))
 
+(defn- <block-with-db-id
+  [repo block]
+  (if (:db/id block)
+    (p/resolved block)
+    (db-async/<get-block repo (:block/uuid block) {:children? false})))
+
 (defn- paste-copied-blocks-or-text
   [input text e html]
   (util/stop e)
@@ -202,19 +217,21 @@
            (if embed-block?
              (when-let [block-id (:block/uuid (first blocks))]
                (when-let [current-block (state/get-edit-block)]
-                 (cond
-                   (some #(= block-id (:block/uuid %)) (db/get-block-parents repo (:block/uuid current-block) {}))
-                   (notification/show! (t :asset/cannot-embed-parent-as-own-property) :error)
+                 (p/let [current-block' (<block-with-db-id repo current-block)
+                         parents (db-async/<get-block-parents repo (:db/id current-block') 100)]
+                   (cond
+                     (some #(= block-id (:block/uuid %)) parents)
+                     (notification/show! (t :asset/cannot-embed-parent-as-own-property) :error)
 
-                   :else
-                   (p/do!
-                    (editor-handler/api-insert-new-block! ""
-                                                          {:block-uuid (:block/uuid current-block)
-                                                           :sibling? true
-                                                           :outliner-op :paste
-                                                           :replace-empty-target? true
-                                                           :other-attrs {:block/link (:db/id (db/entity [:block/uuid block-id]))}})
-                    (state/clear-edit!)))))
+                     :else
+                     (p/let [linked-block (db-async/<get-block repo block-id {:children? false})
+                             _ (editor-handler/api-insert-new-block! ""
+                                                                    {:block-uuid (:block/uuid current-block)
+                                                                     :sibling? true
+                                                                     :outliner-op :paste
+                                                                     :replace-empty-target? true
+                                                                     :other-attrs {:block/link (:db/id linked-block)}})]
+                       (state/clear-edit!))))))
              (editor-handler/paste-blocks blocks {:revert-cut-txs revert-cut-txs
                                                   :keep-uuid? keep-uuid?})))
          (paste-copied-text input text html)))
@@ -239,8 +256,7 @@
 (defn- editing-display-type-block?
   []
   (boolean
-   (when-let [editing-block (some-> (state/get-edit-block) :db/id db/entity)]
-     (:logseq.property.node/display-type editing-block))))
+   (:logseq.property.node/display-type (state/get-edit-block))))
 
 (defn- paste-text-or-blocks-aux
   [input e text html]

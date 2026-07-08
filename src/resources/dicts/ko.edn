@@ -178,7 +178,6 @@
  :cmdk.action/search "검색"
  :cmdk.action/trigger "실행"
 
- :cmdk.create/configure-tag "태그 설정"
  :cmdk.create/page "페이지 만들기"
  :cmdk.create/tag "태그 만들기"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "최근 업데이트"
  :cmdk.group/themes "테마"
 
- :cmdk.info/configure-tag "#{1} 설정"
  :cmdk.info/create-page "페이지 '{1}' 만들기"
  :cmdk.info/create-tag "태그 '{1}' 만들기"
 
