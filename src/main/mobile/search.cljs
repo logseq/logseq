@@ -3,7 +3,6 @@
   (:require [clojure.string :as string]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.cmdk.core :as cmdk]
-            [frontend.db :as db]
             [frontend.search :as search]
             [frontend.state :as state]
             [promesa.core :as p]))
@@ -27,21 +26,14 @@
 (defn- block->page-name
   [block]
   (let [page (:block/page block)
-        page-block (cond
-                     (map? page) page
-                     (uuid? page) (db/entity [:block/uuid page])
-                     (number? page) (db/entity page)
-                     :else nil)]
+        page-block (when (map? page) page)]
     (:block/title page-block)))
 
 (defn- block->nearest-parent-text
   "Returns the text of the nearest non-page parent block, or nil."
   [block]
   (let [parent (:block/parent block)
-        parent-entity (cond
-                        (map? parent) parent
-                        (number? parent) (db/entity parent)
-                        :else nil)]
+        parent-entity (when (map? parent) parent)]
     (when (and parent-entity (not (:block/name parent-entity)))
       (:text (breadcrumb-model/block->breadcrumb-segment parent-entity)))))
 

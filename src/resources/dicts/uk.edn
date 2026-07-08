@@ -178,7 +178,6 @@
  :cmdk.action/search "Пошук"
  :cmdk.action/trigger "Выполнить"
 
- :cmdk.create/configure-tag "Налаштувати тег"
  :cmdk.create/page "Створити сторінку"
  :cmdk.create/tag "Створити тег"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Недавно обновлённые"
  :cmdk.group/themes "Теми"
 
- :cmdk.info/configure-tag "Налаштувати #{1}"
  :cmdk.info/create-page "Створити сторіноку '{1}'"
  :cmdk.info/create-tag "Створити тег '{1}'"
 

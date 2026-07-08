@@ -4,23 +4,18 @@
             [cljs-time.core :as t]
             [cljs.pprint :as pprint]
             [clojure.string :as string]
-            [datascript.core :as d]
-            [electron.ipc :as ipc]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t t-en]]
-            [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
-            [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.db-based.import :as db-import-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.persist-db.browser :as db-browser]
             [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -29,9 +24,6 @@
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
-            [logseq.db.frontend.asset :as db-asset]
-            [logseq.db.frontend.validate :as db-validate]
-            [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.form.core :as form-core]
             [logseq.shui.hooks :as hooks]
@@ -275,22 +267,22 @@
                           (shui/button {:type "submit" :class "right-0 mt-3"} (t :ui/submit))]))])
 
 (defn- validate-imported-data
-  [db import-state files]
+  [{:keys [import-state files validation]}]
   (when-let [org-files (seq (filter #(= "org" (path/file-ext (:path %))) files))]
     (log/info :org-files (mapv :path org-files))
     (notification/show! (t :import/org-files-imported (count org-files))
                         :info false))
-  (when-let [ignored-files (seq @(:ignored-files import-state))]
+  (when-let [ignored-files (seq (:ignored-files import-state))]
     (notification/show! (t :import/ignored-files (count ignored-files))
                         :info false)
     (log/error :import-ignored-files {:msg (str "Import ignored " (count ignored-files) " file(s)")})
     (pprint/pprint ignored-files))
-  (when-let [ignored-assets (seq @(:ignored-assets import-state))]
+  (when-let [ignored-assets (seq (:ignored-assets import-state))]
     (notification/show! (t :import/ignored-assets (count ignored-assets))
                         :info false)
     (log/error :import-ignored-assets {:msg (str "Import ignored " (count ignored-assets) " asset(s)")})
     (pprint/pprint ignored-assets))
-  (when-let [ignored-props (seq @(:ignored-properties import-state))]
+  (when-let [ignored-props (seq (:ignored-properties import-state))]
     (notification/show!
      [:.mb-2
       [:.text-lg.mb-2 (t :import/ignored-properties (count ignored-props))]
@@ -311,14 +303,13 @@
                    [:dt.m-0 [:strong k]]
                    [:dd {:class "text-warning"} v]])))]
      :warning false))
-  (let [{:keys [errors]} (db-validate/validate-local-db! db {:verbose true})]
-    (if errors
-      (do
-        (log/error :import-errors {:msg (str "Import detected " (count errors) " invalid block(s):")})
-        (pprint/pprint errors)
-        (notification/show! (t :import/invalid-blocks-detected (count errors))
-                            :warning false))
-      (log/info :import-valid {:msg "Valid import!"}))))
+  (if-let [errors (seq (:errors validation))]
+    (do
+      (log/error :import-errors {:msg (str "Import detected " (count errors) " invalid block(s):")})
+      (pprint/pprint errors)
+      (notification/show! (t :import/invalid-blocks-detected (count errors))
+                          :warning false))
+    (log/info :import-valid {:msg "Valid import!"})))
 
 (defn- show-notification [{:keys [msg level ex-data]}]
   (if (= :error level)
@@ -328,32 +319,34 @@
         (log/error :import-error ex-data)))
     (notification/show! msg :warning false)))
 
-(defn- read-and-copy-asset [repo repo-dir file assets buffer-handler]
+(defn- <serialize-import-file
+  [file]
   (let [^js file-object (:file-object file)]
-    (if (assets-handler/exceed-limit-size? file-object)
-      (let [path (pr-str (:path file))]
-        (log/info :import-asset-skipped-too-large {:msg (t-en :import/asset-too-large-warning path)})
-        ;; This asset will also be included in the ignored-assets count. Better to be explicit about ignoring
-        ;; these so users are aware of this
-        (notification/show! (t :import/asset-too-large-warning path) :info false))
-      (p/let [buffer (.arrayBuffer file-object)
-              bytes-array (js/Uint8Array. buffer)
-              checksum (db-asset/<get-file-array-buffer-checksum buffer)
-              asset-id (d/squuid)
-              asset-name (some-> (:path file) gp-exporter/asset-path->name)
-              assets-dir (path/path-join repo-dir common-config/local-assets-dir)
-              asset-type (db-asset/asset-path->type (:path file))
-              {:keys [with-edn-content pdf-annotation?]} (buffer-handler bytes-array)]
-        (swap! assets assoc asset-name
-               (with-edn-content
-                 {:size (.-size file-object)
-                  :type asset-type
-                  :path (:path file)
-                  :checksum checksum
-                  :asset-id asset-id}))
-        (fs/mkdir-if-not-exists assets-dir)
-        (when-not pdf-annotation?
-          (fs/write-plain-text-file! repo assets-dir (str asset-id "." asset-type) bytes-array {:skip-transact? true}))))))
+    (if (string/starts-with? (:path file) "assets/")
+      (if (assets-handler/exceed-limit-size? file-object)
+        (let [path (pr-str (:path file))]
+          (log/info :import-asset-skipped-too-large {:msg (t-en :import/asset-too-large-warning path)})
+          (notification/show! (t :import/asset-too-large-warning path) :info false)
+          (select-keys file [:path]))
+        (p/let [buffer (.arrayBuffer file-object)]
+          (assoc (select-keys file [:path])
+                 :asset/payload (js/Uint8Array. buffer)
+                 :asset/size (.-size file-object))))
+      (p/let [content (.text file-object)]
+        (assoc (select-keys file [:path])
+               :file/content content)))))
+
+(defn- <serialize-import-files
+  [files]
+  (p/all (mapv <serialize-import-file files)))
+
+(defn- write-staged-assets!
+  [repo staged-assets]
+  (let [assets-dir (path/path-join (config/get-repo-dir repo) common-config/local-assets-dir)]
+    (when (seq staged-assets)
+      (fs/mkdir-if-not-exists assets-dir)
+      (doseq [{:keys [asset-id asset-type payload]} staged-assets]
+        (fs/write-plain-text-file! repo assets-dir (str asset-id "." asset-type) payload {:skip-transact? true})))))
 
 (defn- import-file-graph
   [*files
@@ -364,9 +357,8 @@
   (p/let [start-time (t/now)
           _ (repo-handler/new-db! graph-name {:file-graph-import? true})
           repo (state/get-current-repo)
-          db-conn (db/get-db repo false)
-          on-tx-report (fn [tx-report]
-                         (db-browser/transact! repo (:tx-data tx-report) (:tx-meta tx-report)))
+          serialized-files (<serialize-import-files *files)
+          serialized-config-file (first (filter #(= (:path %) (:path config-file)) serialized-files))
           options {:user-options
                    (merge
                     (dissoc user-options :graph-name)
@@ -375,35 +367,13 @@
                      :property-parent-classes (some-> property-parent-classes string/trim not-empty  (string/split #",\s*") set)})
                    ;; common options
                    :notify-user show-notification
-                   :set-ui-state state/set-state!
-                   :<read-file (fn <read-file [file] (.text (:file-object file)))
-                   :<get-file-stat (fn <get-file-stat [path]
-                                     ;; Ignore relative paths as we can't get their stats
-                                     (when (and (util/electron?) (path/absolute? path))
-                                       (ipc/ipc :stat path)))
-                   ;; config file options
-                   :default-config config/config-default-content
-                   :<save-config-file (fn save-config-file [_ path content]
-                                        (db-editor-handler/save-file! path content))
-                   ;; logseq file options
-                   :<save-logseq-file (fn save-logseq-file [_ path content]
-                                        (db-editor-handler/save-file! path content))
-                   ;; asset file options
-                   :<read-and-copy-asset #(read-and-copy-asset repo (config/get-repo-dir repo) %1 %2 %3)
-                   :on-tx-report on-tx-report
-                   ;; doc file options
-                   ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
-                   :<export-file (fn <export-file [conn m opts]
-                                   (p/let [tx-reports
-                                           (gp-exporter/<add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
-                                     (doseq [tx-report tx-reports]
-                                       (when tx-report
-                                         (on-tx-report tx-report)))))}
-          {:keys [files import-state]} (gp-exporter/export-file-graph repo db-conn config-file *files options)]
+                   :default-config config/config-default-content}
+          import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file serialized-files options)
+          _ (write-staged-assets! repo (:staged-assets import-result))]
     (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
     (state/set-state! :graph/importing nil)
     (state/set-state! :graph/importing-state nil)
-    (validate-imported-data @db-conn import-state files)
+    (validate-imported-data import-result)
     (state/pub-event! [:graph/ready (state/get-current-repo)])
     (finished-cb)))
 

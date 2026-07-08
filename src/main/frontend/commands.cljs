@@ -3,7 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.context.i18n :as i18n :refer [interpolate-sentence t t-en]]
             [frontend.date :as date]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.extensions.video.youtube :as youtube]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.property.util :as db-pu]
@@ -212,6 +212,11 @@
 (defonce *matched-commands (atom nil))
 (defonce *initial-commands (atom nil))
 
+(defn- <journal-page-ref-text
+  [get-page-ref-text journal-title]
+  (p/let [title (db-async/<get-journal-page-title (state/get-current-repo) journal-title)]
+    (get-page-ref-text title)))
+
 (defn ^:large-vars/cleanup-todo commands-map
   ([get-page-ref-text] (commands-map get-page-ref-text t))
   ([get-page-ref-text t-fn]
@@ -275,16 +280,17 @@
 
        ;; time & date
        [[(t-fn :date.nlp/tomorrow)
-         #(get-page-ref-text (db/get-journal-page-title (date/tomorrow)))
+         #(<journal-page-ref-text get-page-ref-text (date/tomorrow))
          (t-fn :editor.slash/tomorrow-desc)
          :icon/tomorrow
          (t-fn :editor.slash/group-time-and-date)]
         [(t-fn :date.nlp/yesterday)
-         #(get-page-ref-text (db/get-journal-page-title (date/yesterday)))
+         #(<journal-page-ref-text get-page-ref-text (date/yesterday))
          (t-fn :editor.slash/yesterday-desc)
          :icon/yesterday]
         [(t-fn :date.nlp/today)
-         #(get-page-ref-text (db/get-today-journal-title))
+         #(p/let [title (db-async/<get-today-journal-title (state/get-current-repo))]
+            (get-page-ref-text title))
          (t-fn :editor.slash/today-desc)
          :icon/calendar]
         [(t-fn :editor.slash/current-time)
@@ -631,11 +637,15 @@
     (db-property-handler/set-block-property! (:db/id block) property-id value)))
 
 (defmethod handle-step :editor/set-property-on-block-property [[_ block-property-id property-id value]]
-  (let [updated-block (when-let [block-uuid (:block/uuid (state/get-edit-block))]
-                        (db/entity [:block/uuid block-uuid]))
-        block-property-value (get updated-block block-property-id)]
-    (when block-property-value
-      (db-property-handler/set-block-property! (:db/id block-property-value) property-id value))))
+  (when-let [block-uuid (:block/uuid (state/get-edit-block))]
+    (p/let [updated-block (state/<invoke-db-worker
+                           :thread-api/pull
+                           (state/get-current-repo)
+                           [block-property-id]
+                           [:block/uuid block-uuid])
+            block-property-value (get updated-block block-property-id)]
+      (when block-property-value
+        (db-property-handler/set-block-property! (:db/id block-property-value) property-id value)))))
 
 (defmethod handle-step :editor/upsert-type-block [[_ type lang]]
   (when-let [block (state/get-edit-block)]
@@ -747,6 +757,12 @@
 
 (defn exec-plugin-simple-command!
   [pid {:keys [block-id] :as cmd} action]
-  (let [format (and block-id (get (db/entity [:block/uuid block-id]) :block/format :markdown))
-        inputs (vector (conj action (assoc cmd :pid pid)))]
+  (p/let [block (when block-id
+                  (state/<invoke-db-worker
+                   :thread-api/pull
+                   (state/get-current-repo)
+                   [:block/format]
+                   [:block/uuid block-id]))
+          format (and block-id (get block :block/format :markdown))
+          inputs (vector (conj action (assoc cmd :pid pid)))]
     (handle-steps inputs format)))

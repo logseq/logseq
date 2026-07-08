@@ -1,25 +1,36 @@
 (ns ^:no-doc frontend.handler.common.editor
-  (:require [frontend.commands :as commands]))
+  (:require [frontend.commands :as commands]
+            [promesa.core :as p]))
 
 (defn insert-command!
   [id command-output format {:keys [restore?]
                              :or {restore? true}
                              :as option}]
-  (cond
-    ;; replace string
-    (string? command-output)
-    (commands/insert! id command-output option)
+  (letfn [(restore! []
+            (when restore?
+              (commands/restore-state)))
+          (insert-value! [value]
+            (commands/insert! id value option)
+            (restore!))]
+    (cond
+      ;; replace string
+      (string? command-output)
+      (insert-value! command-output)
 
-    ;; steps
-    (vector? command-output)
-    (commands/handle-steps command-output format)
+      ;; steps
+      (vector? command-output)
+      (do
+        (commands/handle-steps command-output format)
+        (restore!))
 
-    (fn? command-output)
-    (let [s (command-output)]
-      (commands/insert! id s option))
+      (p/promise? command-output)
+      (p/then command-output insert-value!)
 
-    :else
-    nil)
+      (fn? command-output)
+      (let [value (command-output)]
+        (if (p/promise? value)
+          (p/then value insert-value!)
+          (insert-value! value)))
 
-  (when restore?
-    (commands/restore-state)))
+      :else
+      (restore!))))

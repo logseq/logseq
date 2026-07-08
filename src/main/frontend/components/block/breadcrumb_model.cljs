@@ -250,8 +250,8 @@
   (boolean
    (and navigating-block
         navigating-block-entity
-        (not= (:db/id (:block/parent initial-block))
-              (:db/id (:block/parent navigating-block-entity))))))
+        (not= (:block/parent-id initial-block)
+              (:block/parent-id navigating-block-entity)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Variant options
@@ -279,8 +279,8 @@
 (defn build-breadcrumb-view
   "Applies the visibility budget to a sequence of segments.
 
-   `segments` are ordered from root (page) to nearest parent — the same
-   order returned by db/get-block-parents (root first).
+   `segments` are ordered from root (page) to nearest parent, with the root
+   segment first.
 
    Options:
      :show-page?     - include the page segment (default true)

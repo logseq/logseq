@@ -19,7 +19,7 @@
             [frontend.components.user.login :as login]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.extensions.lightbox :as lightbox]
             [frontend.extensions.pdf.assets :as pdf-assets]
@@ -40,6 +40,7 @@
             [frontend.modules.instrumentation.sentry :as sentry-event]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.entity :as entity]
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
@@ -129,14 +130,24 @@
     (plugin/open-select-theme!)
     (route-handler/go-to-search! :themes)))
 
+(defn- <page-for-publish-dialog
+  [page-name]
+  (let [lookup (if (util/uuid-string? page-name)
+                 [:block/uuid (uuid page-name)]
+                 [:block/name page-name])]
+    (state/<invoke-db-worker :thread-api/pull
+                             (state/get-current-repo)
+                             [:db/id :block/uuid :block/title :block/name {:block/tags [:db/ident]}]
+                             lookup)))
+
 (defevent! :publish/open-dialog [_]
   (when-not config/publishing?
-    (when-let [page-name (state/get-current-page)]
-      (when-let [page (db/get-page page-name)]
-        (when (db/page? page)
-          (shui/dialog-open!
-           (fn [] (page-menu/publish-page-dialog page))
-           {:class "w-auto max-w-md"}))))))
+    (p/let [page (when-let [page-name (state/get-current-page)]
+                   (<page-for-publish-dialog page-name))]
+      (when (entity/page? page)
+        (shui/dialog-open!
+         (fn [] (page-menu/publish-page-dialog page))
+         {:class "w-auto max-w-md"})))))
 
 (defevent! :ui/toggle-appearance [_]
   (let [popup-id "appearance_settings"]
@@ -195,86 +206,120 @@
      (plugin/perf-tip-content (.-id o) (.-name opts) (.-url opts))
      :warning false (.-id o))))
 
+(defn- <block-ref
+  [block-ref]
+  (cond
+    (map? block-ref)
+    (p/resolved block-ref)
+
+    (uuid? block-ref)
+    (db-async/<get-block (state/get-current-repo) block-ref {:children? false})
+
+    (and (string? block-ref) (util/uuid-string? block-ref))
+    (db-async/<get-block (state/get-current-repo) (uuid block-ref) {:children? false})
+
+    (number? block-ref)
+    (db-async/<get-block (state/get-current-repo) block-ref {:children? false})
+
+    :else
+    (p/resolved nil)))
+
+(defn- <selection-blocks
+  []
+  (when-let [repo (and (seq (state/get-selection-block-ids))
+                       (state/get-current-repo))]
+    (p/let [results (db-async/<get-blocks repo (state/get-selection-block-ids))]
+      (seq (keep :block results)))))
+
+(defn- edit-original-block!
+  [editing-block pos {:keys [editing-default-property?]}]
+  (when editing-block
+    (p/let [editing-block (<block-ref (:block/uuid editing-block))]
+      (when editing-block
+        (let [content (:block/title editing-block)
+              esc? (= "Escape" (state/get-ui-last-key-code))
+              [content' pos] (cond
+                               esc?
+                               [nil pos]
+
+                               (and (>= (count content) pos)
+                                    (>= pos 2)
+                                    (= (util/nth-safe content (dec pos))
+                                       (util/nth-safe content (- pos 2))
+                                       ";"))
+                               [(str (common-util/safe-subs content 0 (- pos 2))
+                                     (common-util/safe-subs content pos))
+                                (- pos 2)]
+
+                               :else
+                               [nil pos])]
+          (when content'
+            (if editing-default-property?
+              (editor-handler/save-block! (state/get-current-repo) (:block/uuid editing-block) content')
+              (editor-handler/edit-block! editing-block (or pos :max)
+                                          (cond-> {}
+                                            content'
+                                            (assoc :custom-content content'))))))))))
+
 (defn- editor-new-property [block target {:keys [selected-blocks popup-id editing-block editing-pos editing-target] :as opts}]
-  (let [opts (dissoc opts :editing-block :editing-pos :editing-target)
-        editing-block (or editing-block
-                          (some-> (state/get-edit-block)
-                                  :block/uuid
-                                  (->> (vector :block/uuid))
-                                  db/entity))
-        pos (or editing-pos (state/get-edit-pos))
-        edit-block-or-selected (cond
-                                 editing-block
-                                 [editing-block]
-                                 (seq selected-blocks)
-                                 selected-blocks
-                                 :else
-                                 (seq (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids))))
-        current-block (when-let [s (state/get-current-page)]
-                        (when (util/uuid-string? s)
-                          (db/entity [:block/uuid (uuid s)])))
-        blocks (or (when block [block])
-                   edit-block-or-selected
-                   (when current-block [current-block]))
-        opts' (cond-> opts
-                editing-block
-                (assoc :original-block editing-block
-                       :edit-original-block
-                       (fn [{:keys [editing-default-property?]}]
-                         (when editing-block
-                           (let [content (:block/title (db/entity (:db/id editing-block)))
-                                 esc? (= "Escape" (state/get-ui-last-key-code))
-                                 [content' pos] (cond
-                                                  esc?
-                                                  [nil pos]
-                                                  (and (>= (count content) pos)
-                                                       (>= pos 2)
-                                                       (= (util/nth-safe content (dec pos))
-                                                          (util/nth-safe content (- pos 2))
-                                                          ";"))
-                                                  [(str (common-util/safe-subs content 0 (- pos 2))
-                                                        (common-util/safe-subs content pos))
-                                                   (- pos 2)]
-                                                  :else
-                                                  [nil pos])]
-                             (when content'
-                               (if editing-default-property?
-                                 (editor-handler/save-block! (state/get-current-repo) (:block/uuid editing-block) content')
-                                 (editor-handler/edit-block! editing-block (or pos :max)
-                                                             (cond-> {}
-                                                               content'
-                                                               (assoc :custom-content content'))))))))))]
-    (when (seq blocks)
-      (let [target' (or target
-                        editing-target
-                        (some-> (state/get-edit-input-id)
-                                (gdom/getElement))
-                        (first (state/get-selection-blocks)))]
-        (if target'
-          (shui/popup-show! target'
-                            #(property-dialog/dialog blocks opts')
-                            (cond-> {:align "start"
-                                     :force-popover? true}
-                              popup-id
-                              (assoc :id popup-id)))
-          (shui/dialog-open! #(property-dialog/dialog blocks opts')
-                             {:id :property-dialog
-                              :align "start"}))))))
+  (p/let [editing-block (if editing-block
+                          (p/resolved editing-block)
+                          (<block-ref (some-> (state/get-edit-block) :block/uuid)))
+          selected-blocks (cond
+                            editing-block
+                            (p/resolved nil)
+
+                            (seq selected-blocks)
+                            (p/resolved selected-blocks)
+
+                            :else
+                            (<selection-blocks))
+          current-block (when-let [s (state/get-current-page)]
+                          (when (util/uuid-string? s)
+                            (<block-ref (uuid s))))]
+    (let [opts (dissoc opts :editing-block :editing-pos :editing-target)
+          pos (or editing-pos (state/get-edit-pos))
+          edit-block-or-selected (cond
+                                   editing-block
+                                   [editing-block]
+
+                                   (seq selected-blocks)
+                                   selected-blocks)
+          blocks (or (when block [block])
+                     edit-block-or-selected
+                     (when current-block [current-block]))
+          opts' (cond-> opts
+                  editing-block
+                  (assoc :original-block editing-block
+                         :edit-original-block #(edit-original-block! editing-block pos %)))]
+      (when (seq blocks)
+        (let [target' (or target
+                          editing-target
+                          (some-> (state/get-edit-input-id)
+                                  (gdom/getElement))
+                          (first (state/get-selection-blocks)))]
+          (if target'
+            (shui/popup-show! target'
+                              #(property-dialog/dialog blocks opts')
+                              (cond-> {:align "start"
+                                       :force-popover? true}
+                                popup-id
+                                (assoc :id popup-id)))
+            (shui/dialog-open! #(property-dialog/dialog blocks opts')
+                               {:id :property-dialog
+                                :align "start"})))))))
 
 (defevent! :editor/new-property [[_ {:keys [block target] :as opts}]]
   (when-not config/publishing?
-    (let [editing-block (some-> (state/get-edit-block)
-                                :block/uuid
-                                (->> (vector :block/uuid))
-                                db/entity)
-          editing-target (some-> (state/get-edit-input-id)
-                                 (gdom/getElement))
-          opts' (cond-> opts
-                  editing-block
-                  (assoc :editing-block editing-block
-                         :editing-pos (state/get-edit-pos))
-                  editing-target
-                  (assoc :editing-target editing-target))]
+    (p/let [editing-block (<block-ref (some-> (state/get-edit-block) :block/uuid))
+            editing-target (some-> (state/get-edit-input-id)
+                                   (gdom/getElement))
+            opts' (cond-> opts
+                    editing-block
+                    (assoc :editing-block editing-block
+                           :editing-pos (state/get-edit-pos))
+                    editing-target
+                    (assoc :editing-target editing-target))]
       (p/do!
        (editor-handler/save-current-block!)
        (editor-new-property block target opts')))))

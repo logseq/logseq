@@ -2,28 +2,19 @@
   "Provides template related functionality"
   (:require [clojure.string :as string]
             [frontend.date :as date]
-            [frontend.db :as db]
-            [frontend.db.conn :as conn]
-            [frontend.db.utils :as db-utils]
             [frontend.state :as state]
-            [frontend.util.ref :as ref]
-            [logseq.db :as ldb]))
+            [frontend.util.ref :as ref]))
 
 (defn- variable-rules
   []
-  {"today" (ref/->page-ref (db/get-journal-page-title (date/today)))
-   "yesterday" (ref/->page-ref (db/get-journal-page-title (date/yesterday)))
-   "tomorrow" (ref/->page-ref (db/get-journal-page-title (date/tomorrow)))
+  {"today" (ref/->page-ref (date/today))
+   "yesterday" (ref/->page-ref (date/yesterday))
+   "tomorrow" (ref/->page-ref (date/tomorrow))
    "time" (date/get-current-time)
    "current page" (when-let [current-page (or
                                            (state/get-current-page)
-                                           (db/get-journal-page-title (date/today)))]
-                    (let [block-uuid (parse-uuid current-page)
-                          page (if block-uuid
-                                 (db-utils/entity [:block/uuid block-uuid])
-                                 (ldb/get-page (conn/get-db) current-page))
-                          current-page' (:block/title page)]
-                      (when current-page' (ref/->page-ref current-page'))))})
+                                           (date/today))]
+                    (ref/->page-ref current-page))})
 
 (def template-re #"<%([^%].*?)%>")
 

@@ -5,7 +5,6 @@
             [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.windows :refer [resolve-own-container] :as pdf-windows]
@@ -379,8 +378,7 @@
   (let [[src set-src!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
-       (p/let [_ (db-async/<get-block repo id {:children? false})
-               block (db-model/get-block-by-uuid id)]
+       (p/let [block (db-async/<get-block repo id {:children? false})]
          (when-let [asset-path' (and block (assets-handler/get-area-block-asset-url block))]
            (-> asset-path' (assets-handler/<make-asset-url)
                (p/then #(set-src! %))))))

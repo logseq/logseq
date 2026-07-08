@@ -316,10 +316,9 @@
 ;; ---------------------------------------------------------------------------
 
 (deftest navigated-between-parents-test
-  (let [page-ref {:db/id 1}
-        initial-block {:db/id 2
+  (let [initial-block {:db/id 2
                        :block/uuid #uuid "00000000-0000-0000-0000-000000000002"
-                       :block/parent page-ref}
+                       :block/parent-id 1}
         navigating-block #uuid "00000000-0000-0000-0000-000000000002"]
     (testing "missing UI-db entity keeps the worker-pulled block list"
       (is (false? (model/navigated-between-parents? initial-block navigating-block nil))))
@@ -329,14 +328,14 @@
                    initial-block
                    navigating-block
                    {:db/id 2
-                    :block/parent page-ref}))))
+                    :block/parent-id 1}))))
 
     (testing "different parent is navigated"
       (is (true? (model/navigated-between-parents?
                   initial-block
                   navigating-block
                   {:db/id 2
-                   :block/parent {:db/id 3}}))))))
+                   :block/parent-id 3}))))))
 
 ;; ---------------------------------------------------------------------------
 ;; segments->full-title

@@ -1,0 +1,2699 @@
+# Remove UI DataScript DB Plan
+
+Goal: remove the renderer-owned DataScript database and make the db-worker database the only graph database used by the UI.
+
+Branch: `refactor/remove-ui-db`
+
+Base branch: `refactor/state`
+
+## Progress Log
+
+- 2026-07-08: Added ADR 0022 to record the accepted direction: remove the renderer-owned UI DataScript DB, make the db worker the only graph DB owner, refactor editor graph-backed logic into worker APIs first, and keep UI code limited to rendering, DOM/focus coordination, and dispatch.
+- 2026-07-08: Batch 58 moved Graph View DB computation from `frontend.common.graph-view` to `frontend.worker.graph-view`. The existing `:thread-api/build-graph` worker API remains the UI boundary, and 27 DataScript/reverse-read occurrences now live under a worker namespace instead of shared frontend common code.
+- 2026-07-08: Batch 58 verification deliberately skipped full tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/graph-view-db-reads-are-worker-owned-test -n frontend.worker.graph-view-test -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-core-test/db-core-thread-apis-delegate-to-worker-owners-test` (RED failed first on the new guard, then passed after the move)
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/worker/graph_view.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/worker/graph_view_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `rtk rg -n "frontend\\.common\\.graph-view|common/graph_view|common\\.graph-view" src/main src/test docs || true` (only the guard's forbidden old path remains)
+  - `rtk rg -n "\\b(?:d/(?:entity|pull|pull-many|q|datoms)|datascript\\.core)\\b" src/main/frontend/common || true` (no matches)
+  - `git diff --check`
+- 2026-07-08: Batch 59 removed the selected 20 reverse-attribute and nested entity reads from the remaining handler/API paths plus simple class/page component paths. New worker APIs return explicit page info, alias source pages, class-extends child trees, and closed property values; UI code now consumes `:block/children`, `:class/children`, and explicit worker payloads instead of `:block/_parent`, `:block/_alias`, `:logseq.property.class/_extends`, `:block/_closed-value-property`, or nested page/parent maps in the selected files.
+- 2026-07-08: Batch 59 verification deliberately skipped full tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/selected-ui-reverse-and-nested-read-count-batch-target-test` (RED failed first with 20, then passed after the migration)
+  - `rtk pnpm cljs:run-test -v frontend.handler.editor-lifecycle-test/did-mount-records-editor-info-with-worker-page-lookup-test -v frontend.handler.db-based.property-test/batch-set-property-closed-value-loads-value-through-worker-test -v frontend.handler.paste-test/paste-text-parseable-resolves-page-refs-through-worker-test -v frontend.handler.paste-test/paste-text-parseable-preserves-og-copied-heading-page-refs -v frontend.handler.paste-test/paste-text-parseable-does-not-create-empty-page-ref`
+  - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/selected-ui-reverse-and-nested-read-count-batch-target-test -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test -n frontend.handler.editor-lifecycle-test -n frontend.handler.db-based.property-test -n frontend.handler.db-based.page-test -n frontend.handler.paste-test -n frontend.handler.comments-test`
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/db/async.cljs src/main/frontend/worker/db_core.cljs src/main/logseq/api/block.cljs src/main/logseq/api/editor.cljs src/main/frontend/handler/editor/lifecycle.cljs src/main/frontend/handler/paste.cljs src/main/frontend/handler/comments.cljs src/main/frontend/handler/page.cljs src/main/frontend/handler/db_based/page.cljs src/main/frontend/handler/db_based/property.cljs src/main/frontend/components/class.cljs src/main/frontend/components/page.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs src/test/frontend/handler/editor_lifecycle_test.cljs src/test/frontend/handler/db_based/property_test.cljs src/test/frontend/handler/paste_test.cljs`
+  - `files=(src/main/logseq/api/editor.cljs src/main/logseq/api/block.cljs src/main/frontend/handler/comments.cljs src/main/frontend/handler/page.cljs src/main/frontend/handler/db_based/page.cljs src/main/frontend/handler/db_based/property.cljs src/main/frontend/handler/paste.cljs src/main/frontend/handler/editor/lifecycle.cljs src/main/frontend/components/class.cljs src/main/frontend/components/page.cljs); rtk rg -n ":[A-Za-z0-9_.-]+/_[A-Za-z0-9_.!?*-]+|\\(:[A-Za-z0-9_.-]+/[A-Za-z0-9_.!?*-]+\\s+\\(:[A-Za-z0-9_.-]+/[A-Za-z0-9_.!?*-]+\\s+[^)]" $files || true` (no matches)
+  - `git diff --check`
+- 2026-07-08: Batch 60 removed the selected 24 component reverse-attribute and nested entity-shaped reads from comments, breadcrumb, views, recycle, property value, objects, property, block, and query view components.
+  - Added worker-side explicit fields on block/view payloads for parent ids, page ids, link ids, view refs, view type idents, gallery asset property idents, alias owners, query ownership, comment threads, property descriptions, and recycle original-page titles.
+  - Updated components to consume explicit worker payload fields such as `:block/parent-id`, `:block/parent-uuid`, `:block/link-id`, `:block/comment-threads`, `:block/alias-source-page-id`, `:logseq.property/views`, `:logseq.property/view-for-id`, and `:logseq.property.view/type-ident`.
+  - Replaced component alias-source lookups with the worker API `db-async/<get-alias-source-page` instead of reading `:block/_alias`.
+  - Updated the breadcrumb model test fixture to use `:block/parent-id`, matching the worker payload contract.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 60 verification deliberately skipped full tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/selected-component-entity-shaped-read-count-batch-target-test` (RED failed first with 24 selected matches, then passed after the migration)
+  - `rtk clojure -M:clj-kondo --lint src/main/frontend/worker/db_core.cljs src/main/frontend/components/block/comments_model.cljs src/main/frontend/components/block/breadcrumb_model.cljs src/main/frontend/components/views.cljs src/main/frontend/components/recycle.cljs src/main/frontend/components/property/value.cljs src/main/frontend/components/objects.cljs src/main/frontend/components/property.cljs src/main/frontend/components/block.cljs src/main/frontend/components/query/view.cljs`
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.components.block.comments-model-test -v frontend.components.block.breadcrumb-model-test -v frontend.components.views-test -v frontend.components.objects-test -v frontend.components.property.value-test -v frontend.components.property.property-test`
+  - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/selected-component-entity-shaped-read-count-batch-target-test`
+  - `rtk rg -n ":[A-Za-z0-9_.-]+/_[A-Za-z0-9_.!?*-]+|\\(:[A-Za-z0-9_.-]+/[A-Za-z0-9_.!?*-]+\\s+\\(:[A-Za-z0-9_.-]+/[A-Za-z0-9_.!?*-]+\\s+[^)]" src/main/frontend/components/block/comments_model.cljs src/main/frontend/components/block/breadcrumb_model.cljs src/main/frontend/components/views.cljs src/main/frontend/components/recycle.cljs src/main/frontend/components/property/value.cljs src/main/frontend/components/objects.cljs src/main/frontend/components/property.cljs src/main/frontend/components/block.cljs src/main/frontend/components/query/view.cljs || true` (no matches)
+  - `git diff --check`
+- 2026-07-08: Batch 61 cleared the remaining frontend UI reverse-attribute and nested entity-shaped reads from `src/main/frontend/components/editor.cljs` and `src/main/frontend/extensions/fsrs.cljs`.
+  - Added a final frontend guard for these two files; the RED run failed first with `2` matches.
+  - The worker block payload now exposes `:block/alias-source-page-class?`, so tag autocomplete can detect class aliases without reading `:block/_alias` in the renderer.
+  - FSRS card list rendering now uses the existing explicit `:logseq.property/query-id` payload instead of reading `(:db/id (:logseq.property/query block))`.
+  - Updated the tag-alias test fixture to use the explicit worker-shaped alias field.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 61 verification deliberately skipped full tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/final-frontend-entity-shaped-read-count-batch-target-test` (RED failed first with `2`, then passed after the migration)
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/final-frontend-entity-shaped-read-count-batch-target-test -v frontend.handler.editor-test/tag-search-does-not-convert-class-aliases -v frontend.handler.editor-test/get-matched-classes-includes-class-aliases`
+  - `rtk rg -n ":[A-Za-z0-9_.-]+/_[A-Za-z0-9_.!?*-]+|\\(:[A-Za-z0-9_.-]+/[A-Za-z0-9_.!?*-]+\\s+\\(:[A-Za-z0-9_.-]+/[A-Za-z0-9_.!?*-]+\\s+[^)]" src/main/frontend src/main/mobile -g "*.cljs" -g "*.cljc" -g "!src/main/frontend/worker/**" -g "!src/main/frontend/db/**" || true` (no matches)
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/worker/db_core.cljs src/main/frontend/components/editor.cljs src/main/frontend/extensions/fsrs.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `rtk git diff --check`
+- 2026-07-08: Batch 62 removed renderer UI DataScript entity-type coupling from selected render/handler/plugin/SDK paths.
+  - Added a guard that rejects `datascript.core`, `datascript.impl.entity`, and `de/entity?`/`e/entity?` usage in selected renderer UI files; the RED run failed first with `36` matches.
+  - Replaced DataScript entity branches with explicit map/id checks in views, block rendering, reference filters, page handlers, outliner op construction, plugin property serialization, PDF highlight persistence, clipboard handling, and SDK result normalization.
+  - Replaced a render-only `d/squuid` use with `random-uuid`, removing the last `datascript.core` import from `components/block.cljs`.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 62 verification deliberately skipped full tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/renderer-datascript-entity-check-count-batch-target-test` (RED failed first with `36`, then passed after the migration)
+  - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/renderer-datascript-entity-check-count-batch-target-test -n frontend.components.views-test -n frontend.handler.page-test -n frontend.handler.db-based.page-test -n frontend.handler.common-test -v frontend.handler.editor-test/tag-search-does-not-convert-class-aliases -v frontend.handler.editor-test/get-matched-classes-includes-class-aliases`
+  - `rtk rg -n "\\[datascript(?:\\.impl\\.entity|\\.core)|\\b(?:de|e)/entity\\?" src/main/frontend/components/views.cljs src/main/frontend/components/block.cljs src/main/frontend/components/reference_filters.cljs src/main/frontend/modules/outliner/op.cljs src/main/frontend/handler/page.cljs src/main/frontend/handler/db_based/page.cljs src/main/frontend/handler/plugin.cljs src/main/frontend/extensions/pdf/core.cljs src/main/frontend/util.cljc src/main/logseq/sdk/utils.cljs || true` (no matches)
+  - `rtk rg -n "\\[datascript(?:\\.impl\\.entity|\\.core)|\\b(?:de|e)/entity\\?" src/main/frontend src/main/mobile src/main/logseq -g "*.cljs" -g "*.cljc" -g "!src/main/frontend/worker/**" -g "!src/main/frontend/db/**" | head -n 120` (remaining matches are API/CLI/common export helpers)
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/components/views.cljs src/main/frontend/components/block.cljs src/main/frontend/components/reference_filters.cljs src/main/frontend/modules/outliner/op.cljs src/main/frontend/handler/page.cljs src/main/frontend/handler/db_based/page.cljs src/main/frontend/handler/plugin.cljs src/main/frontend/extensions/pdf/core.cljs src/main/frontend/util.cljc src/main/logseq/sdk/utils.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `rtk git diff --check`
+- 2026-07-08: Batch 63 removed the old renderer DB connection-state owner from production frontend code.
+  - Deleted `frontend.db.conn-state` and moved the remaining test fixture connection atom into `frontend.db.conn`.
+  - `frontend.db.conn/get-db`, `remove-conn!`, and `destroy-all!` now fail fast outside node tests, so accidental production renderer DB reads do not silently resurrect a UI DB path.
+  - `frontend.util.repo` no longer imports DB connection state just to normalize repo names.
+  - Updated the sync simulation test fixture to use the test-gated `frontend.db.conn/conns` atom.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 63 verification deliberately skipped full and e2e tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/renderer-db-conn-state-is-test-only-test -v frontend.db.restore-test/restore-graph-does-not-create-renderer-datascript-conn-test -n frontend.worker.db-sync-sim-test` (RED failed first with `2` guard failures, then passed after the migration)
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/db/conn.cljs src/main/frontend/util/repo.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_sync_sim_test.cljs`
+  - `rtk rg -n "frontend\\.db\\.conn-state|db-conn-state" src/main src/test -g "*.cljs" -g "*.cljc"` (only guard-test strings remain)
+  - `rtk git diff --check`
+- 2026-07-08: Batch 64 moved the remaining `frontend.db.conn` namespace out of production source.
+  - Added a RED guard that rejects `src/main/frontend/db/conn.cljs`; it failed first while the file still existed.
+  - Moved the `frontend.db.conn` namespace to `src/test/frontend/db/conn.cljs` as a test-only fixture namespace and deleted the production copy.
+  - Simplified the moved test fixture to only support test transactions; there is no production `ldb/transact!` branch left in that namespace.
+  - Production frontend/mobile/electron/logseq source no longer imports `frontend.db.conn` or calls `conn/get-db`, `conn/transact!`, or `conn/conns`.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 64 verification deliberately skipped full and e2e tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/renderer-db-startup-owner-is-removed-test -v frontend.remove-ui-db-test/renderer-db-conn-state-is-test-only-test -v frontend.db.restore-test/restore-graph-does-not-create-renderer-datascript-conn-test -n frontend.worker.db-sync-sim-test`
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/util/repo.cljs src/test/frontend/db/conn.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_sync_sim_test.cljs`
+  - `rtk rg -n "\\[frontend\\.db\\.conn|frontend\\.db\\.conn|conn/get-db|conn/transact!|conn/conns" src/main/frontend src/main/mobile src/main/electron src/main/logseq -g "*.cljs" -g "*.cljc" -g "!src/main/frontend/worker/**" || true` (no matches)
+  - `rtk git diff --check`
+- 2026-07-08: Batch 65 moved the remaining generic renderer DB entity helper facades out of production source.
+  - Added a RED guard that rejects `src/main/frontend/db/utils.cljs` and `src/main/frontend/db/model.cljs`; it failed first while both files still existed.
+  - Moved `frontend.db.utils` and `frontend.db.model` to `src/test/frontend/db/` as test-only fixture/helper namespaces and deleted the production copies.
+  - Production frontend/mobile/electron/logseq source no longer imports `frontend.db.utils` or `frontend.db.model`, and no longer calls `db-utils/*` or `db-model/*`.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 65 verification deliberately skipped full and e2e tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/renderer-db-entity-helper-facades-are-test-only-test` (RED failed first with `2` guard failures)
+  - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/renderer-db-entity-helper-facades-are-test-only-test -n frontend.db.model-test -n frontend.db.query-dsl-test -n frontend.handler.reaction-test`
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/test/frontend/db/utils.cljs src/test/frontend/db/model.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `rtk rg -n "frontend\\.db\\.utils|frontend\\.db\\.model|\\[frontend\\.db\\.utils|\\[frontend\\.db\\.model|db-utils/|db-model/" src/main/frontend src/main/mobile src/main/electron src/main/logseq -g "*.cljs" -g "*.cljc" -g "!src/main/frontend/worker/**" || true` (no matches)
+  - `rtk git diff --check`
+  - Note: a broader attempted run including `frontend.handler.editor-async-test` and `frontend.handler.route-test` was not used as evidence because it hit unrelated current failures in those namespaces after the guard and helper/query namespaces had passed.
+- 2026-07-08: Batch 66 moved simple query DSL DataScript execution out of the renderer namespace.
+  - Added a RED guard that rejects `datascript.core`, `d/entity`, `d/q`, `d/pull`, `d/datoms`, and `*current-db*` in `src/main/frontend/db/query_dsl.cljs`; it failed first on the old renderer query engine.
+  - Moved the query DSL execution engine to `frontend.worker.query-dsl`.
+  - Kept `frontend.db.query-dsl` as a renderer wrapper with pure query-string transforms and worker dispatch through `:thread-api/query-dsl-query` and `:thread-api/query-dsl-custom-query`.
+  - Retargeted `frontend.worker.db-core` and worker query tests to the worker-owned query DSL namespace.
+  - Renderer source does not import `frontend.worker.query-dsl`, and `frontend.db.query-dsl` no longer contains DataScript DB execution.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 66 verification deliberately skipped full and e2e tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/renderer-query-dsl-has-no-datascript-execution-test` (RED failed first on `[datascript.core`)
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/renderer-query-dsl-has-no-datascript-execution-test -n frontend.db.query-dsl-test -v frontend.worker.db-core-test/query-dsl-worker-apis-run-against-worker-db -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-core-test/db-core-thread-apis-delegate-to-worker-owners-test`
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/db/query_dsl.cljs src/main/frontend/worker/query_dsl.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/db/query_dsl_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `rtk rg -n "\\[datascript\\.core|\\bd/(?:entity|q|pull|datoms)|\\*current-db\\*" src/main/frontend/db/query_dsl.cljs || true` (no matches)
+  - `rtk rg -n "frontend\\.worker\\.query-dsl|\\[frontend\\.worker\\.query-dsl" src/main/frontend src/main/mobile src/main/electron src/main/logseq -g "*.cljs" -g "*.cljc" -g "!src/main/frontend/worker/**" || true` (no matches)
+  - `rtk git diff --check`
+- 2026-07-08: Batch 67 removed the remaining `datascript.core` dependency from the renderer plugin DB-based API namespace.
+  - Added a RED guard that rejects `[datascript.core` and `d/squuid` in `src/main/logseq/api/db_based.cljs`; it failed first on the old import.
+  - Replaced the API insert payload UUID generation with `random-uuid` and removed the `datascript.core` require.
+  - `logseq.api.db-based` no longer contains direct DataScript references; its graph reads continue through worker-backed async helpers.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 67 verification deliberately skipped full and e2e tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/api-db-based-has-no-datascript-dependency-test` (RED failed first on `[datascript.core`)
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/api-db-based-has-no-datascript-dependency-test -v frontend.remove-ui-db-test/api-db-based-ui-db-call-count-batch-target-test -v frontend.remove-ui-db-test/remaining-plugin-api-ui-db-call-count-batch-target-test`
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/logseq/api/db_based.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `rtk rg -n "\\[datascript\\.core|\\bd/(?:squuid|entity|q|pull|datoms)" src/main/logseq/api/db_based.cljs || true` (no matches)
+  - `rtk rg -n "\\b(?:d/(?:entity|pull|pull-many|q|datoms|transact!|db-with)|datascript\\.core|\\[datascript\\.core)" src/main/frontend src/main/mobile src/main/electron src/main/logseq -g "*.cljs" -g "*.cljc" -g "!src/main/frontend/worker/**" -g "!src/main/logseq/cli/**" -g "!src/main/logseq/common/export/file.cljs" | sed -n "1,160p"` (remaining hits are `logseq.api.db-based.tools` helpers that operate on a supplied db value and profiler symbol registration)
+  - `rtk git diff --check`
+- 2026-07-08: Batch 68 split pure SDK result sanitizing away from the DataScript-heavy API tools namespace.
+  - Added a RED guard that rejects `logseq.api.db-based.tools` imports from `src/main/logseq/sdk/utils.cljs`; it failed first on the old SDK import.
+  - Added `logseq.api.db-based.util/remove-hidden-properties` as a pure map sanitizer.
+  - Retargeted `logseq.sdk.utils` to the pure util namespace, so renderer SDK result normalization no longer requires `logseq.api.db-based.tools`.
+  - Retargeted `logseq.api.db-based.tools` to reuse the same pure sanitizer while keeping its db-value operations worker/CLI-owned.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 68 verification deliberately skipped full and e2e tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/sdk-utils-does-not-import-db-based-tools-test` (RED failed first on the old SDK import)
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/sdk-utils-does-not-import-db-based-tools-test -v frontend.remove-ui-db-test/api-db-based-has-no-datascript-dependency-test`
+  - `rtk pnpm cljs:run-test -v frontend.worker.db-core-test/db-core-cli-and-api-thread-apis-delegate-to-cli-modules-test`
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/logseq/api/db_based/util.cljs src/main/logseq/api/db_based/tools.cljs src/main/logseq/sdk/utils.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `rtk rg -n "logseq\\.api\\.db-based\\.tools|api-tools/" src/main/logseq/sdk/utils.cljs || true` (no matches)
+  - `rtk rg -n "logseq\\.api\\.db-based\\.tools" src/main/frontend src/main/mobile src/main/electron src/main/logseq -g "*.cljs" -g "*.cljc" -g "!src/main/frontend/worker/**" -g "!src/main/logseq/api/db_based/cli.cljs" || true` (only the tools namespace declaration and a comment remain)
+  - `rtk git diff --check`
+- 2026-07-08: Batch 69 removed the renderer API bundle's remaining import chain to the DataScript-heavy API tools namespace.
+  - Added a RED guard that rejects `logseq.api.db-based.tools` imports from `src/main/logseq/api/db_based/cli.cljs`; it failed first on the old CLI import.
+  - Moved `summarize-upsert-operations` to the pure `logseq.api.db-based.util` namespace.
+  - Retargeted `logseq.api.db-based.cli` to the pure util namespace, so `logseq.api` no longer pulls `logseq.api.db-based.tools` into the renderer API bundle through CLI exports.
+  - Kept `logseq.api.db-based.tools` worker/CLI db-value helpers intact and re-exporting the pure summary helper for existing worker tests.
+  - Removed the remaining renderer-side comment reference to `logseq.api.db-based.tools` so import-chain scans are clean.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 69 verification deliberately skipped full and e2e tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/api-db-based-cli-does-not-import-db-based-tools-test` (RED failed first on the old CLI import)
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/api-db-based-cli-does-not-import-db-based-tools-test -v frontend.remove-ui-db-test/sdk-utils-does-not-import-db-based-tools-test -v frontend.worker.db-core-test/db-core-cli-and-api-thread-apis-delegate-to-cli-modules-test`
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/logseq/api/db_based/util.cljs src/main/logseq/api/db_based/tools.cljs src/main/logseq/api/db_based/cli.cljs src/main/logseq/sdk/utils.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/logseq/api.cljs`
+  - `rtk rg -n "logseq\\.api\\.db-based\\.tools|api-tools/" src/main/logseq/api/db_based/cli.cljs src/main/logseq/sdk/utils.cljs || true` (no matches)
+  - `rtk rg -n "logseq\\.api\\.db-based\\.tools" src/main/frontend src/main/mobile src/main/electron src/main/logseq -g "*.cljs" -g "*.cljc" -g "!src/main/frontend/worker/**" -g "!src/main/logseq/api/db_based/tools.cljs" || true` (no matches)
+  - `rtk git diff --check`
+- 2026-07-08: Batch 70 removed the final unapproved renderer DataScript text reference.
+  - Added a broad RED guard over `src/main/frontend`, `src/main/mobile`, `src/main/electron`, and `src/main/logseq` that rejects DataScript references outside approved worker/CLI/export/API-tools owners; it failed first with `2` profiler example matches.
+  - Replaced the profiler comment example symbols from `datascript.core/entity` to the local profiler test function.
+  - The broad renderer scan is now empty outside the approved owner namespaces.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 70 verification deliberately skipped full and e2e tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/renderer-has-no-unapproved-datascript-references-test` (RED failed first with `2` matches)
+  - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/renderer-has-no-unapproved-datascript-references-test`
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/handler/profiler.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `rtk rg -n "\\b(?:d/(?:entity|pull|pull-many|q|datoms|transact!|db-with)|datascript\\.core|\\[datascript\\.core)" src/main/frontend src/main/mobile src/main/electron src/main/logseq -g "*.cljs" -g "*.cljc" -g "!src/main/frontend/worker/**" -g "!src/main/logseq/cli/**" -g "!src/main/logseq/common/export/file.cljs" -g "!src/main/logseq/api/db_based/tools.cljs" || true` (no matches)
+  - `rtk git diff --check`
+- 2026-07-08: Batch 71 moved task spent-time status-history calculation to the db worker.
+  - Added a RED guard for renderer nested status-history reads in `frontend.db.async` and `frontend.components.block`; it failed first with `4` matches.
+  - Added worker API `:thread-api/task-spent-time`, so the renderer wrapper now only invokes the db worker.
+  - Worker status-history computation now uses an explicit query and resolves status title/ident inside the worker instead of relying on renderer entity navigation, reverse lookups, or nested pull-map reads.
+  - The worker returns explicit fields `:logseq.property.history/property-ident`, `:logseq.property.history/ref-value-ident`, and `:logseq.property.history/ref-value-title`, and strips nested `:logseq.property.history/property` and `:logseq.property.history/ref-value` from the UI payload.
+  - `frontend.components.block/status-history-cp` renders the explicit worker payload fields.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 71 verification deliberately skipped full and e2e tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/task-spent-time-uses-worker-explicit-history-test -v frontend.worker.db-core-test/task-spent-time-runs-against-worker-db -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/db/async.cljs src/main/frontend/components/block.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs`
+  - `rtk rg -n "\\(:db/ident\\s+\\(:logseq\\.property\\.history/(?:property|ref-value)|\\(:block/title\\s+status" src/main/frontend/db/async.cljs src/main/frontend/components/block.cljs` (no matches)
+  - `rtk git diff --check`
+- 2026-07-08: Batch 72 removed selected component page entity-predicate coupling.
+  - Added a RED guard for `src/main/frontend/components/page.cljs`; it failed first with `26` selected `ldb/page?`, `ldb/class?`, `ldb/property?`, and `ldb/journal?` matches.
+  - Added `frontend.util.entity` as a pure worker-payload predicate namespace for page/class/property/journal checks over plain maps and tag payloads.
+  - Replaced the selected page component entity predicates with `frontend.util.entity` calls so the component does not rely on `logseq.db` entity predicate helpers for page-shaped rendering decisions.
+  - Kept existing `logseq.db` calls in that file only for non-entity-predicate helpers such as sorting, library, and recycle checks.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 72 verification deliberately skipped full and e2e tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/selected-component-page-uses-plain-entity-predicates-test -v frontend.util.entity-test/predicates-read-plain-worker-payload-tags -n frontend.remove-ui-db-test -n frontend.util.entity-test`
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/util/entity.cljs src/main/frontend/components/page.cljs src/test/frontend/util/entity_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `rtk rg --pcre2 -n "\\bldb/(?:page\\?|class\\?|property\\?|journal\\?|internal-page\\?)(?=[\\s\\)\\]\\}])" src/main/frontend/components/page.cljs` (no matches)
+  - `rtk git diff --check`
+- 2026-07-08: Batch 73 removed selected block component entity-predicate coupling.
+  - Added a RED guard for `src/main/frontend/components/block.cljs`; it failed first with `24` selected `ldb/page?`, `ldb/class?`, `ldb/property?`, and `ldb/journal?` matches.
+  - Reused `frontend.util.entity` so block rendering decisions read plain worker payload tags instead of `logseq.db` entity predicate helpers.
+  - Kept existing `logseq.db` calls in the block component only for non-selected helpers such as built-in, asset, recycle, children, and ordering logic.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 73 verification deliberately skipped full and e2e tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/selected-component-block-uses-plain-entity-predicates-test -v frontend.util.entity-test/predicates-read-plain-worker-payload-tags -n frontend.remove-ui-db-test -n frontend.util.entity-test`
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/util/entity.cljs src/main/frontend/components/block.cljs src/test/frontend/util/entity_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `rtk rg --pcre2 -n "\\bldb/(?:page\\?|class\\?|property\\?|journal\\?)(?=[\\s\\)\\]\\}])" src/main/frontend/components/block.cljs` (no matches)
+  - `rtk git diff --check`
+- 2026-07-08: Batch 74 removed selected property component entity-predicate coupling.
+  - Added a RED guard for `src/main/frontend/components/property.cljs` and `src/main/frontend/components/property/value.cljs`; it failed first with `31` selected `ldb/*` and `entity-util/*` page/class/property/internal-page predicate matches.
+  - Reused `frontend.util.entity` for property rendering and value selection predicates over plain worker payloads.
+  - Removed the direct `logseq.db.frontend.entity-util` imports from the selected property component files.
+  - Kept existing `logseq.db` calls only for non-selected helpers such as built-in property checks, entity type checks, private tags, and internal tag constants.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 74 verification deliberately skipped full and e2e tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/selected-property-components-use-plain-entity-predicates-test -v frontend.util.entity-test/predicates-read-plain-worker-payload-tags -n frontend.remove-ui-db-test -n frontend.util.entity-test`
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/util/entity.cljs src/main/frontend/components/property.cljs src/main/frontend/components/property/value.cljs src/test/frontend/util/entity_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `rtk rg --pcre2 -n "\\b(?:ldb|entity-util)/(?:page\\?|class\\?|property\\?|journal\\?|internal-page\\?)(?=[\\s\\)\\]\\}])" src/main/frontend/components/property.cljs src/main/frontend/components/property/value.cljs` (no matches)
+  - `rtk git diff --check`
+- 2026-07-08: Batch 75 removed selected handler entity-predicate coupling.
+  - Added a RED guard for `src/main/frontend/handler/editor.cljs`, `src/main/frontend/handler/page.cljs`, `src/main/frontend/handler/comments.cljs`, and `src/main/frontend/handler/events/ui.cljs`; it failed first with `23` selected `ldb/page?`, `ldb/class?`, `ldb/property?`, and `ldb/journal?` matches.
+  - Reused `frontend.util.entity` so selected handler decisions read plain worker payload tags instead of `logseq.db` entity predicate helpers.
+  - Removed now-unused `logseq.db` imports from `frontend.handler.page` and `frontend.handler.events.ui`; kept `logseq.db` in `frontend.handler.comments` only for sorting and in `frontend.handler.editor` for non-selected helpers.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 75 verification deliberately skipped full and e2e tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/selected-handlers-use-plain-entity-predicates-test -v frontend.util.entity-test/predicates-read-plain-worker-payload-tags -n frontend.remove-ui-db-test -n frontend.util.entity-test`
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/util/entity.cljs src/main/frontend/handler/editor.cljs src/main/frontend/handler/page.cljs src/main/frontend/handler/comments.cljs src/main/frontend/handler/events/ui.cljs src/test/frontend/util/entity_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `rtk rg --pcre2 -n "\\bldb/(?:page\\?|class\\?|property\\?|journal\\?)(?=[\\s\\)\\]\\}])" src/main/frontend/handler/editor.cljs src/main/frontend/handler/page.cljs src/main/frontend/handler/comments.cljs src/main/frontend/handler/events/ui.cljs` (no matches)
+  - `rtk git diff --check`
+- 2026-07-08: Batch 76 removed remaining selected component entity-predicate coupling.
+  - Added a RED guard over remaining selected component/extension files; it failed first with `35` selected `ldb/*` and `entity-util/*` page/class/property/journal/internal-page predicate matches.
+  - Reused `frontend.util.entity` in property config, page menu, editor autocomplete, recycle UI, views, icon rendering, header, right sidebar, left sidebar, and FSRS surfaces.
+  - Removed now-unused `logseq.db` imports from files where selected predicates were the only `ldb` dependency.
+  - Kept existing `logseq.db` calls only for non-selected helpers such as built-in checks, sorting, view ordering, and property metadata.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 76 verification deliberately skipped full and e2e tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/remaining-components-use-plain-entity-predicates-test -v frontend.util.entity-test/predicates-read-plain-worker-payload-tags -n frontend.remove-ui-db-test -n frontend.util.entity-test`
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/util/entity.cljs src/main/frontend/components/property/config.cljs src/main/frontend/components/page_menu.cljs src/main/frontend/components/editor.cljs src/main/frontend/components/recycle.cljs src/main/frontend/components/views.cljs src/main/frontend/components/icon.cljs src/main/frontend/components/header.cljs src/main/frontend/components/right_sidebar.cljs src/main/frontend/components/left_sidebar.cljs src/main/frontend/extensions/fsrs.cljs src/test/frontend/util/entity_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `rtk rg --pcre2 -n "\\b(?:ldb|entity-util)/(?:page\\?|class\\?|property\\?|journal\\?|internal-page\\?)(?=[\\s\\)\\]\\}])" src/main/frontend/components/property/config.cljs src/main/frontend/components/page_menu.cljs src/main/frontend/components/editor.cljs src/main/frontend/components/recycle.cljs src/main/frontend/components/views.cljs src/main/frontend/components/icon.cljs src/main/frontend/components/header.cljs src/main/frontend/components/right_sidebar.cljs src/main/frontend/components/left_sidebar.cljs src/main/frontend/extensions/fsrs.cljs` (no matches)
+  - `rtk git diff --check`
+- 2026-07-08: Batch 77 cleared the final selected frontend entity-predicate leftovers.
+  - Added a final RED guard for `src/main/frontend/state.cljs`, `src/main/frontend/modules/outliner/tree.cljs`, and `src/main/mobile/components/header.cljs`; it failed first with the last `3` selected predicate matches. This batch is below 20 only because fewer than 20 selected matches remained in this category.
+  - Reused `frontend.util.entity` in state, outliner tree shaping, and mobile delete confirmation text.
+  - Removed the last direct `logseq.db.frontend.entity-util` import from non-worker frontend/mobile source.
+  - The selected `ldb/page?`, `ldb/class?`, `ldb/property?`, `ldb/journal?`, `ldb/internal-page?`, and matching `entity-util/*` predicate scan is now empty outside worker namespaces.
+  - No renderer cache or new worker cache was added.
+- 2026-07-08: Batch 77 verification deliberately skipped full and e2e tests per request. Focused verification:
+  - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/final-frontend-uses-plain-entity-predicates-test -v frontend.util.entity-test/predicates-read-plain-worker-payload-tags -n frontend.remove-ui-db-test -n frontend.util.entity-test`
+  - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/util/entity.cljs src/main/frontend/state.cljs src/main/frontend/modules/outliner/tree.cljs src/main/mobile/components/header.cljs src/test/frontend/util/entity_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `rtk rg --pcre2 -n "\\b(?:ldb|entity-util)/(?:page\\?|class\\?|property\\?|journal\\?|internal-page\\?)(?=[\\s\\)\\]\\}])" src/main/frontend src/main/mobile -g "*.cljs" -g "*.cljc" -g "!src/main/frontend/worker/**"` (no matches)
+  - `rtk git diff --check`
+- 2026-07-07: Created `refactor/remove-ui-db` from `refactor/state`.
+- 2026-07-07: Reviewed the current renderer DB facade, async worker query bridge, reactive query layer, graph restore path, worker thread APIs, and worker transaction event flow.
+- 2026-07-07: Wrote this first implementation plan. No product code has been changed yet.
+- 2026-07-07: Started implementation. `frontend.db.restore/restore-graph!` now validates the worker graph open response and emits restore UI events without building or registering a renderer DataScript conn.
+- 2026-07-07: Added `:thread-api/get-file-content` as a narrow worker read API and moved repo config restore for `logseq/config.edn` off `db/get-file`.
+- 2026-07-07: Moved startup custom CSS loading for `logseq/custom.css` off `db-model/get-custom-css` and onto `:thread-api/get-file-content`, while preserving configured custom CSS URL precedence.
+- 2026-07-07: Moved local custom JS loading for `logseq/custom.js` off `db/get-file` and onto `:thread-api/get-file-content`; remote custom JS URL loading remains unchanged.
+- 2026-07-07: Moved config editing in `frontend.handler.config/set-config!` off `db/get-file`; it now reads `logseq/config.edn` through the worker before saving.
+- 2026-07-07: Moved the file viewer's repo-relative text-file reads off `db/get-file` and onto `:thread-api/get-file-content`; absolute path reads still use the filesystem.
+- 2026-07-07: Moved publish custom asset reads for `logseq/publish.css` and `logseq/publish.js` off `db-model/get-file` and onto `:thread-api/get-file-content`.
+- 2026-07-07: Removed the new-graph renderer DB startup path: `frontend.handler.repo/create-db` no longer calls `start-repo-db-if-not-exists!`, and the dead `frontend.db/start-db-conn!` plus `frontend.db.conn/start!` functions were deleted.
+- 2026-07-07: Added a local worker bridge in `frontend.components.repo` for E2EE RSA-key setup so tests do not redefine the global worker invocation while the parallel test runner is active.
+- 2026-07-07: Started reactive query ownership migration. Normal datalog `frontend.db.react/q` calls and affected-query refreshes now execute through the existing worker query path without reading or requiring a renderer DataScript conn; local DB-only `query-fn`, `:kv`, nil-query, and node-test paths still require the renderer/test DB.
+- 2026-07-07: Simplified `frontend.db.async.util/<q` so async worker queries always invoke `:thread-api/q` and no longer read, cache through, or transact results into the renderer DB. Removed the obsolete async query request tracking state that only supported renderer DB hydration.
+- 2026-07-07: Converted `frontend.db.async/<get-block`, `<get-blocks`, and `<get-block-parents` to return worker results directly without inspecting renderer entities, reading the renderer conn, or transacting worker blocks into the renderer DB.
+- 2026-07-07: Converted `frontend.db.async/<get-asset-with-checksum` and `<get-block-properties-history` to return worker query results directly instead of hydrating them through `db/entity`; `frontend.db.async` no longer imports the renderer DB facade.
+- 2026-07-07: Added `:thread-api/get-all-properties` and moved `frontend.db.async/<get-all-properties` off `db-model/get-all-properties`; property filtering now runs in the worker without adding a renderer cache.
+- 2026-07-07: Moved `frontend.db.async/<get-tag-objects` off renderer-side class-child lookup and query assembly; it now calls the existing worker `:thread-api/get-class-objects` API.
+- 2026-07-07: Confirmed file-graph import delegates DB conversion to the db-worker through `:thread-api/import-file-graph`; the worker runs `gp-exporter/export-file-graph` against the worker conn and returns staged assets/validation to the UI.
+- 2026-07-07: Moved export auto-backup cancellation off `frontend.db/transact!`; the UI now retracts `:logseq.kv/graph-backup-folder` through worker `:thread-api/transact`.
+- 2026-07-07: Removed the remaining `frontend.db` dependency from `frontend.components.export`; the save-to-file path no longer tries to resolve a page title through `db/get-page`.
+- 2026-07-07: Moved search page-filter lookup off `frontend.db/get-page`; string page filters now resolve page db ids through worker `:thread-api/pull`.
+- 2026-07-07: Moved export backup-folder selection off `frontend.db/transact!`; choosing a backup folder now persists the KV through worker `:thread-api/transact`.
+- 2026-07-07: Removed `frontend.handler.dnd` renderer entity rehydration; drag/drop move handling now uses the block maps passed by callers and keeps writes on the existing worker-backed outliner transaction path.
+- 2026-07-07: Moved code editor save lookups off renderer entities; graph-file saves now check file existence through worker `:thread-api/pull`, and code-block snippet saves load the block through worker-backed `frontend.db.async/<get-block`.
+- 2026-07-07: Removed clipboard helper renderer entity rehydration; `frontend.handler.common/copy-to-clipboard-without-id-property!` now uses the `:block/raw-title` already present on passed block maps and falls back to `:block/title`.
+- 2026-07-07: Removed code extension save completion renderer entity rehydration; `frontend.extensions.code/save-editor!` reloads the edited block through worker-backed `frontend.db.async/<get-block` before returning to raw editor mode.
+- 2026-07-07: Removed object view post-insert renderer entity rehydration; class/property object creation now edits the block returned by the worker-backed insert instead of calling `db/entity` again.
+- 2026-07-07: Moved property-object default placeholder lookup off renderer entities; non-checkbox property object creation now resolves `:logseq.property/empty-placeholder` through worker `:thread-api/pull`.
+- 2026-07-07: Removed query result row renderer rehydration; table query views and full-text query results now use worker-backed result rows directly instead of calling `db/entity`.
+- 2026-07-07: Moved EDN block import target lookup off renderer entities; the import dialog now resolves the current target block through worker `:thread-api/pull` before building the import context.
+- 2026-07-08: Batch 4 RED guard lowered the direct handler UI DB read count target from 35 to 15; the guard failed first with 35 remaining reads, then passed after this batch.
+- 2026-07-08: Batch 4 moved another handler/event group off renderer DB reads. `frontend.handler.editor` now uses worker-backed block loading for previous-block navigation, block tree loading, delete-concat target lookup, quick-add user blocks, and copied/cut export content. Quick-add page rendering now receives the async worker result through local component state instead of reading the renderer DB.
+- 2026-07-08: Batch 4 moved block export metadata/content reads to the db-worker through `:thread-api/export-get-blocks-data` and `frontend.worker.export/get-blocks-export-data`. Markdown, HTML, and OPML export handlers now await worker export data before running the existing text/html/opml formatting logic.
+- 2026-07-08: Batch 4 added `frontend.db.async/<get-block-with-children` as a worker-backed helper for editor tree loading. No new renderer cache was added; the batch reuses the existing worker block request path and existing export formatting helpers.
+- 2026-07-08: Batch 4 reduced direct handler UI DB reads to 15. Remaining handler reads are concentrated in `frontend.handler.editor`, `frontend.handler.block`, `frontend.handler.page`, `frontend.handler.export.common-impl`, `frontend.handler.common.page`, and `frontend.handler.db-based.recent`; export AST replacement still has UI DB reads and is tracked for a later export-specific pass.
+- 2026-07-08: Batch 4 verification deliberately skipped full tests per request. Focused verification:
+  - `rtk bb dev:test -v frontend.handler.editor-test/db-based-save-assets-ignores-stale-comment-target-without-explicit-target`
+  - `rtk bb dev:test -v frontend.handler.editor-test/move-to-prev-block-edit-fn-focuses-merged-asset-title-test -v frontend.handler.editor-test/move-to-prev-block-edit-fn-uses-loaded-sibling-entity-test`
+  - `rtk bb dev:test -v frontend.handler.editor-test/save-block! -v frontend.handler.editor-test/block-default-collapsed-respects-ignore-block-collapsed-flag -v frontend.handler.editor-test/load-children-respects-ignore-block-collapsed-flag -v frontend.handler.editor-test/paste-cut-recycled-block-moves-existing-node-out-of-recycle`
+  - `rtk bb dev:test -v frontend.handler.editor-test/paste-og-copied-heading-page-refs-creates-journal-pages -v frontend.handler.editor-test/paste-og-copied-heading-page-refs-uses-default-journal-title`
+  - `rtk bb dev:test -v frontend.handler.editor-test/focused-root-block-operation-guards-test -v frontend.handler.editor-test/navigable-sibling-block-skips-comment-items-test -v frontend.handler.editor-test/navigable-sibling-block-skips-comments-area-test -v frontend.handler.editor-test/navigable-sibling-block-enters-comments-area-for-up-down-test -v frontend.handler.editor-test/navigable-sibling-block-skips-open-comments-subtree-for-left-right-test -v frontend.handler.editor-test/navigable-sibling-block-skips-comment-item-before-block-below-comments-test -v frontend.handler.editor-test/enter-comments-area-node-focuses-reply-input-test -v frontend.handler.editor-test/enter-comments-area-node-activates-inline-reply-placeholder-test -v frontend.handler.editor-test/enter-comments-area-node-selects-collapsed-comments-test`
+  - `rtk bb dev:test -v frontend.handler.block-test`
+  - `rtk bb dev:test -v frontend.handler.export-test`
+  - `rtk bb dev:test -v frontend.remove-ui-db-test`
+  - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/main/frontend/components/page.cljs src/main/frontend/components/export.cljs src/main/frontend/handler/export/common.cljs src/main/frontend/handler/export/text.cljs src/main/frontend/handler/export/html.cljs src/main/frontend/handler/export/opml.cljs src/main/frontend/worker/export.cljs src/main/frontend/worker/db_core.cljs src/main/frontend/db/async.cljs src/test/frontend/handler/export_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `git diff --check`
+- 2026-07-08: Batch 5 RED guard changed the direct handler UI DB read count target from 15 to 0; the guard failed first with 15 remaining reads, then passed after this batch.
+- 2026-07-08: Batch 5 removed the remaining direct handler `db/entity`, `db/get-db`, `db/get-page`, `conn/get-db`, and `d/entity`/`d/pull` style UI DB reads found by the handler scan. The direct handler DB scan is now empty.
+- 2026-07-08: Batch 5 moved favorites and recents reads to worker APIs: `:thread-api/get-favorite-pages`, `:thread-api/favorited-page?`, and `:thread-api/get-recent-pages`. Sidebar favorites/recents now load those promise-backed handler results through local hook state.
+- 2026-07-08: Batch 5 moved block export formatting into the worker with `:thread-api/export-blocks-as-format`, so markdown/html/opml block export no longer binds `common-impl/*current-db*` to a renderer DB. The worker runs the existing export helpers under the worker DB binding.
+- 2026-07-08: Batch 5 removed editor/block handler renderer rehydration for original block lookup, comment item navigation, delete-block setup, paste recycle checks, and collapse checks. Comment item navigation now uses DOM metadata from the block component; collapse checks use passed block maps or DOM metadata instead of `db/entity`.
+- 2026-07-08: Batch 5 kept `block-unique-title` pure from the handler perspective. It no longer reads `db/get-db`; callers that already have a DB may pass `:db` explicitly, while normal UI callers do not trigger a renderer DB read.
+- 2026-07-08: Batch 5 verification deliberately skipped full tests per request. Focused verification:
+  - `rtk bb dev:test -v frontend.remove-ui-db-test/handlers-direct-ui-db-call-count-batch-target-test` (RED failed with 15, then passed with 0)
+  - `rtk bb dev:test -v frontend.handler.block-test`
+  - `rtk bb dev:test -v frontend.handler.page-test`
+  - `rtk bb dev:test -v frontend.handler.db-based.recent-test`
+  - `rtk bb dev:test -v frontend.handler.export-test`
+  - `rtk bb dev:test -v frontend.remove-ui-db-test`
+  - `rtk bb dev:test -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - `rtk bb dev:test -v frontend.handler.editor-test/paste-cut-recycled-block-moves-existing-node-out-of-recycle -v frontend.handler.editor-test/navigable-sibling-block-skips-comment-items-test -v frontend.handler.editor-test/navigable-sibling-block-skips-comment-item-before-block-below-comments-test -v frontend.handler.editor-test/block-default-collapsed-respects-ignore-block-collapsed-flag -v frontend.handler.editor-test/load-children-respects-ignore-block-collapsed-flag`
+  - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/block.cljs src/test/frontend/handler/block_test.cljs src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/main/frontend/handler/page.cljs src/test/frontend/handler/page_test.cljs src/main/frontend/handler/common/page.cljs src/main/frontend/handler/db_based/recent.cljs src/main/frontend/handler/recent.cljs src/test/frontend/handler/db_based/recent_test.cljs src/main/frontend/handler/export/common.cljs src/main/frontend/handler/export/text.cljs src/main/frontend/handler/export/html.cljs src/main/frontend/handler/export/opml.cljs src/main/frontend/handler/export/common_impl.cljs src/test/frontend/handler/export_test.cljs src/main/frontend/worker/export.cljs src/main/frontend/worker/db_core.cljs src/main/frontend/components/left_sidebar.cljs src/main/frontend/components/block.cljs src/main/logseq/api/app.cljs src/main/logseq/api/db_based.cljs src/test/frontend/remove_ui_db_test.cljs`
+  - `git diff --check`
+- 2026-07-08: Batch 6 RED guard added a pre-component direct UI DB read target for `frontend.commands`, `frontend.reaction`, `frontend.template`, `frontend.state`, `frontend.util.page`, `frontend.mobile.intent`, and `frontend.modules.outliner.*`; the guard failed first with 21 reads, then passed with 0.
+- 2026-07-08: Batch 6 moved the remaining pre-component command/template/mobile/state/outliner reads off the renderer DB. Slash command block-property updates and plugin command format lookup now use worker pulls; reaction summaries use passed created-by ref maps; template current-page variables use route state; mobile share uses the current markdown format constant instead of `db/get-page-format`; sidebar internal-page checks pull the required page metadata from the worker.
+- 2026-07-08: Batch 6 removed the renderer shadow-DB transaction path from `frontend.modules.outliner.pipeline` and `frontend.modules.outliner.ui`. Worker tx reports now drive UI state, route cleanup, reactive query refresh, edit callbacks, and plugin hooks without `d/transact!` into a renderer conn.
+- 2026-07-08: Batch 6 made `frontend.modules.outliner.tree/blocks->vec-tree` data-only for already-loaded block maps. Editor callers that need sorted block trees now await worker-backed `frontend.db.async/<get-block-with-children`; the explicit-DB unit helper remains only for tests/shared data callers.
+- 2026-07-08: Batch 6 verification deliberately skipped full tests per request. Focused verification:
+  - `rtk bb dev:test -v frontend.remove-ui-db-test/pre-component-direct-ui-db-call-count-batch-target-test` (RED failed with 21, then passed with 0)
+  - `rtk bb dev:test -v frontend.remove-ui-db-test -v frontend.reaction-test -v 'frontend.modules.outliner.core-test/test-get-sorted-block-and-children' -v 'frontend.modules.outliner.core-test/test-non-consecutive-blocks->vec-tree' -v 'frontend.modules.outliner.core-test/non-consecutive-blocks->vec-tree-preserves-worker-pulled-block-fields'`
+  - `rtk bb dev:test -v frontend.handler.editor-test/delete-block-aux-uses-passed-block-test -v frontend.handler.editor-test/move-selected-blocks-loads-selection-through-worker-test -v frontend.handler.editor-test/zoom-out-loads-parent-through-worker-test -v frontend.handler.editor-test/paste-cut-recycled-block-moves-existing-node-out-of-recycle -v frontend.remove-ui-db-test/editor-zoom-out-loads-parent-through-worker-test -v frontend.remove-ui-db-test/editor-delete-block-aux-uses-passed-block-test`
+  - `rtk bb dev:test -v frontend.remove-ui-db-test -v frontend.reaction-test -v 'frontend.modules.outliner.core-test/test-get-sorted-block-and-children' -v 'frontend.modules.outliner.core-test/test-non-consecutive-blocks->vec-tree' -v 'frontend.modules.outliner.core-test/non-consecutive-blocks->vec-tree-preserves-worker-pulled-block-fields' -v frontend.handler.editor-test/delete-block-aux-uses-passed-block-test -v frontend.handler.editor-test/move-selected-blocks-loads-selection-through-worker-test -v frontend.handler.editor-test/zoom-out-loads-parent-through-worker-test -v frontend.handler.editor-test/paste-cut-recycled-block-moves-existing-node-out-of-recycle`
+  - `rtk clojure -M:clj-kondo --lint src/main/frontend/commands.cljs src/main/frontend/reaction.cljs src/main/frontend/template.cljs src/main/frontend/state.cljs src/main/frontend/util/page.cljs src/main/frontend/mobile/intent.cljs src/main/frontend/modules/outliner/pipeline.cljs src/main/frontend/modules/outliner/tree.cljs src/main/frontend/modules/outliner/ui.cljc src/main/frontend/db/transact.cljs src/main/frontend/handler/editor.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/reaction_test.cljs src/test/frontend/modules/outliner/core_test.cljs`
+  - `rg -n "\b(db|conn)/(get-db|entity|pull|pull-many|q|get-page|get-block|get-db|datoms|entity-db|get-block-parents|get-block-and-children|get-page-format)\b|\bd/(entity|pull|transact!)\b" src/main/frontend/commands.cljs src/main/frontend/reaction.cljs src/main/frontend/template.cljs src/main/frontend/state.cljs src/main/frontend/util/page.cljs src/main/frontend/mobile/intent.cljs src/main/frontend/modules/outliner/pipeline.cljs src/main/frontend/modules/outliner/tree.cljs src/main/frontend/modules/outliner/ui.cljc` (no matches)
+  - `git diff --check`
+- 2026-07-08: Batch 7 RED guard added a CMDK direct UI DB read target for `frontend.components.cmdk.core`; the guard failed first with 16 direct reads, then passed with 0.
+- 2026-07-08: Batch 7 moved CMDK result loading and actions off renderer DB reads. Recent pages now use the worker-backed recent handler, page/block result rendering uses worker search result maps directly, current-page filters resolve the route page through worker pulls, and open/open-in-sidebar actions use worker-loaded blocks/pages instead of `db/entity`, `db/get-page`, or `frontend.db.model`.
+- 2026-07-08: Batch 7 added `:thread-api/get-first-url-property-value` for CMDK "open current item link" on pages. The worker scans db-based property datoms and resolves URL property schema in the worker, so the renderer does not inspect property entities.
+- 2026-07-08: Batch 7 verification deliberately skipped full tests per request. Focused verification:
+  - `rtk bb dev:test -v frontend.remove-ui-db-test/cmdk-direct-ui-db-call-count-batch-target-test` (RED failed with 16, then passed with 0)
+  - `rtk bb dev:test -v frontend.remove-ui-db-test/cmdk-direct-ui-db-call-count-batch-target-test -v frontend.worker.db-core-test/get-first-url-property-value-returns-worker-url-property -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - `rtk bb dev:test -v frontend.remove-ui-db-test -v frontend.components.cmdk.state-test -v frontend.components.cmdk.list-item-test -v frontend.components.cmdk.scroll-test -v frontend.worker.db-core-test/get-first-url-property-value-returns-worker-url-property -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - `rtk clojure -M:clj-kondo --lint src/main/frontend/components/cmdk/core.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs`
+  - `rg -n "\b(?:db|conn)/(?:get-db|entity|pull|pull-many|q|get-page|get-block|get-db|datoms|entity-db|get-block-parents|get-block-and-children|get-page-format|get-case-page)\b|\bd/(?:entity|pull|q|datoms)\b|frontend\.db(?:\s|\]|\.)|frontend\.db\.model|\bmodel/" src/main/frontend/components/cmdk/core.cljs` (no renderer DB/model matches; `frontend.db.async` remains)
+  - `git diff --check`
+- 2026-07-07: Verified targeted tests:
+  - `rtk bb dev:test -v frontend.db.restore-test/restore-graph-does-not-create-renderer-datascript-conn-test`
+  - `rtk bb dev:test -v frontend.db.restore-test/restore-graph-does-not-create-renderer-datascript-conn-test -v frontend.worker.db-core-test/get-file-content-returns-file-content-by-path -v frontend.handler.repo-config-test/restore-repo-config-reads-config-through-worker-test`
+  - `rtk bb dev:test -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - `rtk bb dev:test -v frontend.handler.ui-test -v frontend.db.restore-test -v frontend.handler.repo-config-test -v frontend.worker.db-core-test/get-file-content-returns-file-content-by-path`
+  - `rtk bb dev:test -v frontend.handler.config-test -v frontend.handler.ui-test -v frontend.db.restore-test -v frontend.handler.repo-config-test -v frontend.worker.db-core-test/get-file-content-returns-file-content-by-path`
+  - `rtk bb dev:test -v frontend.components.file-test -v frontend.handler.config-test -v frontend.handler.ui-test -v frontend.handler.repo-config-test -v frontend.db.restore-test -v frontend.worker.db-core-test/get-file-content-returns-file-content-by-path`
+  - `rtk bb dev:test -v frontend.handler.publish-test/upload-custom-publish-assets-reads-files-through-worker-test`
+  - `rtk bb dev:test -v frontend.remove-ui-db-test/renderer-db-startup-owner-is-removed-test -v frontend.handler.repo-test/create-db-does-not-start-renderer-db-conn-test`
+  - `rtk bb dev:test -v frontend.db.react-test -v frontend.db.query-react-test -v frontend.db.query-dsl-test -v frontend.worker.react-test`
+  - `rtk bb dev:test -v frontend.db.async-util-test -v frontend.db.react-test -v frontend.db.query-react-test -v frontend.db.query-dsl-test -v frontend.handler.comments-test -v frontend.handler.block-test -v frontend.worker.react-test`
+  - `rtk bb dev:test -v frontend.db.async-test`
+  - `rtk bb dev:test -v frontend.db.async-test -v frontend.db.async-util-test -v frontend.db.react-test -v frontend.db.query-react-test -v frontend.db.query-dsl-test -v frontend.handler.comments-test -v frontend.handler.block-test -v frontend.components.block-test -v frontend.components.views-test -v frontend.worker.react-test`
+  - `rtk bb dev:test -v frontend.remove-ui-db-test -v frontend.db.restore-test -v frontend.db.react-test -v frontend.db.async-test -v frontend.db.async-util-test -v frontend.handler.repo-test -v frontend.handler.repo-config-test -v frontend.handler.config-test -v frontend.handler.ui-test -v frontend.handler.publish-test -v frontend.components.file-test -v frontend.components.repo-test/ensure-rsa-key-does-not-create-graph-test -v frontend.components.repo-test/ensure-rsa-key-nil-result-does-not-create-graph-test -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-core-test/get-file-content-returns-file-content-by-path -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - `rtk bb dev:test -v frontend.db.async-test -v frontend.db.async-util-test -v frontend.handler.editor-async-test -v frontend.components.block-test -v frontend.handler.comments-test -v frontend.handler.block-test`
+  - `rtk bb dev:test -v frontend.db.async-test/get-all-properties-uses-worker-without-renderer-db-model-test -v frontend.worker.db-core-test/get-all-properties-filters-and-sorts-worker-properties -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - `rtk bb dev:test -v frontend.db.async-test -v frontend.worker.db-core-test/get-all-properties-filters-and-sorts-worker-properties -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test -v frontend.components.property.property-test -v frontend.components.property.value-test -v frontend.components.property.config-test -v frontend.handler.query.builder-test -v frontend.db.query-dsl-test`
+  - `rtk bb dev:test -v frontend.db.async-test/get-tag-objects-uses-worker-class-objects-without-renderer-db-model-test`
+  - `rtk bb dev:test -v frontend.db.async-test -v frontend.components.property.value-test -v frontend.handler.db-based.page-test -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - `rtk bb dev:test -v frontend.remove-ui-db-test/export-component-backup-folder-cancel-uses-worker-test -v frontend.remove-ui-db-test/export-component-backup-folder-uses-worker-test -v frontend.handler.export-test`
+  - `rtk bb dev:test -v frontend.remove-ui-db-test/export-component-save-to-file-uses-no-renderer-db-test -v frontend.remove-ui-db-test/export-component-backup-folder-cancel-uses-worker-test -v frontend.remove-ui-db-test/export-component-png-page-check-uses-worker-test -v frontend.handler.export-test`
+  - `rtk bb dev:test -v frontend.handler.search-test/search-resolves-string-page-filter-through-worker-test -v frontend.remove-ui-db-test/search-page-filter-uses-worker-test`
+  - `rtk bb dev:test -v frontend.handler.export-test/choose-backup-folder-persists-folder-through-worker-test -v frontend.handler.export-test/auto-db-backup-reads-backup-folder-through-worker-test -v frontend.handler.export-test/auto-db-backup-skips-interval-when-worker-has-no-backup-folder-test -v frontend.remove-ui-db-test/export-backup-folder-write-uses-worker-test -v frontend.remove-ui-db-test/export-backup-folder-uses-worker-test`
+  - `rtk bb dev:test -v frontend.handler.dnd-test -v frontend.remove-ui-db-test/dnd-move-blocks-uses-passed-blocks-test`
+  - `rtk bb dev:test -v frontend.handler.dnd-test -v frontend.remove-ui-db-test/dnd-move-blocks-uses-passed-blocks-test -v frontend.components.imports-test -v frontend.worker.db-core-test/import-file-graph-imports-documents-into-worker-conn -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - `rtk bb dev:test -v frontend.handler.code-test -v frontend.remove-ui-db-test/code-handler-save-uses-worker-test`
+  - `rtk bb dev:test -v frontend.handler.common-test -v frontend.remove-ui-db-test/common-handler-copy-uses-passed-blocks-test`
+  - `rtk bb dev:test -v frontend.remove-ui-db-test/code-extension-save-editor-uses-worker-test`
+  - `rtk bb dev:test -v frontend.handler.code-test -v frontend.remove-ui-db-test/code-handler-save-uses-worker-test -v frontend.remove-ui-db-test/code-extension-save-editor-uses-worker-test`
+  - `rtk bb dev:test -v frontend.remove-ui-db-test/objects-post-insert-edit-uses-returned-block-test`
+  - `rtk bb dev:test -v frontend.components.objects-test -v frontend.remove-ui-db-test/objects-post-insert-edit-uses-returned-block-test`
+  - `rtk bb dev:test -v frontend.remove-ui-db-test/objects-default-value-uses-worker-test`
+  - `rtk bb dev:test -v frontend.components.objects-test -v frontend.remove-ui-db-test/objects-post-insert-edit-uses-returned-block-test -v frontend.remove-ui-db-test/objects-default-value-uses-worker-test`
+  - `rtk bb dev:test -v frontend.remove-ui-db-test/query-result-ui-uses-worker-rows-test`
+  - `rtk bb dev:test -v frontend.components.query.result-test -v frontend.remove-ui-db-test/query-result-ui-uses-worker-rows-test`
+  - `rtk bb dev:test -v frontend.remove-ui-db-test/edn-import-target-block-uses-worker-test`
+- 2026-07-07: Verified full local lint/test command:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after the reactive query worker-path change:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after the async query utility simplification:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after the async block-loader conversion:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after removing async asset/history renderer hydration:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after moving async property loading to the worker:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after moving export auto-backup cancellation to worker transact:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after removing the export component renderer DB import and unused page-title alias:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after moving search page-filter lookup to worker pull:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after moving export backup-folder selection to worker transact:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after removing drag/drop renderer entity rehydration:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after moving code editor save lookups to worker reads:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after removing clipboard helper renderer entity rehydration:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after removing code extension save completion renderer entity rehydration:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after removing object view post-insert renderer entity rehydration:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after moving property-object default placeholder lookup to worker pull:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after removing query result row renderer rehydration:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Re-verified full local lint/test after moving EDN block import target lookup to worker pull:
+  - `rtk bb dev:lint-and-test`
+
+## Current Implementation Map
+
+The current app already uses the worker as the durable graph DB owner. Before this branch, the renderer also created and maintained a local DataScript connection as a shadow read model.
+
+Renderer DB paths found during the initial review:
+
+- `src/main/frontend/db/conn.cljs` owned `conns`, `get-db`, `transact!`, and `start!`; `start!` created a renderer `d/create-conn`. This branch deleted `start!`; `get-db` and `transact!` remain until callers are migrated.
+- `src/main/frontend/db/restore.cljs` fetched initial worker data through `persist-db/<fetch-init-data`, built a renderer conn with `d/conn-from-datoms`, and stored it in `frontend.db.conn-state/conns`. This branch changed restore so it opens the worker graph and does not register a renderer conn.
+- `src/main/frontend/db/utils.cljs` exposes synchronous `entity`, `pull`, `pull-many`, and `q` over the renderer conn.
+- `src/main/frontend/db/model.cljs` is the largest synchronous read facade over `conn/get-db`; components and handlers depend on it heavily.
+- `src/main/frontend/db/react.cljs` stores query atoms and refreshes them by recomputing against `conn/get-db`.
+- `src/main/frontend/db/async.cljs` invokes worker APIs, then often transacts returned blocks into the renderer conn so later synchronous UI reads work.
+- `src/main/frontend/modules/outliner/pipeline.cljs` receives worker tx reports and applies `d/transact!` to the renderer conn to keep the shadow DB in sync.
+
+Key worker-owned DB paths:
+
+- `src/main/frontend/worker/state.cljs` owns `*datascript-conns`.
+- `src/main/frontend/worker/db_core.cljs` exposes worker thread APIs including `:thread-api/q`, `:thread-api/get-blocks`, `:thread-api/transact`, `:thread-api/get-initial-data`, `:thread-api/get-view-data`, and property/value APIs.
+- `src/main/frontend/worker/db_listener.cljs` listens to worker tx reports and broadcasts `:sync-db-changes`.
+- `src/main/frontend/worker/pipeline.cljs` derives affected query keys, deleted block ids, deleted assets, pages, and blocks from worker tx reports.
+- `src/main/frontend/handler/events.cljs` handles `:db/sync-changes` and calls the renderer outliner pipeline, which currently updates the renderer DB.
+
+Scale found during review:
+
+- 127 frontend/test files import the renderer DB facade or DB submodules.
+- About 754 local DataScript-style touch points remain in `src/main/frontend`, including `db/get-db`, `conn/get-db`, `db/entity`, `d/entity`, `d/q`, `react/q`, `db-hooks/use-query`, `d/transact!`, and `ldb/transact!`.
+- The highest-volume UI callers include `src/main/frontend/handler/editor.cljs`, `src/main/frontend/components/block.cljs`, `src/main/frontend/components/property/value.cljs`, `src/main/frontend/components/views.cljs`, and `src/main/frontend/components/cmdk/core.cljs`.
+
+## Target Architecture
+
+There must be one graph DB owner: the worker.
+
+The renderer should keep UI state only. It should not create a graph DataScript conn, transact worker data into a local conn, or answer graph reads from a shadow DB.
+
+Target rules:
+
+- Renderer graph reads call worker APIs.
+- Renderer graph writes call worker transaction APIs.
+- Renderer reactive UI subscribes to worker-derived invalidation results, not to a local DataScript conn.
+- Worker tx reports remain the single source for affected query keys and UI invalidation.
+- No new renderer cache is introduced unless a measured UI path cannot be made acceptable without one.
+- Any unavoidable cache must have a clear owner, invalidation source, bounded size, and a test proving stale data is not served after worker tx events.
+- Fail fast when a worker API is missing or a caller tries to use a removed renderer DB API.
+
+## Non-Goals
+
+- Do not change SQLite schema.
+- Do not redesign db-sync semantics.
+- Do not change worker persistence backend selection.
+- Do not add compatibility fallbacks to keep the renderer DB alive.
+- Do not migrate mobile or publishing onto a separate code path unless an existing platform constraint requires it.
+
+## Main Risks
+
+1. Synchronous component reads are widespread. Removing `db/entity` and `db/get-db` requires changing render flows to async hooks or preloaded data props.
+2. `frontend.db.react` currently mixes local DataScript reads with async worker queries. Replacing it needs a worker-backed query/subscription contract before removing the local conn.
+3. `frontend.db.async/<get-block` currently loads from the worker and then transacts into the UI DB. Removing the transact step will break callers that expect a later synchronous `db/entity`.
+4. `frontend.modules.outliner.pipeline/invoke-hooks` currently applies worker txs to the UI conn and then refreshes local reactive queries. That must become UI-state/event-only handling.
+5. Export, editor navigation, property controls, command palette, and query builder have many direct DB reads and need focused migration batches.
+6. Tests rely on `db/get-db` helpers. Test helpers need worker-backed fixtures or smaller pure DB tests moved to worker/shared DB namespaces.
+
+## Implementation Plan
+
+### Phase 1: Add Guard Tests and Inventory Gates
+
+Add tests before implementation changes.
+
+1. Add a source-scan test that fails on new renderer graph DB ownership:
+   - no `d/create-conn` under `src/main/frontend` outside worker/test-only code;
+   - no `d/conn-from-datoms` in renderer restore paths;
+   - no new direct `d/transact!` in renderer UI code.
+2. Add a source-scan test for renderer API migration progress with an allowlist file. Start with the current allowed namespaces, then shrink it in each phase.
+3. Add tests around startup restore proving the renderer no longer stores a graph conn after the worker is ready.
+4. Add worker API contract tests for every new read endpoint added in later phases.
+
+Target commands:
+
+```bash
+rtk bb dev:test -v frontend.remove-ui-db-test
+rtk bb dev:test -v frontend.worker.db-worker-test
+```
+
+### Phase 2: Replace Initial Restore With Worker Readiness
+
+Stop using initial datoms to build a renderer conn.
+
+1. Done: Change `frontend.db.restore/restore-graph!` so it ensures the worker graph is open and sets app graph state, but does not call `d/conn-from-datoms`.
+2. Done: Remove `frontend.db.conn-state/conns` writes from restore.
+3. Keep `:graph/restored`, loading flags, repo config restore, and root rerender behavior unchanged.
+4. Add a fail-fast assertion for any renderer code that requests `conn/get-db` after this phase outside the temporary allowlist.
+
+Immediate follow-up found during implementation:
+
+- Done: `frontend.handler.repo-config/restore-repo-config!` no longer reads `logseq/config.edn` through the renderer DB. It calls the worker through `:thread-api/get-file-content`.
+- Done: `frontend.handler.ui/add-style-if-exists!` no longer reads `logseq/custom.css` through `db-model/get-custom-css`. It calls the worker through `:thread-api/get-file-content`.
+- Done: `frontend.handler.ui/exec-js-if-exists-&-allowed!` no longer reads local `logseq/custom.js` through `db/get-file`. It calls the worker through `:thread-api/get-file-content`.
+- Done: `frontend.handler.config/set-config!` no longer reads `logseq/config.edn` through `db/get-file`; it calls the worker through `:thread-api/get-file-content`.
+- Done: `frontend.components.file/file-inner` no longer reads repo-relative text files through `db/get-file`; it calls the worker through `:thread-api/get-file-content`.
+- Done: `frontend.handler.publish/<upload-custom-publish-assets!` no longer reads `logseq/publish.css` or `logseq/publish.js` through `db-model/get-file`; it calls the worker through `:thread-api/get-file-content`.
+
+Current scan result for the migrated file-read paths:
+
+- No `db/get-file` or `db-model/get-file` calls remain in the touched restore, repo config, config, UI custom CSS/JS, file viewer, or publish custom asset paths.
+- No renderer production namespace currently creates a DataScript conn through `d/create-conn` or `d/conn-from-datoms`; `frontend.db.conn/start!` has been deleted.
+- `frontend.db.model/get-custom-css` still exists as part of the renderer DB facade. The startup custom CSS path no longer calls it, but the facade can only be deleted after remaining renderer DB callers are migrated.
+- Existing renderer DB read APIs still return data from `frontend.db.conn/get-db` when a conn exists. These must be removed in the later reactive query, async block loading, publishing, export, editor, and component migration phases.
+- `frontend.db.async.util/<q` no longer uses the renderer DB. `frontend.db.async/<get-block`, `<get-blocks`, `<get-block-parents`, `<get-asset-with-checksum`, `<get-block-properties-history`, `<get-all-properties`, and `<get-tag-objects` now return worker data directly without hydrating the renderer DB.
+- `frontend.components.imports/import-file-graph` still performs browser file serialization in the UI because it owns the browser `File` objects, but graph conversion, DB writes, validation, and import-state summary generation run in the db-worker through `:thread-api/import-file-graph`.
+- `frontend.components.export/auto-backup` now reads the backup folder through `:thread-api/get-key-value` and retracts it through `:thread-api/transact`; `frontend.components.export` no longer imports `frontend.db`.
+- The final scan still finds `d/create-conn` and `d/conn-from-datoms` in worker tests, test helpers, and `frontend.worker.sync.temp-sqlite`; those are outside the renderer production DB owner removed in this batch.
+
+Verification:
+
+```bash
+rtk bb dev:test -v frontend.persist-db-test
+rtk bb dev:test -v frontend.handler.repo-test
+```
+
+### Phase 3: Replace Reactive Query Ownership
+
+Move `frontend.db.react` from local DB recomputation to worker-backed query execution and worker tx invalidation.
+
+1. In progress: normal datalog `react/q` calls and affected-query refreshes no longer call `conn/get-db` in production; they use the existing worker query bridge.
+2. Store query results in `:db/query-results` as today, but compute results in the worker.
+3. Replace `refresh-affected-queries!` so it re-invokes only affected worker queries.
+4. Preserve custom query collapse behavior and idle scheduling.
+5. Remove local `conn/get-db` from `frontend.db.react`.
+
+Verification:
+
+```bash
+rtk bb dev:test -v frontend.worker.react-test
+rtk bb dev:test -v frontend.db.query-react-test
+rtk bb dev:test -v frontend.db.query-custom-test
+```
+
+### Phase 4: Convert Block Loading APIs
+
+Make block loaders return data directly from worker results instead of hydrating a UI conn.
+
+1. Done: Replace `frontend.db.async/<get-block`, `<get-blocks`, and `<get-block-parents` internals so they never call `d/transact!`.
+2. In progress: Update call sites that expect `db/entity` after `<get-block` or other async worker reads to use the returned block data directly.
+3. Done: Remove renderer DB hydration from `<get-asset-with-checksum` and `<get-block-properties-history`.
+4. Done: Move `<get-all-properties` to `:thread-api/get-all-properties` while preserving existing property filtering semantics.
+5. Done: Move `<get-tag-objects` to `:thread-api/get-class-objects`.
+6. Remove `skip-transact?` and `skip-refresh?` options once their only purpose is gone.
+7. Keep batching only if measured render behavior still needs it; otherwise remove batching and keep one clear worker API path.
+
+Completed prerequisite:
+
+- Done: `frontend.db.async.util/<q` now always returns worker query results without reading or hydrating the renderer DB.
+
+Verification:
+
+```bash
+rtk bb dev:test -v frontend.handler.block-test
+rtk bb dev:test -v frontend.components.block-test
+rtk bb dev:test -v frontend.handler.editor-async-test
+```
+
+### Phase 5: Migrate High-Volume UI Read Callers
+
+Convert callers in small batches. Each batch should delete renderer DB reads instead of wrapping them.
+
+Direct `d/entity`, `d/pull`, `d/pull-many`, and `d/q` calls in UI namespaces are in scope. Components, handlers, event handlers, extensions, mobile UI, and shared renderer UI helpers must not keep a local DB handle and call DataScript directly. Move each case to one of these shapes:
+
+- a narrow worker API that returns the data the UI needs;
+- a worker-backed async/reactive query that owns invalidation through worker tx reports;
+- pure DB logic moved into worker/shared code and called from the worker.
+
+Do not keep direct `d/entity` or `d/pull` calls by hiding them behind a new renderer cache or compatibility wrapper.
+
+Suggested order:
+
+1. Navigation and editor handlers:
+   - `src/main/frontend/handler/editor.cljs`
+   - `src/main/frontend/handler/block.cljs`
+   - `src/main/frontend/handler/page.cljs`
+2. Core block/page components:
+   - `src/main/frontend/components/block.cljs`
+   - `src/main/frontend/components/page.cljs`
+   - `src/main/frontend/components/journal.cljs`
+3. Property and view surfaces:
+   - `src/main/frontend/components/property/value.cljs`
+   - `src/main/frontend/components/property/config.cljs`
+   - `src/main/frontend/components/views.cljs`
+4. Command/search/query surfaces:
+   - `src/main/frontend/components/cmdk/core.cljs`
+   - `src/main/frontend/search.cljs`
+   - `src/main/frontend/db/query_dsl.cljs`
+   - `src/main/frontend/components/query/builder.cljs`
+5. Export/debug/secondary surfaces:
+   - `src/main/frontend/handler/export/*`
+   - `src/main/frontend/db/debug.cljs`
+   - `src/main/frontend/db/rtc/debug_ui.cljs`
+
+Each migrated caller should either:
+
+- use an existing worker API;
+- add a narrow worker API in `frontend.worker.db-core`;
+- move pure DB logic into `deps/db` or worker/shared code and call it from worker APIs.
+
+### Phase 6: Remove Renderer DB Mutation Pipeline
+
+Once render callers no longer depend on a UI conn:
+
+1. Change `frontend.modules.outliner.pipeline/invoke-hooks` to UI event handling only:
+   - sidebar cleanup;
+   - route redirects;
+   - edit callback scheduling;
+   - plugin hook publication;
+   - page deleted/renamed events.
+2. Remove all `d/transact!` calls from the renderer pipeline.
+3. Keep `:db/latest-transacted-entity-uuids` updates if UI still uses them.
+4. Keep worker-derived `affected-keys`, `blocks`, `pages`, and deleted ids as the event payload used by UI invalidation.
+
+Verification:
+
+```bash
+rtk bb dev:test -v frontend.worker.pipeline-test
+rtk bb dev:test -v frontend.handler.events-test
+```
+
+### Phase 7: Delete Renderer DB Facade
+
+Delete or reduce these namespaces after call sites are migrated:
+
+- `src/main/frontend/db/conn.cljs`
+- `src/main/frontend/db/conn_state.cljs`
+- `src/main/frontend/db/utils.cljs` synchronous DB helpers
+- local-DB parts of `src/main/frontend/db/model.cljs`
+- local-DB parts of `src/main/frontend/db/react.cljs`
+- local-DB hydration paths in `src/main/frontend/db/async.cljs`
+- renderer-only restore logic in `src/main/frontend/db/restore.cljs`
+
+Keep only names that are still valid as worker API facades, and make invalid old APIs throw during migration rather than silently falling back.
+
+### Phase 8: Test and E2E Verification
+
+Run targeted tests after each phase, then full verification before merge.
+
+Required final commands:
+
+```bash
+rtk bb dev:lint-and-test
+rtk bb -f clj-e2e/bb.edn test
+rtk bb -f cli-e2e/bb.edn build
+rtk bb -f cli-e2e/bb.edn test --skip-build
+```
+
+If worker code changes affect `db-worker-node`, rebuild before CLI stress or node-worker verification:
+
+```bash
+rtk pnpm db-worker-node:release:bundle
+```
+
+Manual smoke checks:
+
+- Open an existing DB graph.
+- Switch graphs.
+- Create, edit, indent, outdent, delete, and restore blocks.
+- Open page references, command palette, property dialogs, query views, and journals.
+- Verify db-sync state, conflict UI, and asset retry UI still work.
+- Verify Desktop db-worker-node mode and web worker mode both use the same worker DB read/write APIs from the renderer.
+
+## Review Checklist
+
+- Renderer does not create graph DataScript conns.
+- Renderer does not transact graph tx-data into a local DB.
+- Renderer DB reads are worker calls or data passed from worker results.
+- New worker APIs are narrow and tested.
+- No new cache exists unless it has bounded size, explicit invalidation, and tests.
+- Removed compatibility layers are deleted, not extended.
+- Errors fail fast when a graph is not open or worker is not initialized.
+- Full test suite and both e2e suites pass before this goal is complete.
+- File-graph import does not create, read, or transact the target DB from the renderer; the db worker owns import conversion and target DB writes.
+- UI components, handlers, events, extensions, and mobile UI have no direct renderer DB `d/entity`, `d/pull`, `d/pull-many`, `d/q`, `db/get-db`, or `conn/get-db` calls outside worker/shared DB code and tests.
+
+## Progress Log
+
+- 2026-07-07: Moved async property and tag-object reads off renderer DB helpers:
+  - `frontend.db.async/<get-all-properties` now calls worker `:thread-api/get-all-properties`.
+  - `frontend.db.async/<get-tag-objects` now calls worker `:thread-api/get-class-objects`.
+  - Added worker-side property filtering/sorting coverage and API registration checks.
+- 2026-07-07: Kept search benchmark coverage green after full-suite verification exposed a repeated hot-path threshold failure:
+  - `frontend.worker.search/combine-results` now realizes merged rows into a vector and uses native array sorting while preserving existing ranking behavior.
+  - No cache or fallback state was introduced.
+- 2026-07-07: Verification passed:
+  - `rtk bb dev:test -v frontend.worker.search-test`
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved async scheduled/deadline reads off renderer DB helpers:
+  - `frontend.db.async/<get-date-scheduled-or-deadlines` now calls worker `:thread-api/get-date-scheduled-or-deadlines`.
+  - Worker API performs the same date/status filtering plus order/group transform.
+  - Removed `frontend.db.model` and `frontend.db.utils` from `frontend.db.async`.
+  - Verification passed:
+    - `rtk bb dev:test -v frontend.db.async-test -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test -v frontend.worker.db-core-test/get-date-scheduled-or-deadlines-filters-sorts-and-groups-worker-results`
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Added next implementation target from review:
+  - Move file-graph import conversion and target DB writes from `frontend.components.imports` into the db worker.
+  - Current renderer path creates/restores the target DB, gets `db/get-db`, passes that conn to `gp-exporter/export-file-graph`, and applies exporter tx reports through browser persistence.
+  - Target shape: renderer reads browser files/assets and forwards data/progress callbacks; worker owns the target DB conn, exporter invocation, tx reports, and final validation data.
+- 2026-07-07: Moved file-graph import conversion and target DB writes into the db worker:
+  - Renderer serializes browser files/assets and invokes `:thread-api/import-file-graph`.
+  - Worker runs `gp-exporter/export-file-graph` against the worker-owned target conn and returns import state, validation data, and staged asset writes.
+  - Renderer no longer calls `db/get-db`, `gp-exporter/export-file-graph`, or `db-browser/transact!` for file-graph import.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.components.imports-test -v frontend.worker.db-core-test/import-file-graph-imports-documents-into-worker-conn -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - Full verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved two handler RTC metadata reads off the renderer DB:
+  - `frontend.handler.common.developer/<fetch-server-checksum-diagnostics` now gets the graph RTC UUID from worker `:thread-api/get-rtc-graph-uuid`.
+  - `frontend.handler.db-based.sync/<rtc-get-users-info` now gets the graph RTC UUID from the same worker API before fetching members.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.handler.common.developer-test -v frontend.handler.db-based.sync-test/rtc-get-users-info-uses-cached-members-test`
+  - Full verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Removed the remaining RTC metadata reads from `frontend.handler.db-based.sync`:
+  - RTC start skip logging no longer reads the renderer DB for the optional local RTC id field.
+  - Invite access grants now ask worker `:thread-api/get-rtc-graph-e2ee?` before calling `:thread-api/db-sync-grant-graph-access`.
+  - Added worker API `:thread-api/get-rtc-graph-e2ee?`.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/db-sync-handler-rtc-metadata-uses-worker-test -v frontend.handler.db-based.sync-test/rtc-start-skips-while-graph-upload-is-active-test -v frontend.worker.db-core-test/get-rtc-graph-e2ee-returns-value-from-conn -v frontend.worker.db-core-test/get-rtc-graph-e2ee-returns-nil-for-missing-conn -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+- 2026-07-07: Stabilized `frontend.handler.db-based.sync-test` so async tests finish after temporary redefs unwind; this prevents test-local worker/auth stubs from leaking into the next async test.
+- 2026-07-07: Re-verified the current worker-import and RTC metadata batch:
+  - `rtk bb dev:test -v frontend.components.imports-test -v frontend.worker.db-core-test/import-file-graph-imports-documents-into-worker-conn -v frontend.remove-ui-db-test/db-sync-handler-rtc-metadata-uses-worker-test -v frontend.handler.db-based.sync-test -v frontend.worker.db-core-test/get-rtc-graph-e2ee-returns-value-from-conn -v frontend.worker.db-core-test/get-rtc-graph-e2ee-returns-nil-for-missing-conn -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+- 2026-07-07: Full local verification passed:
+  - `rtk bb dev:lint-and-test`
+- 2026-07-07: Confirmed direct UI DataScript calls are still remaining migration work:
+  - Current scan still finds `d/entity`, `d/pull`, `db/get-db`, and `conn/get-db` in renderer components, handlers, event handlers, extensions, mobile UI, and renderer DB facades.
+  - These are explicitly in scope for Phase 5 and the final review checklist.
+  - They should be removed by moving the read logic to worker APIs or worker-backed reactive/async query paths, not by adding a renderer cache.
+- 2026-07-07: Moved the local-graph upload E2EE metadata read in `frontend.components.repo` off the renderer DB:
+  - `graph-e2ee-enabled?` now calls worker `:thread-api/get-rtc-graph-e2ee?` when the current graph does not already carry `:graph-e2ee?` metadata.
+  - Removed the `logseq.db` dependency from `frontend.components.repo`.
+  - Stabilized `frontend.components.repo-test` async redefs so worker stubs do not leak between tests.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.components.repo-test -v frontend.remove-ui-db-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved the RTC restart background-task UUID check off the renderer DB:
+  - `frontend.handler.db-based.rtc-background-tasks` now compares the restart graph UUID with worker `:thread-api/get-rtc-graph-uuid`.
+  - Removed the `frontend.db` and `logseq.db` dependencies from that namespace.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/rtc-background-tasks-metadata-uses-worker-test -v frontend.remove-ui-db-test/db-sync-handler-rtc-metadata-uses-worker-test -v frontend.handler.db-based.sync-test/rtc-start-skips-while-graph-upload-is-active-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved the `:capture-error` graph schema-version tag off the renderer DB:
+  - `frontend.handler.events` now asks worker `:thread-api/get-graph-schema-version` instead of reading `:logseq.kv/schema-version` through `db/entity`.
+  - The worker returns the schema version from its owned DataScript conn and returns nil when the graph conn is missing.
+  - No renderer cache was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/capture-error-schema-version-uses-worker-test -v frontend.worker.db-core-test/get-graph-schema-version-returns-value-from-conn -v frontend.worker.db-core-test/get-graph-schema-version-returns-nil-for-missing-conn -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved publish graph UUID resolution off the renderer DB:
+  - `frontend.handler.publish` no longer imports `frontend.db` or calls `ldb/get-graph-rtc-uuid` / `ldb/get-graph-local-uuid` against a renderer DB.
+  - Added worker API `:thread-api/get-graph-uuid`, preserving the existing RTC UUID first, local UUID second behavior.
+  - `publish-page!`, `<post-publish!`, and `unpublish-page!` now resolve graph UUIDs through the worker path.
+  - Kept the change cache-free and stabilized publish async tests with explicit setup/teardown so test-local stubs do not leak.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.handler.publish-test -v frontend.handler.ui-test/ui-file-loaders-read-local-files-through-worker-test -v frontend.handler.reaction-test -v logseq.api-test/get-block -v frontend.remove-ui-db-test/publish-graph-uuid-uses-worker-test -v frontend.worker.db-core-test/get-graph-uuid-prefers-rtc-uuid -v frontend.worker.db-core-test/get-graph-uuid-returns-local-uuid-when-rtc-uuid-is-missing -v frontend.worker.db-core-test/get-graph-uuid-returns-nil-for-missing-conn -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved export graph backup-folder reads off the renderer DB:
+  - `frontend.handler.export` now asks worker `:thread-api/get-key-value` for `:logseq.kv/graph-backup-folder`.
+  - Added worker API `:thread-api/get-key-value`; it reads from the worker-owned DataScript conn and returns nil when the conn/key is missing.
+  - `auto-db-backup!` schedules the interval only after the worker returns a backup folder.
+  - No renderer cache or fallback DB read was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.handler.export-test/auto-db-backup-reads-backup-folder-through-worker-test -v frontend.handler.export-test/auto-db-backup-skips-interval-when-worker-has-no-backup-folder-test -v frontend.remove-ui-db-test/export-backup-folder-uses-worker-test -v frontend.worker.db-core-test/get-key-value-returns-kv-value-from-conn -v frontend.worker.db-core-test/get-key-value-returns-nil-for-missing-conn -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved graph preview db-id resolution off the renderer DB:
+  - `frontend.components.graph-actions` no longer requires `frontend.db` or calls `db/entity`.
+  - Graph preview now resolves db-id-only nodes through existing worker `:thread-api/pull` with selector `[:block/uuid]`.
+  - Existing UUID and page-label preview paths are preserved.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.components.graph-actions-test -v frontend.remove-ui-db-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved history cursor restore block lookup off the renderer DB:
+  - `frontend.handler.history/restore-cursor!` no longer requires `frontend.db` or calls `db/pull`.
+  - Undo/redo cursor restore now pulls the target block through existing worker `:thread-api/pull` with selector `[*]`.
+  - UI-state restore and selected-block restore behavior are preserved.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.handler.history-test -v frontend.remove-ui-db-test/history-restore-cursor-uses-worker-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved editor lifecycle page lookup off the renderer DB:
+  - `frontend.handler.editor.lifecycle` no longer requires `frontend.db` or calls `db/entity` during editor mount.
+  - Undo/redo editor-info recording now pulls the edit block page through existing worker `:thread-api/pull` with selector `[{:block/page [:block/uuid]}]`.
+  - Existing skip-focus and undo/redo guard behavior is preserved.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.handler.editor-lifecycle-test -v frontend.remove-ui-db-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved developer entity debug reads off the renderer DB:
+  - `frontend.handler.common.developer/show-entity-data` no longer requires `frontend.db` or calls `db/pull` / `db/entity`.
+  - Developer entity debug display now pulls entity data through existing worker `:thread-api/pull` with selector `[*]`.
+  - Ref title debug output is derived from the worker pull result.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.handler.common.developer-test -v frontend.remove-ui-db-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved scroll-anchor parent lookup off the renderer DB:
+  - `frontend.handler.ui/scroll-to-anchor-block` no longer requires `frontend.db` or calls `db/entity` / `db/get-block-parents`.
+  - Missing anchor blocks are resolved through existing worker `:thread-api/pull` with selector `[:db/id :block/uuid]`.
+  - Anchor parents are resolved through existing worker `:thread-api/get-block-parents`.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.handler.ui-test -v frontend.remove-ui-db-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved export auto-backup UI backup-folder reads off the renderer DB:
+  - `frontend.components.export/auto-backup` no longer reads `:logseq.kv/graph-backup-folder` through `ldb/get-key-value` and `db/get-db`.
+  - The component now loads the backup folder through existing worker `:thread-api/get-key-value`.
+  - Removed the now-unused `logseq.db` dependency from `frontend.components.export`.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test -v frontend.handler.export-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved selected-block export top-level UUID resolution off renderer entities:
+  - `frontend.components.export/export-blocks` no longer resolves selected block UUIDs through `db/entity` before calling `block-handler/get-top-level-blocks`.
+  - Selected blocks are now loaded through existing worker-backed `frontend.db.async/<get-blocks`.
+  - The export panel waits for the worker-loaded top-level UUIDs before rendering export actions.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test -v frontend.handler.export-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved PNG export page classification off renderer entities:
+  - `frontend.components.export/get-image-blob` no longer calls `db/page?` or `db/entity` to decide whether the export target is a page.
+  - PNG export now classifies UUID targets through existing worker `:thread-api/pull` with selector `[{:block/tags [:db/ident]}]`.
+  - Page-like targets continue to include Page, Journal, Tag, and Property class tags.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test -v frontend.handler.export-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved search page-filter lookup off the renderer DB:
+  - `frontend.handler.search/search` no longer imports `frontend.db` or calls `db/get-page` for string `:page-db-id` filters.
+  - String page filters now resolve the numeric page db id through existing worker `:thread-api/pull` with selector `[:db/id]`.
+  - The existing search option shape is preserved: resolved page filters still pass `:page` as a string db id and omit file results.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.handler.search-test/search-resolves-string-page-filter-through-worker-test -v frontend.remove-ui-db-test/search-page-filter-uses-worker-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved export backup-folder selection write off the renderer DB:
+  - `frontend.handler.export/choose-backup-folder` no longer imports `frontend.db` or calls `db/transact!`.
+  - The selected backup folder is now persisted through existing worker `:thread-api/transact` using `:logseq.kv/graph-backup-folder`.
+  - The browser directory handle continues to be stored in IndexedDB under the same key shape.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.handler.export-test/choose-backup-folder-persists-folder-through-worker-test -v frontend.handler.export-test/auto-db-backup-reads-backup-folder-through-worker-test -v frontend.handler.export-test/auto-db-backup-skips-interval-when-worker-has-no-backup-folder-test -v frontend.remove-ui-db-test/export-backup-folder-write-uses-worker-test -v frontend.remove-ui-db-test/export-backup-folder-uses-worker-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Removed drag/drop renderer entity rehydration:
+  - `frontend.handler.dnd/move-blocks` no longer imports `frontend.db` or calls `db/entity`.
+  - Drag/drop move handling uses the block maps already passed by UI callers and still emits the same outliner move op through the existing worker-backed transaction path.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.handler.dnd-test -v frontend.remove-ui-db-test/dnd-move-blocks-uses-passed-blocks-test`
+    - `rtk bb dev:test -v frontend.handler.dnd-test -v frontend.remove-ui-db-test/dnd-move-blocks-uses-passed-blocks-test -v frontend.components.imports-test -v frontend.worker.db-core-test/import-file-graph-imports-documents-into-worker-conn -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved code editor save lookups off renderer entities:
+  - `frontend.handler.code` no longer imports `frontend.db` or calls `db/entity`.
+  - Graph-file saves check `[:file/path path]` through existing worker `:thread-api/pull` before calling `frontend.handler.db-based.editor/save-file!`.
+  - Code-block snippet saves load the target block through existing worker-backed `frontend.db.async/<get-block` before preserving the existing byte-position splice behavior.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.handler.code-test -v frontend.remove-ui-db-test/code-handler-save-uses-worker-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Removed clipboard helper renderer entity rehydration:
+  - `frontend.handler.common/copy-to-clipboard-without-id-property!` no longer imports `frontend.db` or calls `db/entity`.
+  - The helper now uses `:block/raw-title` already present on copied block maps, with `:block/title` as the fallback for title-only maps.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.handler.common-test -v frontend.remove-ui-db-test/common-handler-copy-uses-passed-blocks-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Confirmed and re-verified file-graph import ownership:
+  - `frontend.components.imports/import-file-graph` serializes browser `File` data in the UI, then invokes existing worker API `:thread-api/import-file-graph`.
+  - `frontend.worker.db-core/<import-file-graph!` owns `gp-exporter/export-file-graph`, target worker conn writes, validation, and staged asset metadata.
+  - The UI path does not call `db/get-db`, `gp-exporter/export-file-graph`, or `db-browser/transact!` for file-graph import.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/right-sidebar-dragstart-uses-resolved-item-test -v frontend.components.imports-test/file-graph-import-delegates-db-work-to-worker-test -v frontend.worker.db-core-test/import-file-graph-imports-documents-into-worker-conn -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+- 2026-07-07: Removed one right-sidebar event-time renderer entity read:
+  - `frontend.components.right-sidebar/sidebar-item-inner` no longer calls `db/entity` inside `on-drag-start`.
+  - The drag handler uses the already-resolved sidebar item metadata so DataTransfer stays synchronous without adding any cache.
+  - Remaining direct UI DataScript calls in components, handlers, events, extensions, and mobile UI are still in scope; they should be removed by moving whole read surfaces to worker APIs or worker-backed reactive/async subscriptions, not by adding renderer caches.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/right-sidebar-dragstart-uses-resolved-item-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Moved `:editor/upsert-type-block` reads off renderer entities:
+  - `frontend.handler.events` no longer imports `frontend.db`.
+  - The target block and post-conversion block are loaded through existing worker-backed `frontend.db.async/<get-block`.
+  - `:logseq.kv/latest-code-lang` is read through existing worker API `:thread-api/get-key-value`.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/events-upsert-type-block-uses-worker-test`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test -v frontend.rum-hooks-refactor-test`
+  - Full local verification passed:
+    - `rtk bb dev:lint-and-test`
+- 2026-07-07: Adjusted migration order per review direction:
+  - Continue with `frontend.handler.events*` and `frontend.handler*` before migrating remaining component render paths.
+  - Group handler changes and run focused tests after each grouped batch; do not run the full local test gate unless explicitly requested.
+- 2026-07-07: Moved two small handler/event page lookups off renderer DB reads:
+  - `frontend.handler.page/open-recycle!` now resolves the Recycle page UUID through worker `:thread-api/pull` before redirecting.
+  - `frontend.handler.events.ui/:publish/open-dialog` now resolves the current page through worker `:thread-api/pull` and classifies it with `logseq.db/page?` on the pulled map.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/page-open-recycle-uses-worker-test -v frontend.remove-ui-db-test/events-ui-publish-dialog-uses-worker-test -v frontend.rum-hooks-refactor-test`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved selected comments handler rehydration off renderer entities:
+  - `frontend.handler.comments/<get-comment-threads-for-block` now returns worker-loaded blocks from `frontend.db.async/<get-block` instead of querying rows and rehydrating them through `db/entity`.
+  - Comment-area reveal, expand, and title-edit actions now check the current comments-area block through worker-backed `frontend.db.async/<get-block` before acting, preserving stale deleted-thread no-op behavior without reading the renderer DB.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/comments-handler-thread-loading-uses-worker-blocks-test -v frontend.remove-ui-db-test/comments-handler-area-actions-use-passed-area-test -v frontend.handler.comments-test -v frontend.handler.editor-async-test/ensure-comments-area-for-selected-blocks -v frontend.handler.editor-async-test/ensure-comments-area-for-single-selected-block -v frontend.handler.editor-async-test/add-comment-to-blocks-opens-comment-box -v frontend.handler.editor-async-test/add-comment-to-non-empty-edit-block-focuses-comment-box -v frontend.handler.editor-async-test/add-comment-to-empty-edit-block -v frontend.handler.editor-async-test/add-comment-to-empty-edit-block-reveals-after-comments-tag-is-saved -v frontend.handler.editor-async-test/delete-comment-targets`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved comments target lookup off renderer entities:
+  - `frontend.handler.comments/ensure-comments-area!`, `ensure-comments-area-for-selected-blocks!`, and `/Add comment` shortcut target selection now resolve UUID/db-id refs through worker-backed `frontend.db.async/<get-block`.
+  - The single-selection path now reuses already-loaded block maps instead of reloading them, keeping the flow simple and avoiding a renderer cache.
+  - Existing map callers continue to pass through directly; stale or missing worker loads are ignored the same way missing renderer entities were.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/comments.cljs src/test/frontend/handler/comments_test.cljs src/test/frontend/handler/editor_async_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/comments-handler-target-lookup-uses-worker-test -v frontend.remove-ui-db-test/comments-handler-thread-loading-uses-worker-blocks-test -v frontend.remove-ui-db-test/comments-handler-area-actions-use-passed-area-test -v frontend.handler.comments-test -v frontend.handler.editor-async-test/ensure-comments-area-for-selected-blocks -v frontend.handler.editor-async-test/ensure-comments-area-for-single-selected-block -v frontend.handler.editor-async-test/add-comment-to-blocks-opens-comment-box -v frontend.handler.editor-async-test/add-comment-to-non-empty-edit-block-focuses-comment-box -v frontend.handler.editor-async-test/add-comment-to-empty-edit-block -v frontend.handler.editor-async-test/add-comment-to-empty-edit-block-reveals-after-comments-tag-is-saved -v frontend.handler.editor-async-test/delete-comment-targets`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved `:editor/new-property` event target reads off renderer entities:
+  - `frontend.handler.events.ui` no longer imports `frontend.db`.
+  - Editing block, selected blocks, current page UUID fallback, and edit-original-block cleanup now resolve through existing worker-backed `frontend.db.async/<get-block` / `<get-blocks`.
+  - The event still captures the current edit block before saving it, then opens the property dialog after `save-current-block!`, preserving the previous ordering without a renderer cache.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/events/ui.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/events-ui-new-property-targets-use-worker-test -v frontend.remove-ui-db-test/events-ui-publish-dialog-uses-worker-test`
+  - Remaining direct handler scan count:
+    - `187`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed the remaining comments handler renderer DB dependency:
+  - `frontend.handler.comments` no longer imports `frontend.db`.
+  - `comments-area-child` now sorts children with shared `logseq.db/sort-by-order`.
+  - `comment-delete-targets` uses the parent comments-area map already carried by the comment block instead of rehydrating it through `db/entity`.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/comments.cljs src/test/frontend/handler/comments_test.cljs src/test/frontend/handler/editor_async_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/comments-handler-delete-targets-uses-passed-data-test -v frontend.remove-ui-db-test/comments-handler-target-lookup-uses-worker-test -v frontend.remove-ui-db-test/comments-handler-thread-loading-uses-worker-blocks-test -v frontend.remove-ui-db-test/comments-handler-area-actions-use-passed-area-test -v frontend.handler.comments-test -v frontend.handler.editor-async-test/ensure-comments-area-for-selected-blocks -v frontend.handler.editor-async-test/ensure-comments-area-for-single-selected-block -v frontend.handler.editor-async-test/add-comment-to-blocks-opens-comment-box -v frontend.handler.editor-async-test/add-comment-to-non-empty-edit-block-focuses-comment-box -v frontend.handler.editor-async-test/add-comment-to-empty-edit-block -v frontend.handler.editor-async-test/add-comment-to-empty-edit-block-reveals-after-comments-tag-is-saved -v frontend.handler.editor-async-test/delete-comment-targets`
+  - Remaining direct handler scan count:
+    - `186`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved jump handler block/page reads off renderer entities:
+  - `frontend.handler.jump` no longer imports `frontend.db`.
+  - Jump trigger editing now resolves the target block through worker-backed `frontend.db.async/<get-block` before calling `edit-block!`.
+  - `jump-to` resolves the current edit/selection/current-page block through the same worker-backed loader before checking collapsed state and expanding.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/jump.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/jump-handler-uses-worker-block-loader-test`
+  - Remaining direct handler scan count:
+    - `183`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed paste handler page-format renderer DB read:
+  - `frontend.handler.paste/editor-on-paste!` now uses the current markdown-only page format behavior directly instead of calling `db/get-page-format` through the renderer DB facade.
+  - The paste test no longer stubs `state/get-current-page` or `db/get-page-format` for this path.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/paste.cljs src/test/frontend/handler/paste_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/paste-handler-does-not-read-page-format-from-renderer-db-test -v frontend.handler.paste-test/editor-on-paste-firefox-html-with-line-breaks`
+  - Remaining direct handler scan count:
+    - `182`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved paste embed-block link lookup off renderer entities:
+  - `frontend.handler.paste` now loads the copied linked block through worker-backed `frontend.db.async/<get-block` before inserting the embed block.
+  - `:block/link` still receives the linked block `:db/id`; the paste flow remains promise-based and no renderer cache was added.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/paste.cljs src/test/frontend/handler/paste_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/paste-handler-embed-block-link-uses-worker-test -v frontend.handler.paste-test/editor-on-paste-embed-block-uses-worker-loaded-link`
+  - Remaining direct handler scan count:
+    - `181`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed paste display-type edit-block rehydration:
+  - `frontend.handler.paste/editing-display-type-block?` now reads `:logseq.property.node/display-type` from the current edit block already stored in state instead of reloading it through `db/entity`.
+  - This keeps the paste gate synchronous without adding a renderer cache or worker round trip.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/paste.cljs src/test/frontend/handler/paste_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/paste-handler-display-type-uses-state-block-test -v frontend.handler.paste-test/editing-display-type-block-uses-state-block -v frontend.remove-ui-db-test/paste-handler-embed-block-link-uses-worker-test -v frontend.handler.paste-test/editor-on-paste-embed-block-uses-worker-loaded-link -v frontend.remove-ui-db-test/paste-handler-does-not-read-page-format-from-renderer-db-test -v frontend.handler.paste-test/editor-on-paste-firefox-html-with-line-breaks`
+  - Remaining direct handler scan count:
+    - `180`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved async page favorite/unfavorite page lookup to worker:
+  - `frontend.handler.page/<favorite-page!` and `<unfavorite-page!` now resolve the target page UUID through worker `:thread-api/pull`.
+  - The existing favorite transaction helpers still receive a page UUID; no renderer cache or new worker API was added.
+  - The synchronous `favorited?`, `get-favorites`, and reorder favorites paths still use renderer DB reads and remain for a dedicated later batch.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/page.cljs src/test/frontend/handler/page_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/page-favorite-actions-use-worker-test -v frontend.handler.page-test/favorite-page-actions-load-page-through-worker-test`
+  - Remaining direct handler scan count:
+    - `178`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved async graph registry upsert local UUID work to the db worker:
+  - Added worker API `:thread-api/ensure-local-graph-uuid`, which creates and persists `:logseq.kv/local-graph-uuid` inside the worker DB when missing.
+  - `frontend.handler.graph/<upsert-current-graph-registry!` now uses worker APIs for local graph UUID creation and graph UUID resolution.
+  - The synchronous `current-graph-id` route/content helper still reads renderer DB state and remains for a routing-focused batch; no cache was introduced.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/graph.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/handler/graph_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/graph-registry-upsert-uses-worker-test -v frontend.handler.graph-test/upsert-current-graph-registry-repairs-missing-local-graph-uuid-test -v frontend.worker.db-core-test/ensure-local-graph-uuid-creates-and-persists-missing-uuid -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - Remaining direct handler scan count:
+    - `175`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved DB import marker transactions to the worker:
+  - `frontend.handler.db-based.import` no longer imports `frontend.db`.
+  - SQLite DB and debug-transit import marker writes now use existing worker `:thread-api/transact` instead of renderer `db/transact!`.
+  - The EDN import target block path continues to use worker `:thread-api/pull`.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/db_based/import.cljs src/test/frontend/handler/db_based/import_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/db-import-markers-use-worker-transact-test -v frontend.handler.db-based.import-test/import-from-sqlite-db-persists-import-marker-through-worker-test`
+  - Remaining direct handler scan count:
+    - `173`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved closed-value command lookup off renderer DB:
+  - `frontend.handler.db-based.property/batch-set-property-closed-value!` now pulls closed values through worker `:thread-api/pull` and selects the matching value from returned maps.
+  - Existing batch property transaction behavior is unchanged; it still passes the matched closed-value `:db/id` with `{:entity-id? true}`.
+  - No renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/db_based/property.cljs src/test/frontend/handler/db_based/property_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/db-property-closed-value-lookup-uses-worker-test -v frontend.handler.db-based.property-test/batch-set-property-closed-value-loads-value-through-worker-test`
+  - Remaining direct handler scan count:
+    - `172`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved DB editor file-save transaction to the worker:
+  - `frontend.handler.db-based.editor/save-file!` now writes file content through worker `:thread-api/transact`.
+  - Post-save behavior for `logseq/config.edn` and `logseq/custom.css` is unchanged.
+  - The larger `wrap-parse-block` parser/ref resolution reads are unchanged and remain for a dedicated parser-focused batch.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/db_based/editor.cljs src/test/frontend/handler/db_based/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/db-editor-save-file-uses-worker-transact-test -v frontend.handler.db-based.editor-test/save-file-transacts-through-worker-test`
+  - Remaining direct handler scan count:
+    - `171`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved DB editor heading batch reads to worker-backed block loading:
+  - `frontend.handler.db-based.editor/batch-set-heading!` now loads the affected blocks through `frontend.db.async/<get-blocks` instead of resolving each block with renderer `db/entity`.
+  - The existing title cleanup and heading-property writes remain on the same outliner transaction path; no renderer cache or new worker API was added.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/db_based/editor.cljs src/test/frontend/handler/db_based/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/db-editor-batch-heading-uses-worker-blocks-test -v frontend.handler.db-based.editor-test/batch-set-heading-loads-blocks-through-worker-test -v frontend.remove-ui-db-test/db-editor-save-file-uses-worker-transact-test -v frontend.handler.db-based.editor-test/save-file-transacts-through-worker-test`
+  - Remaining direct handler scan count:
+    - `170`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved tag-to-page conversion tx construction to the worker:
+  - Added worker API `:thread-api/build-convert-tag-to-page-tx`, which builds the page/tag retracts plus tagged-object title updates from the worker DB.
+  - `frontend.handler.db-based.page/convert-tag-to-page!` now asks the worker to build tx-data and submits it through worker `:thread-api/transact` instead of rehydrating object tags with renderer `db/entity` and calling renderer `db/transact!`.
+  - The duplicate/built-in/child checks and confirmation dialog remain in the handler; no renderer cache was added.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/db_based/page.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/handler/db_based/page_test.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/db-page-convert-tag-to-page-uses-worker-test -v frontend.handler.db-based.page-test/convert-tag-to-page-uses-worker-build-and-transact-test -v frontend.worker.db-core-test/build-convert-tag-to-page-tx-updates-tagged-object-title-refs -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - Remaining direct handler scan count:
+    - `168`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved page-to-tag conversion tx construction to the worker:
+  - Added worker API `:thread-api/build-convert-page-to-tag-tx`, which resolves the page from the worker DB and builds the class conversion tx-data there.
+  - `frontend.handler.db-based.page/convert-page-to-tag!` now invokes the worker tx builder and worker `:thread-api/transact` instead of calling `db-class/build-new-class` with renderer `db/get-db` and renderer `db/transact!`.
+  - Duplicate, namespace, and built-in checks remain in the handler for this batch; no renderer cache was added.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/db_based/page.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/handler/db_based/page_test.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/db-page-convert-page-to-tag-uses-worker-test -v frontend.remove-ui-db-test/db-page-convert-tag-to-page-uses-worker-test -v frontend.handler.db-based.page-test/convert-page-to-tag-uses-worker-build-and-transact-test -v frontend.handler.db-based.page-test/convert-tag-to-page-uses-worker-build-and-transact-test -v frontend.worker.db-core-test/build-convert-page-to-tag-tx-builds-class-from-worker-db -v frontend.worker.db-core-test/build-convert-tag-to-page-tx-updates-tagged-object-title-refs -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - Remaining direct handler scan count:
+    - `166`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved tab graph-id memory to the worker:
+  - `frontend.handler.graph/remember-current-graph-id-in-tab!` now reads the graph UUID through worker `:thread-api/get-graph-uuid` before writing tab storage.
+  - The synchronous `current-graph-id` helper remains for route/page URL generation and is a separate routing-focused follow-up.
+  - No renderer cache was added.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/graph.cljs src/test/frontend/handler/graph_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.handler.graph-test/remember-current-graph-id-in-tab-test`
+    - `rtk bb dev:test -v frontend.handler.graph-test/upsert-current-graph-registry-repairs-missing-local-graph-uuid-test -v frontend.remove-ui-db-test/graph-registry-upsert-uses-worker-test -v frontend.remove-ui-db-test/graph-tab-memory-uses-worker-test`
+  - Remaining direct handler scan count:
+    - `166`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved DB page add-tag validation to the worker:
+  - Added worker API `:thread-api/validate-block-tag`, which validates the target block/tag pair against the worker DB with the existing outliner uniqueness validator.
+  - `frontend.handler.db-based.page/add-tag` now saves the current block, validates through the worker, then writes `:block/tags` through the existing property handler only when validation passes.
+  - User-facing validation notifications are preserved by returning the existing notification payload from the worker; no renderer cache was added.
+  - `frontend.handler.db-based.page` no longer contains direct renderer DB reads or renderer transacts.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/db_based/page.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/handler/db_based/page_test.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/db-page-add-tag-validates-through-worker-test -v frontend.handler.db-based.page-test/add-tag-validates-through-worker-test -v frontend.handler.db-based.page-test/add-tag-shows-worker-validation-notification-test -v frontend.worker.db-core-test/validate-block-tag-runs-unique-tag-validation-in-worker -v frontend.worker.db-core-test/validate-block-tag-returns-notification-payload -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - Remaining direct handler scan count:
+    - `164`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved route sidebar journal lookup to the worker:
+  - `frontend.handler.route/sidebar-journals!` now loads today's journal page id through worker `:thread-api/pull`.
+  - The sidebar write still uses the existing `state/sidebar-add-block!` path after the worker returns a page id.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/route-sidebar-journals-uses-worker-test -v frontend.handler.route-test/sidebar-journals-loads-today-through-worker-test`
+    - The source guard failed on the old `db/get-today-journal-page` lookup; the async behavior test also exposed that the old synchronous implementation did not return a promise.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/route.cljs src/test/frontend/handler/route_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/route-sidebar-journals-uses-worker-test -v frontend.handler.route-test/sidebar-journals-loads-today-through-worker-test`
+  - Remaining direct handler scan count:
+    - `163`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved page today-journal lookups to the worker:
+  - Added shared `frontend.handler.page/<today-journal-page`, which pulls today's journal by `:block/journal-day` through worker `:thread-api/pull`.
+  - `create-today-journal!` now checks for an existing today page through the worker before creating one.
+  - `open-today-in-sidebar` now loads today's page id through the worker before adding it to the sidebar.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/page-today-journal-actions-use-worker-test -v frontend.handler.page-test/today-journal-actions-load-page-through-worker-test`
+    - The source guard failed on both old `db/get-today-journal-page` calls, and the behavior test failed when the old renderer DB lookup was invoked.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/page.cljs src/test/frontend/handler/page_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/page-today-journal-actions-use-worker-test -v frontend.handler.page-test/today-journal-actions-load-page-through-worker-test`
+  - Remaining direct handler scan count:
+    - `161`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved block edit target loading to the worker:
+  - `frontend.handler.block/edit-block!` now loads the fresh target block through `frontend.db.async/<get-block` before checking recycle state or opening the editor.
+  - The existing edit state setup is otherwise unchanged; this batch removes the stale renderer `db/entity [:block/uuid ...]` rehydrate only.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/block-handler-edit-block-loads-through-worker-test -v frontend.handler.block-test/edit-block-loads-target-through-worker-test`
+    - The source guard failed on the old `db/entity [:block/uuid block-id]` rehydrate. The behavior test also showed the old synchronous renderer lookup could leave the async test unresolved when it threw before returning a promise.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/block.cljs src/test/frontend/handler/block_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/block-handler-edit-block-loads-through-worker-test -v frontend.handler.block-test/edit-block-loads-target-through-worker-test`
+  - Remaining direct handler scan count:
+    - `160`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved favorite mutation helpers to worker-built outliner ops:
+  - Added worker APIs `:thread-api/build-favorite-page-ops` and `:thread-api/build-unfavorite-page-ops`.
+  - `frontend.handler.common.page/<db-favorite-page!` and `<db-unfavorite-page!` now ask the worker to resolve the favorites page/favorite block and then apply the returned ops through existing worker `:thread-api/apply-outliner-ops`.
+  - The synchronous read helpers `db-favorited?` and `get-favorites` remain for the later component/render phase; this batch only moved mutation helpers.
+  - No renderer cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/common-page-favorite-mutations-use-worker-test -v frontend.handler.common.page-test/favorite-mutations-use-worker-outliner-ops-test -v frontend.worker.db-core-test/build-favorite-page-ops-builds-insert-op-from-worker-db -v frontend.worker.db-core-test/build-unfavorite-page-ops-builds-delete-op-from-worker-db -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+    - The source guard failed on the old renderer DB favorite mutation helpers, handler behavior failed on `conn/get-db`, and worker registration/tests failed because the worker APIs did not exist yet.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/common/page.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/handler/common/page_test.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/common-page-favorite-mutations-use-worker-test -v frontend.handler.common.page-test/favorite-mutations-use-worker-outliner-ops-test -v frontend.worker.db-core-test/build-favorite-page-ops-builds-insert-op-from-worker-db -v frontend.worker.db-core-test/build-unfavorite-page-ops-builds-delete-op-from-worker-db -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - Remaining direct handler scan count:
+    - `158`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved favorite reorder mutation to worker-built outliner ops:
+  - Added worker API `:thread-api/build-reorder-favorites-ops`, which resolves the favorites page, current favorite blocks, and requested page ids from the worker DB.
+  - `frontend.handler.page/<reorder-favorites!` now asks the worker to build `:save-block` ops and applies them through existing worker `:thread-api/apply-outliner-ops`.
+  - The existing favorites updated signal is preserved after the worker apply step.
+  - No renderer cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/page-reorder-favorites-use-worker-test -v frontend.handler.page-test/reorder-favorites-uses-worker-outliner-ops-test -v frontend.worker.db-core-test/build-reorder-favorites-ops-builds-save-ops-from-worker-db -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+    - The source guard failed on old `conn/get-db` and `db/get-page` reads, and worker registration failed because the reorder op builder did not exist yet.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/page.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/handler/page_test.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/page-reorder-favorites-use-worker-test -v frontend.handler.page-test/reorder-favorites-uses-worker-outliner-ops-test -v frontend.worker.db-core-test/build-reorder-favorites-ops-builds-save-ops-from-worker-db -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - Remaining direct handler scan count:
+    - `154`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved after-delete favorite cleanup page lookup to the worker:
+  - `frontend.handler.common.page/after-page-deleted!` now resolves the deleted page UUID through worker `:thread-api/pull`.
+  - It still reuses the worker-backed `<db-unfavorite-page!` helper for the actual favorite cleanup.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/common-page-after-delete-uses-worker-test -v frontend.handler.common.page-test/after-page-deleted-uses-worker-page-lookup-test`
+    - The source guard failed on the old `db/get-page` lookup and the behavior test failed when the renderer DB lookup was invoked.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/common/page.cljs src/test/frontend/handler/common/page_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/common-page-after-delete-uses-worker-test -v frontend.handler.common.page-test/after-page-deleted-uses-worker-page-lookup-test`
+  - Remaining direct handler scan count:
+    - `153`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved page delete lookup and mutation to the worker:
+  - `frontend.handler.common.page/<delete!` now resolves the page UUID/title through worker `:thread-api/pull`.
+  - The delete mutation now applies `[:delete-page ...]` through worker `:thread-api/apply-outliner-ops` instead of `ui-outliner-tx/transact!`.
+  - Default-home cleanup and signed-in user delete metadata are preserved.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/common-page-delete-uses-worker-test -v frontend.handler.common.page-test/delete-page-uses-worker-page-lookup-and-delete-op-test`
+    - The source guard failed on old `db/get-page`, `db/entity`, and `ui-outliner-tx/transact!` usage. The behavior test showed the old path reading the renderer page/entity and applying through the renderer outliner transaction wrapper.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/common/page.cljs src/test/frontend/handler/common/page_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/common-page-delete-uses-worker-test -v frontend.handler.common.page-test/delete-page-uses-worker-page-lookup-and-delete-op-test`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/common-page-delete-uses-worker-test -v frontend.remove-ui-db-test/common-page-after-delete-uses-worker-test -v frontend.remove-ui-db-test/common-page-favorite-mutations-use-worker-test -v frontend.handler.common.page-test/delete-page-uses-worker-page-lookup-and-delete-op-test -v frontend.handler.common.page-test/after-page-deleted-uses-worker-page-lookup-test -v frontend.handler.common.page-test/favorite-mutations-use-worker-outliner-ops-test`
+  - Remaining direct handler scan count:
+    - `151`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved renamed-page redirect lookup to the worker:
+  - `frontend.handler.common.page/after-page-renamed!` now pulls the renamed page UUID through worker `:thread-api/pull` when redirecting the current page.
+  - Default-home rename handling and root rerender behavior are unchanged.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/common-page-after-rename-uses-worker-test -v frontend.handler.common.page-test/after-page-renamed-uses-worker-page-lookup-test`
+    - The source guard failed on old `db/entity` usage. The behavior test showed the old path reading `[:renderer-entity "test" 42]` instead of worker pull.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/common/page.cljs src/test/frontend/handler/common/page_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/common-page-after-rename-uses-worker-test -v frontend.handler.common.page-test/after-page-renamed-uses-worker-page-lookup-test`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/common-page-delete-uses-worker-test -v frontend.remove-ui-db-test/common-page-after-delete-uses-worker-test -v frontend.remove-ui-db-test/common-page-after-rename-uses-worker-test -v frontend.remove-ui-db-test/common-page-favorite-mutations-use-worker-test -v frontend.handler.common.page-test/delete-page-uses-worker-page-lookup-and-delete-op-test -v frontend.handler.common.page-test/after-page-deleted-uses-worker-page-lookup-test -v frontend.handler.common.page-test/after-page-renamed-uses-worker-page-lookup-test -v frontend.handler.common.page-test/favorite-mutations-use-worker-outliner-ops-test`
+  - Remaining direct handler scan count:
+    - `150`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved route redirect page metadata lookup to the worker:
+  - Added worker API `:thread-api/get-page-route-info`, which resolves page route metadata, alias source, and internal/private-page flags from the worker DB.
+  - `frontend.handler.route/redirect-to-page!` now uses worker route info instead of `db/get-page` and `db/get-alias-source-page`.
+  - Alias redirects now use the worker-returned alias source id/UUID directly, preserving recent-page tracking without a second renderer lookup.
+  - No renderer cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/route-redirect-to-page-uses-worker-test -v frontend.handler.route-test/redirect-to-page-includes-current-graph-id -v frontend.handler.route-test/redirect-to-page-preserves-query-params-test -v frontend.handler.route-test/redirect-to-page-tolerates-missing-current-graph-id -v frontend.handler.route-test/redirect-to-page-uses-worker-alias-source-test -v frontend.worker.db-core-test/get-page-route-info-resolves-page-flags-and-alias-source -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+    - The source guard failed on old `db/get-page` and `db/get-alias-source-page` usage. Route behavior tests recorded renderer lookups, and worker registration failed because the route-info API did not exist yet.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/route.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/handler/route_test.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs`
+    - `rtk bb dev:test -v frontend.handler.route-test`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/route-redirect-to-page-uses-worker-test -v frontend.worker.db-core-test/get-page-route-info-resolves-page-flags-and-alias-source -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+  - Remaining direct handler scan count:
+    - `149`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed graph current-id renderer DB read:
+  - `frontend.handler.graph/current-graph-id` now reads the existing tab graph memory populated by `remember-current-graph-id-in-tab!`.
+  - The tab graph id is still worker-derived; this change removes the synchronous `db/get-db` plus graph UUID lookup from `current-graph-id`.
+  - The helper is repo-scoped so stale tab graph memory from another repo is ignored.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/graph-current-graph-id-uses-tab-memory-test -v frontend.handler.graph-test/current-graph-id-uses-tab-memory-test`
+    - The source guard failed on old `db/get-db` usage and the behavior test threw when the old path tried to read the renderer DB.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/graph.cljs src/test/frontend/handler/graph_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/graph-current-graph-id-uses-tab-memory-test -v frontend.handler.graph-test/current-graph-id-uses-tab-memory-test`
+    - `rtk bb dev:test -v frontend.handler.graph-test`
+  - Remaining direct handler scan count:
+    - `148`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed edit-block editor config renderer DB handle:
+  - `frontend.handler.block/edit-block!` already loads the target block through worker-backed `frontend.db.async/<get-block`.
+  - `frontend.handler.block/edit-block-aux` no longer stores `{:db (db/get-db)}` in the editor config passed to `state/set-editing!`.
+  - Existing editor container, direction, event, and cursor position config are unchanged.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/block-handler-edit-block-editor-config-avoids-renderer-db-test -v frontend.handler.block-test/edit-block-loads-target-through-worker-test`
+    - The source guard failed on old `db/get-db` usage and the behavior test threw when the old path tried to fetch the renderer DB for editor config.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/block.cljs src/test/frontend/handler/block_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/block-handler-edit-block-editor-config-avoids-renderer-db-test -v frontend.handler.block-test/edit-block-loads-target-through-worker-test`
+    - `rtk bb dev:test -v frontend.handler.block-test`
+  - Remaining direct handler scan count:
+    - `147`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed add-time recent page renderer entity lookup:
+  - `frontend.handler.db-based.recent/add-page-to-recent!` now updates the recent page id list from UI state only.
+  - Page existence, alias, hidden/private-page, and route metadata validation now belongs to the worker-backed route path before recent ids are added.
+  - `get-recent-pages` still filters stored recent ids for display through the renderer DB and remains for the later component/display phase.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/db-recent-add-page-uses-state-only-test -v frontend.handler.db-based.recent-test/add-page-to-recent-updates-state-without-renderer-entity-test`
+    - The source guard failed on old `db/entity` usage and the behavior test threw when the old add path tried to resolve the page through the renderer DB.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/db_based/recent.cljs src/test/frontend/handler/db_based/recent_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/db-recent-add-page-uses-state-only-test -v frontend.handler.db-based.recent-test/add-page-to-recent-updates-state-without-renderer-entity-test`
+    - `rtk bb dev:test -v frontend.handler.db-based.recent-test`
+  - Remaining direct handler scan count:
+    - `146`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed parseable paste page-name renderer entity lookup:
+  - `frontend.handler.paste/paste-text-parseable` now reads the editing page name from the page map already present on the edit block.
+  - The remaining paste handler DB read is the existing graph-parser ref-id resolution input and was left for a separate worker-backed migration.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.handler.paste-test/paste-text-parseable-preserves-og-copied-heading-page-refs -v frontend.handler.paste-test/paste-text-parseable-does-not-create-empty-page-ref`
+    - Both tests errored on old `db/entity` usage after the tests were changed to provide `[:block/page :block/name]` and reject renderer entity lookup.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/paste.cljs src/test/frontend/handler/paste_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/paste-handler-parseable-page-name-uses-state-block-test -v frontend.handler.paste-test/paste-text-parseable-preserves-og-copied-heading-page-refs -v frontend.handler.paste-test/paste-text-parseable-does-not-create-empty-page-ref`
+    - `rtk bb dev:test -v frontend.handler.paste-test`
+  - Remaining direct handler scan count:
+    - `145`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed top-level block original renderer rehydration:
+  - `frontend.handler.block/get-top-level-blocks` now uses the original block already returned by original-block lookup.
+  - This removes a redundant `db/entity` call from the indent/outdent block selection path.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/block-handler-top-level-original-uses-original-block-test -v frontend.handler.block-test/get-top-level-blocks-uses-original-block-without-renderer-rehydration-test`
+    - The behavior test threw on old `db/entity` usage and the source guard caught the redundant original-block rehydration expression.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/block.cljs src/test/frontend/handler/block_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/block-handler-top-level-original-uses-original-block-test -v frontend.handler.block-test/get-top-level-blocks-uses-original-block-without-renderer-rehydration-test`
+    - `rtk bb dev:test -v frontend.handler.block-test`
+  - Remaining direct handler scan count:
+    - `144`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed current-block rehydration from DB editor parse wrapper:
+  - `frontend.handler.db-based.editor/wrap-parse-block` now trusts the passed block map for current-block display type and cached refs.
+  - `use-cached-refs!` now merges refs already present on the passed block instead of reading them back with `db/entity`.
+  - Existing ref existence checks and markdown hashtag tag-page lookup are unchanged and remain for later worker migration.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/db-editor-wrap-parse-block-uses-passed-current-block-test -v frontend.handler.db-based.editor-test/wrap-parse-block-uses-passed-block-without-current-block-rehydration-test`
+    - The source guard failed on the current-block `db/entity` expressions and the behavior test threw when the old path rehydrated the current block.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/db_based/editor.cljs src/test/frontend/handler/db_based/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/db-editor-wrap-parse-block-uses-passed-current-block-test -v frontend.handler.db-based.editor-test/wrap-parse-block-uses-passed-block-without-current-block-rehydration-test`
+    - `rtk bb dev:test -v frontend.handler.db-based.editor-test`
+  - Note: An overlapping CLJS test compile corrupted `static/tests.js`; serial reruns rebuilt the artifact and passed.
+  - Remaining direct handler scan count:
+    - `141`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed own-order list renderer rehydration:
+  - `frontend.handler.editor/own-order-number-list?` now reads the order-list property from the passed block map.
+  - The passed property value is the normal ref-valued built-in property shape, so `frontend.handler.property.util/lookup` still normalizes it to `"number"`.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-own-order-list-uses-passed-block-test -v frontend.handler.editor-test/own-order-number-list-uses-passed-block-test`
+    - The source guard failed on old `db/entity` usage and the behavior test threw while trying to rehydrate the passed block.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-own-order-list-uses-passed-block-test -v frontend.handler.editor-test/own-order-number-list-uses-passed-block-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+  - Remaining direct handler scan count:
+    - `140`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed editor state block renderer rehydration:
+  - `frontend.handler.editor/get-state` now returns the block already stored in editor args.
+  - This keeps editor state reconstruction synchronous while avoiding a renderer `db/entity` call.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-get-state-uses-editor-args-block-test -v frontend.handler.editor-test/get-state-uses-editor-args-block-without-renderer-rehydration-test`
+    - The source guard failed on old `db/entity` usage and the behavior test threw while trying to rehydrate the editor args block.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-get-state-uses-editor-args-block-test -v frontend.handler.editor-test/get-state-uses-editor-args-block-without-renderer-rehydration-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+  - Remaining direct handler scan count:
+    - `139`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed save-block changed-check renderer rehydration:
+  - `frontend.handler.editor/save-block-if-changed!` now compares the new content against `:block/title` from the passed block map.
+  - Forced saves and trimmed unchanged-content skips are preserved.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-save-block-if-changed-uses-passed-block-test -v frontend.handler.editor-test/save-block-if-changed-uses-passed-block-content-test`
+    - The source guard failed on old `db/entity` usage and the behavior test threw before changed-content handling could proceed.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-save-block-if-changed-uses-passed-block-test -v frontend.handler.editor-test/save-block-if-changed-uses-passed-block-content-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+  - Remaining direct handler scan count:
+    - `138`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved sidebar open target lookup to worker:
+  - `frontend.handler.editor/open-block-in-sidebar!` now resolves page/block targets through worker `:thread-api/pull`.
+  - The worker pull requests `[:db/id {:block/page [:db/id]}]` and classifies targets as `:page` when `:block/page` is absent, otherwise `:block`.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-open-block-in-sidebar-uses-worker-test -v frontend.handler.editor-test/open-block-in-sidebar-loads-target-through-worker-test`
+    - The source guard failed on old `db/entity` usage and the behavior test threw while trying to resolve the target through the renderer DB.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-open-block-in-sidebar-uses-worker-test -v frontend.handler.editor-test/open-block-in-sidebar-loads-target-through-worker-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+  - Remaining direct handler scan count:
+    - `137`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed cycle-todo edit-block renderer rehydration:
+  - `frontend.handler.editor/cycle-todo!` now passes the edit block already held in editor state to `db-based-cycle-todo!`.
+  - Removed the unused input and cursor locals from that branch.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-cycle-todo-uses-edit-block-test -v frontend.handler.editor-test/cycle-todo-uses-current-edit-block-test`
+    - The source guard failed on old `db/entity` usage and the behavior test threw while rehydrating the edit block through the renderer DB.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-cycle-todo-uses-edit-block-test -v frontend.handler.editor-test/cycle-todo-uses-current-edit-block-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+  - Remaining direct handler scan count:
+    - `136`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed cycle-todo Task class renderer lookup:
+  - `frontend.handler.editor/db-based-cycle-todo!` now derives the current todo status from the passed block map.
+  - The transition behavior is unchanged: `todo -> doing -> done -> nil`, and missing status still cycles to `todo`.
+  - The existing status id lookup is preserved for the property write.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-db-based-cycle-todo-uses-block-status-test -v frontend.handler.editor-test/db-based-cycle-todo-uses-block-status-test`
+    - The source guard failed on old `db/entity :logseq.class/Task` usage and the behavior test threw when the helper looked up the Task class through the renderer DB.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-db-based-cycle-todo-uses-block-status-test -v frontend.handler.editor-test/db-based-cycle-todo-uses-block-status-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+  - Remaining direct handler scan count:
+    - `135`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved route title and body-label lookup to worker:
+  - `frontend.handler.route/update-page-title!` and `update-page-label!` now resolve `:page` route title data through worker `:thread-api/get-route-title`.
+  - The worker returns raw `:page-title` or `:block-title`; UI-side formatting still handles built-in page translations, UUID page titles, HLS filenames, block heading cleanup, and long block-title truncation.
+  - `frontend.handler.route` no longer directly calls renderer `db/get-page` or `db/entity`.
+  - No renderer cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/route-title-and-label-use-worker-test -v frontend.handler.route-test/route-title-and-label-use-worker-test -v frontend.worker.db-core-test/route-title-returns-page-and-block-data`
+    - The source guard failed on old `db/get-page`/`db/entity` usage, the route behavior test hit the renderer page lookup, and the worker test reported the missing `:thread-api/get-route-title` API.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/route.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/handler/route_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/route-title-and-label-use-worker-test -v frontend.handler.route-test/route-title-and-label-use-worker-test -v frontend.worker.db-core-test/route-title-returns-page-and-block-data`
+    - `rtk bb dev:test -v frontend.handler.route-test`
+    - `rtk bb dev:test -v frontend.worker.db-core-test/route-title-returns-page-and-block-data -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test`
+  - Remaining direct handler scan count:
+    - `133`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved page autocomplete chosen-result loading to worker:
+  - `frontend.handler.page/page-on-chosen-handler` now uses a worker-backed `db-async/<get-block` result for UUID search results instead of rehydrating through renderer `db/entity`.
+  - NLP date page resolution now uses worker `:thread-api/pull` instead of renderer `db/get-page`.
+  - Existing search result maps with `:db/id` are treated as existing results, so worker-loaded maps do not get recreated as new pages.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/page-autocomplete-chosen-result-uses-worker-test -v frontend.handler.page-test/page-on-chosen-loads-uuid-result-through-worker-test`
+    - The source guard failed on old `db/entity` / `db/get-page` usage and the behavior test failed on the renderer `db/entity` rehydrate.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/page.cljs src/test/frontend/handler/page_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/page-autocomplete-chosen-result-uses-worker-test -v frontend.handler.page-test/page-on-chosen-loads-uuid-result-through-worker-test`
+    - `rtk bb dev:test -v frontend.handler.page-test`
+  - Remaining direct handler scan count:
+    - `131`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved tag autocomplete chosen-result loading to worker:
+  - `frontend.handler.page/tag-on-chosen-handler` now loads UUID chosen results through the shared worker-backed `<chosen-result` helper instead of rehydrating through renderer `db/entity`.
+  - Page-to-tag conversion now uses the worker-loaded chosen-result map directly.
+  - `frontend.handler.db-based.page/tag-on-chosen-handler` treats `:db/id` maps as existing pages, so worker-loaded tag maps are not recreated.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/page-autocomplete-chosen-result-uses-worker-test -v frontend.handler.page-test/tag-on-chosen-loads-uuid-result-through-worker-test`
+    - The behavior test failed on the old renderer `db/entity` rehydrate.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/page.cljs src/main/frontend/handler/db_based/page.cljs src/test/frontend/handler/page_test.cljs src/test/frontend/handler/db_based/page_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/page-autocomplete-chosen-result-uses-worker-test -v frontend.handler.page-test/chosen-result-loads-uuid-result-through-worker-test -v frontend.handler.db-based.page-test/tag-on-chosen-treats-worker-map-as-existing-page-test`
+    - `rtk bb dev:test -v frontend.handler.page-test`
+    - `rtk bb dev:test -v frontend.handler.db-based.page-test`
+  - Remaining direct handler scan count:
+    - `129`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed renderer DB read from property util block value lookup:
+  - `frontend.handler.property.util/get-block-property-value` now reads built-in values from the passed block map through `db-property/lookup`.
+  - Removed the renderer `frontend.db.conn` dependency from `frontend.handler.property.util`.
+  - No renderer cache or new worker API was added; callers already pass the block data.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/property-util-block-property-value-uses-block-map-test -v frontend.handler.property.util-test/get-block-property-value-uses-passed-block-map-test`
+    - The source guard failed on `frontend.db.conn` / `conn/get-db`, and the behavior test failed when `conn/get-db` was stubbed to throw.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/property/util.cljs src/test/frontend/handler/property/util_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/property-util-block-property-value-uses-block-map-test -v frontend.handler.property.util-test/get-block-property-value-uses-passed-block-map-test`
+    - `rtk bb dev:test -v frontend.handler.property.util-test`
+  - Remaining direct handler scan count:
+    - `128`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed renderer DB read from db property util closed values:
+  - `frontend.handler.db-based.property.util/get-closed-property-values` now maps built-in closed-value metadata to the simple block shape consumed by slash-command status and priority commands.
+  - Removed the renderer `frontend.db.conn` and `frontend.state` dependencies from `frontend.handler.db-based.property.util`.
+  - No renderer cache or new worker API was added; the status and priority values are built-in metadata.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/db-property-util-closed-values-use-built-in-metadata-test -v frontend.handler.db-based.property.util-test/get-closed-property-values-uses-built-in-metadata-test`
+    - The source guard failed on `frontend.db.conn` / `conn/get-db`, and the behavior test failed when `conn/get-db` was stubbed to throw.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/property/util.cljs src/main/frontend/handler/db_based/property/util.cljs src/test/frontend/handler/property/util_test.cljs src/test/frontend/handler/db_based/property/util_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/db-property-util-closed-values-use-built-in-metadata-test -v frontend.handler.db-based.property.util-test/get-closed-property-values-uses-built-in-metadata-test`
+    - `rtk bb dev:test -v frontend.handler.db-based.property.util-test`
+  - Remaining direct handler scan count:
+    - `127`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved parseable paste page-ref resolution to worker:
+  - `frontend.handler.paste/paste-text-parseable` now resolves missing page-ref UUIDs through worker `:thread-api/pull` instead of reading the renderer DB.
+  - Existing parsed refs that already include `:block/uuid` are preserved without a worker lookup.
+  - Missing pages still fall back to the graph-parser page map, preserving deterministic date-page UUID behavior.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/paste-handler-parseable-page-name-uses-state-block-test -v frontend.handler.paste-test/paste-text-parseable-resolves-page-refs-through-worker-test -v frontend.handler.paste-test/paste-text-parseable-does-not-create-empty-page-ref -v frontend.handler.paste-test/paste-text-parseable-preserves-og-copied-heading-page-refs`
+    - The source guard failed on the old `db/get-db` read, and the behavior tests failed with `renderer DB should not be used`.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/paste.cljs src/test/frontend/handler/paste_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/paste-handler-parseable-page-name-uses-state-block-test -v frontend.handler.paste-test/paste-text-parseable-resolves-page-refs-through-worker-test -v frontend.handler.paste-test/paste-text-parseable-does-not-create-empty-page-ref -v frontend.handler.paste-test/paste-text-parseable-preserves-og-copied-heading-page-refs`
+    - `rtk bb dev:test -v frontend.handler.paste-test`
+  - Remaining direct handler scan count:
+    - `126`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved edit-page-when-present polling to worker:
+  - `frontend.handler.common.page/edit-page-when-present!` now polls page existence through worker `:thread-api/pull` instead of renderer `db/get-page`.
+  - Passed page maps still go directly to `edit-page!` without a worker lookup.
+  - Reused the existing page lookup-ref helper; no renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/common-page-edit-when-present-uses-worker-test -v frontend.handler.common.page-test/edit-page-when-present-uses-worker-page-lookup-test`
+    - The source guard failed on the old `db/get-page` read, and the behavior test failed with `renderer DB page lookup should not be used`.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/common/page.cljs src/test/frontend/handler/common/page_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/common-page-edit-when-present-uses-worker-test -v frontend.handler.common.page-test/edit-page-when-present-uses-worker-page-lookup-test`
+    - `rtk bb dev:test -v frontend.handler.common.page-test`
+  - Remaining direct handler scan count:
+    - `125`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved follow-link page existence check to worker:
+  - `frontend.handler.editor/<follow-page-link!` now uses the worker-backed `db-async/<get-block` loader for non-UUID page links instead of checking renderer `db/get-page`.
+  - UUID links still redirect directly, and missing page links still publish `[:page/create page]`.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-follow-page-link-uses-worker-test -v frontend.handler.editor-test/follow-link-under-cursor-uses-worker-without-renderer-page-lookup-test`
+    - The source guard failed on the old `db/get-page` read, and the behavior test failed with `renderer page lookup should not be used`.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-follow-page-link-uses-worker-test -v frontend.handler.editor-test/follow-link-under-cursor-uses-worker-without-renderer-page-lookup-test -v frontend.handler.editor-test/follow-link-under-cursor-opens-existing-page-test -v frontend.handler.editor-test/follow-link-under-cursor-creates-missing-page-test -v frontend.handler.editor-test/follow-link-under-cursor-uses-worker-page-before-creating-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+  - Remaining direct handler scan count:
+    - `124`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved common page create lookups to worker:
+  - `frontend.handler.common.page/<create!` now resolves existing pages and the created/restored page through worker `:thread-api/pull` instead of renderer `db/get-page`.
+  - Existing non-recycled pages still redirect and optionally edit using the worker-returned page map.
+  - Recycled-page restore still uses the existing create-page outliner transaction path, then reloads the restored page from the worker.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/common-page-create-existing-page-uses-worker-test -v frontend.handler.common.page-test/create-existing-page-uses-worker-page-lookup-test`
+    - The source guard failed on the old `db/get-page` reads, and the behavior test failed with `renderer DB page lookup should not be used`.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/common-page-create-existing-page-uses-worker-test -v frontend.handler.common.page-test/create-existing-page-uses-worker-page-lookup-test`
+    - `rtk bb dev:test -v frontend.handler.common.page-test`
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/common/page.cljs src/test/frontend/handler/common/page_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/common-page-create-existing-page-uses-worker-test`
+  - Remaining direct handler scan count:
+    - `112`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved paste embed parent check to worker:
+  - `frontend.handler.paste/paste-copied-blocks-or-text` now checks copied embed ancestors through `db-async/<get-block-parents` instead of renderer `db/get-block-parents`.
+  - The current edit block is loaded through the worker only when the state block lacks `:db/id`.
+  - Removed the `frontend.db` dependency from `frontend.handler.paste`.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/paste-handler-embed-parent-check-uses-worker-test -v frontend.handler.paste-test/editor-on-paste-embed-block-uses-worker-loaded-link`
+    - The source guard failed on the old `db/get-block-parents` read, and the behavior test failed with `renderer block parents should not be used`.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/paste.cljs src/test/frontend/handler/paste_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/paste-handler-embed-parent-check-uses-worker-test -v frontend.handler.paste-test/editor-on-paste-embed-block-uses-worker-loaded-link`
+    - `rtk bb dev:test -v frontend.handler.paste-test`
+  - Remaining direct handler scan count:
+    - `111`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed renderer DB reads from db-based editor parse refs:
+  - `frontend.handler.db-based.editor/wrap-parse-block` now preserves parser-produced lookup refs without validating them through renderer `db/entity`.
+  - Markdown hashtag link refs now resolve only from refs already carried by the edited block or existing `:editor/block-refs` state populated by editor autocomplete.
+  - Removed the `frontend.db` dependency from `frontend.handler.db-based.editor`.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/db-editor-wrap-parse-block-uses-cached-refs-test -v frontend.handler.db-based.editor-test/wrap-parse-block-markdown-hashtag-link-test -v frontend.handler.db-based.editor-test/wrap-parse-block-preserves-multiple-block-refs-test -v frontend.handler.db-based.editor-test/wrap-parse-block-preserves-cached-map-refs-without-renderer-db-test`
+    - The source guard failed on `db/entity` and `db/get-page`, and behavior tests failed with `renderer page lookup should not be used` / `renderer entity lookup should not be used`.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/db_based/editor.cljs src/test/frontend/handler/db_based/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/db-editor-wrap-parse-block-uses-cached-refs-test -v frontend.handler.db-based.editor-test/wrap-parse-block-markdown-hashtag-link-test -v frontend.handler.db-based.editor-test/wrap-parse-block-preserves-multiple-block-refs-test -v frontend.handler.db-based.editor-test/wrap-parse-block-preserves-cached-map-refs-without-renderer-db-test`
+    - `rtk bb dev:test -v frontend.handler.db-based.editor-test`
+  - Remaining direct handler scan count:
+    - `108`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed renderer DB read from todo status cycling:
+  - `frontend.handler.editor/db-based-cycle-todo!` now passes the next built-in status ident directly to `property-handler/set-block-property!` instead of resolving the status through renderer `db/entity`.
+  - The outliner/property layer already resolves qualified-keyword ref values in the worker-backed transaction path.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-db-based-cycle-todo-uses-block-status-test -v frontend.handler.editor-test/db-based-cycle-todo-uses-block-status-test`
+    - The source guard failed on `db/entity`, and the behavior test failed with `renderer entity lookup should not be used`.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-db-based-cycle-todo-uses-block-status-test -v frontend.handler.editor-test/db-based-cycle-todo-uses-block-status-test -v frontend.handler.editor-test/cycle-todo-uses-current-edit-block-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+  - Remaining direct handler scan count:
+    - `107`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved open-link-in-sidebar target lookup to worker:
+  - `frontend.handler.editor/open-link-in-sidebar!` now resolves nearest page/block links through worker `:thread-api/pull` instead of renderer `db/get-page`.
+  - Page-name links use `[:block/name ...]`; UUID links use `[:block/uuid ...]`, preserving the existing sidebar item type selection.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-open-link-in-sidebar-uses-worker-test -v frontend.handler.editor-test/open-link-in-sidebar-loads-target-through-worker-test`
+    - The source guard failed on `db/get-page`, and the behavior test failed with `renderer page lookup should not be used`.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-open-link-in-sidebar-uses-worker-test -v frontend.handler.editor-test/open-link-in-sidebar-loads-target-through-worker-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+  - Remaining direct handler scan count:
+    - `106`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved selected-block todo cycling to worker-loaded blocks:
+  - `frontend.handler.editor/cycle-todos!` now loads selected blocks through `db-async/<get-blocks` before applying todo status changes.
+  - Removed the selected-block branch's renderer `db/entity` lookup; `db-based-cycle-todo!` continues to operate on passed block maps.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-cycle-todos-loads-selected-blocks-through-worker-test -v frontend.handler.editor-test/cycle-todo-loads-selected-blocks-through-worker-test`
+    - The source guard failed on `db/entity`, and the behavior test failed with `renderer entity lookup should not be used`.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-cycle-todos-loads-selected-blocks-through-worker-test -v frontend.handler.editor-test/cycle-todo-loads-selected-blocks-through-worker-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+  - Remaining direct handler scan count:
+    - `105`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Removed renderer DB read from zoom-in:
+  - `frontend.handler.editor/zoom-in!` now uses the current edit block UUID already held in state instead of resolving the same UUID through renderer `db/entity`.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-zoom-in-uses-current-edit-block-test -v frontend.handler.editor-test/zoom-in-uses-current-edit-block-without-renderer-lookup-test`
+    - The source guard failed on `db/entity`, and the behavior test failed with `renderer entity lookup should not be used`.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-zoom-in-uses-current-edit-block-test -v frontend.handler.editor-test/zoom-in-uses-current-edit-block-without-renderer-lookup-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+  - Remaining direct handler scan count:
+    - `104`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-07: Moved zoom-out parent/page lookup to worker:
+  - `frontend.handler.editor/zoom-out!` now loads the current block through `db-async/<get-block`, resolves its direct parent through `db-async/<get-block-parents`, and loads the page through the worker block loader when redirecting to the page.
+  - Removed `db/get-block-parent` and renderer `db/entity` reads from the zoom-out path.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-zoom-out-loads-parent-through-worker-test -v frontend.handler.editor-test/zoom-out-loads-parent-through-worker-test`
+    - The source guard failed on `db/get-block-parent` and `db/entity`, and the behavior test failed with `renderer block parent lookup should not be used`.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-zoom-out-loads-parent-through-worker-test -v frontend.handler.editor-test/zoom-out-loads-parent-through-worker-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+  - Remaining direct handler scan count:
+    - `101`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Removed renderer rehydration after block insertion:
+  - `frontend.handler.editor/edit-last-block-after-inserted!` now edits the block returned by the worker-backed insert result instead of resolving it again through renderer `db/entity`.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-post-insert-edit-uses-returned-block-test -v frontend.handler.editor-test/edit-last-block-after-inserted-uses-returned-block-test`
+    - The source guard failed on `db/entity`, and the behavior test failed with `renderer entity lookup should not be used`.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-post-insert-edit-uses-returned-block-test -v frontend.handler.editor-test/edit-last-block-after-inserted-uses-returned-block-test`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-post-insert-edit-uses-returned-block-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+  - Remaining direct handler scan count:
+    - `100`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Removed renderer rehydration from block delete helper:
+  - `frontend.handler.editor/delete-block-aux!` now deletes using the block map passed by the caller instead of resolving it again through renderer `db/entity`.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-delete-block-aux-uses-passed-block-test -v frontend.handler.editor-test/delete-block-aux-uses-passed-block-test`
+    - The source guard failed on `db/entity`, and the behavior test failed with `renderer entity lookup should not be used`.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-delete-block-aux-uses-passed-block-test -v frontend.handler.editor-test/delete-block-aux-uses-passed-block-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+  - Remaining direct handler scan count:
+    - `99`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Moved selected-block move lookup to worker:
+  - `frontend.handler.editor/move-selected-blocks` now loads selected block UUIDs through `db-async/<get-blocks` before computing top-level blocks and opening the move target search.
+  - Removed the selected-block move path's renderer `db/entity` reads.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-move-selected-blocks-loads-through-worker-test -v frontend.handler.editor-test/move-selected-blocks-loads-selection-through-worker-test`
+    - The source guard failed on `db/entity`, and the behavior test failed with `renderer entity lookup should not be used`.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/editor-move-selected-blocks-loads-through-worker-test -v frontend.handler.editor-test/move-selected-blocks-loads-selection-through-worker-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+  - Remaining direct handler scan count:
+    - `98`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Removed renderer rehydration from move-to-prev edit callback:
+  - `frontend.handler.editor/move-to-prev-block` now edits using the sibling entity it already loaded for the merge operation instead of resolving the same `:db/id` through renderer `db/entity`.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.handler.editor-test/move-to-prev-block-edit-fn-uses-loaded-sibling-entity-test -v frontend.remove-ui-db-test/editor-move-to-prev-block-uses-loaded-sibling-entity-test`
+    - The source guard failed on `db/entity`, and the behavior test failed with `sibling entity should not be rehydrated through renderer DB`.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.handler.editor-test/move-to-prev-block-edit-fn-uses-loaded-sibling-entity-test -v frontend.remove-ui-db-test/editor-move-to-prev-block-uses-loaded-sibling-entity-test`
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+    - `git diff --check`
+  - Remaining direct handler scan count:
+    - `97`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Moved pending new block edit lookup to worker:
+  - `frontend.handler.editor/edit-pending-new-block!` now loads the inserted block through `db-async/<get-block` before applying queued indent/edit operations instead of resolving the inserted block through renderer `db/entity`.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.handler.editor-test/edit-pending-new-block-loads-inserted-block-through-worker-test -v frontend.remove-ui-db-test/editor-edit-pending-new-block-loads-through-worker-test`
+    - The source guard failed on `db/entity`, and the behavior test failed with `renderer entity lookup should not be used`.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.handler.editor-test/edit-pending-new-block-loads-inserted-block-through-worker-test -v frontend.remove-ui-db-test/editor-edit-pending-new-block-loads-through-worker-test`
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+    - `git diff --check`
+  - Remaining direct handler scan count:
+    - `96`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed first 20-place handler batch:
+  - Reduced direct renderer DB reads in `frontend.handler.editor` by removing redundant rehydrates, reusing block maps already held by the caller, and moving async insertion/post-insert reload paths to `db-async/<get-block` or `db-async/<get-blocks`.
+  - Added a batch source guard that requires direct UI DB call sites under `src/main/frontend/handler` to stay at or below `76`; this batch reduced the current count from `96` to `75`.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/handlers-direct-ui-db-call-count-batch-target-test`
+    - The batch guard failed with `96` direct handler reads against the `76` target.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/handlers-direct-ui-db-call-count-batch-target-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test`
+    - `git diff --check`
+  - Remaining direct handler scan count:
+    - `75`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed second 20-place handler batch:
+  - Reduced direct renderer DB reads under `src/main/frontend/handler` from `75` to `55`.
+  - Reused existing block maps in `frontend.handler.block` order-list/indent checks, replaced editor navigation edit targets with UUID maps that `edit-block!` already loads through the worker, and moved selected move/tab/copy block lookup paths to `db-async/<get-block` or `db-async/<get-blocks`.
+  - Updated the batch source guard to require handler direct UI DB call sites to stay at or below `55`.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/handlers-direct-ui-db-call-count-batch-target-test`
+    - The batch guard failed with `75` direct handler reads against the `55` target.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/handlers-direct-ui-db-call-count-batch-target-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+    - `rtk bb dev:test -v frontend.handler.block-test`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test`
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/main/frontend/handler/block.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/handler/editor_test.cljs`
+    - `git diff --check`
+  - Remaining direct handler scan count:
+    - `55`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed third handler batch:
+  - Reduced direct renderer DB reads under `src/main/frontend/handler` from `55` to `35`.
+  - Moved more editor handler paths to worker-backed block loads:
+    - `cut-block!`, `cut-selection-blocks`, collapse toggles, replace-ref, query command refresh, insert-tree target lookup, selected-parent lookup, focused-root lookup, and quick-add block/page resolution now avoid renderer `db/entity` or `db/get-db` rehydration.
+    - Selection and delete-zero-position helpers now reuse block maps already held by the handler when a fresh renderer entity lookup was redundant.
+    - `last-top-level-child?` now compares the already-loaded parent metadata instead of resolving a page/entity from the renderer DB.
+  - Updated the batch source guard to require handler direct UI DB call sites to stay at or below `35`.
+  - No renderer cache or new worker API was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/handlers-direct-ui-db-call-count-batch-target-test`
+    - The batch guard failed with `55` direct handler reads against the `35` target before the batch edits.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/handlers-direct-ui-db-call-count-batch-target-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test`
+    - `rtk bb dev:test -v frontend.handler.block-test`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test`
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/handler/editor.cljs src/main/frontend/handler/block.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/handler/editor_test.cljs`
+    - `git diff --check`
+  - Remaining direct handler scan count:
+    - `35`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed component Batch 8 for `frontend.components.property`:
+  - Removed the remaining direct renderer DB reads from `src/main/frontend/components/property.cljs`; the exact source guard for `db/entity`, `db/get-db`, `db/q`, `d/entity`, `d/pull`, and related reads now reports zero matches for this file.
+  - Moved property display derivation to the db worker via `:thread-api/get-display-properties`, including hidden/full property selection, class-property merging, page-property other-position behavior, and recycled entity-value filtering.
+  - Moved display-property drag reorder calculation to the db worker via `:thread-api/reorder-display-property`; the component now sends the displayed property idents instead of reading local property entities/order state.
+  - `frontend.components.property/properties-area` now consumes worker-returned row maps, and `frontend.components.block/block-positioned-properties` uses the new worker-backed `use-has-hidden-properties` hook for the hidden-properties pill.
+  - No renderer cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/property-component-direct-ui-db-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `17` counted direct reads in `components/property.cljs`.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/property-component-direct-ui-db-call-count-batch-target-test -v frontend.components.property.property-test -v frontend.worker.db-core-test/get-display-properties-keeps-other-position-properties-for-page-properties -v frontend.worker.db-core-test/get-display-properties-filters-recycled-entity-values -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test`
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/components/property.cljs src/main/frontend/components/block.cljs src/main/frontend/db/async.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/components/property/property_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed component Batch 9 for `frontend.components.block`:
+  - Reduced direct renderer DB reads in `src/main/frontend/components/block.cljs` from `43` to `10`.
+  - Added a batch source guard that requires `components/block.cljs` to stay at or below `23` direct UI DB reads.
+  - Removed renderer rehydrates from page/block reference initial loads, comment-thread lookup, block-title query/task/card checks, block editing, breadcrumb hydration, selected block drag/drop loading, grouped page rendering, and several query rendering paths.
+  - The drag/drop selected-block path now loads selected blocks via `db-async/<get-blocks` and captures the move target before async work so the existing drop direction is preserved.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/block-component-direct-ui-db-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `43` direct reads against the `23` target.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/block-component-direct-ui-db-call-count-batch-target-test -v frontend.components.block.asset-test -v frontend.components.block.breadcrumb-model-test -v frontend.components.block.comments-model-test -v frontend.components.block.drop-test -v frontend.components.block.image-test -v frontend.components.block.selection-test -v frontend.components.block.virtualized-test`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test`
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/components/block.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Remaining component direct-read inventory:
+    - `39 src/main/frontend/components/property/value.cljs`
+    - `34 src/main/frontend/components/views.cljs`
+    - `10 src/main/frontend/components/block.cljs`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed component Batch 10 for `frontend.components.property.value`:
+  - Reduced direct renderer DB reads in `src/main/frontend/components/property/value.cljs` from `39` to `14`.
+  - Added a batch source guard that requires `components/property/value.cljs` to stay at or below `19` direct UI DB reads.
+  - Moved property value creation, add-property setup, selected ref checks, page/class creation lookup, node choice filtering, choice creation, and scalar input refresh paths away from renderer `db/entity` and `db/get-db` reads.
+  - Updated the scoped node filtering test to assert worker-hydrated choice data instead of stubbing renderer `db/entity`.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/property-value-component-direct-ui-db-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `39` direct reads against the `19` target.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/property-value-component-direct-ui-db-call-count-batch-target-test`
+    - `rtk bb dev:test -v frontend.components.property.value-test`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test`
+    - `rtk bb dev:test -v frontend.components.property.value-test -v frontend.remove-ui-db-test/property-value-component-direct-ui-db-call-count-batch-target-test`
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/components/property/value.cljs src/test/frontend/components/property/value_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Remaining component direct-read inventory:
+    - `34 src/main/frontend/components/views.cljs`
+    - `14 src/main/frontend/components/property/value.cljs`
+    - `10 src/main/frontend/components/block.cljs`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed component Batch 11 for `frontend.components.views`:
+  - Reduced direct renderer DB reads in `src/main/frontend/components/views.cljs` from `34` to `10`.
+  - Added a batch source guard that requires `components/views.cljs` to stay at or below `14` direct UI DB reads.
+  - Moved table column/header metadata, grouping checks, gallery asset/display property selection, filter property selection, lazy item loading, table row tag handling, view type display, and create-view built-in lookups away from renderer `db/entity`, `d/entity`, and `db/get-db` reads.
+  - Used existing column property maps and static built-in property metadata; built-in ids needed by mutations are resolved through the db worker at action time.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/views-component-direct-ui-db-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `34` direct reads against the `14` target.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.components.views-test -v frontend.remove-ui-db-test/views-component-direct-ui-db-call-count-batch-target-test`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test`
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/components/views.cljs src/test/frontend/components/views_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Remaining component direct-read inventory:
+    - `14 src/main/frontend/components/property/value.cljs`
+    - `10 src/main/frontend/components/views.cljs`
+    - `10 src/main/frontend/components/block.cljs`
+    - `9 src/main/frontend/components/editor.cljs`
+    - `8 src/main/frontend/components/page.cljs`
+    - `8 src/main/frontend/components/header.cljs`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed component Batch 12 across remaining smaller component files:
+  - Reduced aggregate direct renderer DB reads under `src/main/frontend/components` from `111` to `91`.
+  - Added a batch source guard that requires aggregate component direct UI DB reads to stay at or below `91`.
+  - Removed direct reads from:
+    - `frontend.components.query.builder`: static closed values and built-in property labels now use built-in property metadata, and the query save path uses the already-held edit block.
+    - `frontend.components.editor`: node rendering, command filtering, embed page creation, and embed block insertion no longer rehydrate through the renderer DB when the needed block/page map is already available or worker-loaded.
+    - `frontend.components.page`: title icon checks and page load state now use the passed or worker-loaded page map.
+    - `frontend.components.header`: RTC graph UUID, toolbar page/recycle lookup, and breadcrumb page lookup now use worker-backed async state.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/components-direct-ui-db-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `111` direct component reads against the `91` target.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/components-direct-ui-db-call-count-batch-target-test`
+    - `rtk bb dev:test -v frontend.components.query-test -v frontend.remove-ui-db-test/components-direct-ui-db-call-count-batch-target-test`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test`
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/components/header.cljs src/main/frontend/components/editor.cljs src/main/frontend/components/page.cljs src/main/frontend/components/query/builder.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Remaining component direct-read inventory:
+    - `14 src/main/frontend/components/property/value.cljs`
+    - `10 src/main/frontend/components/views.cljs`
+    - `10 src/main/frontend/components/block.cljs`
+    - `7 src/main/frontend/components/recycle.cljs`
+    - `5 src/main/frontend/components/page.cljs`
+    - `4 src/main/frontend/components/editor.cljs`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed component Batch 13 across remaining component files:
+  - Reduced aggregate direct renderer DB reads under `src/main/frontend/components` from `91` to `71`.
+  - Updated the aggregate component source guard to require direct UI DB reads to stay at or below `71`.
+  - Removed direct reads from:
+    - `frontend.components.property.value`: repeat-setting built-in properties and asset class now come from worker pulls, date choice labels use worker-returned labels, checkbox-display class checks use the block map, and self-reference tag checks use block tags.
+    - `frontend.components.block`: breadcrumb now reuses the worker-loaded target and parents instead of rehydrating them, and reaction ownership resolves the current user via `db-async/<get-block`.
+    - `frontend.components.views`: filter preloading no longer probes the renderer DB, view lookup uses the passed entity, and group-by property lookup uses column metadata.
+    - `frontend.components.page`: removed the unused synchronous page entity helper.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/components-direct-ui-db-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `91` direct component reads against the `71` target.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.components.property.value-test -v frontend.components.block.breadcrumb-model-test -v frontend.components.block.comments-model-test -v frontend.components.block.drop-test -v frontend.components.block.selection-test -v frontend.components.views-test -v frontend.remove-ui-db-test/components-direct-ui-db-call-count-batch-target-test`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test`
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/components/block.cljs src/main/frontend/components/property/value.cljs src/main/frontend/components/views.cljs src/main/frontend/components/page.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Remaining component direct-read inventory:
+    - `7 src/main/frontend/components/views.cljs`
+    - `7 src/main/frontend/components/recycle.cljs`
+    - `7 src/main/frontend/components/block.cljs`
+    - `4 src/main/frontend/components/settings.cljs`
+    - `4 src/main/frontend/components/right_sidebar.cljs`
+    - `4 src/main/frontend/components/property/config.cljs`
+    - `4 src/main/frontend/components/editor.cljs`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed component Batch 14 across remaining component files:
+  - Reduced aggregate direct renderer DB reads under `src/main/frontend/components` from `71` to `50`.
+  - Updated the aggregate component source guard to require direct UI DB reads to stay at or below `51`.
+  - Removed direct reads from:
+    - `frontend.components.settings`: journal-class lookup, default-home page validation, and RTC graph UUID actions now use worker calls.
+    - `frontend.components.right-sidebar`: sidebar item construction and action menu page checks now consume worker-loaded block/page data.
+    - `frontend.components.recycle`: recycle roots are loaded through worker query/block APIs instead of renderer `d/q`, `d/entity`, and `db/get-db`.
+    - `frontend.components.views`: filter value display, gallery asset values, and query columns no longer rehydrate through the renderer DB.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/components-direct-ui-db-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `71` direct component reads against the `51` target.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.components.views-test -v frontend.components.settings-test -v frontend.remove-ui-db-test/components-direct-ui-db-call-count-batch-target-test -v frontend.remove-ui-db-test/right-sidebar-dragstart-uses-resolved-item-test`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test`
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/components/views.cljs src/main/frontend/components/recycle.cljs src/main/frontend/components/settings.cljs src/main/frontend/components/right_sidebar.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Remaining component direct-read inventory:
+    - `7 src/main/frontend/components/block.cljs`
+    - `4 src/main/frontend/components/property/config.cljs`
+    - `4 src/main/frontend/components/editor.cljs`
+    - `4 src/main/frontend/components/block/macros.cljs`
+    - `3 src/main/frontend/components/property/value.cljs`
+    - `3 src/main/frontend/components/content.cljs`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed component Batch 15 across remaining component files:
+  - Reduced aggregate direct renderer DB reads under `src/main/frontend/components` from `50` to `30`.
+  - Updated the aggregate component source guard to require direct UI DB reads to stay at or below `30`.
+  - Removed direct reads from:
+    - `frontend.components.property.default-value`: default-value property lookup now uses a worker pull before rendering the property value.
+    - `frontend.components.objects`: related-object tag property lookup now uses a worker pull instead of renderer `db/entity`.
+    - `frontend.components.all-pages`: views parent lookup now uses `db-async/<get-block`.
+    - `frontend.components.quick-add`: Quick Add page lookup now uses `db-async/<get-block`.
+    - `frontend.components.reference-filters`: reference page lookup for filter saves now uses worker pull.
+    - `frontend.components.container`: default-home sidebar page IDs now load through worker-backed block fetches.
+    - `frontend.components.query`: custom query rendering now uses the passed block/result maps instead of renderer rehydration.
+    - `frontend.components.content`: context menu selected blocks and block AST data now load through worker-backed block fetches.
+    - `frontend.components.library`: selected search results reuse the worker/search-returned block map.
+    - `frontend.components.page-menu`: page menu actions now use the supplied page map instead of rehydrating from renderer DB.
+    - `frontend.components.selection`: selection action targets now hydrate through worker-backed block fetches.
+    - `frontend.components.rtc.indicator`: asset progress titles now hydrate through worker-backed block fetches.
+    - `frontend.components.page`: page fallback and graph page metadata now load through `db-async/<get-block`.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/components-direct-ui-db-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `50` direct component reads against the `30` target.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/components-direct-ui-db-call-count-batch-target-test`
+    - `rtk bb dev:test -v frontend.components.query-test -v frontend.components.views-test -v frontend.components.settings-test -v frontend.remove-ui-db-test/components-direct-ui-db-call-count-batch-target-test -v frontend.remove-ui-db-test/right-sidebar-dragstart-uses-resolved-item-test`
+    - `rtk bb dev:test -v frontend.components.objects-test -v frontend.components.query-test -v frontend.components.query.result-test -v frontend.components.rtc.indicator-test -v frontend.components.repo-test -v frontend.remove-ui-db-test`
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/components/property/default_value.cljs src/main/frontend/components/objects.cljs src/main/frontend/components/all_pages.cljs src/main/frontend/components/quick_add.cljs src/main/frontend/components/reference_filters.cljs src/main/frontend/components/container.cljs src/main/frontend/components/query.cljs src/main/frontend/components/content.cljs src/main/frontend/components/library.cljs src/main/frontend/components/page_menu.cljs src/main/frontend/components/selection.cljs src/main/frontend/components/rtc/indicator.cljs src/main/frontend/components/page.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Additional lint status:
+    - `rtk bb lint:kondo-git-changes` could not run because `clj-kondo` is not installed on `PATH`.
+    - `rtk pnpm exec clj-kondo --version` also reported `Command "clj-kondo" not found`.
+  - Remaining component direct-read inventory:
+    - `7 src/main/frontend/components/block.cljs`
+    - `4 src/main/frontend/components/block/macros.cljs`
+    - `4 src/main/frontend/components/editor.cljs`
+    - `4 src/main/frontend/components/property/config.cljs`
+    - `3 src/main/frontend/components/property/value.cljs`
+    - `2 src/main/frontend/components/query/builder.cljs`
+    - `2 src/main/frontend/components/left_sidebar.cljs`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed component Batch 16 across remaining component files:
+  - Reduced aggregate direct renderer DB reads under `src/main/frontend/components` from `30` to `10`.
+  - Updated the aggregate component source guard to require direct UI DB reads to stay at or below `10`.
+  - Removed direct reads from:
+    - `frontend.components.views`: table row deletion now loads selected row maps through worker-backed block fetches.
+    - `frontend.components.header`: recent-highlight timestamps now load through worker-backed block fetches for the visible DOM block IDs.
+    - `frontend.components.left-sidebar`: tag navigation class UUIDs now come from worker pulls.
+    - `frontend.components.block`: plugin renderer children/properties now use the supplied block map, and the created-by tooltip no longer probes graph RTC state through renderer DB.
+    - `frontend.components.editor`: page autocomplete carries the exact worker-loaded page through state, and block embed completion loads the embedded block through `db-async/<get-block`.
+    - `frontend.components.property.config`: choice drag ordering now computes neighbor orders from `:property/closed-values` instead of renderer DB entity/order lookups.
+    - `frontend.components.block.macros`: function macros now evaluate query-result property maps directly instead of rehydrating query-result blocks and properties through renderer DB.
+    - `frontend.components.block.breadcrumb-model`: reworded a documentation-only reference so the source guard counts executable reads only.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/components-direct-ui-db-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `30` direct component reads against the `10` target.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/components-direct-ui-db-call-count-batch-target-test`
+    - `rtk bb dev:test -v frontend.components.query-test -v frontend.components.views-test -v frontend.components.block.breadcrumb-model-test -v frontend.components.block.comments-model-test -v frontend.components.block.drop-test -v frontend.components.block.selection-test -v frontend.components.property.config-test -v frontend.components.property.value-test -v frontend.remove-ui-db-test`
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/components/block.cljs src/main/frontend/components/block/macros.cljs src/main/frontend/components/block/breadcrumb_model.cljs src/main/frontend/components/editor.cljs src/main/frontend/components/header.cljs src/main/frontend/components/views.cljs src/main/frontend/components/left_sidebar.cljs src/main/frontend/components/property/config.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Additional test status:
+    - `rtk bb dev:test -v frontend.handler.editor-test` was tried as part of a broader focused run, but failed in unrelated handler/runtime paths including `db-worker has not been initialized`; the component namespaces and `frontend.remove-ui-db-test` in that same run passed.
+  - Remaining component direct-read inventory:
+    - `3 src/main/frontend/components/property/value.cljs`
+    - `2 src/main/frontend/components/query/builder.cljs`
+    - `3 src/main/frontend/components/block.cljs`
+    - `1 src/main/frontend/components/journal.cljs`
+    - `1 src/main/frontend/components/left_sidebar.cljs`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed component Batch 17, the final direct-read component batch:
+  - Reduced aggregate direct renderer DB reads under `src/main/frontend/components` from `10` to `0`.
+  - Updated the aggregate component source guard to require direct UI DB reads to stay at `0`.
+  - Removed direct reads from:
+    - `frontend.components.query.builder`: query-builder display no longer rehydrates UUID titles through renderer DB, and find-mode setup uses local DSL syntax detection instead of renderer `parse-query` with `db/get-db`.
+    - `frontend.components.property.value`: selected blocks now come from selection state, keyword values no longer synchronously resolve DB IDs, and repeat-setting properties load through the existing worker display-properties API.
+    - `frontend.components.left-sidebar`: default-home validation no longer probes renderer DB; page existence is handled by worker-backed page loading paths.
+    - `frontend.components.journal`: journal selection child IDs now load through worker-backed journal block fetches with children.
+    - `frontend.components.block`: hashtag links no longer synchronously probe page tags, property-value validation now runs in the worker, and positioned properties now load through a new worker API.
+    - `frontend.worker.db-core`: added narrow worker APIs for positioned properties and property-value validation.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/components-direct-ui-db-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `10` direct component reads against the `0` target.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/components-direct-ui-db-call-count-batch-target-test`
+    - `rtk bb dev:test -v frontend.components.query-test -v frontend.components.views-test -v frontend.components.block.breadcrumb-model-test -v frontend.components.block.comments-model-test -v frontend.components.block.drop-test -v frontend.components.block.selection-test -v frontend.components.property.config-test -v frontend.components.property.value-test -v frontend.remove-ui-db-test`
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/components/query/builder.cljs src/main/frontend/components/property/value.cljs src/main/frontend/components/block.cljs src/main/frontend/components/journal.cljs src/main/frontend/components/left_sidebar.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Remaining component direct-read inventory:
+    - None. The aggregate direct-read guard for `src/main/frontend/components` is now `0`.
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 18 for the remaining post-component renderer direct DB reads:
+  - Added a guard for `frontend.core`, `frontend.format.block`, `frontend.handler.db-based.import`, `frontend.extensions.fsrs`, `frontend.extensions.pdf.assets`, and `frontend.search`, then reduced that file set from `16` direct renderer DB/DataScript reads to `0`.
+  - Removed the obsolete `d/entity` profiling comment block from `frontend.core`.
+  - Moved template class lookup in `frontend.search/template-search` to worker `:thread-api/pull`.
+  - Moved PDF highlight color, ref-block, and last-visit-page reads off renderer DB/model helpers and onto worker-backed pulls/block loads.
+  - Moved debug transit import normalization into worker DB creation through the `:debug-transit-raw` option, so the renderer no longer reads transit DataScript DBs or calls `d/datoms`.
+  - Removed the renderer DB argument from `frontend.format.block/extract-blocks`; block extraction no longer calls `db/get-db` in the UI.
+  - Moved FSRS due-card discovery into worker `:thread-api/get-fsrs-due-card-block-ids`, moved card/class lookups to worker pulls, and removed `db/sub-block` from the card view.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/post-component-renderer-direct-ui-db-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `16` direct reads.
+  - Focused verification passed:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/post-component-renderer-direct-ui-db-call-count-batch-target-test`
+    - `rtk clojure -M:clj-kondo --lint src/main/frontend/search.cljs src/main/frontend/extensions/pdf/assets.cljs src/main/frontend/format/block.cljs src/main/frontend/handler/db_based/import.cljs src/main/frontend/extensions/fsrs.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+    - `rtk bb dev:test -v frontend.handler.search-test/search-resolves-string-page-filter-through-worker-test`
+    - `rtk bb dev:test -v frontend.extensions.pdf.assets-test`
+    - `rtk bb dev:test -v frontend.handler.db-based.import-test`
+    - `rtk bb dev:test -v frontend.handler.paste-test` (passes with the existing Node `document is not defined` log from the HTML paste path)
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 19 for indirect renderer DB/model reads in handler/mobile/PDF paths:
+  - Added a guard for selected indirect `frontend.db` / `frontend.db.model` reads in `quick_capture`, `mobile`, `handler`, and PDF toolbar files, then reduced that file set from `24` guarded calls to `0`.
+  - Added worker-backed APIs for today journal title, journal page lookup, page existence checks, case-page lookup, block parent/children lookup, and class lookup.
+  - Replaced renderer `db-model/get-today-journal-title`, `db/page-exists?`, `db-model/get-case-page`, `db-model/get-block-parent`, `db-model/get-block-immediate-children`, `db-model/get-journal-page`, `db-model/get-all-classes`, and `db/has-children?` call sites in:
+    - `frontend.quick-capture`
+    - `frontend.mobile.footer`
+    - `frontend.mobile.intent`
+    - `frontend.handler.block`
+    - `frontend.handler.events`
+    - `frontend.handler.db-based.page`
+    - `frontend.handler.journal`
+    - `frontend.handler.editor`
+    - `frontend.extensions.pdf.toolbar`
+  - Updated `frontend.components.editor/search-pages` to await the now async class matcher.
+  - Updated focused tests for worker-backed page conversion and async class matching/save-block expectations.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/indirect-renderer-db-model-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `24` indirect renderer DB/model reads.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/quick_capture.cljs src/main/frontend/mobile/footer.cljs src/main/frontend/mobile/intent.cljs src/main/frontend/handler/block.cljs src/main/frontend/handler/events.cljs src/main/frontend/handler/db_based/page.cljs src/main/frontend/handler/journal.cljs src/main/frontend/handler/editor.cljs src/main/frontend/extensions/pdf/toolbar.cljs src/main/frontend/components/editor.cljs src/main/frontend/db/async.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/handler/db_based/page_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/indirect-renderer-db-model-call-count-batch-target-test`
+    - `rtk bb dev:test -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+    - `rtk bb dev:test -v frontend.handler.block-test`
+    - `rtk bb dev:test -v frontend.handler.db-based.page-test`
+    - `rtk bb dev:test -v frontend.handler.journal-test`
+    - `rtk bb dev:test -v frontend.handler.events-test`
+    - `rtk bb dev:test -v frontend.extensions.pdf.assets-test`
+    - `rtk git diff --check`
+  - Additional test status:
+    - `rtk bb dev:test -v frontend.handler.editor-test` was tried, but this runner executes the whole editor namespace and currently fails in unrelated workerless undo/redo paths with `db-worker has not been initialized`; the edited editor test file is lint-clean.
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 20 for the remaining handler `db-model` reads:
+  - Added a guard for the two remaining handler `db-model` reads in `frontend.handler.editor` and `frontend.handler.property`, then reduced that file set from `2` guarded calls to `0`.
+  - Replaced `db-model/hidden-page?` in `frontend.handler.editor` with `ldb/hidden?` on the already-loaded page map.
+  - Replaced `db-model/get-all-properties` in `frontend.handler.property/get-class-property-choices` with the existing worker-backed `db-async/<get-all-properties` API.
+  - Moved property-valued node choice loading in `frontend.components.property.value` into the existing async initial-choice loader, so the render path consumes worker-loaded `result` instead of doing a synchronous handler read.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/remaining-handler-db-model-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `2` handler `db-model` reads.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/handler/property.cljs src/main/frontend/handler/editor.cljs src/main/frontend/components/property.cljs src/main/frontend/components/property/value.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/remaining-handler-db-model-call-count-batch-target-test`
+    - `rtk bb dev:test -v frontend.components.property.property-test -v frontend.components.property.value-test`
+    - `rtk bb dev:test -v frontend.handler.editor-test/delete-block-inner-loads-current-block-through-worker-test` exited `0` after compiling the focused test target.
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 21 for selected component DB facade/helper reads:
+  - Added a guard for 20 selected component calls to `db/sub-block`, `db/page?`, `db/get-case-page`, and indirect `db-model` helpers, then reduced that selected file set from `20` guarded calls to `0`.
+  - Replaced data-local component reloads with the already supplied entity maps in:
+    - `frontend.components.left-sidebar`
+    - `frontend.components.views`
+    - `frontend.components.objects`
+    - `frontend.components.reference`
+    - `frontend.components.reference-filters`
+    - `frontend.components.db-based.page`
+    - `frontend.components.block/query-result`
+  - Replaced page checks with local `ldb` predicates and a local today-journal predicate in `frontend.components.block` and `frontend.components.page-menu`.
+  - Replaced component class/property list reads with existing worker-backed APIs in `frontend.components.editor`, `frontend.components.query.builder`, `frontend.components.property`, and `frontend.components.property.dialog`.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/component-facade-helper-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `20` selected component facade/helper reads.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/components/left_sidebar.cljs src/main/frontend/components/query/builder.cljs src/main/frontend/components/property/dialog.cljs src/main/frontend/components/editor.cljs src/main/frontend/components/property.cljs src/main/frontend/components/page_menu.cljs src/main/frontend/components/db_based/page.cljs src/main/frontend/components/objects.cljs src/main/frontend/components/reference.cljs src/main/frontend/components/reference_filters.cljs src/main/frontend/components/views.cljs src/main/frontend/components/block.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/component-facade-helper-call-count-batch-target-test`
+    - `rtk bb dev:test -v frontend.components.query-test -v frontend.components.views-test -v frontend.components.objects-test`
+    - `rtk bb dev:test -v frontend.components.property.property-test -v frontend.components.property.value-test -v frontend.components.property.config-test`
+    - `rtk bb dev:test -v frontend.components.block.breadcrumb-model-test -v frontend.components.block.comments-model-test -v frontend.components.block.drop-test -v frontend.components.block.selection-test`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 22 for the final selected component/extension facade reads:
+  - Added a guard for the remaining selected `db/sub-block`, `db/page?`, and `db-model/get-today-journal-title` reads in FSRS, property value/config, and page component files, then reduced that selected file set from `9` guarded calls to `0`.
+  - Replaced `frontend.extensions.fsrs/<create-cards-block!` journal-title lookup with the existing worker-backed `db-async/<get-today-journal-title`.
+  - Replaced property value/config component rehydration with already supplied entity maps in repeat settings, calendar values, choice default menu handling, owner class resolution, and property dropdown rendering.
+  - Replaced `frontend.components.page/page-blocks-cp` renderer entity refresh with the supplied block map and `ldb/page?`.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk bb dev:test -v frontend.remove-ui-db-test/final-component-facade-helper-call-count-batch-target-test` initially failed before test execution because stale Shadow test artifacts referenced an old generated editor-test var.
+    - Direct guard-equivalent RED check confirmed `9` selected facade/helper reads before implementation.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/extensions/fsrs.cljs src/main/frontend/components/property/value.cljs src/main/frontend/components/property/config.cljs src/main/frontend/components/page.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - Cleared ignored generated test artifacts with `rtk rm -rf .shadow-cljs/builds/test static/tests.js static/tests.js.map`, then rebuilt once with `rtk pnpm cljs:test` to avoid concurrent Shadow compiles corrupting generated output.
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/final-component-facade-helper-call-count-batch-target-test`
+    - `rtk pnpm cljs:run-test -v frontend.components.property.value-test -v frontend.components.property.config-test`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 23 for the remaining selected frontend DB helper reads:
+  - Added a guard for the remaining 21 selected frontend helper calls to `db/get-journal-page-title`, `db/get-today-journal-title`, `model/get-block-by-uuid`, `model/get-structured-children`, `model/get-class-objects`, `model/get-all-classes`, and `model/sub-block`, then reduced that selected file set from `21` guarded calls to `0`.
+  - Added worker-backed thread APIs and async wrappers for arbitrary journal page title lookup and structured class descendant lookup.
+  - Moved slash date commands to worker-backed async journal-title lookups and taught shared editor command insertion to handle promise results.
+  - Removed renderer DB title fallbacks from sync template/right-sidebar paths.
+  - Extended worker route info with heading block route fields, and changed route building to consume worker route data instead of looking up blocks in the renderer DB.
+  - Moved class children counts and property node/class selector data to worker-backed async loading; render paths now consume loaded class lists and structured descendant maps.
+  - Removed the remaining `frontend.db.model` require from `frontend.components.property.value`.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/remaining-frontend-helper-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `21` selected frontend helper reads.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/template.cljs src/main/frontend/commands.cljs src/main/frontend/handler/common/editor.cljs src/main/frontend/handler/route.cljs src/main/frontend/components/right_sidebar.cljs src/main/frontend/components/page.cljs src/main/frontend/components/class.cljs src/main/frontend/components/property/value.cljs src/main/frontend/db/async.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs src/test/frontend/handler/route_test.cljs src/test/frontend/components/property/value_test.cljs`
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.components.property.value-test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/remaining-frontend-helper-call-count-batch-target-test -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test -v frontend.worker.db-core-test/get-page-route-info-resolves-page-flags-and-alias-source -v frontend.handler.route-test`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 24 for selected plugin editor API renderer DB reads:
+  - Added a guard for 24 selected `logseq.api.editor` calls to `db-model/get-today-journal-title`, `db-model/get-page`, `db-model/get-block-by-uuid`, `db-model/query-block-by-uuid`, `db-model/get-page-blocks-no-cache`, `db/get-db`, `db/entity`, and `db/pull`, then reduced that selected file from `24` guarded calls to `0`.
+  - Added worker-backed thread APIs and async wrappers for block sibling lookup, page block tree loading, and class default property values.
+  - Moved selected block/page/current block/sibling/page tree/plugin property reads in `logseq.api.editor` to worker-backed async calls.
+  - Kept block insertion and append/prepend flows data-local after the worker-loaded block payload is available; no renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/api-editor-ui-db-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `24` selected plugin editor API renderer DB reads.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/logseq/api/editor.cljs src/main/frontend/db/async.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs`
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/api-editor-ui-db-call-count-batch-target-test -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 25 for selected plugin db-based API renderer DB reads:
+  - Added a guard for 24 selected `logseq.api.db-based` calls to `db/entity`, `db/pull`, `db/get-db`, `db/get-case-page`, `db-model/get-all-classes`, `db-model/get-all-properties`, and `db-conn/get-db`, then reduced that selected file from `24` guarded calls to `3`.
+  - Moved plugin property lookup, property upsert reloads, all-tags/all-properties, tag object lookup, create-tag property reuse, inserted block reloads, tag property add/remove, and block tag add/remove paths to worker-backed async calls.
+  - Kept the small `get-tags`/`get-tag` name lookup helper as the remaining guarded cluster for a later batch.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/api-db-based-ui-db-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `24` selected plugin db-based API renderer DB reads.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/logseq/api/db_based.cljs src/main/logseq/api/editor.cljs src/main/frontend/db/async.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/api-db-based-ui-db-call-count-batch-target-test -v frontend.db.async-test/get-tag-objects-uses-worker-class-objects-without-renderer-db-model-test`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 26 for the remaining selected plugin API renderer DB reads:
+  - Added a guard for the remaining 7 selected `logseq.api.block`, `logseq.api.db`, and `logseq.api.db-based` calls to renderer DB entity/get-db/block helper reads, then reduced that selected API file set from `7` guarded calls to `0`.
+  - Added worker-backed thread APIs and async wrappers for plugin tag-name lookup and plugin query input resolution.
+  - Moved plugin DataScript query input resolution in `logseq.api.db` to the worker while preserving the existing async query execution path.
+  - Moved `logseq.api.db-based` tag name lookup and `get-tag` to worker-backed APIs.
+  - Moved `logseq.api.block` property metadata lookup and `get_block` block/children loading to worker-backed APIs.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/remaining-plugin-api-ui-db-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `7` selected plugin API renderer DB reads.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/logseq/api/block.cljs src/main/logseq/api/db.cljs src/main/logseq/api/db_based.cljs src/main/frontend/db/async.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs`
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/remaining-plugin-api-ui-db-call-count-batch-target-test -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test -v frontend.worker.db-core-test/plugin-api-worker-lookups-return-tags-and-resolve-inputs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 27 for remaining selected `frontend.db.utils` renderer wrappers:
+  - Added a guard for the remaining 7 selected `db-utils/entity` and `db-utils/pull` calls in `logseq.api.block`, `frontend.modules.outliner.op`, `frontend.handler.db-based.property.util`, and `frontend.components.property.config`, then reduced that selected file set from `7` guarded calls to `0`.
+  - Moved plugin JSON property type lookup in `logseq.api.block/parse-property-json-value-if-need` to the worker-backed block loader.
+  - Removed renderer DB rehydration from `frontend.handler.db-based.property.util`; it now formats values from already supplied maps and keeps original property keys for plugin API property output.
+  - Removed renderer DB id coercion from `frontend.modules.outliner.op`; op payloads now pass ids through for worker-side replay resolution.
+  - Removed the property choice block reactive DB rehydration path from `frontend.components.property.config`; closed value maps already supplied on the property are used directly.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/db-utils-renderer-read-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `7` selected `frontend.db.utils` renderer reads.
+  - Focused verification passed:
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/logseq/api/block.cljs src/main/frontend/modules/outliner/op.cljs src/main/frontend/handler/db_based/property/util.cljs src/main/frontend/components/property/config.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/db-utils-renderer-read-call-count-batch-target-test -v frontend.components.property.config-test -v frontend.handler.db-based.property.util-test`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 28 for remaining selected `frontend.db.model` renderer helpers:
+  - Added a guard for the remaining 6 selected `model`/`db-model` calls in `logseq.api.db`, `frontend.components.property.config`, `frontend.components.page`, `frontend.components.block`, and `frontend.components.quick_add`, then reduced that selected file set from `6` guarded calls to `0`.
+  - Added worker-backed async wrappers for file content and page-heading route block lookup.
+  - Added `:thread-api/get-block-by-page-name-and-block-route-name` in the DB worker and covered heading-match and non-heading miss behavior.
+  - Moved plugin `get_file_content`, property class selection, page heading route resolution, and quick-add today-page checks to worker-backed APIs.
+  - Replaced page/today and untitled-page checks with simple predicates over already-loaded page maps.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/remaining-model-helper-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `6` selected `frontend.db.model` renderer helper reads.
+    - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -v frontend.worker.db-core-test/get-block-by-page-name-and-block-route-name-resolves-heading-block -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test`
+    - The worker tests failed before the implementation because `:thread-api/get-block-by-page-name-and-block-route-name` was not registered.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/remaining-model-helper-call-count-batch-target-test -v frontend.worker.db-core-test/get-block-by-page-name-and-block-route-name-resolves-heading-block -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.components.property.config-test -v frontend.handler.db-based.property.util-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/db/async.cljs src/main/frontend/worker/db_core.cljs src/main/logseq/api/db.cljs src/main/frontend/components/property/config.cljs src/main/frontend/components/page.cljs src/main/frontend/components/block.cljs src/main/frontend/components/quick_add.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 29 for the remaining selected SDK utility renderer DB read:
+  - Added a guard for the remaining `db/entity` call in `logseq.sdk.utils`, then reduced that selected SDK utility file from `1` guarded call to `0`.
+  - Removed the SDK JSON normalizer's renderer DB rehydration; block full-title normalization now uses the already-normalized block map.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/sdk-renderer-db-read-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `1` selected SDK utility renderer DB read.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/sdk-renderer-db-read-call-count-batch-target-test -v frontend.remove-ui-db-test/remaining-model-helper-call-count-batch-target-test -v frontend.worker.db-core-test/get-block-by-page-name-and-block-route-name-resolves-heading-block -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/logseq/sdk/utils.cljs src/test/frontend/remove_ui_db_test.cljs src/main/frontend/db/async.cljs src/main/frontend/worker/db_core.cljs src/main/logseq/api/db.cljs src/main/frontend/components/property/config.cljs src/main/frontend/components/page.cljs src/main/frontend/components/block.cljs src/main/frontend/components/quick_add.cljs src/test/frontend/worker/db_core_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 30 for the hidden `frontend.db.react` renderer DB branch:
+  - Added focused tests proving `react/q` query functions and KV reads run without `conn/get-db`.
+  - Removed `datascript.core`, `frontend.db.conn`, and `frontend.db.utils` from `frontend.db.react`.
+  - Simplified reactive query execution so normal queries use worker async query execution, query functions receive `nil` instead of a renderer DB, and KV reads use `:thread-api/get-key-value`.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.db.react-test/q-and-refresh-run-query-fn-without-reading-renderer-db-test -v frontend.db.react-test/q-runs-kv-query-through-worker-without-reading-renderer-db-test`
+    - The tests failed before the implementation because `react/q` returned nil without a renderer DB and did not call the worker KV API.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.db.react-test/q-and-refresh-run-worker-query-without-reading-renderer-db-test -v frontend.db.react-test/q-and-refresh-run-query-fn-without-reading-renderer-db-test -v frontend.db.react-test/q-runs-kv-query-through-worker-without-reading-renderer-db-test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/sdk-renderer-db-read-call-count-batch-target-test -v frontend.remove-ui-db-test/remaining-model-helper-call-count-batch-target-test -v frontend.remove-ui-db-test/db-utils-renderer-read-call-count-batch-target-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/db/react.cljs src/test/frontend/db/react_test.cljs src/main/logseq/sdk/utils.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 31 for remaining `frontend.db.utils/group-by-page` UI/API dependencies:
+  - Added a guard for `db-utils/group-by-page` in `logseq.api.editor` and `frontend.components.query.result`, then reduced that selected file set from `2` guarded calls to `0`.
+  - Replaced the shared DB-utils import with local pure `group-blocks-by-page` helpers that operate only on already-loaded block maps.
+  - Removed the remaining `frontend.db.utils` require from `logseq.api.editor` and `frontend.components.query.result`.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/db-utils-group-by-page-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `2` selected `db-utils/group-by-page` calls.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/db-utils-group-by-page-call-count-batch-target-test -v frontend.components.query.result-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/logseq/api/editor.cljs src/main/frontend/components/query/result.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/components/query/result_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 32 for `frontend.db` facade calls that only alias `logseq.db` helpers:
+  - Added a guard for `db/new-block-id` and `db/sort-by-order` in `logseq.api.editor`, `frontend.handler.editor`, and `frontend.components.property.value`, then reduced that selected file set from `7` guarded calls to `0`.
+  - Replaced those calls with direct `ldb/new-block-id` and `ldb/sort-by-order` calls.
+  - Removed now-unused `frontend.db` requires from the plugin editor API, editor handler, and property value component.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/db-facade-id-order-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `7` selected facade calls.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/db-facade-id-order-call-count-batch-target-test -v frontend.components.property.value-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/logseq/api/editor.cljs src/main/frontend/handler/editor.cljs src/main/frontend/components/property/value.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Additional note: running the whole `frontend.handler.editor-test` namespace exposed existing worker-stub failures in paste/save-block tests, so it was not used as Batch 32 evidence and should be handled as a separate batch.
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 33 for stale editor-handler test setup after the worker-backed editor migration:
+  - Migrated focused `frontend.handler.editor-test` cases away from renderer DB/model helpers that no longer match the worker-backed editor path.
+  - Replaced stale save-block lookup setup with an explicit block fixture and updated expected outliner op payloads to include worker-derived `:block/tags` and `:block/refs`.
+  - Reworked pasted heading page-ref tests to stub `state/<invoke-db-worker` pulls, inspect the inserted block payload, and verify generated journal maps without depending on renderer DB rehydration.
+  - Removed the now-unused `datascript.core` require from the editor handler test namespace.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:run-test -v 'frontend.handler.editor-test/save-block!' -v frontend.handler.editor-test/paste-og-copied-heading-page-refs-creates-journal-pages`
+    - The focused editor tests failed before the migration because they still expected old renderer DB/model behavior and old transaction payload shapes.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v 'frontend.handler.editor-test/save-block!' -v frontend.handler.editor-test/paste-og-copied-heading-page-refs-creates-journal-pages -v frontend.handler.editor-test/paste-og-copied-heading-page-refs-uses-default-journal-title`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/db-facade-id-order-call-count-batch-target-test -v frontend.remove-ui-db-test/db-utils-group-by-page-call-count-batch-target-test -v frontend.components.property.value-test -v frontend.components.query.result-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/test/frontend/handler/editor_test.cljs src/main/logseq/api/editor.cljs src/main/frontend/handler/editor.cljs src/main/frontend/components/property/value.cljs src/test/frontend/remove_ui_db_test.cljs src/main/frontend/components/query/result.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 34 for remaining renderer-facing `frontend.db` facade calls in selected API/component files:
+  - Added a guard for remaining `db/transact!`, `db/get-alias-source-page`, `db/journal-page?`, and `db/sort-by-order` calls in `logseq.api.db`, `frontend.components.library`, `frontend.components.block`, `frontend.components.property.config`, and `frontend.components.page`, then reduced that selected file set from `10` guarded calls to `0`.
+  - Replaced plugin `set_file_content`, library unlink, property config raw updates, and latest-code-language KV writes with direct `:thread-api/transact` worker calls.
+  - Replaced block preview alias-source resolution with the existing worker-backed `db-async/<get-block-source` loader.
+  - Replaced page classification/sorting facade calls with `ldb/journal?` and `ldb/sort-by-order` over already-loaded maps.
+  - Removed now-unused `frontend.db` requires from the touched API/component files.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/remaining-db-facade-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `9` selected facade calls; adding the missed `db/sort-by-order` page call made the completed target `10`.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/remaining-db-facade-call-count-batch-target-test -v frontend.remove-ui-db-test/upsert-type-block-uses-worker-latest-code-lang-test -v frontend.remove-ui-db-test/route-redirect-to-page-uses-worker-test -v frontend.components.property.config-test -v frontend.worker.db-core-test/get-page-route-info-resolves-page-flags-and-alias-source`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/logseq/api/db.cljs src/main/frontend/components/library.cljs src/main/frontend/components/block.cljs src/main/frontend/components/property/config.cljs src/main/frontend/components/page.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 35 for repo and scheduled/deadline `frontend.db` facade calls:
+  - Added a guard for `db/today-journal-page?`, `db/get-repo-name`, `db/get-short-repo-name`, and `db/remove-conn!` in `frontend.components.scheduled-deadlines`, `frontend.components.repo`, and `frontend.handler.repo`, then reduced that selected file set from `5` guarded calls to `0`.
+  - Replaced scheduled/deadline today detection with direct journal-day comparison using `frontend.date`.
+  - Replaced repo selector graph-name formatting with a local pure helper over the repo URL.
+  - Replaced repo deletion's renderer conn removal with the existing worker close path before persisted graph deletion.
+  - Removed now-unused `frontend.db` requires from the touched repo/scheduled files.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/repo-scheduled-db-facade-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `5` selected facade calls.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/repo-scheduled-db-facade-call-count-batch-target-test -v frontend.components.repo-test -v frontend.handler.repo-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/components/scheduled_deadlines.cljs src/main/frontend/components/repo.cljs src/main/frontend/handler/repo.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 36 for container latest-journal lookup:
+  - Added a guard for `db/get-latest-journals` in `frontend.components.container`, then reduced that selected file set from `1` guarded call to `0`.
+  - Added worker thread API `:thread-api/get-latest-journals` and async wrapper `db-async/<get-latest-journals`.
+  - Replaced the publishing-mode empty-journal redirect check with a worker-backed effect and local component state.
+  - Removed the now-unused `frontend.db` require from the container component.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/container-latest-journals-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `1` selected latest-journal facade call.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/container-latest-journals-call-count-batch-target-test -v frontend.worker.db-core-test/get-latest-journals-returns-worker-maps -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/components/container.cljs src/main/frontend/db/async.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 37 for debug helper renderer DB reads:
+  - Added a guard for renderer DB reads/imports in `frontend.db.debug` and `frontend.db.rtc.debug-ui`, then reduced that selected file set from `5` guarded calls to `0`.
+  - Kept `frontend.db.debug/qb` and `frontend.db.debug/get-all-blocks` available as worker-backed async helpers using `:thread-api/pull` and `:thread-api/q`.
+  - Replaced the RTC debug panel's current page block count with a worker-backed count query and local component state.
+  - Removed now-unused `frontend.db`, `frontend.db.utils`, and DataScript requires from the touched debug namespaces.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/debug-ui-db-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `5` selected debug renderer DB reads/imports.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/debug-ui-db-call-count-batch-target-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/db/debug.cljs src/main/frontend/db/rtc/debug_ui.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 38 for state date formatter renderer DB reads:
+  - Added a guard for `db-conn-state/get-conn`, `entity-plus/entity-memoized`, and their direct namespace imports in `frontend.state`, then reduced that selected file from `4` guarded matches to `0`.
+  - Added worker thread API `:thread-api/get-date-formatter` and async wrapper `db-async/<get-date-formatter`.
+  - Replaced `state/get-date-formatter`'s renderer conn-state/entity read with repo-scoped app state hydrated from the worker after repo restore.
+  - Updated the settings date-format save path to refresh the app-state formatter after changing the journal class property.
+  - No renderer cache or new worker cache was added; the app state mirrors current UI configuration only.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/state-date-formatter-db-call-count-batch-target-test`
+    - The batch guard failed before the implementation with `4` selected state date formatter renderer DB references.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/state-date-formatter-db-call-count-batch-target-test -v frontend.worker.db-core-test/get-date-formatter-returns-worker-journal-format -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/state.cljs src/main/frontend/db/async.cljs src/main/frontend/worker/db_core.cljs src/main/frontend/handler/repo.cljs src/main/frontend/components/settings.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 39 for obsolete synchronous `frontend.db.model` helpers:
+  - Added a guard for old synchronous model/facade helpers that only preserved renderer DB reads, then reduced the selected `frontend.db.model` and `frontend.db` surface from `34` guarded matches to `0`.
+  - Removed obsolete sync helpers for file content/custom CSS, route-name heading lookup, alias/page mention wrappers, latest journals, page block counts, parent traversal helpers, class/property/class-object helpers, and the stale sync immediate-children wrapper.
+  - Removed those helpers from the `frontend.db` facade export list.
+  - Trimmed model tests that only exercised deleted renderer DB wrappers; worker-backed tests already cover latest journals, class/property lists, class objects, file content, and route-name heading lookup.
+  - Updated the randomized outliner invariant to call `logseq.db/get-page-blocks-count` on the test DB directly instead of going through `frontend.db.model`.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/obsolete-sync-db-model-helper-count-batch-target-test`
+    - The batch guard failed before the implementation with `34` selected obsolete sync helper matches; the stale sync immediate-children wrapper was folded in after the focused model test exposed it.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/obsolete-sync-db-model-helper-count-batch-target-test -v frontend.db.model-test -v frontend.db.db-based-model-test -v frontend.db.async-test/get-all-properties-uses-worker-without-renderer-db-model-test -v frontend.db.async-test/get-tag-objects-uses-worker-class-objects-without-renderer-db-model-test -v frontend.handler.ui-test/ui-file-loaders-read-local-files-through-worker-test -v frontend.handler.config-test/set-config-reads-current-config-through-worker-test -v frontend.handler.repo-config-test/restore-repo-config-reads-config-through-worker-test -v frontend.handler.publish-test/upload-custom-publish-assets-reads-files-through-worker-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/db/model.cljs src/main/frontend/db.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/db/model_test.cljs src/test/frontend/db/db_based_model_test.cljs src/test/frontend/db/async_test.cljs src/test/frontend/handler/ui_test.cljs src/test/frontend/handler/config_test.cljs src/test/frontend/handler/repo_config_test.cljs src/test/frontend/handler/publish_test.cljs src/test/frontend/modules/outliner/core_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 40 for mobile UI direct renderer DB reads:
+  - Added a guard for `db/entity`, `db/get-page`, `db/get-db`, `db-model/query-block-by-uuid`, `ldb/get-built-in-page`, and `ldb/get-graph-rtc-uuid` in the selected mobile UI namespaces, then reduced that selected file set from `15` guarded matches to `0`.
+  - Replaced mobile journal calendar page lookup with worker-backed `db-async/<get-block`, creating the journal only when the worker returns no page.
+  - Replaced mobile header favorite/page-settings block loads with worker-backed `db-async/<get-block`.
+  - Replaced mobile header RTC graph UUID reads with `:thread-api/get-rtc-graph-uuid`; local-upload eligibility now receives the worker-loaded RTC UUID instead of reading the renderer conn.
+  - Replaced recorder quick-add page and edit-block lookups with worker-backed `db-async/<get-block`.
+  - Replaced selection toolbar entity hydration with selected block maps already held in frontend state.
+  - Updated worker search result pulls to include page title/name so mobile search subtitles do not need renderer DB fallback hydration.
+  - No renderer cache or new worker cache was added; the new header UUID is component UI state only.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/mobile-ui-db-read-count-batch-target-test`
+    - The batch guard failed before the implementation with `15` selected mobile UI DB reads.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/mobile-ui-db-read-count-batch-target-test -v mobile.selection-toolbar-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/mobile/components/header.cljs src/main/mobile/components/recorder.cljs src/main/mobile/components/selection_toolbar.cljs src/main/mobile/search.cljs src/main/frontend/worker/search.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 41 for Electron listener page existence lookup:
+  - Added a guard for `db/get-page` and direct `frontend.db` import in `electron.listener`, then reduced that selected file from `1` guarded match to `0`.
+  - Replaced `redirectWhenExists` page-name existence checking with worker-backed `db-async/<get-block`.
+  - Removed the now-unused `frontend.db` require.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/electron-listener-ui-db-read-count-batch-target-test`
+    - The batch guard failed before the implementation with `1` selected Electron listener renderer DB read.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/electron-listener-ui-db-read-count-batch-target-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/electron/listener.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 42 for custom query reactive input resolution:
+  - Added a guard for `frontend.db.conn`, `frontend.db.model`, `frontend.db.utils`, `conn/get-db`, `model/get-block-by-uuid`, `model/get-today-journal-title`, and `model/with-pages` in `frontend.db.query-react`, then reduced that selected file from `5` guarded matches to `0`.
+  - Made `frontend.db.react/q` accept promise-returning `inputs-fn` values so custom queries can resolve dynamic inputs asynchronously before the worker query runs.
+  - Replaced `frontend.db.query-react` renderer DB input resolution with worker-backed `db-async/<resolve-query-inputs`; current-page UUID/name/title resolution now happens in the worker.
+  - Kept custom query result transformation pure in the renderer by removing the `model/with-pages` hydration step and the `frontend.db.utils/seq-flatten` dependency.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/query-react-renderer-db-read-count-batch-target-test -v frontend.db.react-test/q-and-refresh-resolve-async-inputs-fn-before-worker-query-test -v frontend.worker.db-core-test/plugin-api-worker-lookups-return-tags-and-resolve-inputs`
+    - The batch guard failed before the implementation with `5` selected query-react renderer DB reads/imports; the old async input path also hung until interrupted after the expected RED failure.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/query-react-renderer-db-read-count-batch-target-test -v frontend.db.react-test/q-and-refresh-resolve-async-inputs-fn-before-worker-query-test -v frontend.worker.db-core-test/plugin-api-worker-lookups-return-tags-and-resolve-inputs -v frontend.components.query.result-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/db/react.cljs src/main/frontend/db/query_react.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/db/react_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/components/query/result_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 43 for obsolete selected synchronous `frontend.db.model` helpers:
+  - Added a guard for selected block/journal/page helper names in `frontend.db.model` and the `frontend.db` facade, then reduced that selected surface from `34` guarded matches to `0`.
+  - Removed obsolete synchronous helpers for alias source lookup, block UUID lookup, query block pull, page hydration, reactive sub-block reads, child/parent traversal, page-existence checks, block-and-children reads, journal page/title reads, and stale journal/untitled predicates.
+  - Removed the deleted helpers from the `frontend.db` facade export list.
+  - Updated stale tests that only redefined deleted renderer helpers; asset tests now stub the worker async journal helpers directly.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/selected-sync-db-model-helper-count-batch-target-test`
+    - The batch guard failed before the implementation with `34` selected model/facade helper matches.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/selected-sync-db-model-helper-count-batch-target-test -v frontend.db.model-test -v frontend.handler.route-test/redirect-to-page-uses-worker-route-info-test -v frontend.handler.editor-test/zoom-out-loads-parent-through-worker-test -v frontend.handler.paste-test/paste-blocks-with-embed-uses-worker-parents-test -v frontend.handler.db-based.page-test/convert-page-to-tag-uses-worker-build-and-transact-test -v frontend.handler.editor-async-test/db-based-save-assets-appends-to-today-page-without-editor -v frontend.handler.editor-async-test/db-based-save-assets-uses-last-edit-block-title-without-editor-state -v frontend.handler.editor-async-test/db-based-save-assets-appends-to-explicit-target-block -v frontend.handler.page-test/create-and-open-today-use-worker-page-lookup-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/db/model.cljs src/main/frontend/db.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/db/model_test.cljs src/test/frontend/handler/route_test.cljs src/test/frontend/handler/editor_test.cljs src/test/frontend/handler/paste_test.cljs src/test/frontend/handler/db_based/page_test.cljs src/test/frontend/handler/editor_async_test.cljs src/test/frontend/handler/page_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 44 for query DSL renderer DB reads:
+  - Added a guard for `frontend.db.conn`/`db-conn` usage in `frontend.db.query-dsl`, then reduced that selected file from `3` renderer DB read/import matches to `0`.
+  - Split query DSL execution into pure DB-value helpers, `execute-query` and `execute-custom-query`, so the renderer wrapper no longer dereferences the UI Datascript connection.
+  - Replaced `query` and `custom-query` renderer execution with worker-backed `react/q` calls through `:thread-api/query-dsl-query` and `:thread-api/query-dsl-custom-query`.
+  - Registered worker thread APIs that run query DSL execution against the worker Datascript DB.
+  - Kept the query result normalizer local and small; no renderer cache or new worker cache was added.
+  - Updated query DSL parser/execution tests to use a synchronous local fixture loader and explicit DB values, while the worker test covers the thread API boundary.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/query-dsl-renderer-db-read-count-batch-target-test`
+    - The batch guard failed before the implementation with `3` selected query DSL renderer DB reads/imports.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/query-dsl-renderer-db-read-count-batch-target-test -v frontend.db.query-dsl-test/sample-queries -v frontend.db.query-dsl-test/page-queries -v frontend.db.query-dsl-test/custom-query-test -v frontend.worker.db-core-test/query-dsl-worker-apis-run-against-worker-db -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/db/query_dsl.cljs src/main/frontend/worker/db_core.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/db/query_dsl_test.cljs src/test/frontend/worker/db_core_test.cljs src/test/frontend/worker/db_worker_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 45 for implicit DB reads in `frontend.db.utils` and `frontend.db.model`:
+  - Added a guard for `conn/get-db` and direct `frontend.db.conn` imports in the remaining DB facade helper files, then reduced the selected `frontend.db.utils` and `frontend.db.model` surface from `8` guarded matches to `0`.
+  - Changed `frontend.db.utils/entity`, `pull`, `pull-many`, `q`, and `update-block-content` to require explicit DB values instead of resolving the current repo or renderer connection internally.
+  - Changed `frontend.db.model/get-page` and `get-case-page` to require explicit DB values, and removed the stale comment block that still referenced `conn/get-db`.
+  - Updated focused tests and test helpers to pass fixture DB values explicitly or use existing worker/db helper APIs.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/db-facade-implicit-renderer-db-read-count-batch-target-test`
+    - The batch guard failed before the implementation with `8` selected implicit renderer DB read/import matches.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/db-facade-implicit-renderer-db-read-count-batch-target-test -v frontend.db.model-test/entity-query-should-return-nil-if-id-not-exists -v frontend.db.model-test/entity-query-should-use-explicit-db-value -v frontend.db.db-based-model-test/hidden-page-test -v frontend.db.query-dsl-test/nested-boolean-queries -v frontend.db.query-dsl-test/page-queries -v frontend.handler.route-test/default-page-route`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/db/utils.cljs src/main/frontend/db/model.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/db/model_test.cljs src/test/frontend/db/db_based_model_test.cljs src/test/frontend/db/query_dsl_test.cljs src/test/frontend/handler/route_test.cljs src/test/frontend/modules/outliner/core_test.cljs src/test/frontend/test/helper.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 46 for export common handler DB reads:
+  - Added a guard for `*current-db*`, `logseq.db`, `ldb/get-page`, `ldb/get-block-and-children`, and `common-file` DB content builders in `frontend.handler.export.common-impl`, then reduced that selected handler export surface from `8` guarded matches to `0`.
+  - Removed the dynamic DB/content-config vars and DB-to-AST helpers from `frontend.handler.export.common-impl`; the handler namespace now only transforms ASTs and calls worker-bound resolver fns for block/page refs and embeds.
+  - Moved export block/page AST resolution into `frontend.worker.export`, where the worker DB is already available during `:thread-api/export-blocks-as-format`.
+  - Removed the obsolete nil DB binding from markdown file export and updated the export common comment to describe worker-bound resolvers.
+  - Added a focused worker export smoke test that verifies block refs are replaced through the worker DB resolver path.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/export-common-handler-db-read-count-batch-target-test`
+    - The batch guard failed before the implementation with `8` selected handler export DB resolution matches.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/export-common-handler-db-read-count-batch-target-test -v frontend.worker.db-core-test/worker-export-replaces-block-refs-with-worker-db-test -v frontend.worker.db-core-test/db-core-registers-all-thread-apis-test -v frontend.worker.db-worker-test/thread-api-db-core-registers-all-thread-apis-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/handler/export/common_impl.cljs src/main/frontend/handler/export/common.cljs src/main/frontend/handler/export/text.cljs src/main/frontend/worker/export.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/worker/db_core_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 47 for pure repo-name callers importing `frontend.db.conn`:
+  - Added a guard for `frontend.db.conn` repo-name usage in `frontend.util.url` and the mobile header, then reduced that selected UI surface from `3` guarded matches to `0`.
+  - Added `frontend.util.repo` for pure repo-name and short-name formatting helpers.
+  - Changed `frontend.db.conn` to delegate `get-repo-name` and `get-short-repo-name` to the new util namespace for compatibility while removing production UI callers from the DB connection namespace.
+  - Updated protocol URL generation and the mobile header fallback title to call `frontend.util.repo` directly.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/repo-name-db-conn-usage-count-batch-target-test`
+    - The batch guard failed before the implementation with `3` selected `frontend.db.conn` repo-name usages.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/repo-name-db-conn-usage-count-batch-target-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/util/repo.cljs src/main/frontend/db/conn.cljs src/main/frontend/util/url.cljs src/main/mobile/components/header.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 48 for `frontend.db` facade UI DB read exports:
+  - Added a guard for `frontend.db` importing `frontend.db.conn`/`frontend.db.utils` or exposing `get-db`, `remove-conn!`, `entity`, `pull`, `pull-many`, `get-page`, and `get-case-page`, then reduced that selected facade surface from `11` guarded matches to `0`.
+  - Removed the `frontend.db.conn`, `frontend.db.utils`, and `frontend.db.model` read-helper re-exports from `frontend.db`.
+  - Replaced the remaining publishing-mode `conn/transact!` path with direct `ldb/transact!`, so `frontend.db` no longer depends on the UI connection namespace.
+  - Kept `frontend.db/transact!` and `frontend.db/new-block-id`; no renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/frontend-db-facade-ui-read-export-count-batch-target-test`
+    - The batch guard failed before the implementation with `11` selected facade export/import matches.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/frontend-db-facade-ui-read-export-count-batch-target-test`
+  - Note: after removing the facade exports, `cljs:test` compiled successfully but exposed `197` test-side undeclared-var warnings from tests still referencing deleted `frontend.db` read helpers. These are being migrated in follow-up batches.
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 49 for the first test group using deleted `frontend.db` read helpers:
+  - Added a guard for `db/get-db`, `db/entity`, `db/pull`, `db/pull-many`, `db/get-page`, `db/get-case-page`, and `db/page?` in the first selected test group, then reduced that group from `20` guarded matches to `0`.
+  - Updated `frontend.test.helper` to use `frontend.db.conn/get-db` directly for test fixture connections.
+  - Updated `frontend.db.model-test` to use `frontend.db.utils/entity` for explicit DB-value entity tests.
+  - Updated `frontend.db.property-values-test` to use `frontend.db.conn/get-db` directly.
+  - Updated `frontend.db.query-dsl-test` to use `frontend.db.conn/get-db`, `frontend.db.utils/entity`, and `logseq.db/get-page`/`page?` instead of the deleted facade reads.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/first-test-db-facade-usage-count-batch-target-test`
+    - The batch guard failed before the implementation with `20` selected test-side facade usages.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/frontend-db-facade-ui-read-export-count-batch-target-test -v frontend.remove-ui-db-test/first-test-db-facade-usage-count-batch-target-test -v frontend.db.model-test/entity-query-should-return-nil-if-id-not-exists -v frontend.db.model-test/entity-query-should-use-explicit-db-value -v frontend.db.property-values-test -v frontend.db.query-dsl-test/nested-boolean-queries -v frontend.db.query-dsl-test/page-queries -v frontend.db.query-dsl-test/custom-query-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/frontend/db.cljs src/test/frontend/remove_ui_db_test.cljs src/test/frontend/test/helper.cljs src/test/frontend/db/model_test.cljs src/test/frontend/db/property_values_test.cljs src/test/frontend/db/query_dsl_test.cljs`
+    - `rtk git diff --check`
+  - Note: `cljs:test` now compiles with `178` remaining test-side undeclared-var warnings, down from `197`; remaining warnings are in later test batches.
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 50 for the second test group using deleted `frontend.db` read helpers:
+  - Added `handler/dnd_test.cljs` to the second test guard and reduced the selected group from `20` guarded matches to `0`.
+  - Removed stale `frontend.db` read-helper stubs from repo, views, block, common, developer, page, and DnD tests where the production paths already use worker calls or passed block/page data.
+  - Updated the views group-by-column test to pass column property data directly, matching the current `column-property` path instead of stubbing `frontend.db/entity`.
+  - Updated the page restore test fixture to seed the local test conn directly and stub `db-transact/apply-outliner-ops` for the restore op, avoiding a worker-backed setup transaction.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/second-test-db-facade-usage-count-batch-target-test`
+    - The batch guard failed before implementation with `19` selected matches, then failed with `1` after adding `handler/dnd_test.cljs` and clearing the first 19 matches.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.handler.common.page-test/create-page-restores-recycled-page`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/second-test-db-facade-usage-count-batch-target-test -v frontend.components.repo-test/upload-local-graph-reads-current-graph-e2ee-from-worker-test -v frontend.components.views-test/group-by-column-should-exclude-name-and-include-many-properties -v frontend.handler.block-test/get-top-level-blocks-uses-original-block-without-renderer-rehydration-test -v frontend.handler.block-test/edit-block-loads-target-through-worker-test -v frontend.handler.common-test/copy-to-clipboard-uses-passed-block-raw-titles-test -v frontend.handler.common-test/copy-to-clipboard-keeps-title-when-raw-title-is-missing-test -v frontend.handler.common.developer-test/show-entity-data-uses-worker-pull-test -v frontend.handler.common.developer-test/checksum-diagnostics-fetches-graph-id-through-worker-test -v frontend.handler.common.page-test/create-page-restores-recycled-page -v frontend.handler.common.page-test/create-existing-page-uses-worker-page-lookup-test -v frontend.handler.common.page-test/favorite-mutations-use-worker-outliner-ops-test -v frontend.handler.common.page-test/edit-page-when-present-uses-worker-page-lookup-test -v frontend.handler.common.page-test/after-page-deleted-uses-worker-page-lookup-test -v frontend.handler.common.page-test/delete-page-uses-worker-page-lookup-and-delete-op-test -v frontend.handler.common.page-test/after-page-renamed-uses-worker-page-lookup-test -v frontend.handler.dnd-test/move-blocks-uses-passed-block-maps-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/test/frontend/remove_ui_db_test.cljs src/test/frontend/components/repo_test.cljs src/test/frontend/components/views_test.cljs src/test/frontend/handler/block_test.cljs src/test/frontend/handler/common_test.cljs src/test/frontend/handler/common/developer_test.cljs src/test/frontend/handler/common/page_test.cljs src/test/frontend/handler/dnd_test.cljs`
+    - `rtk git diff --check`
+  - Note: `cljs:test` now compiles with `158` remaining test-side undeclared-var warnings, down from `178`; a line-level scan shows `140` remaining test matches, concentrated in outliner, editor, recent, paste, reaction, db-based editor, export, publish, history, editor lifecycle, and string-guard tests.
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 51 for the third test group using deleted `frontend.db` read helpers:
+  - Added a guard for reaction, export, and publish tests, then reduced that selected group from `20` guarded matches to `0`.
+  - Updated reaction tests to seed the local test conn directly and read entities through `frontend.db.utils/entity` with an explicit DB value.
+  - Stubbed reaction outliner ops to apply directly to the local test conn, avoiding a worker initialization dependency in this local fixture.
+  - Updated export tests to route markdown export through `frontend.worker.export` with the local DB value returned by `frontend.db.conn/get-db`.
+  - Replaced the export test fixture loader with a local sqlite-build transaction applied through `datascript.core/transact!`, so fixture setup no longer calls the renderer transactor.
+  - Removed stale `frontend.db/get-db` stubs from export and publish tests where the production paths already use worker calls.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/third-test-db-facade-usage-count-batch-target-test`
+    - The batch guard failed before implementation with `20` selected test-side facade usages.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.handler.reaction-test/toggle-reaction-anonymous -v frontend.handler.reaction-test/toggle-reaction-with-user -v frontend.handler.reaction-test/toggle-reaction-invalid-emoji`
+    - `rtk pnpm cljs:run-test -v frontend.handler.export-test/auto-db-backup-reads-backup-folder-through-worker-test -v frontend.handler.export-test/auto-db-backup-skips-interval-when-worker-has-no-backup-folder-test -v frontend.handler.export-test/export-blocks-as-markdown-without-properties -v frontend.handler.export-test/export-blocks-as-markdown-with-properties`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/third-test-db-facade-usage-count-batch-target-test -v frontend.handler.reaction-test/toggle-reaction-anonymous -v frontend.handler.reaction-test/toggle-reaction-with-user -v frontend.handler.reaction-test/toggle-reaction-invalid-emoji -v frontend.handler.export-test/auto-db-backup-reads-backup-folder-through-worker-test -v frontend.handler.export-test/auto-db-backup-skips-interval-when-worker-has-no-backup-folder-test -v frontend.handler.export-test/export-blocks-as-markdown-without-properties -v frontend.handler.export-test/export-blocks-as-markdown-with-properties -v frontend.handler.publish-test/post-publish-gets-missing-graph-uuid-from-worker-test -v frontend.handler.publish-test/unpublish-page-gets-graph-uuid-from-worker-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/test/frontend/remove_ui_db_test.cljs src/test/frontend/handler/reaction_test.cljs src/test/frontend/handler/export_test.cljs src/test/frontend/handler/publish_test.cljs`
+    - `rtk git diff --check`
+  - Note: `cljs:test` now compiles with `138` remaining test-side undeclared-var warnings, down from `158`; a line-level scan shows `128` remaining test matches, of which `6` are string guard assertions and `122` are real remaining test-side usages.
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 52 for the fourth test group using deleted `frontend.db` read helpers:
+  - Added a guard for recent and paste tests, then reduced that selected group from `21` guarded matches to `0`.
+  - Updated recent tests to use `frontend.db.conn/get-db` for local fixture DB values and `logseq.db/get-page`/`page?` for explicit DB-value reads.
+  - Added small local test helpers for recent page lookup and page creation, keeping the fixture path direct and avoiding a renderer DB facade.
+  - Removed stale `frontend.db` read-helper stubs from paste tests where the production paths already use state data or worker calls.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/fourth-test-db-facade-usage-count-batch-target-test`
+    - The batch guard failed before implementation with `21` selected test-side facade usages.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/fourth-test-db-facade-usage-count-batch-target-test -v frontend.handler.db-based.recent-test/recents-test -v frontend.handler.db-based.recent-test/recents-hide-recycled-pages-without-removing-history-test -v frontend.handler.db-based.recent-test/add-page-to-recent-updates-state-without-renderer-entity-test -v frontend.handler.db-based.recent-test/favorites-hide-recycled-pages-without-unfavoriting-test -v frontend.handler.paste-test/editor-on-paste-embed-block-uses-worker-loaded-link -v frontend.handler.paste-test/editing-display-type-block-uses-state-block -v frontend.handler.paste-test/paste-text-parseable-preserves-og-copied-heading-page-refs -v frontend.handler.paste-test/paste-text-parseable-resolves-page-refs-through-worker-test -v frontend.handler.paste-test/paste-text-parseable-does-not-create-empty-page-ref`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/test/frontend/remove_ui_db_test.cljs src/test/frontend/handler/db_based/recent_test.cljs src/test/frontend/handler/paste_test.cljs`
+    - `rtk git diff --check`
+  - Note: `cljs:test` now compiles with `117` remaining test-side undeclared-var warnings, down from `138`; a direct line-level scan shows `127` remaining `db/...` matches, including string guard assertions and non-CLJS/electron test files outside the current compile warning count.
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 53 for the fifth test group using deleted `frontend.db` read helpers:
+  - Added a guard for db-based page/editor/property tests plus page, history, route, graph, and editor lifecycle handler tests, then reduced that selected group from `22` guarded matches to `0`.
+  - Removed stale `frontend.db` read-helper stubs from db-based page/editor/property tests and handler page/history/route/graph/editor-lifecycle tests where production already uses worker calls, state, or explicit worker-loaded data.
+  - Kept db-based page tests on the real worker property transaction path for valid tag writes and normalized only dynamic transaction metadata in assertions.
+  - Updated page handler tests to set worker/state explicitly across async promise boundaries instead of relying on temporary async `with-redefs`.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/fifth-test-db-facade-usage-count-batch-target-test`
+    - The batch guard failed before implementation with `22` selected test-side facade usages.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/fifth-test-db-facade-usage-count-batch-target-test -v frontend.handler.db-based.editor-test/wrap-parse-block-markdown-hashtag-link-test -v frontend.handler.db-based.editor-test/wrap-parse-block-preserves-multiple-block-refs-test -v frontend.handler.db-based.editor-test/wrap-parse-block-uses-passed-block-without-current-block-rehydration-test -v frontend.handler.db-based.editor-test/wrap-parse-block-preserves-cached-map-refs-without-renderer-db-test -v frontend.handler.db-based.editor-test/batch-set-heading-loads-blocks-through-worker-test -v frontend.handler.db-based.page-test/convert-tag-to-page-uses-worker-build-and-transact-test -v frontend.handler.db-based.page-test/add-tag-validates-through-worker-test -v frontend.handler.db-based.page-test/tag-on-chosen-treats-worker-map-as-existing-page-test -v frontend.handler.db-based.page-test/add-tag-shows-worker-validation-notification-test -v frontend.handler.db-based.page-test/convert-page-to-tag-uses-worker-build-and-transact-test -v frontend.handler.db-based.property-test/batch-set-property-closed-value-loads-value-through-worker-test -v frontend.handler.page-test/page-on-chosen-loads-uuid-result-through-worker-test -v frontend.handler.page-test/reorder-favorites-uses-worker-outliner-ops-test -v frontend.handler.history-test/restore-cursor-prefers-block-selection-test -v frontend.handler.history-test/restore-cursor-selection-falls-back-to-worker-block-test -v frontend.handler.route-test/redirect-to-page-uses-worker-route-info-test -v frontend.handler.graph-test/current-graph-id-uses-tab-memory-test -v frontend.handler.editor-lifecycle-test/did-mount-records-editor-info-with-worker-page-lookup-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/test/frontend/remove_ui_db_test.cljs src/test/frontend/handler/db_based/page_test.cljs src/test/frontend/handler/db_based/editor_test.cljs src/test/frontend/handler/db_based/property_test.cljs src/test/frontend/handler/page_test.cljs src/test/frontend/handler/history_test.cljs src/test/frontend/handler/route_test.cljs src/test/frontend/handler/graph_test.cljs src/test/frontend/handler/editor_lifecycle_test.cljs`
+    - `rtk rg -n "\bdb/(?:get-db|entity|pull|pull-many|get-page|get-case-page|page\?)" src/test/frontend/handler/db_based/page_test.cljs src/test/frontend/handler/db_based/editor_test.cljs src/test/frontend/handler/db_based/property_test.cljs src/test/frontend/handler/page_test.cljs src/test/frontend/handler/history_test.cljs src/test/frontend/handler/route_test.cljs src/test/frontend/handler/graph_test.cljs src/test/frontend/handler/editor_lifecycle_test.cljs || true`
+    - `rtk git diff --check`
+  - Note: `cljs:test` now compiles with `95` remaining test-side undeclared-var warnings, down from `117`; a direct line-level scan shows `105` remaining `db/...` matches, concentrated in outliner core, editor, and editor async tests, plus small string guard/electron/component test files.
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 54 for the sixth test group using deleted `frontend.db` read helpers:
+  - Added a guard for `src/test/frontend/handler/editor_test.cljs`, then reduced that selected file from `34` guarded matches to `0`.
+  - Removed stale `frontend.db` read-helper stubs from editor handler tests where production already uses passed block data, worker calls, or explicit state.
+  - Reworked local editor fixtures to read from the explicit test DB via `frontend.db.conn`, `logseq.db`, and `frontend.db.utils`, including tag alias setup and paste/cut recycle assertions.
+  - Kept asset-save tests on the real `new-asset-block` path while stubbing only public file/checksum/write dependencies; no renderer cache or new worker cache was added.
+  - Replaced async `p/with-redefs` in the newly touched editor fixtures with explicit restore in `finally`, so the selected editor tests can run together without leaking worker stubs.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/sixth-test-db-facade-usage-count-batch-target-test`
+    - The batch guard failed before implementation with `34` selected test-side facade usages.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/sixth-test-db-facade-usage-count-batch-target-test`
+    - `rtk pnpm cljs:run-test -v frontend.handler.editor-test/own-order-number-list-uses-passed-block-test -v frontend.handler.editor-test/get-state-uses-editor-args-block-without-renderer-rehydration-test -v frontend.handler.editor-test/edit-pending-new-block-loads-inserted-block-through-worker-test -v frontend.handler.editor-test/save-block-if-changed-uses-passed-block-content-test -v frontend.handler.editor-test/open-link-in-sidebar-loads-target-through-worker-test -v frontend.handler.editor-test/zoom-in-uses-current-edit-block-without-renderer-lookup-test -v frontend.handler.editor-test/edit-last-block-after-inserted-uses-returned-block-test -v frontend.handler.editor-test/cycle-todo-uses-current-edit-block-test -v frontend.handler.editor-test/delete-block-aux-uses-passed-block-test`
+    - `rtk pnpm cljs:run-test -v frontend.handler.editor-test/follow-link-under-cursor-opens-existing-page-test -v frontend.handler.editor-test/follow-link-under-cursor-creates-missing-page-test -v frontend.handler.editor-test/follow-link-under-cursor-uses-worker-page-before-creating-test -v frontend.handler.editor-test/follow-link-under-cursor-uses-worker-without-renderer-page-lookup-test`
+    - `rtk pnpm cljs:run-test -v frontend.handler.editor-test/move-selected-blocks-loads-selection-through-worker-test -v frontend.handler.editor-test/cycle-todo-loads-selected-blocks-through-worker-test -v frontend.handler.editor-test/db-based-cycle-todo-uses-block-status-test -v frontend.handler.editor-test/get-matched-classes-includes-class-aliases -v frontend.handler.editor-test/tag-search-does-not-convert-class-aliases`
+    - `rtk pnpm cljs:run-test -v frontend.handler.editor-test/delete-block-when-zero-pos-keeps-asset-block-test -v frontend.handler.editor-test/delete-block-when-zero-pos-keeps-comments-block-test -v frontend.handler.editor-test/delete-block-when-zero-pos-keeps-regular-empty-block-behavior-test -v frontend.handler.editor-test/move-to-prev-block-edit-fn-focuses-merged-asset-title-test -v frontend.handler.editor-test/move-to-prev-block-edit-fn-uses-loaded-sibling-entity-test -v frontend.handler.editor-test/db-based-save-assets-honors-explicit-target-block -v frontend.handler.editor-test/db-based-save-assets-ignores-stale-comment-target-without-explicit-target -v frontend.handler.editor-test/block-default-collapsed-respects-ignore-block-collapsed-flag -v frontend.handler.editor-test/paste-cut-recycled-block-moves-existing-node-out-of-recycle -v frontend.handler.editor-test/navigable-sibling-block-skips-comment-items-test -v frontend.handler.editor-test/navigable-sibling-block-skips-comment-item-before-block-below-comments-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/test/frontend/remove_ui_db_test.cljs src/test/frontend/handler/editor_test.cljs`
+    - `rtk rg -n "\bdb/(?:get-db|entity|pull|pull-many|get-page|get-case-page|page\?)" src/test/frontend/handler/editor_test.cljs || true`
+    - `rtk git diff --check`
+  - Note: `cljs:test` now compiles with `61` remaining test-side undeclared-var warnings, down from `95`; a direct line-level scan shows `71` remaining `db/...` matches in `src/test`, concentrated in outliner core, editor async, db async, imports, and electron tests.
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 55 for the seventh test group using deleted `frontend.db` read helpers:
+  - Added a guard for `src/test/frontend/modules/outliner/core_test.cljs`, then reduced that selected file from `49` guarded matches to `0`.
+  - Replaced outliner core test reads from deleted `frontend.db` helpers with explicit test DB access through `frontend.db.conn`, `frontend.db.utils`, and `datascript.core`.
+  - Updated local fixture writes that prepared empty paste targets and property metadata to transact directly against the explicit test conn, avoiding the UI DB facade in setup.
+  - Kept the production outliner paths unchanged; no renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/seventh-test-db-facade-usage-count-batch-target-test`
+    - The batch guard failed before implementation with `49` selected test-side facade usages.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/seventh-test-db-facade-usage-count-batch-target-test`
+    - `rtk pnpm cljs:run-test -n frontend.modules.outliner.core-test -e long`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/test/frontend/remove_ui_db_test.cljs src/test/frontend/modules/outliner/core_test.cljs`
+    - `rtk rg -n "\bdb/(?:get-db|entity|pull|pull-many|get-page|get-case-page|page\?)" src/test/frontend/modules/outliner/core_test.cljs || true`
+    - `rtk git diff --check`
+  - Note: `cljs:test` now compiles with `14` remaining test-side undeclared-var warnings, down from `61`; a direct line-level scan shows `22` remaining `db/...` matches in `src/test`, concentrated in editor async, db async, imports, and electron tests.
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 78 for removing the production `frontend.db` facade:
+  - Added `renderer-db-main-entry-is-test-only-test`, confirmed it failed while `src/main/frontend/db.cljs` still existed, then deleted the production namespace.
+  - Added a minimal test-only `src/test/frontend/db.cljs` fixture for the remaining unit tests that still need local test-conn `transact!` and `new-block-id`.
+  - Made removal guard helpers tolerate intentionally deleted source files so full `frontend.remove-ui-db-test` can keep covering removed namespaces.
+  - Updated `logseq.api.block/get_block` to preserve the existing public API shape while reading worker payloads: non-expanded children are immediate children only, and top-level refs remain id-only after `fullTitle` calculation.
+  - Updated stale removal guards to assert the current worker-backed helper calls (`db-async/<get-block-page-info`, `db-async/<get-property-closed-values`) instead of old literal `:thread-api/pull` strings.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/renderer-db-main-entry-is-test-only-test`
+    - The guard failed before implementation because `src/main/frontend/db.cljs` still existed.
+  - Focused verification passed:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/renderer-db-main-entry-is-test-only-test -n frontend.db.model-test -n frontend.handler.db-based.import-test -n frontend.handler.db-based.editor-test -n frontend.handler.db-based.page-test -n frontend.handler.export-test -n frontend.handler.editor-test -n logseq.api-test`
+    - `rtk pnpm cljs:test && rtk pnpm cljs:run-test -n frontend.remove-ui-db-test`
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/logseq/api/block.cljs src/test/frontend/db.cljs src/test/frontend/remove_ui_db_test.cljs src/test/logseq/api_test.cljs`
+    - `rtk rg -n "\b(?:d/(?:entity|pull|pull-many|q|datoms|transact!|db-with)|datascript\.core|\[datascript\.core)" src/main/frontend src/main/mobile src/main/electron src/main/logseq -g "*.cljs" -g "*.cljc" -g "!src/main/frontend/worker/**" -g "!src/main/logseq/cli/**" -g "!src/main/logseq/common/export/file.cljs" -g "!src/main/logseq/api/db_based/tools.cljs"` returned no unapproved production renderer DataScript references.
+    - `rtk rg -n "\[frontend\.db :as db\]|\bdb/transact!|\bfrontend\.db$|\(ns frontend\.db\b" src/main/frontend src/main/mobile src/main/electron src/main/logseq -g "*.cljs" -g "*.cljc" -g "!src/main/frontend/worker/**"` returned no production `frontend.db` facade or `db/transact!` matches; only `frontend.db.*` helper namespaces remain.
+    - `rtk git diff --check`
+  - Full local verification intentionally not run per user instruction.
+- 2026-07-08: Completed Batch 79 for the final plugin DB-based API entity-predicate leftovers:
+  - Added `plugin-db-based-api-uses-plain-entity-predicates-test`, confirmed it failed with `11` remaining `ldb`/`entity-util` predicate calls, then moved those checks to `frontend.util.entity`.
+  - Removed the stale `logseq.db.frontend.entity-util` import from `src/main/logseq/api/db_based.cljs`.
+  - Kept remaining `logseq.db` calls in that namespace only for built-in metadata checks, not worker-payload classification.
+  - No renderer cache or new worker cache was added.
+  - Focused RED verification:
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/plugin-db-based-api-uses-plain-entity-predicates-test`
+    - The guard failed before implementation with `11` selected predicate matches.
+  - Focused verification passed:
+    - `rtk rg --pcre2 -n "\b(?:ldb|entity-util)/(?:page\?|class\?|property\?)(?=[\s\)\]\}])|logseq\.db\.frontend\.entity-util" src/main/logseq/api/db_based.cljs` returned no matches.
+    - `rtk clojure -M:clj-kondo --fail-level error --lint src/main/logseq/api/db_based.cljs src/test/frontend/remove_ui_db_test.cljs`
+    - `rtk pnpm cljs:test`
+    - `rtk pnpm cljs:run-test -v frontend.remove-ui-db-test/plugin-db-based-api-uses-plain-entity-predicates-test -n frontend.remove-ui-db-test -n logseq.api-test`
+    - `rtk pnpm cljs:run-test -n frontend.remove-ui-db-test -n logseq.api-test`
+  - Full local verification intentionally not run per user instruction.

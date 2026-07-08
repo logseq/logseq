@@ -3,7 +3,6 @@
   (:require [frontend.components.filepicker :as filepicker]
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.db.react :as react]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
@@ -21,7 +20,7 @@
                                                       {:page (:block/uuid class)
                                                        :properties (merge properties {:block/tags (:db/id class)})
                                                        :edit-block? false})]
-    (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 {:container-id :unknown-container})
+    (editor-handler/edit-block! block 0 {:container-id :unknown-container})
     block))
 
 (defn- build-asset-file-column
@@ -73,7 +72,7 @@
 
 (defn- refresh-view-data!
   [view-parent view table ids]
-  (let [list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))]
+  (let [list-view? (= :logseq.property.view/type.list (:logseq.property.view/type-ident view))]
     (when-let [repo (state/get-current-repo)]
       (if list-view?
         (when-let [result (:result (get @react/*query-state [repo :frontend.worker.react/objects (:db/id view-parent)]))]
@@ -121,25 +120,32 @@
 
 (hsx/defc class-objects
   [class config]
-  (let [class (db/sub-block (:db/id class))
-        container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
+  (let [container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
         config (assoc config :container-id (or (:container-id config) (state/get-container-id container-key)))
         properties (outliner-property/get-class-properties class)]
     [:div.ml-1
      (class-objects-inner config class properties)]))
 
+(defn- <property-object-default-value
+  [property]
+  (if (= :checkbox (:logseq.property/type property))
+    (p/resolved false)
+    (p/let [placeholder (state/<invoke-db-worker :thread-api/pull
+                                                 (state/get-current-repo)
+                                                 [:db/id]
+                                                 :logseq.property/empty-placeholder)]
+      (:db/id placeholder))))
+
 (defn- add-new-property-object!
   [property properties]
-  (p/let [default-value (if (= :checkbox (:logseq.property/type property))
-                          false
-                          (:db/id (db/entity :logseq.property/empty-placeholder)))
+  (p/let [default-value (<property-object-default-value property)
           block (editor-handler/api-insert-new-block! ""
                                                       {:page (:block/uuid property)
                                                        :properties (merge
                                                                     {(:db/ident property) default-value}
                                                                     properties)
                                                        :edit-block? false})]
-    (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 {:container-id :unknown-container})
+    (editor-handler/edit-block! block 0 {:container-id :unknown-container})
     block))
 
 (hsx/defc property-related-objects-inner
@@ -160,12 +166,25 @@
 ;; Show all nodes containing the given property
 (hsx/defc property-related-objects
   [property config]
-  (let [property' (db/sub-block (:db/id property))
+  (let [property' property
+        [tags-property set-tags-property!] (hooks/use-state nil)
         container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
         config (assoc config :container-id (or (:container-id config) (state/get-container-id container-key)))
         ;; Show tags to help differentiate property rows
         properties (if (= (:db/ident property) :block/tags)
                      [property']
-                     [property' (db/entity :block/tags)])]
+                     (cond-> [property']
+                       tags-property
+                       (conj tags-property)))]
+    (hooks/use-effect!
+     (fn []
+       (when-not (= (:db/ident property) :block/tags)
+         (p/let [property (state/<invoke-db-worker :thread-api/pull
+                                                   (state/get-current-repo)
+                                                   '[* {:property/closed-values [*]}]
+                                                   :block/tags)]
+           (set-tags-property! property)))
+       nil)
+     [(:db/ident property)])
     [:div.ml-1
      (property-related-objects-inner config property' properties)]))

@@ -6,8 +6,6 @@
             [cljs-time.format :as tf]
             [clojure.set :as set]
             [clojure.string :as string]
-            [datascript.core :as d]
-            [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.components.dnd :as dnd]
             [frontend.components.icon :as icon-component]
@@ -19,7 +17,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.dicts :as dicts]
             [frontend.date :as date]
-            [frontend.db :as db]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.async :as db-async]
             [frontend.db.react :as react]
@@ -36,6 +33,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.entity :as entity]
             [logseq.common.config :as common-config]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
@@ -79,6 +77,31 @@
 (defn- table-selection-path
   [table & path]
   (into [:view/table-selection (table-selection-id table)] path))
+
+(defn- built-in-property
+  [ident]
+  (if-let [{:keys [title schema closed-values]} (get db-property/built-in-properties ident)]
+    (cond-> {:db/ident ident
+             :block/title title
+             :logseq.property/type (:type schema)}
+      (:cardinality schema)
+      (assoc :db/cardinality (:cardinality schema))
+
+      (seq closed-values)
+      (assoc :property/closed-values closed-values))
+    (some (fn [[_ {:keys [closed-values]}]]
+            (some (fn [{:keys [db-ident value icon]}]
+                    (when (= ident db-ident)
+                      {:db/ident db-ident
+                       :block/title value
+                       :logseq.property/icon icon}))
+                  closed-values))
+          db-property/built-in-properties)))
+
+(defn- column-property
+  [column]
+  (or (:property column)
+      (built-in-property (or (:id column) (:db/ident column)))))
 
 (defn- get-table-row-selection
   [table]
@@ -314,7 +337,7 @@
         [asc?] (some (fn [item] (when (= (:id item) (:id column))
                                   (when-some [asc? (:asc? item)]
                                     [asc?]))) sorting)
-        property (db/entity (:id column))
+        property (column-property column)
         pinned? (when property
                   (contains? (set (map :db/id (:logseq.property.table/pinned-columns view-entity)))
                              (:db/id property)))
@@ -348,7 +371,7 @@
                                                (ui/icon "pin" {:size 15})
                                                [:div (if pinned? (t :view.table/unpin) (t :view.table/pin))]]))]
                             tag (when-let [entity (:logseq.property/view-for view-entity)]
-                                  (when (ldb/class? entity)
+                                  (when (entity/class? entity)
                                     entity))
                             option (cond->
                                     {:with-title? false
@@ -396,7 +419,15 @@
 
 (defn- get-property-value-content
   [entity]
-  (db-view/get-property-value-content (db/get-db) entity))
+  (cond
+    (map? entity)
+    (db-property/property-value-content entity)
+
+    (keyword? entity)
+    (str entity)
+
+    :else
+    entity))
 
 (hsx/defc block-container
   [config row]
@@ -546,7 +577,7 @@
   (let [properties' (->>
                      (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?))
                        properties
-                       (conj properties (db/entity :block/tags)))
+                       (conj properties (built-in-property :block/tags)))
                      (remove (fn [property]
                                (or (nil? property)
                                    (contains? #{:logseq.property/hide?} (:db/ident property))))))
@@ -586,18 +617,19 @@
                                         ident)
                              (and with-object-name? (= :block/title ident))
                              (contains? #{:map :entity} (:logseq.property/type property)))
-                 (let [property (if (de/entity? property)
+                 (let [property (if (:db/ident property)
                                   property
-                                  (or (merge (db/entity ident) property) property)) ; otherwise, :cell/:header/etc. will be removed
-                       get-value (when (de/entity? property)
+                                  (or (merge (built-in-property ident) property) property)) ; otherwise, :cell/:header/etc. will be removed
+                       get-value (when (:db/ident property)
                                    (fn [row] (db-view/get-property-value-for-search row property)))]
                    {:id ident
                     :name (or (:name property)
                               (db-property/built-in-display-title property t))
+                    :property property
                     :header (or (:header property)
                                 header-cp)
                     :cell (or (:cell property)
-                              (when (de/entity? property)
+                              (when (:db/ident property)
                                 (fn [_table row _column style]
                                   (pv/property-value row property {:view? true
                                                                    :table-view? true
@@ -667,7 +699,7 @@
   (when-let [id (:id column)]
     (or (= id :block/page)
         (when-not (= id :block/title)
-          (when-let [property (db/entity id)]
+          (let [property (column-property column)]
             (and (contains? groupable-property-types (:logseq.property/type property))
                  (or (not (db-property/many? property))
                      (contains? groupable-many-property-types (:logseq.property/type property)))))))))
@@ -676,15 +708,15 @@
   [view-entity property-ident value]
   (property-handler/set-block-property! (:db/id view-entity) property-ident value))
 
-(defn- property-ident->id
+(defn- <property-ident->id
   [property-ident]
-  (:db/id (db/entity property-ident)))
+  (p/let [property (state/<invoke-db-worker :thread-api/pull (state/get-current-repo) [:db/id] property-ident)]
+    (:db/id property)))
 
 (defn- gallery-asset-columns
   [columns]
   (filter (fn [column]
-            (when-let [property (db/entity (:id column))]
-              (= :asset (:logseq.property/type property))))
+            (= :asset (:logseq.property/type (column-property column))))
           columns))
 
 (def ^:private gallery-default-card-dimensions
@@ -711,30 +743,30 @@
       (:db/ident column)))
 
 (defn- gallery-column-property
-  [db column]
+  [column]
   (cond
-    (de/entity? column) column
-    (gallery-column-ident column) (d/entity db (gallery-column-ident column))))
+    (:logseq.property/type column) column
+    (gallery-column-ident column) (column-property column)))
 
 (defn- gallery-asset-property-column?
-  [db column]
-  (= :asset (:logseq.property/type (gallery-column-property db column))))
+  [column]
+  (= :asset (:logseq.property/type (gallery-column-property column))))
 
 (defn- gallery-asset-property-idents
-  [db columns]
+  [columns]
   (->> columns
-       (filter #(gallery-asset-property-column? db %))
+       (filter gallery-asset-property-column?)
        (keep gallery-column-ident)
        vec))
 
 (defn- gallery-asset-property-ident
-  [db view columns]
-  (let [configured-ident (:db/ident (:logseq.property.view/gallery-asset-property view))
+  [view columns]
+  (let [configured-ident (:logseq.property.view/gallery-asset-property-ident view)
         view-for (:logseq.property/view-for view)
         feature-type (:logseq.property.view/feature-type view)
         asset-tag? (= :logseq.class/Asset (:db/ident view-for))
         tag-view? (and (= :class-objects feature-type)
-                       (ldb/class? view-for))
+                       (entity/class? view-for))
         query-view? (= :query-result feature-type)]
     (cond
       asset-tag?
@@ -744,7 +776,7 @@
       configured-ident
 
       (or tag-view? query-view?)
-      (let [asset-idents (gallery-asset-property-idents db columns)]
+      (let [asset-idents (gallery-asset-property-idents columns)]
         (when (= 1 (count asset-idents))
           (first asset-idents))))))
 
@@ -779,13 +811,14 @@
 
 (defn- set-gallery-display-properties!
   [view-entity property-idents]
-  (set-view-property! view-entity
-                      :logseq.property.view/gallery-display-properties
-                      (vec (keep property-ident->id property-idents))))
+  (p/let [property-ids (p/all (map <property-ident->id property-idents))]
+    (set-view-property! view-entity
+                        :logseq.property.view/gallery-display-properties
+                        (vec (keep identity property-ids)))))
 
 (defn- gallery-display-properties-menu
   [view-entity columns]
-  (let [asset-property-ident (gallery-asset-property-ident (db/get-db) view-entity columns)
+  (let [asset-property-ident (gallery-asset-property-ident view-entity columns)
         display-property-idents (set (gallery-display-property-idents view-entity columns asset-property-ident))
         property-columns (remove #(contains? #{:select :id asset-property-ident} (:id %)) columns)]
     (shui/dropdown-menu-sub
@@ -809,7 +842,7 @@
   [view-entity columns]
   (let [asset-columns (seq (gallery-asset-columns columns))]
     (when asset-columns
-      (let [asset-property-ident (gallery-asset-property-ident (db/get-db) view-entity columns)]
+      (let [asset-property-ident (gallery-asset-property-ident view-entity columns)]
         (shui/dropdown-menu-sub
          (shui/dropdown-menu-sub-trigger
           (t :view.gallery/asset-property))
@@ -822,7 +855,7 @@
                                  (when checked?
                                    (set-view-property! view-entity
                                                        :logseq.property.view/gallery-asset-property
-                                                       (property-ident->id (:id column)))))
+                                                       (<property-ident->id (:id column)))))
               :onSelect (fn [e] (.preventDefault e))}
              (:name column)))))))))
 
@@ -915,7 +948,7 @@
          {:key (name option-key)
           :checked (= option-key (groups-sort-by-property-identity->name property-ident))
           :onCheckedChange (fn [checked?]
-                             (let [property-id (:db/id (db/entity (groups-sort-by-name->property-identity option-key)))]
+                             (p/let [property-id (<property-ident->id (groups-sort-by-name->property-identity option-key))]
                                (if checked?
                                  (db-property-handler/set-block-property! (:db/id view-entity) :logseq.property.view/sort-groups-by-property
                                                                           property-id)
@@ -944,7 +977,7 @@
 
 (hsx/defc more-actions
   [view-entity columns {:keys [column-visible? rows column-toggle-visibility]} {:keys [group-by-property-ident]}]
-  (let [display-type (:db/ident (:logseq.property.view/type view-entity))
+  (let [display-type (:logseq.property.view/type-ident view-entity)
         table? (= display-type :logseq.property.view/type.table)
         gallery? (= display-type :logseq.property.view/type.gallery)
         group-by-columns (->> (concat (when (or
@@ -999,8 +1032,9 @@
                :checked (= (:id column) group-by-property-ident)
                :onCheckedChange (fn [result]
                                   (if result
-                                    (db-property-handler/set-block-property! (:db/id view-entity) :logseq.property.view/group-by-property
-                                                                             (:db/id (db/entity (:id column))))
+                                    (p/let [property-id (<property-ident->id (:id column))]
+                                      (db-property-handler/set-block-property! (:db/id view-entity) :logseq.property.view/group-by-property
+                                                                               property-id))
                                     (db-property-handler/remove-block-property! (:db/id view-entity) :logseq.property.view/group-by-property)))
                :onSelect (fn [e] (.preventDefault e))}
               (:name column))))))
@@ -1162,55 +1196,56 @@
 
 (defn- on-delete-rows
   [view-parent view-feature-type table selected-ids]
-  (let [selected-rows (->> (map db/entity selected-ids)
-                           (remove :logseq.property/built-in?))
-        pages (filter ldb/page? selected-rows)
-        blocks (remove ldb/page? selected-rows)
-        page-ids (map :db/id pages)
-        {:keys [set-data! set-row-selection!]} (:data-fns table)
-        update-table-state! (fn []
-                              (let [data (:full-data table)
-                                    selected-ids (set (map :db/id selected-rows))
-                                    new-data (if (every? number? data)
-                                               (remove selected-ids data)
-                                               ;; group
-                                               (map (fn [[by-value col]]
-                                                      [by-value (remove selected-ids col)]) data))]
-                                (set-data! new-data)
-                                (set-row-selection! {})))]
-    (p/do!
-     (ui-outliner-tx/transact!
-      {:outliner-op :delete-blocks}
-      (when (seq blocks)
-        (outliner-op/delete-blocks! blocks nil))
-      (case view-feature-type
-        :class-objects
-        (when (seq page-ids)
-          (when-not (= :logseq.class/Page (:db/ident view-parent))
-            (doseq [page pages]
-              (when-let [id (:block/uuid page)]
-                (outliner-op/delete-page! id)))))
+  (p/let [results (db-async/<get-blocks (state/get-current-repo) selected-ids {:children? false})
+          selected-rows (->> (keep :block results)
+                             (remove :logseq.property/built-in?))]
+    (let [pages (filter entity/page? selected-rows)
+          blocks (remove entity/page? selected-rows)
+          page-ids (map :db/id pages)
+          {:keys [set-data! set-row-selection!]} (:data-fns table)
+          update-table-state! (fn []
+                                (let [data (:full-data table)
+                                      selected-row-ids (set (map :db/id selected-rows))
+                                      new-data (if (every? number? data)
+                                                 (remove selected-row-ids data)
+                                                 ;; group
+                                                 (map (fn [[by-value col]]
+                                                        [by-value (remove selected-row-ids col)]) data))]
+                                  (set-data! new-data)
+                                  (set-row-selection! {})))]
+      (p/do!
+       (ui-outliner-tx/transact!
+        {:outliner-op :delete-blocks}
+        (when (seq blocks)
+          (outliner-op/delete-blocks! blocks nil))
+        (case view-feature-type
+          :class-objects
+          (when (seq page-ids)
+            (when-not (= :logseq.class/Page (:db/ident view-parent))
+              (doseq [page pages]
+                (when-let [id (:block/uuid page)]
+                  (outliner-op/delete-page! id)))))
 
-        :property-objects
-        ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
-        (when-not (:logseq.property/built-in? view-parent)
-          (let [tx-data (map (fn [pid] [:db/retract pid (:db/ident view-parent)]) page-ids)]
-            (when (seq tx-data)
-              (outliner-op/transact! tx-data {:outliner-op :save-block}))))
+          :property-objects
+          ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
+          (when-not (:logseq.property/built-in? view-parent)
+            (let [tx-data (map (fn [pid] [:db/retract pid (:db/ident view-parent)]) page-ids)]
+              (when (seq tx-data)
+                (outliner-op/transact! tx-data {:outliner-op :save-block}))))
 
-        :query-result
-        (doseq [page pages]
-          (when-let [id (:block/uuid page)]
-            (outliner-op/delete-page! id)))
+          :query-result
+          (doseq [page pages]
+            (when-let [id (:block/uuid page)]
+              (outliner-op/delete-page! id)))
 
-        :all-pages
-        (state/pub-event! [:page/show-delete-dialog selected-rows update-table-state!])
+          :all-pages
+          (state/pub-event! [:page/show-delete-dialog selected-rows update-table-state!])
 
-        nil))
+          nil))
 
-     (when-not (or (= view-feature-type :all-pages)
-                   (and (= view-feature-type :property-objects) (:logseq.property/built-in? view-parent)))
-       (update-table-state!)))))
+       (when-not (or (= view-feature-type :all-pages)
+                     (and (= view-feature-type :property-objects) (:logseq.property/built-in? view-parent)))
+         (update-table-state!))))))
 
 (defn- table-header
   [table {:keys [show-add-property? add-property! view-parent view-feature-type] :as option}]
@@ -1445,14 +1480,14 @@
 
 (hsx/defc table-row
   [table row props option]
-  (let [block (db/sub-block (:db/id row))
+  (let [block row
         block' (if (contains? #{:self :full} (:block.temp/load-status block)) block row)
         row' (when block'
                (-> block'
                    (update :block/tags (fn [tags]
                                          (keep (fn [tag]
-                                                 (when-let [id (:db/id tag)]
-                                                   (db/entity id)))
+                                                 (when (map? tag)
+                                                   tag))
                                                tags)))
                    (assoc :block.temp/refs-count (:block.temp/refs-count row))))]
     (table-row-inner table row' props option)))
@@ -1517,7 +1552,6 @@
   [view-entity columns {:keys [data-fns] :as table} opts]
   (let [[property set-property!] (hooks/use-state nil)
         [values set-values!] (hooks/use-state nil)
-        schema (:schema (db/get-db))
         timestamp? (datetime-property? property)
         set-filters! (:set-filters! data-fns)
         filters (get-in table [:state :filters])
@@ -1532,13 +1566,12 @@
                 :extract-fn :label
                 :extract-chosen-fn :value
                 :on-chosen (fn [column]
-                             (let [id (:id column)
-                                   property (db/entity id)
+                             (let [property (column-property column)
                                    internal-property {:db/ident (:id column)
                                                       :block/title (:name column)
                                                       :logseq.property/type (:type column)}]
                                (if (or property
-                                       (= :db.cardinality/many (:db/cardinality (get schema id)))
+                                       (= :db.cardinality/many (:db/cardinality property))
                                        (not= (:type column) :string))
                                  (set-property! (or property internal-property))
                                  (do
@@ -1767,7 +1800,7 @@
     (hooks/use-effect!
      (fn []
        (let [values (if (coll? value) value [value])
-             ids (filter #(and (uuid? %) (nil? (db/entity [:block/uuid %]))) values)]
+             ids (filter uuid? values)]
          (when (seq ids) (db-async/<get-blocks (state/get-current-repo) ids))))
      [])
     (let [filters (get-in table [:state :filters])
@@ -1848,19 +1881,15 @@
                              (select/select option))))
                        {:align :start})))}
        (let [value (cond
-                     (uuid? value)
-                     (db/entity [:block/uuid value])
                      (instance? js/Date value)
                      (some->> (tc/to-date value)
                               (t/to-default-time-zone)
                               (tf/unparse yyyy-MM-dd-formatter))
-                     (and (coll? value) (every? uuid? value))
-                     (keep #(db/entity [:block/uuid %]) value)
                      :else
                      value)]
         [:div.ls-view-filter-value.flex.flex-row.items-center.gap-1.text-xs.min-w-0.max-w-full.overflow-hidden
          (cond
-           (de/entity? value)
+           (map? value)
            [:div.ls-view-filter-value-item (get-property-value-content value)]
 
            (string? value)
@@ -1921,10 +1950,14 @@
                  property (if (= property-ident :block/title)
                             {:db/ident property-ident
                              :block/title (t :view.table/name-column)}
-                            (or (db/entity property-ident)
-                                (some (fn [column] (when (= (:id column) property-ident)
-                                                     {:db/ident (:id column)
-                                                      :block/title (:name column)})) columns)))]
+                            (or (some (fn [column]
+                                        (when (= (:id column) property-ident)
+                                          (or (column-property column)
+                                              {:db/ident (:id column)
+                                               :block/title (:name column)
+                                               :logseq.property/type (:type column)})))
+                                      columns)
+                                (built-in-property property-ident)))]
              [:div.flex.flex-row.items-center.border.rounded.min-w-0.max-w-full
               (shui/button
                {:class "!px-2 rounded-none border-r"
@@ -1987,10 +2020,10 @@
   (mapv
    (fn [[property operator matches]]
      (let [matches' (cond
-                      (de/entity? matches)
+                      (map? matches)
                       (:block/uuid matches)
 
-                      (and (coll? matches) (every? de/entity? matches))
+                      (and (coll? matches) (every? map? matches))
                       (set (map :block/uuid matches))
 
                       :else
@@ -2041,11 +2074,7 @@
         db-id (cond (map? item) (:db/id item)
                     (number? item) item
                     :else nil)
-        entity (when db-id
-                 (let [e (db/entity db-id)]
-                   (when (= :full (:block.temp/load-status e))
-                     e)))
-        [item set-item!] (hooks/use-state entity)
+        [item set-item!] (hooks/use-state (when (map? item) item))
         list-or-gallery? (or list-view? gallery-view?)
         opts (if list-or-gallery?
                {:skip-refresh? true
@@ -2058,8 +2087,7 @@
      #(do
         (when (and db-id (not item) (not scrolling?))
           (p/let [block (db-async/<get-block (state/get-current-repo) db-id opts)]
-            (let [block' (if list-or-gallery? (db/entity db-id) block)]
-              (set-item! block'))))
+            (set-item! block)))
         nil)
      [db-id scrolling?])
     (let [item' (cond (map? item) item (number? item) {:db/id item})]
@@ -2157,14 +2185,14 @@
           [:<> (lazy-item-render rows idx)])))))
 
 (hsx/defc gallery-property-value
-  [block property-ident]
+  [block property-ident property]
   (if (= :block/title property-ident)
     [:div.ls-gallery-card-title
      (some->> (:block/title block)
               string/trim
               string/split-lines
               first)]
-    (when-let [property (db/entity property-ident)]
+    (when property
       [:div.ls-gallery-card-property
        (pv/property-value block property {:view? true
                                           :gallery-view? true})])))
@@ -2175,9 +2203,7 @@
                       (get block asset-property-ident))
         ->entity (fn [value]
                    (cond
-                     (de/entity? value) value
-                     (number? value) (db/entity value)
-                     (uuid? value) (db/entity [:block/uuid value])
+                     (map? value) value
                      :else value))]
     (cond
       (= :block/uuid asset-property-ident)
@@ -2214,7 +2240,11 @@
          (asset-cp (assoc config :disable-resize? true :gallery-view? true) asset-block))]
       [:div.ls-gallery-card-meta
        (for [property-ident display-property-idents
-             :let [property-value (gallery-property-value block property-ident)]
+             :let [property (some (fn [column]
+                                    (when (= (:id column) property-ident)
+                                      (column-property column)))
+                                  (:columns table))
+                   property-value (gallery-property-value block property-ident property)]
              :when property-value]
          ^{:key (str "gallery-property-" (:db/id block) "-" property-ident)}
          [:<> property-value])]]]))
@@ -2298,7 +2328,7 @@
   (let [config' (assoc config :container-id (view-container-id config))
         columns (:columns table)
         dimensions (gallery-card-dimensions view-entity)
-        asset-property-ident (gallery-asset-property-ident (db/get-db) view-entity columns)
+        asset-property-ident (gallery-asset-property-ident view-entity columns)
         display-property-idents (gallery-display-property-idents view-entity columns asset-property-ident)
         row-selection (use-table-row-selection table)
         selected-rows (table-get-selection-rows row-selection (:rows table))
@@ -2492,21 +2522,26 @@
 
 (defn- get-views
   [ent view-feature-type]
-  (let [entity (db/entity (:db/id ent))
-        views (->> (:logseq.property/_view-for entity)
+  (let [views (->> (:logseq.property/views ent)
                    (filter (fn [view]
                              (= view-feature-type (:logseq.property.view/feature-type view)))))]
     (ldb/sort-by-order views)))
 
 (defn- create-view!
   [view-parent view-feature-type {:keys [auto-triggered?]}]
-  (when-let [page (db/get-case-page common-config/views-page-name)]
-    (p/let [properties (cond->
-                        {:logseq.property/view-for (:db/id view-parent)
-                         :logseq.property.view/feature-type view-feature-type}
-                         (contains? #{:linked-references :unlinked-references} view-feature-type)
-                         (assoc :logseq.property.view/type (:db/id (db/entity :logseq.property.view/type.list))
-                                :logseq.property.view/group-by-property (:db/id (db/entity :block/page))))
+  (p/let [repo (state/get-current-repo)
+          page (db-async/<get-block repo common-config/views-page-name {:children? false})]
+    (when page
+      (p/let [list-view-type (when (contains? #{:linked-references :unlinked-references} view-feature-type)
+                               (state/<invoke-db-worker :thread-api/pull repo [:db/id] :logseq.property.view/type.list))
+              block-page-property (when (contains? #{:linked-references :unlinked-references} view-feature-type)
+                                    (state/<invoke-db-worker :thread-api/pull repo [:db/id] :block/page))
+              properties (cond->
+                          {:logseq.property/view-for (:db/id view-parent)
+                           :logseq.property.view/feature-type view-feature-type}
+                           (contains? #{:linked-references :unlinked-references} view-feature-type)
+                           (assoc :logseq.property.view/type (:db/id list-view-type)
+                                  :logseq.property.view/group-by-property (:db/id block-page-property)))
             view-exists? (seq (get-views view-parent view-feature-type))
             view-title (if view-exists?
                          ""
@@ -2531,7 +2566,7 @@
                                                            :outliner-op :create-view}
                                                            auto-triggered?
                                                            (assoc :custom-uuid view-block-id)))]
-      (db/entity [:block/uuid (:block/uuid result)]))))
+        (db-async/<get-block repo (:block/uuid result) {:children? false})))))
 
 (def ^:private default-view-title-key-by-feature-type
   {:linked-references :view/linked-references
@@ -2567,7 +2602,7 @@
 (hsx/defc view-tab-button
   [view-parent current-view view* {:keys [views data items-count set-view-entity! set-data! set-views! show-items-count? config references?]}]
   (let [refs-total-count (:refs-total-count config)
-        view (db/sub-block (:db/id view*))
+        view view*
         current-view? (= (:db/id current-view) (:db/id view))]
     (shui/button
      {:key (str "view-tab-" (:db/id view*))
@@ -2610,7 +2645,7 @@
      (when-not references?
        (let [display-type (or (:db/ident (get view :logseq.property.view/type))
                               :logseq.property.view/type.table)]
-         (when-let [icon (:logseq.property/icon (db/entity display-type))]
+         (when-let [icon (:logseq.property/icon (built-in-property display-type))]
            (icon-component/icon icon {:color? true
                                       :size 15}))))
      (display-view-title view)
@@ -2687,9 +2722,9 @@
                       :set-input! set-input!})]
 
       [:div.view-action-type.text-muted-foreground.text-sm
-       (pv/property-value view-entity (db/entity :logseq.property.view/type) {:icon? true
-                                                                              :popup-focus-trigger? false
-                                                                              :popup-auto-focus-trigger? false})]
+       (pv/property-value view-entity (built-in-property :logseq.property.view/type) {:icon? true
+                                                                                      :popup-focus-trigger? false
+                                                                                      :popup-auto-focus-trigger? false})]
 
       (more-actions view-entity columns table option)
 
@@ -2703,7 +2738,7 @@
                          group-by-page?
                          (if value
                            (let [c (state/get-component :block/page-cp)
-                                 page (if (de/entity? value)
+                                 page (if (map? value)
                                         (select-keys value [:db/id :block/uuid :block/title :block/name])
                                         value)]
                              (if (fn? c)
@@ -2780,7 +2815,10 @@
                                                              (nil? (:name column))))
                                                        columns))
         group-by-property (or (:logseq.property.view/group-by-property view-entity)
-                              (db/entity group-by-property-ident))
+                              (some (fn [column]
+                                      (when (= (:id column) group-by-property-ident)
+                                        (column-property column)))
+                                    columns))
         row-selection (get-table-row-selection {:state {:selection-id selection-id}})
         table-map {:view-entity view-entity
                    :data data
@@ -2909,7 +2947,6 @@
                              :logseq.property.node/display-type
                              (= :code))]
     (->> properties
-         (map db/entity)
          (ldb/sort-by-order)
          ((fn [cs] (build-columns config cs {:add-tags-column? false
                                              :advanced-query? advanced-query?}))))))
@@ -2927,7 +2964,7 @@
       :else
       (when (or (not query?) need-query?)
         (let [opts (cond->
-                    {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
+                    {:view-for-id (or (:logseq.property/view-for-id view-entity)
                                       (:db/id view-parent))
                      :view-feature-type view-feature-type
                      :group-by-property-ident group-by-property-ident
@@ -2989,7 +3026,7 @@
         (hooks/use-debounced-value input 300)
         sorting-filters
         group-by-property-ident
-        (:db/id (:logseq.property.view/type view-entity))
+        (:logseq.property.view/type-id view-entity)
         ;; page filters
         (:logseq.property.linked-references/includes view-parent)
         (:logseq.property.linked-references/excludes view-parent)
@@ -3050,7 +3087,7 @@
 
 (hsx/defc sub-view
   [view-entity option]
-  (let [view (or (db/sub-block (:db/id view-entity)) view-entity)
+  (let [view view-entity
         data-changes-version (sub-view-data-changes (:view-parent option) (:view-feature-type option))]
     (view-aux view (assoc option :data-changes-version data-changes-version))))
 

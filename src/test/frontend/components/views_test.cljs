@@ -1,6 +1,5 @@
 (ns frontend.components.views-test
   (:require [cljs.test :refer [deftest is]]
-            [frontend.db]
             [frontend.components.views :as views]))
 
 (deftest build-columns-should-allow-name-property-when-no-object-name
@@ -73,11 +72,9 @@
            [:group-b [{:db/id 2} 3]]]))))
 
 (deftest group-by-column-should-exclude-name-and-include-many-properties
-  (with-redefs [frontend.db/entity (fn [id]
-                                     (case id
-                                       :block/title {:logseq.property/type :string}
-                                       :block/tags {:logseq.property/type :class
-                                                    :db/cardinality :db.cardinality/many}))]
-    (is (views/group-by-column? {:id :block/page}))
-    (is (not (views/group-by-column? {:id :block/title})))
-    (is (views/group-by-column? {:id :block/tags}))))
+  (is (views/group-by-column? {:id :block/page}))
+  (is (not (views/group-by-column? {:id :block/title
+                                    :property {:logseq.property/type :string}})))
+  (is (views/group-by-column? {:id :block/tags
+                               :property {:logseq.property/type :class
+                                          :db/cardinality :db.cardinality/many}})))

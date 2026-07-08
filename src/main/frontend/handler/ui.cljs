@@ -3,8 +3,6 @@
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.config :as config]
-            [frontend.db :as db]
-            [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.handler.assets :as assets-handler]
             [frontend.loader :refer [load]]
@@ -20,6 +18,8 @@
 ;; sidebars
 (def *left-sidebar-resized-at (atom (js/Date.now)))
 (def *right-sidebar-resized-at (atom (js/Date.now)))
+
+(def ^:private <invoke-db-worker state/<invoke-db-worker)
 
 (defn persist-right-sidebar-width!
   [width]
@@ -105,12 +105,26 @@
         (js/setTimeout #(dom/remove-class! element "block-highlight")
                        4000)))))
 
+(defn <get-file-content
+  [repo path]
+  (state/<invoke-db-worker :thread-api/get-file-content repo path))
+
+(defn- <pull-anchor-block
+  [repo anchor-id]
+  (<invoke-db-worker :thread-api/pull repo [:db/id :block/uuid] [:block/uuid anchor-id]))
+
+(defn- <get-block-parents
+  [repo db-id]
+  (<invoke-db-worker :thread-api/get-block-parents repo db-id 3))
+
 (defn add-style-if-exists!
   []
-  (when-let [style (or (state/get-custom-css-link)
-                       (db-model/get-custom-css))]
-    (p/let [style (assets-handler/<expand-assets-links-for-db-graph style)]
-      (util/add-style! style))))
+  (p/let [style (or (state/get-custom-css-link)
+                    (when-let [repo (state/get-current-repo)]
+                      (<get-file-content repo "logseq/custom.css")))]
+    (when style
+      (p/let [style (assets-handler/<expand-assets-links-for-db-graph style)]
+        (util/add-style! style)))))
 
 (defn reset-custom-css!
   []
@@ -153,8 +167,10 @@
             (load href #(do (js/console.log "[custom js]" href) (execed))))
 
           :else
-          (when-let [script (db/get-file href)]
-            (exec-fn script)))))))
+          (p/let [script (when-let [repo (state/get-current-repo)]
+                           (<get-file-content repo href))]
+            (when script
+              (exec-fn script))))))))
 
 (defn toggle-wide-mode!
   []
@@ -294,16 +310,20 @@
               find-idx (fn [anchor-id]
                          (let [idx (.indexOf block-ids anchor-id)]
                            (when (pos? idx) idx)))
-              idx (or (find-idx anchor-id)
-                      (let [block (db/entity [:block/uuid anchor-id])
-                            parents (map :block/uuid (db/get-block-parents (state/get-current-repo) (:block/uuid block) {}))]
-                        (some find-idx parents)))]
-          (when idx
-            (js/setTimeout
-             (fn []
-               (.scrollToIndex ref #js {:index idx})
-               ;; wait until this block has been rendered.
-               (js/setTimeout #(highlight-element! anchor) 200))
-             ;; BUG: grid scrollToIndex not working in useEffect on first render
-             ;; https://github.com/petyosi/react-virtuoso/issues/757
-             (if gallery? 100 0))))))))
+              scroll-to-idx! (fn [idx]
+                               (js/setTimeout
+                                (fn []
+                                  (.scrollToIndex ref #js {:index idx})
+                                  ;; wait until this block has been rendered.
+                                  (js/setTimeout #(highlight-element! anchor) 200))
+                                ;; BUG: grid scrollToIndex not working in useEffect on first render
+                                ;; https://github.com/petyosi/react-virtuoso/issues/757
+                                (if gallery? 100 0)))]
+          (if-let [idx (find-idx anchor-id)]
+            (scroll-to-idx! idx)
+            (when-let [repo (state/get-current-repo)]
+              (p/let [block (<pull-anchor-block repo anchor-id)
+                      parents (when-let [db-id (:db/id block)]
+                                (<get-block-parents repo db-id))]
+                (when-let [idx (some find-idx (map :block/uuid parents))]
+                  (scroll-to-idx! idx))))))))))

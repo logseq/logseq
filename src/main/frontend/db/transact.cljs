@@ -43,7 +43,7 @@
 (defn apply-outliner-ops
   [conn ops opts]
   (when (seq ops)
-    (if util/node-test?
+    (if (and util/node-test? conn)
       (outliner-op/apply-ops! conn ops opts)
       (let [opts' (-> opts
                       ensure-local-op-tx-id

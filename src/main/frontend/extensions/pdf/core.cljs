@@ -3,7 +3,6 @@
             ["react-dom/client" :as rdc]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [datascript.impl.entity :as de]
             [frontend.commands :as commands]
             [frontend.components.block :as block]
             [frontend.components.svg :as svg]
@@ -355,7 +354,7 @@
                                                           (set! (.. target -style -transform) "translate(0, 0)")
                                                           (.removeAttribute target "data-x")
                                                           (.removeAttribute target "data-y")
-                                                          (let [hl' (if (de/entity? result)
+                                                          (let [hl' (if (:db/id result)
                                                                       (assoc-in hl' [:content :image] (:db/id result))
                                                                       hl')]
                                                             (update-hl! hl')))
@@ -586,7 +585,7 @@
                                            (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
                         (-> (p/let [result (pdf-assets/persist-hl-area-image$ viewer (state/get-state :pdf/current)
                                                                               hl nil (:bounding vw-pos))]
-                              (if (de/entity? result)
+                              (if (:db/id result)
                                 (let [hl' (assoc-in hl [:content :image] (:db/id result))]
                                   (set-highlights! (map (fn [hl] (if (= (:id hl) (:id hl')) hl' hl)) highlights'))
                                   hl')

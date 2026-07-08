@@ -12,9 +12,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.assets :as assets-handler]
@@ -210,13 +208,21 @@
                :payload opts))
   (posthog/capture type payload))
 
+(defn- <current-graph-schema-version
+  []
+  (if @state/db-worker-ready?
+    (p/let [version (state/<invoke-db-worker :thread-api/get-graph-schema-version
+                                             (state/get-current-repo))]
+      (some-> version str))
+    (p/resolved nil)))
+
 (defevent! :capture-error [[_ {:keys [error payload extra]}]]
-  (let [payload (merge
-                 {:schema-version (str db-schema/version)
-                  :db-schema-version (when-let [db (db/get-db)]
-                                       (str (:kv/value (db/entity db :logseq.kv/schema-version))))
-                  :db-based true}
-                 payload)]
+  (p/let [db-schema-version (<current-graph-schema-version)
+          payload (merge
+                   {:schema-version (str db-schema/version)
+                    :db-schema-version db-schema-version
+                    :db-based true}
+                   payload)]
     (Sentry/captureException error
                              (bean/->js {:tags payload
                                          :extra extra}))))
@@ -313,15 +319,19 @@
 
 (defevent! :editor/toggle-own-number-list [[_ blocks]]
   (let [batch? (sequential? blocks)
-        blocks (cond->> blocks
-                 batch?
-                 (map #(cond-> % (or (uuid? %) (string? %)) (db-model/get-block-by-uuid))))]
-    (if (and batch? (> (count blocks) 1))
-      (editor-handler/toggle-blocks-as-own-order-list! blocks)
-      (when-let [block (cond-> blocks batch? (first))]
-        (if (editor-handler/own-order-number-list? block)
-          (editor-handler/remove-block-own-order-list-type! block)
-          (editor-handler/make-block-as-own-order-list! block))))))
+        repo (state/get-current-repo)]
+    (p/let [blocks (if batch?
+                     (p/all (map #(if (or (uuid? %) (string? %))
+                                    (db-async/<get-block repo % {:children? false})
+                                    %)
+                                  blocks))
+                     blocks)]
+      (if (and batch? (> (count blocks) 1))
+        (editor-handler/toggle-blocks-as-own-order-list! blocks)
+        (when-let [block (cond-> blocks batch? (first))]
+          (if (editor-handler/own-order-number-list? block)
+            (editor-handler/remove-block-own-order-list-type! block)
+            (editor-handler/make-block-as-own-order-list! block)))))))
 
 (defevent! :editor/remove-own-number-list [[_ block]]
   (when (some-> block (editor-handler/own-order-number-list?))
@@ -353,46 +363,57 @@
           (.setCursor to-line (or cursor-pos 0)))))))
 
 (defevent! :editor/toggle-children-number-list [[_ block]]
-  (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
-    (editor-handler/toggle-blocks-as-own-order-list! blocks)))
+  (when block
+    (p/let [blocks (db-async/<get-block-immediate-children (state/get-current-repo) (:block/uuid block))]
+      (when (seq blocks)
+        (editor-handler/toggle-blocks-as-own-order-list! blocks)))))
+
+(defn- <get-upsert-type-block
+  [repo id]
+  (db-async/<get-block repo id :children? false))
+
+(defn- <latest-code-lang
+  [repo lang]
+  (if lang
+    (p/resolved lang)
+    (state/<invoke-db-worker :thread-api/get-key-value repo :logseq.kv/latest-code-lang)))
 
 (defevent! :editor/upsert-type-block [[_ {:keys [block type lang update-current-block?]}]]
-  (p/do!
-   (when-not update-current-block?
-     (editor-handler/save-current-block!))
-   (when-not update-current-block?
-     (p/delay 16))
-   (let [db-block (db/entity (:db/id block))
-         block-type (:logseq.property.node/display-type db-block)
-         block-title (:block/title db-block)
-         requested-title? (contains? block :block/title)
-         requested-title (:block/title block)
-         latest-code-lang (or lang
-                              (:kv/value (db/entity :logseq.kv/latest-code-lang)))
-         turn-type! #(if (and (= (keyword type) :code) latest-code-lang)
-                       (db-property-handler/set-block-properties!
-                        (:block/uuid %)
-                        {:logseq.property.node/display-type (keyword type)
-                         :logseq.property.code/lang latest-code-lang})
-                       (db-property-handler/set-block-property!
-                        (:block/uuid %) :logseq.property.node/display-type (keyword type)))
-         apply-requested-title! #(when (and update-current-block?
-                                            requested-title?
-                                            (not= requested-title (:block/title %)))
-                                   (editor-handler/save-block! (state/get-current-repo) % requested-title))]
-     (p/let [converted-block (if (or (not (nil? block-type))
-                                     (and (not update-current-block?) (not (string/blank? block-title))))
-                               (p/let [result (ui-outliner-tx/transact!
-                                               {:outliner-op :insert-blocks}
-                                               ;; insert a new block
-                                               (let [[_p _ block'] (editor-handler/insert-new-block-aux! {} db-block "")]
-                                                 (turn-type! block')))]
-                                 (when-let [id (:block/uuid (first (:blocks result)))]
-                                   (db/entity [:block/uuid id])))
-                               (p/let [_ (apply-requested-title! db-block)
-                                       _ (turn-type! db-block)]
-                                 (db/entity [:block/uuid (:block/uuid db-block)])))]
-       (js/setTimeout #(editor-handler/edit-block! converted-block :max) 100)))))
+  (p/let [_ (when-not update-current-block?
+              (editor-handler/save-current-block!))
+          _ (when-not update-current-block?
+              (p/delay 16))
+          repo (state/get-current-repo)
+          db-block (<get-upsert-type-block repo (:db/id block))
+          latest-code-lang (<latest-code-lang repo lang)]
+    (let [block-type (:logseq.property.node/display-type db-block)
+          block-title (:block/title db-block)
+          requested-title? (contains? block :block/title)
+          requested-title (:block/title block)
+          turn-type! #(if (and (= (keyword type) :code) latest-code-lang)
+                        (db-property-handler/set-block-properties!
+                         (:block/uuid %)
+                         {:logseq.property.node/display-type (keyword type)
+                          :logseq.property.code/lang latest-code-lang})
+                        (db-property-handler/set-block-property!
+                         (:block/uuid %) :logseq.property.node/display-type (keyword type)))
+          apply-requested-title! #(when (and update-current-block?
+                                             requested-title?
+                                             (not= requested-title (:block/title %)))
+                                    (editor-handler/save-block! (state/get-current-repo) % requested-title))]
+      (p/let [converted-block (if (or (not (nil? block-type))
+                                      (and (not update-current-block?) (not (string/blank? block-title))))
+                                (p/let [result (ui-outliner-tx/transact!
+                                                {:outliner-op :insert-blocks}
+                                                ;; insert a new block
+                                                (let [[_p _ block'] (editor-handler/insert-new-block-aux! {} db-block "")]
+                                                  (turn-type! block')))]
+                                  (when-let [id (:block/uuid (first (:blocks result)))]
+                                    (<get-upsert-type-block repo id)))
+                                (p/let [_ (apply-requested-title! db-block)
+                                        _ (turn-type! db-block)]
+                                  (<get-upsert-type-block repo (:block/uuid db-block))))]
+        (js/setTimeout #(editor-handler/edit-block! converted-block :max) 100)))))
 
 (defn- editing-users-by-block
   [online-users current-user-uuid]

@@ -109,7 +109,7 @@
 (defn- child-comments-area?
   [block comments-area]
   (let [block-id (:db/id block)
-        parent-id (some-> comments-area :block/parent :db/id)]
+        parent-id (:block/parent-id comments-area)]
     (boolean
      (and block-id
           parent-id
@@ -117,7 +117,7 @@
 
 (defn comment-threads-for-block
   [block]
-  (->> (get block :logseq.property.comments/_blocks)
+  (->> (get block :block/comment-threads)
        (filter comments-area?)
        (remove #(child-comments-area? block %))
        (remove :logseq.property/deleted-at)

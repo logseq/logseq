@@ -7,8 +7,7 @@
             [frontend.components.repo :as repo]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
-            [frontend.db.model :as db-model]
+            [frontend.db.async :as db-async]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.block :as block-handler]
             [frontend.handler.page :as page-handler]
@@ -20,9 +19,11 @@
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.entity :as entity]
             [goog.object :as gobj]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
+            [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [io.factorhouse.hsx.core :as hsx]))
 
@@ -30,10 +31,9 @@
   []
   (when-let [default-home (state/get-default-home)]
     (let [page (:page default-home)
-          page (when (and (string? page)
-                          (not (string/blank? page)))
-                 (db/get-page page))]
-      (if page
+          valid-page? (and (string? page)
+                           (not (string/blank? page)))]
+      (if valid-page?
         default-home
         (dissoc default-home :page)))))
 
@@ -72,14 +72,13 @@
 (hsx/defc ^:large-vars/cleanup-todo page-name
   [page recent?]
   (let [[left-sidebar-resized-at] (hooks/use-atom ui-handler/*left-sidebar-resized-at)
-        id (:db/id page)
-        page (db/sub-block id)]
+        id (:db/id page)]
     (when id
       (let [icon (icon/get-node-icon-cp page {:size 16})
             title (:block/title page)
-            untitled? (db-model/untitled-page? title)
+            untitled? (util/uuid-string? title)
             display-title (cond
-                            (not (db/page? page))
+                            (not (entity/page? page))
                             (block/inline-text :markdown (string/replace (apply str (take 64 (:block/title page))) "\n" " "))
                             untitled? (t :ui/untitled)
                             :else (block-handler/block-unique-title page))
@@ -218,14 +217,25 @@
   [{:keys [default-home route-match route-name srs-open?]}]
   (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
         _preferred-language (rfx/use-sub [:preferred-language])
+        repo (state/get-current-repo)
+        [class-ident->uuid set-class-ident->uuid!] (hooks/use-state {})
         [checked-navs set-checked-navs!] (hooks/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:flashcards :all-pages :graph-view]))]
 
     (hooks/use-effect!
      (fn []
-       (when (vector? checked-navs)
-         (storage/set :ls-sidebar-navigations checked-navs)))
-     [checked-navs])
+	       (when (vector? checked-navs)
+	         (storage/set :ls-sidebar-navigations checked-navs)))
+	     [checked-navs])
+    (hooks/use-effect!
+     (fn []
+       (p/let [classes (p/all (map (fn [class-ident]
+                                     (db-async/<invoke-db-worker :thread-api/pull repo [:block/uuid] class-ident))
+                                   [:logseq.class/Asset :logseq.class/Task]))]
+         (set-class-ident->uuid! (zipmap [:logseq.class/Asset :logseq.class/Task]
+                                         (map :block/uuid classes))))
+       nil)
+     [repo])
 
     (sidebar-content-group
       [:a.wrap-th [:strong.flex-1 (t :sidebar.left/navigations)]]
@@ -299,11 +309,11 @@
             :active (and (not srs-open?) (= route-name :all-pages))
             :icon "files"})
 
-          (= (namespace nav) "tag")
-          (let [name'' (name nav)
-                class-ident (get {"assets" :logseq.class/Asset  "tasks" :logseq.class/Task} name'')]
-            (when-let [tag-uuid (and class-ident (:block/uuid (db/entity class-ident)))]
-              (sidebar-item
+	          (= (namespace nav) "tag")
+	          (let [name'' (name nav)
+	                class-ident (get {"assets" :logseq.class/Asset  "tasks" :logseq.class/Task} name'')]
+	            (when-let [tag-uuid (and class-ident (get class-ident->uuid class-ident))]
+	              (sidebar-item
                {:class (str "tag-view-nav " name'')
                 :title (t (navigation-label-key nav))
                 :href (rfe/href :page {:name tag-uuid})
@@ -315,7 +325,13 @@
   (let [_current-repo (rfx/use-sub [:git/current-repo])
         _db-restoring? (rfx/use-sub [:db/restoring?])
         _favorites-updated? (rfx/use-sub [:favorites/updated?])
-        favorite-entities (page-handler/get-favorites)]
+        [favorite-entities set-favorite-entities!] (hooks/use-state [])]
+    (hooks/use-effect!
+     (fn []
+       (p/let [favorites (page-handler/<get-favorites)]
+         (set-favorite-entities! (vec favorites)))
+       nil)
+     [_current-repo _favorites-updated?])
     (sidebar-content-group
      [:a.wrap-th
       [:strong.flex-1 (t :sidebar.left/favorites)]]
@@ -343,7 +359,13 @@
   (let [current-repo (rfx/use-sub [:git/current-repo])
         _db-restoring? (rfx/use-sub [:db/restoring?])
         _recent-page-ids (rfx/use-sub [:ui/recent-pages current-repo])
-        pages (recent-handler/get-recent-pages)]
+        [pages set-pages!] (hooks/use-state [])]
+    (hooks/use-effect!
+     (fn []
+       (p/let [recent-pages (recent-handler/get-recent-pages)]
+         (set-pages! (vec recent-pages)))
+       nil)
+     [current-repo _recent-page-ids])
        (sidebar-content-group
         [:a.wrap-th [:strong.flex-1 (t :sidebar.left/recent-pages)]]
 

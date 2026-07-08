@@ -178,7 +178,6 @@
  :cmdk.action/search "検索"
  :cmdk.action/trigger "実行"
 
- :cmdk.create/configure-tag "タグを設定"
  :cmdk.create/page "ページを作成"
  :cmdk.create/tag "タグを作成"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "最近更新"
  :cmdk.group/themes "テーマ"
 
- :cmdk.info/configure-tag "#{1} を設定"
  :cmdk.info/create-page "ページ「{1}」を作成"
  :cmdk.info/create-tag "タグ「{1}」を作成"
 
