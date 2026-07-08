@@ -233,7 +233,6 @@
  :cmdk.action/search "Search"
  :cmdk.action/trigger "Trigger"
 
- :cmdk.create/configure-tag "Configure tag"
  :cmdk.create/page "Create page"
  :cmdk.create/tag "Create tag"
 
@@ -260,7 +259,6 @@
  :cmdk.group/recently-updated "Recently updated"
  :cmdk.group/themes "Themes"
 
- :cmdk.info/configure-tag "Configure #{1}"
  :cmdk.info/create-page "Create page called '{1}'"
  :cmdk.info/create-tag "Create tag called '{1}'"
 

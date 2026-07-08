@@ -1,10 +1,11 @@
 (ns frontend.handler.comments-test
   (:require [cljs.test :refer [async deftest is testing]]
             [frontend.components.block.comments-model :as comments-model]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.handler.comments :as comments-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (deftest ensure-comments-area-adds-target-property-for-single-block-comments
@@ -20,10 +21,9 @@
                          :block/tags [{:db/ident comments-model/comments-tag-ident}]}
           inserted (atom nil)
           property-updates (atom [])]
-      (-> (p/with-redefs [db/entity (fn [lookup]
-                                      (case lookup
-                                        [:block/uuid target-uuid] target
-                                        nil))
+      (-> (p/with-redefs [db-async/<get-block (fn [_repo block-id _opts]
+                                                (p/resolved (when (= target-uuid block-id)
+                                                              target)))
                           editor-handler/api-insert-new-block!
                           (fn [title opts]
                             (reset! inserted {:title title :opts opts})
@@ -58,11 +58,10 @@
                   :block/title "target"
                   :block/_parent [comments-area]}
           property-updates (atom [])]
-      (-> (p/with-redefs [db/entity (fn [lookup]
-                                      (case lookup
-                                        [:block/uuid target-uuid] target
-                                        nil))
-                          db/sort-by-order identity
+      (-> (p/with-redefs [db-async/<get-block (fn [_repo block-id _opts]
+                                                (p/resolved (when (= target-uuid block-id)
+                                                              target)))
+                          ldb/sort-by-order identity
                           db-property-handler/set-block-property!
                           (fn [block-id property value]
                             (swap! property-updates conj [block-id property value])
@@ -80,22 +79,29 @@
                     @property-updates))
              (done)))))))
 
-(deftest deleted-comment-thread-actions-are-no-ops
+(deftest deleted-comment-thread-expand-is-no-op
   (testing "expand ignores stale comment thread data when the comments block is gone"
-    (let [expanded (atom [])]
-      (with-redefs [db/entity (constantly nil)
-                    editor-handler/expand-block! (fn [block-id] (swap! expanded conj block-id))]
-        (comments-handler/expand-comments-area!
-         {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"})
-        (is (empty? @expanded)))))
+    (async done
+      (let [expanded (atom [])]
+        (-> (p/with-redefs [db-async/<get-block (fn [& _] (p/resolved nil))
+                            editor-handler/expand-block! (fn [block-id] (swap! expanded conj block-id))]
+              (comments-handler/expand-comments-area!
+               {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"}))
+            (p/then (fn []
+                      (is (empty? @expanded))
+                      (done))))))))
 
+(deftest deleted-comment-thread-reveal-is-no-op
   (testing "reveal ignores stale comment thread data when the comments block is gone"
-    (let [expanded (atom [])]
-      (with-redefs [db/entity (constantly nil)
-                    editor-handler/expand-block! (fn [block-id] (swap! expanded conj block-id))]
-        (comments-handler/reveal-comments-area!
-         {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"})
-        (is (empty? @expanded))))))
+    (async done
+      (let [expanded (atom [])]
+        (-> (p/with-redefs [db-async/<get-block (fn [& _] (p/resolved nil))
+                            editor-handler/expand-block! (fn [block-id] (swap! expanded conj block-id))]
+              (comments-handler/reveal-comments-area!
+               {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"}))
+            (p/then (fn []
+                      (is (empty? @expanded))
+                      (done))))))))
 
 (deftest edit-comments-area-title-edits-comments-block
   (let [comments-uuid #uuid "22222222-2222-2222-2222-222222222222"
@@ -104,12 +110,12 @@
                        :block/title "Comments"
                        :block/tags [{:db/ident comments-model/comments-tag-ident}]}
         edited (atom nil)]
-    (with-redefs [db/entity (fn [lookup]
-                              (case lookup
-                                [:block/uuid comments-uuid] comments-area
-                                nil))
-                  editor-handler/edit-block! (fn [block pos opts]
-                                               (reset! edited [block pos opts]))]
-      (comments-handler/edit-comments-area-title! comments-area :main)
-      (is (= [comments-area :max {:container-id :main}]
-             @edited)))))
+    (async done
+      (-> (p/with-redefs [db-async/<get-block (fn [& _] (p/resolved comments-area))
+                          editor-handler/edit-block! (fn [block pos opts]
+                                                       (reset! edited [block pos opts]))]
+            (comments-handler/edit-comments-area-title! comments-area :main))
+          (p/then (fn []
+                    (is (= [comments-area :max {:container-id :main}]
+                           @edited))
+                    (done)))))))

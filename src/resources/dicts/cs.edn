@@ -178,7 +178,6 @@
  :cmdk.action/search "Hledat"
  :cmdk.action/trigger "Spustit"
 
- :cmdk.create/configure-tag "Konfigurovat štítek"
  :cmdk.create/page "Vytvořit stránku"
  :cmdk.create/tag "Vytvořit štítek"
 
@@ -205,7 +204,6 @@
  :cmdk.group/recently-updated "Nedávno aktualizované"
  :cmdk.group/themes "Motivy"
 
- :cmdk.info/configure-tag "Konfigurovat #{1}"
  :cmdk.info/create-page "Vytvořit stránku '{1}'"
  :cmdk.info/create-tag "Vytvořit štítek '{1}'"
 

@@ -4,9 +4,7 @@
             [frontend.components.block.comments-model :as comments-model]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
             [frontend.handler.notification :as notification]
             [frontend.handler.property.util :as pu]
             [frontend.mobile.haptics :as haptics]
@@ -14,7 +12,6 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
-            [goog.object :as gobj]
             [logseq.db :as ldb]
             [logseq.db.frontend.block-title :as db-block-title]
             [logseq.outliner.core :as outliner-core]
@@ -34,7 +31,7 @@
   (let [order-block-fn? (fn [block]
                           (let [type (pu/lookup block :logseq.property/order-list-type)]
                             (= type order-list-type)))
-        prev-block-fn   #(some-> (db/entity (:db/id %)) ldb/get-left-sibling)
+        prev-block-fn   ldb/get-left-sibling
         prev-block      (prev-block-fn block)]
     (letfn [(order-sibling-list [b]
               (lazy-seq
@@ -43,7 +40,7 @@
             (order-parent-list [b]
               (lazy-seq
                (when (order-block-fn? b)
-                 (cons b (order-parent-list (db-model/get-block-parent (:block/uuid b)))))))]
+                 (cons b (order-parent-list (:block/parent b))))))]
       (let [idx           (if prev-block
                             (count (order-sibling-list block)) 1)
             order-parents-count (dec (count (order-parent-list block)))
@@ -90,15 +87,14 @@
                            (state/get-current-editor-container-id)
                            :unknown-container)]
       (state/set-editing! (str "edit-block-" (:block/uuid block)) content block text-range
-                          {:db (db/get-db)
-                           :container-id container-id :direction direction :event event :pos pos}))
+                          {:container-id container-id :direction direction :event event :pos pos}))
     (mark-last-input-time! repo)))
 
 (defn block-unique-title
   "Multiple pages/objects may have the same `:block/title`.
    Notice: this doesn't prevent for pages/objects that have the same tag or created by different clients."
   [block & {:as opts}]
-  (db-block-title/block-unique-title (db/get-db) block opts))
+  (db-block-title/block-unique-title (:db opts) block (dissoc opts :db)))
 
 (defn block-title-with-icon
   "Used for select item"
@@ -117,11 +113,10 @@
   (when (and (not config/publishing?) (:block/uuid block))
     (let [repo (state/get-current-repo)]
       (when-let [block-id (:block/uuid block)]
-        (let [block (or (db/entity [:block/uuid block-id]) block)]
+        (p/let [block (or (db-async/<get-block repo block-id {:children? false}) block)]
           (if (ldb/recycled? block)
             (notification/show! (t :storage.recycle/readonly) :warning)
             (p/do!
-             (db-async/<get-block repo (:db/id block) {:children? false})
              (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))
              (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
                (state/clear-edit! {:clear-editing-block? false}))
@@ -143,13 +138,8 @@
                (edit-block-aux repo block content text-range (assoc opts :pos pos))))))))))
 
 (defn- get-original-block-by-dom
-  [node]
-  (when-let [id (some-> node
-                        (gobj/get "parentNode")
-                        (util/rec-get-node "ls-block")
-                        (dom/attr "originalblockid")
-                        uuid)]
-    (db/entity [:block/uuid id])))
+  [_node]
+  nil)
 
 (defn- get-original-block
   "Get the original block from the current editing block or selected blocks"
@@ -166,8 +156,7 @@
          (remove nil?)
          (keep #(when-let [id (dom/attr % "blockid")]
                   (when (= (uuid id) (:block/uuid linked-block))
-                    (when-let [original-id (some-> (dom/attr % "originalblockid") uuid)]
-                      (db/entity [:block/uuid original-id])))))
+                    (:original-block linked-block))))
          ;; FIXME: what if there're multiple same blocks in the selection
          first)))
 
@@ -178,8 +167,9 @@
   (let [level-blocks (outliner-core/blocks-with-level blocks)]
     (->> (filter (fn [b] (= 1 (:block/level b))) level-blocks)
          (map (fn [b]
-                (let [original (get-original-block b)]
-                  (or (and original (db/entity (:db/id original))) b)))))))
+                (let [original (or (:original-block b)
+                                   (get-original-block b))]
+                  (or original b)))))))
 
 (defn get-current-editing-original-block
   []
@@ -207,8 +197,7 @@
 (defn- indent-target-allowed?
   [block indent?]
   (or (not indent?)
-      (let [block (db/entity (:db/id block))
-            left (ldb/get-left-sibling block)]
+      (let [left (ldb/get-left-sibling block)]
         (not (comments-model/comments-area? left)))))
 
 (let [*timeout (atom nil)]

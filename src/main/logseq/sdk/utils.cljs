@@ -2,14 +2,11 @@
   (:require [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.walk :as walk]
-            [datascript.impl.entity :as de]
-            [frontend.db :as db]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.util :as util]
             [goog.object :as gobj]
-            [logseq.api.db-based.tools :as api-tools]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.entity-util :as entity-util]))
+            [logseq.api.db-based.util :as api-util]
+            [logseq.db.frontend.content :as db-content]))
 
 (defn- keep-json-keyword?
   [k]
@@ -17,7 +14,7 @@
            (contains? #{"block" "db" "file"})
            (not)))
 
-(def remove-hidden-properties api-tools/remove-hidden-properties)
+(def remove-hidden-properties api-util/remove-hidden-properties)
 
 (def ^:private kw-tag "___kw___") ; unlikely in normal strings; change if you prefer
 
@@ -38,13 +35,7 @@
            runtime (some-> plugin
                            (gobj/get "sdk")
                            (gobj/get "runtime"))
-           cljs? (= "cljs" runtime)
-           input (cond
-                   (de/entity? input) (entity-util/entity->map input)
-                   (sequential? input) (map #(if (de/entity? %)
-                                               (entity-util/entity->map %)
-                                               %) input)
-                   :else input)]
+          cljs? (= "cljs" runtime)]
        (walk/prewalk
         (fn [a]
           (cond
@@ -58,14 +49,12 @@
                 camel-case?
                 (csk/->camelCase)))
 
-            (de/entity? a) (:db/id a)
             (uuid? a) (str a)
 
             (and (map? a) (:block/uuid a) (:block/title a))
             (-> a
                 (assoc :block/content (:block/title a)
-                       :block/full-title (or (when-let [e (db/entity [:block/uuid (:block/uuid a)])]
-                                               (db-content/recur-replace-uuid-in-block-title e))
+                       :block/full-title (or (db-content/recur-replace-uuid-in-block-title a)
                                              (:block/title a)))
                 remove-hidden-properties)
 

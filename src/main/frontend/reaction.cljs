@@ -2,7 +2,6 @@
   "Utilities for block reactions"
   (:require ["@emoji-mart/data" :as emoji-data]
             [clojure.string :as string]
-            [frontend.db :as db]
             [goog.object :as gobj]))
 
 (defonce emoji-id-set
@@ -26,7 +25,8 @@
                                :else nil)))
         reaction-username (fn [reaction]
                             (let [user (:logseq.property/created-by-ref reaction)]
-                              (:block/title (db/entity (:db/id user)))))
+                              (when (map? user)
+                                (:block/title user))))
         summary (reduce (fn [acc reaction]
                           (let [emoji-id (:logseq.property.reaction/emoji-id reaction)
                                 user-id (reaction-user-id reaction)

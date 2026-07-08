@@ -1,10 +1,7 @@
 (ns frontend.db.async.util
   "Async util helper"
   (:require [clojure.walk :as walk]
-            [datascript.core :as d]
-            [frontend.db.conn :as db-conn]
-            [frontend.state :as state]
-            [promesa.core :as p]))
+            [frontend.state :as state]))
 
 (defn- transform-pull-query
   [query]
@@ -24,37 +21,16 @@
      query)
     query))
 
+(defn <invoke-db-worker
+  [api & args]
+  (apply state/<invoke-db-worker api args))
+
 (defn <q
-  [graph {:keys [transact-db? advanced-query?]
-          :or {transact-db? true}
-          :as opts} & inputs]
+  [graph {:keys [advanced-query?]
+          :as _opts} & inputs]
   (assert (not-any? fn? inputs) "Async query inputs can't include fns because fn can't be serialized")
   (let [inputs' (if advanced-query?
                   (cons (transform-pull-query (first inputs))
                         (rest inputs))
-                  inputs)
-        query-key [inputs' opts]
-        async-requested? (state/async-query-requested? query-key)]
-    (if (and async-requested? transact-db?)
-      (p/promise
-       (let [db (db-conn/get-db graph)]
-         (apply d/q (first inputs') db (rest inputs'))))
-      (p/let [result (state/<invoke-db-worker :thread-api/q graph inputs')]
-        (state/mark-async-query-requested! query-key)
-        (when result
-          (when (and transact-db? (seq result) (coll? result))
-            (when-let [conn (db-conn/get-db graph false)]
-              (let [tx-data (->>
-                             (if (and (coll? (first result))
-                                      (not (map? (first result))))
-                               (apply concat result)
-                               result)
-                             (remove nil?))]
-                (if (every? map? tx-data)
-                  (try
-                    (d/transact! conn tx-data)
-                    (catch :default e
-                      (js/console.error "<q failed with:" e)
-                      nil))
-                  (js/console.log "<q skipped tx for inputs:" inputs')))))
-          result)))))
+                  inputs)]
+    (<invoke-db-worker :thread-api/q graph inputs')))

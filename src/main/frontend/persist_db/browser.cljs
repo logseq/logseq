@@ -211,10 +211,13 @@
                                 (if (= :thread-api/import-db-binary qkw)
                                   (.remoteInvokeBinary ^js wrapped-worker* method (first args) (second args))
                                   (.remoteInvokeBinary ^js wrapped-worker* method (first args))))
-                              (p/let [result (.remoteInvoke ^js wrapped-worker*
-                                                            (str (namespace qkw) "/" (name qkw))
-                                                            (ldb/write-transit-str args))]
-                                (ldb/read-transit-str result))))
+                              (-> (p/let [result (.remoteInvoke ^js wrapped-worker*
+                                                                 (str (namespace qkw) "/" (name qkw))
+                                                                 (ldb/write-transit-str args))]
+                                    (ldb/read-transit-str result))
+                                  (p/catch (fn [error]
+                                             (js/console.error "DB worker API failed:" (str qkw) error)
+                                             (throw error))))))
            t1 (util/time-ms)]
        (reset! state/*db-worker-thread worker)
        (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)

@@ -1,10 +1,11 @@
 (ns frontend.components.property.dialog
   "Property && value choose"
   (:require [frontend.components.property :as property-component]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [logseq.shui.hooks :as hooks]
+            [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
 (hsx/defc dialog
@@ -13,8 +14,14 @@
   (let [has-blocks? (seq blocks)
         k (:property-key opts)
         *property-key (hooks/use-memo #(atom k) [k])
-        *property (hooks/use-memo #(atom (when k (db/get-case-page k))) [k])
+        *property (hooks/use-memo #(atom nil) [k])
         block (first blocks)]
+    (hooks/use-effect!
+     (fn []
+       (when k
+         (p/let [property (db-async/<get-case-page (state/get-current-repo) k)]
+           (reset! *property property))))
+     [k])
     (hooks/use-effect!
      (fn []
        (when has-blocks?

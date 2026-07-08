@@ -19,25 +19,21 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
-            [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as model]
             [frontend.extensions.graph :as graph]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.user :as user-handler]
             [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.entity :as entity]
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.db :as db-db]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -48,21 +44,10 @@
   [route-match]
   (get-in route-match [:parameters :path :name]))
 
-;; Named block links only works on web (and publishing)
-(if util/web-platform?
-  (defn- get-block-uuid-by-block-route-name
-    "Return string block uuid for matching :name and :block-route-name params or
-    nil if not found"
-    [route-match]
-    ;; Only query if block name is in the route
-    (when-let [route-name (get-in route-match [:parameters :path :block-route-name])]
-      (->> (model/get-block-by-page-name-and-block-route-name
-            (state/get-current-repo)
-            (get-page-name route-match)
-            route-name)
-           :block/uuid
-           str)))
-  (def get-block-uuid-by-block-route-name (constantly nil)))
+(defn- get-block-route-name
+  [route-match]
+  (when util/web-platform?
+    (get-in route-match [:parameters :path :block-route-name])))
 
 (defn- open-root-block!
   [block sidebar? preview?]
@@ -90,12 +75,13 @@
 (hsx/defc add-button-inner
   [block {:keys [container-id editing? block?] :as config*}]
   (let [*ref (hooks/use-ref nil)
-        has-children? (:block/_parent block)
-        page? (ldb/page? block)
+        children (:block/children block)
+        has-children? (seq children)
+        page? (entity/page? block)
         opacity-class (cond
                         (and editing? has-children?) "opacity-0"
                         (and (util/mobile?)
-                             (or (some-> (:block/title (last (ldb/sort-by-order (:block/_parent block)))) string/blank?)
+                             (or (some-> (:block/title (last (ldb/sort-by-order children))) string/blank?)
                                  (and (not has-children?) (string/blank? (:block/title block)))))
                         "opacity-0"
                         (util/mobile?) "opacity-50"
@@ -109,11 +95,13 @@
         :parentblockid (:db/id block)
         :ref *ref
         :on-click (fn [e]
-                    (when-not (and (util/mobile?) editing?)
-                      (util/stop e)
-                      (state/set-state! :editor/container-id container-id)
-                      (editor-handler/api-insert-new-block! "" (merge config
-                                                                      {:block-uuid (:block/uuid block)}))))
+	                    (when-not (and (util/mobile?) editing?)
+	                      (util/stop e)
+	                      (state/set-state! :editor/container-id container-id)
+	                      (editor-handler/api-insert-new-block! "" (merge config
+	                                                                      (if page?
+	                                                                        {:page (:block/uuid block)}
+	                                                                        {:block-uuid (:block/uuid block)})))))
         :on-mouse-over (fn []
                          (when-not (and (util/mobile?) editing?)
                            (let [ref (hooks/deref *ref)
@@ -153,32 +141,52 @@
    (fn []
      (when on-page-blocks-rendered
        (on-page-blocks-rendered))))
-  (let [_doc-mode? (rfx/use-sub [:document/mode?])]
-    (when-let [id (:db/id block*)]
-      (let [block (db/sub-block id)
-            block-id (:block/uuid block)
-            block? (not (db/page? block))
-            full-children (->> (:block/_parent block)
+  (let [[quick-add-children set-quick-add-children!] (hooks/use-state nil)
+        [loaded-children set-loaded-children!] (hooks/use-state (:block/children block*))
+        _doc-mode? (rfx/use-sub [:document/mode?])
+        latest-transacted-entity-uuids (rfx/use-sub [:db/latest-transacted-entity-uuids])
+        id (:db/id block*)
+        block block*
+        quick-add-page? (= (:block/title block) common-config/quick-add-page-name)]
+    (hooks/use-effect!
+     (fn []
+       (when-let [block-uuid (:block/uuid block*)]
+         (p/let [result (db-async/<get-block-with-children (state/get-current-repo)
+                                                            block-uuid
+                                                            {:children? true
+                                                             :include-collapsed-children? true})]
+	           (set-loaded-children! (vec (:children result)))))
+	       nil)
+	     [(:block/uuid block*) latest-transacted-entity-uuids])
+    (hooks/use-effect!
+     (fn []
+       (if quick-add-page?
+         (p/let [blocks (editor-handler/<get-user-quick-add-blocks)]
+           (set-quick-add-children! blocks))
+         (set-quick-add-children! nil)))
+     [quick-add-page? id])
+    (when block
+      (let [block-id (:block/uuid block)
+            block? (not (entity/page? block))
+            full-children (->> loaded-children
                                ldb/sort-by-order)
             mobile-length-limit 50
             [children more?] (if (and (> (count full-children) mobile-length-limit) (util/mobile?) journals?)
                                [(take mobile-length-limit full-children) true]
                                [full-children false])
-            quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) common-config/quick-add-page-name))
             children (cond
-                       (and (= id quick-add-page-id)
-                            (user-handler/user-uuid)
-                            (ldb/get-graph-rtc-uuid (db/get-db)))
-                       (editor-handler/get-user-quick-add-blocks)
+                       quick-add-page?
+                       (or quick-add-children children)
 
-                       (ldb/class? block)
+                       (entity/class? block)
                        (remove (fn [b] (contains? (set (map :db/id (:block/tags b))) (:db/id block))) children)
 
-                       (ldb/property? block)
+                       (entity/property? block)
                        (remove (fn [b] (some? (get b (:db/ident block)))) children)
 
                      :else
                      children)
+          block (assoc block :block/children full-children)
           config (assoc config :library? (ldb/library? block))
           document-mode? (rfx/use-sub [:document/mode?])]
       (cond
@@ -197,7 +205,7 @@
                                 :document/mode? document-mode?}
                                config)
                 config hiccup-config
-                blocks (if block? [block] (db/sort-by-order children block))]
+                blocks (if block? [block] (ldb/sort-by-order children))]
             [:div.relative
              (page-blocks-inner block blocks config sidebar? false block-id)
              (when more?
@@ -234,7 +242,7 @@
   [page]
   [:div.ls-page-title-actions
    [:div.flex.flex-row.items-center.gap-2
-    (when-not (:logseq.property/icon (db/entity (:db/id page)))
+    (when-not (:logseq.property/icon page)
       (shui/button
         {:variant :ghost
          :size :sm
@@ -250,7 +258,7 @@
        :size :sm
        :class "px-2 py-0 h-6 text-xs text-muted-foreground"
        :on-click (fn [e]
-                   (if (ldb/property? page)
+                   (if (entity/property? page)
                    (shui/popup-show!
                       (.-currentTarget e)
                       (fn []
@@ -260,13 +268,13 @@
                        :as-dropdown? true
                        :dropdown-menu? true})
                      (let [opts (cond-> {:block page :target (.-currentTarget e)}
-                                  (ldb/class? page)
+                                  (entity/class? page)
                                   (assoc :class-schema? true))]
                        (state/pub-event! [:editor/new-property opts]))))}
       (cond
-        (ldb/class? page)
+        (entity/class? page)
         (t :class/add-property)
-        (ldb/property? page)
+        (entity/property? page)
         (t :ui/configure)
         :else
         (t :property/set-property)))]])
@@ -297,7 +305,7 @@
         :hide-children? true
         :container-id container-id
         :show-tag-and-property-classes? true
-        :journal-page? (ldb/journal? page)
+        :journal-page? (entity/journal? page)
         :on-title-click (fn [e]
                           (cond
                             (gobj/get e "shiftKey")
@@ -312,28 +320,16 @@
        page)]]))
 
 (defn- get-path-page-name
-  [route-match page-name]
+  [route-match page-name route-block-uuid]
   (or page-name
-      (get-block-uuid-by-block-route-name route-match)
+      route-block-uuid
       ;; is page name or uuid
       (get-page-name route-match)
       (state/get-current-page)))
 
-(defn get-page-entity
-  [page-name]
-  (cond
-    (uuid? page-name)
-    (db/entity [:block/uuid page-name])
-
-    (common-util/uuid-string? page-name)
-    (db/entity [:block/uuid (uuid page-name)])
-
-    :else
-    (db/get-page page-name)))
-
 (defn- get-sanity-page-name
-  [route-match page-name]
-  (when-let [path-page-name (get-path-page-name route-match page-name)]
+  [route-match page-name route-block-uuid]
+  (when-let [path-page-name (get-path-page-name route-match page-name route-block-uuid)]
     (util/page-name-sanity-lc path-page-name)))
 
 (hsx/defc on-mounted
@@ -354,8 +350,8 @@
 
 (hsx/defc tabs
   [page opts]
-  (let [class? (ldb/class? page)
-        property? (ldb/property? page)
+  (let [class? (entity/class? page)
+        property? (entity/property? page)
         both? (and class? property?)
         default-tab (cond
                       both?
@@ -398,7 +394,7 @@
 
 (hsx/defc sidebar-page-properties
   [config page]
-  (let [[collapsed? set-collapsed!] (hooks/use-state (not (ldb/class? page)))]
+  (let [[collapsed? set-collapsed!] (hooks/use-state (not (entity/class? page)))]
     [:div.ls-sidebar-page-properties.flex.flex-col.gap-2.mt-2
      [:div
       (shui/button
@@ -423,25 +419,36 @@
         [linked-refs-tagged-ready-page-id] (hooks/use-atom linked-refs-tagged-ready-page-id*)
         container-key (select-keys option [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
         container-id (or (:container-id option) (state/get-container-id container-key))
-        page (or page (some-> (:db/id option) db/entity))
+        repo (or repo current-repo)
+        page-option-id (:db/id option)
+        [loaded-page set-loaded-page!] (hooks/use-state nil)
+        _ (hooks/use-effect!
+           (fn []
+             (when (and (nil? page) page-option-id)
+               (p/let [page (db-async/<get-block repo page-option-id {:children? false})]
+                 (set-loaded-page! page)))
+             nil)
+           [repo page page-option-id])
+        page (or page loaded-page)
         page-id (:db/id page)
         config (assoc config
                       :id (str (:block/uuid page)))
-        repo (or repo current-repo)
         block? (some? (:block/page page))
-        class-page? (ldb/class? page)
-        property-page? (ldb/property? page)
+        class-page? (entity/class? page)
+        property-page? (entity/property? page)
         title (:block/title page)
-        journal? (db/journal-page? title)
-        recycle-page? (and (ldb/page? page)
+        journal? (entity/journal? page)
+        recycle-page? (and (entity/page? page)
                            (= title common-config/recycle-page-name))
         fmt-journal? (boolean (date/journal-title->int title))
-        today? (model/today-journal-page? page)
+        today? (and (entity/journal? page)
+                    (= (:block/journal-day page)
+                       (date/today-journal-day)))
         home? (= :home (state/get-current-route))
         recycled? (ldb/recycled? page)
-        page-display-title (when (ldb/page? page)
+        page-display-title (when (entity/page? page)
                              (route-handler/built-in-page-title (:block/title page)))
-        show-tabs? (and (or class-page? (ldb/property? page)) (not tag-dialog?))
+        show-tabs? (and (or class-page? (entity/property? page)) (not tag-dialog?))
         blocks-ready? (or journals?
                           (= page-id linked-refs-blocks-ready-page-id))
         tagged-ready? (or (not show-tabs?)
@@ -471,7 +478,7 @@
             (when-not (or block? sidebar?)
               [:<>
                [:div.flex.flex-row.space-between
-                (when (ldb/page? page)
+                (when (entity/page? page)
                   (db-page-title page
                                  {:sidebar? sidebar?
                                   :journals? journals?
@@ -479,7 +486,7 @@
                                   :display-title page-display-title
                                   :tag-dialog? tag-dialog?}))
                 (lsp-pagebar-slot)]
-               (when (and (ldb/page? page)
+               (when (and (entity/page? page)
                           (not (ldb/library? page)))
                  (property-component/bidirectional-properties-area page config))])
 
@@ -489,7 +496,7 @@
             (when (ldb/library? page)
               (library/add-pages page))
 
-            (when (and sidebar? (ldb/page? page))
+            (when (and sidebar? (entity/page? page))
               [:div.-mb-8
                (sidebar-page-properties config page)])
 
@@ -519,7 +526,7 @@
               (when today?
                 (scheduled/scheduled-and-deadlines title))
 
-              (when (and (ldb/page? page) (:logseq.property.class/_extends page))
+              (when (entity/class? page)
                 (class-component/class-children page))
 
               ;; referenced blocks
@@ -545,29 +552,40 @@
 (hsx/defc page-aux
   [option]
   (let [page-name (:page-name option)
+        route-page-name (get-page-name option)
+        block-route-name (get-block-route-name option)
+        [route-block-uuid set-route-block-uuid!] (hooks/use-state nil)
         page-id-uuid-or-name (or (:db/id option) (:block/uuid option)
-                                 (get-sanity-page-name option page-name))
+                                 (get-sanity-page-name option page-name route-block-uuid))
         preview-or-sidebar? (or (:preview? option) (:sidebar? option))
         page-uuid? (when page-name (util/uuid-string? page-name))
         *loading? (hooks/use-memo #(atom true) [])
-        page-in-db (db/get-page page-id-uuid-or-name)
-        *page (hooks/use-memo #(atom page-in-db) [])
+        *page (hooks/use-memo #(atom nil) [])
         *refs-count (hooks/use-memo #(atom nil) [])
         [loading?] (hooks/use-atom *loading?)
         [page] (hooks/use-atom *page)
         [refs-count] (hooks/use-atom *refs-count)]
     (hooks/use-effect!
      (fn []
+       (if (and block-route-name route-page-name)
+         (p/let [block (db-async/<get-block-by-page-name-and-block-route-name
+                         (state/get-current-repo)
+                         route-page-name
+                         block-route-name)]
+           (set-route-block-uuid! (some-> block :block/uuid str)))
+         (set-route-block-uuid! nil))
+       nil)
+     [route-page-name block-route-name])
+    (hooks/use-effect!
+     (fn []
        (reset! *loading? true)
-       (when (:block.temp/load-status page-in-db)
-         (reset! *loading? false))
        (p/let [repo (state/get-current-repo)
                page-block (db-async/<get-block repo page-id-uuid-or-name)
                page-id (:db/id page-block)
-               refs-count (when-not (or (ldb/class? page-block) (ldb/property? page-block))
+               refs-count (when-not (or (entity/class? page-block) (entity/property? page-block))
                             (db-async/<get-block-refs-count repo page-id))]
          (reset! *loading? false)
-         (reset! *page (db/entity (:db/id page-block)))
+         (reset! *page page-block)
          (reset! *refs-count refs-count)
          (when page-block
            (when-not (or preview-or-sidebar? (:tag-dialog? option))
@@ -629,13 +647,27 @@
   (let [route-name (rfx/use-sub [:route-match :data :name])
         route-path-name (rfx/use-sub [:route-match :path-params :name])
         theme (rfx/use-sub [:ui/theme])
-        current-page (or
-                      (and (= :page route-name)
-                           route-path-name)
-                      (model/get-today-journal-title))
-        page-entity (db/get-page current-page)]
+        route-page (and (= :page route-name)
+                        route-path-name)
+        [current-page set-current-page!] (hooks/use-state route-page)
+        [page-entity set-page-entity!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (if route-page
+         (set-current-page! route-page)
+         (p/let [today-title (db-async/<get-today-journal-title (state/get-current-repo))]
+           (set-current-page! today-title)))
+       nil)
+     [route-page])
+    (hooks/use-effect!
+     (fn []
+       (when current-page
+         (p/let [page (db-async/<get-block (state/get-current-repo) current-page {:children? false})]
+           (set-page-entity! page)))
+       nil)
+     [current-page])
     (page-graph-aux current-page
-                    {:type (if (ldb/page? page-entity) :page :block)
+                    {:type (if (entity/page? page-entity) :page :block)
                      :block/uuid (:block/uuid page-entity)
                      :theme theme
                      :show-journal? false})))

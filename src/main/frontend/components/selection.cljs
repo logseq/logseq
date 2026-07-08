@@ -1,7 +1,7 @@
 (ns frontend.components.selection
   "Block selection"
   (:require [frontend.components.block.comments-model :as comments-model]
-            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.comments :as comments-handler]
             [frontend.handler.editor :as editor-handler]
@@ -9,7 +9,9 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
+            [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
 (defn show-comment-action?
@@ -23,11 +25,21 @@
     :or {on-cut #(editor-handler/cut-selection-blocks true)
          outliner? true}}]
   (let [search-mode (rfx/use-sub [:search/mode])
-        property-dialog? (rfx/use-sub [:ui/show-property-dialog?])]
+        property-dialog? (rfx/use-sub [:ui/show-property-dialog?])
+        selected-block-ids (if (seq selected-blocks)
+                             (keep #(when (number? %) %) selected-blocks)
+                             (state/get-selection-block-ids))
+        direct-selected-blocks (when (seq selected-blocks)
+                                 (remove number? selected-blocks))
+        [loaded-selected-blocks set-loaded-selected-blocks!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (p/let [results (db-async/<get-blocks (state/get-current-repo) selected-block-ids)]
+         (set-loaded-selected-blocks! (vec (keep :block results))))
+       nil)
+     [selected-block-ids])
     (when-not (or search-mode property-dialog?)
-    (let [selected-blocks (or (seq selected-blocks)
-                              (seq (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids))))
-          selected-blocks (map (fn [block] (if (number? block) (db/entity block) block)) selected-blocks)
+    (let [selected-blocks (seq (concat direct-selected-blocks loaded-selected-blocks))
           comment-targets (comments-model/comment-target-blocks selected-blocks)
           on-copy (if (and selected-blocks (nil? on-copy))
                     #(editor-handler/copy-selection-blocks true {:selected-blocks selected-blocks})

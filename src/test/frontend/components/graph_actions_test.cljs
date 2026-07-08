@@ -1,8 +1,10 @@
 (ns frontend.components.graph-actions-test
-  (:require [cljs.test :refer [deftest is]]
+  (:require [cljs.test :refer [async deftest is]]
             [frontend.components.graph-actions :as graph-actions]
             [frontend.handler.route :as route-handler]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]))
 
 (deftest activate-node-uses-worker-payload
   (let [redirects* (atom [])
@@ -63,3 +65,35 @@
                                         :label "Ordinary Page"})
 
       (is (empty? @redirects*)))))
+
+(deftest preview-node-resolves-db-id-through-worker
+  (async done
+    (let [worker-calls* (atom [])
+          preview-options* (atom [])
+          node {:db-id 505 :page? false}
+          original-document (aget js/global "document")]
+      (set! (.-document js/global) #js {:querySelector (fn [_] nil)})
+      (-> (p/with-redefs [state/get-current-repo (constantly "logseq_db_test")
+                          state/<invoke-db-worker (fn [& args]
+                                                   (swap! worker-calls* conj (vec args))
+                                                   (p/resolved {:block/uuid #uuid "55555555-5555-5555-5555-555555555555"}))
+                          state/get-page-blocks-cp (constantly (fn [opts]
+                                                                 (swap! preview-options* conj opts)
+                                                                 [:div]))
+                          shui/popup-show! (fn [_position content _opts]
+                                             (content)
+                                             :shown)]
+            (p/let [_ (graph-actions/preview-node! node #js {:clientX 10 :clientY 20})]
+              (is (= [[:thread-api/pull "logseq_db_test" [:block/uuid] 505]]
+                     @worker-calls*))
+              (is (= ["55555555-5555-5555-5555-555555555555"]
+                     (map :page-name @preview-options*)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+            (fn []
+              (if (nil? original-document)
+                (js-delete js/global "document")
+                (set! (.-document js/global) original-document))
+              (done)))))))

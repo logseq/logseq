@@ -2,15 +2,17 @@
   (:require [cljs.test :refer [deftest is async]]
             [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.db :as db]
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.persist-db :as persist-db]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
+
+(defn- finish-async-test!
+  [done]
+  (js/setTimeout done 0))
 
 (deftest coerce-http-request-does-not-add-client-revision-to-member-request-test
   (is (= {:email "user@example.com"}
@@ -29,10 +31,10 @@
                          {:keys [url opts]} @called]
                    (is (= "http://base/graphs/graph-1/members/user-2" url))
                    (is (= "DELETE" (:method opts)))
-                   (done)))
+                   (finish-async-test! done)))
                (p/catch (fn [e]
                           (is false (str e))
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest leave-graph-uses-current-user-test
   (async done
@@ -47,10 +49,10 @@
                          {:keys [url opts]} @called]
                    (is (= "http://base/graphs/graph-1/members/user-1" url))
                    (is (= "DELETE" (:method opts)))
-                   (done)))
+                   (finish-async-test! done)))
                (p/catch (fn [e]
                           (is false (str e))
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest leave-graph-missing-user-test
   (async done
@@ -58,10 +60,10 @@
                (db-sync/<rtc-leave-graph! "graph-1"))
              (p/then (fn [_]
                        (is false "expected rejection")
-                       (done)))
+                       (finish-async-test! done)))
              (p/catch (fn [e]
                         (is (= :db-sync/invalid-member (:type (ex-data e))))
-                        (done))))))
+                        (finish-async-test! done))))))
 
 (deftest rtc-get-users-info-uses-cached-members-test
   (async done
@@ -69,12 +71,14 @@
                fetch-calls (atom 0)]
            (state/replace-state! (assoc state-prev :rtc/users-info {}))
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                               db/get-db (fn [] :db)
-                               ldb/get-graph-rtc-uuid (fn [_db] "graph-1")
+                               db-sync/<get-rtc-graph-uuid
+                               (fn [repo]
+                                 (is (= "repo-1" repo))
+                                 (p/resolved "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
                                state/get-current-repo (fn [] "repo-1")
                                db-sync/fetch-json (fn [url opts _]
                                                     (swap! fetch-calls inc)
-                                                    (is (= "http://base/graphs/graph-1/members" url))
+                                                    (is (= "http://base/graphs/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/members" url))
                                                     (is (= "GET" (:method opts)))
                                                    (p/resolved {:members [{:user-id "user-1"
                                                                            :role "member"
@@ -93,13 +97,12 @@
                           (is false (str e))))
                (p/finally (fn []
                             (state/replace-state! state-prev)
-                            (done)))))))
+                            (finish-async-test! done)))))))
 
 (deftest rtc-create-graph-persists-disabled-e2ee-flag-test
   (async done
          (let [worker-calls (atom [])]
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! worker-calls conj args)
                                                          (p/resolved {:graph-id "graph-1"
@@ -114,10 +117,10 @@
                                   false
                                   true]]
                                 @worker-calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [e]
                           (is false (str e))
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest rtc-create-graph-defaults-e2ee-enabled-test
   (async done
@@ -138,10 +141,10 @@
                                   true
                                   true]]
                                 @worker-calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [e]
                           (is false (str e))
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest rtc-upload-graph-creates-remote-graph-as-not-ready-test
   (async done
@@ -149,12 +152,11 @@
                refresh-calls (atom 0)
                start-calls (atom [])
                state-prev @state/state]
-           (swap! state/state assoc
-                  :auth/id-token "id-token-1"
-                  :auth/access-token "access-token-1"
-                  :auth/refresh-token "refresh-token-1"
-                  :auth/oauth-token-url "http://oauth/token"
-                  :auth/oauth-client-id "client-1")
+           (state/set-auth-id-token "id-token-1")
+           (state/set-auth-access-token "access-token-1")
+           (state/set-auth-refresh-token "refresh-token-1")
+           (state/set-state! :auth/oauth-token-url "http://oauth/token")
+           (state/set-state! :auth/oauth-client-id "client-1")
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                state/<invoke-db-worker (fn [& args]
@@ -177,10 +179,10 @@
                                 (second @upload-calls)))
                          (is (= 1 @refresh-calls))
                          (is (= ["logseq_db_demo"] @start-calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [e]
                           (is false (str e))
-                          (done)))
+                          (finish-async-test! done)))
                (p/finally (fn []
                             (reset! state/state state-prev)))))))
 
@@ -193,6 +195,7 @@
                   :rtc/uploading? false)
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               util/electron? (fn [] false)
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! worker-calls conj args)
                                                          (p/resolved :ok))
@@ -201,13 +204,13 @@
                (p/then (fn [_]
                          (is false "expected rejection")
                          (reset! state/state state-prev)
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is (= :db-sync/graph-operation-in-progress
                                  (:type (ex-data error))))
                           (is (empty? @worker-calls))
                           (reset! state/state state-prev)
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest rtc-download-graph-rejects-while-upload-is-active-test
   (async done
@@ -226,13 +229,13 @@
                (p/then (fn [_]
                          (is false "expected rejection")
                          (reset! state/state state-prev)
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is (= :db-sync/graph-operation-in-progress
                                  (:type (ex-data error))))
                           (is (empty? @worker-calls))
                           (reset! state/state state-prev)
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest rtc-upload-graph-rejects-while-download-is-active-test
   (async done
@@ -256,7 +259,7 @@
                (p/then (fn [_]
                          (is false "expected rejection")
                          (reset! state/state state-prev)
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is (= :db-sync/graph-operation-in-progress
                                  (:type (ex-data error))))
@@ -264,7 +267,7 @@
                           (is (zero? @refresh-calls))
                           (is (empty? @start-calls))
                           (reset! state/state state-prev)
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest rtc-create-graph-and-start-sync-does-not-upload-snapshot-test
   (async done
@@ -290,10 +293,10 @@
                          (is (= 1 @refresh-calls))
                          (is (= ["logseq_db_demo"] @start-calls))
                          (is (empty? @upload-calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [e]
                           (is false (str e))
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest rtc-start-skips-while-graph-upload-is-active-test
   (async done
@@ -312,10 +315,10 @@
                (p/then (fn [_]
                          (is (not-any? #(= :thread-api/db-sync-start (first %)) @calls))
                          (is (some #(= :thread-api/db-sync-stop (first %)) @calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))
+                          (finish-async-test! done)))
                (p/finally (fn []
                             (reset! state/*db-worker worker-prev)
                             (reset! state/state state-prev)))))))
@@ -338,10 +341,10 @@
                (p/then (fn [_]
                          (is (not-any? #(= :thread-api/db-sync-start (first %)) @calls))
                          (is (some #(= :thread-api/db-sync-stop (first %)) @calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))
+                          (finish-async-test! done)))
                (p/finally (fn []
                             (reset! state/*db-worker worker-prev)
                             (reset! state/state state-prev)))))))
@@ -384,10 +387,10 @@
                                 (second (first @calls))))
                          (is (= [:thread-api/db-sync-start "demo-graph"]
                                 (second @calls)))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))
+                          (finish-async-test! done)))
                (p/finally (fn []
                             (reset! state/*db-worker worker-prev)
                             (reset! state/state state-prev)))))))
@@ -451,10 +454,10 @@
                          (is (= false (:graph-ready-for-use? (first graphs))))
                          (is (= false (:graph-ready-for-use? (first @graphs-state))))
                          (is (empty? @ensure-calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))
+                          (finish-async-test! done)))
                (p/finally (fn []
                             (reset! state/*db-worker worker-prev)))))))
 
@@ -481,10 +484,10 @@
                                   {:ensure-server? true
                                    :server-rsa-keys-exists? false}]]
                                 @ensure-calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))
+                          (finish-async-test! done)))
                (p/finally (fn []
                             (reset! state/*db-worker worker-prev)))))))
 
@@ -518,10 +521,10 @@
                                 (mapv first @worker-calls)))
                          (is (= "refresh-token-1"
                                 (:auth/refresh-token (second (first @worker-calls)))))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))
+                          (finish-async-test! done)))
                (p/finally (fn []
                             (reset! state/*db-worker worker-prev)
                             (reset! state/state state-prev)))))))
@@ -544,10 +547,10 @@
                            (is (string/ends-with? graph "demo-graph"))
                            (is (= "graph-1" graph-uuid))
                            (is (= false graph-e2ee?)))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest rtc-download-graph-sets-and-clears-downloading-state-test
   (async done
@@ -566,11 +569,11 @@
                          (is (= [[:rtc/downloading-graph-uuid "graph-1"]
                                  [:rtc/downloading-graph-uuid nil]]
                                 @state-calls))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (reset! state/*db-worker worker-prev)
                           (is false (str error))
-                          (done)))
+                          (finish-async-test! done)))
                (p/finally (fn []
                             (reset! state/*db-worker worker-prev)))))))
 
@@ -614,10 +617,10 @@
                                 (ffirst @invoke-calls)))
                          (is (= :thread-api/db-sync-download-graph-by-id
                                 (first (second @invoke-calls))))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest rtc-download-graph-downloads-missing-assets-on-electron-test
   (async done
@@ -642,10 +645,10 @@
                                 (mapv first @worker-calls)))
                          (is (= ["logseq_db_db1" "graph-1"]
                                 (rest (nth @worker-calls 2))))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest rtc-download-graph-skips-runtime-rebind-outside-electron-test
   (async done
@@ -668,10 +671,10 @@
                          (is (empty? @runtime-rebind-calls))
                          (is (= :thread-api/db-sync-download-graph-by-id
                                 (ffirst @worker-calls)))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))))))
+                          (finish-async-test! done)))))))
 
 (deftest rtc-download-graph-syncs-auth-state-after-runtime-rebind-test
   (async done
@@ -693,7 +696,7 @@
                                 (ffirst @worker-calls)))
                          (is (= :thread-api/db-sync-download-graph-by-id
                                 (first (second @worker-calls))))
-                         (done)))
+                         (finish-async-test! done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))))))
+                          (finish-async-test! done)))))))

@@ -1,23 +1,22 @@
 (ns frontend.components.query.view
   "DB query result view"
   (:require [frontend.components.views :as views]
-            [frontend.db :as db]
             [frontend.state]
             [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]))
 
-(defn- result->entities
+(defn- result->rows
   [result]
-  (map (fn [b] (or (db/entity (:db/id b)) b)) result))
+  (remove nil? result))
 
 (defn- init-result
   [result view-entity]
   (let [result' (if (map? result)
                   (mapcat second result)
                   result)]
-    (->> (result->entities result')
+    (->> (result->rows result')
          (remove (fn [b] (contains?
-                          #{(:db/id view-entity) (:db/id (:logseq.property/query view-entity))}
+                          #{(:db/id view-entity) (:logseq.property/query-id view-entity)}
                           (:db/id b))))
          (remove :logseq.property/view-for))))
 

@@ -2,12 +2,13 @@
   "Jump to property key/value"
   (:require [clojure.string :as string]
             [dommy.core :as d]
-            [frontend.db :as db]
             [frontend.context.i18n :refer [t]]
+            [frontend.db.async :as db-async]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [promesa.core :as p]))
 
 (defonce *current-keys (atom nil))
 (defonce *jump-data (atom {}))
@@ -69,6 +70,12 @@
   (let [idx (.indexOf @*current-keys key)]
     (when (>= idx 0) (nth triggers idx))))
 
+(defn- <get-block
+  [id-or-name]
+  (if id-or-name
+    (db-async/<get-block (state/get-current-repo) id-or-name {:children? false})
+    (p/resolved nil)))
+
 (defn- trigger!
   [key e]
   (let [{:keys [triggers _mode]} @*jump-data
@@ -81,22 +88,24 @@
         (if (d/has-class? trigger "block-content")
           (let [block-id (some-> (d/attr trigger "blockid") uuid)
                 container-id (some-> (d/attr trigger "containerid")
-                                     util/safe-parse-int)
-                block (when block-id (db/entity [:block/uuid block-id]))]
-            (when block (editor-handler/edit-block! block :max {:container-id container-id})))
+                                     util/safe-parse-int)]
+            (p/let [block (<get-block block-id)]
+              (when block
+                (editor-handler/edit-block! block :max {:container-id container-id}))))
           (.click trigger))
         (notification/show! (t :nav/invalid-jump-error) :error true)))))
 
 (defn jump-to
   []
   (when (empty? (d/sel js/document ".jtrigger-id"))
-    (let [current-block-id (or (:block/uuid (state/get-edit-block))
-                               (first (state/get-selection-block-ids))
-                               (:block/uuid (db/get-page (state/get-current-page))))
-          current-block (when (uuid? current-block-id)
-                          (db/entity [:block/uuid current-block-id]))
-          collapsed? (or (state/get-block-collapsed current-block-id) (:block/collapsed? current-block))]
-      (when collapsed?
+    (p/let [current-block-id (or (:block/uuid (state/get-edit-block))
+                                 (first (state/get-selection-block-ids)))
+            current-block (or (when current-block-id
+                                (<get-block current-block-id))
+                              (<get-block (state/get-current-page)))
+            current-block-id (or current-block-id (:block/uuid current-block))
+            collapsed? (or (state/get-block-collapsed current-block-id) (:block/collapsed? current-block))]
+      (when (and collapsed? current-block-id)
         (editor-handler/expand-block! current-block-id))
       (let [f #(let [selected-block-or-editing-block (or (first (state/get-selection-blocks))
                                                          ;; current editing block

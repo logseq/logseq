@@ -1,61 +1,29 @@
 (ns frontend.components.recycle
   "Recycle page UI"
-  (:require [datascript.core :as d]
-            [frontend.components.avatar :as avatar]
+  (:require [frontend.components.avatar :as avatar]
             [frontend.components.block :as component-block]
             [frontend.context.i18n :as i18n :refer [t]]
-            [frontend.db :as db]
-            [frontend.db.hooks :as db-hooks]
-            [frontend.db.react :as react]
+            [frontend.db.async :as db-async]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db :as ldb]
+            [frontend.util.entity :as entity]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
+            [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
-(defn- resolve-entity
-  [db value]
-  (cond
-    (and (map? value) (:db/id value)) value
-    (integer? value) (d/entity db value)
-    (vector? value) (d/entity db value)
-    :else nil))
-
-(defn- deleted-roots
-  [db]
-  (->> (d/q '[:find [?e ...]
-              :where
-              [?e :logseq.property/deleted-at]]
-            db)
-       (map #(d/entity db %))
-       (sort-by :logseq.property/deleted-at #(compare %2 %1))))
-
-(defn- sub-deleted-root-ids
-  []
-  (when-let [repo (state/get-current-repo)]
-    (some-> (react/q repo
-                     [:frontend.worker.react/recycle-roots]
-                     {:query-fn (fn [db _]
-                                  (->> (d/q '[:find [?e ...]
-                                              :where
-                                              [?e :logseq.property/deleted-at]]
-                                            db)
-                                       vec))}
-                     nil)
-            db-hooks/use-query)))
-
 (defn- group-title
-  [db root]
-  (if (ldb/page? root)
+  [root]
+  (if (entity/page? root)
     (:block/title root)
-    (or (:block/title (resolve-entity db (:logseq.property.recycle/original-page root)))
+    (or (:logseq.property.recycle/original-page-title root)
         (t :page/unknown))))
 
 (defn- deleted-by
-  [db root]
-  (resolve-entity db (:logseq.property/deleted-by-ref root)))
+  [root]
+  (:logseq.property/deleted-by-ref root))
 
 (defn- deleted-by-avatar
   [user]
@@ -67,19 +35,19 @@
     :avatar-src (:logseq.property.user/avatar user)}))
 
 (defn- deleted-root-header
-  [db root]
-  (let [user (deleted-by db root)
+  [root]
+  (let [user (deleted-by root)
         deleted-at (:logseq.property/deleted-at root)
         root-uuid (:block/uuid root)
         delete-message (str "Permanently delete this "
-                            (if (ldb/page? root) "page" "block")
+                            (if (entity/page? root) "page" "block")
                             " from Recycle? This cannot be undone.")]
     [:div.flex.items-center.justify-between.gap-4.text-xs.text-muted-foreground
      [:div.flex.items-center.gap-1.min-w-0.flex-1
       (deleted-by-avatar user)
       [:div.min-w-0
        [:div.truncate
-        (t (if (ldb/page? root)
+        (t (if (entity/page? root)
              :storage.recycle/page-deleted-at
              :storage.recycle/block-deleted-at)
            (i18n/locale-format-date (js/Date. deleted-at)))]]]
@@ -113,30 +81,38 @@
 
 (hsx/defc recycle-page
   [_page {:keys [class]}]
-  (let [db* (db/get-db)
-           root-ids (or (sub-deleted-root-ids)
-                        [])
-           roots (if (seq root-ids)
-                   (->> root-ids
-                        (keep #(d/entity db* %))
-                        (sort-by :logseq.property/deleted-at #(compare %2 %1)))
-                   (deleted-roots db*))
-           groups (->> roots
-                       (group-by #(group-title db* %))
-                       (sort-by (fn [[_ roots]]
-                                  (:logseq.property/deleted-at (first roots)))
-                                #(compare %2 %1)))]
+  (let [repo (state/get-current-repo)
+        [roots set-roots!] (hooks/use-state nil)
+        groups (->> (or roots [])
+                    (group-by group-title)
+                    (sort-by (fn [[_ roots]]
+                               (:logseq.property/deleted-at (first roots)))
+                             #(compare %2 %1)))]
+    (hooks/use-effect!
+     (fn []
+       (p/let [root-ids (db-async/<q repo
+                                     {:transact-db? false}
+                                     '[:find [?e ...]
+                                       :where
+                                       [?e :logseq.property/deleted-at]])
+               results (db-async/<get-blocks repo root-ids {:children? false})
+               roots (->> results
+                          (map :block)
+                          (sort-by :logseq.property/deleted-at #(compare %2 %1)))]
+         (set-roots! roots))
+       nil)
+     [repo])
        [:div {:class (util/classnames ["flex" "flex-col" "gap-8" "ls-recycle-page-content" class])}
         [:div.text-sm.text-muted-foreground.ls-recycle-page-description.ml-1
          (t :storage.recycle/retention-desc)]
         (if (seq groups)
           (for [[title roots] groups]
             [:section {:key title}
-             (when-not (some ldb/page? roots)
+             (when-not (some entity/page? roots)
                [:h2.text-lg.font-medium.mb-3 title])
-             [:div.flex.flex-col
-              (for [root roots]
-                [:div {:key (str (:block/uuid root))}
-                 (deleted-root-header db* root)
+              [:div.flex.flex-col
+               (for [root roots]
+                 [:div {:key (str (:block/uuid root))}
+                 (deleted-root-header root)
                  (deleted-root-outliner root)])]])
           [:div.text-sm.text-muted-foreground (t :storage.recycle/empty)])]))

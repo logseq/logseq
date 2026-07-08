@@ -1,12 +1,10 @@
 (ns frontend.components.query.result-test
   (:require [clojure.test :refer [deftest are testing is]]
-            [frontend.components.query.result :as query-result]
-            [frontend.db.model :as model]))
+            [frontend.components.query.result :as query-result]))
 
 (defn- transform-query-result
   [config query-m result]
-  (with-redefs [model/with-pages identity]
-    (query-result/transform-query-result config query-m result)))
+  (query-result/transform-query-result config query-m result))
 
 (deftest transform-query-result-with-transforms-and-grouping
   (let [result (mapv
