@@ -614,84 +614,84 @@
   [repo {:keys [config datoms debug-transit-raw sync-download-graph? creating-remote-graph?] :as opts}]
   (let [datoms (or datoms
                    (when debug-transit-raw
-                     (debug-transit-raw->datoms debug-transit-raw)))])
-  (when creating-remote-graph?
-    (when (and (worker-state/get-sqlite-conn repo :client-ops)
-               (nil? (client-op/get-local-tx repo)))
-      (client-op/update-local-tx repo 0)))
-  (when-not (worker-state/get-sqlite-conn repo)
-    (p/let [[db search-db client-ops-db vector-index] (get-dbs repo)
-            dbs (cond-> [db search-db]
-                  client-ops-db (conj client-ops-db))
-            storage (new-sqlite-storage db)]
-      (swap! *sqlite-conns assoc repo {:db db
-                                       :search search-db
-                                       :client-ops client-ops-db})
-      (when vector-index
-        (swap! *vector-indexes assoc repo vector-index))
-      (doseq [db' dbs]
-        (enable-sqlite-wal-mode! db'))
-      (common-sqlite/create-kvs-table! db)
-      (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
-      (search/create-tables-and-triggers! search-db)
-      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
-      (ldb/register-debounce-fn! (gfun/debounce d/store 1000))
-      (let [conn (common-sqlite/get-storage-conn storage db-schema/schema)
-            _ (db-fix/check-and-fix-schema! conn)
-            _ (when datoms
-                (let [ident-eids (into #{}
-                                       (comp (filter (fn [datom]
-                                                       (= (:a datom) :db/ident)))
-                                             (map :e))
-                                       datoms)
-                      to-tx (fn [d] [:db/add (:e d) (:a d) (:v d)])
-                      batch-size 20000
-                      ident-batches (->> datoms
-                                         (filter #(contains? ident-eids (:e %)))
-                                         (map to-tx)
-                                         (partition-all batch-size))
-                      _ (doseq [batch ident-batches]
-                          (d/transact! conn batch {:initial-db? true}))
-                      non-ident-batches (->> datoms
-                                             (remove #(contains? ident-eids (:e %)))
-                                             (map to-tx)
-                                             (partition-all batch-size))]
-                  (doseq [batch non-ident-batches]
-                    (d/transact! conn batch {:initial-db? true}))))
-            client-ops-conn (when-not @*publishing? client-ops-db)
-            initial-data-exists? (when (nil? datoms)
-                                   (and (d/entity @conn :logseq.class/Root)
-                                        (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type)))))]
-        (swap! *datascript-conns assoc repo conn)
-        (swap! *client-ops-conns assoc repo client-ops-conn)
-        (when-not @*publishing?
-          (client-op/ensure-sqlite-schema! client-ops-db))
-        (when creating-remote-graph?
-          (when (nil? (client-op/get-local-tx repo))
-            (client-op/update-local-tx repo 0)))
-        (ensure-client-ops-cleanup-timer! repo)
-        (let [initial-tx-report (when-not (or initial-data-exists?
-                                              (seq datoms)
-                                              sync-download-graph?)
-                                  (let [config (resolve-initial-config config)
-                                        initial-data (sqlite-create-graph/build-db-initial-data
-                                                      config (select-keys opts [:import-type :graph-git-sha :creating-remote-graph?]))]
-                                    (ldb/transact! conn initial-data
-                                                   {:initial-db? true})))]
-          (when-not sync-download-graph?
-            (let [migrate-result (db-migrate/migrate conn)]
-              (if migrate-result
-                (handle-migrate-result-local-txs! repo migrate-result)
-                (maybe-enqueue-built-in-sync-repair! repo conn migrate-result initial-data-exists?)))
-            (gc-sqlite-dbs! db conn {})
-            (maybe-run-recycle-gc! conn))
+                     (debug-transit-raw->datoms debug-transit-raw)))]
+    (when creating-remote-graph?
+      (when (and (worker-state/get-sqlite-conn repo :client-ops)
+                 (nil? (client-op/get-local-tx repo)))
+        (client-op/update-local-tx repo 0)))
+    (when-not (worker-state/get-sqlite-conn repo)
+      (p/let [[db search-db client-ops-db vector-index] (get-dbs repo)
+              dbs (cond-> [db search-db]
+                    client-ops-db (conj client-ops-db))
+              storage (new-sqlite-storage db)]
+        (swap! *sqlite-conns assoc repo {:db db
+                                         :search search-db
+                                         :client-ops client-ops-db})
+        (when vector-index
+          (swap! *vector-indexes assoc repo vector-index))
+        (doseq [db' dbs]
+          (enable-sqlite-wal-mode! db'))
+        (common-sqlite/create-kvs-table! db)
+        (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
+        (search/create-tables-and-triggers! search-db)
+        (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+        (ldb/register-debounce-fn! (gfun/debounce d/store 1000))
+        (let [conn (common-sqlite/get-storage-conn storage db-schema/schema)
+              _ (db-fix/check-and-fix-schema! conn)
+              _ (when datoms
+                  (let [ident-eids (into #{}
+                                         (comp (filter (fn [datom]
+                                                         (= (:a datom) :db/ident)))
+                                               (map :e))
+                                         datoms)
+                        to-tx (fn [d] [:db/add (:e d) (:a d) (:v d)])
+                        batch-size 20000
+                        ident-batches (->> datoms
+                                           (filter #(contains? ident-eids (:e %)))
+                                           (map to-tx)
+                                           (partition-all batch-size))
+                        _ (doseq [batch ident-batches]
+                            (d/transact! conn batch {:initial-db? true}))
+                        non-ident-batches (->> datoms
+                                               (remove #(contains? ident-eids (:e %)))
+                                               (map to-tx)
+                                               (partition-all batch-size))]
+                    (doseq [batch non-ident-batches]
+                      (d/transact! conn batch {:initial-db? true}))))
+              client-ops-conn (when-not @*publishing? client-ops-db)
+              initial-data-exists? (when (nil? datoms)
+                                     (and (d/entity @conn :logseq.class/Root)
+                                          (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type)))))]
+          (swap! *datascript-conns assoc repo conn)
+          (swap! *client-ops-conns assoc repo client-ops-conn)
+          (when-not @*publishing?
+            (client-op/ensure-sqlite-schema! client-ops-db))
+          (when creating-remote-graph?
+            (when (nil? (client-op/get-local-tx repo))
+              (client-op/update-local-tx repo 0)))
+          (ensure-client-ops-cleanup-timer! repo)
+          (let [initial-tx-report (when-not (or initial-data-exists?
+                                                (seq datoms)
+                                                sync-download-graph?)
+                                    (let [config (resolve-initial-config config)
+                                          initial-data (sqlite-create-graph/build-db-initial-data
+                                                        config (select-keys opts [:import-type :graph-git-sha :creating-remote-graph?]))]
+                                      (ldb/transact! conn initial-data
+                                                     {:initial-db? true})))]
+            (when-not sync-download-graph?
+              (let [migrate-result (db-migrate/migrate conn)]
+                (if migrate-result
+                  (handle-migrate-result-local-txs! repo migrate-result)
+                  (maybe-enqueue-built-in-sync-repair! repo conn migrate-result initial-data-exists?)))
+              (gc-sqlite-dbs! db conn {})
+              (maybe-run-recycle-gc! conn))
 
-          (when initial-tx-report
-            (db-sync/handle-local-tx! repo initial-tx-report))
+            (when initial-tx-report
+              (db-sync/handle-local-tx! repo initial-tx-report))
 
-          (db-listener/listen-db-changes! repo (get @*datascript-conns repo))
+            (db-listener/listen-db-changes! repo (get @*datascript-conns repo))
 
-          nil)))))
+            nil))))))
 
 (defn- <list-all-dbs
   []
