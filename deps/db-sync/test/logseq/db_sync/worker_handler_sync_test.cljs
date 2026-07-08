@@ -945,6 +945,121 @@
           (is (= @tx-report-count (count (storage/fetch-tx-since sql t-before))))
           (is (= 300 (block-title-prefix-count @conn "large-tempid-block-"))))))))
 
+(deftest tx-batch-applies-large-entry-with-dependent-blocks-across-chunks-test
+  (testing "large tx chunking preserves ordered parent-before-child dependencies"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-dependency-page"
+                                    :block/title "large-dependency-page"}])
+              t-before (storage/get-t sql)
+              parent-uuid (random-uuid)
+              child-uuid (random-uuid)
+              parent-eid "large-dependency-parent"
+              child-eid "large-dependency-child"
+              filler-tx (large-block-insert-tx page-uuid 70)
+              parent-tx [[:db/add parent-eid :block/uuid parent-uuid]
+                         [:db/add parent-eid :block/title "large-dependency-parent"]
+                         [:db/add parent-eid :block/page [:block/uuid page-uuid]]
+                         [:db/add parent-eid :block/parent [:block/uuid page-uuid]]
+                         [:db/add parent-eid :block/order "z0"]
+                         [:db/add parent-eid :block/created-at 1]
+                         [:db/add parent-eid :block/updated-at 1]]
+              child-tx [[:db/add child-eid :block/uuid child-uuid]
+                        [:db/add child-eid :block/title "large-dependency-child"]
+                        [:db/add child-eid :block/page [:block/uuid page-uuid]]
+                        [:db/add child-eid :block/parent [:block/uuid parent-uuid]]
+                        [:db/add child-eid :block/order "z1"]
+                        [:db/add child-eid :block/created-at 2]
+                        [:db/add child-eid :block/updated-at 2]]
+              tx-data (vec (concat filler-tx parent-tx child-tx))
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              tx-data-counts (atom [])
+              response (try
+                         (d/listen! conn ::large-dependent-block-chunks
+                                    (fn [{:keys [tx-data]}]
+                                      (swap! tx-data-counts conj (count tx-data))))
+                         (with-redefs [ws/broadcast! (fn [& _] nil)]
+                           (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))
+                         (finally
+                           (d/unlisten! conn ::large-dependent-block-chunks)))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (= [497 7] @tx-data-counts))
+          (is (= @tx-data-counts
+                 (mapv (comp count protocol/transit->tx :tx)
+                       (storage/fetch-tx-since sql t-before))))
+          (is (= parent-uuid
+                 (get-in (d/pull @conn [{:block/parent [:block/uuid]}]
+                                 [:block/uuid child-uuid])
+                         [:block/parent :block/uuid])))
+          (is (= 70 (block-title-prefix-count @conn "large-op-block-")))
+          (is (= 3 (block-title-prefix-count @conn "large-dependency-"))))))))
+
+(deftest tx-batch-applies-large-delete-entry-with-descendants-across-chunks-test
+  (testing "delete-blocks descendant expansion is still applied in ordered chunks"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              parent-uuid (random-uuid)
+              child-count 520
+              child-uuids (repeatedly child-count random-uuid)
+              _ (d/transact! conn
+                             (vec
+                              (concat
+                               [{:block/uuid page-uuid
+                                 :block/name "large-delete-page"
+                                 :block/title "large-delete-page"}
+                                {:block/uuid parent-uuid
+                                 :block/title "large-delete-parent"
+                                 :block/page [:block/uuid page-uuid]
+                                 :block/parent [:block/uuid page-uuid]
+                                 :block/order "d0"
+                                 :block/created-at 1
+                                 :block/updated-at 1}]
+                               (map-indexed
+                                (fn [idx child-uuid]
+                                  {:block/uuid child-uuid
+                                   :block/title (str "large-delete-child-" idx)
+                                   :block/page [:block/uuid page-uuid]
+                                   :block/parent [:block/uuid parent-uuid]
+                                   :block/order (str "d" (inc idx))
+                                   :block/created-at idx
+                                   :block/updated-at idx})
+                                child-uuids))))
+              t-before (storage/get-t sql)
+              tx-entry {:tx (protocol/tx->transit [[:db/retractEntity [:block/uuid parent-uuid]]])
+                        :tx-id (random-uuid)
+                        :outliner-op :delete-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              tx-report-count (atom 0)
+              response (try
+                         (d/listen! conn ::large-delete-block-chunks
+                                    (fn [_tx-report]
+                                      (swap! tx-report-count inc)))
+                         (with-redefs [ws/broadcast! (fn [& _] nil)]
+                           (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))
+                         (finally
+                           (d/unlisten! conn ::large-delete-block-chunks)))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (> @tx-report-count 1))
+          (is (> (:t response) t-before))
+          (is (pos? (count (storage/fetch-tx-since sql t-before))))
+          (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
+          (is (every? nil? (map #(d/entity @conn [:block/uuid %]) child-uuids)))
+          (is (zero? (block-title-prefix-count @conn "large-delete-child-"))))))))
+
 (deftest tx-batch-rolls-back-large-entry-when-live-chunk-fails-test
   (testing "large tx live chunk failure leaves no persisted partial chunks"
     (with-memory-sql
