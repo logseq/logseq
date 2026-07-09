@@ -41,30 +41,46 @@
                   kw)))
         kv-entity/kv-entities))
 
+(defn- tx-ignored-kv-entity-refs
+  [tx-data]
+  (into ignored-kv-entities
+        (keep (fn [item]
+                (cond
+                  (and (map? item)
+                       (contains? ignored-kv-entities (:db/ident item)))
+                  (:db/id item)
+
+                  (and (entity-op? item)
+                       (= :db/ident (nth item 2))
+                       (contains? ignored-kv-entities (nth item 3)))
+                  (second item))))
+        tx-data))
+
 (defn- ignored-kv-entity-ref?
-  [db entity-ref]
-  (or (contains? ignored-kv-entities entity-ref)
+  [db ignored-entity-refs entity-ref]
+  (or (contains? ignored-entity-refs entity-ref)
       (when-let [eid (entity-ref->eid db entity-ref)]
         (contains? ignored-kv-entities (:db/ident (d/entity db eid))))))
 
 (defn- ignored-kv-entity-op?
-  [db item]
+  [db ignored-entity-refs item]
   (cond
     (and (map? item) (contains? item :db/id))
-    (ignored-kv-entity-ref? db (:db/id item))
+    (ignored-kv-entity-ref? db ignored-entity-refs (:db/id item))
 
     (retract-entity-op? item)
-    (ignored-kv-entity-ref? db (second item))
+    (ignored-kv-entity-ref? db ignored-entity-refs (second item))
 
     (entity-op? item)
-    (ignored-kv-entity-ref? db (second item))
+    (ignored-kv-entity-ref? db ignored-entity-refs (second item))
 
     :else
     false))
 
 (defn- strip-ignored-kv-entity-ops
   [db tx-data]
-  (remove (partial ignored-kv-entity-op? db) tx-data))
+  (let [ignored-entity-refs (tx-ignored-kv-entity-refs tx-data)]
+    (remove (partial ignored-kv-entity-op? db ignored-entity-refs) tx-data)))
 
 (defn- drop-ops-targeting-retracted-entities
   [db tx-data]
@@ -158,7 +174,7 @@
                      drop-ops-targeting-retracted-entities? false
                      retract-touched-descendants? false}}]
    (let [tx-data* (cond->> (strip-migration-deleted-attrs tx-data)
-                    true
+                    (seq ignored-kv-entities)
                     (strip-ignored-kv-entity-ops db)
                     drop-missing-retract-ops?
                     (remove (fn [item]
