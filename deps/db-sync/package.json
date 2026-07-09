@@ -21,6 +21,7 @@
     "migrate:staging": "cd ./worker && wrangler d1 migrations apply logseq-sync-graph-meta-staging --env staging --remote",
     "migrate:prod": "cd ./worker && wrangler d1 migrations apply logseq-sync-graphs-prod --env prod --remote",
     "test:node-adapter": "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js",
+    "test:large-op-128m": "clojure -M:cljs release db-sync-large-op-memory-test && node --max-old-space-size=128 worker/dist/large-op-memory-test.js",
     "test": "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js",
     "clean": "rm -rf ./worker/dist/",
     "sentry:sourcemaps": "sentry-cli sourcemaps upload --release $SENTRY_RELEASE --rewrite --strip-prefix worker/dist/worker --url-prefix \"~/\" worker/dist/worker",
