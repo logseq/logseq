@@ -9,11 +9,11 @@ type check = {
   code : Error.code option;
   message : string;
   path : Cli_primitive.path option;
-  servers : Melange_edn_melange.any list;
+  servers : Melange_edn_melange.any Rrbvec.t;
   raw : Melange_edn_melange.any option;
 }
 
-type report = { status : check_status; checks : check list }
+type report = { status : check_status; checks : check Rrbvec.t }
 
 val check_db_worker_script : action -> check
 val check_root_dir : Cli_config.t -> check

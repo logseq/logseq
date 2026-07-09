@@ -135,7 +135,7 @@ type t = {
   code : code;
   message : string;
   hint : string option;
-  candidates : candidate list;
+  candidates : candidate Rrbvec.t;
   context : Melange_edn_melange.any option;
 }
 
@@ -287,7 +287,7 @@ let code_to_string = function
 
 let code_to_keyword code = Edn_util.keyword_t (code_to_string code)
 
-let make ?hint ?(candidates = []) ?context code message =
+let make ?hint ?(candidates = Vec.empty) ?context code message =
   { code; message; hint; candidates; context }
 
 let invalid_options message = make Invalid_options message

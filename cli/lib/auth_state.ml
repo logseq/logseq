@@ -82,35 +82,34 @@ let auth_json data =
   Js.Json.stringify (Js.Json.object_ object_) ^ "\n"
 
 let first_string_field object_ keys =
-  keys |> List.find_map (Json_util.string_field object_)
+  keys |> Vec.find_map (Json_util.string_field object_)
 
 let first_int64_field object_ keys =
-  keys |> List.find_map (Json_util.int64_field object_)
+  keys |> Vec.find_map (Json_util.int64_field object_)
 
 let parse_auth_json text =
   let object_ = Json_util.object_of_json_string text in
   let id_token =
     Option.bind object_ (fun object_ ->
-        first_string_field object_ [ "id-token"; "id_token" ])
+        first_string_field object_ (Vec.of_array [| "id-token"; "id_token" |]))
   in
   let access_token =
     Option.bind object_ (fun object_ ->
-        first_string_field object_ [ "access-token"; "access_token" ])
+        first_string_field object_
+          (Vec.of_array [| "access-token"; "access_token" |]))
   in
   let refresh_token =
     Option.bind object_ (fun object_ ->
-        first_string_field object_ [ "refresh-token"; "refresh_token" ])
+        first_string_field object_
+          (Vec.of_array [| "refresh-token"; "refresh_token" |]))
   in
   let provider =
     Option.bind object_ (fun object_ ->
-        first_string_field object_ [ "provider" ])
+        first_string_field object_ (Vec.singleton "provider"))
   in
   match (provider, id_token, access_token, refresh_token) with
   | None, None, None, None ->
-      Error
-        (Error.make
-           (Error.Invalid_auth_file)
-           "invalid auth file")
+      Error (Error.make Error.Invalid_auth_file "invalid auth file")
   | _, _, _, _ ->
       let provider = Option.value provider ~default:"cognito" in
       Ok
@@ -122,46 +121,45 @@ let parse_auth_json text =
           expires_at =
             Option.bind object_ (fun object_ ->
                 Option.map Time.time_of_epoch_ms
-                  (first_int64_field object_ [ "expires-at"; "expires_at" ]));
+                  (first_int64_field object_
+                     (Vec.of_array [| "expires-at"; "expires_at" |])));
           sub =
             Option.bind object_ (fun object_ ->
-                first_string_field object_ [ "sub" ]);
+                first_string_field object_ (Vec.singleton "sub"));
           email =
             Option.bind object_ (fun object_ ->
-                first_string_field object_ [ "email" ]);
+                first_string_field object_ (Vec.singleton "email"));
           updated_at =
             Option.value
               (Option.bind object_ (fun object_ ->
                    Option.map Time.time_of_epoch_ms
-                     (first_int64_field object_ [ "updated-at"; "updated_at" ])))
+                     (first_int64_field object_
+                        (Vec.of_array [| "updated-at"; "updated_at" |]))))
               ~default:Time.epoch;
         }
 
 let jwt_payload token =
-  match String.split_on_char '.' token with
-  | [ _header; payload; _signature ] ->
-      Ok (Cli_platform.Crypto.base64url_decode payload)
-  | _ ->
-      Error
-        (Error.make
-           (Error.Invalid_auth_token)
-           "invalid auth token")
+  let parts = Vec.split_on_char '.' token in
+  if Vec.length parts = 3 then
+    Ok (Cli_platform.Crypto.base64url_decode (Vec.nth parts 1))
+  else Error (Error.make Error.Invalid_auth_token "invalid auth token")
 
 let claims_of_id_token id_token =
   Error.bind (jwt_payload id_token) (fun payload ->
       let object_ = Json_util.object_of_json_string payload in
       Ok
         ( Option.bind object_ (fun object_ ->
-              first_string_field object_ [ "sub" ]),
+              first_string_field object_ (Vec.singleton "sub")),
           Option.bind object_ (fun object_ ->
-              first_string_field object_ [ "email" ]),
+              first_string_field object_ (Vec.singleton "email")),
           Option.bind object_ (fun object_ ->
               Option.map
                 (fun exp -> Time.time_of_epoch_ms (Int64.mul exp 1_000L))
-                (first_int64_field object_ [ "exp" ])) ))
+                (first_int64_field object_ (Vec.singleton "exp"))) ))
 
 let auth_path_context path =
-  Edn_util.map [ (Edn_util.keyword "auth-path", Edn_util.string path) ]
+  Edn_util.map_vec
+    (Vec.of_array [| (Edn_util.keyword "auth-path", Edn_util.string path) |])
 
 let read_auth_file config =
   let path = auth_path config in
@@ -171,8 +169,7 @@ let read_auth_file config =
        try Error.map (fun data -> Some data) (parse_auth_json (read_file path))
        with exn ->
          Error
-           (Error.make ~context:(auth_path_context path)
-              (Error.Invalid_auth_file)
+           (Error.make ~context:(auth_path_context path) Error.Invalid_auth_file
               (Printexc.to_string exn)))
 
 let write_auth_file config data =
@@ -186,8 +183,7 @@ let write_auth_file config data =
      with exn ->
        Error
          (Error.make ~context:(auth_path_context path)
-            (Error.Auth_file_write_failed)
-            (Printexc.to_string exn)))
+            Error.Auth_file_write_failed (Printexc.to_string exn)))
 
 let delete_auth_file config =
   let path = auth_path config in
@@ -198,8 +194,7 @@ let delete_auth_file config =
      with exn ->
        Error
          (Error.make ~context:(auth_path_context path)
-            (Error.Auth_file_delete_failed)
-            (Printexc.to_string exn)))
+            Error.Auth_file_delete_failed (Printexc.to_string exn)))
 
 let expired_auth auth =
   match auth.expires_at with
@@ -209,8 +204,7 @@ let expired_auth auth =
 let missing_auth config message =
   Error.make ~hint:"Run `logseq login` first."
     ~context:(auth_path_context (auth_path config))
-    (Error.Missing_auth)
-    message
+    Error.Missing_auth message
 
 let config_auth config =
   if
@@ -234,7 +228,7 @@ let config_auth config =
 let raw_config_string config keys =
   match config.Cli_config.raw_file_config with
   | None -> None
-  | Some value -> List.find_map (Edn_util.get_string value) keys
+  | Some value -> Vec.find_map (Edn_util.get_string value) keys
 
 let default_oauth_domain = "logseq-prod.auth.us-east-1.amazoncognito.com"
 let default_oauth_client_id = "69cs1lgme7p8kbgld8n5kseii6"
@@ -247,11 +241,13 @@ let normalize_base_url value =
   else value
 
 let oauth_domain_base config =
-  match raw_config_string config [ "oauth-domain"; "domain" ] with
+  match
+    raw_config_string config (Vec.of_array [| "oauth-domain"; "domain" |])
+  with
   | Some domain when String.trim domain <> "" -> "https://" ^ String.trim domain
   | _ -> "https://" ^ default_oauth_domain
 
-let raw_http_base config = raw_config_string config [ "http-base" ]
+let raw_http_base config = raw_config_string config (Vec.singleton "http-base")
 
 let configured_http_base config =
   match raw_http_base config with
@@ -269,27 +265,31 @@ let oauth_endpoint_base config =
 
 let token_endpoint config =
   match
-    raw_config_string config [ "oauth-token-endpoint"; "token-endpoint" ]
+    raw_config_string config
+      (Vec.of_array [| "oauth-token-endpoint"; "token-endpoint" |])
   with
   | Some endpoint when String.trim endpoint <> "" -> Some endpoint
   | _ -> Some (normalize_base_url (oauth_endpoint_base config) ^ "/oauth2/token")
 
 let logout_endpoint config =
   match
-    raw_config_string config [ "oauth-logout-endpoint"; "logout-endpoint" ]
+    raw_config_string config
+      (Vec.of_array [| "oauth-logout-endpoint"; "logout-endpoint" |])
   with
   | Some endpoint when String.trim endpoint <> "" -> Some endpoint
   | _ -> Some (normalize_base_url (oauth_endpoint_base config) ^ "/logout")
 
 let oauth_client_id config =
-  match raw_config_string config [ "oauth-client-id"; "client-id" ] with
+  match
+    raw_config_string config (Vec.of_array [| "oauth-client-id"; "client-id" |])
+  with
   | Some client_id when String.trim client_id <> "" -> Some client_id
   | _ -> Some default_oauth_client_id
 
 let authorize_endpoint config =
   match
     raw_config_string config
-      [ "oauth-authorize-endpoint"; "authorize-endpoint" ]
+      (Vec.of_array [| "oauth-authorize-endpoint"; "authorize-endpoint" |])
   with
   | Some endpoint when String.trim endpoint <> "" -> Some endpoint
   | _ ->
@@ -298,14 +298,14 @@ let authorize_endpoint config =
 
 let oauth_scope config =
   Option.value
-    (raw_config_string config [ "oauth-scope"; "scope" ])
+    (raw_config_string config (Vec.of_array [| "oauth-scope"; "scope" |]))
     ~default:"email openid phone"
 
 let raw_config_bool config keys ~default =
   match config.Cli_config.raw_file_config with
   | None -> default
   | Some value -> (
-      match List.find_map (Edn_util.get value) keys with
+      match Vec.find_map (Edn_util.get value) keys with
       | Some value when Option.is_some (Edn_util.as_bool value) ->
           Option.get (Edn_util.as_bool value)
       | Some value when Option.is_some (Edn_util.as_string value) ->
@@ -314,7 +314,7 @@ let raw_config_bool config keys ~default =
       | _ -> default)
 
 let replace_char ~needle ~replacement value =
-  value |> String.split_on_char needle |> String.concat replacement
+  value |> Vec.split_on_char needle |> Vec.string_concat replacement
 
 let form_encode value =
   value |> Js.Global.encodeURIComponent
@@ -326,13 +326,13 @@ let form_encode value =
 
 let form_body fields =
   fields
-  |> List.map (fun (key, value) -> form_encode key ^ "=" ^ form_encode value)
-  |> String.concat "&"
+  |> Vec.map (fun (key, value) -> form_encode key ^ "=" ^ form_encode value)
+  |> Vec.string_concat "&"
 
 let query_string fields =
   fields
-  |> List.map (fun (key, value) -> form_encode key ^ "=" ^ form_encode value)
-  |> String.concat "&"
+  |> Vec.map (fun (key, value) -> form_encode key ^ "=" ^ form_encode value)
+  |> Vec.string_concat "&"
 
 let random_base64url size = Cli_platform.Crypto.random_base64url size
 let pkce_challenge verifier = Sha256.base64url verifier
@@ -346,15 +346,15 @@ let refreshed_auth_of_body current body =
   match Json_util.object_of_json_string body with
   | None ->
       Error
-        (Error.make
-           (Error.Missing_id_token)
+        (Error.make Error.Missing_id_token
            "auth token response missing id_token")
   | Some object_ -> (
-      match first_string_field object_ [ "id_token"; "id-token" ] with
+      match
+        first_string_field object_ (Vec.of_array [| "id_token"; "id-token" |])
+      with
       | None ->
           Error
-            (Error.make
-               (Error.Missing_id_token)
+            (Error.make Error.Missing_id_token
                "auth token response missing id_token")
       | Some id_token ->
           Error.bind (claims_of_id_token id_token)
@@ -365,11 +365,11 @@ let refreshed_auth_of_body current body =
                   id_token = Some id_token;
                   access_token =
                     first_string_field object_
-                      [ "access_token"; "access-token" ];
+                      (Vec.of_array [| "access_token"; "access-token" |]);
                   refresh_token =
                     (match
                        first_string_field object_
-                         [ "refresh_token"; "refresh-token" ]
+                         (Vec.of_array [| "refresh_token"; "refresh-token" |])
                      with
                     | Some _ as token -> token
                     | None -> current.refresh_token);
@@ -389,17 +389,18 @@ let refresh_auth config data =
           Cli_effect.pure
             (Error
                (Error.make ~hint:"Run `logseq login` first."
-                  (Error.Auth_refresh_failed)
+                  Error.Auth_refresh_failed
                   "auth token endpoint is not configured"))
       | Some url ->
           let fields =
-            [
-              ("grant_type", "refresh_token"); ("refresh_token", refresh_token);
-            ]
+            Vec.of_array
+              [|
+                ("grant_type", "refresh_token"); ("refresh_token", refresh_token);
+              |]
           in
           let fields =
             match oauth_client_id config with
-            | Some client_id -> fields @ [ ("client_id", client_id) ]
+            | Some client_id -> Vec.push_back fields ("client_id", client_id)
             | None -> fields
           in
           Cli_effect.catch
@@ -407,10 +408,11 @@ let refresh_auth config data =
                (fun body -> refreshed_auth_of_body data body)
                (http_request ~method_:Fetch.Post ~url
                   ~headers:
-                    [
-                      ("Content-Type", "application/x-www-form-urlencoded");
-                      ("Accept", "application/json");
-                    ]
+                    (Vec.of_array
+                       [|
+                         ("Content-Type", "application/x-www-form-urlencoded");
+                         ("Accept", "application/json");
+                       |])
                   ~body:(form_body fields)
                   ~timeout_span:(Some config.timeout_span)))
             (fun exn ->
@@ -418,15 +420,15 @@ let refresh_auth config data =
                 (Error
                    (Error.make ~hint:"Run `logseq login` first."
                       ~context:
-                        (Edn_util.map
-                           [
-                             ( Edn_util.keyword "auth-path",
-                               Edn_util.string (auth_path config) );
-                             ( Edn_util.keyword "error",
-                               Edn_util.string (Printexc.to_string exn) );
-                           ])
-                      (Error.Auth_refresh_failed)
-                      "auth refresh failed"))))
+                        (Edn_util.map_vec
+                           (Vec.of_array
+                              [|
+                                ( Edn_util.keyword "auth-path",
+                                  Edn_util.string (auth_path config) );
+                                ( Edn_util.keyword "error",
+                                  Edn_util.string (Printexc.to_string exn) );
+                              |]))
+                      Error.Auth_refresh_failed "auth refresh failed"))))
 
 let auth_code_exchange config ~code ~redirect_uri ~code_verifier =
   match token_endpoint config with
@@ -434,20 +436,21 @@ let auth_code_exchange config ~code ~redirect_uri ~code_verifier =
       Cli_effect.pure
         (Error
            (Error.make ~hint:"Run `logseq login` first."
-              (Error.Auth_code_exchange_failed)
+              Error.Auth_code_exchange_failed
               "auth token endpoint is not configured"))
   | Some url ->
       let fields =
-        [
-          ("grant_type", "authorization_code");
-          ("code", code);
-          ("redirect_uri", redirect_uri);
-          ("code_verifier", code_verifier);
-        ]
+        Vec.of_array
+          [|
+            ("grant_type", "authorization_code");
+            ("code", code);
+            ("redirect_uri", redirect_uri);
+            ("code_verifier", code_verifier);
+          |]
       in
       let fields =
         match oauth_client_id config with
-        | Some client_id -> fields @ [ ("client_id", client_id) ]
+        | Some client_id -> Vec.push_back fields ("client_id", client_id)
         | None -> fields
       in
       Cli_effect.catch
@@ -467,24 +470,26 @@ let auth_code_exchange config ~code ~redirect_uri ~code_verifier =
                body)
            (http_request ~method_:Fetch.Post ~url
               ~headers:
-                [
-                  ("Content-Type", "application/x-www-form-urlencoded");
-                  ("Accept", "application/json");
-                ]
+                (Vec.of_array
+                   [|
+                     ("Content-Type", "application/x-www-form-urlencoded");
+                     ("Accept", "application/json");
+                   |])
               ~body:(form_body fields) ~timeout_span:(Some config.timeout_span)))
         (fun exn ->
           Cli_effect.pure
             (Error
                (Error.make ~hint:"Run `logseq login` first."
                   ~context:
-                    (Edn_util.map
-                       [
-                         ( Edn_util.keyword "auth-path",
-                           Edn_util.string (auth_path config) );
-                         ( Edn_util.keyword "error",
-                           Edn_util.string (Printexc.to_string exn) );
-                       ])
-                  (Error.Auth_code_exchange_failed)
+                    (Edn_util.map_vec
+                       (Vec.of_array
+                          [|
+                            ( Edn_util.keyword "auth-path",
+                              Edn_util.string (auth_path config) );
+                            ( Edn_util.keyword "error",
+                              Edn_util.string (Printexc.to_string exn) );
+                          |]))
+                  Error.Auth_code_exchange_failed
                   "authorization code exchange failed")))
 
 let redirect_path = "/auth/callback"
@@ -506,8 +511,8 @@ let url_decode value =
   with _ -> value
 
 let query_params query =
-  query |> String.split_on_char '&'
-  |> List.filter_map (fun part ->
+  Vec.split_on_char '&' query
+  |> Vec.filter_map (fun part ->
       if part = "" then None
       else
         let key, value = split_once '=' part in
@@ -523,19 +528,17 @@ let callback_result_of_target ~state = function
   | None ->
       ( login_callback_response 400 "Invalid request",
         Error
-          (Error.make
-             (Error.Invalid_callback_request)
+          (Error.make Error.Invalid_callback_request
              "invalid login callback request") )
   | Some target -> (
       let path, query = split_once '?' target in
       let params = query_params query in
-      let param key = List.assoc_opt key params in
+      let param key = Vec.assoc_opt key params in
       match (path, param "error", param "state", param "code") with
       | path, _, _, _ when path <> redirect_path ->
           ( login_callback_response 404 "Not found",
             Error
-              (Error.make
-                 (Error.Login_callback_not_found)
+              (Error.make Error.Login_callback_not_found
                  "login callback path not found") )
       | _, Some oauth_error, _, _ ->
           ( login_callback_response 400
@@ -543,19 +546,19 @@ let callback_result_of_target ~state = function
             Error
               (Error.make
                  ~context:
-                   (Edn_util.map
-                      [
-                        ( Edn_util.keyword "oauth-error",
-                          Edn_util.string oauth_error );
-                      ])
-                 (Error.Login_callback_error)
+                   (Edn_util.map_vec
+                      (Vec.of_array
+                         [|
+                           ( Edn_util.keyword "oauth-error",
+                             Edn_util.string oauth_error );
+                         |]))
+                 Error.Login_callback_error
                  "login callback returned oauth error") )
       | _, _, Some callback_state, _ when callback_state <> state ->
           ( login_callback_response 400
               "Login failed due to state mismatch. Return to the CLI and retry.",
             Error
-              (Error.make
-                 (Error.Invalid_callback_state)
+              (Error.make Error.Invalid_callback_state
                  "login callback state mismatch") )
       | _, _, _, Some code when String.trim code <> "" ->
           ( login_callback_response 200
@@ -565,21 +568,18 @@ let callback_result_of_target ~state = function
           ( login_callback_response 400
               "Login failed because the callback did not include a code.",
             Error
-              (Error.make
-                 (Error.Missing_callback_code)
+              (Error.make Error.Missing_callback_code
                  "missing authorization code") ))
 
 let open_browser config url =
   if
     not
-      (raw_config_bool config [ "open-browser"; "open-browser?" ] ~default:true)
+      (raw_config_bool config
+         (Vec.of_array [| "open-browser"; "open-browser?" |])
+         ~default:true)
   then Ok false
   else if Cli_unix.open_url url then Ok true
-  else
-    Error
-      (Error.make
-         (Error.Browser_open_failed)
-         "failed to open browser")
+  else Error (Error.make Error.Browser_open_failed "failed to open browser")
 
 let resolve_auth config =
   match config_auth config with
@@ -600,26 +600,28 @@ let login config =
   | None ->
       Cli_effect.pure
         (Error
-           (Error.make
-              (Error.Login_not_configured)
+           (Error.make Error.Login_not_configured
               "oauth authorize endpoint is not configured"))
   | Some authorize_endpoint -> (
       match oauth_client_id config with
       | None ->
           Cli_effect.pure
             (Error
-               (Error.make
-                  (Error.Login_not_configured)
+               (Error.make Error.Login_not_configured
                   "oauth client id is not configured"))
       | Some client_id -> (
-          let state = raw_or_random config [ "oauth-state"; "state" ] 24 in
+          let state =
+            raw_or_random config (Vec.of_array [| "oauth-state"; "state" |]) 24
+          in
           let code_verifier =
-            raw_or_random config [ "oauth-code-verifier"; "code-verifier" ] 48
+            raw_or_random config
+              (Vec.of_array [| "oauth-code-verifier"; "code-verifier" |])
+              48
           in
           let code_challenge =
             match
               raw_config_string config
-                [ "oauth-code-challenge"; "code-challenge" ]
+                (Vec.of_array [| "oauth-code-challenge"; "code-challenge" |])
             with
             | Some value when String.trim value <> "" -> value
             | _ -> pkce_challenge code_verifier
@@ -628,15 +630,16 @@ let login config =
           let authorize_url =
             authorize_endpoint ^ "?"
             ^ query_string
-                [
-                  ("response_type", "code");
-                  ("client_id", client_id);
-                  ("scope", oauth_scope config);
-                  ("redirect_uri", redirect_uri);
-                  ("state", state);
-                  ("code_challenge", code_challenge);
-                  ("code_challenge_method", "S256");
-                ]
+                (Vec.of_array
+                   [|
+                     ("response_type", "code");
+                     ("client_id", client_id);
+                     ("scope", oauth_scope config);
+                     ("redirect_uri", redirect_uri);
+                     ("state", state);
+                     ("code_challenge", code_challenge);
+                     ("code_challenge_method", "S256");
+                   |])
           in
           let finish_login opened code =
             auth_code_exchange config ~code ~redirect_uri ~code_verifier
@@ -680,9 +683,7 @@ let login config =
           | Error Cli_platform.Login_callback_timeout ->
               Cli_effect.pure
                 (Error
-                   (Error.make
-                      (Error.Login_timeout)
-                      "login callback timed out"))
+                   (Error.make Error.Login_timeout "login callback timed out"))
           | Error (Cli_platform.Login_callback_server_aborted message) -> (
               match !browser_open_error with
               | Some err -> Cli_effect.pure (Error err)
@@ -691,23 +692,26 @@ let login config =
                     (Error
                        (Error.make
                           ~context:
-                            (Edn_util.map
-                               [
-                                 ( Edn_util.keyword "error",
-                                   Edn_util.string message );
-                               ])
-                          (Error.Login_callback_server_start_failed)
+                            (Edn_util.map_vec
+                               (Vec.of_array
+                                  [|
+                                    ( Edn_util.keyword "error",
+                                      Edn_util.string message );
+                                  |]))
+                          Error.Login_callback_server_start_failed
                           "failed to start login callback server")))
           | Error (Cli_platform.Login_callback_server_start_failed message) ->
               Cli_effect.pure
                 (Error
                    (Error.make
                       ~context:
-                        (Edn_util.map
-                           [
-                             (Edn_util.keyword "error", Edn_util.string message);
-                           ])
-                      (Error.Login_callback_server_start_failed)
+                        (Edn_util.map_vec
+                           (Vec.of_array
+                              [|
+                                ( Edn_util.keyword "error",
+                                  Edn_util.string message );
+                              |]))
+                      Error.Login_callback_server_start_failed
                       "failed to start login callback server"))))
 
 let logout config =
@@ -717,32 +721,33 @@ let logout config =
   | None ->
       Cli_effect.pure
         (Error
-           (Error.make
-              (Error.Logout_not_configured)
+           (Error.make Error.Logout_not_configured
               "oauth logout endpoint is not configured"))
   | Some logout_endpoint -> (
       match oauth_client_id config with
       | None ->
           Cli_effect.pure
             (Error
-               (Error.make
-                  (Error.Logout_not_configured)
+               (Error.make Error.Logout_not_configured
                   "oauth client id is not configured"))
       | Some client_id -> (
           let redirect_uri = callback_uri redirect_path in
           let state =
-            raw_or_random config [ "oauth-logout-state"; "logout-state" ] 24
+            raw_or_random config
+              (Vec.of_array [| "oauth-logout-state"; "logout-state" |])
+              24
           in
           let logout_url =
             logout_endpoint ^ "?"
             ^ query_string
-                [
-                  ("response_type", "code");
-                  ("client_id", client_id);
-                  ("redirect_uri", redirect_uri);
-                  ("state", state);
-                  ("scope", oauth_scope config);
-                ]
+                (Vec.of_array
+                   [|
+                     ("response_type", "code");
+                     ("client_id", client_id);
+                     ("redirect_uri", redirect_uri);
+                     ("state", state);
+                     ("scope", oauth_scope config);
+                   |])
           in
           let result opened =
             {
