@@ -563,7 +563,11 @@
                           :error (str e)})
                false)
              (throw e))))
-       false))))
+       (if (contains? delete-outliner-ops outliner-op)
+         (throw (ex-info "delete tx sanitized to empty"
+                         {:type :db-sync/empty-delete-tx
+                          :outliner-op outliner-op}))
+         false)))))
 
 (defn- apply-tx! [^js self tx-entries request-context]
   (let [sql (.-sql self)]
