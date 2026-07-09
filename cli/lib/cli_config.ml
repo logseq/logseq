@@ -36,7 +36,7 @@ type t = {
 }
 
 type source = Defaults | Env | File of Cli_primitive.path | Argv
-type resolved = { config : t; sources : source list }
+type resolved = { config : t; sources : source Rrbvec.t }
 
 let default_root_dir () =
   Filename.concat (Sys.getenv_opt "HOME" |> Option.value ~default:".") "logseq"
@@ -91,15 +91,15 @@ let read_config_file path =
   else
     let content = read_file path in
     if String.trim content = "" then Ok None
-    else try Ok (Some (Melange_edn_melange.of_edn_string content |> value_of_edn))
-    with exn ->
-      Error
-        (Error.make
-           (Error.Invalid_config)
-           ("invalid config file: " ^ path ^ " (" ^ Printexc.to_string exn ^ ")"))
+    else
+      try Ok (Some (Melange_edn_melange.of_edn_string content |> value_of_edn))
+      with exn ->
+        Error
+          (Error.make Error.Invalid_config
+             ("invalid config file: " ^ path ^ " (" ^ Printexc.to_string exn
+            ^ ")"))
 
-let invalid_config message =
-  Error.make (Error.Invalid_config) message
+let invalid_config message = Error.make Error.Invalid_config message
 
 let parse_int_value value =
   let value = String.trim value in
@@ -109,17 +109,17 @@ let parse_int_value value =
 let env_string key env value_key fields =
   match env key with
   | Some value when String.trim value <> "" ->
-      (Edn_util.keyword value_key, Edn_util.string value) :: fields
+      Vec.push_front fields (Edn_util.keyword value_key, Edn_util.string value)
   | _ -> fields
 
 let env_int key env value_key fields =
   match Option.bind (env key) parse_int_value with
-  | Some value -> (Edn_util.keyword value_key, value) :: fields
+  | Some value -> Vec.push_front fields (Edn_util.keyword value_key, value)
   | None -> fields
 
 let env_config env =
   let fields =
-    []
+    Vec.empty
     |> env_string "LOGSEQ_CLI_GRAPH" env "graph"
     |> env_string "LOGSEQ_CLI_ROOT_DIR" env "root-dir"
     |> env_string "LOGSEQ_CLI_CONFIG" env "config-path"
@@ -130,7 +130,7 @@ let env_config env =
     |> env_string "LOGSEQ_CLI_WS_URL" env "ws-url"
     |> env_string "LOGSEQ_CLI_HTTP_BASE" env "http-base"
   in
-  Edn_util.map_t (List.rev fields)
+  Edn_util.map_t_rev_vec fields
 
 let validate_env_int_value key env =
   match env key with
@@ -154,23 +154,23 @@ let checked_env_config env =
 let sanitize_file_config value =
   match Edn_util.as_map value with
   | Some fields ->
-      Edn_util.map
-        (List.filter
-           (fun (key, _) ->
-             match Edn_util.as_string_like key with
-             | Some ("auth-token" | "retries" | "e2ee-password") -> false
-             | _ -> true)
-           fields)
+      Edn_util.map_vec
+        (fields
+        |> Vec.filter (fun (key, _) ->
+            match Edn_util.as_string_like key with
+            | Some ("auth-token" | "retries" | "e2ee-password") -> false
+            | _ -> true))
   | None -> value
 
 let assoc_opt key value fields =
   match value with
   | None -> fields
   | Some value ->
-      (Edn_util.keyword key, Edn_util.string value)
-      :: List.remove_assoc (Edn_util.keyword key) fields
+      Vec.push_front
+        (Vec.remove_assoc (Edn_util.keyword key) fields)
+        (Edn_util.keyword key, Edn_util.string value)
 
-let map_fields value = Option.value (Edn_util.as_map value) ~default:[]
+let map_fields value = Option.value (Edn_util.as_map value) ~default:Vec.empty
 
 let rec mkdir_p path =
   if path = "" || path = Filename.dirname path || Cli_unix.file_exists path then
@@ -256,7 +256,7 @@ let validate_config_values ~source value =
                     (fun () ->
                       validate_output_config_value ~source "output" value)))))
 
-let first_some values = List.find_map (fun value -> value) values
+let first_some values = Vec.find_map (fun value -> value) values
 
 let positive_or_default value default =
   match value with Some value when value > 0 -> value | _ -> default
@@ -270,20 +270,22 @@ let resolve ~(defaults : defaults) ~env (globals : Global_opts.t) =
       let env_config = Edn_util.any env_config in
       let initial_root_dir =
         first_some
-          [
-            globals.root_dir;
-            value_string "root-dir" env_config;
-            Some defaults.root_dir;
-          ]
+          (Vec.of_array
+             [|
+               globals.root_dir;
+               value_string "root-dir" env_config;
+               Some defaults.root_dir;
+             |])
         |> Option.value ~default:defaults.root_dir
       in
       let config_path =
         first_some
-          [
-            globals.config_path;
-            value_string "config-path" env_config;
-            Some (default_config_path initial_root_dir);
-          ]
+          (Vec.of_array
+             [|
+               globals.config_path;
+               value_string "config-path" env_config;
+               Some (default_config_path initial_root_dir);
+             |])
         |> Option.value ~default:(default_config_path initial_root_dir)
       in
       match read_config_file config_path with
@@ -313,15 +315,19 @@ let resolve ~(defaults : defaults) ~env (globals : Global_opts.t) =
               in
               let root_dir =
                 first_some
-                  [
-                    globals.root_dir;
-                    value_string "root-dir" env_config;
-                    Option.bind raw_file_config (value_string "root-dir");
-                    Some initial_root_dir;
-                  ]
+                  (Vec.of_array
+                     [|
+                       globals.root_dir;
+                       value_string "root-dir" env_config;
+                       Option.bind raw_file_config (value_string "root-dir");
+                       Some initial_root_dir;
+                     |])
                 |> Option.value ~default:initial_root_dir
               in
-              let graph = first_some [ globals.graph; env_graph; file_graph ] in
+              let graph =
+                first_some
+                  (Vec.of_array [| globals.graph; env_graph; file_graph |])
+              in
               let repo = Option.map graph_to_repo graph in
               let file_ws_url =
                 Option.bind raw_file_config (fun value ->
@@ -351,46 +357,51 @@ let resolve ~(defaults : defaults) ~env (globals : Global_opts.t) =
               let env_http_base = Edn_util.get_string env_config "http-base" in
               let output_format =
                 first_some
-                  [
-                    globals.output_format;
-                    value_output "output-format" env_config;
-                    Option.bind raw_file_config (value_output "output-format");
-                    Option.bind raw_file_config (value_output "output");
-                  ]
+                  (Vec.of_array
+                     [|
+                       globals.output_format;
+                       value_output "output-format" env_config;
+                       Option.bind raw_file_config
+                         (value_output "output-format");
+                       Option.bind raw_file_config (value_output "output");
+                     |])
               in
               let timeout_span =
                 first_some
-                  [
-                    globals.timeout_span;
-                    span_option_of_ms (value_int64 "timeout-ms" env_config);
-                    span_option_of_ms
-                      (Option.bind raw_file_config (value_int64 "timeout-ms"));
-                    Some defaults.timeout_span;
-                  ]
+                  (Vec.of_array
+                     [|
+                       globals.timeout_span;
+                       span_option_of_ms (value_int64 "timeout-ms" env_config);
+                       span_option_of_ms
+                         (Option.bind raw_file_config (value_int64 "timeout-ms"));
+                       Some defaults.timeout_span;
+                     |])
                 |> Option.value ~default:defaults.timeout_span
               in
               let login_timeout_span =
                 first_some
-                  [
-                    span_option_of_ms
-                      (value_int64 "login-timeout-ms" env_config);
-                    span_option_of_ms
-                      (Option.bind raw_file_config
-                         (value_int64 "login-timeout-ms"));
-                    Some defaults.login_timeout_span;
-                  ]
+                  (Vec.of_array
+                     [|
+                       span_option_of_ms
+                         (value_int64 "login-timeout-ms" env_config);
+                       span_option_of_ms
+                         (Option.bind raw_file_config
+                            (value_int64 "login-timeout-ms"));
+                       Some defaults.login_timeout_span;
+                     |])
                 |> Option.value ~default:defaults.login_timeout_span
               in
               let logout_timeout_span =
                 first_some
-                  [
-                    span_option_of_ms
-                      (value_int64 "logout-timeout-ms" env_config);
-                    span_option_of_ms
-                      (Option.bind raw_file_config
-                         (value_int64 "logout-timeout-ms"));
-                    Some defaults.logout_timeout_span;
-                  ]
+                  (Vec.of_array
+                     [|
+                       span_option_of_ms
+                         (value_int64 "logout-timeout-ms" env_config);
+                       span_option_of_ms
+                         (Option.bind raw_file_config
+                            (value_int64 "logout-timeout-ms"));
+                       Some defaults.logout_timeout_span;
+                     |])
                 |> Option.value ~default:defaults.logout_timeout_span
               in
               let list_title_max_display_width =
@@ -438,14 +449,15 @@ let resolve ~(defaults : defaults) ~env (globals : Global_opts.t) =
                 (Ok
                    {
                      config;
-                     sources = [ Defaults; File config_path; Env; Argv ];
+                     sources =
+                       Vec.of_array [| Defaults; File config_path; Env; Argv |];
                    })))
 
 let update_config config patch =
   let original =
     match config.raw_file_config with
     | Some value -> value
-    | None -> Edn_util.map []
+    | None -> Edn_util.map_vec Vec.empty
   in
   let fields = map_fields original in
   let fields =
@@ -457,28 +469,27 @@ let update_config config patch =
   let fields =
     match Edn_util.get patch "ws-url" with
     | Some value when Edn_util.is_null value ->
-        List.remove_assoc (Edn_util.keyword "ws-url") fields
+        Vec.remove_assoc (Edn_util.keyword "ws-url") fields
     | _ -> fields
   in
   let fields =
     match Edn_util.get patch "http-base" with
     | Some value when Edn_util.is_null value ->
-        List.remove_assoc (Edn_util.keyword "http-base") fields
+        Vec.remove_assoc (Edn_util.keyword "http-base") fields
     | _ -> fields
   in
   let fields =
     match Edn_util.get patch "graph" with
     | Some value when Edn_util.is_null value ->
-        List.remove_assoc (Edn_util.keyword "graph") fields
+        Vec.remove_assoc (Edn_util.keyword "graph") fields
     | _ -> fields
   in
-  let value = Edn_util.map_t (List.rev fields) in
+  let value = Edn_util.map_t_vec (fields |> Vec.rev) in
   try
     write_config_file config.config_path (Edn_util.any value);
     Cli_effect.pure (Ok value)
   with exn ->
     Cli_effect.pure
       (Error
-         (Error.make
-            (Error.Config_write_failed)
+         (Error.make Error.Config_write_failed
             ("failed to write config file: " ^ Printexc.to_string exn)))

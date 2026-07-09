@@ -17,7 +17,7 @@ type action =
       repo : Cli_primitive.repo;
       graph : Cli_primitive.graph;
       id : Cli_primitive.db_id option;
-      ids : Cli_primitive.db_id list;
+      ids : Cli_primitive.db_id Rrbvec.t;
       multi_id : bool;
       uuid : Cli_primitive.uuid option;
     }

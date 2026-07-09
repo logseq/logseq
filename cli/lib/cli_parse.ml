@@ -1,9 +1,9 @@
 let is_option token = String.length token > 0 && token.[0] = '-'
 
 let option_value key options =
-  List.find_map (fun (k, v) -> if k = key then v else None) options
+  Vec.find_map (fun (k, v) -> if k = key then v else None) options
 
-let option_present key options = List.exists (fun (k, _) -> k = key) options
+let option_present key options = Vec.exists (fun (k, _) -> k = key) options
 
 let normalize_key = function
   | "-g" -> Some "graph"
@@ -45,28 +45,37 @@ let boolean_literal value =
   | _ -> false
 
 let parse_tokens argv =
-  let rec loop options positional = function
-    | [] -> (List.rev options, List.rev positional)
-    | "--" :: rest -> (List.rev options, List.rev_append positional rest)
-    | token :: rest -> (
+  let rec loop options positional remaining =
+    match Vec.pop_front remaining with
+    | None -> (Vec.rev options, Vec.rev positional)
+    | Some ("--", rest) -> (Vec.rev options, Vec.rev_append positional rest)
+    | Some (token, rest) -> (
         match split_equals_option token with
         | Some (key, value) ->
-            loop ((key, Some value) :: options) positional rest
+            loop (Vec.push_front options (key, Some value)) positional rest
         | None -> (
             match normalize_key token with
             | Some key when boolean_option key -> (
-                match rest with
-                | value :: tail when boolean_literal value ->
-                    loop ((key, Some value) :: options) positional tail
-                | _ -> loop ((key, Some "true") :: options) positional rest)
+                match Vec.pop_front rest with
+                | Some (value, tail) when boolean_literal value ->
+                    loop
+                      (Vec.push_front options (key, Some value))
+                      positional tail
+                | _ ->
+                    loop
+                      (Vec.push_front options (key, Some "true"))
+                      positional rest)
             | Some key -> (
-                match rest with
-                | value :: tail when not (is_option value) ->
-                    loop ((key, Some value) :: options) positional tail
-                | _ -> loop ((key, None) :: options) positional rest)
-            | None -> loop options (token :: positional) rest))
+                match Vec.pop_front rest with
+                | Some (value, tail) when not (is_option value) ->
+                    loop
+                      (Vec.push_front options (key, Some value))
+                      positional tail
+                | _ -> loop (Vec.push_front options (key, None)) positional rest
+                )
+            | None -> loop options (Vec.push_front positional token) rest))
   in
-  loop [] [] argv
+  loop Vec.empty Vec.empty argv
 
 let globals_of_options options =
   Global_opts.create
@@ -84,8 +93,9 @@ let globals_of_options options =
     ()
 
 let parse_csv value =
-  value |> String.split_on_char ',' |> List.map String.trim
-  |> List.filter (fun value -> value <> "")
+  Vec.split_on_char ',' value
+  |> Vec.map String.trim
+  |> Vec.filter (fun value -> value <> "")
 
 let int_option key options =
   Option.bind (option_value key options) int_of_string_opt
@@ -101,7 +111,7 @@ let bool_option_value key options =
   | Some value -> Some (String.lowercase_ascii (String.trim value) = "true")
   | None -> if option_present key options then Some true else None
 
-let raw_option_present token argv = List.exists (( = ) token) argv
+let raw_option_present token argv = Vec.exists (( = ) token) argv
 
 let common_list_opts options =
   {
@@ -126,60 +136,92 @@ let graph_import_type options =
     Graph.normalize_import_type
 
 let global_options =
-  [
-    "graph";
-    "root-dir";
-    "config";
-    "timeout-ms";
-    "output";
-    "verbose";
-    "profile";
-    "help";
-    "version";
-  ]
+  Vec.of_array
+    [|
+      "graph";
+      "root-dir";
+      "config";
+      "timeout-ms";
+      "output";
+      "verbose";
+      "profile";
+      "help";
+      "version";
+    |]
 
-let common_list_options = [ "fields"; "limit"; "offset"; "sort"; "order" ]
+let common_list_options =
+  Vec.of_array [| "fields"; "limit"; "offset"; "sort"; "order" |]
 
-let allowed_options_for_path = function
-  | [ "graph"; "list" ]
-  | [ "graph"; "switch" ]
-  | [ "graph"; "remove" ]
-  | [ "graph"; "info" ]
-  | [ "graph"; "backup"; "list" ] ->
-      []
-  | [ "graph"; "create" ] -> [ "enable-sync"; "e2ee-password" ]
-  | [ "graph"; "validate" ] -> [ "fix"; "fields" ]
-  | [ "graph"; "backup"; "create" ] -> [ "name" ]
-  | [ "graph"; "backup"; "restore" ] -> [ "src"; "dst" ]
-  | [ "graph"; "backup"; "remove" ] -> [ "src" ]
-  | [ "graph"; "export" ] -> [ "type"; "file"; "edn-options"; "pretty-print" ]
-  | [ "graph"; "import" ] -> [ "type"; "input" ]
-  | [ "list"; "page" ] ->
-      common_list_options
-      @ [
-          "expand";
-          "include-built-in";
-          "include-journal";
-          "journal-only";
-          "include-hidden";
-          "updated-after";
-          "created-after";
-        ]
-  | [ "list"; "tag" ] ->
-      common_list_options
-      @ [ "expand"; "include-built-in"; "with-properties"; "with-extends" ]
-  | [ "list"; "property" ] ->
-      common_list_options
-      @ [ "expand"; "include-built-in"; "with-classes"; "with-type" ]
-  | [ "list"; "task" ] ->
-      common_list_options @ [ "status"; "priority"; "content" ]
-  | [ "list"; "node" ] -> common_list_options @ [ "tags"; "properties" ]
-  | [ "list"; "asset" ] -> common_list_options
-  | [ "remove"; "block" ] -> [ "id"; "uuid" ]
-  | [ "remove"; "page" ] -> [ "id"; "page" ]
-  | [ "remove"; "tag" ] | [ "remove"; "property" ] -> [ "id"; "name" ]
-  | [ "upsert"; "block" ] ->
-      [
+let option_names values = Vec.of_array values
+let path1 path a = Vec.length path = 1 && Vec.nth path 0 = a
+
+let path2 path a b =
+  Vec.length path = 2 && Vec.nth path 0 = a && Vec.nth path 1 = b
+
+let path3 path a b c =
+  Vec.length path = 3
+  && Vec.nth path 0 = a
+  && Vec.nth path 1 = b
+  && Vec.nth path 2 = c
+
+let path2_any path a choices =
+  Vec.length path = 2 && Vec.nth path 0 = a && Vec.mem (Vec.nth path 1) choices
+
+let path3_any path a b choices =
+  Vec.length path = 3
+  && Vec.nth path 0 = a
+  && Vec.nth path 1 = b
+  && Vec.mem (Vec.nth path 2) choices
+
+let allowed_options_for_path path =
+  if
+    path2_any path "graph"
+      (option_names [| "list"; "switch"; "remove"; "info" |])
+    || path3 path "graph" "backup" "list"
+  then Vec.empty
+  else if path2 path "graph" "create" then
+    option_names [| "enable-sync"; "e2ee-password" |]
+  else if path2 path "graph" "validate" then option_names [| "fix"; "fields" |]
+  else if path3 path "graph" "backup" "create" then option_names [| "name" |]
+  else if path3 path "graph" "backup" "restore" then
+    option_names [| "src"; "dst" |]
+  else if path3 path "graph" "backup" "remove" then option_names [| "src" |]
+  else if path2 path "graph" "export" then
+    option_names [| "type"; "file"; "edn-options"; "pretty-print" |]
+  else if path2 path "graph" "import" then option_names [| "type"; "input" |]
+  else if path2 path "list" "page" then
+    Vec.append common_list_options
+      (option_names
+         [|
+           "expand";
+           "include-built-in";
+           "include-journal";
+           "journal-only";
+           "include-hidden";
+           "updated-after";
+           "created-after";
+         |])
+  else if path2 path "list" "tag" then
+    Vec.append common_list_options
+      (option_names
+         [| "expand"; "include-built-in"; "with-properties"; "with-extends" |])
+  else if path2 path "list" "property" then
+    Vec.append common_list_options
+      (option_names
+         [| "expand"; "include-built-in"; "with-classes"; "with-type" |])
+  else if path2 path "list" "task" then
+    Vec.append common_list_options
+      (option_names [| "status"; "priority"; "content" |])
+  else if path2 path "list" "node" then
+    Vec.append common_list_options (option_names [| "tags"; "properties" |])
+  else if path2 path "list" "asset" then common_list_options
+  else if path2 path "remove" "block" then option_names [| "id"; "uuid" |]
+  else if path2 path "remove" "page" then option_names [| "id"; "page" |]
+  else if path2_any path "remove" (option_names [| "tag"; "property" |]) then
+    option_names [| "id"; "name" |]
+  else if path2 path "upsert" "block" then
+    option_names
+      [|
         "id";
         "uuid";
         "target-id";
@@ -193,9 +235,10 @@ let allowed_options_for_path = function
         "update-properties";
         "remove-tags";
         "remove-properties";
-      ]
-  | [ "upsert"; "page" ] ->
-      [
+      |]
+  else if path2 path "upsert" "page" then
+    option_names
+      [|
         "id";
         "page";
         "restore";
@@ -203,9 +246,10 @@ let allowed_options_for_path = function
         "update-properties";
         "remove-tags";
         "remove-properties";
-      ]
-  | [ "upsert"; "asset" ] ->
-      [
+      |]
+  else if path2 path "upsert" "asset" then
+    option_names
+      [|
         "id";
         "uuid";
         "path";
@@ -214,9 +258,10 @@ let allowed_options_for_path = function
         "target-page";
         "pos";
         "content";
-      ]
-  | [ "upsert"; "task" ] ->
-      [
+      |]
+  else if path2 path "upsert" "task" then
+    option_names
+      [|
         "id";
         "uuid";
         "page";
@@ -233,16 +278,20 @@ let allowed_options_for_path = function
         "no-priority";
         "no-scheduled";
         "no-deadline";
-      ]
-  | [ "upsert"; "tag" ] ->
-      [ "id"; "name"; "add-properties"; "remove-properties" ]
-  | [ "upsert"; "property" ] ->
-      [ "id"; "name"; "type"; "cardinality"; "hide"; "public" ]
-  | [ "search"; ("block" | "page" | "property" | "tag") ] -> [ "content" ]
-  | [ "query"; "list" ] -> []
-  | [ "query" ] -> [ "query"; "name"; "inputs" ]
-  | [ "show" ] ->
-      [
+      |]
+  else if path2 path "upsert" "tag" then
+    option_names [| "id"; "name"; "add-properties"; "remove-properties" |]
+  else if path2 path "upsert" "property" then
+    option_names [| "id"; "name"; "type"; "cardinality"; "hide"; "public" |]
+  else if
+    path2_any path "search"
+      (option_names [| "block"; "page"; "property"; "tag" |])
+  then option_names [| "content" |]
+  else if path2 path "query" "list" then Vec.empty
+  else if path1 path "query" then option_names [| "query"; "name"; "inputs" |]
+  else if path1 path "show" then
+    option_names
+      [|
         "id";
         "uuid";
         "page";
@@ -250,32 +299,43 @@ let allowed_options_for_path = function
         "linked-references";
         "ref-id-footer";
         "level";
-      ]
-  | [ "server"; ("list" | "cleanup" | "start" | "stop" | "restart") ] -> []
-  | [ "sync"; "status" ]
-  | [ "sync"; "stop" ]
-  | [ "sync"; "remote-graphs" ]
-  | [ "sync"; "config"; ("get" | "unset") ] ->
-      []
-  | [ "sync"; ("start" | "upload") ] -> [ "e2ee-password" ]
-  | [ "sync"; "download" ] -> [ "progress"; "e2ee-password" ]
-  | [ "sync"; "asset"; "download" ] -> [ "id"; "uuid" ]
-  | [ "sync"; "ensure-keys" ] -> [ "e2ee-password"; "upload-keys" ]
-  | [ "sync"; "grant-access" ] -> [ "graph-id"; "email" ]
-  | [ "sync"; "config"; "set" ] -> []
-  | [ "debug"; "pull" ] -> [ "id"; "uuid"; "ident" ]
-  | [ "doctor" ] -> [ "dev-script" ]
-  | [ "login" ] | [ "logout" ] | [ "skill"; "show" ] | "example" :: _ -> []
-  | [ "completion" ] -> [ "shell" ]
-  | [ "skill"; "install" ] -> [ "global" ]
-  | _ -> []
+      |]
+  else if
+    path2_any path "server"
+      (option_names [| "list"; "cleanup"; "start"; "stop"; "restart" |])
+  then Vec.empty
+  else if
+    path2_any path "sync" (option_names [| "status"; "stop"; "remote-graphs" |])
+    || path3_any path "sync" "config" (option_names [| "get"; "unset" |])
+  then Vec.empty
+  else if path2_any path "sync" (option_names [| "start"; "upload" |]) then
+    option_names [| "e2ee-password" |]
+  else if path2 path "sync" "download" then
+    option_names [| "progress"; "e2ee-password" |]
+  else if path3 path "sync" "asset" "download" then
+    option_names [| "id"; "uuid" |]
+  else if path2 path "sync" "ensure-keys" then
+    option_names [| "e2ee-password"; "upload-keys" |]
+  else if path2 path "sync" "grant-access" then
+    option_names [| "graph-id"; "email" |]
+  else if path3 path "sync" "config" "set" then Vec.empty
+  else if path2 path "debug" "pull" then
+    option_names [| "id"; "uuid"; "ident" |]
+  else if path1 path "doctor" then option_names [| "dev-script" |]
+  else if
+    path1 path "login" || path1 path "logout" || path2 path "skill" "show"
+    || path1 path "example"
+  then Vec.empty
+  else if path1 path "completion" then option_names [| "shell" |]
+  else if path2 path "skill" "install" then option_names [| "global" |]
+  else Vec.empty
 
 let validate_known_options path options =
   let allowed =
-    List.sort_uniq String.compare
-      (global_options @ allowed_options_for_path path)
+    Vec.sort_uniq String.compare
+      (Vec.append global_options (allowed_options_for_path path))
   in
-  match List.find_opt (fun (key, _) -> not (List.mem key allowed)) options with
+  match Vec.find_opt (fun (key, _) -> not (Vec.mem key allowed)) options with
   | Some (key, _) -> Error (Error.invalid_options ("Unknown option: :" ^ key))
   | None -> Ok ()
 
@@ -284,20 +344,20 @@ let invalid_value key value message =
     ("Invalid value for option :" ^ key ^ ": " ^ value ^ ". " ^ message)
 
 let validate_integer_option key options =
-  match List.find_opt (fun (candidate, _) -> candidate = key) options with
+  match Vec.find_opt (fun (candidate, _) -> candidate = key) options with
   | Some (_, Some value) when Int64.of_string_opt value = None ->
       Error (invalid_value key value "Expected integer")
   | _ -> Ok ()
 
 let validate_integer_options keys options =
-  List.fold_left
+  Vec.fold_left
     (fun result key ->
       Error.bind result (fun () -> validate_integer_option key options))
     (Ok ()) keys
 
 let validate_boolean_option_values options =
   match
-    List.find_opt
+    Vec.find_opt
       (fun (key, value) ->
         boolean_option key
         &&
@@ -312,24 +372,22 @@ let validate_boolean_option_values options =
 
 let validate_member_option key values options =
   match option_value key options with
-  | Some value when not (List.mem value values) ->
+  | Some value when not (Vec.mem value values) ->
       Error
         (invalid_value key value
-           ("Available values: " ^ String.concat ", " values))
+           ("Available values: " ^ Vec.string_concat ", " values))
   | _ -> Ok ()
 
 let validate_csv_member_option key values options =
   match option_value key options with
   | Some value -> (
       match
-        List.find_opt
-          (fun field -> not (List.mem field values))
-          (parse_csv value)
+        Vec.find_opt (fun field -> not (Vec.mem field values)) (parse_csv value)
       with
       | Some invalid ->
           Error
             (invalid_value key invalid
-               ("Available values: " ^ String.concat ", " values))
+               ("Available values: " ^ Vec.string_concat ", " values))
       | None -> Ok ())
   | None -> Ok ()
 
@@ -340,37 +398,46 @@ let validate_time_option key options =
   | _ -> Ok ()
 
 let list_page_sort_values =
-  [ "id"; "ident"; "title"; "uuid"; "created-at"; "updated-at" ]
+  Vec.of_array [| "id"; "ident"; "title"; "uuid"; "created-at"; "updated-at" |]
 
 let list_tag_sort_values =
-  list_page_sort_values @ [ "properties"; "extends"; "description" ]
+  Vec.append list_page_sort_values
+    (Vec.of_array [| "properties"; "extends"; "description" |])
 
 let list_property_sort_values =
-  list_page_sort_values @ [ "classes"; "type"; "cardinality"; "description" ]
+  Vec.append list_page_sort_values
+    (Vec.of_array [| "classes"; "type"; "cardinality"; "description" |])
 
 let list_task_sort_values =
-  [
-    "id";
-    "title";
-    "status";
-    "priority";
-    "scheduled";
-    "deadline";
-    "updated-at";
-    "created-at";
-  ]
+  Vec.of_array
+    [|
+      "id";
+      "title";
+      "status";
+      "priority";
+      "scheduled";
+      "deadline";
+      "updated-at";
+      "created-at";
+    |]
 
 let list_node_sort_values =
-  [ "id"; "title"; "type"; "page-id"; "page-title"; "created-at"; "updated-at" ]
+  Vec.of_array
+    [|
+      "id"; "title"; "type"; "page-id"; "page-title"; "created-at"; "updated-at";
+    |]
 
 let list_asset_sort_values =
-  [ "id"; "title"; "asset-type"; "size"; "updated-at"; "created-at" ]
+  Vec.of_array
+    [| "id"; "title"; "asset-type"; "size"; "updated-at"; "created-at" |]
 
 let validate_list_common_values sort_values options =
   Error.bind (validate_integer_option "limit" options) (fun () ->
       Error.bind (validate_integer_option "offset" options) (fun () ->
           Error.bind
-            (validate_member_option "order" [ "asc"; "desc" ] options)
+            (validate_member_option "order"
+               (Vec.of_array [| "asc"; "desc" |])
+               options)
             (fun () ->
               Error.bind (validate_member_option "sort" sort_values options)
                 (fun () ->
@@ -378,7 +445,9 @@ let validate_list_common_values sort_values options =
 
 let validate_global_values options =
   Error.bind (validate_integer_option "timeout-ms" options) (fun () ->
-      validate_member_option "output" [ "human"; "json"; "edn" ] options)
+      validate_member_option "output"
+        (Vec.of_array [| "human"; "json"; "edn" |])
+        options)
 
 let parse_graph_export_edn_options options =
   match option_value "edn-options" options with
@@ -398,8 +467,8 @@ let parse_graph_export_edn_options options =
       )
 
 let validate_non_empty_csv_option key message options =
-  match List.find_opt (fun (candidate, _) -> candidate = key) options with
-  | Some (_, Some value) when parse_csv value = [] ->
+  match Vec.find_opt (fun (candidate, _) -> candidate = key) options with
+  | Some (_, Some value) when Vec.is_empty (parse_csv value) ->
       Error (Error.invalid_options message)
   | Some (_, None) -> Error (Error.invalid_options message)
   | _ -> Ok ()
@@ -415,50 +484,51 @@ let validate_list_node_values options =
 
 let validate_pos_value options =
   validate_member_option "pos"
-    [ "first-child"; "last-child"; "sibling" ]
+    (Vec.of_array [| "first-child"; "last-child"; "sibling" |])
     options
 
 let validate_selector_integer_values path options =
-  match path with
-  | [ "remove"; ("page" | "tag" | "property") ]
-  | [ "upsert"; ("page" | "tag" | "property") ]
-  | [ "sync"; "asset"; "download" ]
-  | [ "debug"; "pull" ] ->
-      validate_integer_option "id" options
-  | [ "upsert"; ("block" | "asset" | "task") ] ->
-      validate_integer_options [ "id"; "target-id" ] options
-  | _ -> Ok ()
+  if
+    path2_any path "remove" (option_names [| "page"; "tag"; "property" |])
+    || path2_any path "upsert" (option_names [| "page"; "tag"; "property" |])
+    || path3 path "sync" "asset" "download"
+    || path2 path "debug" "pull"
+  then validate_integer_option "id" options
+  else if path2_any path "upsert" (option_names [| "block"; "asset"; "task" |])
+  then validate_integer_options (option_names [| "id"; "target-id" |]) options
+  else Ok ()
 
 let validate_option_values path options =
   Error.bind (validate_selector_integer_values path options) (fun () ->
-      match path with
-      | [ "graph"; "export" ] -> Ok ()
-      | [ "list"; "page" ] ->
-          Error.bind (validate_list_common_values list_page_sort_values options)
-            (fun () ->
-              Error.bind (validate_time_option "updated-after" options)
-                (fun () -> validate_time_option "created-after" options))
-      | [ "list"; "tag" ] ->
-          validate_list_common_values list_tag_sort_values options
-      | [ "list"; "property" ] ->
-          validate_list_common_values list_property_sort_values options
-      | [ "list"; "task" ] ->
-          validate_list_common_values list_task_sort_values options
-      | [ "list"; "node" ] ->
-          Error.bind (validate_list_node_values options) (fun () ->
-              validate_list_common_values list_node_sort_values options)
-      | [ "list"; "asset" ] ->
-          validate_list_common_values list_asset_sort_values options
-      | [ "show" ] -> validate_integer_option "level" options
-      | [ "completion" ] ->
-          validate_member_option "shell" [ "zsh"; "bash" ] options
-      | [ "upsert"; "task" ] ->
-          Error.bind (validate_pos_value options) (fun () ->
-              Error.bind (validate_time_option "scheduled" options) (fun () ->
-                  validate_time_option "deadline" options))
-      | [ "upsert"; "block" ] | [ "upsert"; "asset" ] ->
-          validate_pos_value options
-      | _ -> Ok ())
+      if path2 path "graph" "export" then Ok ()
+      else if path2 path "list" "page" then
+        Error.bind (validate_list_common_values list_page_sort_values options)
+          (fun () ->
+            Error.bind (validate_time_option "updated-after" options) (fun () ->
+                validate_time_option "created-after" options))
+      else if path2 path "list" "tag" then
+        validate_list_common_values list_tag_sort_values options
+      else if path2 path "list" "property" then
+        validate_list_common_values list_property_sort_values options
+      else if path2 path "list" "task" then
+        validate_list_common_values list_task_sort_values options
+      else if path2 path "list" "node" then
+        Error.bind (validate_list_node_values options) (fun () ->
+            validate_list_common_values list_node_sort_values options)
+      else if path2 path "list" "asset" then
+        validate_list_common_values list_asset_sort_values options
+      else if path1 path "show" then validate_integer_option "level" options
+      else if path1 path "completion" then
+        validate_member_option "shell"
+          (Vec.of_array [| "zsh"; "bash" |])
+          options
+      else if path2 path "upsert" "task" then
+        Error.bind (validate_pos_value options) (fun () ->
+            Error.bind (validate_time_option "scheduled" options) (fun () ->
+                validate_time_option "deadline" options))
+      else if path2 path "upsert" "block" || path2 path "upsert" "asset" then
+        validate_pos_value options
+      else Ok ())
 
 let validate_options path options =
   Error.bind (validate_known_options path options) (fun () ->
@@ -513,10 +583,10 @@ let parsed_remove_command options = function
 let content_option_or_args options args =
   match option_value "content" options with
   | Some _ as content -> content
-  | None when args <> [] -> Some (String.concat " " args)
+  | None when not (Vec.is_empty args) -> Some (Vec.string_concat " " args)
   | None -> None
 
-let parsed_upsert_command ?(args = []) options = function
+let parsed_upsert_command ?(args = Vec.empty) options = function
   | "block" ->
       Some
         (Cli_request.Upsert
@@ -680,56 +750,80 @@ let parsed_list_command options = function
                 tags =
                   Option.value
                     (Option.map parse_csv (option_value "tags" options))
-                    ~default:[];
+                    ~default:Vec.empty;
                 properties =
                   Option.value
                     (Option.map parse_csv (option_value "properties" options))
-                    ~default:[];
+                    ~default:Vec.empty;
               }))
   | "asset" -> Some (List (Parsed_asset { common = common_list_opts options }))
   | _ -> None
 
 let parse ?stdin argv =
   let options, positional = parse_tokens argv in
-  let make path command =
+  let positional_array = Vec.to_array positional in
+  let positional_tail start =
+    Vec.init
+      (max 0 (Array.length positional_array - start))
+      (fun index -> positional_array.(index + start))
+  in
+  let make_vec path command =
     Error.bind (validate_options path options) (fun () ->
         let globals = globals_of_options options in
         Ok (Cli_request.make ~globals ~path ~command ~raw_args:argv))
   in
-  if option_present "version" options then make [] Cli_request.Version
+  let make path command = make_vec (Vec.of_array path) command in
+  if option_present "version" options then make [||] Cli_request.Version
+  else if
+    Array.length positional_array >= 2
+    && positional_array.(0) = "upsert"
+    && positional_array.(1) = "block"
+  then
+    match parsed_upsert_command ~args:(positional_tail 2) options "block" with
+    | Some command -> make [| "upsert"; "block" |] command
+    | None -> Error (Error.unknown_command "unknown command: upsert block")
+  else if Array.length positional_array >= 1 && positional_array.(0) = "example"
+  then
+    let selector = positional_tail 1 in
+    make_vec
+      (Vec.push_front selector "example")
+      (Example (Example.Parsed_example { selector }))
   else
-    match positional with
-    | [ "graph"; "list" ] -> make [ "graph"; "list" ] (Graph Graph.Parsed_list)
-    | [ "graph"; "create" ] ->
-        make [ "graph"; "create" ]
+    match positional_array with
+    | [| "graph"; "list" |] ->
+        make [| "graph"; "list" |] (Graph Graph.Parsed_list)
+    | [| "graph"; "create" |] ->
+        make [| "graph"; "create" |]
           (Graph
              (Parsed_create
                 {
                   enable_sync = option_present "enable-sync" options;
                   e2ee_password = option_value "e2ee-password" options;
                 }))
-    | [ "graph"; "switch" ] -> make [ "graph"; "switch" ] (Graph Parsed_switch)
-    | [ "graph"; "remove" ] -> make [ "graph"; "remove" ] (Graph Parsed_remove)
-    | [ "graph"; "validate" ] ->
-        make [ "graph"; "validate" ]
+    | [| "graph"; "switch" |] ->
+        make [| "graph"; "switch" |] (Graph Parsed_switch)
+    | [| "graph"; "remove" |] ->
+        make [| "graph"; "remove" |] (Graph Parsed_remove)
+    | [| "graph"; "validate" |] ->
+        make [| "graph"; "validate" |]
           (Graph
              (Parsed_validate
                 {
                   fix =
                     option_present "fix" options || raw_option_present "-f" argv;
                 }))
-    | [ "graph"; "info" ] -> make [ "graph"; "info" ] (Graph Parsed_info)
-    | [ "graph"; "backup"; "list" ] ->
-        make [ "graph"; "backup"; "list" ] (Graph Parsed_backup_list)
-    | [ "graph"; "backup"; "create" ] ->
+    | [| "graph"; "info" |] -> make [| "graph"; "info" |] (Graph Parsed_info)
+    | [| "graph"; "backup"; "list" |] ->
+        make [| "graph"; "backup"; "list" |] (Graph Parsed_backup_list)
+    | [| "graph"; "backup"; "create" |] ->
         make
-          [ "graph"; "backup"; "create" ]
+          [| "graph"; "backup"; "create" |]
           (Graph (Parsed_backup_create { name = option_value "name" options }))
-    | [ "graph"; "backup"; "restore" ] -> (
+    | [| "graph"; "backup"; "restore" |] -> (
         match (option_value "src" options, option_value "dst" options) with
         | Some src, Some dst ->
             make
-              [ "graph"; "backup"; "restore" ]
+              [| "graph"; "backup"; "restore" |]
               (Graph
                  (Parsed_backup_restore
                     { src; dst = Cli_primitive.create_graph dst }))
@@ -739,21 +833,21 @@ let parse ?stdin argv =
         | _, None ->
             Error
               (Error.invalid_options "graph backup restore --dst is required"))
-    | [ "graph"; "backup"; "remove" ] -> (
+    | [| "graph"; "backup"; "remove" |] -> (
         match option_value "src" options with
         | Some src ->
             make
-              [ "graph"; "backup"; "remove" ]
+              [| "graph"; "backup"; "remove" |]
               (Graph (Parsed_backup_remove { src }))
         | None ->
             Error
               (Error.invalid_options "graph backup remove --src is required"))
-    | [ "graph"; "export" ] -> (
+    | [| "graph"; "export" |] -> (
         match graph_export_type options with
         | Some export_type ->
             Error.bind (parse_graph_export_edn_options options)
               (fun edn_options ->
-                make [ "graph"; "export" ]
+                make [| "graph"; "export" |]
                   (Graph
                      (Parsed_export
                         {
@@ -763,76 +857,73 @@ let parse ?stdin argv =
                           pretty_print = option_present "pretty-print" options;
                           include_timestamps = false;
                           exclude_built_in_pages = false;
-                          exclude_namespaces = [];
+                          exclude_namespaces = Vec.empty;
                         })))
         | None ->
             Error
               (Error.invalid_options "graph export --type must be edn or sqlite")
         )
-    | [ "graph"; "import" ] -> (
+    | [| "graph"; "import" |] -> (
         match (graph_import_type options, option_value "input" options) with
         | Some import_type, Some input ->
-            make [ "graph"; "import" ]
+            make [| "graph"; "import" |]
               (Graph (Parsed_import { import_type; input }))
         | None, _ ->
             Error
               (Error.invalid_options "graph import --type must be edn or sqlite")
         | _, None ->
             Error (Error.invalid_options "graph import --input is required"))
-    | [ "list"; kind ] -> (
+    | [| "list"; kind |] -> (
         match parsed_list_command options kind with
-        | Some command -> make [ "list"; kind ] command
+        | Some command -> make [| "list"; kind |] command
         | None ->
             Error (Error.unknown_command ("unknown command: list " ^ kind)))
-    | [ "remove"; kind ] -> (
+    | [| "remove"; kind |] -> (
         match parsed_remove_command options kind with
-        | Some command -> make [ "remove"; kind ] command
+        | Some command -> make [| "remove"; kind |] command
         | None ->
             Error (Error.unknown_command ("unknown command: remove " ^ kind)))
-    | "upsert" :: "block" :: args -> (
-        match parsed_upsert_command ~args options "block" with
-        | Some command -> make [ "upsert"; "block" ] command
-        | None -> Error (Error.unknown_command "unknown command: upsert block"))
-    | [ "upsert"; kind ] -> (
+    | [| "upsert"; kind |] -> (
         match parsed_upsert_command options kind with
-        | Some command -> make [ "upsert"; kind ] command
+        | Some command -> make [| "upsert"; kind |] command
         | None ->
             Error (Error.unknown_command ("unknown command: upsert " ^ kind)))
-    | [ "search"; "block" ] ->
-        make [ "search"; "block" ]
+    | [| "search"; "block" |] ->
+        make [| "search"; "block" |]
           (Search
              (Search.Parsed_block
                 {
                   content =
                     Option.value (option_value "content" options) ~default:"";
                 }))
-    | [ "search"; "page" ] ->
-        make [ "search"; "page" ]
+    | [| "search"; "page" |] ->
+        make [| "search"; "page" |]
           (Search
              (Search.Parsed_page
                 {
                   content =
                     Option.value (option_value "content" options) ~default:"";
                 }))
-    | [ "search"; "property" ] ->
-        make [ "search"; "property" ]
+    | [| "search"; "property" |] ->
+        make [| "search"; "property" |]
           (Search
              (Search.Parsed_property
                 {
                   content =
                     Option.value (option_value "content" options) ~default:"";
                 }))
-    | [ "search"; "tag" ] ->
-        make [ "search"; "tag" ]
+    | [| "search"; "tag" |] ->
+        make [| "search"; "tag" |]
           (Search
              (Search.Parsed_tag
                 {
                   content =
                     Option.value (option_value "content" options) ~default:"";
                 }))
-    | [ "query"; "list" ] -> make [ "query"; "list" ] (Query Query.Parsed_list)
-    | [ "query" ] ->
-        make [ "query" ]
+    | [| "query"; "list" |] ->
+        make [| "query"; "list" |] (Query Query.Parsed_list)
+    | [| "query" |] ->
+        make [| "query" |]
           (Query
              (Query.Parsed_run
                 {
@@ -840,7 +931,7 @@ let parse ?stdin argv =
                   name = option_value "name" options;
                   inputs_edn = option_value "inputs" options;
                 }))
-    | [ "show" ] ->
+    | [| "show" |] ->
         let stdin_id =
           if
             option_present "id" options
@@ -848,7 +939,7 @@ let parse ?stdin argv =
           then stdin
           else None
         in
-        make [ "show" ]
+        make [| "show" |]
           (Show
              (Show.Parsed_show
                 {
@@ -864,29 +955,30 @@ let parse ?stdin argv =
                   level = int_option "level" options;
                   stdin_id;
                 }))
-    | [ "server"; "list" ] ->
-        make [ "server"; "list" ] (Server Server_command.Parsed_list)
-    | [ "server"; "cleanup" ] ->
-        make [ "server"; "cleanup" ] (Server Parsed_cleanup)
-    | [ "server"; "start" ] -> make [ "server"; "start" ] (Server Parsed_start)
-    | [ "server"; "stop" ] -> make [ "server"; "stop" ] (Server Parsed_stop)
-    | [ "server"; "restart" ] ->
-        make [ "server"; "restart" ] (Server Parsed_restart)
-    | [ "sync"; "status" ] ->
-        make [ "sync"; "status" ] (Sync Sync.Parsed_status)
-    | [ "sync"; "start" ] ->
-        make [ "sync"; "start" ]
+    | [| "server"; "list" |] ->
+        make [| "server"; "list" |] (Server Server_command.Parsed_list)
+    | [| "server"; "cleanup" |] ->
+        make [| "server"; "cleanup" |] (Server Parsed_cleanup)
+    | [| "server"; "start" |] ->
+        make [| "server"; "start" |] (Server Parsed_start)
+    | [| "server"; "stop" |] -> make [| "server"; "stop" |] (Server Parsed_stop)
+    | [| "server"; "restart" |] ->
+        make [| "server"; "restart" |] (Server Parsed_restart)
+    | [| "sync"; "status" |] ->
+        make [| "sync"; "status" |] (Sync Sync.Parsed_status)
+    | [| "sync"; "start" |] ->
+        make [| "sync"; "start" |]
           (Sync
              (Sync.Parsed_start
                 { e2ee_password = option_value "e2ee-password" options }))
-    | [ "sync"; "stop" ] -> make [ "sync"; "stop" ] (Sync Sync.Parsed_stop)
-    | [ "sync"; "upload" ] ->
-        make [ "sync"; "upload" ]
+    | [| "sync"; "stop" |] -> make [| "sync"; "stop" |] (Sync Sync.Parsed_stop)
+    | [| "sync"; "upload" |] ->
+        make [| "sync"; "upload" |]
           (Sync
              (Sync.Parsed_upload
                 { e2ee_password = option_value "e2ee-password" options }))
-    | [ "sync"; "download" ] ->
-        make [ "sync"; "download" ]
+    | [| "sync"; "download" |] ->
+        make [| "sync"; "download" |]
           (Sync
              (Sync.Parsed_download
                 {
@@ -895,80 +987,82 @@ let parse ?stdin argv =
                      else None);
                   e2ee_password = option_value "e2ee-password" options;
                 }))
-    | [ "sync"; "asset"; "download" ] ->
+    | [| "sync"; "asset"; "download" |] ->
         make
-          [ "sync"; "asset"; "download" ]
+          [| "sync"; "asset"; "download" |]
           (Sync
              (Sync.Parsed_asset_download
                 {
                   id = int64_option "id" options;
                   uuid = option_value "uuid" options;
                 }))
-    | [ "sync"; "remote-graphs" ] ->
-        make [ "sync"; "remote-graphs" ] (Sync Sync.Parsed_remote_graphs)
-    | [ "sync"; "ensure-keys" ] ->
-        make [ "sync"; "ensure-keys" ]
+    | [| "sync"; "remote-graphs" |] ->
+        make [| "sync"; "remote-graphs" |] (Sync Sync.Parsed_remote_graphs)
+    | [| "sync"; "ensure-keys" |] ->
+        make
+          [| "sync"; "ensure-keys" |]
           (Sync
              (Sync.Parsed_ensure_keys
                 {
                   e2ee_password = option_value "e2ee-password" options;
                   upload_keys = option_present "upload-keys" options;
                 }))
-    | [ "sync"; "grant-access" ] ->
-        make [ "sync"; "grant-access" ]
+    | [| "sync"; "grant-access" |] ->
+        make
+          [| "sync"; "grant-access" |]
           (Sync
              (Sync.Parsed_grant_access
                 {
                   graph_id = option_value "graph-id" options;
                   email = option_value "email" options;
                 }))
-    | [ "sync"; "config"; "get"; key ] -> (
+    | [| "sync"; "config"; "get"; key |] -> (
         match sync_config_key_or_error (Some key) with
         | Ok key ->
             make
-              [ "sync"; "config"; "get" ]
+              [| "sync"; "config"; "get" |]
               (Sync (Sync.Parsed_config_get { key }))
         | Error err -> Error err)
-    | [ "sync"; "config"; "get" ] ->
+    | [| "sync"; "config"; "get" |] ->
         make
-          [ "sync"; "config"; "get" ]
+          [| "sync"; "config"; "get" |]
           (Sync (Sync.Parsed_config_get { key = None }))
-    | [ "sync"; "config"; "set"; key; value ] -> (
+    | [| "sync"; "config"; "set"; key; value |] -> (
         match sync_config_key_or_error (Some key) with
         | Ok key ->
             make
-              [ "sync"; "config"; "set" ]
+              [| "sync"; "config"; "set" |]
               (Sync (Sync.Parsed_config_set { key; value = Some value }))
         | Error err -> Error err)
-    | [ "sync"; "config"; "set"; key ] -> (
+    | [| "sync"; "config"; "set"; key |] -> (
         match sync_config_key_or_error (Some key) with
         | Ok key ->
             make
-              [ "sync"; "config"; "set" ]
+              [| "sync"; "config"; "set" |]
               (Sync (Sync.Parsed_config_set { key; value = None }))
         | Error err -> Error err)
-    | [ "sync"; "config"; "set" ] ->
+    | [| "sync"; "config"; "set" |] ->
         make
-          [ "sync"; "config"; "set" ]
+          [| "sync"; "config"; "set" |]
           (Sync (Sync.Parsed_config_set { key = None; value = None }))
-    | [ "sync"; "config"; "unset"; key ] -> (
+    | [| "sync"; "config"; "unset"; key |] -> (
         match sync_config_key_or_error (Some key) with
         | Ok key ->
             make
-              [ "sync"; "config"; "unset" ]
+              [| "sync"; "config"; "unset" |]
               (Sync (Sync.Parsed_config_unset { key }))
         | Error err -> Error err)
-    | [ "sync"; "config"; "unset" ] ->
+    | [| "sync"; "config"; "unset" |] ->
         make
-          [ "sync"; "config"; "unset" ]
+          [| "sync"; "config"; "unset" |]
           (Sync (Sync.Parsed_config_unset { key = None }))
-    | [ "debug"; "pull" ] -> (
+    | [| "debug"; "pull" |] -> (
         match
           Option.map Debug.parse_ident_option (option_value "ident" options)
         with
         | Some (Error err) -> Error err
         | ident ->
-            make [ "debug"; "pull" ]
+            make [| "debug"; "pull" |]
               (Debug
                  (Debug.Parsed_pull
                     {
@@ -979,30 +1073,31 @@ let parse ?stdin argv =
                           | Ok ident -> Some ident
                           | Error _ -> None);
                     })))
-    | [ "agent"; "bridge" ] ->
-        make [ "agent"; "bridge" ] (Agent Agent.Parsed_bridge)
-    | [ "doctor" ] ->
-        make [ "doctor" ]
+    | [| "agent"; "bridge" |] ->
+        make [| "agent"; "bridge" |] (Agent Agent.Parsed_bridge)
+    | [| "doctor" |] ->
+        make [| "doctor" |]
           (Doctor
              (Doctor.Parsed_doctor
                 { dev_script = option_present "dev-script" options }))
-    | [ "login" ] -> make [ "login" ] (Auth Auth_command.Parsed_login)
-    | [ "logout" ] -> make [ "logout" ] (Auth Auth_command.Parsed_logout)
-    | [ "skill"; "show" ] -> make [ "skill"; "show" ] (Skill Skill.Parsed_show)
-    | [ "skill"; "install" ] ->
-        make [ "skill"; "install" ]
+    | [| "login" |] -> make [| "login" |] (Auth Auth_command.Parsed_login)
+    | [| "logout" |] -> make [| "logout" |] (Auth Auth_command.Parsed_logout)
+    | [| "skill"; "show" |] ->
+        make [| "skill"; "show" |] (Skill Skill.Parsed_show)
+    | [| "skill"; "install" |] ->
+        make [| "skill"; "install" |]
           (Skill
              (Skill.Parsed_install { global = option_present "global" options }))
-    | [ "completion"; shell ] -> (
+    | [| "completion"; shell |] -> (
         match Cli_primitive.shell_of_string shell with
         | Some shell ->
-            make [ "completion" ]
+            make [| "completion" |]
               (Completion (Completion.Parsed_completion { shell = Some shell }))
         | None ->
             Error
               (Error.invalid_options
                  ("unsupported shell: " ^ shell ^ "; expected zsh or bash")))
-    | [ "completion" ] ->
+    | [| "completion" |] ->
         let shell =
           match option_value "shell" options with
           | None ->
@@ -1019,13 +1114,10 @@ let parse ?stdin argv =
               )
         in
         Error.bind shell (fun shell ->
-            make [ "completion" ]
+            make [| "completion" |]
               (Completion (Completion.Parsed_completion { shell })))
-    | "example" :: selector ->
-        make ("example" :: selector)
-          (Example (Example.Parsed_example { selector }))
-    | [] -> Error (Error.unknown_command "")
+    | [||] -> Error (Error.unknown_command "")
     | _ ->
         Error
           (Error.unknown_command
-             ("unknown command: " ^ String.concat " " positional))
+             ("unknown command: " ^ Vec.string_concat " " positional))

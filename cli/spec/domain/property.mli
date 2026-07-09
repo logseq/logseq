@@ -29,10 +29,10 @@ type schema = {
 type assignment = { key : key; value : Melange_edn_melange.any }
 
 type update_plan = {
-  update_tags : Selector.tag list;
-  remove_tags : Selector.tag list;
-  update_properties : assignment list;
-  remove_properties : key list;
+  update_tags : Selector.tag Rrbvec.t;
+  remove_tags : Selector.tag Rrbvec.t;
+  update_properties : assignment Rrbvec.t;
+  remove_properties : key Rrbvec.t;
 }
 
 val empty_update_plan : update_plan

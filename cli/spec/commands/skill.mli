@@ -19,7 +19,7 @@ type install_target = {
 type update_status = {
   installed : bool;
   outdated : bool;
-  outdated_targets : install_target list;
+  outdated_targets : install_target Rrbvec.t;
   error : Error.t option;
 }
 
@@ -32,6 +32,6 @@ val resolve_install_target :
 val installed_skill_targets :
   cwd:Cli_primitive.path ->
   home_dir:Cli_primitive.path option ->
-  install_target list
+  install_target Rrbvec.t
 
 include Command_spec.S with type parsed := parsed and type action := action

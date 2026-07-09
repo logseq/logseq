@@ -119,16 +119,17 @@ let config_value config = function
   | Ws_url -> config.Cli_config.ws_url
   | Http_base -> config.http_base
 
-let config_patch key value = Edn_util.map [ (key_value key, value) ]
+let config_patch key value =
+  Edn_util.map_vec (Vec.of_array [| (key_value key, value) |])
 
 let config_result ?value key =
-  let fields = [ (Edn_util.keyword "key", key_value key) ] in
+  let fields = Vec.singleton (Edn_util.keyword "key", key_value key) in
   let fields =
     match value with
-    | Some value -> (Edn_util.keyword "value", value) :: fields
+    | Some value -> Vec.push_front fields (Edn_util.keyword "value", value)
     | None -> fields
   in
-  Edn_util.map (List.rev fields)
+  Edn_util.map_rev_vec fields
 
 let action_with_repo config make message =
   match config.Cli_config.repo with
@@ -269,32 +270,33 @@ let execute_config_unset mode config key =
         (Cli_result.error ~command:Command_id.Sync_config_unset mode err)
 
 let sync_config_value config =
-  Edn_util.map_t
-    [
-      ( Edn_util.keyword "ws-url",
-        match config.Cli_config.ws_url with
-        | Some value -> Edn_util.string value
-        | None -> Edn_util.nil );
-      ( Edn_util.keyword "http-base",
-        match config.Cli_config.http_base with
-        | Some value -> Edn_util.string value
-        | None -> Edn_util.nil );
-    ]
+  Edn_util.map_t_vec
+    (Vec.of_array
+       [|
+         ( Edn_util.keyword "ws-url",
+           match config.Cli_config.ws_url with
+           | Some value -> Edn_util.string value
+           | None -> Edn_util.nil );
+         ( Edn_util.keyword "http-base",
+           match config.Cli_config.http_base with
+           | Some value -> Edn_util.string value
+           | None -> Edn_util.nil );
+       |])
 
 let add_runtime_auth key value fields =
   match value with
   | Some value when String.trim value <> "" ->
-      (Edn_util.keyword key, Edn_util.string value) :: fields
+      Vec.push_front fields (Edn_util.keyword key, Edn_util.string value)
   | _ -> fields
 
 let runtime_auth_state config =
   let fields =
-    []
+    Vec.empty
     |> add_runtime_auth "auth/id-token" config.Cli_config.id_token
     |> add_runtime_auth "auth/access-token" config.Cli_config.access_token
     |> add_runtime_auth "auth/refresh-token" config.Cli_config.refresh_token
   in
-  match fields with [] -> None | _ -> Some (Edn_util.map_t (List.rev fields))
+  if Vec.is_empty fields then None else Some (Edn_util.map_t_rev_vec fields)
 
 let config_with_auth config (auth : Auth_state.auth_data) =
   {
@@ -336,7 +338,8 @@ let prepare_worker_runtime invoke_config config =
       set_sync_config ()
 
 let unquote_transit_value = function
-  | Melange_edn_melange.Any (Melange_edn_melange.Tagged (("transit/quote" | "'"), value)) ->
+  | Melange_edn_melange.Any
+      (Melange_edn_melange.Tagged (("transit/quote" | "'"), value)) ->
       value
   | value -> value
 
@@ -344,57 +347,90 @@ let result_value result =
   let result = unquote_transit_value result in
   match Edn_util.as_map result with
   | Some _ -> result
-  | _ -> Edn_util.map [ (Edn_util.keyword "result", result) ]
+  | _ ->
+      Edn_util.map_vec (Vec.of_array [| (Edn_util.keyword "result", result) |])
 
 let kw name = Edn_util.keyword name
 let sym name = Edn_util.symbol name
-let vector values = Edn_util.vector values
+let vector_vec values = Edn_util.vector_vec values
 let repo_string repo = Cli_primitive.string_of_repo repo
 let graph_string graph = Cli_primitive.string_of_graph graph
 
 let graph_e2ee_query =
   Cli_primitive.make_datascript_query
-    ~find:[ sym "?v"; kw "." ]
+    ~find:(Vec.of_array [| sym "?v"; kw "." |])
     ~where:
-      [
-        Cli_primitive.V
-          (Edn_util.vector_t
-             [ sym "?e"; kw "db/ident"; kw "logseq.kv/graph-rtc-e2ee?" ]);
-        Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "kv/value"; sym "?v" ]);
-      ]
+      (Vec.of_array
+         [|
+           Cli_primitive.V
+             (Edn_util.vector_t_vec
+                (Vec.of_array
+                   [| sym "?e"; kw "db/ident"; kw "logseq.kv/graph-rtc-e2ee?" |]));
+           Cli_primitive.V
+             (Edn_util.vector_t_vec
+                (Vec.of_array [| sym "?e"; kw "kv/value"; sym "?v" |]));
+         |])
     ()
 
 let sync_download_non_empty_query =
   Cli_primitive.make_datascript_query
-    ~find:[ Edn_util.list [ sym "count"; sym "?e" ]; kw "." ]
+    ~find:
+      (Vec.of_array
+         [|
+           Edn_util.list_vec (Vec.of_array [| sym "count"; sym "?e" |]); kw ".";
+         |])
     ~where:
-      [
-        Cli_primitive.V (Edn_util.vector_t [ sym "?e"; kw "block/name"; sym "_" ]);
-        Cli_primitive.L
-          (Edn_util.list_t
-             [
-               sym "not";
-               vector
-                 [ sym "?e"; kw "logseq.property/built-in?"; Edn_util.bool true ];
-             ]);
-        Cli_primitive.L
-          (Edn_util.list_t [ sym "not"; vector [ sym "?e"; kw "db/ident" ] ]);
-        Cli_primitive.L
-          (Edn_util.list_t [ sym "not"; vector [ sym "?e"; kw "file/path" ] ]);
-      ]
+      (Vec.of_array
+         [|
+           Cli_primitive.V
+             (Edn_util.vector_t_vec
+                (Vec.of_array [| sym "?e"; kw "block/name"; sym "_" |]));
+           Cli_primitive.L
+             (Edn_util.list_t_vec
+                (Vec.of_array
+                   [|
+                     sym "not";
+                     vector_vec
+                       (Vec.of_array
+                          [|
+                            sym "?e";
+                            kw "logseq.property/built-in?";
+                            Edn_util.bool true;
+                          |]);
+                   |]));
+           Cli_primitive.L
+             (Edn_util.list_t_vec
+                (Vec.of_array
+                   [|
+                     sym "not";
+                     vector_vec (Vec.of_array [| sym "?e"; kw "db/ident" |]);
+                   |]));
+           Cli_primitive.L
+             (Edn_util.list_t_vec
+                (Vec.of_array
+                   [|
+                     sym "not";
+                     vector_vec (Vec.of_array [| sym "?e"; kw "file/path" |]);
+                   |]));
+         |])
     ()
 
 let sync_asset_pull_selector =
-  vector
-    [
-      kw "db/id";
-      kw "block/uuid";
-      Edn_util.map [ (kw "block/tags", vector [ kw "db/ident" ]) ];
-      kw "logseq.property.asset/type";
-      kw "logseq.property.asset/checksum";
-      kw "logseq.property.asset/remote-metadata";
-      kw "logseq.property.asset/external-url";
-    ]
+  vector_vec
+    (Vec.of_array
+       [|
+         kw "db/id";
+         kw "block/uuid";
+         Edn_util.map_vec
+           (Vec.of_array
+              [|
+                (kw "block/tags", vector_vec (Vec.of_array [| kw "db/ident" |]));
+              |]);
+         kw "logseq.property.asset/type";
+         kw "logseq.property.asset/checksum";
+         kw "logseq.property.asset/remote-metadata";
+         kw "logseq.property.asset/external-url";
+       |])
 
 let trim_keyword value =
   if String.length value > 0 && value.[0] = ':' then
@@ -425,16 +461,17 @@ let invoke_global_config ?(create_empty_db = false) config =
   | None, None -> Cli_effect.pure (Error (Error.missing_graph ()))
 
 let graphs_value graphs =
-  if Edn_util.is_null graphs then Edn_util.vector []
+  if Edn_util.is_null graphs then Edn_util.vector_vec Vec.empty
   else
     match (Edn_util.as_vector graphs, Edn_util.as_list graphs) with
     | Some _, _ -> graphs
-    | _, Some graphs -> Edn_util.vector graphs
-    | _ -> Edn_util.vector [ graphs ]
+    | _, Some graphs -> Edn_util.vector_vec graphs
+    | _ -> Edn_util.vector_vec (Vec.of_array [| graphs |])
 
 let tagged_error_value value =
   match unquote_transit_value value with
-  | Melange_edn_melange.Any (Melange_edn_melange.Tagged ("error", value)) -> Some value
+  | Melange_edn_melange.Any (Melange_edn_melange.Tagged ("error", value)) ->
+      Some value
   | _ -> None
 
 let remote_graphs_error graphs =
@@ -442,7 +479,7 @@ let remote_graphs_error graphs =
   | Some value -> Some value
   | None -> (
       match Edn_util.as_seq graphs with
-      | Some values -> List.find_map tagged_error_value values
+      | Some values -> Vec.find_map tagged_error_value values
       | None -> None)
 
 let worker_error_message ~default_message value =
@@ -474,12 +511,8 @@ let sync_upload_worker_error value =
     code = Some "db-sync/graph-already-exists"
     || code = Some "graph-already-exists"
     || message = "remote graph already exists; delete it before uploading again"
-  then
-    Error.make ~context:value
-      (Error.Graph_already_exists)
-      message
-  else
-    Error.make ~context:value (Error.Sync_upload_failed) message
+  then Error.make ~context:value Error.Graph_already_exists message
+  else Error.make ~context:value Error.Sync_upload_failed message
 
 let e2ee_password_worker_error value =
   worker_error ~code:Error.E2ee_password_failed
@@ -488,8 +521,8 @@ let e2ee_password_worker_error value =
 let value_string value = Option.map trim_keyword (Edn_util.as_string_like value)
 
 let remote_graph_values value =
-  if Edn_util.is_null value then []
-  else Option.value (Edn_util.as_seq value) ~default:[ value ]
+  if Edn_util.is_null value then Vec.empty
+  else Option.value (Edn_util.as_seq value) ~default:(Vec.singleton value)
 
 let remote_graph_name value =
   match Edn_util.get value "graph-name" with
@@ -506,25 +539,27 @@ let remote_graph_e2ee value =
 
 let find_remote_graph graph graphs =
   remote_graph_values graphs
-  |> List.find_opt (fun value ->
+  |> Vec.find_opt (fun value ->
       Option.equal String.equal (remote_graph_name value) (Some graph))
 
 let remote_graph_not_found graph =
   Error.make
-    ~context:(Edn_util.map [ (kw "graph", Edn_util.string graph) ])
-    (Error.Remote_graph_not_found)
+    ~context:
+      (Edn_util.map_vec
+         (Vec.of_array [| (kw "graph", Edn_util.string graph) |]))
+    Error.Remote_graph_not_found
     ("remote graph not found: " ^ graph)
 
 let graph_db_not_empty repo count =
   Error.make
     ~context:
-      (Edn_util.map
-         [
-           (kw "repo", Edn_util.string (repo_string repo));
-           (kw "non-empty-entity-count", Edn_util.int count);
-         ])
-    (Error.Graph_db_not_empty)
-    "graph db is not empty"
+      (Edn_util.map_vec
+         (Vec.of_array
+            [|
+              (kw "repo", Edn_util.string (repo_string repo));
+              (kw "non-empty-entity-count", Edn_util.int count);
+            |]))
+    Error.Graph_db_not_empty "graph db is not empty"
 
 let download_progress_enabled config ~progress ~progress_explicit =
   if progress_explicit then progress
@@ -559,17 +594,19 @@ let maybe_connect_download_progress _config invoke_config ~enabled ~graph_id =
 let asset_download_error code message repo graph =
   Error.make
     ~context:
-      (Edn_util.map
-         [
-           (kw "repo", Edn_util.string (repo_string repo));
-           (kw "graph", Edn_util.string (graph_string graph));
-         ])
+      (Edn_util.map_vec
+         (Vec.of_array
+            [|
+              (kw "repo", Edn_util.string (repo_string repo));
+              (kw "graph", Edn_util.string (graph_string graph));
+            |]))
     code message
 
 let asset_lookup_ref ~id ~uuid =
   match (id, uuid) with
   | Some id, _ -> Edn_util.int64 id
-  | None, Some uuid -> vector [ kw "block/uuid"; Edn_util.uuid uuid ]
+  | None, Some uuid ->
+      vector_vec (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |])
   | None, None -> Edn_util.nil
 
 let asset_tag_ident = "logseq.class/Asset"
@@ -593,7 +630,7 @@ let asset_tag value =
 let asset_tags value =
   Option.value
     (Option.bind (Edn_util.get value "block/tags") Edn_util.as_seq)
-    ~default:[]
+    ~default:Vec.empty
 
 let non_empty_string_field value key =
   match Edn_util.get value key with
@@ -608,26 +645,31 @@ let field_present value key =
   | Some value -> not (Edn_util.is_null value)
   | None -> false
 
-let asset_result_data ?(extra = []) asset ~download_requested ~checksum_status =
+let asset_result_data ?(extra = Vec.empty) asset ~download_requested
+    ~checksum_status =
   let fields =
-    [
-      ( kw "asset-uuid",
-        Edn_util.string
-          (Option.value (non_empty_string_field asset "block/uuid") ~default:"")
-      );
-      ( kw "asset-type",
-        Edn_util.string
-          (Option.value
-             (non_empty_string_field asset "logseq.property.asset/type")
-             ~default:"") );
-      (kw "download-requested?", Edn_util.bool download_requested);
-      (kw "checksum-status", kw checksum_status);
-    ]
-    @ extra
+    Vec.of_array
+      [|
+        ( kw "asset-uuid",
+          Edn_util.string
+            (Option.value
+               (non_empty_string_field asset "block/uuid")
+               ~default:"") );
+        ( kw "asset-type",
+          Edn_util.string
+            (Option.value
+               (non_empty_string_field asset "logseq.property.asset/type")
+               ~default:"") );
+        (kw "download-requested?", Edn_util.bool download_requested);
+        (kw "checksum-status", kw checksum_status);
+      |]
+    |> fun fields -> Vec.append fields extra
   in
   match Edn_util.get_int64 asset "db/id" with
-  | Some id -> Edn_util.map ((kw "asset-id", Edn_util.int64 id) :: fields)
-  | None -> Edn_util.map fields
+  | Some id ->
+      Edn_util.map_vec
+        (Vec.push_front fields (kw "asset-id", Edn_util.int64 id))
+  | None -> Edn_util.map_vec fields
 
 let asset_file_path config repo asset =
   let asset_uuid =
@@ -672,33 +714,35 @@ let remove_local_asset path =
 let ensure_keys_args ~upload_keys ~e2ee_password =
   if not upload_keys then None
   else
-    let fields = [ (kw "ensure-server?", Edn_util.bool true) ] in
+    let fields = Vec.singleton (kw "ensure-server?", Edn_util.bool true) in
     let fields =
       match e2ee_password with
       | Some password when String.trim password <> "" ->
-          (kw "password", Edn_util.string password) :: fields
+          Vec.push_front fields (kw "password", Edn_util.string password)
       | _ -> fields
     in
-    Some (Edn_util.map_t (List.rev fields))
+    Some (Edn_util.map_t_vec (fields |> Vec.rev))
 
 let e2ee_password_not_found repo =
   Error.make ~hint:"Provide --e2ee-password to verify and persist it."
     ~context:
-      (Edn_util.map
-         [
-           (kw "repo", Edn_util.string (repo_string repo));
-           (kw "action", kw "sync-start");
-         ])
-    (Error.E2ee_password_not_found)
-    "e2ee-password not found"
+      (Edn_util.map_vec
+         (Vec.of_array
+            [|
+              (kw "repo", Edn_util.string (repo_string repo));
+              (kw "action", kw "sync-start");
+            |]))
+    Error.E2ee_password_not_found "e2ee-password not found"
 
 let missing_refresh_token_error config =
   Error.make ~hint:"Run `logseq login` first."
     ~context:
-      (Edn_util.map
-         [ (kw "auth-path", Edn_util.string (Auth_state.auth_path config)) ])
-    (Error.Missing_auth)
-    "missing refresh token"
+      (Edn_util.map_vec
+         (Vec.of_array
+            [|
+              (kw "auth-path", Edn_util.string (Auth_state.auth_path config));
+            |]))
+    Error.Missing_auth "missing refresh token"
 
 let refresh_token_required config =
   match config.Cli_config.refresh_token with
@@ -716,16 +760,17 @@ let contains_substring ~needle text =
 
 let missing_e2ee_password_diagnostic text =
   let text = String.lowercase_ascii text in
-  List.exists
+  Vec.exists
     (fun needle -> contains_substring ~needle text)
-    [
-      "db-sync/missing-e2ee-password";
-      "missing-e2ee-password";
-      "db-sync/invalid-e2ee-password-payload";
-      "invalid-e2ee-password-payload";
-      "decrypt-text-by-text-password";
-      "e2ee-password-not-found";
-    ]
+    (Vec.of_array
+       [|
+         "db-sync/missing-e2ee-password";
+         "missing-e2ee-password";
+         "db-sync/invalid-e2ee-password-payload";
+         "invalid-e2ee-password-payload";
+         "decrypt-text-by-text-password";
+         "e2ee-password-not-found";
+       |])
 
 let ensure_e2ee_password_available config invoke_config repo e2ee_password
     graph_e2ee =
@@ -767,13 +812,14 @@ let runtime_error repo status last_error =
       "Run sync status to inspect last-error and fix sync runtime error before \
        retrying."
     ~context:
-      (Edn_util.map
-         [
-           (kw "repo", Edn_util.string (repo_string repo));
-           (kw "status", status);
-           (kw "last-error", last_error);
-         ])
-    (Error.Sync_start_runtime_error)
+      (Edn_util.map_vec
+         (Vec.of_array
+            [|
+              (kw "repo", Edn_util.string (repo_string repo));
+              (kw "status", status);
+              (kw "last-error", last_error);
+            |]))
+    Error.Sync_start_runtime_error
     "sync start reached open websocket but runtime sync error is present"
 
 let sync_start_timeout_error repo status =
@@ -782,11 +828,13 @@ let sync_start_timeout_error repo status =
       "Run sync status to inspect ws-state and ensure sync endpoint/token are \
        valid."
     ~context:
-      (Edn_util.map
-         [
-           (kw "repo", Edn_util.string (repo_string repo)); (kw "status", status);
-         ])
-    (Error.Sync_start_timeout)
+      (Edn_util.map_vec
+         (Vec.of_array
+            [|
+              (kw "repo", Edn_util.string (repo_string repo));
+              (kw "status", status);
+            |]))
+    Error.Sync_start_timeout
     "sync start timed out before websocket reached open state"
 
 let wait_sync_start_ready config invoke_config repo =
@@ -906,11 +954,12 @@ let execute_start mode config repo e2ee_password =
           in
           Transport.thread_api_q invoke_config ~repo
             ~query:
-              (Edn_util.vector_t
-                 [
-                   Edn_util.any
-                     (Cli_primitive.datascript_query_to_edn graph_e2ee_query);
-                 ])
+              (Edn_util.vector_t_vec
+                 (Vec.of_array
+                    [|
+                      Edn_util.any
+                        (Cli_primitive.datascript_query_to_edn graph_e2ee_query);
+                    |]))
           >>= fun graph_e2ee ->
           let graph_e2ee = Edn_util.as_bool graph_e2ee = Some true in
           let handle_e2ee = function
@@ -944,8 +993,10 @@ let execute_remote_graphs mode config =
           | None ->
               Cli_effect.pure
                 (Cli_result.ok ~command:Command_id.Sync_remote_graphs mode
-                   (Raw (Edn_util.map [ (kw "graphs", graphs_value graphs) ]))))
-      )
+                   (Raw
+                      (Edn_util.map_vec
+                         (Vec.of_array [| (kw "graphs", graphs_value graphs) |]))))
+          ))
 
 let execute_grant_access mode config repo graph_id email =
   Server_runtime.ensure_server config repo ~create_empty_db:false >>= function
@@ -1018,12 +1069,13 @@ let execute_ensure_keys mode config ~upload_keys ~e2ee_password =
 let ensure_empty_download_db invoke_config repo =
   Transport.thread_api_q invoke_config ~repo
     ~query:
-      (Edn_util.vector_t
-         [
-           Edn_util.any
-             (Cli_primitive.datascript_query_to_edn
-                sync_download_non_empty_query);
-         ])
+      (Edn_util.vector_t_vec
+         (Vec.of_array
+            [|
+              Edn_util.any
+                (Cli_primitive.datascript_query_to_edn
+                   sync_download_non_empty_query);
+            |]))
   >>= function
   | count_value when Option.value (Edn_util.as_int count_value) ~default:0 > 0
     ->
@@ -1114,10 +1166,10 @@ let execute_download mode config repo graph progress progress_explicit
 let validate_asset repo graph asset =
   match Edn_util.as_map asset with
   | Some _ ->
-      if not (List.exists asset_tag (asset_tags asset)) then
+      if not (Vec.exists asset_tag (asset_tags asset)) then
         Error
-          (asset_download_error Error.Not_asset "selected entity is not an asset"
-             repo graph)
+          (asset_download_error Error.Not_asset
+             "selected entity is not an asset" repo graph)
       else if Option.is_none (non_empty_string_field asset "block/uuid") then
         Error
           (asset_download_error Error.Asset_uuid_missing "asset uuid is missing"
@@ -1168,9 +1220,7 @@ let request_asset_download mode _config invoke_config repo asset checksum_status
   | None ->
       Cli_effect.pure
         (Cli_result.error ~command:Command_id.Sync_asset_download mode
-           (Error.make
-              (Error.Asset_uuid_missing)
-              "asset uuid is missing"))
+           (Error.make Error.Asset_uuid_missing "asset uuid is missing"))
 
 let execute_asset_download_request mode config invoke_config repo graph asset =
   Transport.thread_api_db_sync_status invoke_config ~repo >>= fun status ->
@@ -1182,19 +1232,20 @@ let execute_asset_download_request mode config invoke_config repo graph asset =
             (Cli_result.ok ~command:Command_id.Sync_asset_download mode
                (Raw
                   (asset_result_data
-                     ~extra:[ (kw "skipped-reason", kw "already-downloaded") ]
+                     ~extra:
+                       (Vec.singleton
+                          (kw "skipped-reason", kw "already-downloaded"))
                      asset ~download_requested:false ~checksum_status:"match")))
       | Local_mismatch path ->
           remove_local_asset path;
           request_asset_download mode config invoke_config repo asset "mismatch"
-            [
-              ( kw "hint",
-                Edn_util.string
-                  "Local asset checksum mismatched; requested re-download." );
-            ]
+            (Vec.singleton
+               ( kw "hint",
+                 Edn_util.string
+                   "Local asset checksum mismatched; requested re-download." ))
       | Local_missing ->
           request_asset_download mode config invoke_config repo asset "missing"
-            [])
+            Vec.empty)
   | _ ->
       Cli_effect.pure
         (Cli_result.error ~command:Command_id.Sync_asset_download mode
@@ -1203,14 +1254,14 @@ let execute_asset_download_request mode config invoke_config repo graph asset =
                 ("Run logseq sync start --graph " ^ graph_string graph
                ^ " first.")
               ~context:
-                (Edn_util.map
-                   [
-                     (kw "repo", Edn_util.string (repo_string repo));
-                     (kw "graph", Edn_util.string (graph_string graph));
-                     (kw "status", status);
-                   ])
-              (Error.Sync_not_started)
-              "sync is not started for this graph"))
+                (Edn_util.map_vec
+                   (Vec.of_array
+                      [|
+                        (kw "repo", Edn_util.string (repo_string repo));
+                        (kw "graph", Edn_util.string (graph_string graph));
+                        (kw "status", status);
+                      |]))
+              Error.Sync_not_started "sync is not started for this graph"))
 
 let execute_asset_download mode config repo graph id uuid =
   Server_runtime.ensure_server config repo ~create_empty_db:false >>= function
@@ -1256,85 +1307,97 @@ let execute_with_mode action config mode =
   | Sync_grant_access { repo; graph_id; email; _ } ->
       execute_grant_access mode config repo graph_id email
 
-let meta ?(examples = []) id doc =
+let meta ?(examples = Vec.empty) id doc =
   {
     Command_registry.id;
     path = Command_id.to_path id;
     doc;
     long_doc = None;
     examples;
-    options = [];
+    options = Vec.empty;
     category = Command_registry.Graph_management;
     requires_graph = Command_id.requires_graph id;
     requires_auth = Command_id.requires_auth id;
     write_command = Command_id.is_write id;
-    human_table_headers_order = [];
+    human_table_headers_order = Vec.empty;
   }
 
 let metadata () =
-  [
-    meta
-      ~examples:[ "logseq sync status --graph my-graph" ]
-      Command_id.Sync_status "Show db-sync runtime status";
-    meta
-      ~examples:
-        [
-          "logseq sync start --graph my-graph";
-          "logseq sync start --graph my-graph --e2ee-password \"my-secret\"";
-        ]
-      Sync_start "Start db-sync client";
-    meta
-      ~examples:[ "logseq sync stop --graph my-graph" ]
-      Sync_stop "Stop db-sync client";
-    meta
-      ~examples:
-        [
-          "logseq sync upload --graph my-graph";
-          "logseq sync upload --graph my-graph --e2ee-password \"my-secret\"";
-        ]
-      Sync_upload "Initialize upload of the entire graph";
-    meta
-      ~examples:
-        [
-          "logseq sync download --graph my-graph";
-          "logseq sync download --graph my-graph --progress";
-          "logseq sync download --graph my-graph --e2ee-password \"my-secret\"";
-        ]
-      Sync_download "Download remote graph snapshot";
-    meta
-      ~examples:
-        [
-          "logseq sync asset download --graph my-graph --id 123";
-          "logseq sync asset download --graph my-graph --uuid <asset-uuid>";
-        ]
-      Sync_asset_download "Download remote asset";
-    meta
-      ~examples:[ "logseq sync remote-graphs" ]
-      Sync_remote_graphs "List remote graphs";
-    meta
-      ~examples:
-        [
-          "logseq sync ensure-keys";
-          "logseq sync ensure-keys --e2ee-password \"my-secret\" --upload-keys";
-        ]
-      Sync_ensure_keys "Ensure user RSA keys for sync/e2ee";
-    meta
-      ~examples:
-        [
-          "logseq sync grant-access --graph my-graph --graph-id \
-           8b6ecdd0-1fab-4a9f-b3fb-3069c5f76e95 --email teammate@example.com";
-        ]
-      Sync_grant_access "Grant graph access to an email";
-    meta
-      ~examples:[ "logseq sync config set sync-enabled true" ]
-      Sync_config_set "Set sync config key";
-    meta
-      ~examples:[ "logseq sync config get sync-enabled" ]
-      Sync_config_get "Get sync config key";
-    meta
-      ~examples:[ "logseq sync config unset sync-enabled" ]
-      Sync_config_unset "Unset sync config key";
-  ]
+  Vec.of_array
+    [|
+      meta
+        ~examples:(Vec.singleton "logseq sync status --graph my-graph")
+        Command_id.Sync_status "Show db-sync runtime status";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq sync start --graph my-graph";
+               "logseq sync start --graph my-graph --e2ee-password \
+                \"my-secret\"";
+             |])
+        Sync_start "Start db-sync client";
+      meta
+        ~examples:(Vec.singleton "logseq sync stop --graph my-graph")
+        Sync_stop "Stop db-sync client";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq sync upload --graph my-graph";
+               "logseq sync upload --graph my-graph --e2ee-password \
+                \"my-secret\"";
+             |])
+        Sync_upload "Initialize upload of the entire graph";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq sync download --graph my-graph";
+               "logseq sync download --graph my-graph --progress";
+               "logseq sync download --graph my-graph --e2ee-password \
+                \"my-secret\"";
+             |])
+        Sync_download "Download remote graph snapshot";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq sync asset download --graph my-graph --id 123";
+               "logseq sync asset download --graph my-graph --uuid <asset-uuid>";
+             |])
+        Sync_asset_download "Download remote asset";
+      meta
+        ~examples:(Vec.singleton "logseq sync remote-graphs")
+        Sync_remote_graphs "List remote graphs";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq sync ensure-keys";
+               "logseq sync ensure-keys --e2ee-password \"my-secret\" \
+                --upload-keys";
+             |])
+        Sync_ensure_keys "Ensure user RSA keys for sync/e2ee";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq sync grant-access --graph my-graph --graph-id \
+                8b6ecdd0-1fab-4a9f-b3fb-3069c5f76e95 --email \
+                teammate@example.com";
+             |])
+        Sync_grant_access "Grant graph access to an email";
+      meta
+        ~examples:(Vec.singleton "logseq sync config set sync-enabled true")
+        Sync_config_set "Set sync config key";
+      meta
+        ~examples:(Vec.singleton "logseq sync config get sync-enabled")
+        Sync_config_get "Get sync config key";
+      meta
+        ~examples:(Vec.singleton "logseq sync config unset sync-enabled")
+        Sync_config_unset "Unset sync config key";
+    |]
 
 let execute action config =
   let (Output.Mode.Packed mode) = Output_mode.for_config config in

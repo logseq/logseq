@@ -16,7 +16,11 @@ module Human_output : sig
   type t
 
   val create :
-    ?headers:string list -> ?footer:string -> rows:string list list -> unit -> t
+    ?headers:string Rrbvec.t ->
+    ?footer:string ->
+    rows:string Rrbvec.t Rrbvec.t ->
+    unit ->
+    t
 
   val to_string : t -> string
   (** format as table.

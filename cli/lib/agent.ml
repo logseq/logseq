@@ -16,15 +16,15 @@ type template_kind = Task | Comment
 type prompt_template = {
   kind : template_kind;
   body : string;
-  required_vars : string list;
-  allowed_vars : string list;
+  required_vars : string Rrbvec.t;
+  allowed_vars : string Rrbvec.t;
 }
 
 type bridge_result = {
   mode : Cli_primitive.keyword;
   graph : Cli_primitive.graph;
   agent_name : string;
-  routed : Melange_edn_melange.any list;
+  routed : Melange_edn_melange.any Rrbvec.t;
 }
 
 type routed_task = { block : Melange_edn_melange.any; session : string option }
@@ -67,67 +67,76 @@ let task_finish_reaction_line =
 let comment_completion_line = "Complete the request from the mentioned comment."
 
 let graph_report_lines =
-  [
-    "If the target graph is sync-enabled, make sure it is synced after writing \
-     back to the graph.";
-    "Keep the report short when possible.";
-    "Report blockers only if there is a blocker.";
-    "Report root cause and Steps to verify only for bug fixes.";
-  ]
+  Vec.of_array
+    [|
+      "If the target graph is sync-enabled, make sure it is synced after \
+       writing back to the graph.";
+      "Keep the report short when possible.";
+      "Report blockers only if there is a blocker.";
+      "Report root cause and Steps to verify only for bug fixes.";
+    |]
 
 let comment_reply_instruction_lines =
-  [
-    "Reply instructions:";
-    "For a short reply, append a comment after the requesting comment.";
-    "For a long reply, write a normal block tree after the comments area and \
-     append a comment that references that tree.";
-    "When referencing result blocks in DB graphs, reference result blocks with \
-     [[block-uuid]], not ((block-uuid)).";
-    "If the request is blocked or fails, make that clear in the reply.";
-  ]
+  Vec.of_array
+    [|
+      "Reply instructions:";
+      "For a short reply, append a comment after the requesting comment.";
+      "For a long reply, write a normal block tree after the comments area and \
+       append a comment that references that tree.";
+      "When referencing result blocks in DB graphs, reference result blocks \
+       with [[block-uuid]], not ((block-uuid)).";
+      "If the request is blocked or fails, make that clear in the reply.";
+    |]
 
 let default_task_prompt_template =
-  String.concat "\n"
-    ([
-       "You are handling a Logseq AgentBridge task.";
-       "";
-       "Graph: {{graph}}";
-       "Block UUID: {{block-uuid}}";
-       "AgentBridge name: {{agent-name}}";
-       "";
-       graph_scope_line;
-       task_result_line;
-       task_finish_reaction_line;
-     ]
-    @ graph_report_lines
-    @ [ ""; "Task block tree:"; "{{task-block-tree}}" ])
+  Vec.string_concat "\n"
+    ( Vec.of_array
+        [|
+          "You are handling a Logseq AgentBridge task.";
+          "";
+          "Graph: {{graph}}";
+          "Block UUID: {{block-uuid}}";
+          "AgentBridge name: {{agent-name}}";
+          "";
+          graph_scope_line;
+          task_result_line;
+          task_finish_reaction_line;
+        |]
+    |> fun lines ->
+      Vec.append lines graph_report_lines |> fun lines ->
+      Vec.append lines
+        (Vec.of_array [| ""; "Task block tree:"; "{{task-block-tree}}" |]) )
 
 let default_comment_prompt_template =
-  String.concat "\n"
-    ([
-       "You are handling a Logseq AgentBridge comment request.";
-       "";
-       "Graph: {{graph}}";
-       "Comment UUID: {{comment-uuid}}";
-       "AgentBridge name: {{agent-name}}";
-       "";
-       graph_scope_line;
-       comment_completion_line;
-     ]
-    @ graph_report_lines
-    @ [
-        "";
-        "Comment target context:";
-        "{{comment-target-context}}";
-        "";
-        "Comment thread context:";
-        "{{comment-thread-context}}";
-        "";
-        "Requesting comment:";
-        "{{requesting-comment}}";
-        "";
-      ]
-    @ comment_reply_instruction_lines)
+  Vec.string_concat "\n"
+    ( Vec.of_array
+        [|
+          "You are handling a Logseq AgentBridge comment request.";
+          "";
+          "Graph: {{graph}}";
+          "Comment UUID: {{comment-uuid}}";
+          "AgentBridge name: {{agent-name}}";
+          "";
+          graph_scope_line;
+          comment_completion_line;
+        |]
+    |> fun lines ->
+      Vec.append lines graph_report_lines |> fun lines ->
+      Vec.append lines
+        (Vec.of_array
+           [|
+             "";
+             "Comment target context:";
+             "{{comment-target-context}}";
+             "";
+             "Comment thread context:";
+             "{{comment-thread-context}}";
+             "";
+             "Requesting comment:";
+             "{{requesting-comment}}";
+             "";
+           |])
+      |> fun lines -> Vec.append lines comment_reply_instruction_lines )
 
 let trim_non_empty value =
   let value = String.trim value in
@@ -146,7 +155,7 @@ let value_key_matches key value =
 
 let map_contains key value =
   match Edn_util.as_map value with
-  | Some fields -> List.exists (fun (k, _) -> value_key_matches key k) fields
+  | Some fields -> Vec.exists (fun (k, _) -> value_key_matches key k) fields
   | None -> false
 
 let resolve_agent_name config hostname =
@@ -163,8 +172,7 @@ let resolve_agent_name config hostname =
   | true, Some agent_name -> Ok agent_name
   | true, None ->
       Error
-        (Error.make
-           (Error.Agent_name_invalid)
+        (Error.make Error.Agent_name_invalid
            "agent-name in cli.edn must be a non-empty string")
   | false, _ -> (
       match Option.bind hostname trim_non_empty with
@@ -174,13 +182,12 @@ let resolve_agent_name config hostname =
           | Some agent_name -> Ok agent_name
           | None ->
               Error
-                (Error.make
-                   (Error.Agent_name_invalid)
+                (Error.make Error.Agent_name_invalid
                    "agent-name cannot be resolved from cli.edn or hostname")))
 
 let value_list = function
-  | Some value -> Option.value (Edn_util.as_seq value) ~default:[]
-  | _ -> []
+  | Some value -> Option.value (Edn_util.as_seq value) ~default:Vec.empty
+  | _ -> Vec.empty
 
 let ident_value value =
   match Edn_util.as_string_like value with
@@ -192,7 +199,7 @@ let ident_value value =
 
 let has_task_tag raw =
   value_list (Edn_util.get raw "block/tags")
-  |> List.exists (fun tag -> ident_value tag = Some "logseq.class/Task")
+  |> Vec.exists (fun tag -> ident_value tag = Some "logseq.class/Task")
 
 let status_ident raw =
   match Edn_util.get raw "logseq.property/status" with
@@ -201,7 +208,7 @@ let status_ident raw =
 
 let assignee_values raw =
   value_list (Edn_util.get raw "logseq.property/assignee")
-  |> List.filter_map (fun value ->
+  |> Vec.filter_map (fun value ->
       Option.bind (Edn_util.get_string value "block/title") trim_non_empty)
 
 let routable_task_decision entity ~agent_name =
@@ -211,7 +218,7 @@ let routable_task_decision entity ~agent_name =
   else if not (has_task_tag raw) then Not_routable Missing_task_tag
   else if status_ident raw <> Some "logseq.property/status.todo" then
     Not_routable Not_todo
-  else if not (List.mem agent_name (assignee_values raw)) then
+  else if not (Vec.mem agent_name (assignee_values raw)) then
     Not_routable Assignee_mismatch
   else if Option.is_some (Edn_util.get raw "logseq.property.agent/session-id")
   then Not_routable Already_routed
@@ -225,17 +232,18 @@ let valid_var_name value =
   String.length value > 0 && String.for_all is_var_char value
 
 let unique values =
-  let rec loop seen = function
-    | [] -> List.rev seen
-    | value :: rest when List.mem value seen -> loop seen rest
-    | value :: rest -> loop (value :: seen) rest
+  let rec loop seen remaining =
+    match Vec.pop_front remaining with
+    | None -> Vec.rev seen
+    | Some (value, rest) when Vec.mem value seen -> loop seen rest
+    | Some (value, rest) -> loop (Vec.push_front seen value) rest
   in
-  loop [] values
+  loop Vec.empty values
 
 let template_vars body =
   let len = String.length body in
   let rec loop acc index =
-    if index + 3 >= len then unique (List.rev acc)
+    if index + 3 >= len then unique (Vec.rev acc)
     else if body.[index] = '{' && body.[index + 1] = '{' then
       match String.index_from_opt body (index + 2) '}' with
       | Some close when close + 1 < len && body.[close + 1] = '}' ->
@@ -247,38 +255,36 @@ let template_vars body =
             && body.[close + 2] = '\''
           in
           let acc =
-            if (not quoted) && valid_var_name name then name :: acc else acc
+            if (not quoted) && valid_var_name name then Vec.push_front acc name
+            else acc
           in
           loop acc (close + 2)
       | _ -> loop acc (index + 2)
     else loop acc (index + 1)
   in
-  loop [] 0
+  loop Vec.empty 0
 
-let list_diff xs ys = List.filter (fun x -> not (List.mem x ys)) xs
+let list_diff xs ys = Vec.filter (fun x -> not (Vec.mem x ys)) xs
 
 let validate_prompt_template template =
   if String.trim template.body = "" then
     Error
-      (Error.make
-         (Error.Missing_template_code_block)
+      (Error.make Error.Missing_template_code_block
          "agent bridge prompt template code block is missing")
   else
     let vars = template_vars template.body in
-    match list_diff vars template.allowed_vars with
-    | _ :: _ ->
+    let unknown_vars = list_diff vars template.allowed_vars in
+    if not (Vec.is_empty unknown_vars) then
+      Error
+        (Error.make Error.Unknown_template_vars
+           "agent bridge prompt template has unknown variables")
+    else
+      let missing_vars = list_diff template.required_vars vars in
+      if not (Vec.is_empty missing_vars) then
         Error
-          (Error.make
-             (Error.Unknown_template_vars)
-             "agent bridge prompt template has unknown variables")
-    | [] -> (
-        match list_diff template.required_vars vars with
-        | _ :: _ ->
-            Error
-              (Error.make
-                 (Error.Missing_template_vars)
-                 "agent bridge prompt template is missing required variables")
-        | [] -> Ok ())
+          (Error.make Error.Missing_template_vars
+             "agent bridge prompt template is missing required variables")
+      else Ok ()
 
 let raw_config_string config key =
   Option.bind config.Cli_config.raw_file_config (fun value ->
@@ -297,77 +303,81 @@ let agent_bridge_process_once config =
     ~default:false
 
 let codex_command_prefix config =
-  [ codex_bin config; "--sandbox"; "danger-full-access"; "exec" ]
+  Vec.of_array [| codex_bin config; "--sandbox"; "danger-full-access"; "exec" |]
 
 let build_codex_command config prompt =
-  codex_command_prefix config @ [ "--json"; "--skip-git-repo-check"; prompt ]
+  Vec.append
+    (codex_command_prefix config)
+    (Vec.of_array [| "--json"; "--skip-git-repo-check"; prompt |])
 
 let build_codex_resume_command config session_id prompt =
-  codex_command_prefix config
-  @ [ "resume"; "--json"; "--skip-git-repo-check"; session_id; prompt ]
+  Vec.append
+    (codex_command_prefix config)
+    (Vec.of_array
+       [| "resume"; "--json"; "--skip-git-repo-check"; session_id; prompt |])
 
 let shell_env () = Cli_unix.environment ()
 
 let run_command_capture command =
-  match command with
-  | [] -> { Cli_unix.status = 1; stdout = ""; stderr = "missing command" }
-  | bin :: args -> Cli_unix.run_process_capture bin args (shell_env ())
+  match Vec.pop_front command with
+  | None -> { Cli_unix.status = 1; stdout = ""; stderr = "missing command" }
+  | Some (bin, args) -> Cli_unix.run_process_capture bin args (shell_env ())
 
 let start_command_capture_session_line command =
-  match command with
-  | [] -> { Cli_unix.status = 1; stdout = ""; stderr = "missing command" }
-  | bin :: args ->
+  match Vec.pop_front command with
+  | None -> { Cli_unix.status = 1; stdout = ""; stderr = "missing command" }
+  | Some (bin, args) ->
       Cli_unix.start_process_capture_session_line bin args (shell_env ())
 
 let start_command_detached command =
-  match command with
-  | [] ->
-      Error
-        (Error.make (Error.Codex_start_failed) "missing command")
-  | bin :: _ -> (
+  match Vec.peek_front command with
+  | None -> Error (Error.make Error.Codex_start_failed "missing command")
+  | Some bin -> (
       try
         ignore
-          (Cli_unix.create_process_env bin (Array.of_list command)
-             (shell_env ()) 0 1 2);
+          (Cli_unix.create_process_env bin (Vec.to_array command) (shell_env ())
+             0 1 2);
         Ok ()
       with
       | Cli_unix.Cli_unix_error (_, op, detail) ->
           Error
-            (Error.make
-               (Error.Codex_start_failed)
+            (Error.make Error.Codex_start_failed
                ("failed to start codex " ^ op ^ ": " ^ detail))
       | exn ->
           Error
-            (Error.make
-               (Error.Codex_start_failed)
+            (Error.make Error.Codex_start_failed
                ("failed to start codex: " ^ Printexc.to_string exn)))
 
 let codex_available config =
-  let result = run_command_capture [ codex_bin config; "--version" ] in
+  let result =
+    run_command_capture (Vec.of_array [| codex_bin config; "--version" |])
+  in
   result.Cli_unix.status = 0
 
 let parse_codex_session_id stdout =
-  stdout |> String.split_on_char '\n'
-  |> List.find_map (fun line ->
+  Vec.split_on_char '\n' stdout
+  |> Vec.find_map (fun line ->
       try
         match Json_util.object_of_json_string line with
         | None -> None
         | Some object_ -> (
             match
-              [ "session-id"; "session_id"; "thread-id"; "thread_id" ]
-              |> List.find_map (Json_util.string_field object_)
+              Vec.of_array
+                [| "session-id"; "session_id"; "thread-id"; "thread_id" |]
+              |> Vec.find_map (Json_util.string_field object_)
             with
             | Some session_id -> Some session_id
             | None ->
-                [
-                  ("session", "id");
-                  ("session", "session-id");
-                  ("session", "session_id");
-                  ("thread", "id");
-                  ("thread", "thread-id");
-                  ("thread", "thread_id");
-                ]
-                |> List.find_map (fun (object_field, nested_field) ->
+                Vec.of_array
+                  [|
+                    ("session", "id");
+                    ("session", "session-id");
+                    ("session", "session_id");
+                    ("thread", "id");
+                    ("thread", "thread-id");
+                    ("thread", "thread_id");
+                  |]
+                |> Vec.find_map (fun (object_field, nested_field) ->
                     Json_util.nested_string_field object_ object_field
                       nested_field))
       with _ -> None)
@@ -376,16 +386,14 @@ let start_codex _config command =
   let result = start_command_capture_session_line command in
   if result.Cli_unix.status <> 0 then
     Error
-      (Error.make
-         (Error.Codex_start_failed)
+      (Error.make Error.Codex_start_failed
          ("codex exited before startup completed: " ^ result.Cli_unix.stderr))
   else
     match parse_codex_session_id result.Cli_unix.stdout with
     | Some session when String.trim session <> "" -> Ok session
     | _ ->
         Error
-          (Error.make
-             (Error.Codex_session_id_missing)
+          (Error.make Error.Codex_session_id_missing
              "codex exited before reporting a session id")
 
 let ensure_master_session config master_prompt =
@@ -406,54 +414,66 @@ let block_title value =
 
 let project_dir_line config =
   match config.Cli_config.project_dir with
-  | Some value when String.trim value <> "" -> [ "Project directory: " ^ value ]
-  | _ -> []
+  | Some value when String.trim value <> "" ->
+      Vec.singleton ("Project directory: " ^ value)
+  | _ -> Vec.empty
 
 let inherited_task_session_lines = function
-  | None -> []
+  | None -> Vec.empty
   | Some inherited ->
-      [
-        "";
-        "Inherited parent task UUID: " ^ inherited.parent_block_uuid;
-        "Inherited subagent session id: " ^ inherited.session_id;
-        "Continue this child task in the inherited subagent session instead of \
-         launching a new subagent.";
-      ]
+      Vec.of_array
+        [|
+          "";
+          "Inherited parent task UUID: " ^ inherited.parent_block_uuid;
+          "Inherited subagent session id: " ^ inherited.session_id;
+          "Continue this child task in the inherited subagent session instead \
+           of launching a new subagent.";
+        |]
 
 let build_master_task_dispatch_prompt config ~graph ~agent_name
     ?inherited_session ?tree_text block =
   let uuid = Option.value (block_uuid block) ~default:"" in
-  String.concat "\n"
-    ([
-       "You are handling a Logseq AgentBridge master dispatch request.";
-       "";
-       "Request kind: task";
-       "Graph: " ^ graph;
-       "AgentBridge name: " ^ agent_name;
-     ]
-    @ project_dir_line config
-    @ [
-        "";
-        graph_scope_line;
-        "Only the master agent may write task results back into the target \
-         graph.";
-        "Subagents may read graph context but must not write graph content.";
-        "Route this request according to the master prompt policy.";
-        "After launching the subagent with `codex exec`, write that subagent \
-         session id to the task block's `:logseq.property.agent/session-id` \
-         property.";
-        "";
-        "Write task results back into the graph.";
-        task_finish_reaction_line;
-      ]
-    @ graph_report_lines
-    @ [ ""; "Block UUID: " ^ uuid; "" ]
-    @ inherited_task_session_lines inherited_session
-    @ [
-        "";
-        "Task block tree:";
-        Option.value tree_text ~default:(block_title block);
-      ])
+  Vec.string_concat "\n"
+    ( Vec.of_array
+        [|
+          "You are handling a Logseq AgentBridge master dispatch request.";
+          "";
+          "Request kind: task";
+          "Graph: " ^ graph;
+          "AgentBridge name: " ^ agent_name;
+        |]
+    |> fun lines ->
+      Vec.append lines (project_dir_line config) |> fun lines ->
+      Vec.append lines
+        (Vec.of_array
+           [|
+             "";
+             graph_scope_line;
+             "Only the master agent may write task results back into the \
+              target graph.";
+             "Subagents may read graph context but must not write graph \
+              content.";
+             "Route this request according to the master prompt policy.";
+             "After launching the subagent with `codex exec`, write that \
+              subagent session id to the task block's \
+              `:logseq.property.agent/session-id` property.";
+             "";
+             "Write task results back into the graph.";
+             task_finish_reaction_line;
+           |])
+      |> fun lines ->
+      Vec.append lines graph_report_lines |> fun lines ->
+      Vec.append lines (Vec.of_array [| ""; "Block UUID: " ^ uuid; "" |])
+      |> fun lines ->
+      Vec.append lines (inherited_task_session_lines inherited_session)
+      |> fun lines ->
+      Vec.append lines
+        (Vec.of_array
+           [|
+             "";
+             "Task block tree:";
+             Option.value tree_text ~default:(block_title block);
+           |]) )
 
 let dispatch_task_to_master config ~graph ~agent_name ~master_session
     ?inherited_session ?tree_text block =
@@ -467,31 +487,41 @@ let build_master_comment_dispatch_prompt config ~graph ~agent_name
     ~comment_block ~target_tree_texts ~comments_area_tree_text
     ~comment_tree_text =
   let uuid = Option.value (block_uuid comment_block) ~default:"" in
-  String.concat "\n"
-    ([
-       "You are handling a Logseq AgentBridge master dispatch request.";
-       "";
-       "Request kind: comment";
-       "Graph: " ^ graph;
-       "AgentBridge name: " ^ agent_name;
-     ]
-    @ project_dir_line config
-    @ [ ""; graph_scope_line; comment_completion_line ]
-    @ graph_report_lines @ [ "" ] @ comment_reply_instruction_lines
-    @ [
-        "";
-        "Comment UUID: " ^ uuid;
-        "";
-        "Comment target context:";
-        String.concat "\n"
-          (List.filter (fun value -> String.trim value <> "") target_tree_texts);
-        "";
-        "Comment thread context:";
-        comments_area_tree_text;
-        "";
-        "Requesting comment:";
-        comment_tree_text;
-      ])
+  Vec.string_concat "\n"
+    ( Vec.of_array
+        [|
+          "You are handling a Logseq AgentBridge master dispatch request.";
+          "";
+          "Request kind: comment";
+          "Graph: " ^ graph;
+          "AgentBridge name: " ^ agent_name;
+        |]
+    |> fun lines ->
+      Vec.append lines (project_dir_line config) |> fun lines ->
+      Vec.append lines
+        (Vec.of_array [| ""; graph_scope_line; comment_completion_line |])
+      |> fun lines ->
+      Vec.append lines graph_report_lines |> fun lines ->
+      Vec.append lines (Vec.singleton "") |> fun lines ->
+      Vec.append lines comment_reply_instruction_lines |> fun lines ->
+      Vec.append lines
+        (Vec.of_array
+           [|
+             "";
+             "Comment UUID: " ^ uuid;
+             "";
+             "Comment target context:";
+             Vec.string_concat "\n"
+               (Vec.filter
+                  (fun value -> String.trim value <> "")
+                  target_tree_texts);
+             "";
+             "Comment thread context:";
+             comments_area_tree_text;
+             "";
+             "Requesting comment:";
+             comment_tree_text;
+           |]) )
 
 let dispatch_comment_to_master config ~graph ~agent_name ~master_session
     ~target_tree_texts ~comments_area_tree_text ~comment_tree_text comment_block
@@ -515,13 +545,18 @@ let build ?registry:_ config _globals = function
 
 let kw value = Edn_util.keyword value
 let sym value = Edn_util.symbol value
-let vector values = Edn_util.vector values
-let list values = Edn_util.list values
-let where_v values = Cli_primitive.V (Edn_util.vector_t values)
-let where_l values = Cli_primitive.L (Edn_util.list_t values)
-let query_value query = Edn_util.any (Cli_primitive.datascript_query_to_edn query)
-let query_call query args = vector (query_value query :: args)
-let empty_rules = vector []
+let vector_vec values = Edn_util.vector_vec values
+let list_vec values = Edn_util.list_vec values
+let where_v values = Cli_primitive.V (Edn_util.vector_t_vec values)
+let where_l values = Cli_primitive.L (Edn_util.list_t_vec values)
+
+let query_value query =
+  Edn_util.any (Cli_primitive.datascript_query_to_edn query)
+
+let query_call query args =
+  Edn_util.vector_vec (Vec.push_front args (query_value query))
+
+let empty_rules = Edn_util.vector_vec Vec.empty
 let agent_bridge_registry_page = "AgentBridge"
 let master_prompt_wrapper_title = "AgentBridge master prompt"
 let task_prompt_template_title = "Task prompt template"
@@ -539,7 +574,7 @@ let live_entity value =
   Option.is_some (Edn_util.get value "db/id")
   && Option.is_none (Edn_util.get value "logseq.property/deleted-at")
 
-let first_live_entity values = List.find_opt live_entity values
+let first_live_entity values = Vec.find_opt live_entity values
 
 let order_key value =
   match Edn_util.get value "block/order" with
@@ -556,27 +591,27 @@ let child_blocks block =
       (Edn_util.get block "block/children", Edn_util.get block "block/_parent")
     with
     | Some value, _ | None, Some value ->
-        Option.value (Edn_util.as_seq value) ~default:[]
-    | None, None -> []
+        Option.value (Edn_util.as_seq value) ~default:Vec.empty
+    | None, None -> Vec.empty
   in
-  values |> List.filter live_entity
-  |> List.sort (fun a b -> String.compare (order_key a) (order_key b))
+  values |> Vec.filter live_entity
+  |> Vec.sort (fun a b -> String.compare (order_key a) (order_key b))
 
 let rec block_title_tree block =
   let title =
     Option.value (Edn_util.get_string block "block/title") ~default:""
   in
-  title :: List.concat_map block_title_tree (child_blocks block)
+  Vec.push_front (Vec.concat_map block_title_tree (child_blocks block)) title
 
 let code_block_tag tag = ident_value tag = Some "logseq.class/Code-block"
 
 let block_has_code_tag block =
-  value_list (Edn_util.get block "block/tags") |> List.exists code_block_tag
+  value_list (Edn_util.get block "block/tags") |> Vec.exists code_block_tag
 
 let extract_code_blocks text =
   let len = String.length text in
   let rec loop acc index =
-    if index + 3 > len then List.rev acc
+    if index + 3 > len then Vec.rev acc
     else if index + 3 <= len && String.sub text index 3 = "```" then
       match String.index_from_opt text (index + 3) '\n' with
       | None -> loop acc (index + 3)
@@ -592,17 +627,19 @@ let extract_code_blocks text =
               let body =
                 String.sub text (body_start + 1) (close - body_start - 1)
               in
-              loop (body :: acc) (close + 3))
+              loop (Vec.push_front acc body) (close + 3))
     else loop acc (index + 1)
   in
-  loop [] 0
+  loop Vec.empty 0
 
 let task_prompt_template body =
   {
     kind = Task;
     body;
-    required_vars = [ "graph"; "block-uuid"; "agent-name"; "task-block-tree" ];
-    allowed_vars = [ "graph"; "block-uuid"; "agent-name"; "task-block-tree" ];
+    required_vars =
+      Vec.of_array [| "graph"; "block-uuid"; "agent-name"; "task-block-tree" |];
+    allowed_vars =
+      Vec.of_array [| "graph"; "block-uuid"; "agent-name"; "task-block-tree" |];
   }
 
 let comment_prompt_template body =
@@ -610,23 +647,25 @@ let comment_prompt_template body =
     kind = Comment;
     body;
     required_vars =
-      [
-        "graph";
-        "comment-uuid";
-        "agent-name";
-        "comment-target-context";
-        "comment-thread-context";
-        "requesting-comment";
-      ];
+      Vec.of_array
+        [|
+          "graph";
+          "comment-uuid";
+          "agent-name";
+          "comment-target-context";
+          "comment-thread-context";
+          "requesting-comment";
+        |];
     allowed_vars =
-      [
-        "graph";
-        "comment-uuid";
-        "agent-name";
-        "comment-target-context";
-        "comment-thread-context";
-        "requesting-comment";
-      ];
+      Vec.of_array
+        [|
+          "graph";
+          "comment-uuid";
+          "agent-name";
+          "comment-target-context";
+          "comment-thread-context";
+          "requesting-comment";
+        |];
   }
 
 let prompt_template_for_kind = function
@@ -643,31 +682,30 @@ let default_prompt_template = function
 
 let prompt_template_from_block kind block =
   let templates =
-    block_title_tree block |> List.concat_map extract_code_blocks
+    block_title_tree block |> Vec.concat_map extract_code_blocks
   in
   let renderable =
     templates
-    |> List.filter (fun body ->
+    |> Vec.filter (fun body ->
         validate_prompt_template ((prompt_template_for_kind kind) body) = Ok ())
   in
-  match renderable with
-  | [ body ] -> Ok body
-  | _ -> (
-      match templates with
-      | [ body ] -> (
-          match
-            validate_prompt_template ((prompt_template_for_kind kind) body)
-          with
-          | Ok () -> Ok body
-          | Error err -> Error err)
-      | _ ->
-          Error
-            (Error.make
-               (Error.Agent_prompt_template_invalid)
-               "agent bridge prompt template must contain one code block"))
+  if Vec.length renderable = 1 then Ok (Vec.hd renderable)
+  else
+    match templates with
+    | templates when Vec.length templates = 1 -> (
+        let body = Vec.hd templates in
+        match
+          validate_prompt_template ((prompt_template_for_kind kind) body)
+        with
+        | Ok () -> Ok body
+        | Error err -> Error err)
+    | _ ->
+        Error
+          (Error.make Error.Agent_prompt_template_invalid
+             "agent bridge prompt template must contain one code block")
 
 let blocks_by_title blocks title =
-  List.find_opt
+  Vec.find_opt
     (fun block -> Edn_util.get_string block "block/title" = Some title)
     blocks
 
@@ -675,358 +713,551 @@ let agent_bridge_registry_page_query =
   query_call
     (Cli_primitive.make_datascript_query
        ~find:
-         [
-           vector
-             [
-               list
-                 [
-                   sym "pull";
-                   sym "?p";
-                   vector
-                     [
-                       kw "db/id";
-                       kw "block/uuid";
-                       kw "block/name";
-                       kw "block/title";
-                       kw "logseq.property/deleted-at";
-                     ];
-                 ];
-               sym "...";
-             ];
-         ]
-       ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?page-name" ]
-       ~where:[ where_v [ sym "?p"; kw "block/name"; sym "?page-name" ] ]
+         (Vec.of_array
+            [|
+              vector_vec
+                (Vec.of_array
+                   [|
+                     list_vec
+                       (Vec.of_array
+                          [|
+                            sym "pull";
+                            sym "?p";
+                            vector_vec
+                              (Vec.of_array
+                                 [|
+                                   kw "db/id";
+                                   kw "block/uuid";
+                                   kw "block/name";
+                                   kw "block/title";
+                                   kw "logseq.property/deleted-at";
+                                 |]);
+                          |]);
+                     sym "...";
+                   |]);
+            |])
+       ~in_:
+         (Vec.of_array
+            [|
+              Melange_edn_melange.symbol "$";
+              Melange_edn_melange.symbol "?page-name";
+            |])
+       ~where:
+         (Vec.singleton
+            (where_v
+               (Vec.of_array [| sym "?p"; kw "block/name"; sym "?page-name" |])))
        ())
-    [ Edn_util.string (registry_page_name ()) ]
+    (Vec.singleton (Edn_util.string (registry_page_name ())))
 
 let registered_agent_query agent_name =
   query_call
     (Cli_primitive.make_datascript_query
        ~find:
-         [
-           vector
-             [
-               list
-                 [
-                   sym "pull";
-                   sym "?p";
-                   vector
-                     [
-                       kw "db/id";
-                       kw "block/uuid";
-                       kw "block/name";
-                       kw "block/title";
-                       kw "logseq.property/deleted-at";
-                     ];
-                 ];
-               sym "...";
-             ];
-         ]
-       ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?agent-page-name" ]
-       ~where:[ where_v [ sym "?p"; kw "block/name"; sym "?agent-page-name" ] ]
+         (Vec.of_array
+            [|
+              vector_vec
+                (Vec.of_array
+                   [|
+                     list_vec
+                       (Vec.of_array
+                          [|
+                            sym "pull";
+                            sym "?p";
+                            vector_vec
+                              (Vec.of_array
+                                 [|
+                                   kw "db/id";
+                                   kw "block/uuid";
+                                   kw "block/name";
+                                   kw "block/title";
+                                   kw "logseq.property/deleted-at";
+                                 |]);
+                          |]);
+                     sym "...";
+                   |]);
+            |])
+       ~in_:
+         (Vec.of_array
+            [|
+              Melange_edn_melange.symbol "$";
+              Melange_edn_melange.symbol "?agent-page-name";
+            |])
+       ~where:
+         (Vec.of_array
+            [|
+              where_v
+                (Vec.of_array
+                   [| sym "?p"; kw "block/name"; sym "?agent-page-name" |]);
+            |])
        ())
-    [ Edn_util.string (agent_page_name agent_name) ]
+    (Vec.singleton (Edn_util.string (agent_page_name agent_name)))
 
 let agent_master_prompt_blocks_query page_id =
   query_call
     (Cli_primitive.make_datascript_query
        ~find:
-         [
-           vector
-             [
-               list
-                 [
-                   sym "pull";
-                   sym "?b";
-                   vector
-                     [
-                       kw "db/id";
-                       kw "block/uuid";
-                       kw "block/title";
-                       kw "block/order";
-                       kw "logseq.property/deleted-at";
-                       Edn_util.map
-                         [
-                           ( kw "block/_parent",
-                             vector
-                               [
-                                 kw "db/id";
-                                 kw "block/uuid";
-                                 kw "block/title";
-                                 kw "block/order";
-                                 kw "logseq.property/deleted-at";
-                                 Edn_util.map
-                                   [
-                                     ( kw "block/tags",
-                                       vector
-                                         [
-                                           kw "db/id";
-                                           kw "db/ident";
-                                           kw "block/name";
-                                           kw "block/title";
-                                         ] );
-                                   ];
-                               ] );
-                         ];
-                     ];
-                 ];
-               sym "...";
-             ];
-         ]
-       ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?page-id" ]
-       ~where:[ where_v [ sym "?b"; kw "block/parent"; sym "?page-id" ] ]
+         (Vec.of_array
+            [|
+              vector_vec
+                (Vec.of_array
+                   [|
+                     list_vec
+                       (Vec.of_array
+                          [|
+                            sym "pull";
+                            sym "?b";
+                            vector_vec
+                              (Vec.of_array
+                                 [|
+                                   kw "db/id";
+                                   kw "block/uuid";
+                                   kw "block/title";
+                                   kw "block/order";
+                                   kw "logseq.property/deleted-at";
+                                   Edn_util.map_vec
+                                     (Vec.of_array
+                                        [|
+                                          ( kw "block/_parent",
+                                            vector_vec
+                                              (Vec.of_array
+                                                 [|
+                                                   kw "db/id";
+                                                   kw "block/uuid";
+                                                   kw "block/title";
+                                                   kw "block/order";
+                                                   kw
+                                                     "logseq.property/deleted-at";
+                                                   Edn_util.map_vec
+                                                     (Vec.of_array
+                                                        [|
+                                                          ( kw "block/tags",
+                                                            vector_vec
+                                                              (Vec.of_array
+                                                                 [|
+                                                                   kw "db/id";
+                                                                   kw "db/ident";
+                                                                   kw
+                                                                     "block/name";
+                                                                   kw
+                                                                     "block/title";
+                                                                 |]) );
+                                                        |]);
+                                                 |]) );
+                                        |]);
+                                 |]);
+                          |]);
+                     sym "...";
+                   |]);
+            |])
+       ~in_:
+         (Vec.of_array
+            [|
+              Melange_edn_melange.symbol "$";
+              Melange_edn_melange.symbol "?page-id";
+            |])
+       ~where:
+         (Vec.singleton
+            (where_v
+               (Vec.of_array [| sym "?b"; kw "block/parent"; sym "?page-id" |])))
        ())
-    [ Edn_util.int64 page_id ]
+    (Vec.singleton (Edn_util.int64 page_id))
 
 let prompt_template_blocks_query page_id =
   query_call
     (Cli_primitive.make_datascript_query
        ~find:
-         [
-           vector
-             [
-               list
-                 [
-                   sym "pull";
-                   sym "?b";
-                   vector
-                     [
-                       kw "db/id";
-                       kw "block/uuid";
-                       kw "block/title";
-                       kw "block/order";
-                       Edn_util.map
-                         [
-                           ( kw "block/_parent",
-                             vector
-                               [
-                                 kw "db/id";
-                                 kw "block/uuid";
-                                 kw "block/title";
-                                 kw "block/order";
-                                 Edn_util.map
-                                   [
-                                     ( kw "block/_parent",
-                                       vector
-                                         [
-                                           kw "db/id";
-                                           kw "block/uuid";
-                                           kw "block/title";
-                                           kw "block/order";
-                                         ] );
-                                   ];
-                               ] );
-                         ];
-                     ];
-                 ];
-               sym "...";
-             ];
-         ]
-       ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?page-id" ]
-       ~where:[ where_v [ sym "?b"; kw "block/parent"; sym "?page-id" ] ]
+         (Vec.of_array
+            [|
+              vector_vec
+                (Vec.of_array
+                   [|
+                     list_vec
+                       (Vec.of_array
+                          [|
+                            sym "pull";
+                            sym "?b";
+                            vector_vec
+                              (Vec.of_array
+                                 [|
+                                   kw "db/id";
+                                   kw "block/uuid";
+                                   kw "block/title";
+                                   kw "block/order";
+                                   Edn_util.map_vec
+                                     (Vec.of_array
+                                        [|
+                                          ( kw "block/_parent",
+                                            vector_vec
+                                              (Vec.of_array
+                                                 [|
+                                                   kw "db/id";
+                                                   kw "block/uuid";
+                                                   kw "block/title";
+                                                   kw "block/order";
+                                                   Edn_util.map_vec
+                                                     (Vec.of_array
+                                                        [|
+                                                          ( kw "block/_parent",
+                                                            vector_vec
+                                                              (Vec.of_array
+                                                                 [|
+                                                                   kw "db/id";
+                                                                   kw
+                                                                     "block/uuid";
+                                                                   kw
+                                                                     "block/title";
+                                                                   kw
+                                                                     "block/order";
+                                                                 |]) );
+                                                        |]);
+                                                 |]) );
+                                        |]);
+                                 |]);
+                          |]);
+                     sym "...";
+                   |]);
+            |])
+       ~in_:
+         (Vec.of_array
+            [|
+              Melange_edn_melange.symbol "$";
+              Melange_edn_melange.symbol "?page-id";
+            |])
+       ~where:
+         (Vec.singleton
+            (where_v
+               (Vec.of_array [| sym "?b"; kw "block/parent"; sym "?page-id" |])))
        ())
-    [ Edn_util.int64 page_id ]
+    (Vec.singleton (Edn_util.int64 page_id))
 
 let task_ancestor_session_selector =
-  vector
-    [
-      kw "db/id";
-      kw "block/uuid";
-      kw "block/title";
-      Edn_util.map
-        [ (kw "block/tags", vector [ kw "db/ident"; kw "block/title" ]) ];
-      kw "logseq.property.agent/session-id";
-      Edn_util.map [ (kw "block/parent", vector [ kw "db/id" ]) ];
-    ]
+  vector_vec
+    (Vec.of_array
+       [|
+         kw "db/id";
+         kw "block/uuid";
+         kw "block/title";
+         Edn_util.map_vec
+           (Vec.of_array
+              [|
+                ( kw "block/tags",
+                  vector_vec
+                    (Vec.of_array [| kw "db/ident"; kw "block/title" |]) );
+              |]);
+         kw "logseq.property.agent/session-id";
+         Edn_util.map_vec
+           (Vec.of_array
+              [|
+                (kw "block/parent", vector_vec (Vec.of_array [| kw "db/id" |]));
+              |]);
+       |])
 
 let routable_task_selector =
-  vector
-    [
-      kw "db/id";
-      kw "block/uuid";
-      kw "block/title";
-      Edn_util.map
-        [ (kw "block/tags", vector [ kw "db/ident"; kw "block/title" ]) ];
-      Edn_util.map
-        [
-          ( kw "logseq.property/status",
-            vector [ kw "db/ident"; kw "block/title" ] );
-        ];
-      Edn_util.map
-        [
-          ( kw "logseq.property/assignee",
-            vector
-              [ kw "db/id"; kw "block/title"; kw "block/name"; kw "db/ident" ]
-          );
-        ];
-      kw "logseq.property.agent/session-id";
-      Edn_util.map [ (kw "block/parent", vector [ kw "db/id" ]) ];
-    ]
+  vector_vec
+    (Vec.of_array
+       [|
+         kw "db/id";
+         kw "block/uuid";
+         kw "block/title";
+         Edn_util.map_vec
+           (Vec.of_array
+              [|
+                ( kw "block/tags",
+                  vector_vec
+                    (Vec.of_array [| kw "db/ident"; kw "block/title" |]) );
+              |]);
+         Edn_util.map_vec
+           (Vec.of_array
+              [|
+                ( kw "logseq.property/status",
+                  vector_vec
+                    (Vec.of_array [| kw "db/ident"; kw "block/title" |]) );
+              |]);
+         Edn_util.map_vec
+           (Vec.of_array
+              [|
+                ( kw "logseq.property/assignee",
+                  vector_vec
+                    (Vec.of_array
+                       [|
+                         kw "db/id";
+                         kw "block/title";
+                         kw "block/name";
+                         kw "db/ident";
+                       |]) );
+              |]);
+         kw "logseq.property.agent/session-id";
+         Edn_util.map_vec
+           (Vec.of_array
+              [|
+                (kw "block/parent", vector_vec (Vec.of_array [| kw "db/id" |]));
+              |]);
+       |])
 
 let routable_task_query agent_name =
   query_call
     (Cli_primitive.make_datascript_query
        ~find:
-         [ vector [ list [ sym "pull"; sym "?e"; routable_task_selector ]; sym "..." ] ]
+         (Vec.of_array
+            [|
+              vector_vec
+                (Vec.of_array
+                   [|
+                     list_vec
+                       (Vec.of_array
+                          [| sym "pull"; sym "?e"; routable_task_selector |]);
+                     sym "...";
+                   |]);
+            |])
        ~in_:
-         [
-           Melange_edn_melange.symbol "$";
-           Melange_edn_melange.symbol "?agent-name";
-           Melange_edn_melange.symbol "%";
-         ]
+         (Vec.of_array
+            [|
+              Melange_edn_melange.symbol "$";
+              Melange_edn_melange.symbol "?agent-name";
+              Melange_edn_melange.symbol "%";
+            |])
        ~where:
-         [
-           where_v [ sym "?e"; kw "block/tags"; kw "logseq.class/Task" ];
-           where_v [ sym "?e"; kw "logseq.property/status"; sym "?status" ];
-           where_v
-             [ sym "?status"; kw "db/ident"; kw "logseq.property/status.todo" ];
-           where_v
-             [
-               sym "?assignee-property";
-               kw "block/name";
-               Edn_util.string "assignee";
-             ];
-           where_v [ sym "?assignee-property"; kw "db/ident"; sym "?assignee-attr" ];
-           where_v [ sym "?e"; sym "?assignee-attr"; sym "?assignee-ref" ];
-           where_v [ sym "?assignee-ref"; kw "block/title"; sym "?agent-name" ];
-         ]
+         (Vec.of_array
+            [|
+              where_v
+                (Vec.of_array
+                   [| sym "?e"; kw "block/tags"; kw "logseq.class/Task" |]);
+              where_v
+                (Vec.of_array
+                   [| sym "?e"; kw "logseq.property/status"; sym "?status" |]);
+              where_v
+                (Vec.of_array
+                   [|
+                     sym "?status";
+                     kw "db/ident";
+                     kw "logseq.property/status.todo";
+                   |]);
+              where_v
+                (Vec.of_array
+                   [|
+                     sym "?assignee-property";
+                     kw "block/name";
+                     Edn_util.string "assignee";
+                   |]);
+              where_v
+                (Vec.of_array
+                   [|
+                     sym "?assignee-property";
+                     kw "db/ident";
+                     sym "?assignee-attr";
+                   |]);
+              where_v
+                (Vec.of_array
+                   [| sym "?e"; sym "?assignee-attr"; sym "?assignee-ref" |]);
+              where_v
+                (Vec.of_array
+                   [|
+                     sym "?assignee-ref"; kw "block/title"; sym "?agent-name";
+                   |]);
+            |])
        ())
-    [ Edn_util.string agent_name; empty_rules ]
+    (Vec.of_array [| Edn_util.string agent_name; empty_rules |])
 
 let comment_block_selector =
-  vector
-    [
-      kw "db/id";
-      kw "block/uuid";
-      kw "block/title";
-      Edn_util.map
-        [ (kw "block/tags", vector [ kw "db/ident"; kw "block/title" ]) ];
-      Edn_util.map
-        [
-          ( kw "block/refs",
-            vector [ kw "db/id"; kw "block/title"; kw "block/name" ] );
-        ];
-      Edn_util.map
-        [
-          ( kw "block/parent",
-            vector
-              [
-                kw "db/id";
-                kw "block/uuid";
-                kw "block/title";
-                Edn_util.map
-                  [
-                    (kw "block/tags", vector [ kw "db/ident"; kw "block/title" ]);
-                  ];
-              ] );
-        ];
-      sym "*";
-    ]
+  vector_vec
+    (Vec.of_array
+       [|
+         kw "db/id";
+         kw "block/uuid";
+         kw "block/title";
+         Edn_util.map_vec
+           (Vec.of_array
+              [|
+                ( kw "block/tags",
+                  vector_vec
+                    (Vec.of_array [| kw "db/ident"; kw "block/title" |]) );
+              |]);
+         Edn_util.map_vec
+           (Vec.of_array
+              [|
+                ( kw "block/refs",
+                  vector_vec
+                    (Vec.of_array
+                       [| kw "db/id"; kw "block/title"; kw "block/name" |]) );
+              |]);
+         Edn_util.map_vec
+           (Vec.of_array
+              [|
+                ( kw "block/parent",
+                  vector_vec
+                    (Vec.of_array
+                       [|
+                         kw "db/id";
+                         kw "block/uuid";
+                         kw "block/title";
+                         Edn_util.map_vec
+                           (Vec.of_array
+                              [|
+                                ( kw "block/tags",
+                                  vector_vec
+                                    (Vec.of_array
+                                       [| kw "db/ident"; kw "block/title" |]) );
+                              |]);
+                       |]) );
+              |]);
+         sym "*";
+       |])
 
 let comment_target_block_selector =
-  vector
-    [
-      kw "db/id";
-      kw "block/uuid";
-      kw "block/title";
-      Edn_util.map
-        [
-          ( kw "logseq.property/assignee",
-            vector
-              [ kw "db/id"; kw "block/title"; kw "block/name"; kw "db/ident" ]
-          );
-        ];
-      kw "logseq.property.agent/session-id";
-      sym "*";
-    ]
+  vector_vec
+    (Vec.of_array
+       [|
+         kw "db/id";
+         kw "block/uuid";
+         kw "block/title";
+         Edn_util.map_vec
+           (Vec.of_array
+              [|
+                ( kw "logseq.property/assignee",
+                  vector_vec
+                    (Vec.of_array
+                       [|
+                         kw "db/id";
+                         kw "block/title";
+                         kw "block/name";
+                         kw "db/ident";
+                       |]) );
+              |]);
+         kw "logseq.property.agent/session-id";
+         sym "*";
+       |])
 
 let comments_area_selector =
-  vector
-    [
-      kw "db/id";
-      kw "block/uuid";
-      kw "block/title";
-      Edn_util.map
-        [ (kw "block/tags", vector [ kw "db/ident"; kw "block/title" ]) ];
-      Edn_util.map
-        [
-          (kw "logseq.property.comments/blocks", comment_target_block_selector);
-        ];
-    ]
+  vector_vec
+    (Vec.of_array
+       [|
+         kw "db/id";
+         kw "block/uuid";
+         kw "block/title";
+         Edn_util.map_vec
+           (Vec.of_array
+              [|
+                ( kw "block/tags",
+                  vector_vec
+                    (Vec.of_array [| kw "db/ident"; kw "block/title" |]) );
+              |]);
+         Edn_util.map_vec
+           (Vec.of_array
+              [|
+                ( kw "logseq.property.comments/blocks",
+                  comment_target_block_selector );
+              |]);
+       |])
 
 let reaction_query target_uuid emoji_id =
   query_call
     (Cli_primitive.make_datascript_query
-       ~find:[ list [ sym "?r"; sym "." ] ]
+       ~find:(Vec.singleton (list_vec (Vec.of_array [| sym "?r"; sym "." |])))
        ~in_:
-         [
-           Melange_edn_melange.symbol "$";
-           Melange_edn_melange.symbol "?target-uuid";
-           Melange_edn_melange.symbol "?emoji-id";
-           Melange_edn_melange.symbol "%";
-         ]
+         (Vec.of_array
+            [|
+              Melange_edn_melange.symbol "$";
+              Melange_edn_melange.symbol "?target-uuid";
+              Melange_edn_melange.symbol "?emoji-id";
+              Melange_edn_melange.symbol "%";
+            |])
        ~where:
-         [
-           where_v [ sym "?target"; kw "block/uuid"; sym "?target-uuid" ];
-           where_v
-             [ sym "?r"; kw "logseq.property.reaction/target"; sym "?target" ];
-           where_v
-             [ sym "?r"; kw "logseq.property.reaction/emoji-id"; sym "?emoji-id" ];
-           where_l
-             [
-               sym "missing?";
-               sym "$";
-               sym "?r";
-               kw "logseq.property/created-by-ref";
-             ];
-         ]
+         (Vec.of_array
+            [|
+              where_v
+                (Vec.of_array
+                   [| sym "?target"; kw "block/uuid"; sym "?target-uuid" |]);
+              where_v
+                (Vec.of_array
+                   [|
+                     sym "?r";
+                     kw "logseq.property.reaction/target";
+                     sym "?target";
+                   |]);
+              where_v
+                (Vec.of_array
+                   [|
+                     sym "?r";
+                     kw "logseq.property.reaction/emoji-id";
+                     sym "?emoji-id";
+                   |]);
+              where_l
+                (Vec.of_array
+                   [|
+                     sym "missing?";
+                     sym "$";
+                     sym "?r";
+                     kw "logseq.property/created-by-ref";
+                   |]);
+            |])
        ())
-    [ Edn_util.uuid target_uuid; Edn_util.string emoji_id; empty_rules ]
+    (Vec.of_array
+       [| Edn_util.uuid target_uuid; Edn_util.string emoji_id; empty_rules |])
 
 let task_status_query block_uuid =
   query_call
     (Cli_primitive.make_datascript_query
-       ~find:[ list [ sym "?status-ident"; sym "." ] ]
-       ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?block-uuid" ]
+       ~find:
+         (Vec.singleton
+            (list_vec (Vec.of_array [| sym "?status-ident"; sym "." |])))
+       ~in_:
+         (Vec.of_array
+            [|
+              Melange_edn_melange.symbol "$";
+              Melange_edn_melange.symbol "?block-uuid";
+            |])
        ~where:
-         [
-           where_v [ sym "?block"; kw "block/uuid"; sym "?block-uuid" ];
-           where_v [ sym "?block"; kw "logseq.property/status"; sym "?status" ];
-           where_v [ sym "?status"; kw "db/ident"; sym "?status-ident" ];
-         ]
+         (Vec.of_array
+            [|
+              where_v
+                (Vec.of_array
+                   [| sym "?block"; kw "block/uuid"; sym "?block-uuid" |]);
+              where_v
+                (Vec.of_array
+                   [|
+                     sym "?block"; kw "logseq.property/status"; sym "?status";
+                   |]);
+              where_v
+                (Vec.of_array
+                   [| sym "?status"; kw "db/ident"; sym "?status-ident" |]);
+            |])
        ())
-    [ Edn_util.uuid block_uuid ]
+    (Vec.singleton (Edn_util.uuid block_uuid))
 
 let values_of_query_result value =
   match (Edn_util.as_vector value, Edn_util.as_list value) with
   | Some values, _ | _, Some values -> values
-  | _ -> []
+  | _ -> Vec.empty
 
 let unquote_transit_value = function
-  | Melange_edn_melange.Any (Melange_edn_melange.Tagged (("transit/quote" | "'"), value)) ->
+  | Melange_edn_melange.Any
+      (Melange_edn_melange.Tagged (("transit/quote" | "'"), value)) ->
       value
   | value -> value
 
 let keyword_string value = value |> unquote_transit_value |> Edn_util.as_keyword
 
 let bridge_result_value (result : bridge_result) =
-  Edn_util.map
-    [
-      (kw "mode", Edn_util.any result.mode);
-      (kw "graph", Edn_util.string (Cli_primitive.string_of_graph result.graph));
-      (kw "agent-name", Edn_util.string result.agent_name);
-      (kw "routed", Edn_util.vector result.routed);
-    ]
+  Edn_util.map_vec
+    (Vec.of_array
+       [|
+         (kw "mode", Edn_util.any result.mode);
+         ( kw "graph",
+           Edn_util.string (Cli_primitive.string_of_graph result.graph) );
+         (kw "agent-name", Edn_util.string result.agent_name);
+         (kw "routed", Edn_util.vector_vec result.routed);
+       |])
 
 let routed_task_value task =
-  Edn_util.map
-    [
-      (kw "block", task.block);
-      ( kw "session",
-        match task.session with
-        | Some session -> Edn_util.string session
-        | None -> Edn_util.nil );
-    ]
+  Edn_util.map_vec
+    (Vec.of_array
+       [|
+         (kw "block", task.block);
+         ( kw "session",
+           match task.session with
+           | Some session -> Edn_util.string session
+           | None -> Edn_util.nil );
+       |])
 
 let list_routable_tasks invoke_config repo agent_name =
   let open Cli_effect in
@@ -1038,7 +1269,7 @@ let list_routable_tasks invoke_config repo agent_name =
     (fun result ->
       let routed =
         result |> values_of_query_result
-        |> List.filter (fun value ->
+        |> Vec.filter (fun value ->
             routable_task_decision (Entity.of_value value) ~agent_name
             = Routable)
       in
@@ -1046,7 +1277,8 @@ let list_routable_tasks invoke_config repo agent_name =
 
 let apply_outliner_ops invoke_config repo ops =
   Transport.thread_api_apply_outliner_ops invoke_config ~repo
-    ~ops:(Edn_util.vector_t ops) ~options:(Edn_util.map_t [])
+    ~ops:(Edn_util.vector_t_vec ops)
+    ~options:(Edn_util.map_t_vec Vec.empty)
 
 let pull_registry_page invoke_config repo =
   let open Cli_effect in
@@ -1068,10 +1300,17 @@ let pull_agent_page invoke_config repo agent_name =
 
 let create_page invoke_config repo title =
   apply_outliner_ops invoke_config repo
-    [
-      vector
-        [ kw "create-page"; vector [ Edn_util.string title; Edn_util.map [] ] ];
-    ]
+    (Vec.of_array
+       [|
+         vector_vec
+           (Vec.of_array
+              [|
+                kw "create-page";
+                vector_vec
+                  (Vec.of_array
+                     [| Edn_util.string title; Edn_util.map_vec Vec.empty |]);
+              |]);
+       |])
 
 let ensure_registry_page invoke_config repo =
   let open Cli_effect in
@@ -1102,29 +1341,25 @@ let register_agent_bridge invoke_config repo agent_name =
 
 let master_prompt_from_block block =
   match Edn_util.get_string block "block/title" with
-  | Some title when title = master_prompt_wrapper_title -> (
+  | Some title when title = master_prompt_wrapper_title ->
       let prompts =
         child_blocks block
-        |> List.filter block_has_code_tag
-        |> List.filter_map (fun child ->
+        |> Vec.filter block_has_code_tag
+        |> Vec.filter_map (fun child ->
             Option.bind (Edn_util.get_string child "block/title") trim_non_empty)
       in
-      match prompts with
-      | [ prompt ] -> Ok prompt
-      | [] ->
-          Error
-            (Error.make
-               (Error.Agent_master_prompt_invalid)
-               "agent bridge master prompt code block is missing")
-      | _ ->
-          Error
-            (Error.make
-               (Error.Agent_master_prompt_invalid)
-               "agent bridge master prompt must contain one code block"))
+      if Vec.length prompts = 1 then Ok (Vec.hd prompts)
+      else if Vec.is_empty prompts then
+        Error
+          (Error.make Error.Agent_master_prompt_invalid
+             "agent bridge master prompt code block is missing")
+      else
+        Error
+          (Error.make Error.Agent_master_prompt_invalid
+             "agent bridge master prompt must contain one code block")
   | _ ->
       Error
-        (Error.make
-           (Error.Agent_master_prompt_invalid)
+        (Error.make Error.Agent_master_prompt_invalid
            "agent bridge master prompt wrapper is invalid")
 
 let hex_digest_prefix byte_count seed =
@@ -1142,57 +1377,68 @@ let insert_default_master_prompt invoke_config repo agent_page_uuid =
     "00000000-0000-4000-8001-" ^ hex_digest_prefix 6 (block_uuid ^ ":" ^ nonce)
   in
   let code_block =
-    Edn_util.map
-      [
-        (kw "block/uuid", Edn_util.uuid code_uuid);
-        (kw "block/title", Edn_util.string default_master_prompt);
-        (kw "block/tags", Edn_util.set [ kw "logseq.class/Code-block" ]);
-        (kw "logseq.property.node/display-type", kw "code");
-        (kw "logseq.property.code/lang", Edn_util.string "markdown");
-      ]
+    Edn_util.map_vec
+      (Vec.of_array
+         [|
+           (kw "block/uuid", Edn_util.uuid code_uuid);
+           (kw "block/title", Edn_util.string default_master_prompt);
+           ( kw "block/tags",
+             Edn_util.set_vec (Vec.of_array [| kw "logseq.class/Code-block" |])
+           );
+           (kw "logseq.property.node/display-type", kw "code");
+           (kw "logseq.property.code/lang", Edn_util.string "markdown");
+         |])
   in
   let wrapper_block =
-    Edn_util.map
-      [
-        (kw "block/uuid", Edn_util.uuid block_uuid);
-        (kw "block/title", Edn_util.string master_prompt_wrapper_title);
-      ]
+    Edn_util.map_vec
+      (Vec.of_array
+         [|
+           (kw "block/uuid", Edn_util.uuid block_uuid);
+           (kw "block/title", Edn_util.string master_prompt_wrapper_title);
+         |])
   in
   apply_outliner_ops invoke_config repo
-    [
-      vector
-        [
-          kw "insert-blocks";
-          vector
-            [
-              vector [ wrapper_block ];
-              Edn_util.uuid agent_page_uuid;
-              Edn_util.map
-                [
-                  (kw "outliner-op", kw "insert-blocks");
-                  (kw "sibling?", Edn_util.bool false);
-                  (kw "bottom?", Edn_util.bool false);
-                  (kw "keep-uuid?", Edn_util.bool true);
-                ];
-            ];
-        ];
-      vector
-        [
-          kw "insert-blocks";
-          vector
-            [
-              vector [ code_block ];
-              Edn_util.uuid block_uuid;
-              Edn_util.map
-                [
-                  (kw "outliner-op", kw "insert-blocks");
-                  (kw "sibling?", Edn_util.bool false);
-                  (kw "bottom?", Edn_util.bool false);
-                  (kw "keep-uuid?", Edn_util.bool true);
-                ];
-            ];
-        ];
-    ]
+    (Vec.of_array
+       [|
+         vector_vec
+           (Vec.of_array
+              [|
+                kw "insert-blocks";
+                vector_vec
+                  (Vec.of_array
+                     [|
+                       vector_vec (Vec.of_array [| wrapper_block |]);
+                       Edn_util.uuid agent_page_uuid;
+                       Edn_util.map_vec
+                         (Vec.of_array
+                            [|
+                              (kw "outliner-op", kw "insert-blocks");
+                              (kw "sibling?", Edn_util.bool false);
+                              (kw "bottom?", Edn_util.bool false);
+                              (kw "keep-uuid?", Edn_util.bool true);
+                            |]);
+                     |]);
+              |]);
+         vector_vec
+           (Vec.of_array
+              [|
+                kw "insert-blocks";
+                vector_vec
+                  (Vec.of_array
+                     [|
+                       vector_vec (Vec.of_array [| code_block |]);
+                       Edn_util.uuid block_uuid;
+                       Edn_util.map_vec
+                         (Vec.of_array
+                            [|
+                              (kw "outliner-op", kw "insert-blocks");
+                              (kw "sibling?", Edn_util.bool false);
+                              (kw "bottom?", Edn_util.bool false);
+                              (kw "keep-uuid?", Edn_util.bool true);
+                            |]);
+                     |]);
+              |]);
+       |])
 
 let insert_default_master_prompt_code invoke_config repo wrapper_uuid =
   let nonce =
@@ -1202,39 +1448,46 @@ let insert_default_master_prompt_code invoke_config repo wrapper_uuid =
     "00000000-0000-4000-8001-" ^ hex_digest_prefix 6 (wrapper_uuid ^ ":" ^ nonce)
   in
   let code_block =
-    Edn_util.map
-      [
-        (kw "block/uuid", Edn_util.uuid code_uuid);
-        (kw "block/title", Edn_util.string default_master_prompt);
-        (kw "block/tags", Edn_util.set [ kw "logseq.class/Code-block" ]);
-        (kw "logseq.property.node/display-type", kw "code");
-        (kw "logseq.property.code/lang", Edn_util.string "markdown");
-      ]
+    Edn_util.map_vec
+      (Vec.of_array
+         [|
+           (kw "block/uuid", Edn_util.uuid code_uuid);
+           (kw "block/title", Edn_util.string default_master_prompt);
+           ( kw "block/tags",
+             Edn_util.set_vec (Vec.of_array [| kw "logseq.class/Code-block" |])
+           );
+           (kw "logseq.property.node/display-type", kw "code");
+           (kw "logseq.property.code/lang", Edn_util.string "markdown");
+         |])
   in
   apply_outliner_ops invoke_config repo
-    [
-      vector
-        [
-          kw "insert-blocks";
-          vector
-            [
-              vector [ code_block ];
-              Edn_util.uuid wrapper_uuid;
-              Edn_util.map
-                [
-                  (kw "outliner-op", kw "insert-blocks");
-                  (kw "sibling?", Edn_util.bool false);
-                  (kw "bottom?", Edn_util.bool false);
-                  (kw "keep-uuid?", Edn_util.bool true);
-                ];
-            ];
-        ];
-    ]
+    (Vec.of_array
+       [|
+         vector_vec
+           (Vec.of_array
+              [|
+                kw "insert-blocks";
+                vector_vec
+                  (Vec.of_array
+                     [|
+                       vector_vec (Vec.of_array [| code_block |]);
+                       Edn_util.uuid wrapper_uuid;
+                       Edn_util.map_vec
+                         (Vec.of_array
+                            [|
+                              (kw "outliner-op", kw "insert-blocks");
+                              (kw "sibling?", Edn_util.bool false);
+                              (kw "bottom?", Edn_util.bool false);
+                              (kw "keep-uuid?", Edn_util.bool true);
+                            |]);
+                     |]);
+              |]);
+       |])
 
 let repairable_missing_master_prompt_code block =
   Edn_util.get_string block "block/title" = Some master_prompt_wrapper_title
   && Option.is_some (Edn_util.get_string block "block/uuid")
-  && child_blocks block |> List.filter block_has_code_tag = []
+  && child_blocks block |> Vec.filter block_has_code_tag |> Vec.is_empty
 
 let ensure_agent_master_prompt invoke_config repo agent_name =
   let open Cli_effect in
@@ -1256,7 +1509,7 @@ let ensure_agent_master_prompt invoke_config repo agent_name =
               (fun blocks ->
                 match
                   values_of_query_result blocks
-                  |> List.sort (fun a b ->
+                  |> Vec.sort (fun a b ->
                       String.compare (order_key a) (order_key b))
                   |> first_live_entity
                 with
@@ -1320,18 +1573,21 @@ let ensure_reaction invoke_config repo target_uuid emoji_id =
       else
         bind
           (apply_outliner_ops invoke_config repo
-             [
-               vector
-                 [
-                   kw "toggle-reaction";
-                   vector
-                     [
-                       Edn_util.uuid target_uuid;
-                       Edn_util.string emoji_id;
-                       Edn_util.nil;
-                     ];
-                 ];
-             ])
+             (Vec.of_array
+                [|
+                  vector_vec
+                    (Vec.of_array
+                       [|
+                         kw "toggle-reaction";
+                         vector_vec
+                           (Vec.of_array
+                              [|
+                                Edn_util.uuid target_uuid;
+                                Edn_util.string emoji_id;
+                                Edn_util.nil;
+                              |]);
+                       |]);
+                |]))
           (fun _ -> pure ()))
 
 let show_task_tree config repo graph block =
@@ -1384,11 +1640,11 @@ let comment_tag tag = tag_ident_matches "logseq.class/Comment" tag
 let comments_area_tag tag = tag_ident_matches "logseq.class/Comments" tag
 
 let has_tag predicate block =
-  value_list (Edn_util.get block "block/tags") |> List.exists predicate
+  value_list (Edn_util.get block "block/tags") |> Vec.exists predicate
 
 let ref_titles block =
   value_list (Edn_util.get block "block/refs")
-  |> List.filter_map (fun ref ->
+  |> Vec.filter_map (fun ref ->
       Option.bind (Edn_util.get_string ref "block/title") trim_non_empty)
 
 let comment_block_matches block agent_name =
@@ -1397,7 +1653,7 @@ let comment_block_matches block agent_name =
   &&
   let title = block_title block in
   string_contains ~needle:("[[" ^ agent_name ^ "]]") title
-  || List.mem agent_name (ref_titles block)
+  || Vec.mem agent_name (ref_titles block)
 
 let comments_area_block block = has_tag comments_area_tag block
 
@@ -1439,13 +1695,14 @@ let process_comment invoke_config repo graph agent_name config master_session
   else
     let target_blocks = comments_area_target_blocks comments_area in
     let* target_tree_texts =
-      let rec loop acc = function
-        | [] -> pure (List.rev acc)
-        | block :: rest ->
+      let rec loop acc remaining =
+        match Vec.pop_front remaining with
+        | None -> pure (Vec.rev acc)
+        | Some (block, rest) ->
             let* text = show_block_tree config repo graph block in
-            loop (text :: acc) rest
+            loop (Vec.push_front acc text) rest
       in
-      loop [] target_blocks
+      loop Vec.empty target_blocks
     in
     let* comments_area_tree_text =
       show_block_tree config repo graph comments_area
@@ -1545,7 +1802,9 @@ let rec normalize_transit_value reader value =
   | Some text -> decode_transit_string reader text
   | None -> (
       match Edn_util.as_vector value with
-      | Some (tag_value :: [ rep ]) -> (
+      | Some values when Vec.length values = 2 -> (
+          let tag_value = Vec.nth values 0 in
+          let rep = Vec.nth values 1 in
           match
             Option.bind
               (Edn_util.as_string tag_value)
@@ -1557,25 +1816,33 @@ let rec normalize_transit_value reader value =
               normalize_transit_rep_values reader rep |> Edn_util.list
           | Some tag ->
               Edn_util.any
-                (Melange_edn_melange.tagged tag (normalize_transit_value reader rep))
-          | None -> normalize_transit_vector reader (tag_value :: [ rep ]))
+                (Melange_edn_melange.tagged tag
+                   (normalize_transit_value reader rep))
+          | None -> normalize_transit_vector reader values)
       | Some values -> normalize_transit_vector reader values
       | None -> value)
 
 and normalize_transit_rep_values reader rep =
   match Edn_util.as_seq rep with
-  | Some values -> List.map (normalize_transit_value reader) values
+  | Some values ->
+      values |> Vec.map (normalize_transit_value reader) |> Vec.to_list
   | None -> [ normalize_transit_value reader rep ]
 
 and normalize_transit_vector reader values =
-  match values with
-  | first :: rest when Edn_util.as_string first = Some "^ " ->
+  match Vec.pop_front values with
+  | Some (first, rest) when Edn_util.as_string first = Some "^ " ->
       normalize_transit_map reader rest
-  | _ -> Edn_util.vector (List.map (normalize_transit_value reader) values)
+  | _ -> Edn_util.vector_vec (values |> Vec.map (normalize_transit_value reader))
 
 and normalize_transit_map reader flat =
-  let rec loop acc = function
-    | key :: value :: rest ->
+  let rec loop acc remaining =
+    match Vec.pop_front remaining with
+    | Some (key, remaining) when not (Vec.is_empty remaining) ->
+        let value, rest =
+          match Vec.pop_front remaining with
+          | Some pair -> pair
+          | None -> failwith "non-empty vector must have a front value"
+        in
         let key =
           match Edn_util.as_string key with
           | Some text ->
@@ -1583,10 +1850,10 @@ and normalize_transit_map reader flat =
           | None -> normalize_transit_value reader key
         in
         let value = normalize_transit_value reader value in
-        loop ((key, value) :: acc) rest
-    | _ -> Edn_util.map (List.rev acc)
+        loop (Vec.push_front acc (key, value)) rest
+    | _ -> Edn_util.map_vec (acc |> Vec.rev)
   in
-  loop [] flat
+  loop Vec.empty flat
 
 let normalize_event_payload payload =
   let raw =
@@ -1597,18 +1864,19 @@ let normalize_event_payload payload =
   in
   let normalized = normalize_transit_value { cache = [||] } raw in
   match Edn_util.as_vector normalized with
-  | Some [ _event_type; payload ] -> payload
+  | Some values when Vec.length values = 2 -> Vec.nth values 1
   | _ -> normalized
 
 let datom_vector datom =
   match datom with
-  | Melange_edn_melange.Any (Melange_edn_melange.Tagged ("datascript/Datom", value)) ->
+  | Melange_edn_melange.Any
+      (Melange_edn_melange.Tagged ("datascript/Datom", value)) ->
       Edn_util.as_vector value
   | _ -> Edn_util.as_vector datom
 
 let datom_index datom index =
   match datom_vector datom with
-  | Some values -> List.nth_opt values index
+  | Some values -> Vec.nth_opt values index
   | None -> None
 
 let datom_attr datom =
@@ -1675,18 +1943,19 @@ let route_comment_datoms invoke_config repo graph agent_name config
   let open Cli_effect in
   let datoms =
     sync_payload_tx_data payload
-    |> List.filter (fun datom -> comment_title_datom datom agent_name)
+    |> Vec.filter (fun datom -> comment_title_datom datom agent_name)
   in
-  let rec loop acc = function
-    | [] -> pure (List.rev acc)
-    | datom :: rest ->
+  let rec loop acc remaining =
+    match Vec.pop_front remaining with
+    | None -> pure (Vec.rev acc)
+    | Some (datom, rest) ->
         bind
           (route_comment_datom invoke_config repo graph agent_name config
              master_session datom) (function
-          | Some routed -> loop (routed :: acc) rest
+          | Some routed -> loop (Vec.push_front acc routed) rest
           | None -> loop acc rest)
   in
-  loop [] datoms
+  loop Vec.empty datoms
 
 let parent_block_id block =
   match Edn_util.get block "block/parent" with
@@ -1738,19 +2007,24 @@ let mark_task_started invoke_config repo block =
               | Some "logseq.property/status.todo" ->
                   bind
                     (apply_outliner_ops invoke_config repo
-                       [
-                         vector
-                           [
-                             kw "batch-set-property";
-                             vector
-                               [
-                                 vector [ Edn_util.uuid uuid ];
-                                 kw "logseq.property/status";
-                                 kw "logseq.property/status.doing";
-                                 Edn_util.map [];
-                               ];
-                           ];
-                       ])
+                       (Vec.of_array
+                          [|
+                            vector_vec
+                              (Vec.of_array
+                                 [|
+                                   kw "batch-set-property";
+                                   vector_vec
+                                     (Vec.of_array
+                                        [|
+                                          vector_vec
+                                            (Vec.of_array
+                                               [| Edn_util.uuid uuid |]);
+                                          kw "logseq.property/status";
+                                          kw "logseq.property/status.doing";
+                                          Edn_util.map_vec Vec.empty;
+                                        |]);
+                                 |]);
+                          |]))
                     (fun _ -> pure ())
               | _ -> pure ()))
 
@@ -1778,14 +2052,16 @@ let process_task invoke_config repo graph agent_name config master_session block
 let process_tasks invoke_config repo graph agent_name config master_session
     tasks =
   let open Cli_effect in
-  let rec loop acc = function
-    | [] -> pure (List.rev acc)
-    | block :: rest ->
+  let rec loop acc remaining =
+    match Vec.pop_front remaining with
+    | None -> pure (Vec.rev acc)
+    | Some (block, rest) ->
         bind
           (process_task invoke_config repo graph agent_name config
-             master_session block) (fun routed -> loop (routed :: acc) rest)
+             master_session block) (fun routed ->
+            loop (Vec.push_front acc routed) rest)
   in
-  loop [] tasks
+  loop Vec.empty tasks
 
 let bridge_log_line message = Time.rfc3339_millis (Time.now ()) ^ " " ^ message
 
@@ -1812,9 +2088,9 @@ let command_preview command =
   in
   let quote value =
     if shell_safe value then value
-    else "'" ^ String.concat "'\"'\"'" (String.split_on_char '\'' value) ^ "'"
+    else "'" ^ Vec.string_concat "'\"'\"'" (Vec.split_on_char '\'' value) ^ "'"
   in
-  String.concat " " (List.map quote command)
+  Vec.string_concat " " (Vec.map quote command)
 
 let is_uri_component_unescaped = function
   | 'A' .. 'Z'
@@ -1852,27 +2128,27 @@ let bridge_lock_owner_path lock_dir = Filename.concat lock_dir "owner.edn"
 let bridge_lock_owner graph agent_name =
   let graph = Cli_primitive.string_of_graph graph in
   Melange_edn_melange.to_edn_string
-    (Edn_util.map
-       [
-         (Edn_util.keyword "pid", Edn_util.int (Cli_unix.getpid ()));
-         (Edn_util.keyword "graph", Edn_util.string graph);
-         (Edn_util.keyword "agent", Edn_util.string agent_name);
-         ( Edn_util.keyword "started-at",
-           Edn_util.string
-             (Printf.sprintf "%.3f"
-                (Time.time_to_epoch_seconds_float (Time.now ()))) );
-       ])
+    (Edn_util.map_vec
+       (Vec.of_array
+          [|
+            (Edn_util.keyword "pid", Edn_util.int (Cli_unix.getpid ()));
+            (Edn_util.keyword "graph", Edn_util.string graph);
+            (Edn_util.keyword "agent", Edn_util.string agent_name);
+            ( Edn_util.keyword "started-at",
+              Edn_util.string
+                (Printf.sprintf "%.3f"
+                   (Time.time_to_epoch_seconds_float (Time.now ()))) );
+          |]))
   ^ "\n"
 
 let bridge_lock_error graph agent_name =
   let graph = Cli_primitive.string_of_graph graph in
-  Error.make
-    (Error.Agent_bridge_already_running)
+  Error.make Error.Agent_bridge_already_running
     ("agent bridge is already running for graph '" ^ graph
    ^ "' and AgentBridge name '" ^ agent_name ^ "'")
 
 let bridge_lock_failure message =
-  Error.make (Error.Agent_bridge_lock_failed) message
+  Error.make Error.Agent_bridge_lock_failed message
 
 let bridge_lock_owner_pid lock_dir =
   try
@@ -1967,7 +2243,7 @@ let execute_bridge_once repo (graph : Cli_primitive.graph) agent_name config
               mode = Edn_util.keyword_t "processed-once";
               graph;
               agent_name;
-              routed = List.map routed_task_value routed_tasks;
+              routed = Vec.map routed_task_value routed_tasks;
             }
           in
           pure
@@ -2045,8 +2321,7 @@ let execute_with_mode (Agent_bridge { repo; graph }) config mode =
       if not (codex_available config) then
         pure
           (Output_mode.error ~command:Command_id.Agent_bridge mode
-             (Error.make
-                (Error.Codex_not_found)
+             (Error.make Error.Codex_not_found
                 "codex executable is not available"))
       else
         with_bridge_lock config graph agent_name mode (fun () ->
@@ -2055,21 +2330,20 @@ let execute_with_mode (Agent_bridge { repo; graph }) config mode =
             else execute_bridge_forever repo graph agent_name config mode)
 
 let metadata () =
-  [
+  Vec.singleton
     {
       Command_registry.id = Command_id.Agent_bridge;
       path = Command_id.to_path Command_id.Agent_bridge;
       doc = "Run task agent bridge";
       long_doc = None;
-      examples = [];
-      options = [];
+      examples = Vec.empty;
+      options = Vec.empty;
       category = Command_registry.Hidden;
       requires_graph = Command_id.requires_graph Command_id.Agent_bridge;
       requires_auth = Command_id.requires_auth Command_id.Agent_bridge;
       write_command = Command_id.is_write Command_id.Agent_bridge;
-      human_table_headers_order = [];
-    };
-  ]
+      human_table_headers_order = Vec.empty;
+    }
 
 let execute action config =
   let (Output.Mode.Packed mode) = Output_mode.for_config config in
