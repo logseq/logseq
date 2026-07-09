@@ -264,8 +264,8 @@
 
 (defn- handle-tx-batch-ok!
   [repo client remote-tx remote-checksum]
-  (sync-apply/clear-upload-response-timeout! client)
   (require-non-negative remote-tx {:repo repo :type "tx/batch/ok"})
+  (sync-apply/ack-upload-response! repo client)
   (let [current-local-tx (client-op/get-local-tx repo)
         next-local-tx (max current-local-tx remote-tx)]
     (client-op/update-local-tx repo next-local-tx)
