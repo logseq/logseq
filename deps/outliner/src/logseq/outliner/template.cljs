@@ -31,6 +31,11 @@
         day' (if (< day 10) (str "0" day) (str day))]
     (js/parseInt (str year month' day') 10)))
 
+(def ^:private journal-variable-offsets
+  {"today" 0
+   "yesterday" -1
+   "tomorrow" 1})
+
 (defn- journal-title
   [db offset-days]
   (let [journal-day (date->journal-day (date-with-day-offset offset-days))]
@@ -42,24 +47,69 @@
              db journal-day)
         (str journal-day))))
 
-(defn- target-page-title
+(defn- journal-page
+  [db offset-days]
+  (let [journal-day (date->journal-day (date-with-day-offset offset-days))]
+    (when-let [page-id (d/q '[:find ?p .
+                              :in $ ?journal-day
+                              :where
+                              [?p :block/journal-day ?journal-day]]
+                            db journal-day)]
+      (d/entity db page-id))))
+
+(defn- journal-page-or-title
+  [db offset-days]
+  (or (journal-page db offset-days)
+      (journal-title db offset-days)))
+
+(defn- target-page
   [target]
   (cond
     (ldb/page? target)
-    (:block/title target)
+    target
 
     :else
-    (get-in target [:block/page :block/title])))
+    (:block/page target)))
+
+(defn- page-ref-for
+  [page-or-title]
+  (page-ref/->page-ref
+   (if-let [page-uuid (:block/uuid page-or-title)]
+     page-uuid
+     page-or-title)))
+
+(defn- dynamic-template-matches
+  [content]
+  (when (string? content)
+    (map (comp string/lower-case string/trim second)
+         (re-seq template-re content))))
+
+(defn- block-template-contents
+  [block]
+  (concat
+   [(:block/title block) (:block/raw-title block)]
+   (when (map? (:block/properties-text-values block))
+     (vals (:block/properties-text-values block)))))
+
+(defn dynamic-template-journal-days
+  [blocks]
+  (->> blocks
+       (mapcat block-template-contents)
+       (mapcat dynamic-template-matches)
+       (keep journal-variable-offsets)
+       (map #(date->journal-day (date-with-day-offset %)))
+       distinct
+       vec))
 
 (defn- variable-rules
   [db target]
-  (let [today (journal-title db 0)
-        current-page (or (target-page-title target) today)]
-    {"today" (page-ref/->page-ref today)
-     "yesterday" (page-ref/->page-ref (journal-title db -1))
-     "tomorrow" (page-ref/->page-ref (journal-title db 1))
+  (let [today (journal-page-or-title db 0)
+        current-page (or (target-page target) today)]
+    {"today" (page-ref-for today)
+     "yesterday" (page-ref-for (journal-page-or-title db -1))
+     "tomorrow" (page-ref-for (journal-page-or-title db 1))
      "time" (current-time)
-     "current page" (page-ref/->page-ref current-page)}))
+     "current page" (page-ref-for current-page)}))
 
 (defn- resolve-string
   [content rules]

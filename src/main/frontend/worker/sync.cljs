@@ -54,17 +54,26 @@
   (when (worker-state/get-client-ops-conn repo)
     (let [current-checksum (client-op/get-local-checksum repo)
           new-checksum (sync-checksum/update-checksum current-checksum tx-report)]
-      ;; (let [full-checksum (sync-checksum/recompute-checksum (:db-after tx-report))]
-      ;;   (when (not= new-checksum full-checksum)
-      ;;    (prn :debug
-      ;;         "checksum-doesn't match"
-      ;;         {:current-checksum current-checksum
-      ;;          :new-checksum new-checksum
-      ;;          :full-checksum full-checksum
-      ;;          :db-before (ldb/write-transit-str (:db-before tx-report))
-      ;;          :db-after (ldb/write-transit-str (:db-after tx-report))
-      ;;          :tx-data (ldb/write-transit-str (:tx-data tx-report))
-      ;;          :tx-meta (ldb/write-transit-str (:tx-meta tx-report))})))
+      (when (and (exists? js/process)
+                 (= "1" (aget (.-env js/process) "LOGSEQ_CHECKSUM_ASSERT")))
+        (let [recomputed-checksum (sync-checksum/recompute-checksum (:db-after tx-report))]
+          (when-not (= new-checksum recomputed-checksum)
+            (let [{:keys [tx-meta tx-data]} tx-report]
+              (log/error :db-sync/checksum-incremental-drift
+                         {:repo repo
+                          :current-checksum current-checksum
+                          :incremental-checksum new-checksum
+                          :recomputed-checksum recomputed-checksum
+                          :tx-meta tx-meta
+                          :tx-count (count tx-data)
+                          :tx-sample (take 30 tx-data)})
+              (throw (ex-info "Incremental checksum drift"
+                              {:repo repo
+                               :current-checksum current-checksum
+                               :incremental-checksum new-checksum
+                               :recomputed-checksum recomputed-checksum
+                               :tx-meta tx-meta
+                               :tx-count (count tx-data)}))))))
       (client-op/update-local-checksum repo new-checksum))))
 
 (defn- broadcast-rtc-state!
@@ -189,6 +198,7 @@
    :asset-queue (atom (p/resolved nil))
    :pending-pull-since (atom nil)
    :inflight (atom [])
+   :upload-request (atom nil)
    :last-sync-error (atom nil)
    :reconnect (atom {:attempt 0 :timer nil})
    :stale-kill-timer (atom nil)
@@ -284,6 +294,7 @@
 (defn- stop-client!
   [client]
   (clear-stale-ws-loop-timer! client)
+  (sync-apply/clear-upload-response-timeout! client)
   (when-let [reconnect (:reconnect client)]
     (clear-reconnect-timer! reconnect))
   (when-let [ws (:ws client)]

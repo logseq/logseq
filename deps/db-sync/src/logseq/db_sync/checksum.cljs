@@ -76,6 +76,35 @@
   [db eid]
   (:block/uuid (d/entity db eid)))
 
+(defn- parse-uuid-string
+  [value]
+  (when (string? value)
+    (try
+      (uuid value)
+      (catch :default _
+        nil))))
+
+(defn- entids
+  [db-before db-after value]
+  (let [lookup-ref (fn [db value]
+                     (when value
+                       (try
+                         (d/entid db value)
+                         (catch :default _
+                           nil))))
+        uuid-value (cond
+                     (uuid? value) value
+                     (string? value) (parse-uuid-string value)
+                     :else nil)]
+    (cond-> #{}
+      (integer? value) (conj value)
+      (lookup-ref db-before value) (conj (lookup-ref db-before value))
+      (lookup-ref db-after value) (conj (lookup-ref db-after value))
+      (and uuid-value (lookup-ref db-before [:block/uuid uuid-value]))
+      (conj (lookup-ref db-before [:block/uuid uuid-value]))
+      (and uuid-value (lookup-ref db-after [:block/uuid uuid-value]))
+      (conj (lookup-ref db-after [:block/uuid uuid-value])))))
+
 (defn- normalize-checksum-value
   [db attr value]
   (case attr
@@ -149,6 +178,27 @@
                  (when (checksum-eligible-entity? db e)
                    (entity-checksum-tuples db e e2ee?))))))
 
+(defn- tx-item-eids
+  [db-before db-after tx-item]
+  (if-let [eid (:e tx-item)]
+    #{eid}
+    (if (vector? tx-item)
+      (let [[op entity attr value] tx-item
+            entity-ids (entids db-before db-after entity)]
+        (cond-> entity-ids
+          (and (= op :db/add) (= attr :block/uuid))
+          (into (entids db-before db-after value))
+          (and (= op :db/retract) (= attr :block/uuid))
+          (into (entids db-before db-after value))))
+      #{})))
+
+(defn- block-uuid-tx-item?
+  [tx-item]
+  (= :block/uuid
+     (if (vector? tx-item)
+       (nth tx-item 2 nil)
+       (:a tx-item))))
+
 (defn- touched-base-eids
   [db-before db-after tx-data]
   (let [before-eligible-cache (volatile! {})
@@ -159,18 +209,20 @@
                              (let [eligible? (boolean (checksum-eligible-entity? db eid))]
                                (vswap! cache assoc eid eligible?)
                                eligible?)))]
-    (->> tx-data
-         (reduce (fn [eids datom]
-                   (if-let [eid (:e datom)]
-                     (let [attr (:a datom)]
-                       (cond-> eids
-                         (= attr :block/uuid) (conj eid)
-                         (or (cached-eligible? db-before before-eligible-cache eid)
-                             (cached-eligible? db-after after-eligible-cache eid))
-                         (conj eid)))
-                     eids))
-                 #{})
-         set)))
+    (reduce (fn [result tx-item]
+              (let [block-uuid-change? (block-uuid-tx-item? tx-item)]
+                (reduce (fn [eids eid]
+                          (cond-> eids
+                            (or block-uuid-change?
+                                (not= (get-block-uuid db-before eid)
+                                      (get-block-uuid db-after eid))
+                                (cached-eligible? db-before before-eligible-cache eid)
+                                (cached-eligible? db-after after-eligible-cache eid))
+                            (conj eid)))
+                        result
+                        (tx-item-eids db-before db-after tx-item))))
+            #{}
+            tx-data)))
 
 (defn- touched-checksum-uuids
   [db-before db-after eids]

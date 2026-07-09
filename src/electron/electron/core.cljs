@@ -374,7 +374,6 @@
       :read-file! #(.readFileSync fs % "utf8")
       :write-file! #(.writeFileSync fs %1 %2 "utf8")
       :chmod! #(fs/chmodSync %1 %2)
-      :show-message-box! #(.showMessageBox dialog (clj->js %))
       :show-error-box! #(.showErrorBox dialog %1 %2)
       :t t
       :log-info! logger/info

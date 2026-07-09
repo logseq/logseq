@@ -57,6 +57,10 @@ async function copyOne({ from, to, optional = false }) {
     throw new Error(`missing required source file: ${from}`);
   }
   await fs.mkdir(path.dirname(to), { recursive: true });
+  if (await exists(to)) {
+    const stats = await fs.stat(to);
+    await fs.chmod(to, stats.mode | 0o200);
+  }
   await fs.copyFile(from, to);
 }
 
