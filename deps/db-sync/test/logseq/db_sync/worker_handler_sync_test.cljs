@@ -1,5 +1,7 @@
 (ns logseq.db-sync.worker-handler-sync-test
-  (:require [cljs.test :refer [async deftest is testing]]
+  (:require ["better-sqlite3" :as sqlite3]
+            [cljs.test :refer [async deftest is testing]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db-sync.common :as common]
@@ -12,6 +14,38 @@
             [logseq.db-sync.worker.ws :as ws]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
+
+(def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))
+
+(defn- select-sql?
+  [sql]
+  (string/starts-with? (-> sql string/trim string/lower-case) "select"))
+
+(defn- run-sql
+  [^js stmt args]
+  (.apply (.-run stmt) stmt (to-array args)))
+
+(defn- all-sql
+  [^js stmt args]
+  (.apply (.-all stmt) stmt (to-array args)))
+
+(defn- with-memory-sql
+  [f]
+  (let [db (new sqlite ":memory:" nil)
+        sql #js {:_db db
+                 :exec (fn [sql-str & args]
+                         (let [stmt (.prepare db sql-str)]
+                           (if (select-sql? sql-str)
+                             (all-sql stmt args)
+                             (do
+                               (run-sql stmt args)
+                               nil))))
+                 :close (fn []
+                          (.close db))}]
+    (try
+      (f sql)
+      (finally
+        (.close sql)))))
 
 (defn- seeded-rng
   [seed0]
@@ -76,8 +110,8 @@
       ;; update title
       2 (if-let [target-id (pick-rand rng all-ids)]
           {:tx (protocol/tx->transit [[:db/add [:block/uuid (uuid target-id)]
-                                      :block/title
-                                      (str "server-fuzz-title-" step)]])
+                                       :block/title
+                                       (str "server-fuzz-title-" step)]])
            :outliner-op :save-block}
           {:tx (protocol/tx->transit [])
            :outliner-op :rebase})
@@ -89,8 +123,8 @@
                            child)
                 page (pick-rand rng page-ids)]
             {:tx (protocol/tx->transit [[:db/add [:block/uuid (uuid child)]
-                                        :block/parent
-                                        [:block/uuid (uuid parent)]]
+                                         :block/parent
+                                         [:block/uuid (uuid parent)]]
                                        [:db/add [:block/uuid (uuid child)]
                                         :block/page
                                         [:block/uuid (uuid page)]]])
@@ -238,12 +272,12 @@
           old-title (or (:block/title (d/pull db [:block/title] [:block/uuid target-uuid])) "")
           new-title (str "rand-title-" step)]
       {:forward [{:tx (protocol/tx->transit [[:db/add [:block/uuid target-uuid]
-                                             :block/title
-                                             new-title]])
+                                              :block/title
+                                              new-title]])
                   :outliner-op :save-block}]
        :inverse [{:tx (protocol/tx->transit [[:db/add [:block/uuid target-uuid]
-                                             :block/title
-                                             old-title]])
+                                              :block/title
+                                              old-title]])
                   :outliner-op :save-block}]
        :undoable? true})
     {:forward [(no-op-rebase-entry)]
@@ -255,8 +289,8 @@
         placement (block-placement db target-uuid)]
     (if (and (:parent-uuid placement) (:page-uuid placement))
       {:forward [{:tx (protocol/tx->transit [[:db/add [:block/uuid target-uuid]
-                                             :block/parent
-                                             [:block/uuid (uuid new-parent-id)]]
+                                              :block/parent
+                                              [:block/uuid (uuid new-parent-id)]]
                                             [:db/add [:block/uuid target-uuid]
                                              :block/page
                                              [:block/uuid (uuid new-page-id)]]
@@ -265,8 +299,8 @@
                                              new-order]])
                   :outliner-op outliner-op}]
        :inverse [{:tx (protocol/tx->transit [[:db/add [:block/uuid target-uuid]
-                                             :block/parent
-                                             [:block/uuid (:parent-uuid placement)]]
+                                              :block/parent
+                                              [:block/uuid (:parent-uuid placement)]]
                                             [:db/add [:block/uuid target-uuid]
                                              :block/page
                                              [:block/uuid (:page-uuid placement)]]
@@ -442,12 +476,12 @@
                                                                       (if (neg? last-addr) rows []))
                                sync-handler/snapshot-row-count (fn [_sql] (count rows))]
                  (p/let [resp (sync-handler/handle-http self request)
-                       encoding (.get (.-headers resp) "content-encoding")
-                       content-type (.get (.-headers resp) "content-type")
-                       buf (.arrayBuffer resp)
-                       payload (js/Uint8Array. buf)
-                       rows (snapshot/finalize-framed-buffer payload)
-                       addrs (mapv first rows)]
+                         encoding (.get (.-headers resp) "content-encoding")
+                         content-type (.get (.-headers resp) "content-type")
+                         buf (.arrayBuffer resp)
+                         payload (js/Uint8Array. buf)
+                         rows (snapshot/finalize-framed-buffer payload)
+                         addrs (mapv first rows)]
                  (is (= 200 (.-status resp)))
                  (is (= "gzip" encoding))
                  (is (= "application/transit+json" content-type))
@@ -456,10 +490,10 @@
                  (is (every? (fn [[addr content _addresses]]
                                (and (int? addr)
                                     (string? content)))
-                             rows))
+                             rows)))
                  (is (= [[1 "row-1" nil]
                          [2 "row-2" nil]]
-                        rows))))
+                        rows)))
                (p/then (fn []
                          (restore!)
                          (done)))
@@ -804,8 +838,355 @@
                 @tx-metas))
       (is (= "migration-only"
              (:block/title (first (d/q '[:find [(pull ?e [:block/title]) ...]
-                                      :where [?e :block/title "migration-only"]]
-                                    @conn))))))))
+                                    :where [?e :block/title "migration-only"]]
+                                  @conn))))))))
+
+(defn- large-block-insert-tx
+  [page-uuid block-count]
+  (vec
+   (mapcat (fn [idx]
+             (let [block-uuid (random-uuid)
+                   eid (str block-uuid)]
+               [[:db/add eid :block/uuid block-uuid idx]
+                [:db/add eid :block/title (str "large-op-block-" idx) idx]
+                [:db/add eid :block/page [:block/uuid page-uuid] idx]
+                [:db/add eid :block/parent [:block/uuid page-uuid] idx]
+                [:db/add eid :block/order "a0" idx]
+                [:db/add eid :block/created-at idx idx]
+                [:db/add eid :block/updated-at idx idx]]))
+           (range block-count))))
+
+(defn- block-title-prefix-count
+  [db prefix]
+  (->> (d/datoms db :avet :block/title)
+       (filter (fn [datom]
+                 (string/starts-with? (:v datom) prefix)))
+       count))
+
+(deftest tx-batch-applies-large-entry-in-ordered-chunks-test
+  (testing "large tx entries are executed as ordered chunks while preserving final state"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-op-page"
+                                    :block/title "large-op-page"}])
+              t-before (storage/get-t sql)
+              block-count 1200
+              tx-data (large-block-insert-tx page-uuid block-count)
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              tx-report-count (atom 0)
+              response (try
+                         (d/listen! conn ::large-entry-chunks
+                                    (fn [_tx-report]
+                                      (swap! tx-report-count inc)))
+                         (with-redefs [sync-checksum/recompute-checksum
+                                       (fn [_db]
+                                         (throw (ex-info "large tx should update checksum incrementally"
+                                                         {:type :test/full-checksum-recompute})))
+                                       ws/broadcast! (fn [& _] nil)]
+                           (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))
+                         (finally
+                           (d/unlisten! conn ::large-entry-chunks)))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (> @tx-report-count 1))
+          (is (= (+ t-before @tx-report-count) (:t response)))
+          (is (= @tx-report-count (count (storage/fetch-tx-since sql t-before))))
+          (is (= block-count
+                  (block-title-prefix-count @conn "large-op-block-"))))))))
+
+(deftest tx-batch-applies-large-entry-with-negative-tempids-in-ordered-chunks-test
+  (testing "large tx entries with tempids are still accepted and chunked safely"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-tempid-page"
+                                    :block/title "large-tempid-page"}])
+              t-before (storage/get-t sql)
+              tx-data (vec
+                       (mapcat (fn [idx]
+                                 (let [eid (- -1 idx)]
+                                   [[:db/add eid :block/uuid (random-uuid)]
+                                    [:db/add eid :block/title (str "large-tempid-block-" idx)]
+                                    [:db/add eid :block/page [:block/uuid page-uuid]]
+                                    [:db/add eid :block/parent [:block/uuid page-uuid]]
+                                    [:db/add eid :block/order "a0"]
+                                    [:db/add eid :block/created-at idx]
+                                    [:db/add eid :block/updated-at idx]]))
+                               (range 300)))
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              tx-report-count (atom 0)
+              response (try
+                         (d/listen! conn ::large-tempid-entry-chunks
+                                    (fn [_tx-report]
+                                      (swap! tx-report-count inc)))
+                         (with-redefs [ws/broadcast! (fn [& _] nil)]
+                           (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))
+                         (finally
+                           (d/unlisten! conn ::large-tempid-entry-chunks)))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (> @tx-report-count 1))
+          (is (= (+ t-before @tx-report-count) (:t response)))
+          (is (= @tx-report-count (count (storage/fetch-tx-since sql t-before))))
+          (is (= 300 (block-title-prefix-count @conn "large-tempid-block-"))))))))
+
+(deftest tx-batch-applies-large-entry-with-dependent-blocks-across-chunks-test
+  (testing "large tx chunking preserves ordered parent-before-child dependencies"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-dependency-page"
+                                    :block/title "large-dependency-page"}])
+              t-before (storage/get-t sql)
+              parent-uuid (random-uuid)
+              child-uuid (random-uuid)
+              parent-eid "large-dependency-parent"
+              child-eid "large-dependency-child"
+              filler-tx (large-block-insert-tx page-uuid 70)
+              parent-tx [[:db/add parent-eid :block/uuid parent-uuid]
+                         [:db/add parent-eid :block/title "large-dependency-parent"]
+                         [:db/add parent-eid :block/page [:block/uuid page-uuid]]
+                         [:db/add parent-eid :block/parent [:block/uuid page-uuid]]
+                         [:db/add parent-eid :block/order "z0"]
+                         [:db/add parent-eid :block/created-at 1]
+                         [:db/add parent-eid :block/updated-at 1]]
+              child-tx [[:db/add child-eid :block/uuid child-uuid]
+                        [:db/add child-eid :block/title "large-dependency-child"]
+                        [:db/add child-eid :block/page [:block/uuid page-uuid]]
+                        [:db/add child-eid :block/parent [:block/uuid parent-uuid]]
+                        [:db/add child-eid :block/order "z1"]
+                        [:db/add child-eid :block/created-at 2]
+                        [:db/add child-eid :block/updated-at 2]]
+              tx-data (vec (concat filler-tx parent-tx child-tx))
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              tx-data-counts (atom [])
+              response (try
+                         (d/listen! conn ::large-dependent-block-chunks
+                                    (fn [{:keys [tx-data]}]
+                                      (swap! tx-data-counts conj (count tx-data))))
+                         (with-redefs [ws/broadcast! (fn [& _] nil)]
+                           (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))
+                         (finally
+                           (d/unlisten! conn ::large-dependent-block-chunks)))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (= [497 7] @tx-data-counts))
+          (is (= @tx-data-counts
+                 (mapv (comp count protocol/transit->tx :tx)
+                       (storage/fetch-tx-since sql t-before))))
+          (is (= parent-uuid
+                 (get-in (d/pull @conn [{:block/parent [:block/uuid]}]
+                                 [:block/uuid child-uuid])
+                         [:block/parent :block/uuid])))
+          (is (= 70 (block-title-prefix-count @conn "large-op-block-")))
+          (is (= 3 (block-title-prefix-count @conn "large-dependency-"))))))))
+
+(deftest tx-batch-applies-large-delete-entry-with-descendants-across-chunks-test
+  (testing "delete-blocks descendant expansion is still applied in ordered chunks"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              parent-uuid (random-uuid)
+              child-count 520
+              child-uuids (repeatedly child-count random-uuid)
+              _ (d/transact! conn
+                             (vec
+                              (concat
+                               [{:block/uuid page-uuid
+                                 :block/name "large-delete-page"
+                                 :block/title "large-delete-page"}
+                                {:block/uuid parent-uuid
+                                 :block/title "large-delete-parent"
+                                 :block/page [:block/uuid page-uuid]
+                                 :block/parent [:block/uuid page-uuid]
+                                 :block/order "d0"
+                                 :block/created-at 1
+                                 :block/updated-at 1}]
+                               (map-indexed
+                                (fn [idx child-uuid]
+                                  {:block/uuid child-uuid
+                                   :block/title (str "large-delete-child-" idx)
+                                   :block/page [:block/uuid page-uuid]
+                                   :block/parent [:block/uuid parent-uuid]
+                                   :block/order (str "d" (inc idx))
+                                   :block/created-at idx
+                                   :block/updated-at idx})
+                                child-uuids))))
+              t-before (storage/get-t sql)
+              tx-entry {:tx (protocol/tx->transit [[:db/retractEntity [:block/uuid parent-uuid]]])
+                        :tx-id (random-uuid)
+                        :outliner-op :delete-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              tx-report-count (atom 0)
+              response (try
+                         (d/listen! conn ::large-delete-block-chunks
+                                    (fn [_tx-report]
+                                      (swap! tx-report-count inc)))
+                         (with-redefs [ws/broadcast! (fn [& _] nil)]
+                           (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))
+                         (finally
+                           (d/unlisten! conn ::large-delete-block-chunks)))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (> @tx-report-count 1))
+          (is (> (:t response) t-before))
+          (is (pos? (count (storage/fetch-tx-since sql t-before))))
+          (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
+          (is (every? nil? (map #(d/entity @conn [:block/uuid %]) child-uuids)))
+          (is (zero? (block-title-prefix-count @conn "large-delete-child-"))))))))
+
+(deftest tx-batch-rolls-back-large-entry-when-live-chunk-fails-test
+  (testing "large tx live chunk failure leaves no persisted partial chunks"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-rollback-page"
+                                    :block/title "large-rollback-page"}])
+              t-before (storage/get-t sql)
+              checksum-before (storage/get-checksum sql)
+              missing-parent-uuid (random-uuid)
+              tx-data* (large-block-insert-tx page-uuid 1200)
+              [_op entity _attr _value tx] (nth tx-data* 150)
+              tx-data (assoc tx-data*
+                             150 [:db/add entity :block/page [:block/uuid missing-parent-uuid] tx])
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              response (with-redefs [ws/broadcast! (fn [& _] nil)]
+                         (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
+          (is (= "tx/reject" (:type response)))
+          (is (= "db transact failed" (:reason response)))
+          (is (= t-before (storage/get-t sql)))
+          (is (= checksum-before (storage/get-checksum sql)))
+          (is (empty? (storage/fetch-tx-since sql t-before)))
+          (is (zero? (block-title-prefix-count @(.-conn self) "large-op-block-"))))))))
+
+(deftest tx-batch-rolls-back-large-entry-when-later-live-chunk-fails-test
+  (testing "large tx later chunk failure leaves no persisted partial chunks"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-later-rollback-page"
+                                    :block/title "large-later-rollback-page"}])
+              t-before (storage/get-t sql)
+              checksum-before (storage/get-checksum sql)
+              missing-parent-uuid (random-uuid)
+              tx-data* (large-block-insert-tx page-uuid 1200)
+              [_op entity _attr _value tx] (nth tx-data* 700)
+              tx-data (assoc tx-data*
+                             700 [:db/add entity :block/page [:block/uuid missing-parent-uuid] tx])
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              response (with-redefs [ws/broadcast! (fn [& _] nil)]
+                         (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
+          (is (= "tx/reject" (:type response)))
+          (is (= "db transact failed" (:reason response)))
+          (is (= t-before (storage/get-t sql)))
+          (is (= checksum-before (storage/get-checksum sql)))
+          (is (empty? (storage/fetch-tx-since sql t-before)))
+          (is (zero? (block-title-prefix-count @(.-conn self) "large-op-block-"))))))))
+
+(deftest tx-batch-large-entry-uses-bounded-visible-tx-reports-test
+  (testing "large tx chunks are visible and each tx report stays bounded"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-validation-page"
+                                    :block/title "large-validation-page"}])
+              t-before (storage/get-t sql)
+              block-count 1200
+              tx-data (large-block-insert-tx page-uuid block-count)
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              tx-data-counts (atom [])
+              response (try
+                         (d/listen! conn ::large-visible-tx-report-size
+                                    (fn [{:keys [tx-data]}]
+                                      (swap! tx-data-counts conj (count tx-data))))
+                         (with-redefs [ws/broadcast! (fn [& _] nil)]
+                           (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))
+                         (finally
+                           (d/unlisten! conn ::large-visible-tx-report-size)))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (= (count tx-data) (reduce + @tx-data-counts)))
+          (is (every? #(<= % 500) @tx-data-counts)))))))
+
+(deftest tx-batch-large-entry-updates-checksum-once-for-logical-tx-test
+  (testing "large tx chunks append visible tx-log rows but update stored checksum once for the full logical tx"
+    (with-memory-sql
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (storage/open-conn sql)
+              page-uuid (random-uuid)
+              _ (d/transact! conn [{:block/uuid page-uuid
+                                    :block/name "large-checksum-page"
+                                    :block/title "large-checksum-page"}])
+              t-before (storage/get-t sql)
+              block-count 1200
+              tx-data (large-block-insert-tx page-uuid block-count)
+              tx-entry {:tx (protocol/tx->transit tx-data)
+                        :tx-id (random-uuid)
+                        :outliner-op :insert-blocks}
+              self #js {:sql sql
+                        :conn conn
+                        :schema-ready true}
+              original-set-checksum! storage/set-checksum!
+              checksum-updates (atom [])
+              response (with-redefs [storage/set-checksum! (fn [sql* checksum]
+                                                             (swap! checksum-updates conj checksum)
+                                                             (original-set-checksum! sql* checksum))
+                                     ws/broadcast! (fn [& _] nil)]
+                         (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
+          (is (= "tx/batch/ok" (:type response)))
+          (is (> (:t response) (inc t-before)))
+          (is (= 1 (count @checksum-updates)))
+          (is (= (sync-checksum/recompute-checksum @conn)
+                 (storage/get-checksum sql))))))))
 
 (deftest finished-snapshot-upload-persists-provided-checksum-test
   (async done
@@ -909,12 +1290,17 @@
           tx-entry-2 {:tx (protocol/tx->transit [[:db/add -2 :block/title "bad"]])
                       :outliner-op :save-block}
           apply-calls (atom 0)
+          apply-tx-entry (fn [_conn tx-entry]
+                           (swap! apply-calls inc)
+                           (when (= 2 @apply-calls)
+                             (throw (ex-info "DB write failed with invalid data"
+                                             {:tx-entry tx-entry}))))
           response (with-redefs [ws/broadcast! (fn [& _] nil)
-                                 sync-handler/apply-tx-entry! (fn [_conn tx-entry]
-                                                                (swap! apply-calls inc)
-                                                                (when (= 2 @apply-calls)
-                                                                  (throw (ex-info "DB write failed with invalid data"
-                                                                                  {:tx-entry tx-entry}))))]
+                                 sync-handler/apply-tx-entry! (fn
+                                                                ([conn tx-entry]
+                                                                 (apply-tx-entry conn tx-entry))
+                                                                ([_self conn tx-entry _request-context]
+                                                                 (apply-tx-entry conn tx-entry)))]
                      (sync-handler/handle-tx-batch! self nil [tx-entry-1 tx-entry-2] 0))]
       (is (= "tx/reject" (:type response)))
       (is (= "db transact failed" (:reason response)))
