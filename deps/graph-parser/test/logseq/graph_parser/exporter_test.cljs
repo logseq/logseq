@@ -655,6 +655,7 @@ abc
 
 (deftest-async import-removes-pre-block-marker-and-missing-block-refs
   (let [missing-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        missing-embed-uuid #uuid "55555555-5555-5555-5555-555555555555"
         target-uuid #uuid "22222222-2222-2222-2222-222222222222"
         empty-title-property-uuid #uuid "33333333-3333-3333-3333-333333333333"
         empty-title-parent-uuid #uuid "44444444-4444-4444-4444-444444444444"]
@@ -662,6 +663,7 @@ abc
                          "pages/A.md"
                          (str "Plain pre-block\n"
                               "- Missing ref ((" missing-uuid "))\n"
+                              "- {{embed ((" missing-embed-uuid "))}}\n"
                               "- Existing ref ((" target-uuid "))\n"
                               "- ((" empty-title-property-uuid "))\n"
                               "  heading:: true\n"
@@ -694,11 +696,18 @@ abc
           "Missing OG block refs are removed from imported refs")
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
           "Missing OG block refs do not leave placeholder entities")
+      (is (nil? (d/entity @conn [:block/uuid missing-embed-uuid]))
+          "Missing OG block embeds do not leave placeholder entities")
+      (is (empty? (d/q '[:find ?b
+                         :where [?b :block/link ?target]
+                         [(missing? $ ?target :block/uuid)]]
+                       @conn))
+          "Missing OG block embeds do not leave dangling block links")
       (is (nil? (d/entity @conn [:block/uuid empty-title-property-uuid]))
           "Missing OG block refs in empty-title property blocks do not leave placeholder entities")
       (is (nil? (d/entity @conn [:block/uuid empty-title-parent-uuid]))
           "Missing OG block refs in empty-title parent blocks do not leave placeholder entities")
-      (is (= 2 (count empty-title-blocks))
+      (is (= 3 (count empty-title-blocks))
           "Blocks whose titles become empty after cleanup are preserved")
       (is (true? (:logseq.property/heading empty-title-property-block))
           "Empty-title blocks keep imported heading properties")
@@ -736,6 +745,45 @@ abc
           "Missing block ref cleanup tx-report is propagated to import callers")
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
           "Missing OG block ref placeholder is removed"))))
+
+(deftest export-doc-files-aborts-on-export-file-failure
+  (cljs.test/async
+   done
+   (let [attempted-paths (atom [])
+         failed-error (ex-info "worker transact failed" {:code :worker-transact-failed})
+         graph-dir (write-temp-file-graph [["pages/A.md" "- first\n"]
+                                           ["pages/B.md" "- second\n"]])
+         first-file (node-path/join graph-dir "pages/A.md")
+         second-file (node-path/join graph-dir "pages/B.md")
+         conn (db-test/create-conn)
+         doc-options (gp-exporter/build-doc-options
+                      {:macros {} :file/name-format :triple-lowbar}
+                      (merge default-export-options
+                             {:notify-user (constantly nil)
+                              :user-options {:convert-all-tags? false}
+                              :<export-file (fn [_conn {:file/keys [path]} _opts]
+                                              (swap! attempted-paths conj path)
+                                              (p/rejected failed-error))}))
+         assert-failure (fn [result]
+                          (is (= :worker-transact-failed
+                                 (or (:code (ex-data result))
+                                     (:code (ex-data (.-cause result)))))
+                              "Export file failure is propagated to the caller")
+                          (is (= [first-file] @attempted-paths)
+                              "Import stops after the first export file failure")
+                          (done))]
+     (try
+       (-> (gp-exporter/export-doc-files
+            conn
+            [{:path first-file} {:path second-file}]
+            <read-file
+            doc-options)
+           (.then (fn [_]
+                    (is false "Export file failure should reject")
+                    (done)))
+           (.catch assert-failure))
+       (catch :default e
+         (assert-failure e))))))
 
 (deftest update-asset-links-in-block-title
   (are [x y]
