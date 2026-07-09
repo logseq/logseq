@@ -49,3 +49,32 @@
           sanitized (tx-sanitize/sanitize-tx @conn tx-data)]
       (is (empty? (set/intersection graph-backup-folder-ops (set sanitized))))
       (is (some #(= [:db/add [:block/uuid block-uuid] :block/title "remote title"] %) sanitized)))))
+
+(deftest sanitize-tx-drops-same-tx-ignored-kv-tempid-ops-test
+  (testing "remote txs should drop all ops for tempids identified as ignored KV entities"
+    (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          conn (db-test/create-conn)
+          ignored-ops #{[:db/add "kv-temp" :db/ident :logseq.kv/graph-backup-folder]
+                        [:db/add "kv-temp" :logseq.kv/value "/tmp/backup"]
+                        [:db/retractEntity "kv-temp"]}
+          tx-data (into [[:db/add [:block/uuid block-uuid] :block/title "remote title"]]
+                        ignored-ops)
+          sanitized (tx-sanitize/sanitize-tx @conn tx-data)]
+      (is (empty? (set/intersection ignored-ops (set sanitized))))
+      (is (some #(= [:db/add [:block/uuid block-uuid] :block/title "remote title"] %) sanitized)))))
+
+(deftest sanitize-tx-drops-same-tx-ignored-kv-map-ops-test
+  (testing "remote txs should drop map-form ignored KV entities and following tempid ops"
+    (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          conn (db-test/create-conn)
+          ignored-map {:db/id -1
+                       :db/ident :logseq.kv/graph-backup-folder
+                       :logseq.kv/value "/tmp/backup"}
+          ignored-ops #{ignored-map
+                        [:db/add -1 :logseq.kv/value "/tmp/backup-2"]
+                        [:db/retractEntity -1]}
+          tx-data (into [[:db/add [:block/uuid block-uuid] :block/title "remote title"]]
+                        ignored-ops)
+          sanitized (tx-sanitize/sanitize-tx @conn tx-data)]
+      (is (empty? (set/intersection ignored-ops (set sanitized))))
+      (is (some #(= [:db/add [:block/uuid block-uuid] :block/title "remote title"] %) sanitized)))))
