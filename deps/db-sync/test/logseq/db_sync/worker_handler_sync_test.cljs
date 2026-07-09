@@ -1340,6 +1340,37 @@
       (is (some? (d/entity @conn [:block/uuid success-block-uuid])))
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))))))
 
+(deftest tx-batch-rejects-stale-delete-before-later-failure-test
+  (testing "stale delete-blocks entries are not reported as successfully applied"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          stale-delete-tx-id (random-uuid)
+          later-failed-tx-id (random-uuid)
+          missing-delete-uuid (random-uuid)
+          missing-update-uuid (random-uuid)
+          t-before (storage/get-t sql)
+          stale-delete-entry {:tx-id stale-delete-tx-id
+                              :tx (protocol/tx->transit
+                                   [[:db/retractEntity [:block/uuid missing-delete-uuid]]])
+                              :outliner-op :delete-blocks}
+          later-failed-entry {:tx-id later-failed-tx-id
+                              :tx (protocol/tx->transit
+                                   [[:db/add [:block/uuid missing-update-uuid] :block/title "stale" 1]])
+                              :outliner-op :save-block}
+          changed-messages (atom [])
+          response (with-redefs [ws/broadcast! (fn [_self _sender payload]
+                                                 (swap! changed-messages conj payload))]
+                     (sync-handler/handle-tx-batch! self nil [stale-delete-entry later-failed-entry] t-before))]
+      (is (= "tx/reject" (:type response)))
+      (is (= "db transact failed" (:reason response)))
+      (is (= t-before (:t response)))
+      (is (= stale-delete-tx-id (:failed-tx-id response)))
+      (is (nil? (:success-tx-ids response)))
+      (is (empty? @changed-messages)))))
+
 (deftest tx-batch-ignores-empty-rebase-entry-test
   (testing "empty rebase entry is a no-op: no t increment, no tx-log append, no changed broadcast"
     (let [sql (test-sql/make-sql)
