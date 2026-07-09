@@ -1,7 +1,8 @@
 (ns logseq.db-sync.tx-sanitize
   (:require [clojure.set :as set]
             [datascript.core :as d]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.kv-entity :as kv-entity]))
 
 (def ^:private retract-entity-ops
   #{:db/retractEntity :db.fn/retractEntity})
@@ -32,6 +33,38 @@
   (and (vector? item)
        (<= 4 (count item))
        (contains? entity-op-kinds (first item))))
+
+(def ^:private ignored-kv-entities
+  (into #{}
+        (keep (fn [[kw config]]
+                (when (get-in config [:rtc :rtc/ignore-entity-when-init-upload])
+                  kw)))
+        kv-entity/kv-entities))
+
+(defn- ignored-kv-entity-ref?
+  [db entity-ref]
+  (or (contains? ignored-kv-entities entity-ref)
+      (when-let [eid (entity-ref->eid db entity-ref)]
+        (contains? ignored-kv-entities (:db/ident (d/entity db eid))))))
+
+(defn- ignored-kv-entity-op?
+  [db item]
+  (cond
+    (and (map? item) (contains? item :db/id))
+    (ignored-kv-entity-ref? db (:db/id item))
+
+    (retract-entity-op? item)
+    (ignored-kv-entity-ref? db (second item))
+
+    (entity-op? item)
+    (ignored-kv-entity-ref? db (second item))
+
+    :else
+    false))
+
+(defn- strip-ignored-kv-entity-ops
+  [db tx-data]
+  (remove (partial ignored-kv-entity-op? db) tx-data))
 
 (defn- drop-ops-targeting-retracted-entities
   [db tx-data]
@@ -125,6 +158,8 @@
                      drop-ops-targeting-retracted-entities? false
                      retract-touched-descendants? false}}]
    (let [tx-data* (cond->> (strip-migration-deleted-attrs tx-data)
+                    true
+                    (strip-ignored-kv-entity-ops db)
                     drop-missing-retract-ops?
                     (remove (fn [item]
                               (and (retract-entity-op? item)
