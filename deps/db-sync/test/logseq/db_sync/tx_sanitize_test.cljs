@@ -10,6 +10,10 @@
     :logseq.property.embedding/hnsw-label
     :logseq.property.embedding/hnsw-label-updated-at})
 
+(def ^:private graph-backup-folder-ops
+  #{[:db/retractEntity :logseq.kv/graph-backup-folder]
+    [:db/add :logseq.kv/graph-backup-folder :logseq.kv/value "/tmp/backup"]})
+
 (defn- tx-item-attrs
   [item]
   (cond
@@ -34,4 +38,14 @@
           sanitized (tx-sanitize/sanitize-tx @conn tx-data)
           sanitized-attrs (set (mapcat tx-item-attrs sanitized))]
       (is (empty? (set/intersection migration-deleted-attrs sanitized-attrs)))
+      (is (some #(= [:db/add [:block/uuid block-uuid] :block/title "remote title"] %) sanitized)))))
+
+(deftest sanitize-tx-drops-ignored-kv-entity-ops-test
+  (testing "remote txs should not apply KV entities that are excluded from sync"
+    (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          conn (db-test/create-conn)
+          tx-data (into [[:db/add [:block/uuid block-uuid] :block/title "remote title"]]
+                        graph-backup-folder-ops)
+          sanitized (tx-sanitize/sanitize-tx @conn tx-data)]
+      (is (empty? (set/intersection graph-backup-folder-ops (set sanitized))))
       (is (some #(= [:db/add [:block/uuid block-uuid] :block/title "remote title"] %) sanitized)))))
