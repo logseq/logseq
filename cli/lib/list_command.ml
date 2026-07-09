@@ -1,7 +1,7 @@
 type order = Asc | Desc
 
 type common_opts = {
-  fields : string list option;
+  fields : string Rrbvec.t option;
   limit : int option;
   offset : int option;
   sort : string option;
@@ -44,8 +44,8 @@ type task_opts = {
 
 type node_opts = {
   common : common_opts;
-  tags : string list;
-  properties : string list;
+  tags : string Rrbvec.t;
+  properties : string Rrbvec.t;
 }
 
 type asset_opts = { common : common_opts }
@@ -68,7 +68,7 @@ type action = {
   options : Melange_edn_melange.any;
 }
 
-type list_result = { items : Entity.t list }
+type list_result = { items : Entity.t Rrbvec.t }
 
 let order_of_string value =
   match String.lowercase_ascii (String.trim value) with
@@ -109,7 +109,8 @@ let validate_parsed = function
       | Some value when normalize_priority value = None ->
           Error (Error.invalid_options (invalid_priority_message value))
       | _ -> Ok ())
-  | Parsed_node opts when opts.tags = [] && opts.properties = [] ->
+  | Parsed_node opts when Vec.is_empty opts.tags && Vec.is_empty opts.properties
+    ->
       Error
         (Error.invalid_options
            "list node requires at least one of --tags or --properties")
@@ -119,73 +120,79 @@ let normalize_options p = Error.bind (validate_parsed p) (fun () -> Ok p)
 let default_sort_field = "updated-at"
 
 let field_map fields =
-  List.map (fun (name, keyword) -> (name, Edn_util.keyword_t keyword)) fields
+  Vec.map (fun (name, keyword) -> (name, Edn_util.keyword_t keyword)) fields
 
 let page_field_map =
   field_map
-    [
-      ("id", "db/id");
-      ("ident", "db/ident");
-      ("title", "block/title");
-      ("uuid", "block/uuid");
-      ("created-at", "block/created-at");
-      ("updated-at", "block/updated-at");
-    ]
+    (Vec.of_array
+       [|
+         ("id", "db/id");
+         ("ident", "db/ident");
+         ("title", "block/title");
+         ("uuid", "block/uuid");
+         ("created-at", "block/created-at");
+         ("updated-at", "block/updated-at");
+       |])
 
 let tag_field_map =
-  page_field_map
-  @ field_map
-      [
-        ("properties", "logseq.property.class/properties");
-        ("extends", "logseq.property.class/extends");
-        ("description", "logseq.property/description");
-      ]
+  Vec.append page_field_map
+    (field_map
+       (Vec.of_array
+          [|
+            ("properties", "logseq.property.class/properties");
+            ("extends", "logseq.property.class/extends");
+            ("description", "logseq.property/description");
+          |]))
 
 let property_field_map =
-  page_field_map
-  @ field_map
-      [
-        ("classes", "logseq.property/classes");
-        ("type", "logseq.property/type");
-        ("cardinality", "db/cardinality");
-        ("description", "logseq.property/description");
-      ]
+  Vec.append page_field_map
+    (field_map
+       (Vec.of_array
+          [|
+            ("classes", "logseq.property/classes");
+            ("type", "logseq.property/type");
+            ("cardinality", "db/cardinality");
+            ("description", "logseq.property/description");
+          |]))
 
 let task_field_map =
   field_map
-    [
-      ("id", "db/id");
-      ("title", "block/title");
-      ("status", "logseq.property/status");
-      ("priority", "logseq.property/priority");
-      ("scheduled", "logseq.property/scheduled");
-      ("deadline", "logseq.property/deadline");
-      ("updated-at", "block/updated-at");
-      ("created-at", "block/created-at");
-    ]
+    (Vec.of_array
+       [|
+         ("id", "db/id");
+         ("title", "block/title");
+         ("status", "logseq.property/status");
+         ("priority", "logseq.property/priority");
+         ("scheduled", "logseq.property/scheduled");
+         ("deadline", "logseq.property/deadline");
+         ("updated-at", "block/updated-at");
+         ("created-at", "block/created-at");
+       |])
 
 let node_field_map =
   field_map
-    [
-      ("id", "db/id");
-      ("title", "block/title");
-      ("type", "node/type");
-      ("page-id", "block/page-id");
-      ("page-title", "block/page-title");
-      ("created-at", "block/created-at");
-      ("updated-at", "block/updated-at");
-    ]
+    (Vec.of_array
+       [|
+         ("id", "db/id");
+         ("title", "block/title");
+         ("type", "node/type");
+         ("page-id", "block/page-id");
+         ("page-title", "block/page-title");
+         ("created-at", "block/created-at");
+         ("updated-at", "block/updated-at");
+       |])
 
 let asset_field_map =
   field_map
-    [
-      ("id", "db/id");
-      ("title", "block/title");
-      ("asset-type", "logseq.property.asset/type");
-      ("size", "logseq.property.asset/size");
-      ("updated-at", "block/updated-at");
-      ("created-at", "block/created-at");
-    ]
+    (Vec.of_array
+       [|
+         ("id", "db/id");
+         ("title", "block/title");
+         ("asset-type", "logseq.property.asset/type");
+         ("size", "logseq.property.asset/size");
+         ("updated-at", "block/updated-at");
+         ("created-at", "block/created-at");
+       |])
 
 let field_map_of_kind = function
   | Page -> page_field_map
@@ -254,22 +261,22 @@ let compare_item_by keyword a b =
 
 let sort_values ~field_map common items =
   let sort_field = Option.value common.sort ~default:default_sort_field in
-  match List.assoc_opt sort_field field_map with
+  match Vec.assoc_opt sort_field field_map with
   | None -> items
   | Some keyword -> (
-      let sorted = List.sort (compare_item_by keyword) items in
+      let sorted = Vec.sort (compare_item_by keyword) items in
       match common.order with
       | Some Asc -> sorted
-      | Some Desc | None -> List.rev sorted)
+      | Some Desc | None -> Vec.rev sorted)
 
 let apply_offset_limit common entities =
   let entities =
     match common.offset with
-    | Some n -> entities |> List.to_seq |> Seq.drop n |> List.of_seq
+    | Some n -> entities |> Vec.to_seq |> Seq.drop n |> Vec.of_seq
     | None -> entities
   in
   match common.limit with
-  | Some n -> entities |> List.to_seq |> Seq.take n |> List.of_seq
+  | Some n -> entities |> Vec.to_seq |> Seq.take n |> Vec.of_seq
   | None -> entities
 
 let command_id = function
@@ -281,15 +288,15 @@ let command_id = function
   | Parsed_asset _ -> List_asset
 
 let value_of_string_list values =
-  Edn_util.vector (List.map (fun value -> Edn_util.string value) values)
+  Edn_util.vector_vec (values |> Vec.map (fun value -> Edn_util.string value))
 
 let string_list_of_value value =
   match Edn_util.as_seq value with
-  | Some values -> List.filter_map Edn_util.as_string_like values
+  | Some values -> Vec.filter_map Edn_util.as_string_like values
   | None -> (
       match Edn_util.as_string_like value with
-      | Some value -> [ value ]
-      | None -> [])
+      | Some value -> Vec.singleton value
+      | None -> Vec.empty)
 
 let common_of_options options =
   {
@@ -302,112 +309,139 @@ let common_of_options options =
 
 let select_fields field_map fields item =
   let keys =
-    fields |> List.filter_map (fun field -> List.assoc_opt field field_map)
+    fields |> Vec.filter_map (fun field -> Vec.assoc_opt field field_map)
   in
-  if keys = [] then item
+  if Vec.is_empty keys then item
   else
-    Edn_util.map
-      (List.filter_map
-         (fun key ->
-           Option.map
-             (fun value -> (Edn_util.any key, value))
-             (Edn_util.get item (Edn_util.keyword_to_string key)))
-         keys)
+    Edn_util.map_vec
+      (keys
+      |> Vec.filter_map (fun key ->
+          Option.map
+            (fun value -> (Edn_util.any key, value))
+            (Edn_util.get item (Edn_util.keyword_to_string key))))
 
 let apply_fields field_map common items =
   match common.fields with
   | None -> items
-  | Some fields -> List.map (select_fields field_map fields) items
+  | Some fields -> Vec.map (select_fields field_map fields) items
 
 let postprocess_items kind options items =
   let common = common_of_options options in
   let field_map = field_map_of_kind kind in
   let sorted = sort_values ~field_map common items in
   let limited =
-    sorted |> List.map Entity.of_value |> apply_offset_limit common
-    |> List.map (fun entity -> entity.Entity.raw)
+    sorted |> Vec.map Entity.of_value |> apply_offset_limit common
+    |> Vec.map (fun entity -> entity.Entity.raw)
   in
   apply_fields field_map common limited
 
 let status_query invoke_config repo =
   Transport.thread_api_q invoke_config ~repo
     ~query:
-      (Edn_util.vector_t
-         [ Edn_util.any Task_status.status_closed_values_query ])
+      (Edn_util.vector_t_vec
+         (Vec.of_array
+            [| Edn_util.any Task_status.status_closed_values_query |]))
 
 let kw value = Edn_util.keyword value
 let sym value = Edn_util.symbol value
-let vector values = Edn_util.vector values
-let list values = Edn_util.list values
+let vector_vec values = Edn_util.vector_vec values
+let list_vec values = Edn_util.list_vec values
 let normalized_lookup_name value = String.lowercase_ascii (String.trim value)
-let query_value query = Edn_util.any (Cli_primitive.datascript_query_to_edn query)
+
+let query_value query =
+  Edn_util.any (Cli_primitive.datascript_query_to_edn query)
 
 let tag_selector =
-  vector
-    [
-      kw "db/id";
-      kw "block/uuid";
-      kw "block/name";
-      kw "block/title";
-      Edn_util.map [ (kw "block/tags", vector [ kw "db/ident" ]) ];
-      kw "logseq.property/public?";
-    ]
+  vector_vec
+    (Vec.of_array
+       [|
+         kw "db/id";
+         kw "block/uuid";
+         kw "block/name";
+         kw "block/title";
+         Edn_util.map_vec
+           (Vec.of_array
+              [|
+                (kw "block/tags", vector_vec (Vec.of_array [| kw "db/ident" |]));
+              |]);
+         kw "logseq.property/public?";
+       |])
 
 let property_selector =
-  vector
-    [
-      kw "db/id";
-      kw "db/ident";
-      kw "block/name";
-      kw "block/title";
-      kw "logseq.property/type";
-      kw "db/cardinality";
-      kw "logseq.property/public?";
-    ]
+  vector_vec
+    (Vec.of_array
+       [|
+         kw "db/id";
+         kw "db/ident";
+         kw "block/name";
+         kw "block/title";
+         kw "logseq.property/type";
+         kw "db/cardinality";
+         kw "logseq.property/public?";
+       |])
 
 let class_query selector class_ident =
   Cli_primitive.make_datascript_query
-    ~find:[ vector [ list [ sym "pull"; sym "?e"; selector ]; sym "..." ] ]
-    ~in_:[ Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name" ]
+    ~find:
+      (Vec.singleton
+         (vector_vec
+            (Vec.of_array
+               [|
+                 list_vec (Vec.of_array [| sym "pull"; sym "?e"; selector |]);
+                 sym "...";
+               |])))
+    ~in_:
+      (Vec.of_array
+         [|
+           Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name";
+         |])
     ~where:
-      [
-        Cli_primitive.V
-          (Edn_util.vector_t [ sym "?e"; kw "block/name"; sym "?name" ]);
-        Cli_primitive.V
-          (Edn_util.vector_t [ sym "?e"; kw "block/tags"; sym "?tag" ]);
-        Cli_primitive.V
-          (Edn_util.vector_t [ sym "?tag"; kw "db/ident"; kw class_ident ]);
-      ]
+      (Vec.of_array
+         [|
+           Cli_primitive.V
+             (Edn_util.vector_t_vec
+                (Vec.of_array [| sym "?e"; kw "block/name"; sym "?name" |]));
+           Cli_primitive.V
+             (Edn_util.vector_t_vec
+                (Vec.of_array [| sym "?e"; kw "block/tags"; sym "?tag" |]));
+           Cli_primitive.V
+             (Edn_util.vector_t_vec
+                (Vec.of_array [| sym "?tag"; kw "db/ident"; kw class_ident |]));
+         |])
     ()
 
 let pull_tag_by_name config repo name =
   Transport.thread_api_q config ~repo
     ~query:
-      (Edn_util.vector_t
-         [
-           query_value (class_query tag_selector "logseq.class/Tag");
-           Edn_util.string (normalized_lookup_name name);
-         ])
+      (Edn_util.vector_t_vec
+         (Vec.of_array
+            [|
+              query_value (class_query tag_selector "logseq.class/Tag");
+              Edn_util.string (normalized_lookup_name name);
+            |]))
 
 let pull_tag_by_uuid config repo uuid =
   Transport.thread_api_pull config ~repo
     ~selector:(Edn_util.expect_vector_t "list tag selector" tag_selector)
-    ~lookup:(vector [ kw "block/uuid"; Edn_util.uuid uuid ])
+    ~lookup:
+      (vector_vec (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |]))
 
 let pull_property_by_ident config repo ident =
   Transport.thread_api_pull config ~repo
     ~selector:
       (Edn_util.expect_vector_t "list property selector" property_selector)
-    ~lookup:(vector [ kw "db/ident"; kw ident ])
+    ~lookup:(vector_vec (Vec.of_array [| kw "db/ident"; kw ident |]))
 
 let pull_property_by_name config repo name =
   Transport.thread_api_q config ~repo
     ~query:
-      (Edn_util.vector_t
-         [
-           query_value (class_query property_selector "logseq.class/Property");
-           Edn_util.string (normalized_lookup_name name);
-         ])
+      (Edn_util.vector_t_vec
+         (Vec.of_array
+            [|
+              query_value
+                (class_query property_selector "logseq.class/Property");
+              Edn_util.string (normalized_lookup_name name);
+            |]))
 
 let pull_property_by_id config repo id =
   Transport.thread_api_pull config ~repo
@@ -417,8 +451,9 @@ let pull_property_by_id config repo id =
 
 let pull_asset_tag config repo =
   Transport.thread_api_pull config ~repo
-    ~selector:(Edn_util.vector_t [ kw "db/id" ])
-    ~lookup:(vector [ kw "db/ident"; kw "logseq.class/Asset" ])
+    ~selector:(Edn_util.vector_t_vec (Vec.of_array [| kw "db/id" |]))
+    ~lookup:
+      (vector_vec (Vec.of_array [| kw "db/ident"; kw "logseq.class/Asset" |]))
 
 let first_entity value =
   let map_value value =
@@ -427,12 +462,27 @@ let first_entity value =
   match
     (Edn_util.as_vector value, Edn_util.as_list value, Edn_util.as_map value)
   with
-  | Some (first :: _), _, _ | _, Some (first :: _), _ -> (
+  | Some values, _, _ when not (Vec.is_empty values) -> (
+      let first = Vec.hd values in
       match map_value first with
       | Some _ as result -> result
       | None -> (
           match (Edn_util.as_vector first, Edn_util.as_list first) with
-          | Some (nested :: _), _ | _, Some (nested :: _) -> map_value nested
+          | Some nested_values, _ when not (Vec.is_empty nested_values) ->
+              map_value (Vec.hd nested_values)
+          | _, Some nested_values when not (Vec.is_empty nested_values) ->
+              map_value (Vec.hd nested_values)
+          | _ -> None))
+  | _, Some values, _ when not (Vec.is_empty values) -> (
+      let first = Vec.hd values in
+      match map_value first with
+      | Some _ as result -> result
+      | None -> (
+          match (Edn_util.as_vector first, Edn_util.as_list first) with
+          | Some nested_values, _ when not (Vec.is_empty nested_values) ->
+              map_value (Vec.hd nested_values)
+          | _, Some nested_values when not (Vec.is_empty nested_values) ->
+              map_value (Vec.hd nested_values)
           | _ -> None))
   | _, _, Some _ -> Some value
   | _ -> None
@@ -445,7 +495,7 @@ let ident_of_entity value =
 let tag_entity value =
   match Option.bind (Edn_util.get value "block/tags") Edn_util.as_seq with
   | Some tags ->
-      List.exists
+      Vec.exists
         (fun tag ->
           match
             Option.bind (Edn_util.get tag "db/ident") Edn_util.as_string_like
@@ -460,10 +510,8 @@ let tag_id_of_result result =
   | Some entity when tag_entity entity -> (
       match id_of_entity entity with
       | Some id -> Ok id
-      | None ->
-          Error
-            (Error.make (Error.Tag_not_found) "tag not found"))
-  | _ -> Error (Error.make (Error.Tag_not_found) "tag not found")
+      | None -> Error (Error.make Error.Tag_not_found "tag not found"))
+  | _ -> Error (Error.make Error.Tag_not_found "tag not found")
 
 let property_entity value =
   Option.is_some (Edn_util.get value "logseq.property/type")
@@ -477,25 +525,13 @@ let property_ident_of_entity entity =
   if property_entity entity && property_public entity then
     match ident_of_entity entity with
     | Some ident -> Ok ident
-    | None ->
-        Error
-          (Error.make
-             (Error.Property_not_found)
-             "property not found")
-  else
-    Error
-      (Error.make
-         (Error.Property_not_found)
-         "property not found")
+    | None -> Error (Error.make Error.Property_not_found "property not found")
+  else Error (Error.make Error.Property_not_found "property not found")
 
 let property_ident_of_query result =
   match first_entity result with
   | Some entity -> property_ident_of_entity entity
-  | None ->
-      Error
-        (Error.make
-           (Error.Property_not_found)
-           "property not found")
+  | None -> Error (Error.make Error.Property_not_found "property not found")
 
 let keyword_label ident =
   let value = Edn_util.keyword_to_string ident in
@@ -539,16 +575,17 @@ let resolve_tag_id invoke_config repo selector =
       bind (pull_tag_by_uuid invoke_config repo uuid) (fun result ->
           pure (tag_id_of_result result))
 
-let rec resolve_tag_ids invoke_config repo = function
-  | [] -> Cli_effect.pure (Ok [])
-  | selector :: rest ->
+let rec resolve_tag_ids invoke_config repo selectors =
+  match Vec.pop_front selectors with
+  | None -> Cli_effect.pure (Ok Vec.empty)
+  | Some (selector, rest) ->
       let open Cli_effect in
       bind (resolve_tag_id invoke_config repo selector) (function
         | Error err -> pure (Error err)
         | Ok id ->
             bind (resolve_tag_ids invoke_config repo rest) (function
               | Error err -> pure (Error err)
-              | Ok ids -> pure (Ok (id :: ids))))
+              | Ok ids -> pure (Ok (Vec.push_front ids id))))
 
 let resolve_property_ident invoke_config repo selector =
   let open Cli_effect in
@@ -578,16 +615,17 @@ let resolve_property_ident invoke_config repo selector =
                    (Edn_util.keyword_to_string (Edn_util.keyword_t name)))
                 (fun entity -> pure (property_ident_of_entity entity)))
 
-let rec resolve_property_idents invoke_config repo = function
-  | [] -> Cli_effect.pure (Ok [])
-  | selector :: rest ->
+let rec resolve_property_idents invoke_config repo selectors =
+  match Vec.pop_front selectors with
+  | None -> Cli_effect.pure (Ok Vec.empty)
+  | Some (selector, rest) ->
       let open Cli_effect in
       bind (resolve_property_ident invoke_config repo selector) (function
         | Error err -> pure (Error err)
         | Ok ident ->
             bind (resolve_property_idents invoke_config repo rest) (function
               | Error err -> pure (Error err)
-              | Ok idents -> pure (Ok (ident :: idents))))
+              | Ok idents -> pure (Ok (Vec.push_front idents ident))))
 
 let normalize_task_options invoke_config repo options =
   let open Cli_effect in
@@ -608,7 +646,7 @@ let normalize_task_options invoke_config repo options =
           let values =
             match (Edn_util.as_vector result, Edn_util.as_list result) with
             | Some values, _ | _, Some values -> values
-            | _ -> []
+            | _ -> Vec.empty
           in
           let statuses = Task_status.normalize_available_statuses values in
           match Task_status.resolve_status_ident status_input statuses with
@@ -627,7 +665,7 @@ let bool_option options key =
 
 let fields_include options field =
   match (common_of_options options).fields with
-  | Some fields -> List.exists (( = ) field) fields
+  | Some fields -> Vec.exists (( = ) field) fields
   | None -> false
 
 let normalize_tag_options options =
@@ -645,14 +683,14 @@ let normalize_node_options invoke_config repo options =
   let tag_selectors =
     Edn_util.get options "tags"
     |> Option.map string_list_of_value
-    |> Option.value ~default:[]
-    |> List.map parse_tag_selector
+    |> Option.value ~default:Vec.empty
+    |> Vec.map parse_tag_selector
   in
   let property_selectors =
     Edn_util.get options "properties"
     |> Option.map string_list_of_value
-    |> Option.value ~default:[]
-    |> List.map parse_property_selector
+    |> Option.value ~default:Vec.empty
+    |> Vec.map parse_property_selector
   in
   bind (resolve_tag_ids invoke_config repo tag_selectors) (function
     | Error err -> pure (Error err)
@@ -666,19 +704,19 @@ let normalize_node_options invoke_config repo options =
                 |> Edn_util.remove "properties"
               in
               let options =
-                if tag_ids = [] then options
+                if Vec.is_empty tag_ids then options
                 else
                   Edn_util.assoc "tag-ids"
-                    (Edn_util.vector
-                       (List.map (fun id -> Edn_util.int64 id) tag_ids))
+                    (Edn_util.vector_vec
+                       (tag_ids |> Vec.map (fun id -> Edn_util.int64 id)))
                     options
               in
               let options =
-                if property_idents = [] then options
+                if Vec.is_empty property_idents then options
                 else
                   Edn_util.assoc "property-idents"
-                    (Edn_util.vector
-                       (List.map
+                    (Edn_util.vector_vec
+                       (Vec.map
                           (fun ident -> Edn_util.any ident)
                           property_idents))
                     options
@@ -693,14 +731,11 @@ let normalize_asset_options invoke_config repo options =
           pure
             (Ok
                (Edn_util.assoc "tag-ids"
-                  (Edn_util.vector [ Edn_util.int64 id ])
+                  (Edn_util.vector_vec (Vec.of_array [| Edn_util.int64 id |]))
                   options))
       | None ->
           pure
-            (Error
-               (Error.make
-                  (Error.Asset_tag_not_found)
-                  "asset tag not found")))
+            (Error (Error.make Error.Asset_tag_not_found "asset tag not found")))
 
 let prepare_tag_item options item =
   ( ( item |> fun item ->
@@ -732,38 +767,40 @@ let prepare_page_item item = Edn_util.remove "logseq.property/type" item
 
 let prepare_items kind options items =
   match kind with
-  | Page -> List.map prepare_page_item items
-  | Tag -> List.map (prepare_tag_item options) items
-  | Property -> List.map (prepare_property_item options) items
+  | Page -> Vec.map prepare_page_item items
+  | Tag -> Vec.map (prepare_tag_item options) items
+  | Property -> Vec.map (prepare_property_item options) items
   | Task | Node | Asset -> items
 
 let visible_title_fields = function
   | Node ->
-      [
-        Edn_util.keyword_t "block/title"; Edn_util.keyword_t "block/page-title";
-      ]
-  | Page | Tag | Property | Task | Asset -> [ Edn_util.keyword_t "block/title" ]
+      Vec.of_array
+        [|
+          Edn_util.keyword_t "block/title";
+          Edn_util.keyword_t "block/page-title";
+        |]
+  | Page | Tag | Property | Task | Asset ->
+      Vec.singleton (Edn_util.keyword_t "block/title")
 
 let normalize_visible_title_fields config repo kind items =
   let fields = visible_title_fields kind in
-  let entities = List.map Entity.of_value items in
+  let entities = Vec.map Entity.of_value items in
   let uuids = Uuid_refs_types.collect_uuid_refs_from_items entities fields in
-  match uuids with
-  | [] -> Cli_effect.pure items
-  | uuids ->
-      Cli_effect.map
-        (fun labels ->
-          Uuid_refs_types.normalize_item_string_fields entities fields labels
-          |> List.map (fun item -> item.Entity.raw))
-        (Uuid_refs_types.fetch_uuid_labels config repo uuids)
+  if Vec.is_empty uuids then Cli_effect.pure items
+  else
+    Cli_effect.map
+      (fun labels ->
+        Uuid_refs_types.normalize_item_string_fields entities fields labels
+        |> Vec.map (fun item -> item.Entity.raw))
+      (Uuid_refs_types.fetch_uuid_labels config repo uuids)
 
 let add_optional key value fields =
   match value with
   | None -> fields
-  | Some value -> (Edn_util.keyword key, value) :: fields
+  | Some value -> Vec.push_front fields (Edn_util.keyword key, value)
 
 let common_options common =
-  []
+  Vec.empty
   |> add_optional "fields" (Option.map value_of_string_list common.fields)
   |> add_optional "limit"
        (Option.map (fun value -> Edn_util.int value) common.limit)
@@ -777,7 +814,8 @@ let common_options common =
           common.order)
 
 let add_bool key enabled fields =
-  if enabled then (Edn_util.keyword key, Edn_util.bool true) :: fields
+  if enabled then
+    Vec.push_front fields (Edn_util.keyword key, Edn_util.bool true)
   else fields
 
 let add_optional_bool key value fields =
@@ -799,21 +837,21 @@ let options_of_parsed = function
            (Option.map
               (fun value -> Edn_util.int64 (Time.time_to_epoch_ms value))
               opts.created_after)
-      |> fun fields -> Edn_util.map (List.rev fields)
+      |> fun fields -> Edn_util.map_vec (fields |> Vec.rev)
   | Parsed_tag opts ->
       common_options opts.common
       |> add_bool "expand" opts.expand
       |> add_optional_bool "include-built-in" opts.include_built_in
       |> add_bool "with-properties" opts.with_properties
       |> add_bool "with-extends" opts.with_extends
-      |> fun fields -> Edn_util.map (List.rev fields)
+      |> fun fields -> Edn_util.map_vec (fields |> Vec.rev)
   | Parsed_property opts ->
       common_options opts.common
       |> add_bool "expand" opts.expand
       |> add_optional_bool "include-built-in" opts.include_built_in
       |> add_bool "with-classes" opts.with_classes
       |> add_bool "with-type" opts.with_type
-      |> fun fields -> Edn_util.map (List.rev fields)
+      |> fun fields -> Edn_util.map_vec (fields |> Vec.rev)
   | Parsed_task opts ->
       common_options opts.common
       |> add_optional "status"
@@ -822,17 +860,18 @@ let options_of_parsed = function
            (Option.map (fun value -> Edn_util.string value) opts.priority)
       |> add_optional "content"
            (Option.map (fun value -> Edn_util.string value) opts.content)
-      |> fun fields -> Edn_util.map (List.rev fields)
+      |> fun fields -> Edn_util.map_vec (fields |> Vec.rev)
   | Parsed_node opts ->
       common_options opts.common
       |> add_optional "tags"
-           (if opts.tags = [] then None
+           (if Vec.is_empty opts.tags then None
             else Some (value_of_string_list opts.tags))
       |> add_optional "properties"
-           (if opts.properties = [] then None
+           (if Vec.is_empty opts.properties then None
             else Some (value_of_string_list opts.properties))
-      |> fun fields -> Edn_util.map (List.rev fields)
-  | Parsed_asset opts -> Edn_util.map (List.rev (common_options opts.common))
+      |> fun fields -> Edn_util.map_vec (fields |> Vec.rev)
+  | Parsed_asset opts ->
+      Edn_util.map_vec (opts.common |> common_options |> Vec.rev)
 
 let build ?registry:_ config _globals parsed =
   Error.bind (normalize_options parsed) (fun parsed ->
@@ -849,7 +888,8 @@ let build ?registry:_ config _globals parsed =
             })
 
 let items_value items =
-  Edn_util.map_t [ (Edn_util.keyword "items", Edn_util.vector items) ]
+  Edn_util.map_t_vec
+    (Vec.of_array [| (Edn_util.keyword "items", Edn_util.vector_vec items) |])
 
 let execute_with_mode action config mode =
   let open Cli_effect in
@@ -899,8 +939,8 @@ let execute_with_mode action config mode =
                       (Edn_util.as_vector value, Edn_util.as_list value)
                     with
                     | Some xs, _ | _, Some xs -> xs
-                    | _ when Edn_util.is_null value -> []
-                    | _ -> [ value ]
+                    | _ when Edn_util.is_null value -> Vec.empty
+                    | _ -> Vec.singleton value
                   in
                   let items = prepare_items action.kind action.options items in
                   let items =
@@ -913,73 +953,80 @@ let execute_with_mode action config mode =
                       pure
                         (Cli_result.ok ~command:action.command mode (Raw data))))))
 
-let meta ?(examples = []) id doc =
+let meta ?(examples = Vec.empty) id doc =
   {
     Command_registry.id;
     path = Command_id.to_path id;
     doc;
     long_doc = None;
     examples;
-    options = [];
+    options = Vec.empty;
     category = Command_registry.Graph_inspect_and_edit;
     requires_graph = Command_id.requires_graph id;
     requires_auth = Command_id.requires_auth id;
     write_command = Command_id.is_write id;
-    human_table_headers_order = [];
+    human_table_headers_order = Vec.empty;
   }
 
 let metadata () =
-  [
-    meta
-      ~examples:
-        [
-          "logseq list page --graph my-graph";
-          "logseq list page --graph my-graph --journal-only --limit 20";
-          "logseq list page --graph my-graph --limit 50 --sort updated-at \
-           --order desc";
-        ]
-      Command_id.List_page "List pages";
-    meta
-      ~examples:
-        [
-          "logseq list tag --graph my-graph --with-properties";
-          "logseq list tag --graph my-graph --include-built-in --limit 20 \
-           --output json";
-        ]
-      List_tag "List tags";
-    meta
-      ~examples:
-        [
-          "logseq list property --graph my-graph --with-type";
-          "logseq list property --graph my-graph --include-built-in --limit 20 \
-           --output json";
-        ]
-      List_property "List properties";
-    meta
-      ~examples:
-        [
-          "logseq list task --graph my-graph --status todo --priority high";
-          "logseq list task --graph my-graph --content \"release\" --sort \
-           updated-at --order desc";
-        ]
-      List_task "List tasks";
-    meta
-      ~examples:
-        [
-          "logseq list node --graph my-graph --tags project,work";
-          "logseq list node --graph my-graph --properties status,priority \
-           --sort updated-at --order desc";
-        ]
-      List_node "List nodes";
-    meta
-      ~examples:
-        [
-          "logseq list asset --graph my-graph";
-          "logseq list asset --graph my-graph --limit 20 --sort updated-at \
-           --order desc";
-        ]
-      List_asset "List assets";
-  ]
+  Vec.of_array
+    [|
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq list page --graph my-graph";
+               "logseq list page --graph my-graph --journal-only --limit 20";
+               "logseq list page --graph my-graph --limit 50 --sort updated-at \
+                --order desc";
+             |])
+        Command_id.List_page "List pages";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq list tag --graph my-graph --with-properties";
+               "logseq list tag --graph my-graph --include-built-in --limit 20 \
+                --output json";
+             |])
+        List_tag "List tags";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq list property --graph my-graph --with-type";
+               "logseq list property --graph my-graph --include-built-in \
+                --limit 20 --output json";
+             |])
+        List_property "List properties";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq list task --graph my-graph --status todo --priority high";
+               "logseq list task --graph my-graph --content \"release\" --sort \
+                updated-at --order desc";
+             |])
+        List_task "List tasks";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq list node --graph my-graph --tags project,work";
+               "logseq list node --graph my-graph --properties status,priority \
+                --sort updated-at --order desc";
+             |])
+        List_node "List nodes";
+      meta
+        ~examples:
+          (Vec.of_array
+             [|
+               "logseq list asset --graph my-graph";
+               "logseq list asset --graph my-graph --limit 20 --sort \
+                updated-at --order desc";
+             |])
+        List_asset "List assets";
+    |]
 
 let execute action config =
   let (Output.Mode.Packed mode) = Output_mode.for_config config in
