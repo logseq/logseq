@@ -7,7 +7,7 @@ type t = {
   name : string option;
   title : string option;
   kind : kind;
-  tags : Cli_primitive.keyword list;
+  tags : Cli_primitive.keyword Rrbvec.t;
   created_at : Time.date option;
   updated_at : Time.date option;
   deleted_at : Time.date option;
