@@ -1,6 +1,7 @@
 (ns logseq.db-sync.tx-sanitize-test
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.set :as set]
+            [datascript.core :as d]
             [logseq.db-sync.tx-sanitize :as tx-sanitize]
             [logseq.db.test.helper :as db-test]))
 
@@ -78,3 +79,26 @@
           sanitized (tx-sanitize/sanitize-tx @conn tx-data)]
       (is (empty? (set/intersection ignored-ops (set sanitized))))
       (is (some #(= [:db/add [:block/uuid block-uuid] :block/title "remote title"] %) sanitized)))))
+
+(deftest sanitize-delete-blocks-retracts-property-value-children-test
+  (testing "delete-blocks adds retracts for generated property value children"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/cli-http-prop {:logseq.property/type :default}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "Parent"
+                             :build/properties
+                             {:user.property/cli-http-prop
+                              {:build/property-value :block
+                               :block/title "Property value"}}}]}]})
+          parent (db-test/find-block-by-content @conn "Parent")
+          property-value (db-test/find-block-by-content @conn "Property value")
+          tx-data [[:db/retractEntity [:block/uuid (:block/uuid parent)]]]
+          sanitized (tx-sanitize/sanitize-tx @conn
+                                             tx-data
+                                             {:drop-missing-retract-ops? true
+                                              :drop-ops-targeting-retracted-entities? true
+                                              :retract-touched-descendants? true})]
+      (is (= (:db/id property-value)
+             (:db/id (:user.property/cli-http-prop (d/entity @conn (:db/id parent))))))
+      (is (some #(= [:db/retractEntity (:db/id property-value)] %) sanitized)))))
