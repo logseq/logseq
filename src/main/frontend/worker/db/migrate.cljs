@@ -77,25 +77,27 @@
 
 (defn- tag-comment-blocks
   [db]
-  (->> (d/q '[:find [?comment ...]
-              :where
-              [?comments-area :block/tags :logseq.class/Comments]
-              [?comment :block/parent ?comments-area]]
-            db)
-       (map (fn [comment-id]
-              [:db/add comment-id :block/tags :logseq.class/Comment]))))
+  (when (d/entity db :logseq.class/Comments)
+    (->> (d/q '[:find [?comment ...]
+                :where
+                [?comments-area :block/tags :logseq.class/Comments]
+                [?comment :block/parent ?comments-area]]
+              db)
+         (map (fn [comment-id]
+                [:db/add comment-id :block/tags :logseq.class/Comment])))))
 
 (defn- add-single-block-comment-targets
   [db]
-  (->> (d/q '[:find ?comments-area-id ?parent-id
-              :where
-              [?comments-area-id :block/tags :logseq.class/Comments]
-              [?comments-area-id :block/parent ?parent-id]]
-            db)
-       (keep (fn [[comments-area-id parent-id]]
-               (let [comments-area (d/entity db comments-area-id)]
-                 (when-not (seq (:logseq.property.comments/blocks comments-area))
-                   [:db/add comments-area-id :logseq.property.comments/blocks parent-id]))))))
+  (when (d/entity db :logseq.class/Comments)
+    (->> (d/q '[:find ?comments-area-id ?parent-id
+                :where
+                [?comments-area-id :block/tags :logseq.class/Comments]
+                [?comments-area-id :block/parent ?parent-id]]
+              db)
+         (keep (fn [[comments-area-id parent-id]]
+                 (let [comments-area (d/entity db comments-area-id)]
+                   (when-not (seq (:logseq.property.comments/blocks comments-area))
+                     [:db/add comments-area-id :logseq.property.comments/blocks parent-id])))))))
 
 (defn- missing-class-extends?
   [class]

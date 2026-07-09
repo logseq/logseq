@@ -263,6 +263,24 @@
                       (d/entity @conn [:block/uuid range-comments-uuid])))))
         "Existing range comment targets should be preserved")))
 
+(deftest migrate-65-27-with-missing-comments-built-ins-does-not-crash
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 27}}
+                       {:db/ident :logseq.class/Root
+                        :block/title "Root Tag"}])
+
+    (is (nil? (d/entity @conn :logseq.class/Comments)))
+    (is (nil? (d/entity @conn :logseq.property.comments/blocks)))
+
+    (db-migrate/migrate conn :target-version {:major 65 :minor 33})
+
+    (is (= {:major 65 :minor 33}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (some? (d/entity @conn :logseq.class/Comments)))
+    (is (some? (d/entity @conn :logseq.class/Comment)))
+    (is (some? (d/entity @conn :logseq.property.comments/blocks)))))
+
 (deftest migrate-65-30-adds-assignee-property
   (let [conn (d/create-conn db-schema/schema)]
     (d/transact! conn [{:db/ident :logseq.kv/schema-version
