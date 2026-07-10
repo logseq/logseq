@@ -72,7 +72,7 @@ let rec to_value t =
   let fields =
     if Vec.is_empty t.children then fields
     else
-      Vec.push_front fields
+      Vec.push_back fields
         ( Edn_util.keyword "block/children",
           Edn_util.vector_vec
             (t.children |> Vec.map (fun child -> Edn_util.any (to_value child)))
@@ -81,37 +81,37 @@ let rec to_value t =
   let fields =
     match t.uuid with
     | Some uuid ->
-        Vec.push_front fields (Edn_util.keyword "block/uuid", Edn_util.uuid uuid)
+        Vec.push_back fields (Edn_util.keyword "block/uuid", Edn_util.uuid uuid)
     | None -> fields
   in
   let fields =
     match t.id with
     | Some id ->
-        Vec.push_front fields (Edn_util.keyword "db/id", Edn_util.int64 id)
+        Vec.push_back fields (Edn_util.keyword "db/id", Edn_util.int64 id)
     | None -> fields
   in
   let fields =
     match t.parent with
     | Some parent ->
-        Vec.push_front fields
+        Vec.push_back fields
           (Edn_util.keyword "block/parent", parent_to_value parent)
     | None -> fields
   in
   let fields =
     if Vec.is_empty t.tags then fields
     else
-      Vec.push_front fields
+      Vec.push_back fields
         ( Edn_util.keyword "block/tags",
           Edn_util.set_vec (t.tags |> Vec.map tag_to_value) )
   in
   let fields =
     Vec.fold_left
       (fun fields assignment ->
-        Vec.push_front fields
+        Vec.push_back fields
           (property_key_to_value assignment.Property.key, assignment.value))
       fields t.properties
   in
-  Edn_util.map_t_rev_vec fields
+  Edn_util.map_t_vec fields
 
 let rec flatten xs =
   Vec.append xs (Vec.concat_map (fun t -> flatten t.children) xs)

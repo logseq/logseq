@@ -234,16 +234,16 @@ let valid_var_name value =
 let unique values =
   let rec loop seen remaining =
     match Vec.pop_front remaining with
-    | None -> Vec.rev seen
+    | None -> seen
     | Some (value, rest) when Vec.mem value seen -> loop seen rest
-    | Some (value, rest) -> loop (Vec.push_front seen value) rest
+    | Some (value, rest) -> loop (Vec.push_back seen value) rest
   in
   loop Vec.empty values
 
 let template_vars body =
   let len = String.length body in
   let rec loop acc index =
-    if index + 3 >= len then unique (Vec.rev acc)
+    if index + 3 >= len then unique acc
     else if body.[index] = '{' && body.[index + 1] = '{' then
       match String.index_from_opt body (index + 2) '}' with
       | Some close when close + 1 < len && body.[close + 1] = '}' ->
@@ -255,7 +255,7 @@ let template_vars body =
             && body.[close + 2] = '\''
           in
           let acc =
-            if (not quoted) && valid_var_name name then Vec.push_front acc name
+            if (not quoted) && valid_var_name name then Vec.push_back acc name
             else acc
           in
           loop acc (close + 2)
@@ -611,7 +611,7 @@ let block_has_code_tag block =
 let extract_code_blocks text =
   let len = String.length text in
   let rec loop acc index =
-    if index + 3 > len then Vec.rev acc
+    if index + 3 > len then acc
     else if index + 3 <= len && String.sub text index 3 = "```" then
       match String.index_from_opt text (index + 3) '\n' with
       | None -> loop acc (index + 3)
@@ -627,7 +627,7 @@ let extract_code_blocks text =
               let body =
                 String.sub text (body_start + 1) (close - body_start - 1)
               in
-              loop (Vec.push_front acc body) (close + 3))
+              loop (Vec.push_back acc body) (close + 3))
     else loop acc (index + 1)
   in
   loop Vec.empty 0
@@ -1697,10 +1697,10 @@ let process_comment invoke_config repo graph agent_name config master_session
     let* target_tree_texts =
       let rec loop acc remaining =
         match Vec.pop_front remaining with
-        | None -> pure (Vec.rev acc)
+        | None -> pure acc
         | Some (block, rest) ->
             let* text = show_block_tree config repo graph block in
-            loop (Vec.push_front acc text) rest
+            loop (Vec.push_back acc text) rest
       in
       loop Vec.empty target_blocks
     in
@@ -1850,8 +1850,8 @@ and normalize_transit_map reader flat =
           | None -> normalize_transit_value reader key
         in
         let value = normalize_transit_value reader value in
-        loop (Vec.push_front acc (key, value)) rest
-    | _ -> Edn_util.map_vec (acc |> Vec.rev)
+        loop (Vec.push_back acc (key, value)) rest
+    | _ -> Edn_util.map_vec acc
   in
   loop Vec.empty flat
 
@@ -1947,12 +1947,12 @@ let route_comment_datoms invoke_config repo graph agent_name config
   in
   let rec loop acc remaining =
     match Vec.pop_front remaining with
-    | None -> pure (Vec.rev acc)
+    | None -> pure acc
     | Some (datom, rest) ->
         bind
           (route_comment_datom invoke_config repo graph agent_name config
              master_session datom) (function
-          | Some routed -> loop (Vec.push_front acc routed) rest
+          | Some routed -> loop (Vec.push_back acc routed) rest
           | None -> loop acc rest)
   in
   loop Vec.empty datoms
@@ -2054,12 +2054,12 @@ let process_tasks invoke_config repo graph agent_name config master_session
   let open Cli_effect in
   let rec loop acc remaining =
     match Vec.pop_front remaining with
-    | None -> pure (Vec.rev acc)
+    | None -> pure acc
     | Some (block, rest) ->
         bind
           (process_task invoke_config repo graph agent_name config
              master_session block) (fun routed ->
-            loop (Vec.push_front acc routed) rest)
+            loop (Vec.push_back acc routed) rest)
   in
   loop Vec.empty tasks
 

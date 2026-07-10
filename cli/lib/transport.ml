@@ -346,10 +346,10 @@ let split_sse_events buffer =
   let rec loop start acc =
     match find_substring_from ~needle:"\n\n" buffer start with
     | None ->
-        (Vec.rev acc, String.sub buffer start (String.length buffer - start))
+        (acc, String.sub buffer start (String.length buffer - start))
     | Some idx ->
         let event_text = String.sub buffer start (idx - start) in
-        loop (idx + 2) (Vec.push_front acc event_text)
+        loop (idx + 2) (Vec.push_back acc event_text)
   in
   loop 0 Vec.empty
 
