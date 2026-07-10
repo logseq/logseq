@@ -1680,6 +1680,16 @@ let () =
       | Some (Output.Mode.Packed Output.Mode.Json) -> pass
       | _ -> fail_test "expected json output mode");
 
+  test "CLI parity parse skips an earlier duplicate option without a value"
+    (fun () ->
+      let request =
+        expect_parse_ok "duplicate output parse"
+          [| "--output"; "--output"; "json"; "graph"; "list" |]
+      in
+      match request.globals.output_format with
+      | Some (Output.Mode.Packed Output.Mode.Json) -> pass
+      | _ -> fail_test "expected later json output mode");
+
   test "CLI parity parse supports list page filters and validation" (fun () ->
       let request =
         expect_parse_ok "list page parse"
@@ -5808,6 +5818,16 @@ let () =
       expect_named_contains "version build time" stdout "Build time: ";
       expect_named_contains "version revision" stdout "Revision: ";
       expect_bool "profile disabled" true (Vec.is_empty output.stderr));
+
+  test "CLI parity main uses a later duplicate option with a value" (fun () ->
+      let output =
+        run_cli_lifecycle [| "--output"; "--output"; "json"; "--version" |]
+      in
+      expect_int "duplicate output version exit" 0 output.exit_code;
+      let stdout = stdout_text "duplicate output version stdout" output in
+      expect_valid_json "duplicate output version json" stdout;
+      expect_named_contains "duplicate output version status" stdout
+        "\"status\":\"ok\"");
 
   test "CLI parity version action output includes build metadata" (fun () ->
       let result =
