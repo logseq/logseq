@@ -6540,6 +6540,31 @@
             (is (empty? (non-recycle-validation-entities validation))
                 (str (:errors validation)))))))))
 
+(deftest apply-remote-txs-computes-remote-deletes-once-per-batch-test
+  (testing "a large remote batch keeps delete filtering without repeatedly rescanning the pull"
+    (let [{:keys [conn parent child2]} (setup-parent-child)
+          parent-id (:db/id parent)
+          child2-uuid (:block/uuid child2)
+          delete-set-computations (atom 0)
+          original-delete-set-fn (deref (var sync-apply/remote-txs-retract-entity-block-uuids))
+          remote-txs (conj (mapv (fn [index]
+                                   {:tx-data [[:db/add parent-id
+                                               :block/title
+                                               (str "remote title " index)]]})
+                                 (range 128))
+                            {:tx-data [[:db/retractEntity [:block/uuid child2-uuid]]]})]
+      (with-redefs [sync-apply/remote-txs-retract-entity-block-uuids
+                    (fn [txs]
+                      (swap! delete-set-computations inc)
+                      (original-delete-set-fn txs))]
+        (with-datascript-conns conn nil
+          (fn []
+            (#'sync-apply/apply-remote-txs! test-repo nil remote-txs)
+            (is (= 1 @delete-set-computations))
+            (is (= "remote title 127"
+                   (:block/title (d/entity @conn parent-id))))
+            (is (nil? (d/entity @conn [:block/uuid child2-uuid])))))))))
+
 (deftest apply-remote-txs-local-fallback-delete-parent-retracts-remote-child-test
   (testing "rebasing a fallback local retractEntity deletes remote children inserted while the local tx was reversed"
     (async done

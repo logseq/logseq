@@ -1155,30 +1155,30 @@
 
 (defn- transact-remote-txs!
   [conn remote-txs & {:keys [db-before-local-reversal]}]
-  (loop [remaining remote-txs
-         results []]
-    (let [db @conn]
-      (if-let [remote-tx (first remaining)]
-        (let [deleted-block-uuids (remote-txs-retract-entity-block-uuids remaining)
-              tx-data (some->> (:tx-data remote-tx)
-                               (map (partial resolve-temp-id db))
-                               (tx-sanitize/sanitize-tx db)
-                               drop-stale-adds-after-remote-entity-delete
-                               (drop-stale-deleted-block-ref-ops db deleted-block-uuids)
-                               (drop-missing-block-ref-ops db))
-              tx-data (cond->> tx-data
-                        db-before-local-reversal
-                        (drop-local-reversal-stale-target-ops db-before-local-reversal db))
-              tx-data (seq tx-data)
-              tx-meta (apply-tx-meta remote-tx)
-              report (ldb/transact! conn tx-data tx-meta)
-              results' (cond-> results
-                         tx-data
-                         (conj {:tx-data tx-data
-                                :report report}))]
-          (recur (next remaining)
-                 results'))
-        results))))
+  (let [deleted-block-uuids (remote-txs-retract-entity-block-uuids remote-txs)]
+    (loop [remaining remote-txs
+           results []]
+      (let [db @conn]
+        (if-let [remote-tx (first remaining)]
+          (let [tx-data (some->> (:tx-data remote-tx)
+                                 (map (partial resolve-temp-id db))
+                                 (tx-sanitize/sanitize-tx db)
+                                 drop-stale-adds-after-remote-entity-delete
+                                 (drop-stale-deleted-block-ref-ops db deleted-block-uuids)
+                                 (drop-missing-block-ref-ops db))
+                tx-data (cond->> tx-data
+                          db-before-local-reversal
+                          (drop-local-reversal-stale-target-ops db-before-local-reversal db))
+                tx-data (seq tx-data)
+                tx-meta (apply-tx-meta remote-tx)
+                report (ldb/transact! conn tx-data tx-meta)
+                results' (cond-> results
+                           tx-data
+                           (conj {:tx-data tx-data
+                                  :report report}))]
+            (recur (next remaining)
+                   results'))
+          results)))))
 
 (defn reverse-local-txs!
   [conn local-txs]
