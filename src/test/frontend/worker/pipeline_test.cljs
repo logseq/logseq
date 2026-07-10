@@ -1,6 +1,8 @@
 (ns frontend.worker.pipeline-test
   (:require [cljs.test :refer [deftest is testing]]
+            [clojure.string :as string]
             [datascript.core :as d]
+            [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.pipeline :as worker-pipeline]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
@@ -10,9 +12,90 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
+            [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.recycle :as outliner-recycle]))
+
+(deftest save-block-resolves-page-refs-in-worker-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "first"}
+                         {:block/title "second"}]}])
+        first-block (db-test/find-block-by-content @conn "first")
+        second-block (db-test/find-block-by-content @conn "second")
+        first-page-uuid (random-uuid)
+        second-page-uuid (random-uuid)
+        now (common-util/time-ms)
+        page-ref-map (fn [page-uuid]
+                       {:block/uuid page-uuid
+                        :block/title "foo"
+                        :block/name "foo"
+                        :block/created-at now
+                        :block/updated-at now
+                        :block/type "page"})]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (outliner-core/save-block!
+       conn
+       {:db/id (:db/id first-block)
+        :block/uuid (:block/uuid first-block)
+        :block/title (str "[[" first-page-uuid "]]")
+        :block/refs [(page-ref-map first-page-uuid)]})
+      (let [page (ldb/get-page @conn "foo")]
+        (is (= [:logseq.class/Page] (map :db/ident (:block/tags page))))
+        (outliner-core/save-block!
+         conn
+         {:db/id (:db/id second-block)
+          :block/uuid (:block/uuid second-block)
+          :block/title (str "[[" second-page-uuid "]]")
+          :block/refs [(page-ref-map second-page-uuid)]})
+        (let [second-block (d/entity @conn (:db/id second-block))]
+          (is (= (:block/uuid page)
+                 (:block/uuid (first (:block/refs second-block)))))
+          (is (= "[[foo]]" (:block/title second-block)))))
+
+      (let [tag-ref-uuid (random-uuid)
+            tag-uuid (random-uuid)]
+        (outliner-core/save-block!
+         conn
+         {:db/id (:db/id second-block)
+          :block/uuid (:block/uuid second-block)
+          :block/title (str "#[[" tag-ref-uuid "]]")
+          :block/tags [{:block/uuid tag-uuid
+                        :block/title "tag"
+                        :block/name "tag"
+                        :block/type "page"}]
+          :block/refs [{:block/uuid tag-ref-uuid
+                        :block/title "tag"
+                        :block/name "tag"
+                        :block/type "page"}]})
+        (let [block (d/entity @conn (:db/id second-block))
+              tag (first (:block/tags block))]
+          (is (ldb/class? tag))
+          (is (some #(= (:block/uuid tag) (:block/uuid %))
+                    (:block/refs block)))
+          (is (empty? (:errors (worker-db-validate/validate-db conn :fix false))))))
+
+      (let [journal-uuid (random-uuid)
+            journal-name "Jul 9th, 2026"]
+        (outliner-core/save-block!
+         conn
+         {:db/id (:db/id second-block)
+          :block/uuid (:block/uuid second-block)
+          :block/title (str "[[" journal-uuid "]]")
+          :block/refs [{:block/uuid journal-uuid
+                        :block/title journal-name
+                        :block/name (string/lower-case journal-name)
+                        :block/journal-day 20260709
+                        :block/created-at now
+                        :block/updated-at now
+                        :block/type "journal"}]})
+        (let [journal (ldb/get-page @conn (string/lower-case journal-name))]
+          (is (= 20260709 (:block/journal-day journal)))
+          (is (= [:logseq.class/Journal] (map :db/ident (:block/tags journal))))))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
 
 (deftest test-built-in-page-updates-that-should-be-reverted
   (let [conn (db-test/create-conn-with-blocks

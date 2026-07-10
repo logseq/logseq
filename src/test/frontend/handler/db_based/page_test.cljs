@@ -26,6 +26,8 @@
               (case (first args)
                 :thread-api/page-exists?
                 (p/resolved false)
+                :thread-api/get-structured-children
+                (p/resolved [])
                 :thread-api/build-convert-tag-to-page-tx (p/resolved tx-data)
                 :thread-api/transact (p/resolved {:tx-data tx-data})
                 (p/rejected (js/Error. (str "unexpected worker call: " (pr-str args)))))))
@@ -43,6 +45,7 @@
             (p/then
 	             (fn []
 	               (is (= [[:thread-api/page-exists? "test" "Tag" #{:logseq.class/Page}]
+	                       [:thread-api/get-structured-children "test" class-id]
                            [:thread-api/build-convert-tag-to-page-tx "test" class-id]
 	                       [:thread-api/transact "test" tx-data {:outliner-op :save-block} nil]]
 	                      @calls))))

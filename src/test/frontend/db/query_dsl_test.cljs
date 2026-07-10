@@ -640,6 +640,12 @@
            (map testable-content (dsl-query "[[page 2]]")))
         "Page ref arg")
 
+    (let [page (ldb/get-page (conn/get-db test-helper/test-db) "page 2")
+          query (str "[[" (:block/uuid page) "]]")]
+      (is (= ["b2"]
+             (map testable-content (dsl-query query)))
+          "UUID page ref arg"))
+
     (is (= ["b2"]
            (map testable-content (dsl-query "#tag1")))
         "Tag arg")

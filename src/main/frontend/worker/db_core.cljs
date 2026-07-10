@@ -19,6 +19,7 @@
    [frontend.worker.db.validate :as worker-db-validate]
    [frontend.worker.export :as worker-export]
    [frontend.worker.graph-view :as graph-view]
+   [frontend.worker.handler.comments :as worker-comments]
    [frontend.worker.markdown-mirror :as markdown-mirror]
    [frontend.worker.pipeline :as worker-pipeline]
    [frontend.worker.platform :as platform]
@@ -44,6 +45,7 @@
    [logseq.common.uuid :as common-uuid]
    [logseq.db :as ldb]
    [logseq.db.common.initial-data :as common-initial-data]
+   [logseq.db.common.entity-plus :as entity-plus]
    [logseq.db.common.order :as db-order]
    [logseq.db.common.reference :as db-reference]
    [logseq.db.common.sqlite :as common-sqlite]
@@ -1137,6 +1139,7 @@
     {:db/id (:db/id page)
      :block/uuid (:block/uuid page)
      :block/title (:block/title page)
+     :block/raw-title (:block/raw-title page)
      :block/name (:block/name page)
      :block/journal-day (:block/journal-day page)}))
 
@@ -1233,6 +1236,36 @@
   [repo block-ref]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (block-page-info @conn block-ref)))
+
+(def-thread-api :thread-api/get-comments-area-block
+  [repo block-ref]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (worker-comments/get-comments-area-block @conn block-ref)))
+
+(def-thread-api :thread-api/resolve-comments-area
+  [repo block-ref]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (worker-comments/resolve-comments-area @conn block-ref)))
+
+(def-thread-api :thread-api/resolve-comments-area-for-blocks
+  [repo block-refs]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (worker-comments/resolve-comments-area-for-blocks @conn block-refs)))
+
+(def-thread-api :thread-api/get-comment-delete-targets
+  [repo comment-block-ref]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (worker-comments/get-comment-delete-targets @conn comment-block-ref)))
+
+(def-thread-api :thread-api/get-comment-threads-for-block
+  [repo block-uuid]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (worker-comments/get-comment-threads-for-block @conn block-uuid)))
+
+(def-thread-api :thread-api/get-comment-thread-block-uuids
+  [repo block-uuids]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (worker-comments/get-comment-thread-block-uuids @conn block-uuids)))
 
 (def-thread-api :thread-api/get-block-immediate-children
   [repo block-uuid]
@@ -1336,7 +1369,10 @@
     (when-let [property (d/entity @conn property-ident)]
       (mapv (fn [entity]
               (select-keys (entity-util/entity->map entity)
-                           [:db/id :block/title :logseq.property/value]))
+                           [:db/id :block/uuid :block/title :block/order
+                            :logseq.property/value
+                            :logseq.property/icon
+                            :logseq.property/choice-checkbox-state]))
             (:block/_closed-value-property property)))))
 
 (defn- route-title-info
@@ -1463,7 +1499,9 @@
 
 (defn- display-properties-for-block
   [block]
-  (cond-> (:block/properties block)
+  (cond-> (if (de/entity? block)
+            (entity-plus/lookup-kv-then-entity block :block/properties)
+            (:block/properties block))
     (and (ldb/class? block)
          (not (ldb/built-in? block)))
     (merge (zipmap class-page-metadata-properties
@@ -1558,7 +1596,7 @@
                                    (or page-title?
                                        sidebar-properties?
                                        tag-dialog?))
-        properties* (display-properties-for-block block)
+        properties* (display-properties-for-block block-entity)
         {:keys [properties recycled-only-property-ids]}
         (sanitize-property-values-for-display properties*)
         remove-built-in-or-other-position-properties
@@ -1649,7 +1687,11 @@
 (def-thread-api :thread-api/get-block-positioned-properties
   [repo {:keys [block-id position]}]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (outliner-property/get-block-positioned-properties @conn block-id position)))
+    (let [db @conn]
+      (->> (outliner-property/get-block-positioned-properties db block-id position)
+           (keep (fn [property]
+                   (display-property-map db (:db/ident property))))
+           vec))))
 
 (def-thread-api :thread-api/validate-property-value
   [repo {:keys [property value]}]
@@ -1737,6 +1779,9 @@
               (integer? id-or-page-name)
               id-or-page-name
 
+              (keyword? id-or-page-name)
+              id-or-page-name
+
               :else
               nil)]
     (cond
@@ -1752,17 +1797,23 @@
 (defn- ref-value->summary
   [db value]
   (if-let [entity (d/entity db value)]
-    (cond-> {:db/id (:db/id entity)}
+    (let [raw-title (or (:block/raw-title entity) (:block/title entity))]
+      (cond-> {:db/id (:db/id entity)}
       (:block/uuid entity)
       (assoc :block/uuid (:block/uuid entity))
-      (:block/title entity)
-      (assoc :block/title (:block/title entity))
+      raw-title
+      (assoc :block/title raw-title
+             :block/raw-title raw-title)
       (:block/name entity)
       (assoc :block/name (:block/name entity))
       (:block/journal-day entity)
       (assoc :block/journal-day (:block/journal-day entity))
+      (:logseq.property/icon entity)
+      (assoc :logseq.property/icon (:logseq.property/icon entity))
+      (:logseq.property/choice-checkbox-state entity)
+      (assoc :logseq.property/choice-checkbox-state (:logseq.property/choice-checkbox-state entity))
       (:db/ident entity)
-      (assoc :db/ident (:db/ident entity)))
+      (assoc :db/ident (:db/ident entity))))
     {:db/id value}))
 
 (defn- ref-attr?
@@ -1779,13 +1830,69 @@
     (ref-value->summary db value)
     value))
 
+(defn- number->letters
+  [n]
+  (when (pos? n)
+    (loop [n n
+           result ""]
+      (if (pos? n)
+        (let [offset (mod (dec n) 26)
+              ch (.fromCharCode js/String (+ 65 offset))]
+          (recur (quot (- n offset) 26) (str ch result)))
+        result))))
+
+(defn- number->roman
+  [n]
+  (when (pos? n)
+    (let [pairs [[1000 "M"] [900 "CM"] [500 "D"] [400 "CD"]
+                 [100 "C"] [90 "XC"] [50 "L"] [40 "XL"]
+                 [10 "X"] [9 "IX"] [5 "V"] [4 "IV"] [1 "I"]]]
+      (loop [n n
+             [[value numeral] & more] pairs
+             result ""]
+        (cond
+          (zero? n) result
+          (>= n value) (recur (- n value) pairs (str result numeral))
+          :else (recur n more result))))))
+
+(defn- order-list-type
+  [block]
+  (some-> (db-property/lookup block :logseq.property/order-list-type)
+          str
+          string/lower-case))
+
+(defn- order-list-index
+  [block target-order-list-type]
+  (let [order-block? (fn [block]
+                       (= target-order-list-type (order-list-type block)))
+        prev-block-fn ldb/get-left-sibling
+        prev-block (prev-block-fn block)]
+    (letfn [(order-sibling-list [b]
+              (lazy-seq
+               (when (order-block? b)
+                 (cons b (order-sibling-list (prev-block-fn b))))))
+            (order-parent-list [b]
+              (lazy-seq
+               (when (order-block? b)
+                 (cons b (order-parent-list (:block/parent b))))))]
+      (let [idx (if prev-block
+                  (count (order-sibling-list block))
+                  1)
+            order-parents-count (dec (count (order-parent-list block)))
+            delta (if (neg? order-parents-count) 0 (mod order-parents-count 3))]
+        (cond
+          (zero? delta) idx
+          (= delta 1) (some-> (number->letters idx) string/lower-case)
+          :else (number->roman idx))))))
+
 (defn- entity-forward-map
   [db entity {:keys [properties]}]
   (when entity
     (let [property-set (some-> properties set)
-          title (or (:block/raw-title entity)
-                    (:block/title entity)
-                    (:block/name entity))
+          raw-title (or (:block/raw-title entity)
+                        (:block/title entity)
+                        (:block/name entity))
+          list-type (order-list-type entity)
           datoms (cond->> (d/datoms db :eavt (:db/id entity))
                    (seq property-set)
                    (filter #(contains? property-set (:a %))))
@@ -1798,8 +1905,13 @@
                   {:db/id (:db/id entity)}
                   datoms)]
       (cond-> result
-        title
-        (assoc :block/title title)))))
+        raw-title
+        (assoc :block/title raw-title
+               :block/raw-title raw-title)
+
+        list-type
+        (assoc :block.temp/order-list-index
+               (order-list-index entity list-type))))))
 
 (defn- ref-db-id
   [value]
@@ -1929,13 +2041,14 @@
 
 (defn- get-block-children
   [db block {:keys [include-collapsed-children?]}]
-  (let [children-blocks (common-initial-data/get-block-children
-                         db
-                         (:db/id block)
-                         {:include-collapsed-children? include-collapsed-children?})
+  (let [children-blocks (->> (common-initial-data/get-block-children
+                              db
+                              (:db/id block)
+                              {:include-collapsed-children? include-collapsed-children?})
+                             (remove ldb/recycled?))
         large-page? (>= (count children-blocks) 100)
         children (if large-page?
-                   (direct-child-blocks db (:db/id block))
+                   (remove ldb/recycled? (direct-child-blocks db (:db/id block)))
                    children-blocks)]
     {:large-page? large-page?
      :children (->> children
@@ -2568,9 +2681,20 @@
   [repo ops opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (try
-      (worker-util/profile
-       "apply outliner ops"
-       (outliner-op/apply-ops! conn ops opts))
+      (let [page-id (let [id (:ui/page-id opts)]
+                      (if (and (string? id) (common-util/uuid-string? id))
+                        (uuid id)
+                        id))
+            opts (dissoc opts :ui/page-id)
+            result (worker-util/profile
+                    "apply outliner ops"
+                    (outliner-op/apply-ops! conn ops opts))
+            page-tree (when page-id
+                        (get-block-and-children @conn page-id
+                                                {:children? true
+                                                 :include-collapsed-children? true}))]
+        (worker-plain-value @conn {:result result
+                                   :page-tree page-tree}))
       (catch :default e
         (let [data (ex-data e)
               {:keys [type payload]} (when (map? data) data)]
@@ -2727,7 +2851,7 @@
   [repo class-id]
   (let [db @(worker-state/get-datascript-conn repo)]
     (->> (db-class/get-class-objects db class-id)
-         (map entity-util/entity->map)
+         (map #(worker-plain-value db %))
          with-explicit-ref-fields-recursive)))
 
 (def-thread-api :thread-api/validate-block-tag

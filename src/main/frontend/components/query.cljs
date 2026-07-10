@@ -71,13 +71,12 @@
                           [:div (t :query/custom-view-error (str error))]))]
            (util/hiccup-keywordize result))
 
-         (not (:built-in-query? config))
-         (when-let [query-block (:logseq.property/query current-block)]
-           (when-not (string/blank? (:block/title query-block))
-             (query-view/query-result (assoc config
-                                             :id (str (:block/uuid current-block))
-                                             :query query)
-                                      current-block result)))
+        (not (:built-in-query? config))
+        (when-not (string/blank? query)
+          (query-view/query-result (assoc config
+                                          :id (str (:block/uuid current-block))
+                                          :query query)
+                                   current-block result))
 
          ;; Normally displays built-in-query results
          (and (seq result) (or only-blocks? blocks-grouped-by-page?))

@@ -25,6 +25,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -135,29 +136,59 @@
   (let [editing? (rfx/use-sub [:editor/editing?])]
     (add-button-inner block (assoc config :editing? editing?))))
 
-(hsx/defc page-blocks-cp
-  [block* {:keys [sidebar? hide-add-button? journals? on-page-blocks-rendered] :as config}]
-  (hooks/use-effect!
-   (fn []
-     (when on-page-blocks-rendered
-       (on-page-blocks-rendered))))
+(defn- page-children->tree
+  [block children]
+  (let [tree (outliner-tree/blocks->vec-tree (cons block children) (:block/uuid block))]
+    (if (entity/page? block)
+      tree
+      (:block/children (first tree)))))
+
+(defn- use-page-block-state
+  [block*]
   (let [[quick-add-children set-quick-add-children!] (hooks/use-state nil)
         [loaded-children set-loaded-children!] (hooks/use-state (:block/children block*))
         _doc-mode? (rfx/use-sub [:document/mode?])
         latest-transacted-entity-uuids (rfx/use-sub [:db/latest-transacted-entity-uuids])
+        latest-page-tree (when (= (:block/uuid block*)
+                                  (get-in (:page-tree latest-transacted-entity-uuids)
+                                          [:block :block/uuid]))
+                           (:page-tree latest-transacted-entity-uuids))
+        latest-page-children (:children latest-page-tree)
         id (:db/id block*)
-        block block*
+        block (or (:block latest-page-tree) block*)
         quick-add-page? (= (:block/title block) common-config/quick-add-page-name)]
     (hooks/use-effect!
      (fn []
-       (when-let [block-uuid (:block/uuid block*)]
-         (p/let [result (db-async/<get-block-with-children (state/get-current-repo)
-                                                            block-uuid
-                                                            {:children? true
-                                                             :include-collapsed-children? true})]
-	           (set-loaded-children! (vec (:children result)))))
-	       nil)
-	     [(:block/uuid block*) latest-transacted-entity-uuids])
+       (set-loaded-children! (:block/children block*))
+       nil)
+     [(:block/uuid block*)])
+    (hooks/use-effect!
+     (fn []
+       (let [deleted-ids (:deleted-ids latest-transacted-entity-uuids)]
+         (cond
+           latest-page-children
+           (set-loaded-children! latest-page-children)
+
+           (seq deleted-ids)
+           (set-loaded-children! #(vec (remove (comp deleted-ids :block/uuid) %)))
+
+           :else
+           (when-let [block-uuid (:block/uuid block*)]
+             (p/let [result (db-async/<get-block-with-children (state/get-current-repo)
+                                                                block-uuid
+                                                                {:children? true
+                                                                 :include-collapsed-children? true})]
+               (set-loaded-children! (vec (:children result)))))))
+       nil)
+     [(:block/uuid block*) latest-transacted-entity-uuids])
+    (hooks/use-effect!
+     (fn []
+       (when latest-page-tree
+         (when-let [edit-block-f (state/take-edit-block-fn!
+                                   (:editor/edit-block-fn-id latest-transacted-entity-uuids))]
+           (util/schedule edit-block-f)))
+       nil)
+     [latest-page-tree (:editor/edit-block-fn-id latest-transacted-entity-uuids)])
     (hooks/use-effect!
      (fn []
        (if quick-add-page?
@@ -165,11 +196,25 @@
            (set-quick-add-children! blocks))
          (set-quick-add-children! nil)))
      [quick-add-page? id])
+    {:block block
+     :latest-page-children latest-page-children
+     :loaded-children loaded-children
+     :quick-add-children quick-add-children
+     :quick-add-page? quick-add-page?}))
+
+(hsx/defc page-blocks-cp
+  [block* {:keys [sidebar? hide-add-button? journals? on-page-blocks-rendered] :as config}]
+  (hooks/use-effect!
+   (fn []
+     (when on-page-blocks-rendered
+       (on-page-blocks-rendered))))
+  (let [{:keys [block latest-page-children loaded-children quick-add-children quick-add-page?]}
+        (use-page-block-state block*)]
     (when block
       (let [block-id (:block/uuid block)
             block? (not (entity/page? block))
-            full-children (->> loaded-children
-                               ldb/sort-by-order)
+            full-children (page-children->tree block
+                                               (or latest-page-children loaded-children))
             mobile-length-limit 50
             [children more?] (if (and (> (count full-children) mobile-length-limit) (util/mobile?) journals?)
                                [(take mobile-length-limit full-children) true]
@@ -585,9 +630,13 @@
        (when-not provided-page
          (reset! *loading? true)
          (p/let [repo (state/get-current-repo)
-                 page-block (db-async/<get-block repo page-id-uuid-or-name
-                                                  {:children? true
-                                                   :include-collapsed-children? true})
+                 {page-block :block children :children}
+                 (db-async/<get-block-with-children repo page-id-uuid-or-name
+                                                    {:children? true
+                                                     :include-collapsed-children? true})
+                 page-block (cond-> page-block
+                              (some? children)
+                              (assoc :block/children children))
                  page-id (:db/id page-block)
                  refs-count (when-not (or (entity/class? page-block) (entity/property? page-block))
                               (db-async/<get-block-refs-count repo page-id))]

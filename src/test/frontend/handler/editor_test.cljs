@@ -15,7 +15,7 @@
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.modules.outliner.op :as frontend-outliner-op]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [frontend.util :as util]
@@ -25,9 +25,13 @@
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.op :as outliner-op]
             [promesa.core :as p]))
 
-(use-fixtures :each {:before test-helper/start-test-db!
+(use-fixtures :each {:before (fn []
+                              (async done
+                                     (test-helper/start-test-db!)
+                                     (done)))
                      :after (fn []
                               (state/set-current-repo! nil)
                               (test-helper/destroy-test-db!))})
@@ -201,7 +205,7 @@
                                                    (reset! tx-calls [db ops opts])
                                                    :tx)
                   editor/wrap-parse-block identity
-                  outliner-op/save-block! (fn [block opts]
+                  frontend-outliner-op/save-block! (fn [block opts]
                                             (swap! save-calls conj [block opts]))]
       (is (nil? (editor/save-block-if-changed! block " Old title ")))
       (is (empty? @save-calls)
@@ -502,7 +506,7 @@
                   (fn [blocks]
                     (swap! calls conj [:top-level blocks])
                     [top-level-block])
-                  outliner-op/delete-blocks!
+                  frontend-outliner-op/delete-blocks!
                   (fn [blocks opts]
                     (swap! calls conj [:delete blocks opts]))
                   db-transact/apply-outliner-ops
@@ -537,7 +541,7 @@
                           db-async/<get-blocks
                           (fn [repo ids opts]
                             (swap! calls conj [:get-blocks repo ids opts])
-                            (p/resolved [block-a block-b]))
+                            (p/resolved [{:block block-a} {:block block-b}]))
                           block-handler/get-top-level-blocks
                           (fn [blocks]
                             (let [blocks (vec blocks)]
@@ -576,7 +580,11 @@
                    :block/uuid block-id-b
                    :logseq.property/status {:db/ident :logseq.property/status.doing}}
           cycle-calls (atom [])
-          worker-calls (atom [])]
+          worker-calls (atom [])
+          original-cycle-todo! editor/db-based-cycle-todo!]
+      (set! editor/db-based-cycle-todo!
+            (fn [block]
+              (swap! cycle-calls conj block)))
       (-> (p/with-redefs [state/get-editor-action (constantly nil)
                           editor/get-selected-blocks (constantly [:node-a :node-b])
                           dom/attr (fn [node attr]
@@ -588,9 +596,7 @@
                           db-async/<get-blocks
                           (fn [repo ids opts]
                             (swap! worker-calls conj [:get-blocks repo ids opts])
-                            (p/resolved [block-a block-b]))
-                          editor/db-based-cycle-todo! (fn [block]
-                                                        (swap! cycle-calls conj block))]
+                            (p/resolved [{:block block-a} {:block block-b}]))]
             (-> (try
                   (editor/cycle-todo!)
                   (catch :default error
@@ -603,7 +609,9 @@
                 (p/catch
                  (fn [error]
                    (is false (str error))))))
-          (p/finally done)))))
+          (p/finally (fn []
+                       (set! editor/db-based-cycle-todo! original-cycle-todo!)
+                       (done)))))))
 
 (deftest db-based-cycle-todo-uses-block-status-test
   (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
@@ -1015,50 +1023,64 @@
   [block]
   (let [deleted? (atom false)
         stopped? (atom false)
-        input #js {:value ""}]
-    (with-redefs [state/get-input (constantly input)
-                  cursor/pos (constantly 0)
-                  util/stop (fn [_] (reset! stopped? true))
-                  state/get-current-repo (constantly test-helper/test-db)
-                  state/get-edit-block (constantly block)
-                  ldb/get-left-sibling (constantly nil)
-                  editor/get-state (constantly {:config {}})
-                  editor/delete-block! (fn [_] (reset! deleted? true))]
-      (#'editor/delete-block-when-zero-pos! nil)
-      {:deleted? @deleted?
-       :stopped? @stopped?})))
+        input #js {:value ""}
+        originals [state/get-input cursor/pos util/stop state/get-current-repo
+                   state/get-edit-block db-async/<get-block-sibling
+                   editor/get-state editor/delete-block!]
+        restore! (fn []
+                   (set! state/get-input (nth originals 0))
+                   (set! cursor/pos (nth originals 1))
+                   (set! util/stop (nth originals 2))
+                   (set! state/get-current-repo (nth originals 3))
+                   (set! state/get-edit-block (nth originals 4))
+                   (set! db-async/<get-block-sibling (nth originals 5))
+                   (set! editor/get-state (nth originals 6))
+                   (set! editor/delete-block! (nth originals 7)))]
+    (set! state/get-input (constantly input))
+    (set! cursor/pos (constantly 0))
+    (set! util/stop (fn [_] (reset! stopped? true)))
+    (set! state/get-current-repo (constantly test-helper/test-db))
+    (set! state/get-edit-block (constantly block))
+    (set! db-async/<get-block-sibling (fn [& _] (p/resolved nil)))
+    (set! editor/get-state (constantly {:config {}}))
+    (set! editor/delete-block! (fn [_] (reset! deleted? true)))
+    (-> (#'editor/delete-block-when-zero-pos! nil)
+        (p/then (fn []
+                  {:deleted? @deleted?
+                   :stopped? @stopped?}))
+        (p/finally restore!))))
 
 (deftest delete-block-when-zero-pos-keeps-asset-block-test
-  (testing "Backspace at the start of an asset block does not delete the block"
-    (is (= {:deleted? false
-            :stopped? true}
-           (delete-block-at-zero-pos-result
-            {:db/id 1
-             :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
-             :block/title ""
-             :block/page {:db/id 10}
-             :logseq.property.asset/type "png"})))))
+  (async done
+    (-> (p/let [result (delete-block-at-zero-pos-result
+                        {:db/id 1
+                         :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                         :block/title ""
+                         :block/page {:db/id 10}
+                         :logseq.property.asset/type "png"})]
+          (is (= {:deleted? false :stopped? true} result)))
+        (p/finally done))))
 
 (deftest delete-block-when-zero-pos-keeps-comments-block-test
-  (testing "Backspace at the start of a Comments block does not delete the block"
-    (is (= {:deleted? false
-            :stopped? true}
-           (delete-block-at-zero-pos-result
-            {:db/id 1
-             :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
-             :block/title ""
-             :block/page {:db/id 10}
-             :block/tags [{:db/ident :logseq.class/Comments}]})))))
+  (async done
+    (-> (p/let [result (delete-block-at-zero-pos-result
+                        {:db/id 1
+                         :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                         :block/title ""
+                         :block/page {:db/id 10}
+                         :block/tags [{:db/ident :logseq.class/Comments}]})]
+          (is (= {:deleted? false :stopped? true} result)))
+        (p/finally done))))
 
 (deftest delete-block-when-zero-pos-keeps-regular-empty-block-behavior-test
-  (testing "Backspace at the start of a regular empty block still deletes it"
-    (is (= {:deleted? true
-            :stopped? true}
-           (delete-block-at-zero-pos-result
-            {:db/id 1
-             :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
-             :block/title ""
-             :block/page {:db/id 10}})))))
+  (async done
+    (-> (p/let [result (delete-block-at-zero-pos-result
+                        {:db/id 1
+                         :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                         :block/title ""
+                         :block/page {:db/id 10}})]
+          (is (= {:deleted? true :stopped? true} result)))
+        (p/finally done))))
 
 (deftest move-to-prev-block-edit-fn-focuses-merged-asset-title-test
   (async done
@@ -1277,7 +1299,7 @@
           original-<get-today-journal-title db-async/<get-today-journal-title
           original-<get-journal-page-by-day db-async/<get-journal-page-by-day
           original-db-based-write-asset! editor/db-based-write-asset!
-          original-insert-blocks! outliner-op/insert-blocks!
+          original-insert-blocks! frontend-outliner-op/insert-blocks!
           original-<get-blocks db-async/<get-blocks
           original-get-edit-block state/get-edit-block
           original-get-edit-content state/get-edit-content
@@ -1292,7 +1314,7 @@
                                                 (p/resolved {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})))
       (set! editor/db-based-write-asset! (fn [& _args]
                                            (p/resolved nil)))
-      (set! outliner-op/insert-blocks! (fn [blocks target opts]
+      (set! frontend-outliner-op/insert-blocks! (fn [blocks target opts]
                                          (reset! inserted {:blocks blocks
                                                            :target target
                                                            :opts opts})))
@@ -1323,7 +1345,7 @@
                        (set! db-async/<get-today-journal-title original-<get-today-journal-title)
                        (set! db-async/<get-journal-page-by-day original-<get-journal-page-by-day)
                        (set! editor/db-based-write-asset! original-db-based-write-asset!)
-                       (set! outliner-op/insert-blocks! original-insert-blocks!)
+                       (set! frontend-outliner-op/insert-blocks! original-insert-blocks!)
                        (set! db-async/<get-blocks original-<get-blocks)
                        (set! state/get-edit-block original-get-edit-block)
                        (set! state/get-edit-content original-get-edit-content)
@@ -1343,7 +1365,7 @@
           original-<get-today-journal-title db-async/<get-today-journal-title
           original-<get-journal-page-by-day db-async/<get-journal-page-by-day
           original-db-based-write-asset! editor/db-based-write-asset!
-          original-insert-blocks! outliner-op/insert-blocks!
+          original-insert-blocks! frontend-outliner-op/insert-blocks!
           original-<get-blocks db-async/<get-blocks
           original-get-edit-block state/get-edit-block
           original-get-edit-content state/get-edit-content
@@ -1358,7 +1380,7 @@
                                                 (p/resolved {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})))
       (set! editor/db-based-write-asset! (fn [& _args]
                                            (p/resolved nil)))
-      (set! outliner-op/insert-blocks! (fn [blocks target opts]
+      (set! frontend-outliner-op/insert-blocks! (fn [blocks target opts]
                                          (reset! inserted {:blocks blocks
                                                            :target target
                                                            :opts opts})))
@@ -1387,7 +1409,7 @@
                        (set! db-async/<get-today-journal-title original-<get-today-journal-title)
                        (set! db-async/<get-journal-page-by-day original-<get-journal-page-by-day)
                        (set! editor/db-based-write-asset! original-db-based-write-asset!)
-                       (set! outliner-op/insert-blocks! original-insert-blocks!)
+                       (set! frontend-outliner-op/insert-blocks! original-insert-blocks!)
                        (set! db-async/<get-blocks original-<get-blocks)
                        (set! state/get-edit-block original-get-edit-block)
                        (set! state/get-edit-content original-get-edit-content)
@@ -1482,29 +1504,35 @@
       "Temporary collapsed UI state should skip children loading"))
 
 (deftest paste-cut-recycled-block-moves-existing-node-out-of-recycle
-  (test-helper/load-test-files [{:page {:block/title "Page 1"}
-                                 :blocks [{:block/title "source"}]}
-                                {:page {:block/title "Page 2"}
-                                 :blocks [{:block/title "target"}]}])
-  (let [source (test-helper/find-block-by-content "source")
-        target (test-helper/find-block-by-content "target")
-        test-db (conn/get-db test-helper/test-db)
-        recycle-page (ldb/get-page test-db "Recycle")]
-    (outliner-core/delete-blocks! (conn/get-db test-helper/test-db false) [source] {})
-    (state/set-block-op-type! :cut)
-    (editor/paste-blocks [{:block/uuid (:block/uuid source)
-                           :block/title "source"}]
-                         {:target-block target
-                          :sibling? true
-                          :keep-uuid? true
-                          :ops-only? true})
-    (let [source' (db-utils/entity (conn/get-db test-helper/test-db)
-                                   [:block/uuid (:block/uuid source)])]
-      (is (= (:db/id (:block/page target)) (:db/id (:block/page source'))))
-      (is (= (:db/id (:block/parent target)) (:db/id (:block/parent source'))))
-      (is (nil? (:logseq.property/deleted-at source')))
-      (is (nil? (:logseq.property.recycle/original-page source')))
-      (is (not= (:db/id recycle-page) (:db/id (:block/page source')))))))
+  (async done
+    (test-helper/load-test-files [{:page {:block/title "Page 1"}
+                                   :blocks [{:block/title "source"}]}
+                                  {:page {:block/title "Page 2"}
+                                   :blocks [{:block/title "target"}]}])
+    (let [source (test-helper/find-block-by-content "source")
+          target (test-helper/find-block-by-content "target")
+          test-db (conn/get-db test-helper/test-db)
+          recycle-page (ldb/get-page test-db "Recycle")]
+      (outliner-core/delete-blocks! (conn/get-db test-helper/test-db false) [source] {})
+      (state/set-block-op-type! :cut)
+      (-> (p/with-redefs [db-transact/apply-outliner-ops
+                          (fn [_db ops opts]
+                            (outliner-op/apply-ops!
+                             (conn/get-db test-helper/test-db false) ops opts))]
+            (p/let [_ (editor/paste-blocks [{:block/uuid (:block/uuid source)
+                                             :block/title "source"}]
+                                           {:target-block target
+                                            :sibling? true
+                                            :keep-uuid? true
+                                            :ops-only? true})]
+              (let [source' (db-utils/entity (conn/get-db test-helper/test-db)
+                                             [:block/uuid (:block/uuid source)])]
+                (is (= (:db/id (:block/page target)) (:db/id (:block/page source'))))
+                (is (= (:db/id (:block/parent target)) (:db/id (:block/parent source'))))
+                (is (nil? (:logseq.property/deleted-at source')))
+                (is (nil? (:logseq.property.recycle/original-page source')))
+                (is (not= (:db/id recycle-page) (:db/id (:block/page source')))))))
+          (p/finally done)))))
 
 (deftest paste-og-copied-heading-page-refs-creates-journal-pages
   (async done
@@ -1528,7 +1556,7 @@
                       db-async/<get-journal-page-by-day (fn [_repo _journal-day]
                                                          (p/resolved nil))
                       state/<invoke-db-worker <pull-page-from-test-db
-                      outliner-op/insert-blocks! (fn [blocks target opts]
+                      frontend-outliner-op/insert-blocks! (fn [blocks target opts]
                                                    (reset! inserted {:blocks blocks
                                                                      :target target
                                                                      :opts opts})
@@ -1573,7 +1601,7 @@
                       db-async/<get-journal-page-by-day (fn [_repo _journal-day]
                                                          (p/resolved nil))
                       state/<invoke-db-worker <pull-page-from-test-db
-                      outliner-op/insert-blocks! (fn [blocks target opts]
+                      frontend-outliner-op/insert-blocks! (fn [blocks target opts]
                                                    (reset! inserted {:blocks blocks
                                                                      :target target
                                                                      :opts opts})

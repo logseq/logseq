@@ -1,5 +1,6 @@
 (ns ^:no-doc frontend.handler.block
   (:require [clojure.string :as string]
+            [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.components.block.comments-model :as comments-model]
             [frontend.config :as config]
@@ -28,37 +29,39 @@
 
 (defn get-idx-of-order-list-block
   [block order-list-type]
-  (let [order-block-fn? (fn [block]
-                          (let [type (pu/lookup block :logseq.property/order-list-type)]
-                            (= type order-list-type)))
-        prev-block-fn   ldb/get-left-sibling
-        prev-block      (prev-block-fn block)]
-    (letfn [(order-sibling-list [b]
-              (lazy-seq
-               (when (order-block-fn? b)
-                 (cons b (order-sibling-list (prev-block-fn b))))))
-            (order-parent-list [b]
-              (lazy-seq
-               (when (order-block-fn? b)
-                 (cons b (order-parent-list (:block/parent b))))))]
-      (let [idx           (if prev-block
-                            (count (order-sibling-list block)) 1)
-            order-parents-count (dec (count (order-parent-list block)))
-            delta (if (neg? order-parents-count) 0 (mod order-parents-count 3))]
-        (cond
-          (zero? delta) idx
+  (when (de/entity? block)
+    (let [order-block-fn? (fn [block]
+                            (let [type (pu/lookup block :logseq.property/order-list-type)]
+                              (= type order-list-type)))
+          prev-block-fn   ldb/get-left-sibling
+          prev-block      (prev-block-fn block)]
+      (letfn [(order-sibling-list [b]
+                (lazy-seq
+                 (when (order-block-fn? b)
+                   (cons b (order-sibling-list (prev-block-fn b))))))
+              (order-parent-list [b]
+                (lazy-seq
+                 (when (order-block-fn? b)
+                   (cons b (order-parent-list (:block/parent b))))))]
+        (let [idx           (if prev-block
+                              (count (order-sibling-list block)) 1)
+              order-parents-count (dec (count (order-parent-list block)))
+              delta (if (neg? order-parents-count) 0 (mod order-parents-count 3))]
+          (cond
+            (zero? delta) idx
 
-          (= delta 1)
-          (some-> (util/convert-to-letters idx) util/safe-lower-case)
+            (= delta 1)
+            (some-> (util/convert-to-letters idx) util/safe-lower-case)
 
-          :else
-          (util/convert-to-roman idx))))))
+            :else
+            (util/convert-to-roman idx)))))))
 
 (defn attach-order-list-state
   [config block]
   (let [type (pu/lookup block :logseq.property/order-list-type)
         own-order-list-type  (some-> type str string/lower-case)
-        own-order-list-index (some->> own-order-list-type (get-idx-of-order-list-block block))]
+        own-order-list-index (or (:block.temp/order-list-index block)
+                                 (some->> own-order-list-type (get-idx-of-order-list-block block)))]
     (assoc config :own-order-list-type own-order-list-type
            :own-order-list-index own-order-list-index
            :own-order-number-list? (= own-order-list-type "number"))))
@@ -197,7 +200,8 @@
 (defn- indent-target-allowed?
   [block indent?]
   (or (not indent?)
-      (let [left (ldb/get-left-sibling block)]
+      (let [left (when (de/entity? block)
+                   (ldb/get-left-sibling block))]
         (not (comments-model/comments-area? left)))))
 
 (let [*timeout (atom nil)]
