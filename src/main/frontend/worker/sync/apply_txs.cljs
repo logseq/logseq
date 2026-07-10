@@ -406,6 +406,13 @@
     (keep block-uuid-lookup-ref-value
           [(second item) (nth item 3 nil)])))
 
+(defn- tx-data-has-block-uuid-ref?
+  [tx-data]
+  (boolean
+   (some (fn [item]
+           (seq (tx-item-ref-block-uuids item)))
+         tx-data)))
+
 (defn- tx-item-retract-entity-block-uuid
   [item]
   (when (and (vector? item)
@@ -1172,9 +1179,13 @@
                 tx-data (some->> (:tx-data remote-tx)
                                  (map (partial resolve-temp-id db))
                                  (tx-sanitize/sanitize-tx db)
-                                 drop-stale-adds-after-remote-entity-delete
-                                 (drop-stale-deleted-block-ref-ops db deleted-block-uuids)
-                                 (drop-missing-block-ref-ops db))
+                                 drop-stale-adds-after-remote-entity-delete)
+                tx-data (cond->> tx-data
+                          (seq deleted-block-uuids)
+                          (drop-stale-deleted-block-ref-ops db deleted-block-uuids)
+
+                          (tx-data-has-block-uuid-ref? tx-data)
+                          (drop-missing-block-ref-ops db))
                 tx-data (cond->> tx-data
                           db-before-local-reversal
                           (drop-local-reversal-stale-target-ops db-before-local-reversal db))

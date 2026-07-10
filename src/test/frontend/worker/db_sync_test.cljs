@@ -6565,6 +6565,35 @@
                    (:block/title (d/entity @conn parent-id))))
             (is (nil? (d/entity @conn [:block/uuid child2-uuid])))))))))
 
+(deftest apply-remote-txs-skips-block-ref-filters-when-txs-have-no-block-uuid-refs-test
+  (testing "plain remote title updates avoid block-ref filters"
+    (let [{:keys [conn parent]} (setup-parent-child)
+          parent-id (:db/id parent)
+          stale-deleted-ref-filter-computations (atom 0)
+          missing-ref-filter-computations (atom 0)
+          original-stale-deleted-ref-filter-fn (deref (var sync-apply/drop-stale-deleted-block-ref-ops))
+          original-missing-ref-filter-fn (deref (var sync-apply/drop-missing-block-ref-ops))
+          remote-txs (mapv (fn [index]
+                             {:tx-data [[:db/add parent-id
+                                         :block/title
+                                         (str "remote title " index)]]})
+                           (range 128))]
+      (with-redefs [sync-apply/drop-stale-deleted-block-ref-ops
+                    (fn [db deleted-block-uuids tx-data]
+                      (swap! stale-deleted-ref-filter-computations inc)
+                      (original-stale-deleted-ref-filter-fn db deleted-block-uuids tx-data))
+                    sync-apply/drop-missing-block-ref-ops
+                    (fn [db tx-data]
+                      (swap! missing-ref-filter-computations inc)
+                      (original-missing-ref-filter-fn db tx-data))]
+        (with-datascript-conns conn nil
+          (fn []
+            (#'sync-apply/apply-remote-txs! test-repo nil remote-txs)
+            (is (zero? @stale-deleted-ref-filter-computations))
+            (is (zero? @missing-ref-filter-computations))
+            (is (= "remote title 127"
+                   (:block/title (d/entity @conn parent-id))))))))))
+
 (deftest apply-remote-txs-keeps-refs-to-block-recreated-after-earlier-delete-test
   (testing "a later remote tx can recreate a block uuid deleted earlier in the same batch"
     (let [{:keys [conn parent child2]} (setup-parent-child)
