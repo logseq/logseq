@@ -1,5 +1,8 @@
 let is_option token = String.length token > 0 && token.[0] = '-'
-let option_value key options = Option.join (Vec.assoc_opt key options)
+let option_value key options =
+  Vec.find_map
+    (fun (candidate, value) -> if candidate = key then value else None)
+    options
 let option_present key options = Vec.mem_assoc key options
 
 let normalize_key = function
