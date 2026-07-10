@@ -3027,10 +3027,11 @@
                           ^js pill-rect (.getBoundingClientRect pill)
                           content-rect (when content (.getBoundingClientRect content))
                           content-width (if content-rect (.-width content-rect) 0)
+                          ;; Nested node refs can hide their natural width behind local overflow styles.
                           content-scroll (if content
                                            (max (.-scrollWidth content)
                                                 (max-scroll-width
-                                                 (.querySelectorAll content "*")))
+                                                 (.querySelectorAll content ".page-ref > span, .block-title-wrap, .multi-values.jtrigger")))
                                            0)
                           pill-chrome (max 0 (- (.-width pill-rect) content-width))]
                       (+ pill-chrome content-scroll)))
