@@ -3093,7 +3093,7 @@
            (if observer
              (.disconnect observer)
              (.removeEventListener js/window "resize" measure!)))))
-     [block properties show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
+     [(:block/uuid block) (:block/updated-at block) properties show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
     [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden.w-full.min-w-0
      [:div
       {:class (util/classnames
