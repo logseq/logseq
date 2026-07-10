@@ -575,17 +575,17 @@ let resolve_tag_id invoke_config repo selector =
       bind (pull_tag_by_uuid invoke_config repo uuid) (fun result ->
           pure (tag_id_of_result result))
 
-let rec resolve_tag_ids invoke_config repo selectors =
-  match Vec.pop_front selectors with
-  | None -> Cli_effect.pure (Ok Vec.empty)
-  | Some (selector, rest) ->
-      let open Cli_effect in
-      bind (resolve_tag_id invoke_config repo selector) (function
-        | Error err -> pure (Error err)
-        | Ok id ->
-            bind (resolve_tag_ids invoke_config repo rest) (function
-              | Error err -> pure (Error err)
-              | Ok ids -> pure (Ok (Vec.push_front ids id))))
+let resolve_tag_ids invoke_config repo selectors =
+  let open Cli_effect in
+  let rec loop acc remaining =
+    match Vec.pop_front remaining with
+    | None -> pure (Ok acc)
+    | Some (selector, rest) ->
+        bind (resolve_tag_id invoke_config repo selector) (function
+          | Error err -> pure (Error err)
+          | Ok id -> loop (Vec.push_back acc id) rest)
+  in
+  loop Vec.empty selectors
 
 let resolve_property_ident invoke_config repo selector =
   let open Cli_effect in
@@ -615,17 +615,17 @@ let resolve_property_ident invoke_config repo selector =
                    (Edn_util.keyword_to_string (Edn_util.keyword_t name)))
                 (fun entity -> pure (property_ident_of_entity entity)))
 
-let rec resolve_property_idents invoke_config repo selectors =
-  match Vec.pop_front selectors with
-  | None -> Cli_effect.pure (Ok Vec.empty)
-  | Some (selector, rest) ->
-      let open Cli_effect in
-      bind (resolve_property_ident invoke_config repo selector) (function
-        | Error err -> pure (Error err)
-        | Ok ident ->
-            bind (resolve_property_idents invoke_config repo rest) (function
-              | Error err -> pure (Error err)
-              | Ok idents -> pure (Ok (Vec.push_front idents ident))))
+let resolve_property_idents invoke_config repo selectors =
+  let open Cli_effect in
+  let rec loop acc remaining =
+    match Vec.pop_front remaining with
+    | None -> pure (Ok acc)
+    | Some (selector, rest) ->
+        bind (resolve_property_ident invoke_config repo selector) (function
+          | Error err -> pure (Error err)
+          | Ok ident -> loop (Vec.push_back acc ident) rest)
+  in
+  loop Vec.empty selectors
 
 let normalize_task_options invoke_config repo options =
   let open Cli_effect in
@@ -797,7 +797,7 @@ let normalize_visible_title_fields config repo kind items =
 let add_optional key value fields =
   match value with
   | None -> fields
-  | Some value -> Vec.push_front fields (Edn_util.keyword key, value)
+  | Some value -> Vec.push_back fields (Edn_util.keyword key, value)
 
 let common_options common =
   Vec.empty
@@ -815,7 +815,7 @@ let common_options common =
 
 let add_bool key enabled fields =
   if enabled then
-    Vec.push_front fields (Edn_util.keyword key, Edn_util.bool true)
+    Vec.push_back fields (Edn_util.keyword key, Edn_util.bool true)
   else fields
 
 let add_optional_bool key value fields =
@@ -837,21 +837,21 @@ let options_of_parsed = function
            (Option.map
               (fun value -> Edn_util.int64 (Time.time_to_epoch_ms value))
               opts.created_after)
-      |> fun fields -> Edn_util.map_vec (fields |> Vec.rev)
+      |> Edn_util.map_vec
   | Parsed_tag opts ->
       common_options opts.common
       |> add_bool "expand" opts.expand
       |> add_optional_bool "include-built-in" opts.include_built_in
       |> add_bool "with-properties" opts.with_properties
       |> add_bool "with-extends" opts.with_extends
-      |> fun fields -> Edn_util.map_vec (fields |> Vec.rev)
+      |> Edn_util.map_vec
   | Parsed_property opts ->
       common_options opts.common
       |> add_bool "expand" opts.expand
       |> add_optional_bool "include-built-in" opts.include_built_in
       |> add_bool "with-classes" opts.with_classes
       |> add_bool "with-type" opts.with_type
-      |> fun fields -> Edn_util.map_vec (fields |> Vec.rev)
+      |> Edn_util.map_vec
   | Parsed_task opts ->
       common_options opts.common
       |> add_optional "status"
@@ -860,7 +860,7 @@ let options_of_parsed = function
            (Option.map (fun value -> Edn_util.string value) opts.priority)
       |> add_optional "content"
            (Option.map (fun value -> Edn_util.string value) opts.content)
-      |> fun fields -> Edn_util.map_vec (fields |> Vec.rev)
+      |> Edn_util.map_vec
   | Parsed_node opts ->
       common_options opts.common
       |> add_optional "tags"
@@ -869,9 +869,9 @@ let options_of_parsed = function
       |> add_optional "properties"
            (if Vec.is_empty opts.properties then None
             else Some (value_of_string_list opts.properties))
-      |> fun fields -> Edn_util.map_vec (fields |> Vec.rev)
+      |> Edn_util.map_vec
   | Parsed_asset opts ->
-      Edn_util.map_vec (opts.common |> common_options |> Vec.rev)
+      Edn_util.map_vec (opts.common |> common_options)
 
 let build ?registry:_ config _globals parsed =
   Error.bind (normalize_options parsed) (fun parsed ->

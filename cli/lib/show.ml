@@ -676,7 +676,7 @@ let fetch_linked_references config repo root_id =
     (fun refs ->
       let rec pull_blocks acc remaining =
         match Vec.pop_front remaining with
-        | None -> pure (Vec.rev acc)
+        | None -> pure acc
         | Some (id, rest) ->
             bind
               (Transport.thread_api_pull config ~repo
@@ -686,7 +686,7 @@ let fetch_linked_references config repo root_id =
               (fun value ->
                 let acc =
                   if missing_entity value || property_value_block value then acc
-                  else Vec.push_front acc (Block.of_value value)
+                  else Vec.push_back acc (Block.of_value value)
                 in
                 pull_blocks acc rest)
       in
@@ -718,12 +718,12 @@ let attach_page_hierarchy config repo ?max_depth root =
               (fun children ->
                 let rec attach_all acc remaining =
                   match Vec.pop_front remaining with
-                  | None -> pure (Vec.rev acc)
+                  | None -> pure acc
                   | Some (child, rest) ->
                       bind
                         (attach_node (depth + 1) visited child)
                         (fun child ->
-                          attach_all (Vec.push_front acc child) rest)
+                          attach_all (Vec.push_back acc child) rest)
                 in
                 bind (attach_all Vec.empty children) (fun children ->
                     pure (assoc_children node children))))
@@ -850,12 +850,12 @@ let rec resolve_linked_blocks ?(depth = 1) ?(visited = Vec.empty) config
       else
         let rec resolve_all acc remaining =
           match Vec.pop_front remaining with
-          | None -> pure (Vec.rev acc)
+          | None -> pure acc
           | Some (child, rest) ->
               bind
                 (resolve_linked_blocks ~depth:(depth + 1) ~visited config action
                    child)
-                (fun child -> resolve_all (Vec.push_front acc child) rest)
+                (fun child -> resolve_all (Vec.push_back acc child) rest)
         in
         bind (resolve_all Vec.empty children) (fun children ->
             pure
@@ -942,10 +942,10 @@ let empty_render_metadata =
 let unique_preserve_order values =
   let rec loop acc remaining =
     match Vec.pop_front remaining with
-    | None -> Vec.rev acc
+    | None -> acc
     | Some (value, rest) ->
         if Vec.mem value rest then loop acc rest
-        else loop (Vec.push_front acc value) rest
+        else loop (Vec.push_back acc value) rest
   in
   loop Vec.empty values
 
@@ -1106,7 +1106,7 @@ let fetch_property_titles invoke_config repo idents =
   let open Cli_effect in
   let rec pull acc remaining =
     match Vec.pop_front remaining with
-    | None -> pure (Vec.rev acc)
+    | None -> pure acc
     | Some ((key_text, ident), rest) ->
         bind
           (Transport.thread_api_pull invoke_config ~repo
@@ -1122,7 +1122,7 @@ let fetch_property_titles invoke_config repo idents =
                     (entity_label_from_value value)
                     ~default:(fallback_property_title key_text)
                 in
-                Vec.push_front acc (key_text, title)
+                Vec.push_back acc (key_text, title)
               else acc
             in
             pull acc rest)
@@ -1133,7 +1133,7 @@ let fetch_property_value_labels invoke_config repo ids =
   let open Cli_effect in
   let rec pull acc remaining =
     match Vec.pop_front remaining with
-    | None -> pure (Vec.rev acc)
+    | None -> pure acc
     | Some (id, rest) ->
         bind
           (Transport.thread_api_pull invoke_config ~repo
@@ -1144,7 +1144,7 @@ let fetch_property_value_labels invoke_config repo ids =
           (fun value ->
             let acc =
               match entity_label_from_value value with
-              | Some label -> Vec.push_front acc (id, label)
+              | Some label -> Vec.push_back acc (id, label)
               | None -> acc
             in
             pull acc rest)
@@ -1613,12 +1613,12 @@ let resolve_linked_references config (action : action) = function
       let open Cli_effect in
       let rec resolve_all acc remaining =
         match Vec.pop_front remaining with
-        | None -> pure (Vec.rev acc)
+        | None -> pure acc
         | Some (block, rest) ->
             bind (resolve_linked_blocks config action block.Block.raw)
               (fun raw ->
                 let block = Block.of_value raw in
-                resolve_all (Vec.push_front acc { block with Block.raw }) rest)
+                resolve_all (Vec.push_back acc { block with Block.raw }) rest)
       in
       bind (resolve_all Vec.empty refs.blocks) (fun blocks ->
           pure (Some { refs with blocks }))
@@ -1702,18 +1702,18 @@ let execute_with_mode action config mode =
           | Ok invoke_config ->
               let rec build_entries acc remaining =
                 match Vec.pop_front remaining with
-                | None -> pure (Vec.rev acc)
+                | None -> pure acc
                 | Some (id, rest) ->
                     bind (pull_entity invoke_config action.repo (By_id id))
                       (fun value ->
                         if missing_entity value then
                           build_entries
-                            (Vec.push_front acc
+                            (Vec.push_back acc
                                (id, Error (entity_error (By_id id))))
                             rest
                         else if recycled_page value then
                           build_entries
-                            (Vec.push_front acc
+                            (Vec.push_back acc
                                (id, Error (recycled_page_error ())))
                             rest
                         else
@@ -1748,7 +1748,7 @@ let execute_with_mode action config mode =
                                               in
                                               bind metadata (fun metadata ->
                                                   build_entries
-                                                    (Vec.push_front acc
+                                                    (Vec.push_back acc
                                                        ( id,
                                                          Ok
                                                            ( root,
