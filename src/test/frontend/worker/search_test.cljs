@@ -221,6 +221,7 @@
                               (swap! fts-binds conj (first bind)))
                             #js []))}]
       (with-redefs [search/combine-results (fn [_db results] results)
+                    d/db? (constantly false)
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
                       result)]
@@ -248,7 +249,7 @@
       (with-redefs [search/combine-results (fn [_db results] results)
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
-                      result)]
+                      (assoc result :block/uuid (uuid (:id result))))]
         (is (empty? (search/search-blocks (atom :large-db) db "xxx and " {:limit 10})))
         (is (empty? (search/search-blocks (atom :large-db) db "xxx AND " {:limit 10})))
         (is (empty? (search/search-blocks (atom :large-db) db "xxx or " {:limit 10})))
@@ -294,7 +295,7 @@
       (with-redefs [search/combine-results (fn [_db results] results)
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
-                      result)]
+                      (assoc result :block/uuid (uuid (:id result))))]
         (let [result (vec (search/search-blocks (atom :large-db) db "nwp" {:limit 10}))]
           (is (= [{:id "67e55044-10b1-426f-9247-bb680e5fe0c8"
                    :page "67e55044-10b1-426f-9247-bb680e5fe0c8"
@@ -394,7 +395,7 @@
       (with-redefs [search/combine-results (fn [_db results] results)
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
-                      result)]
+                      (assoc result :block/uuid (uuid (:id result))))]
         (let [result (vec (search/search-blocks (atom :large-db)
                                                 db
                                                 "block"
@@ -452,9 +453,10 @@
       (with-redefs [search/combine-results (fn [_db results]
                                              (doall results)
                                              rows)
+                    d/db? (constantly false)
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
-                      result)]
+                      (assoc result :block/uuid (uuid (:id result))))]
         (is (= 10
                (count (search/search-blocks (atom :large-db)
                                             (checking-db)

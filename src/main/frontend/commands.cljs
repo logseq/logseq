@@ -662,10 +662,10 @@
   (db-based-set-priority priority))
 
 (defmethod handle-step :editor/set-scheduled [[_]]
-  (state/pub-event! [:editor/new-property {:property-key "Scheduled"}]))
+  (state/pub-event! [:editor/new-property {:property-key :logseq.property/scheduled}]))
 
 (defmethod handle-step :editor/set-deadline [[_]]
-  (state/pub-event! [:editor/new-property {:property-key "Deadline"}]))
+  (state/pub-event! [:editor/new-property {:property-key :logseq.property/deadline}]))
 
 (defmethod handle-step :editor/run-query-command [[_]]
   (state/pub-event! [:editor/run-query-command]))
@@ -673,10 +673,10 @@
 (def clear-markdown-heading common-util/clear-markdown-heading)
 
 (defmethod handle-step :editor/set-heading [[_ heading]]
-  (when-let [input-id (state/get-edit-input-id)]
-    (when-let [_current-input (gdom/getElement input-id)]
-      (let [current-block (state/get-edit-block)]
-        (state/pub-event! [:editor/set-heading current-block heading])))))
+  (when-let [block (state/get-edit-block)]
+    (if (nil? heading)
+      (db-property-handler/remove-block-property! (:block/uuid block) :logseq.property/heading)
+      (db-property-handler/set-block-property! (:block/uuid block) :logseq.property/heading heading))))
 
 (defmethod handle-step :editor/search-page [_]
   (state/set-editor-action! :page-search))

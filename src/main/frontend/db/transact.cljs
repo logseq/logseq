@@ -40,6 +40,26 @@
                      (cons (when (uuid? target-id) target-id)
                            (map :block/uuid blocks)))
 
+                   :move-blocks
+                   (let [[block-ids target-id] args]
+                     (cons (when (uuid? target-id) target-id)
+                           block-ids))
+
+                   :move-blocks-up-down
+                   (first args)
+
+                   :indent-outdent-blocks
+                   (first args)
+
+                   (:set-block-property :remove-block-property :delete-property-value)
+                   [(first args)]
+
+                   (:batch-set-property :batch-remove-property :batch-delete-property-value)
+                   (first args)
+
+                   :create-property-text-block
+                   [(first args)]
+
                    :delete-blocks
                    (first args)
 
@@ -48,12 +68,19 @@
        set))
 
 (defn- refresh-worker-op-blocks!
-  [ops tx-meta]
-  (let [updated-ids (op-block-uuids ops)]
-    (when (seq updated-ids)
+  [ops tx-meta page-tree]
+  (let [affected-ids (op-block-uuids ops)
+        deleted-ids (->> ops
+                         (filter #(= :delete-blocks (first %)))
+                         (mapcat (comp first second))
+                         set)
+        updated-ids (apply disj affected-ids deleted-ids)]
+    (when (seq affected-ids)
       (state/set-state! :db/latest-transacted-entity-uuids
                         {:updated-ids updated-ids
-                         :deleted-ids #{}
+                         :deleted-ids deleted-ids
+                         :page-tree page-tree
+                         :editor/edit-block-fn-id (:editor/edit-block-fn-id tx-meta)
                          :tx-id (:db-sync/tx-id tx-meta)}))))
 
 (defn transact [worker-transact repo tx-data tx-meta]
@@ -78,6 +105,7 @@
                       ensure-local-op-tx-id
                       (assoc
                        :client-id (:client-id @state/state)
+                       :ui/page-id (state/get-current-page)
                        :local-tx? true))
             request #(state/<invoke-db-worker
                       :thread-api/apply-outliner-ops
@@ -90,6 +118,6 @@
             (state/<invoke-db-worker :thread-api/undo-redo-set-pending-editor-info
                                      (state/get-current-repo)
                                      (state/get-editor-info))
-            (p/let [result (request)]
-              (refresh-worker-op-blocks! ops opts')
+            (p/let [{:keys [result page-tree]} (request)]
+              (refresh-worker-op-blocks! ops opts' page-tree)
               result))))))))

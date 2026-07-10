@@ -256,6 +256,32 @@
                                      (is (= ["b1" "b2"] updated-blocks) "Visible page blocks stay on the page")
                                      (is (empty? deleted-blocks) "Deleted block is removed from page db")))}))))
 
+(deftest-async delete-selection-focuses-the-previous-block-after-the-worker-transaction
+  (let [previous-block {:db/id 1
+                        :block/uuid (random-uuid)
+                        :block/title "previous"}
+        deleted-block {:db/id 2
+                       :block/uuid (random-uuid)
+                       :block/title "deleted"}
+        edit-call (atom nil)]
+    (-> (p/with-redefs [db-async/<get-block-sibling
+                        (fn [_repo block-id direction]
+                          (is (= (:db/id deleted-block) block-id))
+                          (is (= :left direction))
+                          (p/resolved previous-block))
+                        db-transact/apply-outliner-ops (fn [& _] (p/resolved nil))
+                        editor/edit-block! (fn [block pos]
+                                             (reset! edit-call [block pos]))]
+          (editor/delete-blocks! "test-repo"
+                                 [(:block/uuid deleted-block)]
+                                 [deleted-block]
+                                 []
+                                 false))
+        (p/then
+         (fn [_]
+           (is (= [previous-block :max] @edit-call)
+               "Deletion should wait for the worker sibling lookup before restoring focus"))))))
+
 (deftest-async backspace-before-block-merges-into-previous-blank-asset-block
   (load-test-files
    [{:page {:block/title "page1"}
@@ -470,6 +496,17 @@
                                                       :block-container #js {}})
                         editor/insert-new-block-aux! (fn [config _block _value]
                                                        (reset! insert-config config)
+                                                       (state/queue-edit-block-fn!
+                                                        (:editor/edit-block-fn-id config)
+                                                        #(p/do!
+                                                          (when-let [indent? (:tab-indent?
+                                                                           (state/get-state :editor/pending-new-block))]
+                                                            (block-handler/indent-outdent-blocks!
+                                                             [next-block] indent? nil))
+                                                          (editor/edit-block! next-block 0
+                                                                              {:container-id nil
+                                                                               :custom-content ""})
+                                                          (state/set-state! :editor/pending-new-block nil)))
                                                        [(p/resolved true) true next-block])
                         editor/get-new-container-id (constantly nil)
                         editor/indent-outdent (fn [indent?]
@@ -540,6 +577,13 @@
                                                        (swap! insert-configs conj config)
                                                        (let [next-block (first @inserted-blocks)]
                                                          (swap! inserted-blocks subvec 1)
+                                                         (state/queue-edit-block-fn!
+                                                          (:editor/edit-block-fn-id config)
+                                                          #(p/do!
+                                                            (editor/edit-block! next-block 0
+                                                                                {:container-id nil
+                                                                                 :custom-content ""})
+                                                            (state/set-state! :editor/pending-new-block nil)))
                                                          [(p/resolved true) true next-block]))
                         editor/get-new-container-id (constantly nil)
                         editor/edit-block! (fn [block pos opts]
@@ -794,7 +838,19 @@
                                comments-model/comments-blocks-property [first-block second-block]}
         inserts (atom [])
         expanded (atom [])]
-    (-> (p/with-redefs [block-handler/get-top-level-blocks identity
+    (-> (p/with-redefs [state/get-current-repo (constantly "test-repo")
+                        block-handler/get-top-level-blocks identity
+                        db-async/<resolve-comments-area-for-blocks
+                        (fn [_repo block-refs]
+                          (is (= [first-uuid second-uuid] (vec block-refs)))
+                          (p/resolved {:action :insert
+                                       :title "Comments"
+                                       :opts {:block-uuid second-uuid
+                                              :sibling? true
+                                              :edit-block? false
+                                              :other-attrs {:block/tags #{comments-model/comments-tag-ident}
+                                                            comments-model/comments-blocks-property #{[:block/uuid first-uuid]
+                                                                                                     [:block/uuid second-uuid]}}}}))
                         editor/api-insert-new-block! (fn [content opts]
                                                        (swap! inserts conj {:content content
                                                                            :opts opts})
@@ -832,8 +888,23 @@
                                :block/tags #{comments-model/comments-tag-ident}}
         inserts (atom [])
         expanded (atom [])]
-    (-> (p/with-redefs [ldb/sort-by-order identity
+    (-> (p/with-redefs [state/get-current-repo (constantly "test-repo")
                         block-handler/get-top-level-blocks identity
+                        db-async/<resolve-comments-area-for-blocks
+                        (fn [_repo block-refs]
+                          (is (= [block-uuid] (vec block-refs)))
+                          (p/resolved {:action :single
+                                       :block-ref block-uuid}))
+                        db-async/<resolve-comments-area
+                        (fn [_repo block-ref]
+                          (is (= block-uuid block-ref))
+                          (p/resolved {:action :insert
+                                       :title "Comments"
+                                       :opts {:block-uuid block-uuid
+                                              :end? true
+                                              :edit-block? false
+                                              :other-attrs {:block/tags #{comments-model/comments-tag-ident}
+                                                            comments-model/comments-blocks-property #{[:block/uuid block-uuid]}}}}))
                         editor/api-insert-new-block! (fn [content opts]
                                                        (swap! inserts conj {:content content
                                                                            :opts opts})
@@ -1025,30 +1096,23 @@
                          @inserted)
                       "Inserted comment blocks should be tagged as #Comment"))))))
 
-(deftest delete-comment-targets
-  (let [delete-targets (resolve 'frontend.handler.comments/comment-delete-targets)
-        first-comment {:block/uuid (random-uuid)
+(deftest-async comment-delete-targets-use-worker
+  (let [delete-targets (resolve 'frontend.handler.comments/<comment-delete-targets)
+        comment-block {:block/uuid (random-uuid)
                        :block/title "first"}
-        second-comment {:block/uuid (random-uuid)
-                        :block/title "second"}
-        deleted-comment (assoc second-comment :logseq.property/deleted-at 1)
         comments-area {:block/uuid (random-uuid)
                        :block/title "Comments"
-                       :block/tags #{comments-model/comments-tag-ident}}]
+                       :block/tags #{comments-model/comments-tag-ident}}
+        resolved-block-ref (atom nil)]
     (is (fn? delete-targets))
     (when (fn? delete-targets)
-      (testing "deletes the comments area when the deleted comment is the only live child"
-        (let [comments-area (assoc comments-area :block/_parent [first-comment])
-              first-comment (assoc first-comment :block/parent comments-area)]
-          (is (= [comments-area]
-                 (delete-targets first-comment)))))
-      (testing "keeps the comments area when other live comments remain"
-        (let [comments-area (assoc comments-area :block/_parent [first-comment second-comment])
-              first-comment (assoc first-comment :block/parent comments-area)]
-          (is (= [first-comment]
-                 (delete-targets first-comment)))))
-      (testing "ignores already deleted comment children"
-        (let [comments-area (assoc comments-area :block/_parent [first-comment deleted-comment])
-              first-comment (assoc first-comment :block/parent comments-area)]
-          (is (= [comments-area]
-                 (delete-targets first-comment))))))))
+      (-> (p/with-redefs [state/get-current-repo (constantly "test-repo")
+                          db-async/<get-comment-delete-targets
+                          (fn [_repo block-ref]
+                            (reset! resolved-block-ref block-ref)
+                            (p/resolved [comments-area]))]
+            (delete-targets comment-block))
+          (p/then
+           (fn [targets]
+             (is (= (:block/uuid comment-block) @resolved-block-ref))
+             (is (= [comments-area] targets))))))))
