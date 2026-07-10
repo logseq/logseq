@@ -2,15 +2,18 @@
   (:require [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [datascript.storage :as storage]
             [frontend.common.thread-api :as thread-api]
+            [frontend.db.query-dsl :as query-dsl]
+            [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-core :as db-core]
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.export :as worker-export]
             [frontend.worker.graph-view :as graph-view]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.platform :as platform]
-            [frontend.worker.query-dsl :as query-dsl]
+            [frontend.worker.query-dsl :as worker-query-dsl]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
@@ -19,15 +22,14 @@
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.download :as sync-download]
             [frontend.worker.undo-redo :as worker-undo-redo]
-            [frontend.worker-common.util :as worker-util]
             [goog.object :as gobj]
-            [logseq.common.config :as common-config]
             [logseq.api.db-based.tools :as api-tools]
             [logseq.cli.common.db-worker :as cli-db-worker]
+            [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.common.initial-data :as common-initial-data]
-            [logseq.db.common.view :as db-view]
             [logseq.db.common.order :as db-order]
+            [logseq.db.common.view :as db-view]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -85,6 +87,9 @@
           :thread-api/page-exists? :thread-api/get-case-page :thread-api/get-tags-by-name
           :thread-api/resolve-query-inputs :thread-api/get-block-parent
           :thread-api/get-block-page-info
+          :thread-api/get-comments-area-block :thread-api/resolve-comments-area
+          :thread-api/resolve-comments-area-for-blocks :thread-api/get-comment-delete-targets
+          :thread-api/get-comment-threads-for-block :thread-api/get-comment-thread-block-uuids
           :thread-api/get-block-immediate-children :thread-api/get-block-sibling
           :thread-api/get-page-blocks-tree :thread-api/get-block-class-default-properties
           :thread-api/get-all-classes :thread-api/get-structured-children :thread-api/get-class-extends-children-tree
@@ -196,6 +201,29 @@
         (do
           (cleanup)
           result)))))
+
+(deftest apply-outliner-ops-returns-plain-block-map-test
+  (restoring-worker-state
+   (fn []
+     (let [apply-ops! (get-thread-api :thread-api/apply-outliner-ops)
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [result (:result
+                     (apply-ops! test-repo
+                                 [[:upsert-property
+                                   [:user.property/test-property
+                                    {:logseq.property/type :default}
+                                    {:property-name "test-property"}]]]
+                                 {}))]
+         (is (not (de/entity? result)))
+         (is (= :user.property/test-property (:db/ident result)))
+         (is (= "test-property" (:block/title result)))
+         (is (= "test-property" (:block/raw-title result)))
+         (is (= :default (:logseq.property/type result)))
+         (is (= :db.cardinality/one (:db/cardinality result)))
+         (is (= (:db/id result)
+                (:db/id (#'db-core/resolve-block-entity @conn :user.property/test-property)))))))))
 
 (defn- fake-db
   ([]
@@ -530,9 +558,9 @@
                                                   (nil? @progress-seen-before-rebuild-work?))
                                          (reset! progress-seen-before-rebuild-work?
                                                  (boolean (seq @progress-calls))))
-                                       (if (= sql "PRAGMA user_version")
-                                         #js [#js [0]]
-                                         #js [])))
+                                            (if (= sql "PRAGMA user_version")
+                                              #js [#js [0]]
+                                              #js [])))
                             :close (fn [] nil)}
               idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
           (platform/set-platform! (build-test-platform))
@@ -822,11 +850,11 @@
      (restoring-worker-state
       (fn []
         (let [batch-sizes (atom [])
-              blocks (mapv (fn [n]
-                              {:id (str "block-" n)
-                               :page "page-1"
-                               :title (str "Block " n)})
-                            (range 65))]
+                   blocks (mapv (fn [n]
+                                  {:id (str "block-" n)
+                                   :page "page-1"
+                                   :title (str "Block " n)})
+                                (range 65))]
           (platform/set-platform!
            (build-test-platform
             {:runtime :node
@@ -849,11 +877,11 @@
         (let [active-batches (atom 0)
               max-active-batches (atom 0)
               batch-sizes (atom [])
-              blocks (mapv (fn [n]
-                              {:id (str "block-" n)
-                               :page "page-1"
-                               :title (str "Block " n)})
-                            (range 96))]
+                   blocks (mapv (fn [n]
+                                  {:id (str "block-" n)
+                                   :page "page-1"
+                                   :title (str "Block " n)})
+                                (range 96))]
           (platform/set-platform!
            (build-test-platform
             {:runtime :node
@@ -879,11 +907,11 @@
      (restoring-worker-state
       (fn []
         (let [batch-sizes (atom [])
-              blocks (mapv (fn [n]
-                              {:id (str "block-" n)
-                               :page "page-1"
-                               :title (str "Block " n)})
-                            (range 8))
+                   blocks (mapv (fn [n]
+                                  {:id (str "block-" n)
+                                   :page "page-1"
+                                   :title (str "Block " n)})
+                                (range 8))
               embed-texts (fn [texts]
                             (swap! batch-sizes conj (count texts))
                             (if (> (count texts) 2)
@@ -1342,6 +1370,27 @@
          ;; Verify the conn now has the new data
         (is (= "replaced" (:kv/value (d/entity @conn :test/entity)))))))))
 
+(deftest get-class-objects-returns-plain-worker-maps-test
+  (restoring-worker-state
+   (fn []
+     (let [conn (d/create-conn db-schema/schema)
+           block-uuid #uuid "11111111-2222-3333-4444-555555555555"]
+       (d/transact! conn [{:db/ident :logseq.class/Page
+                           :block/title "Page"}
+                          {:block/uuid block-uuid
+                           :block/title "Tagged page"
+                           :block/tags #{:logseq.class/Page}}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [class-id (:db/id (d/entity @conn :logseq.class/Page))
+             result ((get-thread-api :thread-api/get-class-objects) test-repo class-id)
+             block-result (first result)]
+         (is (= {:db/id (:db/id (d/entity @conn [:block/uuid block-uuid]))
+                 :block/uuid block-uuid
+                 :block/title "Tagged page"
+                 :block/raw-title "Tagged page"
+                 :block/tags class-id}
+                block-result)))))))
+
 ;; ---- checksum-diagnostics tests ----
 
 (deftest checksum-diagnostics-returns-local-and-remote
@@ -1589,7 +1638,8 @@
        (reset! worker-state/*datascript-conns {test-repo conn})
        (let [result (get-latest-journals! test-repo 1)]
          (is (= [latest-uuid] (mapv :block/uuid result)))
-         (is (= ["2024-01-02"] (mapv :block/title result))))))))
+         (is (= ["Jan 2nd, 2024"] (mapv :block/title result)))
+         (is (= ["Jan 2nd, 2024"] (mapv :block/raw-title result))))))))
 
 (deftest get-date-formatter-returns-worker-journal-format
   (restoring-worker-state
@@ -1737,7 +1787,7 @@
                            :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
                            :block/page [:block/uuid #uuid "11111111-1111-1111-1111-111111111111"]}])
        (reset! worker-state/*datascript-conns {test-repo conn})
-       (with-redefs [query-dsl/execute-query
+       (with-redefs [worker-query-dsl/execute-query
                      (fn [query-string db opts]
                        [(contains? (set (map first (d/q '[:find ?title
                                                           :where [_ :block/title ?title]]
@@ -1745,7 +1795,7 @@
                                    "worker task")
                         query-string
                         opts])
-                     query-dsl/execute-custom-query
+                     worker-query-dsl/execute-custom-query
                      (fn [query-m db opts]
                        [(contains? (set (map first (d/q '[:find ?title
                                                           :where [_ :block/title ?title]]
@@ -1761,6 +1811,28 @@
                 (custom-query! test-repo
                                {:query '(page querypage)}
                                {:block-attrs [:db/id :block/title]}))))))))
+
+(deftest query-dsl-worker-results-include-renderable-block-fields
+  (restoring-worker-state
+   (fn []
+     (let [query! (get-thread-api :thread-api/query-dsl-query)
+           conn (d/create-conn db-schema/schema)
+           page-uuid #uuid "11111111-1111-1111-1111-111111111111"
+           block-uuid #uuid "22222222-2222-2222-2222-222222222222"]
+       (d/transact! conn [{:db/ident :logseq.class/Page}
+                          {:block/title "querypage"
+                           :block/name "querypage"
+                           :block/uuid page-uuid
+                           :block/tags :logseq.class/Page}
+                          {:block/title "worker task"
+                           :block/uuid block-uuid
+                           :block/page [:block/uuid page-uuid]}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [result (ffirst (query! test-repo
+                                    "(page querypage)"
+                                    {:block-attrs query-dsl/db-block-attrs}))]
+         (is (= block-uuid (:block/uuid result)))
+         (is (= "worker task" (:block/raw-title result))))))))
 
 (deftest task-spent-time-runs-against-worker-db
   (restoring-worker-state
@@ -1828,8 +1900,8 @@
                            :block/tags :logseq.class/Page
                            property-id "Jun 23rd, 2026"}])
        (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [block {:db/id (:db/id (d/entity @conn [:block/uuid page-id]))
-                    :block/uuid page-id
+       (let [block {:block/uuid page-id
+                    :block/tags #{:logseq.class/Page}
                     :block/properties {property-id "Jun 23rd, 2026"}}
              page-result (display-properties! test-repo {:block block
                                                          :opts {:page-title? true}
@@ -1867,14 +1939,65 @@
                            :block/uuid page-id
                            :block/tags :logseq.class/Page}])
        (reset! worker-state/*datascript-conns {test-repo conn})
-       (let [block {:db/id (:db/id (d/entity @conn [:block/uuid page-id]))
-                    :block/uuid page-id
+       (let [block {:block/uuid page-id
+                    :block/tags #{:logseq.class/Page}
                     :block/properties {property-id #{active-value recycled-value}}}
              result (display-properties! test-repo {:block block
                                                     :opts {:page-title? true}
                                                     :show-empty-and-hidden-properties? false})]
          (is (= #{active-value}
                 (:value (first (:full-properties result))))))))))
+
+(deftest get-display-properties-reads-current-worker-block-properties
+  (restoring-worker-state
+   (fn []
+     (let [display-properties! (get-thread-api :thread-api/get-display-properties)
+           block-id #uuid "11111111-1111-1111-1111-111111111111"
+           property-id :user.property/fresh
+           property-value "fresh value"
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:db/ident property-id
+                           :block/title "Fresh"
+                           :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                           :block/tags :logseq.class/Property
+                           :logseq.property/type :default}
+                          {:block/title "Block"
+                           :block/uuid block-id
+                           property-id property-value}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [stale-block {:db/id (:db/id (d/entity @conn [:block/uuid block-id]))
+                          :block/uuid block-id
+                          :block/properties {}}
+             result (display-properties! test-repo {:block stale-block
+                                                    :opts {}
+                                                    :show-empty-and-hidden-properties? false})
+             fresh-property (some (fn [property-row]
+                                    (when (= property-id (:property-id property-row))
+                                      property-row))
+                                  (:full-properties result))]
+         (is (= property-value (:value fresh-property))))))))
+
+(deftest get-block-positioned-properties-returns-plain-property-maps
+  (restoring-worker-state
+   (fn []
+     (let [positioned-properties! (get-thread-api :thread-api/get-block-positioned-properties)
+           block-id #uuid "11111111-1111-1111-1111-111111111111"
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:block/title "Scheduled task"
+                           :block/uuid block-id
+                           :logseq.property/scheduled 1783612800000}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [block-db-id (:db/id (d/entity @conn [:block/uuid block-id]))
+             result (positioned-properties! test-repo {:block-id block-db-id
+                                                       :position :block-below})
+             scheduled-property (some (fn [property]
+                                        (when (= :logseq.property/scheduled (:db/ident property))
+                                          property))
+                                      result)]
+         (is (= "Scheduled" (:block/title scheduled-property)))
+         (is (= :datetime (:logseq.property/type scheduled-property))))))))
 
 (deftest route-title-returns-page-and-block-data
   (restoring-worker-state
@@ -1966,7 +2089,7 @@
                        page (some->> (d/q '[:find [?e ...]
                                              :where [?e :block/name "home"]]
                                            @conn)
-                                      first
+                                           first
                                       (d/entity @conn))]
                  (is (= #{"pages/Home.md" "logseq/config.edn"}
                         (set (map :path (:files result)))))

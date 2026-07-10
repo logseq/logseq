@@ -1001,20 +1001,24 @@
                          :else
                          nil)
         *entity (hooks/use-memo #(atom initial-entity) [page-id-or-name])
-        [entity'] (hooks/use-atom *entity)]
+        [entity'] (hooks/use-atom *entity)
+        latest-tx-id (:tx-id (rfx/use-sub [:db/latest-transacted-entity-uuids]))]
+    (hooks/use-effect!
+     (fn []
+       (when page-entity
+         (reset! *entity page-entity))
+       nil)
+     [page-entity])
     (hooks/use-effect!
      (fn []
        (cond
-         page-entity
-         nil
-
          (or (:skip-async-load? config) (:table-view? config))
          nil
 
          :else
          (p/let [result (<get-block page-id-or-name)]
            (reset! *entity result))))
-     [page-id-or-name])
+     [page-id-or-name latest-tx-id])
     (let [entity entity'
           config (assoc config :block entity)]
       (cond
@@ -1295,7 +1299,7 @@
                     {:style {:margin-right 1
                              :margin-top -2
                              :vertical-align "middle"}
-                     :on-pointer-down (fn [e]
+                    :on-pointer-down (fn [e]
                                         (util/stop e))}
                     (block-positioned-properties config block :block-left)])
                  (page-cp config' (if (uuid? uuid-or-title)
@@ -2786,7 +2790,7 @@
                                                                       :tag? true
                                                                       :disable-preview? true) tag)]))
                                                  popup-opts))}
-           (for [tag (take 2 block-tags)]
+          (for [tag (take 2 block-tags)]
              [:div.block-tag.pl-2
               {:key (str "tag-" (:db/id tag))}
               (page-cp (assoc config
@@ -2967,7 +2971,7 @@
               {:size 16 :class "bottom-property-action-icon"})
      label)))
 
-(defn- block-below-positioned-properties-cp
+(hsx/defc block-below-positioned-properties-cp
   [block properties opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
   (let [*pills-el (hooks/use-ref nil)
         *overflow? (hooks/use-memo #(atom false) [(:block/uuid block) (count properties)])
@@ -3025,18 +3029,25 @@
 (hsx/defc block-positioned-properties
   [config block position]
   (let [[positioned-properties set-positioned-properties!] (hooks/use-state nil)
+        [current-block set-current-block!] (hooks/use-state block)
+        latest-transacted-entity-uuids (rfx/use-sub [:db/latest-transacted-entity-uuids])
         _ (hooks/use-effect!
            (fn []
-             (p/let [properties (db-async/<invoke-db-worker :thread-api/get-block-positioned-properties
-                                                            (state/get-current-repo)
-                                                            {:block-id (:db/id block)
-                                                             :position position})]
-               (set-positioned-properties! properties))
-             nil)
-           [(:db/id block) position])
+             (p/let [repo (state/get-current-repo)
+	                     properties (db-async/<invoke-db-worker :thread-api/get-block-positioned-properties
+	                                                            repo
+	                                                            {:block-id (:db/id block)
+	                                                             :position position})
+	                     current-block (db-async/<get-block repo (:block/uuid block) {:children? false})]
+	               (set-positioned-properties! properties)
+	               (when current-block
+	                 (set-current-block! current-block)))
+	             nil)
+           [(:db/id block) (:block/uuid block) position latest-transacted-entity-uuids])
+        block (or current-block block)
         properties (cond->> positioned-properties
-	                     (= position :block-below)
-	                     (remove (fn [property]
+		                     (= position :block-below)
+		                     (remove (fn [property]
 	                               (= (:db/ident property) :logseq.property/icon))))
         has-viewable-properties? (seq properties)
         opts (merge config
@@ -3064,12 +3075,12 @@
     (case position
         :block-below
         (when has-viewable-properties?
-          (block-below-positioned-properties-cp block
-                                                properties
-                                                opts
-                                                show-hidden-properties-pill-toggle?
-                                                show-hidden-properties-control?
-                                                show-add-property-button?))
+          [block-below-positioned-properties-cp block
+           properties
+           opts
+           show-hidden-properties-pill-toggle?
+           show-hidden-properties-control?
+           show-add-property-button?])
 
         (when (seq properties)
           [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6.self-start
@@ -3281,7 +3292,9 @@
   (let [repo (state/get-current-repo)
         format :markdown
         collapsed? (:collapsed? config)
-        content (:block/raw-title block)
+        edit-block block
+        content (or (:block/raw-title block)
+                    (:block/title block))
         content (if (string? content) (string/trim content) "")
         block-ref? (:block-ref? config)
         block (merge block (block/parse-title-and-body uuid format content))
@@ -3336,7 +3349,7 @@
                                             (let [f (:on-block-content-pointer-down config)]
                                               (if (fn? f)
                                                 (f e)
-                                                (block-content-on-pointer-down e block block-id edit-input-id content config))))))))]
+                                                (block-content-on-pointer-down e edit-block block-id edit-input-id content config))))))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :key (str "block-content-" uuid)}
@@ -3421,6 +3434,8 @@
         named? (some? (:block/name block))
         table? (:table? config)
         raw-mode-block (rfx/use-sub [:editor/raw-mode-block])
+        indent-preview (rfx/use-sub [:editor/indent-preview])
+        indent-preview? (= (:block-uuid indent-preview) uuid)
         type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
                                 (not= (:db/id block) (:db/id raw-mode-block)))
         config (assoc config :block-parent-id block-id)
@@ -3474,7 +3489,12 @@
                                   (block-refs-count block refs-count *hide-block-refs?))])
              editor-cp [:div.editor-wrapper.flex.flex-1.w-full
                         {:id editor-id
-                         :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (entity/journal? block)))}])}
+                         :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (entity/journal? block)))}])
+                         :style (when indent-preview?
+                                  {:transform (str "translateX("
+                                                   (if (:indent? indent-preview) "42px" "-42px")
+                                                   ")")
+                                   :transition "transform 80ms ease"})}
                         (ui/catch-error
                          (ui/block-error (t :sync/something-wrong) {})
                          (editor-box {:block block
@@ -4034,10 +4054,27 @@
 
 (hsx/defc query-result
   [config block query-block]
-  (let [query (:block/title query-block)
+  (let [[current-query-block set-current-query-block!] (hooks/use-state query-block)
+        query-block-uuid (:block/uuid query-block)
+        latest-transacted-entity-uuids (rfx/use-sub [:db/latest-transacted-entity-uuids])
+        _ (hooks/use-effect!
+           (fn []
+             (set-current-query-block! query-block)
+             nil)
+           [query-block-uuid (:block/title query-block) (:block/raw-title query-block)])
+        _ (hooks/use-effect!
+           (fn []
+             (when (contains? (:updated-ids latest-transacted-entity-uuids) query-block-uuid)
+               (p/let [current-query-block (db-async/<get-block (state/get-current-repo)
+                                                                 query-block-uuid
+                                                                 {:children? false})]
+                 (set-current-query-block! current-query-block)))
+             nil)
+           [query-block-uuid latest-transacted-entity-uuids])
+        query (:block/title current-query-block)
         result (common-util/safe-read-string {:log-error? false} query)
         advanced-query? (map? result)]
-    (when query-block
+    (when current-query-block
       [:div {:style {:padding-left 42}}
        (query/custom-query (wrap-query-components (assoc config
                                                     :dsl-query? (not advanced-query?)
@@ -4293,7 +4330,7 @@
         attrs (on-drag-and-mouse-attrs block original-block uuid top? block-id *move-to)
         own-number-list? (:own-order-number-list? config)
         order-list? (boolean own-number-list?)
-        children (ldb/get-children block)
+        children (:block/children block)
         comments-area? (comments-model/comments-area? block)
         comment-thread (when-not comments-area?
                          (or (ui-comment-thread-for-block block)
@@ -4624,10 +4661,20 @@
    :hide-block-control?
    :ref-matched-children-ids])
 
+(defn- block-render-state
+  [block]
+  [(dissoc block :block/children)
+   (mapv :block/uuid (:block/children block))])
+
 (defn- block-changed?
   [old-block new-block]
-  (not= (select-keys old-block [:block/tx-id :block/title :block/raw-title :block/updated-at])
-        (select-keys new-block [:block/tx-id :block/title :block/raw-title :block/updated-at])))
+  (not= (block-render-state old-block)
+        (block-render-state new-block)))
+
+(defn- block-with-children-tree
+  [block children]
+  (when block
+    (first (tree/blocks->vec-tree (cons block children) (:block/uuid block)))))
 
 (defn- same-block-render-input?
   [[old-config old-block] [new-config new-block]]
@@ -4680,6 +4727,12 @@
   (if (and (:container-id config) (not linked-block?))
     (:container-id config)
     (state/get-container-id (generated-container-id-key config block))))
+
+(defn- block-in-latest-tx?
+  [latest-transacted-entity-uuids block-uuid]
+  (let [{:keys [updated-ids deleted-ids]} latest-transacted-entity-uuids]
+    (boolean (or (contains? updated-ids block-uuid)
+                 (contains? deleted-ids block-uuid)))))
 
 (hsx/defc loaded-block-container-inner
   [config block & {:as opts}]
@@ -4737,29 +4790,42 @@
   [config block* & {:as opts}]
   (let [[block set-block!] (hooks/use-state block*)
         id (or (:db/id block*) (:block/uuid block*))
+        block-uuid (:block/uuid block)
+        latest-transacted-entity-uuids (rfx/use-sub [:db/latest-transacted-entity-uuids])
         temporary-collapsed-state (state/get-block-collapsed (:block/uuid block)
                                                              (:container-id config))
         ignore-block-collapsed? (:ignore-block-collapsed? config)
         load-children? (editor-handler/load-children? block
                                                       temporary-collapsed-state
-                                                      ignore-block-collapsed?)]
+                                                      ignore-block-collapsed?)
+        refresh-block! (fn []
+                         (when-not (or (:page-title? config)
+                                       (:view? config))
+                           (p/let [{:keys [block children]}
+                                   (db-async/<get-block-with-children
+                                    (state/get-current-repo)
+                                    id
+                                    {:children? load-children?
+                                     :include-collapsed-children? (and load-children?
+                                                                       ignore-block-collapsed?)
+                                     :skip-refresh? false})]
+                             (set-block! (block-with-children-tree block children)))))]
     (hooks/use-effect!
      (fn []
        (set-block! block*)
        nil)
-     [(:block/uuid block*) (:block/tx-id block*) (:block/title block*) (:block/raw-title block*) (:block/updated-at block*)])
+     [(:block/uuid block*) (block-render-state block*)])
     (hooks/use-effect!
      (fn []
-       (when-not (or (:page-title? config) (:view? config))
-         (p/let [block (db-async/<get-block (state/get-current-repo)
-                                            id
-                                            {:children? load-children?
-                                             :include-collapsed-children? (and load-children?
-                                                                               ignore-block-collapsed?)
-                                             :skip-refresh? false})]
-            (set-block! block)))
+       (refresh-block!)
        nil)
     [id load-children? ignore-block-collapsed? temporary-collapsed-state])
+    (hooks/use-effect!
+     (fn []
+       (when (block-in-latest-tx? latest-transacted-entity-uuids block-uuid)
+         (refresh-block!))
+       nil)
+     [block-uuid latest-transacted-entity-uuids])
     (when (or (:view? config) (:block/title block))
       (loaded-block-container config block opts))))
 
@@ -5254,7 +5320,9 @@
      [scroll-container selection-block-ids])
 
     [:div.blocks-list-wrap
-     {:data-level (or (:level config) 0)}
+     (cond-> {:data-level (or (:level config) 0)}
+       virtualized?
+       (assoc :data-virtuoso-scroller true))
      (cond
        virtualized?
        (ui/virtualized-list virtual-opts)

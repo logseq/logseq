@@ -134,8 +134,8 @@
       (p/with-redefs [db-async/<get-blocks
                       (fn [repo block-ids]
                         (swap! calls conj [:get-blocks repo block-ids])
-                        (p/resolved [{:block/uuid block-id
-                                      :block/raw-title "## Heading"}]))
+                        (p/resolved [{:block {:block/uuid block-id
+                                              :block/raw-title "## Heading"}}]))
                       property-handler/set-block-property!
                       (fn [id property-id value]
                         (swap! calls conj [:set-property id property-id value])

@@ -24,7 +24,7 @@
   [block-or-id]
   (cond
     (map? block-or-id)
-    (:block/uuid block-or-id)
+    (or (:block/uuid block-or-id) (:uuid block-or-id))
 
     :else
     block-or-id))

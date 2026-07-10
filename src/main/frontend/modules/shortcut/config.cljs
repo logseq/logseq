@@ -269,7 +269,7 @@
    :editor/add-property-deadline            {:binding "p d"
                                              :selection? true
                                              :fn      (fn []
-                                                        (state/pub-event! [:editor/new-property {:property-key "Deadline"}]))}
+                                                        (state/pub-event! [:editor/new-property {:property-key :logseq.property/deadline}]))}
 
    :editor/add-property-status              {:binding "p s"
                                              :selection? true

@@ -2,6 +2,8 @@
   (:require [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [frontend.components.property.value :as property-value]
+            [frontend.handler.block :as block-handler]
+            [frontend.state :as state]
             [promesa.core :as p]))
 
 (deftest resolve-journal-page-for-date-returns-existing-page-test
@@ -208,6 +210,60 @@
     (is (= []
            (#'property-value/scoped-class-nodes
             property [page-class tag-class] nil {})))))
+
+(deftest all-classes-query-keeps-private-tags-for-internal-choices-test
+  (is (= {:except-root-class? false
+          :except-private-tags? false}
+         @#'property-value/all-classes-query-options)))
+
+(deftest property-value-selected-detects-current-ref-value-test
+  (is (true? (#'property-value/property-value-selected?
+              [{:db/id 4
+                :db/ident :logseq.class/Page}]
+              4)))
+  (is (false? (#'property-value/property-value-selected?
+               [{:db/id 5
+                 :db/ident :logseq.class/Tag}]
+               4))))
+
+(deftest property-multiple-values-treats-tags-as-many-test
+  (is (true? (#'property-value/property-multiple-values?
+              {:db/ident :block/tags})))
+  (is (false? (#'property-value/property-multiple-values?
+               {:db/ident :block/title}))))
+
+(deftest get-operating-blocks-ignores-single-selected-block-test
+  (let [target {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+        selected {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"}]
+    (with-redefs [state/get-selection-block-ids (constantly [(:block/uuid selected)])
+                  state/get-selection-blocks (constantly [selected])
+                  state/get-state (constantly nil)
+                  block-handler/get-top-level-blocks identity]
+      (is (= [target]
+             (property-value/get-operating-blocks target))))))
+
+(deftest get-operating-blocks-uses-current-multi-selection-test
+  (let [target {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+        selected {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"}]
+    (with-redefs [state/get-selection-block-ids (constantly (map :block/uuid [target selected]))
+                  state/get-selection-blocks (constantly [target selected])
+                  state/get-state (constantly nil)
+                  block-handler/get-top-level-blocks identity]
+      (is (= [target selected]
+             (property-value/get-operating-blocks target))))))
+
+(deftest get-operating-blocks-prefers-view-selection-test
+  (let [target {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+        stale-selected {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"}
+        view-selected {:block/uuid #uuid "33333333-3333-3333-3333-333333333333"}]
+    (with-redefs [state/get-selection-block-ids (constantly [(:block/uuid target) (:block/uuid stale-selected)])
+                  state/get-selection-blocks (constantly [target stale-selected])
+                  state/get-state (fn [key]
+                                    (when (= key :view/selected-blocks)
+                                      [view-selected]))
+                  block-handler/get-top-level-blocks identity]
+      (is (= [view-selected]
+             (property-value/get-operating-blocks target))))))
 
 (deftest scoped-class-nodes-filters-search-results-by-scoped-classes-test
   (let [property {:logseq.property/type :node}

@@ -208,6 +208,7 @@
       :editor/container-id                   nil
       :editor/next-edit-block                nil
       :editor/raw-mode-block                 nil
+      :editor/indent-preview                 nil
       :editor/virtualized-scroll-fn          nil
       :editor/edit-block-fn                  nil
 

@@ -758,6 +758,11 @@
   [block opts enabled? show-empty-and-hidden?]
   (let [repo (state/get-current-repo)
         request-opts (display-properties-request-opts opts)
+        latest-transacted-entity-uuids (rfx/use-sub [:db/latest-transacted-entity-uuids])
+        transaction-id (let [updated-ids (:updated-ids latest-transacted-entity-uuids)]
+                         (when (or (contains? updated-ids (:db/id block))
+                                   (contains? updated-ids (:block/uuid block)))
+                           (:tx-id latest-transacted-entity-uuids)))
         [display-properties set-display-properties!] (hooks/use-state empty-display-properties)]
     (hooks/use-effect!
      (fn []
@@ -773,6 +778,7 @@
       repo
       (:db/id block)
       (:block/properties block)
+      transaction-id
       show-empty-and-hidden?
       (:gallery-view? request-opts)
       (:page-title? request-opts)

@@ -766,6 +766,14 @@ Some bindings in this fn:
     (take sample (shuffle result))
     result))
 
+(defn- with-raw-title
+  [value]
+  (if (and (map? value)
+           (contains? value :block/title)
+           (not (contains? value :block/raw-title)))
+    (assoc value :block/raw-title (:block/title value))
+    value))
+
 (defn- query-result-tuples
   [result]
   (let [tuples (cond
@@ -775,21 +783,22 @@ Some bindings in this fn:
                  :else
                  result)]
     (mapv (fn [tuple]
-            (cond
-              (vector? tuple)
-              tuple
+            (mapv with-raw-title
+                  (cond
+                    (vector? tuple)
+                    tuple
 
-              (map? tuple)
-              [tuple]
+                    (map? tuple)
+                    [tuple]
 
-              (and (object? tuple) (number? (.-length ^js tuple)))
-              (vec (array-seq tuple))
+                    (and (object? tuple) (number? (.-length ^js tuple)))
+                    (vec (array-seq tuple))
 
-              (seqable? tuple)
-              (vec tuple)
+                    (seqable? tuple)
+                    (vec tuple)
 
-              :else
-              [tuple]))
+                    :else
+                    [tuple])))
           tuples)))
 
 (defn execute-query

@@ -10,10 +10,8 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.entity :as entity]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (defn- <block-ref
@@ -34,73 +32,16 @@
     :else
     (p/resolved nil)))
 
-(defn- comments-area-child
-  [block]
-  (some (fn [child]
-          (when (comments-model/comments-area? child)
-            child))
-        (ldb/sort-by-order (:block/children block))))
-
-(defn- <block-with-children
-  [block]
-  (if-let [uuid (:block/uuid block)]
-    (p/let [{loaded-block :block children :children}
-            (db-async/<get-block-with-children
-             (state/get-current-repo)
-             uuid
-             {:children? true
-              :include-collapsed-children? true
-              :skip-refresh? true})]
-      (assoc (or loaded-block block) :block/children children))
-    (p/resolved block)))
-
-(defn- block-ref-uuid
+(defn- worker-block-ref
   [block-ref]
   (cond
-    (map? block-ref) (:block/uuid block-ref)
-    (uuid? block-ref) block-ref
-    (and (string? block-ref) (util/uuid-string? block-ref)) (uuid block-ref)
-    :else nil))
-
-(defn- block-lookup-ref
-  [block]
-  [:block/uuid (:block/uuid block)])
-
-(def ^:private comment-thread-pull-selector
-  '[:db/id
-    :block/uuid
-    :block/title
-    :block/order
-    :block/created-at
-    :block/updated-at
-    :logseq.property/deleted-at
-    {:block/tags [:db/id :db/ident]}
-    {:block/parent [:db/id :block/uuid]}
-    {:logseq.property.comments/blocks [:db/id :block/uuid :block/title :logseq.property/deleted-at]}])
+    (map? block-ref) (or (:block/uuid block-ref) (:db/id block-ref))
+    :else block-ref))
 
 (defn <get-comment-threads-for-block
   [block-uuid]
   (when-let [repo (and block-uuid (state/get-current-repo))]
-    (p/let [threads (db-async/<q repo
-                                 {:transact-db? true}
-                                 '[:find [(pull ?comments-area ?selector) ...]
-                                   :in $ ?block-uuid ?selector
-                                   :where
-                                   [?block :block/uuid ?block-uuid]
-                                   [?comments-area :logseq.property.comments/blocks ?block]
-                                   [?comments-area :block/tags :logseq.class/Comments]
-                                   [(missing? $ ?comments-area :logseq.property/deleted-at)]]
-                                 block-uuid
-                                 comment-thread-pull-selector)
-            blocks (p/all
-                    (mapv (fn [thread]
-                            (db-async/<get-block repo
-                                                 (:block/uuid thread)
-                                                 {:children? true
-                                                  :include-collapsed-children? true
-                                                  :skip-refresh? true}))
-                          threads))]
-      (vec (keep identity blocks)))))
+    (db-async/<get-comment-threads-for-block repo block-uuid)))
 
 (defn <get-comment-thread-block-uuids
   ([block-uuids]
@@ -119,82 +60,31 @@
                                     nil)))
                           vec)]
      (when (and repo (seq block-uuids))
-       (p/let [result (db-async/<q repo
-                                   {:transact-db? false}
-                                   '[:find [?block-uuid ...]
-                                     :in $ [?block-uuid ...]
-                                     :where
-                                     [?block :block/uuid ?block-uuid]
-                                     [?comments-area :logseq.property.comments/blocks ?block]
-                                     [?comments-area :block/tags :logseq.class/Comments]
-                                     [?comments-area :block/parent ?comments-area-parent]
-                                     [(not= ?comments-area-parent ?block)]
-                                     [(missing? $ ?comments-area :logseq.property/deleted-at)]]
-                                   block-uuids)]
-         (mapv str result))))))
-
-(defn- single-comment-targets
-  [block]
-  #{(block-lookup-ref block)})
-
-(defn- ensure-single-comment-target-property!
-  [comments-area block]
-  (when (and comments-area block (not (seq (get comments-area comments-model/comments-blocks-property))))
-    (db-property-handler/set-block-property! (:db/id comments-area)
-                                             comments-model/comments-blocks-property
-                                             (single-comment-targets block))))
-
-(defn- comments-area-title
-  [block]
-  (if (entity/page? block)
-    "Comments on this page"
-    "Comments"))
-
-(defn- comments-area-insert-position
-  [block]
-  (if (entity/page? block)
-    {:start? true}
-    {:end? true}))
+       (db-async/<get-comment-thread-block-uuids repo block-uuids)))))
 
 (defn- <comments-area-block
   [comments-area]
-  (if-let [uuid (:block/uuid comments-area)]
-    (db-async/<get-block (state/get-current-repo)
-                         uuid
-                         {:children? false
-                          :skip-refresh? true})
+  (if-let [repo (state/get-current-repo)]
+    (db-async/<get-comments-area-block repo (worker-block-ref comments-area))
     (p/resolved nil)))
 
 (defn ensure-comments-area!
   [block-id]
-  (p/let [block (<block-ref block-id)
-          block (when block (<block-with-children block))]
-    (when block
-      (if-let [comments-area (comments-area-child block)]
-        (p/let [_ (ensure-single-comment-target-property! comments-area block)]
+  (when-let [repo (state/get-current-repo)]
+    (p/let [{:keys [action comments-area target-property title opts]}
+            (db-async/<resolve-comments-area repo (worker-block-ref block-id))]
+      (case action
+        :existing
+        (p/let [_ (when target-property
+                    (db-property-handler/set-block-property! (:block-id target-property)
+                                                             (:property target-property)
+                                                             (:value target-property)))]
           comments-area)
-        (editor-handler/api-insert-new-block!
-         (comments-area-title block)
-         (merge {:block-uuid (:block/uuid block)
-                 :edit-block? false
-                 :other-attrs {:block/tags #{comments-model/comments-tag-ident}
-                               comments-model/comments-blocks-property (single-comment-targets block)}}
-                (comments-area-insert-position block)))))))
 
-(defn- same-comment-targets?
-  [comments-area target-uuids]
-  (= target-uuids
-     (->> (comments-model/comment-thread-target-blocks comments-area)
-          (keep block-ref-uuid)
-          set)))
+        :insert
+        (editor-handler/api-insert-new-block! title opts)
 
-(defn- existing-comments-area-for-targets
-  [blocks]
-  (let [target-uuids (set (keep :block/uuid blocks))]
-    (some (fn [comments-area]
-            (when (same-comment-targets? comments-area target-uuids)
-              comments-area))
-          (comments-model/comment-threads-for-block (first blocks)))))
+        nil))))
 
 (defn ensure-comments-area-for-selected-blocks!
   [block-refs]
@@ -203,26 +93,29 @@
                       (keep identity)
                       block-handler/get-top-level-blocks
                       comments-model/comment-target-blocks)]
-    (when-let [last-block (last blocks)]
-      (if (= 1 (count blocks))
-        (p/let [comments-area (ensure-comments-area! last-block)]
-          (when comments-area
-            (editor-handler/expand-block! (:block/uuid comments-area)))
-          comments-area)
-        (if-let [comments-area (existing-comments-area-for-targets blocks)]
+    (when (seq blocks)
+      (p/let [{:keys [action block-ref comments-area title opts]}
+              (db-async/<resolve-comments-area-for-blocks (state/get-current-repo)
+                                                          (mapv worker-block-ref blocks))]
+        (case action
+          :single
+          (p/let [comments-area (ensure-comments-area! block-ref)]
+            (when comments-area
+              (editor-handler/expand-block! (:block/uuid comments-area)))
+            comments-area)
+
+          :existing
           (p/do!
            (editor-handler/expand-block! (:block/uuid comments-area))
            comments-area)
-          (p/let [comments-area (editor-handler/api-insert-new-block!
-                                 "Comments"
-                                 {:block-uuid (:block/uuid last-block)
-                                  :sibling? true
-                                  :edit-block? false
-                                  :other-attrs {:block/tags #{comments-model/comments-tag-ident}
-                                                comments-model/comments-blocks-property (set (map block-lookup-ref blocks))}})]
+
+          :insert
+          (p/let [comments-area (editor-handler/api-insert-new-block! title opts)]
             (when comments-area
               (editor-handler/expand-block! (:block/uuid comments-area)))
-            comments-area))))))
+            comments-area)
+
+          nil)))))
 
 (defn- focus-comments-reply!
   [comments-area-el]
@@ -343,20 +236,16 @@
 
 (defn- <comment-delete-targets
   [comment-block]
-  (let [comments-area (:block/parent comment-block)]
-    (p/let [comments-area (when comments-area (<block-with-children comments-area))
-            live-children (remove :logseq.property/deleted-at (:block/children comments-area))]
-      (if (and (comments-model/comments-area? comments-area)
-               (<= (count live-children) 1))
-        [comments-area]
-        [comment-block]))))
+  (when-let [repo (state/get-current-repo)]
+    (db-async/<get-comment-delete-targets repo (worker-block-ref comment-block))))
 
 (defn delete-comment!
   [comment-block]
   (p/let [targets (<comment-delete-targets comment-block)]
-    (ui-outliner-tx/transact!
-     {:outliner-op :delete-blocks}
-     (outliner-op/delete-blocks! targets nil))))
+    (when (seq targets)
+      (ui-outliner-tx/transact!
+       {:outliner-op :delete-blocks}
+       (outliner-op/delete-blocks! targets nil)))))
 
 (defn paste-assets!
   [target-block e]

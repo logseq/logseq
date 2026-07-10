@@ -67,7 +67,7 @@
 (defn- property-value-block-container-props
   [property]
   {:class (property-value-block-container-class)
-   :tabIndex 0
+   :tabIndex -1
    :on-key-down (fn [e]
                   (when (= (.-currentTarget e) js/document.activeElement)
                     (case (util/ekey e)
@@ -109,6 +109,15 @@
     (keep value->db-id value)
     (some-> value value->db-id vector)))
 
+(defn- property-value-selected?
+  [property-value value]
+  (contains? (set (property-value->ids property-value)) value))
+
+(defn- property-multiple-values?
+  [property]
+  (or (db-property/many? property)
+      (= (:db/ident property) :block/tags)))
+
 (defn- property-value-popup-blocked-link?
   [target]
   (when-let [node (some-> target (.closest "a"))]
@@ -137,10 +146,8 @@
 (defn- get-selected-blocks
   []
   (some->> (state/get-selection-block-ids)
-           (keep (fn [id]
-                   (some #(when (= id (:block/uuid %)) %)
-                         (state/get-selection-blocks))))
            (seq)
+           (map (fn [id] {:block/uuid id}))
            block-handler/get-top-level-blocks
            (remove entity/property?)))
 
@@ -148,16 +155,17 @@
   [block]
   (let [selected-blocks (get-selected-blocks)
         view-selected-blocks (state/get-state :view/selected-blocks)]
-    (or (seq selected-blocks)
-        (seq view-selected-blocks)
+    (or (seq view-selected-blocks)
+        (when (> (count selected-blocks) 1)
+          (seq selected-blocks))
         [block])))
 
 (defn batch-operation?
   []
   (let [selected-blocks (get-selected-blocks)
         view-selected-blocks (state/get-state :view/selected-blocks)]
-    (or (> (count selected-blocks) 1)
-        (seq view-selected-blocks))))
+    (or (seq view-selected-blocks)
+        (> (count selected-blocks) 1))))
 
 (hsx/defc icon-row
   [block editing?]
@@ -287,24 +295,32 @@
 
 (defn- add-or-remove-property-value
   [block property value selected? {:keys [refresh-result-f entity-id?] :as opts}]
-  (let [many? (db-property/many? property)
+  (let [many? (property-multiple-values? property)
         blocks (get-operating-blocks block)
+        current-block-ref (or (:block/uuid (first blocks))
+                              (:db/id (first blocks))
+                              (:db/id block))
         repo (state/get-current-repo)]
-    (p/do!
-     (db-async/<get-block repo (:db/id block) {:children? false})
-     (when (and selected?
-                (= :db.type/ref (:db/valueType property))
-                (number? value))
-       (db-async/<get-block repo value {:children? false}))
+    (p/let [current-block (db-async/<get-block repo current-block-ref {:children? false})
+            selected? (if many?
+                        (not (property-value-selected? (get current-block (:db/ident property)) value))
+                        selected?)
+            _ (when (and selected?
+                         (= :db.type/ref (:db/valueType property))
+                         (number? value))
+                (db-async/<get-block repo value {:children? false}))]
      (if selected?
-       (<add-property! block (:db/ident property) value
-                       {:selected? selected?
-                        :entity-id? entity-id?
-                        :exit-edit? (if (some? (:exit-edit? opts)) (:exit-edit? opts) (not many?))})
+       (if many?
+         (db-property-handler/batch-set-property! (map :block/uuid blocks)
+                                                  (:db/ident property)
+                                                  value
+                                                  {:entity-id? entity-id?})
+         (<add-property! block (:db/ident property) value
+                         {:selected? selected?
+                          :entity-id? entity-id?
+                          :exit-edit? (if (some? (:exit-edit? opts)) (:exit-edit? opts) (not many?))}))
        (p/do!
-        (ui-outliner-tx/transact!
-         {:outliner-op :save-block}
-         (db-property-handler/batch-delete-property-value! (map :db/id blocks) (:db/ident property) value))
+        (db-property-handler/batch-delete-property-value! (map :block/uuid blocks) (:db/ident property) value)
         (when (or (not many?)
                   ;; values will be cleared
                   (and many? (<= (count (get block (:db/ident property))) 1)))
@@ -312,6 +328,15 @@
      (when (fn? refresh-result-f) (refresh-result-f)))))
 
 (declare property-value)
+
+(defn- <property-with-closed-values
+  [repo property-ident]
+  (p/let [property (state/<invoke-db-worker :thread-api/pull repo '[*] property-ident)
+          closed-values (db-async/<get-property-closed-values repo property-ident)]
+    (cond-> property
+      (seq closed-values)
+      (assoc :property/closed-values closed-values))))
+
 (hsx/defc repeat-setting
   [block property]
   (let [opts {:exit-edit? false}
@@ -319,11 +344,11 @@
         [repeat-properties set-repeat-properties!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
-	       (p/let [repeated-property (state/<invoke-db-worker :thread-api/pull repo '[* {:property/closed-values [*]}] :logseq.property.repeat/repeated?)
-	               recur-frequency-property (state/<invoke-db-worker :thread-api/pull repo '[* {:property/closed-values [*]}] :logseq.property.repeat/recur-frequency)
-	               recur-unit-property (state/<invoke-db-worker :thread-api/pull repo '[* {:property/closed-values [*]}] :logseq.property.repeat/recur-unit)
-	               repeat-type-property (state/<invoke-db-worker :thread-api/pull repo '[* {:property/closed-values [*]}] :logseq.property.repeat/repeat-type)
-	               status-property (state/<invoke-db-worker :thread-api/pull repo '[* {:property/closed-values [*]}] :logseq.property/status)
+       (p/let [repeated-property (<property-with-closed-values repo :logseq.property.repeat/repeated?)
+               recur-frequency-property (<property-with-closed-values repo :logseq.property.repeat/recur-frequency)
+               recur-unit-property (<property-with-closed-values repo :logseq.property.repeat/recur-unit)
+               repeat-type-property (<property-with-closed-values repo :logseq.property.repeat/repeat-type)
+               status-property (<property-with-closed-values repo :logseq.property/status)
 	               status-done (state/<invoke-db-worker :thread-api/pull repo '[*] :logseq.property/status.done)
 	               {:keys [full-properties]} (db-async/<get-display-properties repo block
 	                                                                            {:publishing? config/publishing?
@@ -669,12 +694,12 @@
                  (merge opts
                         {:block block
                          :property property
-                         :datetime? datetime?
-                         :multiple-values? multiple-values?
-                         :on-change (fn [value]
-                                      (let [blocks (get-operating-blocks block)]
-                                        (property-handler/batch-set-block-property! (map :block/uuid blocks)
-                                                                                    (:db/ident property)
+	                         :datetime? datetime?
+	                         :multiple-values? multiple-values?
+	                         :on-change (fn [value]
+	                                      (let [blocks (get-operating-blocks block)]
+	                                        (property-handler/batch-set-block-property! (map :block/uuid blocks)
+	                                                                                    (:db/ident property)
                                                                                     (if datetime?
                                                                                       value
                                                                                       (:db/id value)))))
@@ -1094,6 +1119,10 @@
             class))
         classes))
 
+(def ^:private all-classes-query-options
+  {:except-root-class? false
+   :except-private-tags? false})
+
 (hsx/defc property-value-select-node
   [block property opts
    {:keys [*show-new-property-config?]}]
@@ -1160,7 +1189,7 @@
 
     (hooks/use-effect!
      (fn []
-       (p/let [all-classes (db-async/<get-all-classes repo {:except-root-class? false})
+       (p/let [all-classes (db-async/<get-all-classes repo all-classes-query-options)
                class-options (db-async/<get-all-classes
                               repo
                               {:except-root-class? true
@@ -2075,7 +2104,7 @@
 
       :else
       (if (and select-type?'
-               (not (and (not closed-values?) (= type :date))))
+               (not (and (not closed-values?) (contains? #{:date :datetime} type))))
         (let [classes (:block/tags block)
               display-as-checkbox? (and (some
                                          (fn [block]
@@ -2141,7 +2170,7 @@
 (hsx/defc multiple-values-inner
   [block property v {:keys [on-chosen editing?] :as opts}]
   (let [type (:logseq.property/type property)
-        date? (= type :date)
+        date? (contains? #{:date :datetime} type)
         *el (hooks/use-ref nil)
         items (cond->> (if (entity-map? v) #{v} v)
                 (= (:db/ident property) :block/tags)
@@ -2165,7 +2194,9 @@
 
                          (select block property select-opts opts))]))]
     (if editing?
-      (select-cp {} nil)
+      (if date?
+        (property-value-date-picker block property nil (assoc opts :editing? true))
+        (select-cp {} nil))
       (let [toggle-fn shui/popup-hide!
             content-fn (fn [{:keys [_id content-props]} target]
                          (select-cp {:content-props content-props} target))

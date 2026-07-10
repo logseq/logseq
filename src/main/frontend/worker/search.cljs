@@ -880,35 +880,37 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defn- direct-page-results
   [conn q code-class option limit]
-  (when (:page-only? option)
+  (when (d/db? @conn)
     (let [needle (some-> q
                          (fuzzy/search-normalize true)
                          fuzzy/clean-str
                          string/lower-case)]
       (when-not (string/blank? needle)
-        (let [pages (->> (d/datoms @conn :avet :block/name)
-                         (keep #(d/entity @conn (:e %)))
-                         (filter ldb/page?)
-                         (filter (fn [page]
-                                   (let [title (or (:block/title page) (:block/name page))
-                                         haystack (some-> title
-                                                          (fuzzy/search-normalize true)
-                                                          fuzzy/clean-str
-                                                          string/lower-case)]
-                                     (and haystack (string/includes? haystack needle)))))
-                         (take limit)
-                         vec)]
-          (keep (fn [page]
-                  (search-result->block-result
-                   conn
-                   q
-                   code-class
-                   option
-                   {:id (str (:block/uuid page))
-                    :page (str (:block/uuid page))
-                    :title (:block/title page)
-                    search-result-block-key page}))
-                pages))))))
+      (let [pages (->> (d/datoms @conn :avet :block/name)
+                       (keep #(d/entity @conn (:e %)))
+                       (filter (fn [page]
+                                 (and (ldb/page? page)
+                                      (:block/name page)
+                                      (:block/title page))))
+                       (filter (fn [page]
+                                 (let [haystack (some-> (:block/title page)
+                                                        (fuzzy/search-normalize true)
+                                                        fuzzy/clean-str
+                                                        string/lower-case)]
+                                   (and haystack (string/includes? haystack needle)))))
+                       (take limit)
+                       vec)]
+        (keep (fn [page]
+                (search-result->block-result
+                 conn
+                 q
+                 code-class
+                 option
+                 {:id (str (:block/uuid page))
+                  :page (str (:block/uuid page))
+                  :title (:block/title page)
+                  search-result-block-key page}))
+              pages))))))
 
 (defn- vector-search-blocks
   [vector-index {:keys [limit page query-embedding]}]
@@ -991,7 +993,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                        (common-util/distinct-by :id)
                        (keep #(search-result->block-result conn q code-class option %)))
            result (cond->> result
-                    (:page-only? option)
+                    (not code-only?)
                     (concat (direct-page-results conn q code-class option limit))
                     true
                     (remove nil?)

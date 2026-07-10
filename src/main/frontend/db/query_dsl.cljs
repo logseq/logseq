@@ -86,8 +86,8 @@
     (pre-transform q')))
 
 (def db-block-attrs
-  "Block attributes for db graph queries"
-  [:db/id])
+  "Block fields needed to render query results without a renderer DB."
+  [:db/id :block/uuid :block/title :block/raw-title])
 
 (defn- query-key
   [query-string query-opts]

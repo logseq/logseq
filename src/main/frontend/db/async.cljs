@@ -96,6 +96,30 @@
   [graph block-id direction]
   (<invoke-db-worker :thread-api/get-block-sibling graph block-id direction))
 
+(defn <get-comments-area-block
+  [graph block-ref]
+  (<invoke-db-worker :thread-api/get-comments-area-block graph block-ref))
+
+(defn <resolve-comments-area
+  [graph block-ref]
+  (<invoke-db-worker :thread-api/resolve-comments-area graph block-ref))
+
+(defn <resolve-comments-area-for-blocks
+  [graph block-refs]
+  (<invoke-db-worker :thread-api/resolve-comments-area-for-blocks graph block-refs))
+
+(defn <get-comment-delete-targets
+  [graph comment-block-ref]
+  (<invoke-db-worker :thread-api/get-comment-delete-targets graph comment-block-ref))
+
+(defn <get-comment-threads-for-block
+  [graph block-uuid]
+  (<invoke-db-worker :thread-api/get-comment-threads-for-block graph block-uuid))
+
+(defn <get-comment-thread-block-uuids
+  [graph block-uuids]
+  (<invoke-db-worker :thread-api/get-comment-thread-block-uuids graph block-uuids))
+
 (defn <get-page-blocks-tree
   [graph page-id-name-or-uuid]
   (<invoke-db-worker :thread-api/get-page-blocks-tree graph page-id-name-or-uuid))

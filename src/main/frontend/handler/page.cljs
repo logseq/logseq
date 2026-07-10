@@ -204,6 +204,10 @@
                            [:db/id :block/title :block/name :block/uuid :block/tags]
                            [:block/name (util/page-name-sanity-lc page)]))
 
+(defn- labeled-node-ref
+  [block]
+  (str "[" (:block/title block) "](" (ref/->page-ref (:block/uuid block)) ")"))
+
 (defn- tag-on-chosen-handler
   [input id pos format current-pos edit-content q]
   (fn [chosen-result ^js e]
@@ -274,9 +278,16 @@
                                         [chosen' chosen-result])
             datoms (state/<invoke-db-worker :thread-api/datoms repo :avet :block/name (util/page-name-sanity-lc chosen'))
             multiple-pages-same-name? (> (count datoms) 1)
-            ref-text (if (and (existing-chosen-result? chosen-result)
-                              (or multiple-pages-same-name? (not (entity/page? chosen-result))))
+            ref-text (cond
+                       (and (existing-chosen-result? chosen-result)
+                            (not (entity/page? chosen-result)))
+                       (labeled-node-ref chosen-result)
+
+                       (and (existing-chosen-result? chosen-result)
+                            multiple-pages-same-name?)
                        (ref/->page-ref (:block/uuid chosen-result))
+
+                       :else
                        (get-page-ref-text chosen'))
             result (when-not (existing-chosen-result? chosen-result)
                      (<create! chosen'
@@ -285,18 +296,17 @@
             ref-text' (if result
                         (let [title (:block/title result)]
                           (ref/->page-ref title))
-                        ref-text)]
-      (p/do!
-       (editor-handler/insert-command! id
-                                       ref-text'
-                                       format
-                                       {:last-pattern (str page-ref/left-brackets (if (editor-handler/get-selected-text) "" q))
-                                        :end-pattern page-ref/right-brackets
-                                        :postfix-fn   (fn [s] (util/replace-first page-ref/right-brackets s ""))
-                                        :command :page-ref})
-        (p/let [chosen-result (or result chosen-result)]
-          (when (:db/id chosen-result)
-            (state/conj-block-ref! chosen-result)))))))
+                        ref-text)
+            _ (editor-handler/insert-command! id
+                                              ref-text'
+                                              format
+                                              {:last-pattern (str page-ref/left-brackets (if (editor-handler/get-selected-text) "" q))
+                                               :end-pattern page-ref/right-brackets
+                                               :postfix-fn   (fn [s] (util/replace-first page-ref/right-brackets s ""))
+                                               :command :page-ref})
+            chosen-result (or result chosen-result)]
+      (when (:db/id chosen-result)
+        (state/conj-block-ref! chosen-result)))))
 
 (defn on-chosen-handler
   [input id pos format]

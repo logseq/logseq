@@ -66,17 +66,14 @@
        :hls-file      (str "assets/" key ".edn")
        :original-path original-path})))
 
-(defn- <highlight-color-id
+(defn <highlight-color-id
   [repo color]
   (when color
-    (p/let [property (state/<invoke-db-worker :thread-api/pull
-                                              repo
-                                              '[:db/id {:property/closed-values [:db/id :block/title]}]
-                                              :logseq.property.pdf/hl-color)]
+    (p/let [closed-values (db-async/<get-property-closed-values repo :logseq.property.pdf/hl-color)]
       (some (fn [color-block]
               (when (= (:block/title color-block) color)
                 (:db/id color-block)))
-            (:property/closed-values property)))))
+            closed-values))))
 
 (defn db-based-ensure-ref-block!
   [pdf-current {:keys [id content page properties] :as hl} insert-opts]

@@ -109,7 +109,7 @@
   (let [remove-options (set (:remove-options options))
         include-properties? (not (contains? remove-options :property))
         open-blocks-only? (boolean (get-in options [:other-options :open-blocks-only]))
-        {:keys [content format title]} (get-blocks-export-data
+        {:keys [content format]} (get-blocks-export-data
                                         db
                                         root-block-uuids-or-page-uuid
                                         {:open-blocks-only? open-blocks-only?

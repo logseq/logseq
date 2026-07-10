@@ -1,5 +1,5 @@
 (ns frontend.handler.common.page-test
-  (:require [clojure.test :refer [async is use-fixtures]]
+  (:require [clojure.test :refer [is use-fixtures]]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
             [frontend.db.transact :as db-transact]
@@ -16,10 +16,7 @@
             [promesa.core :as p]))
 
 (use-fixtures :each
-  {:before (fn []
-             (async done
-                    (test-helper/start-test-db!)
-                    (done)))
+  {:before test-helper/start-test-db!
    :after test-helper/destroy-test-db!})
 
 (deftest-async create-page-restores-recycled-page
@@ -73,7 +70,7 @@
         page {:db/id 42
               :block/title "Existing Page"
               :block/uuid page-uuid}
-        page-selector '[:db/id :block/uuid :block/title :logseq.property/deleted-at {:block/parent ...}]
+        page-selector '[:db/id :block/uuid :block/title :block/name :logseq.property/deleted-at {:block/parent ...}]
         calls (atom [])]
     (p/with-redefs [state/get-current-repo (constantly "test")
                     state/<invoke-db-worker

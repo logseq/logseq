@@ -2,8 +2,39 @@
   (:require [cljs.test :refer [async deftest is]]
             [frontend.db.async :as db-async]
             [frontend.handler.db-based.property :as db-property-handler]
+            [frontend.modules.outliner.op :as outliner-op]
             [frontend.state :as state]
             [promesa.core :as p]))
+
+(deftest set-block-property-resolves-numeric-block-id-test
+  (async done
+    (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          calls (atom [])
+          original-get-block db-async/<get-block
+          original-set-block-property! outliner-op/set-block-property!]
+      (set! db-async/<get-block
+            (fn [repo id opts]
+              (swap! calls conj [:get-block repo id opts])
+              (p/resolved {:block/uuid block-uuid})))
+      (set! outliner-op/set-block-property!
+            (fn [block-id property-id value]
+              (swap! calls conj [:set-block-property block-id property-id value])))
+      (-> (p/with-redefs [state/get-current-repo (constantly "test")]
+            (db-property-handler/set-block-property!
+             197 :logseq.property.asset/last-visit-page 1))
+          (p/then
+           (fn []
+             (is (= [[:get-block "test" 197 {:children? false}]
+                     [:set-block-property block-uuid :logseq.property.asset/last-visit-page 1]]
+                    @calls))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (set! db-async/<get-block original-get-block)
+             (set! outliner-op/set-block-property! original-set-block-property!)
+             (done)))))))
 
 (deftest batch-set-property-closed-value-loads-value-through-worker-test
   (async done

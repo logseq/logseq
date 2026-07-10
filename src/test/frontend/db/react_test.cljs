@@ -1,11 +1,15 @@
 (ns frontend.db.react-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require [cljs.test :refer [async deftest is use-fixtures]]
             [frontend.db.async.util :as db-async-util]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]))
+
+(use-fixtures :each
+  {:before react/clear-query-state!
+   :after react/clear-query-state!})
 
 (deftest q-and-refresh-run-worker-query-without-reading-renderer-db-test
   (async done
@@ -65,13 +69,14 @@
                   :where
                   [?b :block/page ?page]
                   [?b :block/title ?title]]
-          worker-calls (atom [])]
+          worker-calls (atom [])
+          original-invoke-db-worker db-async-util/<invoke-db-worker]
       (react/clear-query-state!)
-      (p/with-redefs [util/node-test? false
-                      db-async-util/<q
-                      (fn [repo' opts & inputs]
-                        (swap! worker-calls conj [repo' opts inputs])
-                        (p/resolved #{["worker-title"]}))]
+      (set! db-async-util/<invoke-db-worker
+            (fn [api repo' inputs]
+              (swap! worker-calls conj [api repo' inputs])
+              (p/resolved #{["worker-title"]})))
+      (p/with-redefs [util/node-test? false]
         (let [result-atom (react/q repo [:frontend.worker.react/async-inputs-test]
                                    {:inputs-fn (fn []
                                                  (p/resolved ["worker-page"]))}
@@ -83,20 +88,15 @@
                          [[:frontend.worker.react/async-inputs-test]])
                       _ (p/delay 0)]
                 (is (= #{["worker-title"]} @result-atom))
-                (is (= [[repo
-                         {:transact-db? false
-                          :advanced-query? true}
-                         [query "worker-page"]]
-                        [repo
-                         {:transact-db? false
-                          :advanced-query? true}
-                         [query "worker-page"]]]
+                (is (= [[:thread-api/q repo [query "worker-page"]]
+                        [:thread-api/q repo [query "worker-page"]]]
                        @worker-calls)))
               (p/catch
                (fn [error]
                  (is false (str error))))
               (p/finally
                (fn []
+                 (set! db-async-util/<invoke-db-worker original-invoke-db-worker)
                  (react/clear-query-state!)
                  (done)))))))))
 

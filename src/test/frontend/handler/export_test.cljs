@@ -107,10 +107,8 @@
 
 (use-fixtures :once
   {:before (fn []
-             (async done
-                    (test-helper/start-test-db!)
-                    (load-export-test-files!)
-                    (done)))
+             (test-helper/start-test-db!)
+             (load-export-test-files!))
    :after test-helper/destroy-test-db!})
 
 (use-fixtures :each

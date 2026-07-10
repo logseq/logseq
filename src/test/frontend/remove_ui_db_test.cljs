@@ -1503,8 +1503,8 @@
         "today journal creation should check existing page through the shared worker helper.")
     (is (string/includes? sidebar-source "<today-journal-page")
         "opening today's journal in the sidebar should load the page through the shared worker helper.")
-    (is (string/includes? helper-source ":thread-api/pull")
-        "today journal helper should load the page through a worker pull.")))
+    (is (string/includes? helper-source "db-async/<get-journal-page-by-day")
+        "today journal helper should load the page through the worker-backed journal lookup.")))
 
 (deftest page-favorite-actions-use-worker-test
   (let [source (source-for "src/main/frontend/handler/page.cljs")
@@ -1590,8 +1590,8 @@
                              (string/index-of source "(defn go-to-journals!"))]
     (is (not (string/includes? sidebar-source "db/get-today-journal-page"))
         "sidebar journals must not read today's journal through renderer DB.")
-    (is (string/includes? sidebar-source ":thread-api/pull")
-        "sidebar journals should load today's journal page through a worker pull.")))
+    (is (string/includes? sidebar-source "db-async/<get-journal-page-by-day")
+        "sidebar journals should load today's journal page through the worker-backed journal lookup.")))
 
 (deftest route-redirect-to-page-uses-worker-test
   (let [source (source-for "src/main/frontend/handler/route.cljs")
@@ -1643,8 +1643,8 @@
   (let [source (source-for "src/main/frontend/handler/comments.cljs")]
     (is (not (string/includes? source "db/entity [:block/uuid (:block/uuid thread)]"))
         "comment thread loading must not rehydrate worker query rows through renderer DB entities.")
-    (is (string/includes? source "db-async/<get-block repo")
-        "comment thread loading should use worker-loaded block maps.")))
+    (is (string/includes? source "db-async/<get-comment-threads-for-block repo")
+        "comment thread loading should use the dedicated worker comment API.")))
 
 (deftest comments-handler-area-actions-use-passed-area-test
   (let [source (source-for "src/main/frontend/handler/comments.cljs")]
