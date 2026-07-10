@@ -1,9 +1,6 @@
 let is_option token = String.length token > 0 && token.[0] = '-'
-
-let option_value key options =
-  Vec.find_map (fun (k, v) -> if k = key then v else None) options
-
-let option_present key options = Vec.exists (fun (k, _) -> k = key) options
+let option_value key options = Option.join (Vec.assoc_opt key options)
+let option_present key options = Vec.mem_assoc key options
 
 let normalize_key = function
   | "-g" -> Some "graph"
@@ -71,8 +68,7 @@ let parse_tokens argv =
                     loop
                       (Vec.push_back options (key, Some value))
                       positional tail
-                | _ -> loop (Vec.push_back options (key, None)) positional rest
-                )
+                | _ -> loop (Vec.push_back options (key, None)) positional rest)
             | None -> loop options (Vec.push_back positional token) rest))
   in
   loop Vec.empty Vec.empty argv
@@ -344,8 +340,8 @@ let invalid_value key value message =
     ("Invalid value for option :" ^ key ^ ": " ^ value ^ ". " ^ message)
 
 let validate_integer_option key options =
-  match Vec.find_opt (fun (candidate, _) -> candidate = key) options with
-  | Some (_, Some value) when Int64.of_string_opt value = None ->
+  match Vec.assoc_opt key options with
+  | Some (Some value) when Int64.of_string_opt value = None ->
       Error (invalid_value key value "Expected integer")
   | _ -> Ok ()
 
@@ -401,12 +397,12 @@ let list_page_sort_values =
   Vec.of_array [| "id"; "ident"; "title"; "uuid"; "created-at"; "updated-at" |]
 
 let list_tag_sort_values =
-  Vec.append list_page_sort_values
-    (Vec.of_array [| "properties"; "extends"; "description" |])
+  Vec.append_array list_page_sort_values
+    [| "properties"; "extends"; "description" |]
 
 let list_property_sort_values =
-  Vec.append list_page_sort_values
-    (Vec.of_array [| "classes"; "type"; "cardinality"; "description" |])
+  Vec.append_array list_page_sort_values
+    [| "classes"; "type"; "cardinality"; "description" |]
 
 let list_task_sort_values =
   Vec.of_array
@@ -467,10 +463,10 @@ let parse_graph_export_edn_options options =
       )
 
 let validate_non_empty_csv_option key message options =
-  match Vec.find_opt (fun (candidate, _) -> candidate = key) options with
-  | Some (_, Some value) when Vec.is_empty (parse_csv value) ->
+  match Vec.assoc_opt key options with
+  | Some (Some value) when Vec.is_empty (parse_csv value) ->
       Error (Error.invalid_options message)
-  | Some (_, None) -> Error (Error.invalid_options message)
+  | Some None -> Error (Error.invalid_options message)
   | _ -> Ok ()
 
 let validate_list_node_values options =

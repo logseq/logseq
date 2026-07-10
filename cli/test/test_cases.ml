@@ -379,7 +379,7 @@ let () =
         in
         remove_tree root;
         ignore (assert_exit_zero "verbose graph list" result);
-        match Vec.peek_front (Vec.split_on_char '\n' result##stderr) with
+        match Vec.peek_front_opt (Vec.split_on_char '\n' result##stderr) with
         | Some line when String.trim line <> "" ->
             expect_valid_edn "verbose parsed options line" line
         | _ -> fail_test ("missing verbose stderr line: " ^ result##stderr)
@@ -2532,13 +2532,13 @@ let () =
           remove_tree root;
           ignore (expect_cli_exit_zero "sync upload password" result);
           if
-            !method_names
-            = Vec.of_array
-                [|
-                  "thread-api/db-sync-ensure-user-rsa-keys";
-                  "thread-api/verify-and-save-e2ee-password";
-                  "thread-api/db-sync-upload-graph";
-                |]
+            Vec.equal String.equal !method_names
+              (Vec.of_array
+                 [|
+                   "thread-api/db-sync-ensure-user-rsa-keys";
+                   "thread-api/verify-and-save-e2ee-password";
+                   "thread-api/db-sync-upload-graph";
+                 |])
           then
             if
               Vec.exists
@@ -2591,12 +2591,12 @@ let () =
           remove_tree root;
           ignore (expect_cli_exit_zero "sync ensure-keys password" result);
           if
-            !method_names
-            = Vec.of_array
-                [|
-                  "thread-api/verify-and-save-e2ee-password";
-                  "thread-api/db-sync-ensure-user-rsa-keys";
-                |]
+            Vec.equal String.equal !method_names
+              (Vec.of_array
+                 [|
+                   "thread-api/verify-and-save-e2ee-password";
+                   "thread-api/db-sync-ensure-user-rsa-keys";
+                 |])
           then Js.Promise.resolve pass
           else
             fail_promise

@@ -1324,8 +1324,10 @@ let pull_entity_by_lookup config repo selector lookup =
 
 let first_entity value =
   match (Edn_util.as_vector value, Edn_util.as_list value) with
-  | Some values, _ when not (Vec.is_empty values) -> Some (Vec.hd values)
-  | _, Some values when not (Vec.is_empty values) -> Some (Vec.hd values)
+  | Some values, _ when not (Vec.is_empty values) ->
+      Some (Vec.peek_front values)
+  | _, Some values when not (Vec.is_empty values) ->
+      Some (Vec.peek_front values)
   | _ -> None
 
 let id_of_entity value = Edn_util.get_int64 value "db/id"
@@ -1450,8 +1452,7 @@ let value_of_schema (schema : Property.schema) =
   let fields =
     match schema.public with
     | Some public ->
-        Vec.push_back fields
-          (kw "logseq.property/public?", Edn_util.bool public)
+        Vec.push_back fields (kw "logseq.property/public?", Edn_util.bool public)
     | None -> fields
   in
   Edn_util.map_vec fields
@@ -1887,7 +1888,8 @@ let resolve_blocks_inline_properties invoke_config repo blocks =
     match Vec.pop_front remaining with
     | None -> pure (Ok acc)
     | Some (block, rest) ->
-        bind (resolve_block_inline_properties invoke_config repo block) (function
+        bind (resolve_block_inline_properties invoke_config repo block)
+          (function
           | Error err -> pure (Error err)
           | Ok block -> loop (Vec.push_back acc block) rest)
   in
@@ -2370,29 +2372,27 @@ let with_asset_metadata (block : Block.t) asset_tag_id asset_type asset_size
     block with
     Block.tags = Vec.push_front block.tags (Selector.Tag_id asset_tag_id);
     properties =
-      Vec.append
-        (Vec.of_array
-           [|
-             {
-               Property.key =
-                 Property.Key_ident
-                   (Edn_util.keyword_t "logseq.property.asset/type");
-               value = Edn_util.string asset_type;
-             };
-             {
-               key =
-                 Property.Key_ident
-                   (Edn_util.keyword_t "logseq.property.asset/size");
-               value = Edn_util.int64 (Int64.of_int asset_size);
-             };
-             {
-               key =
-                 Property.Key_ident
-                   (Edn_util.keyword_t "logseq.property.asset/checksum");
-               value = Edn_util.string asset_checksum;
-             };
-           |])
-        block.properties;
+      Vec.prepend_array block.properties
+        [|
+          {
+            Property.key =
+              Property.Key_ident
+                (Edn_util.keyword_t "logseq.property.asset/type");
+            value = Edn_util.string asset_type;
+          };
+          {
+            key =
+              Property.Key_ident
+                (Edn_util.keyword_t "logseq.property.asset/size");
+            value = Edn_util.int64 (Int64.of_int asset_size);
+          };
+          {
+            key =
+              Property.Key_ident
+                (Edn_util.keyword_t "logseq.property.asset/checksum");
+            value = Edn_util.string asset_checksum;
+          };
+        |];
   }
 
 let result_ids_of_create_result result =
