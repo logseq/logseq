@@ -1119,10 +1119,6 @@
             class))
         classes))
 
-(def ^:private all-classes-query-options
-  {:except-root-class? false
-   :except-private-tags? false})
-
 (hsx/defc property-value-select-node
   [block property opts
    {:keys [*show-new-property-config?]}]
@@ -1138,12 +1134,9 @@
                                           (set-initial-choices! value)
                                           (set-result! value))
         repo (state/get-current-repo)
-        classes (:logseq.property/classes property)
-        class? (= :class (:logseq.property/type property))
         [class-data set-class-data!] (hooks/use-state nil)
         all-classes (:all-classes class-data)
         page-class (class-by-ident all-classes :logseq.class/Page)
-        tag-class (class-by-ident all-classes :logseq.class/Tag)
         input-opts (fn [_]
                      {:on-click (fn []
                                   (when *show-new-property-config?
@@ -1182,42 +1175,21 @@
                                        (conj page-class))))))
                      :add-new-choice! (fn [new-choice]
                                         (set-initial-choices! (add-initial-node-choice (current-initial-choices) new-choice))))
-        non-root-classes (cond-> (remove (fn [c] (= (:db/ident c) :logseq.class/Root)) classes)
-                           (and class? tag-class)
-                           (conj tag-class))
         extends-property? (= (:db/ident property) :logseq.property.class/extends)]
 
     (hooks/use-effect!
      (fn []
-       (p/let [all-classes (db-async/<get-all-classes repo all-classes-query-options)
-               class-options (db-async/<get-all-classes
-                              repo
-                              {:except-root-class? true
-                               :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))})
-               extends-class-options (db-async/<get-all-classes repo {:except-extends-hidden-tags? true})
-               class-ids (->> (concat all-classes classes [(when extends-property? block)])
-                              (keep :db/id)
-                              distinct)
-               structured-children (p/all
-                                    (mapv (fn [class-id]
-                                            (p/let [children (db-async/<get-structured-children repo class-id)]
-                                              [class-id children]))
-                                          class-ids))]
-         (set-class-data! {:all-classes all-classes
-                           :class-options class-options
-                           :extends-class-options extends-class-options
-                           :structured-children-by-class-id (into {} structured-children)}))
+       (p/let [{:keys [initial-choices] :as selector-data}
+               (db-async/<get-property-node-selector-data repo {:property property
+                                                                :block block})
+               initial-choices (if (= :property (:logseq.property/type property))
+                                 (<load-initial-node-choices repo property nil)
+                                 initial-choices)]
+         (set-class-data! (dissoc selector-data :initial-choices))
+         (when-not extends-property?
+           (set-result-and-initial-choices! initial-choices)))
        nil)
      [repo (:db/ident property) (:db/id block)])
-
-    ;; effect runs once
-    (hooks/use-effect!
-     (fn []
-       (when (and class-data (not extends-property?))
-         (p/let [result (<load-initial-node-choices repo property non-root-classes)]
-           (set-result-and-initial-choices! result)))
-       nil)
-     [class-data])
 
     (when class-data
       (select-node property opts' result))))

@@ -2842,6 +2842,148 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (fsrs-due-card-block-ids @conn cards-id)))
 
+(def ^:private broad-scoped-node-class-idents
+  #{:logseq.class/Page})
+
+(defn- broad-scoped-node-property?
+  [property classes]
+  (and (= :node (:logseq.property/type property))
+       (some #(contains? broad-scoped-node-class-idents (:db/ident %)) classes)))
+
+(defn- property-node-selector-initial-choices
+  [db property non-root-classes option]
+  (cond
+    (= :property (:logseq.property/type property))
+    nil
+
+    (seq non-root-classes)
+    (if (broad-scoped-node-property? property non-root-classes)
+      (db-view/get-property-values db (:db/ident property) option)
+      (->> non-root-classes
+           (mapcat (fn [class] (db-class/get-class-objects db (:db/id class))))
+           distinct
+           (mapv #(worker-plain-value db %))))
+
+    :else
+    (db-view/get-property-values db (:db/ident property) option)))
+
+(def-thread-api :thread-api/get-property-node-selector-data
+  [repo {:keys [property block] :as option}]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn
+          all-classes (get-all-classes db {:except-root-class? false
+                                           :except-private-tags? false})
+          class-options (get-all-classes db {:except-root-class? true
+                                             :except-private-tags? (not (contains? #{:logseq.property/template-applied-to}
+                                                                                   (:db/ident property)))})
+          extends-class-options (get-all-classes db {:except-extends-hidden-tags? true})
+          classes (:logseq.property/classes property)
+          class? (= :class (:logseq.property/type property))
+          tag-class (some (fn [class]
+                            (when (= :logseq.class/Tag (:db/ident class))
+                              class))
+                          all-classes)
+          non-root-classes (cond-> (remove (fn [class]
+                                             (= (:db/ident class) :logseq.class/Root))
+                                           classes)
+                             (and class? tag-class)
+                             (conj tag-class))
+          extends-property? (= (:db/ident property) :logseq.property.class/extends)
+          class-ids (->> (concat all-classes classes [(when extends-property? block)])
+                         (keep :db/id)
+                         distinct)
+          structured-children-by-class-id (->> class-ids
+                                               (map (fn [class-id]
+                                                      [class-id (db-class/get-structured-children db class-id)]))
+                                               (into {}))]
+      {:all-classes all-classes
+       :class-options class-options
+       :extends-class-options extends-class-options
+       :structured-children-by-class-id structured-children-by-class-id
+       :initial-choices (property-node-selector-initial-choices db property non-root-classes option)})))
+
+(defn- view-filter-operators
+  [property]
+  (if (contains? #{:block/created-at :block/updated-at} (:db/ident property))
+    [:before :after]
+    (vec
+     (concat
+      [:is :is-not]
+      (case (:logseq.property/type property)
+        (:datetime)
+        [:before :after]
+        (:default :url :node)
+        [:text-contains :text-not-contains]
+        (:date)
+        [:date-before :date-after]
+        :number
+        [:number-gt :number-lt :number-gte :number-lte :between]
+        nil)))))
+
+(defn- view-filter-value-after-operator-change
+  [operator value]
+  (case operator
+    (:is :is-not)
+    (when (set? value) value)
+
+    (:text-contains :text-not-contains)
+    (when (string? value) value)
+
+    (:number-gt :number-lt :number-gte :number-lte)
+    (when (number? value) value)
+
+    :between
+    (when (and (vector? value) (every? number? value))
+      value)
+
+    (:date-before :date-after :before :after)
+    (when (number? value) value)))
+
+(defn- view-filter-value-source
+  [property operator]
+  (let [type (:logseq.property/type property)]
+    (cond
+      (contains? #{:before :after} operator)
+      :timestamp
+
+      (= :checkbox type)
+      :checkbox
+
+      (contains? #{:data :datetime :checkbox} type)
+      nil
+
+      :else
+      :property-values)))
+
+(defn- view-filter-many?
+  [property operator]
+  (not (or (contains? #{:date-before :date-after :before :after} operator)
+           (= :checkbox (:logseq.property/type property)))))
+
+(defn- normalize-view-filter-value
+  [value]
+  (if (map? (:value value))
+    (assoc value :value (:block/uuid (:value value)))
+    value))
+
+(def-thread-api :thread-api/get-view-filter-data
+  [repo {:keys [property property-ident operator value] :as option}]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn
+          property (or property
+                       (some-> (d/entity db property-ident)
+                               entity-util/entity->map))
+          operator (or operator :is)
+          value-source (view-filter-value-source property operator)
+          values (when (= :property-values value-source)
+                   (mapv normalize-view-filter-value
+                         (db-view/get-property-values db (:db/ident property) option)))]
+      {:operators (view-filter-operators property)
+       :value-source value-source
+       :many? (view-filter-many? property operator)
+       :values values
+       :value-after-operator-change (view-filter-value-after-operator-change operator value)})))
+
 (def-thread-api :thread-api/get-view-data
   [repo view-id option]
   (let [db @(worker-state/get-datascript-conn repo)]

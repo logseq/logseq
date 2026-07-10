@@ -211,11 +211,6 @@
            (#'property-value/scoped-class-nodes
             property [page-class tag-class] nil {})))))
 
-(deftest all-classes-query-keeps-private-tags-for-internal-choices-test
-  (is (= {:except-root-class? false
-          :except-private-tags? false}
-         @#'property-value/all-classes-query-options)))
-
 (deftest property-value-selected-detects-current-ref-value-test
   (is (true? (#'property-value/property-value-selected?
               [{:db/id 4

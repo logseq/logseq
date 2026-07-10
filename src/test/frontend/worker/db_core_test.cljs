@@ -93,6 +93,7 @@
           :thread-api/get-block-immediate-children :thread-api/get-block-sibling
           :thread-api/get-page-blocks-tree :thread-api/get-block-class-default-properties
           :thread-api/get-all-classes :thread-api/get-structured-children :thread-api/get-class-extends-children-tree
+          :thread-api/get-property-node-selector-data :thread-api/get-view-filter-data
           :thread-api/get-alias-source-page :thread-api/get-property-closed-values
           :thread-api/get-route-title :thread-api/get-first-url-property-value
           :thread-api/get-display-properties :thread-api/reorder-display-property
@@ -829,17 +830,21 @@
      (restoring-worker-state
       (fn []
         (platform/set-platform! (build-test-platform {:runtime :node}))
-        (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [_] nil)}})
-        (p/let [result (#'db-core/<embed-index-blocks
-                        test-repo
-                        [{:id "block-1"
-                          :page "page-1"
-                          :title "Hello"}])]
-          (is (= [{:id "block-1"
-                   :page "page-1"
-                   :title "Hello"
-                   :embedding [0]}]
-                 result)))))
+        (let [vector-index {:upsert! (fn [_] nil)}]
+          (reset! worker-state/*vector-indexes {test-repo vector-index})
+          (p/with-redefs [worker-state/get-vector-index (fn [repo]
+                                                          (when (= repo test-repo)
+                                                            vector-index))]
+            (p/let [result (#'db-core/<embed-index-blocks
+                            test-repo
+                            [{:id "block-1"
+                              :page "page-1"
+                              :title "Hello"}])]
+              (is (= [{:id "block-1"
+                       :page "page-1"
+                       :title "Hello"
+                       :embedding [0]}]
+                     result)))))))
      (p/catch (fn [error]
                 (is false (str "unexpected error: " error))))
      (p/finally done))))
@@ -2155,6 +2160,81 @@
                 (set (map :block/title page-a))))
          (is (= ["other page"]
                 (mapv :block/title page-b))))))))
+
+(deftest get-property-node-selector-data-prepares-worker-owned-db-data-test
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [get-selector-data! (get-thread-api :thread-api/get-property-node-selector-data)
+                  conn (d/create-conn db-schema/schema)
+                  page-uuid #uuid "11111111-1111-1111-1111-111111111111"]
+              (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+              (d/transact! conn [{:db/id -1
+                                  :db/ident :user.class/Topic
+                                  :block/title "Topic"
+                                  :block/name "topic"
+                                  :block/tags :logseq.class/Tag}
+                                 {:block/title "Page A"
+                                  :block/name "page-a"
+                                  :block/uuid page-uuid
+                                  :block/tags -1}])
+              (reset! worker-state/*datascript-conns {test-repo conn})
+              (->
+               (p/let [topic-class (select-keys (d/entity @conn :user.class/Topic)
+                                                [:db/id :db/ident :block/title])
+                       topic-class-id (:db/id topic-class)
+                       property {:db/ident :block/tags
+                                 :logseq.property/type :node
+                                 :logseq.property/classes [topic-class]}
+                       data (get-selector-data! test-repo {:property property
+                                                           :block {:db/id (:db/id (d/entity @conn [:block/uuid page-uuid]))}})]
+                 (is (some #(= :user.class/Topic (:db/ident %)) (:all-classes data)))
+                 (is (not-any? #(= :logseq.class/Root (:db/ident %)) (:class-options data)))
+                 (is (contains? (:structured-children-by-class-id data) topic-class-id))
+                 (is (= ["Page A"] (map :block/title (:initial-choices data)))))
+               (p/catch
+                (fn [error]
+                  (is false (str error))))
+               (p/finally done)))))))
+
+(deftest get-view-filter-data-prepares-operators-and-values-test
+  (restoring-worker-state
+   (fn []
+     (let [get-filter-data! (get-thread-api :thread-api/get-view-filter-data)
+           conn (d/create-conn db-schema/schema)
+           page-uuid #uuid "22222222-2222-2222-2222-222222222222"
+           option {:property {:db/ident :user.property/topic
+                              :block/title "Topic"
+                              :logseq.property/type :node}
+                   :property-ident :user.property/topic
+                   :operator :is
+                   :value "stale"}]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (with-redefs [db-view/get-property-values
+                     (fn [_conn property-ident _option]
+                       (is (= :user.property/topic property-ident))
+                       [{:label "Page B"
+                         :value {:block/uuid page-uuid
+                                 :block/title "Page B"}}])]
+         (let [data (get-filter-data! test-repo option)]
+           (is (= [:is :is-not :text-contains :text-not-contains] (:operators data)))
+           (is (= :property-values (:value-source data)))
+           (is (true? (:many? data)))
+           (is (= [{:label "Page B" :value page-uuid}] (:values data)))
+           (is (nil? (:value-after-operator-change data)))))
+       (is (= {:operators [:before :after]
+               :value-source :timestamp
+               :many? false
+               :values nil
+               :value-after-operator-change 123}
+              (select-keys
+               (get-filter-data! test-repo {:property {:db/ident :block/created-at
+                                                       :logseq.property/type :datetime}
+                                            :property-ident :block/created-at
+                                            :operator :before
+                                            :value 123})
+               [:operators :value-source :many? :values :value-after-operator-change])))))))
 
 (deftest build-convert-tag-to-page-tx-updates-tagged-object-title-refs
   (restoring-worker-state

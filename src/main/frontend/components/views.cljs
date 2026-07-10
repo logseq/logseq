@@ -1551,7 +1551,7 @@
 (hsx/defc ^:large-vars/cleanup-todo filter-property
   [view-entity columns {:keys [data-fns] :as table} opts]
   (let [[property set-property!] (hooks/use-state nil)
-        [values set-values!] (hooks/use-state nil)
+        [filter-data set-filter-data!] (hooks/use-state nil)
         timestamp? (datetime-property? property)
         set-filters! (:set-filters! data-fns)
         filters (get-in table [:state :filters])
@@ -1587,13 +1587,20 @@
         property-ident (:db/ident property)]
     (hooks/use-effect!
      (fn []
-       (when (and view-entity property-ident (not (or timestamp? checkbox?)))
-         (p/let [data (db-async/<get-property-values property-ident {:view-id (:db/id view-entity)
-                                                                     :query-entity-ids (:query-entity-ids opts)})]
-           (set-values! data))))
+       (if (and view-entity property-ident)
+         (p/let [data (db-async/<get-view-filter-data property
+                                                      {:view-id (:db/id view-entity)
+                                                       :query-entity-ids (:query-entity-ids opts)})]
+           (set-filter-data! data))
+         (set-filter-data! nil)))
      [property-ident])
-    (let [option (cond
-                   timestamp?
+    (let [value-source (or (:value-source filter-data)
+                           (cond
+                             timestamp? :timestamp
+                             checkbox? :checkbox
+                             property :property-values))
+          option (cond
+                   (= :timestamp value-source)
                    (merge option
                           {:items (timestamp-options)
                            :input-default-placeholder (if property (db-property/built-in-display-title property t) (t :select/default-prompt))
@@ -1615,7 +1622,7 @@
                                              {})
                                             (set-filter-fn value))))})
                    property
-                   (if checkbox?
+                   (if (= :checkbox value-source)
                      (let [items [{:value true :label (string/lower-case (t :ui/true))}
                                   {:value false :label (string/lower-case (t :ui/false))}]]
                        (merge option
@@ -1624,8 +1631,8 @@
                                :on-chosen (fn [value]
                                             (let [filters' (conj (:filters filters) [(:db/ident property) :is value])]
                                               (set-filters! {:or? (:or? filters)
-                                                             :filters filters'})))}))
-                     (let [items values]
+                                                              :filters filters'})))}))
+                     (let [items (:values filter-data)]
                        (merge option
                               {:items items
                                :input-default-placeholder (if property (db-property/built-in-display-title property t) (t :select/default-prompt))
@@ -1693,65 +1700,37 @@
     :number-lte "<="
     :between (t :view.filter/operator-between)))
 
-(defn get-property-operators
-  [property]
-  (if (contains? #{:block/created-at :block/updated-at} (:db/ident property))
-    [:before :after]
-    (concat
-     [:is :is-not]
-     (case (:logseq.property/type property)
-       (:datetime)
-       [:before :after]
-       (:default :url :node)
-       [:text-contains :text-not-contains]
-       (:date)
-       [:date-before :date-after]
-       :number
-       [:number-gt :number-lt :number-gte :number-lte :between]
-       nil))))
-
-(defn- get-filter-with-changed-operator
-  [_property operator value]
-  (case operator
-    (:is :is-not)
-    (when (set? value) value)
-
-    (:text-contains :text-not-contains)
-    (when (string? value) value)
-
-    (:number-gt :number-lt :number-gte :number-lte)
-    (when (number? value) value)
-
-    :between
-    (when (and (vector? value) (every? number? value))
-      value)
-
-    (:date-before :date-after :before :after)
-    ;; FIXME: should be a valid date number
-    (when (number? value) value)))
-
 (hsx/defc filter-operator
   [property operator filters set-filters! idx]
-  (shui/dropdown-menu
-   (shui/dropdown-menu-trigger
-    {:asChild true}
-    (shui/button
-     {:class "!px-2 rounded-none border-r"
-      :variant "ghost"
-      :size :sm}
-     [:span.text-xs (operator->text operator)]))
-   (shui/dropdown-menu-content
-    {:align "start"}
-    (let [operators (get-property-operators property)]
-      (for [operator operators]
+  (let [[operators set-operators!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (p/let [data (db-async/<get-view-filter-data property)]
+         (set-operators! (:operators data)))
+       nil)
+     [(:db/ident property) (:logseq.property/type property)])
+    (shui/dropdown-menu
+     (shui/dropdown-menu-trigger
+      {:asChild true}
+      (shui/button
+       {:class "!px-2 rounded-none border-r"
+        :variant "ghost"
+        :size :sm}
+       [:span.text-xs (operator->text operator)]))
+     (shui/dropdown-menu-content
+      {:align "start"}
+      (for [operator (or operators [])]
         (shui/dropdown-menu-item
          {:on-click (fn []
-                      (set-filters!
-                       (update filters :filters
-                               (fn [col]
-                                 (update col idx
-                                         (fn [[property _old-operator value]]
-                                           (let [value' (get-filter-with-changed-operator property operator value)]
+                      (p/let [data (db-async/<get-view-filter-data property
+                                                                    {:operator operator
+                                                                     :value (nth (get-in filters [:filters idx]) 2)})
+                              value' (:value-after-operator-change data)]
+                        (set-filters!
+                         (update filters :filters
+                                 (fn [col]
+                                   (update col idx
+                                           (fn [[property _old-operator _value]]
                                              (if value'
                                                [property operator value']
                                                [property operator]))))))))}
@@ -1795,40 +1774,33 @@
 
 (hsx/defc ^:large-vars/cleanup-todo filter-value-select
   [view-entity {:keys [data-fns] :as table} property value operator idx opts]
-  (let [type (:logseq.property/type property)
-        property-ident (:db/ident property)]
-    (hooks/use-effect!
-     (fn []
-       (let [values (if (coll? value) value [value])
-             ids (filter uuid? values)]
-         (when (seq ids) (db-async/<get-blocks (state/get-current-repo) ids))))
-     [])
-    (let [filters (get-in table [:state :filters])
-          set-filters! (:set-filters! data-fns)
-          many? (if (or (contains? #{:date-before :date-after :before :after} operator)
-                        (contains? #{:checkbox} type))
-                  false
-                  true)]
-      (shui/button
+  (hooks/use-effect!
+   (fn []
+     (let [values (if (coll? value) value [value])
+           ids (filter uuid? values)]
+       (when (seq ids) (db-async/<get-blocks (state/get-current-repo) ids))))
+   [])
+  (let [filters (get-in table [:state :filters])
+        set-filters! (:set-filters! data-fns)]
+    (shui/button
        {:class "!px-2 rounded-none border-r min-w-0 max-w-full overflow-hidden"
         :variant "ghost"
         :size :sm
         :on-click (fn [e]
-                    (p/let [values (when (and property-ident
-                                              (not (contains? #{:data :datetime :checkbox} type)))
-                                     (p/let [data (db-async/<get-property-values property-ident {:view-id (:db/id view-entity)
-                                                                                                 :query-entity-ids (:query-entity-ids opts)})]
-                                       (map (fn [v] (if (map? (:value v))
-                                                      (assoc v :value (:block/uuid (:value v)))
-                                                      v)) data)))
-                            items (cond
-                                    (contains? #{:before :after} operator)
+                    (p/let [filter-data (db-async/<get-view-filter-data property
+                                                                        {:view-id (:db/id view-entity)
+                                                                         :query-entity-ids (:query-entity-ids opts)
+                                                                         :operator operator})
+                            many? (:many? filter-data)
+                            items (case (:value-source filter-data)
+                                    :timestamp
                                     (timestamp-options)
-                                    (= type :checkbox)
+
+                                    :checkbox
                                     [{:value true :label (string/lower-case (t :ui/true))}
                                      {:value false :label (string/lower-case (t :ui/false))}]
-                                    :else
-                                    values)]
+
+                                    (:values filter-data))]
                       (shui/popup-show!
                        (.-target e)
                        (fn []
@@ -1906,7 +1878,7 @@
                 (interpose [:span.flex-none ", "])
                 (into [:div.ls-view-filter-value-item]))
            :else
-           (t :view/all))])))))
+           (t :view/all))]))))
 
 (hsx/defc filter-value
   [view-entity table property operator value filters set-filters! idx opts]
